@@ -28,6 +28,8 @@ parser.add_argument('--mods', default='vanilla,dunecity,Dune2R',
 parser.add_argument('--worker-counts', default='1,4',
                     help='DUNECITY_PATH_WORKERS values the first mod is repeated under; the '
                          'boundary continuation must be identical across them')
+parser.add_argument('--tornie-state', action='store_true',
+                    help='Test real Tornie 546 object save roundtrips and off-family isolation')
 args = parser.parse_args()
 build = args.build_dir.resolve()
 out = args.output_dir.resolve() if args.output_dir else Path(tempfile.mkdtemp(prefix='dunecity-containment-probe-'))
@@ -87,14 +89,17 @@ def run(mod, path_workers, tag, profile=None):
                SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
                CONTAINMENT_PROBE_MOD=mod, CONTAINMENT_PROBE_OUT=str(out / tag),
                DUNECITY_PATH_WORKERS=path_workers)
+    if args.tornie_state:
+        env['CONTAINMENT_PROBE_TORNIE_STATE'] = '1'
     (out / tag).mkdir(parents=True, exist_ok=True)
     logfile = out / ('run-' + tag + '.log')
     with logfile.open('w') as log:
         subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
                        stdout=log, stderr=subprocess.STDOUT, check=True, timeout=900)
     text = logfile.read_text()
-    if 'TRANSPORT_CONTAINMENT_PROBE_PASS:' not in text:
-        raise RuntimeError('Missing transport-containment result: ' + str(logfile))
+    marker = 'TORNIE_STATE_PROBE_PASS:' if args.tornie_state else 'TRANSPORT_CONTAINMENT_PROBE_PASS:'
+    if marker not in text:
+        raise RuntimeError('Missing ' + marker + ' result: ' + str(logfile))
     if 'TRANSPORT_CONTAINMENT_PROBE_FAIL:' in text:
         raise RuntimeError('Transport-containment check failed: ' + str(logfile))
     # The boundary continuation, with the saved-byte checksum: this is what must not depend on
@@ -107,7 +112,8 @@ def run(mod, path_workers, tag, profile=None):
 continuations = {}
 for mod in mods:
     continuations[mod] = run(mod, workers[0], mod + '-workers' + workers[0])
-    print('transport containment passed: mod=' + mod + ' workers=' + workers[0])
+    print(('Tornie object state' if args.tornie_state else 'transport containment')
+          + ' passed: mod=' + mod + ' workers=' + workers[0])
 for extra in workers[1:]:
     tag = mods[0] + '-workers' + extra
     repeated = run(mods[0], extra, tag, profile=mods[0] + '-workers' + workers[0])
@@ -117,4 +123,5 @@ for extra in workers[1:]:
     print('boundary continuation identical: mod=' + mods[0] + ' workers='
           + workers[0] + ' vs ' + extra)
 subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
-print('Transport containment verified for: ' + args.mods + '. Logs: ' + str(out))
+print(('Tornie object state' if args.tornie_state else 'Transport containment')
+      + ' verified for: ' + args.mods + '. Logs: ' + str(out))

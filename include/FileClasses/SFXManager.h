@@ -118,6 +118,7 @@ private:
 
     std::vector<sdl2::mix_chunk_ptr> lngVoice;
     std::array<sdl2::mix_chunk_ptr, NUM_SOUNDCHUNK> soundChunk;
+    sdl2::mix_chunk_ptr kleshmershNameVoice;
 };
 
 #endif // SFXMANAGER_H

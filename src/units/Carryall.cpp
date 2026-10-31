@@ -26,6 +26,7 @@
 #include <SpatialGrid.h>
 #include <Game.h>
 #include <SoundPlayer.h>
+#include <mod/ModManager.h>
 
 #include <structures/RepairYard.h>
 #include <structures/Refinery.h>
@@ -471,7 +472,7 @@ FixPoint Carryall::getDestinationAngle() const {
 }
 
 void Carryall::move() {
-    const FixPoint cruise = currentGame->objectData.data[itemID][originalHouseID].maxspeed;
+    const FixPoint cruise = currentGame->objectData.data[itemID][getProductionHouseID()].maxspeed;
     FixPoint x, y;
     if(!getFlightDestination(x,y)) {
         currentMaxSpeed = std::min(currentMaxSpeed + 0.2_fix, cruise);
@@ -491,7 +492,11 @@ void Carryall::move() {
     // Dynasty's delayed script has a 0.25 tile/s per-axis docking rate at
     // normal speed. Spread that movement over our updates without a teleport.
     currentMaxSpeed = 0;
-    const FixPoint step = CarryallFlight::finalStep(cruise);
+    FixPoint step = CarryallFlight::finalStep(cruise);
+    // Docking bypasses AirUnit::move(), so apply its family effects here once.
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        step *= owner->radarSpeedFactor(itemID) * getMovementSpeedFactor();
+    }
     realX += std::clamp(x-realX,-step,step);
     realY += std::clamp(y-realY,-step,step);
     const Coord next(realX.lround()/TILESIZE,realY.lround()/TILESIZE);

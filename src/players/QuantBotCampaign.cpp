@@ -1,4 +1,4 @@
-#include <players/QuantBot.h>
+#include "QuantBotInternal.h"
 #include <players/QuantBotCityPolicy.h>
 #include <players/HumanPlayer.h>
 #include <House.h>
@@ -217,7 +217,7 @@ CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
 bool QuantBot::campaignCombatUnit(const UnitBase* unit) const {
     return unit && unit->getOwner()==getHouse() && unit->getHealth()>0
         && unit->canAttack() && unit->getItemID()!=Unit_Saboteur
-        && unit->getItemID()!=Unit_Harvester && unit->getItemID()!=Unit_Sandworm
+        && !QuantBotInternal::harvesterItem(unit->getItemID()) && unit->getItemID()!=Unit_Sandworm
         && unit->getItemID()!=Unit_MCV && unit->getItemID()!=Unit_Carryall;
 }
 
@@ -246,7 +246,7 @@ CampaignDifficultyPolicy::Pressure QuantBot::campaignPressure() const {
         // Include transported survivors so pickup cannot free an assault slot.
         if (!campaignCombatUnit(unit)) continue;
         ++result.units;
-        result.value+=std::max(100,currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price);
+        result.value+=std::max(100,currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price);
     }
     result.houses=result.units>0 ? 1 : 0;
     return result;
@@ -265,9 +265,9 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
             // The Natives are always "alive" but are no opposing house.
             if (!house || house->isNatives() || !house->isAlive() || house->getTeamID()==getHouse()->getTeamID()) continue;
             int value = 0;
-            for (Uint32 item = Unit_FirstID; item <= Unit_LastID; ++item)
-                if (item != Unit_Carryall && item != Unit_Harvester && item != Unit_MCV && item != Unit_Sandworm
-                    && item != Unit_Frigate)
+            for (Uint32 item = Unit_FirstID; item <= (ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Unit_LastID); ++item)
+                if (QuantBotBuildPolicy::militaryItem(item) && item != Unit_Frigate
+                    && !isAmbientUnit(item))
                     value += house->getNumItems(item) * currentGame->objectData.data[item][h].price;
             strongest = std::max(strongest, value);
         }
@@ -301,7 +301,7 @@ bool QuantBot::campaignLocalContact(const ObjectBase* target) const {
     // Workers need protection wherever the spice field is. The contact remains
     // bounded around the worker, including an artillery attacker's firing range.
     for (const auto* worker : getUnitList())
-        if (worker->getOwner()==getHouse() && worker->getItemID()==Unit_Harvester && worker->isActive()
+        if (worker->getOwner()==getHouse() && QuantBotInternal::harvesterItem(worker->getItemID()) && worker->isActive()
             && blockDistance(target->getLocation(),worker->getLocation())<=std::max(4,target->getWeaponRange()+2)) return true;
     return false;
 }

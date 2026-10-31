@@ -327,7 +327,7 @@ public:
     void unassignInfantry(Uint32 objectID, int currentPosition);
     void unassignUndergroundUnit(Uint32 objectID);
     void setType(int newType);
-    void squash() const;
+    void squash(UnitBase* crusher = nullptr) const;
     int getInfantryTeam() const;
     FixPoint harvestSpice();
     void setSpice(FixPoint newSpice);
@@ -443,16 +443,23 @@ public:
 
     bool isSand() const noexcept { return (type == Terrain_Sand); }
     bool isDunes() const noexcept { return (type == Terrain_Dunes); }
-    bool isSpiceBloom() const noexcept { return ((type == Terrain_SpiceBloom) || (type == Terrain_GreenSpiceBloom) || (type == Terrain_RedSpiceBloom)); }
+    bool isSpiceBloom() const noexcept { return ((type == Terrain_SpiceBloom) || (type == Terrain_GreenSpiceBloom) || (type == Terrain_RedSpiceBloom)
+                                              || (type == Terrain_PaleLilacSpiceBloom) || (type == Terrain_WhiteSpiceBloom)); }
     bool isSpecialBloom() const noexcept { return (type == Terrain_SpecialBloom); }
     bool isGreenSpice() const noexcept { return ((type == Terrain_GreenSpice) || (type == Terrain_ThickGreenSpice) || (type == Terrain_GreenSpiceBloom)); }
     bool isRedSpice() const noexcept { return ((type == Terrain_RedSpice) || (type == Terrain_ThickRedSpice) || (type == Terrain_RedSpiceBloom)); }
+    bool isPaleLilacSpice() const noexcept { return ((type == Terrain_PaleLilacSpice) || (type == Terrain_ThickPaleLilacSpice) || (type == Terrain_PaleLilacSpiceBloom)); }
+    bool isWhiteSpice() const noexcept { return ((type == Terrain_WhiteSpice) || (type == Terrain_ThickWhiteSpice) || (type == Terrain_WhiteSpiceBloom)); }
     bool isSpice() const noexcept { return ((type == Terrain_Spice) || (type == Terrain_ThickSpice)
                                          || (type == Terrain_GreenSpice) || (type == Terrain_ThickGreenSpice)
-                                         || (type == Terrain_RedSpice) || (type == Terrain_ThickRedSpice)); }
+                                         || (type == Terrain_RedSpice) || (type == Terrain_ThickRedSpice)
+                                         || (type == Terrain_PaleLilacSpice) || (type == Terrain_ThickPaleLilacSpice)
+                                         || (type == Terrain_WhiteSpice) || (type == Terrain_ThickWhiteSpice)); }
     bool isThickSpice() const noexcept { return ((type == Terrain_ThickSpice)
                                               || (type == Terrain_ThickGreenSpice)
-                                              || (type == Terrain_ThickRedSpice)); }
+                                              || (type == Terrain_ThickRedSpice)
+                                              || (type == Terrain_ThickPaleLilacSpice)
+                                              || (type == Terrain_ThickWhiteSpice)); }
 
     Uint32 getSandRegion() const noexcept { return sandRegion; }
     int getOwner() const noexcept { return owner; }

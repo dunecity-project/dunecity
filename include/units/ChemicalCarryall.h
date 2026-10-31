@@ -16,6 +16,7 @@ public:
 
     bool update() override;
     void deploy(const Coord& newLocation) override;
+    void setProductionHouseID(int houseID) override;
 
     bool canHeal() const override { return true; }
     void doAttackObject(Uint32 targetObjectID, bool bForced) override;

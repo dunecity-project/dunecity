@@ -57,6 +57,8 @@
 
 #define NETWORKPACKET_MATCH_CONTROL         23  // Host -> Clients: authoritative speed/pause state
 #define NETWORKPACKET_MATCH_RESUME_REQUEST  24  // Client -> Host: ask to leave a pause
+#define NETWORKPACKET_COOP_CAMPAIGN_CONTROL 25  // Direct peers only: mission readiness/advance
+#define NETWORKPACKET_COOP_SETUP_TRANSFER   26  // Direct lobby only: chunked co-op checkpoint setup
 
 // Network protocol version - increment when packet formats change
 // Version 2: Added simMsAvg to NETWORKPACKET_CLIENTSTATS (5 fields instead of 4)
@@ -328,10 +330,12 @@
 //      cannot read the added settings byte (save 9877).
 // 107: city matches give the Construction Yard 1000 credits of storage at match start;
 //      a 106 peer would start the same mod with none and desync.
-#define NETWORK_PROTOCOL_VERSION            107
+// 108: Tornie-family 1.0.546 objects, technology, rules, research and cooperative campaigns.
+//      Older peers cannot interpret the new object IDs, commands or settings (save 9878).
+#define NETWORK_PROTOCOL_VERSION            108
 
 // Mod transfer limits
-#define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size
+#define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
 #define MOD_CHUNK_SIZE          (64 * 1024)          // 64KB per chunk
 
 #endif // NETWORKPACKETTYPES_H

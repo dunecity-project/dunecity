@@ -109,8 +109,8 @@ public:
 
     class Structure {
     public:
-        Structure(int id, HOUSETYPE house, int itemID, int health, Coord position)
-         : id(id), house(house), itemID(itemID), health(health), position(position) {
+        Structure(int id, HOUSETYPE house, int itemID, int health, Coord position, bool powerUpgraded = false)
+         : id(id), house(house), itemID(itemID), health(health), position(position), powerUpgraded(powerUpgraded) {
 
         }
 
@@ -119,6 +119,7 @@ public:
         int             itemID;
         int             health;
         Coord           position;
+        bool            powerUpgraded = false;
     };
 
     class Unit {

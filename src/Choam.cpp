@@ -47,10 +47,12 @@ void Choam::load(InputStream& stream) {
     }
 }
 
-int Choam::getPrice(Uint32 itemID) const {
+int Choam::getPrice(Uint32 itemID, bool applyResearch) const {
     for(const BuildItem& buildItem : availableItems) {
         if(buildItem.itemID == itemID) {
-            return buildItem.price;
+            return applyResearch ? house->radarUnitPrice(itemID,
+                currentGame->getGameInitSettings().campaignPurchasePrice(buildItem.price, house->getHouseID()))
+                : buildItem.price;
         }
     }
 

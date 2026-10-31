@@ -34,32 +34,14 @@
 
 
 namespace {
-const int houseOrder[] = {
-    HOUSE_ATREIDES,
-    HOUSE_ORDOS,
-    HOUSE_HARKONNEN,
-    HOUSE_MERCENARY,
-    HOUSE_FREMEN,
-    HOUSE_SARDAUKAR,
-    HOUSE_NEUTRAL,
-    HOUSE_REBELS,
-    HOUSE_CUSTOM
-};
 
 constexpr int kVisibleHouseButtons = 3;
-int getHouseChoiceCount() {
-    const int capacity = sizeof(houseOrder) / sizeof(houseOrder[0]);
-    return isHouseAvailable(HOUSE_CUSTOM) ? capacity : capacity - 1;
-}
-
-int getMaxHouseScrollPos() {
-    return getHouseChoiceCount() - kVisibleHouseButtons;
-}
 }
 
 // Static member definitions
 int HouseChoiceMenu::s_house = HOUSE_ATREIDES;
 bool HouseChoiceMenu::s_online = true;
+bool HouseChoiceMenu::s_separateFactionCoop = false;
 bool HouseChoiceMenu::s_singleMission = false;
 bool HouseChoiceMenu::s_publicGame = true;
 int HouseChoiceMenu::s_startLevel = 1;
@@ -71,6 +53,8 @@ SettingsClass::GameOptionsClass HouseChoiceMenu::s_currentGameOptions;
 HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : MenuBase(), showLobby(showLobby)
 {
     OnlineModPolicy::restoreApprovedSelection();
+    houseChoices = CustomGamePlayerPolicy::selectableHouses(ModManager::instance().isTornieFamilyContentActive(),
+        isHouseAvailable(HOUSE_CUSTOM), ModManager::instance().getPlayableHouses());
     s_online = online;
     currentHouseChoiceScrollPos = 0;
     if(!keepRules) {
@@ -98,11 +82,11 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     onlineDescription.setTextColor(COLOR_WHITE);
     onlineDescription.setAlignment(Alignment_Left);
     windowWidget.addWidget(&onlineDescription, Point(232,0), Point(360,28));
-    connectionDropDown.addEntry(_("Offline"), 0);
-    connectionDropDown.addEntry(_("Online co-op"), 1);
-    connectionDropDown.setSelectedItem(s_online ? 1 : 0);
+    populateConnections();
     connectionDropDown.setOnSelectionChange([this](bool interactive) {
-        s_online = connectionDropDown.getSelectedIndex() == 1;
+        const int connection = connectionDropDown.getSelectedEntryIntData();
+        s_online = connection != 0;
+        s_separateFactionCoop = connection == 2;
         // Remember the player's own choice; a programmatic online flow keeps its preference.
         if(interactive) rememberPlayMode(PlayModeScope::Campaign, s_online);
         updateConnection();
@@ -284,7 +268,9 @@ void HouseChoiceMenu::onEnemyChanged(bool /*interactive*/) {
 }
 
 void HouseChoiceMenu::onHouseButton(int button) {
-    int selectedHouse = houseOrder[currentHouseChoiceScrollPos+button];
+    const int index = currentHouseChoiceScrollPos + button;
+    if(index < 0 || index >= houseChoices.count) return;
+    const int selectedHouse = houseChoices[index];
 
     const HOUSETYPE selectedIdentity =
         getHouseFactionIdentity(static_cast<HOUSETYPE>(selectedHouse));
@@ -339,33 +325,57 @@ void HouseChoiceMenu::populateLevels() {
     startLevelDropDown.setSelectedItem(s_startLevel - 1);
 }
 
+void HouseChoiceMenu::populateConnections() {
+    const bool online = s_online;
+    const bool separate = s_separateFactionCoop && ModManager::instance().isTornieFamilyContentActive();
+    connectionDropDown.clearAllEntries();
+    connectionDropDown.addEntry(_("Offline"), 0);
+    connectionDropDown.addEntry(_("Online co-op"), 1);
+    if(ModManager::instance().isTornieFamilyContentActive())
+        connectionDropDown.addEntry(_("Online faction co-op"), 2);
+    s_online = online;
+    s_separateFactionCoop = separate;
+    connectionDropDown.setSelectedItem(online ? (separate ? 2 : 1) : 0);
+}
+
 void HouseChoiceMenu::updateConnection() {
     const bool lobby = showLobby || !OnlineModPolicy::approved();
+    const bool separate = isSeparateFactionCoop();
     onlineDescription.setText(s_online
         ? _("Public: others can watch or ask to join.\nChoose Private for invite-only play.")
         : _("Play the campaign on this computer.\nStart directly with your chosen house and rules."));
-    hostCoopButton.setText(s_online && lobby ? _("Create Lobby") : s_singleMission ? _("Start Mission") : _("Start Campaign"));
+    hostCoopButton.setText(separate ? _("Choose faction co-op")
+        : s_online && lobby ? _("Create Lobby") : s_singleMission ? _("Start Mission") : _("Start Campaign"));
     if(s_online && !OnlineModPolicy::approved())
         onlineDescription.setText(_("New mods use a pregame lobby.\nPlayers must join before the game starts."));
-    visibilityDropDown.setEnabled(s_online);
-    visibilityDropDown.setVisible(s_online);
-    partnerSelector.setEnabled(!s_online || !lobby);
-    if(s_online && lobby) supportDescription.setText(_("Choose your partner in the pregame lobby."));
+    if(separate)
+        onlineDescription.setText(_("Play separate allied factions.\nChoose your allies and controllers in the next screen."));
+    visibilityDropDown.setEnabled(s_online && !separate);
+    visibilityDropDown.setVisible(s_online && !separate);
+    journeyDropDown.setEnabled(!separate);
+    startLevelDropDown.setEnabled(!separate);
+    enemySelector.setEnabled(!separate);
+    gameOptionsButton.setEnabled(!separate);
+    partnerSelector.setEnabled(!separate && (!s_online || !lobby));
+    if(separate) supportDescription.setText(_("Choose faction co-op settings in the next screen."));
+    else if(s_online && lobby) supportDescription.setText(_("Choose your partner in the pregame lobby."));
     else onPartnerChanged(false);
 }
 
 void HouseChoiceMenu::updateHouseChoice() {
-    if(!isHouseAvailable(static_cast<HOUSETYPE>(s_house))) s_house = HOUSE_ATREIDES;
+    if(!houseChoices.contains(s_house) && houseChoices.count > 0) s_house = houseChoices[0];
     selectedHouseLabel.setText(_("Selected:") + std::string("\n") + getHouseNameByNumber(static_cast<HOUSETYPE>(s_house)));
 
-    // House1 button
-    house1Button.setTextures(pGFXManager->getUIGraphic(UI_Herald_ColoredLarge, houseOrder[currentHouseChoiceScrollPos+0]));
-
-    // House2 button
-    house2Button.setTextures(pGFXManager->getUIGraphic(UI_Herald_ColoredLarge, houseOrder[currentHouseChoiceScrollPos+1]));
-
-    // House3 button
-    house3Button.setTextures(pGFXManager->getUIGraphic(UI_Herald_ColoredLarge, houseOrder[currentHouseChoiceScrollPos+2]));
+    PictureButton* buttons[] = {&house1Button, &house2Button, &house3Button};
+    for(int i = 0; i < kVisibleHouseButtons; ++i) {
+        const int index = currentHouseChoiceScrollPos + i;
+        buttons[i]->setVisible(index < houseChoices.count);
+        if(index < houseChoices.count)
+            buttons[i]->setTextures(pGFXManager->getUIGraphic(UI_Herald_ColoredLarge, houseChoices[index]));
+    }
+    houseLeftButton.setVisible(currentHouseChoiceScrollPos > 0);
+    houseRightButton.setVisible(currentHouseChoiceScrollPos + kVisibleHouseButtons < houseChoices.count);
+    hostCoopButton.setEnabled(houseChoices.count > 0);
 }
 
 void HouseChoiceMenu::onHouseLeft()
@@ -378,7 +388,7 @@ void HouseChoiceMenu::onHouseLeft()
 
 void HouseChoiceMenu::onHouseRight()
 {
-    if(currentHouseChoiceScrollPos < getMaxHouseScrollPos()) {
+    if(currentHouseChoiceScrollPos + kVisibleHouseButtons < houseChoices.count) {
         currentHouseChoiceScrollPos++;
         updateHouseChoice();
     }
@@ -409,9 +419,13 @@ void HouseChoiceMenu::onModSelectionChanged(bool interactive) {
             s_currentGameOptions = effectiveGameOptions;
         }
     }
-    currentHouseChoiceScrollPos = std::min(currentHouseChoiceScrollPos, getMaxHouseScrollPos());
+    houseChoices = CustomGamePlayerPolicy::selectableHouses(ModManager::instance().isTornieFamilyContentActive(),
+        isHouseAvailable(HOUSE_CUSTOM), manager.getPlayableHouses());
+    currentHouseChoiceScrollPos = std::min(currentHouseChoiceScrollPos,
+        std::max(0, houseChoices.count - kVisibleHouseButtons));
     updateHouseChoice();
     updateModDescription();
     campaignSkinDropDown.setEnabled(manager.isCityModeActive());
+    populateConnections();
     updateConnection();
 }

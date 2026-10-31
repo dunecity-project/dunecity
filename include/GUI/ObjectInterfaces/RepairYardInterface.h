@@ -28,6 +28,7 @@
 #include <units/UnitBase.h>
 
 #include <structures/RepairYard.h>
+#include <mod/ModManager.h>
 
 class RepairYardInterface : public DefaultStructureInterface {
 public:
@@ -78,7 +79,9 @@ protected:
 
             if(pUnit != nullptr) {
                 repairUnitProgressBar.setVisible(true);
-                repairUnitProgressBar.setTexture(resolveItemPicture(pUnit->getItemID()));
+                repairUnitProgressBar.setTexture(ModManager::instance().isTornieFamilyContentActive()
+                    ? resolveItemPicture(pUnit->getItemID(), static_cast<HOUSETYPE>(pUnit->getProductionHouseID()))
+                    : resolveItemPicture(pUnit->getItemID()));
                 repairUnitProgressBar.setProgress( ((pUnit->getHealth()*100)/pUnit->getMaxHealth()).toDouble());
             } else {
                 repairUnitProgressBar.setVisible(false);

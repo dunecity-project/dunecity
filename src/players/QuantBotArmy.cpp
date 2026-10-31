@@ -58,7 +58,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
     defenceResponseCycles[key] = now;
     const auto isProtectedAsset=[&](const ObjectBase* object) {
         return object && object->getOwner()==getHouse()
-            && (object->isAStructure() || object->getItemID()==Unit_Harvester
+            && (object->isAStructure() || QuantBotInternal::harvesterItem(object->getItemID())
                 || object->getItemID()==Unit_RebelHarvester);
     };
     if (!clearingSpice && (isProtectedAsset(protectedAsset) || isProtectedAsset(victim))) {
@@ -109,7 +109,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
     const bool assetEmergency = !clearingSpice
         && (isProtectedAsset(protectedAsset) || isProtectedAsset(victim));
     auto value = [&](const ObjectBase* object) {
-        const int price = currentGame->objectData.data[object->getItemID()][object->getOriginalHouseID()].price;
+        const int price = currentGame->objectData.data[object->getItemID()][object->getProductionHouseID()].price;
         return std::max(1,(FixPoint(price)*object->getHealth()/object->getMaxHealth()).lround());
     };
     int threatValue = value(intruder), committed = 0;
@@ -135,8 +135,8 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && blockDistance(contact,unit->getLocation()) <= threatTiles) threatValue += value(unit);
         if (unit->getOwner()!=getHouse() || !unit->isRespondable()
             || !unit->canAttack(intruder) || unit->getAttackMode()==RETREAT
-            || unit->getItemID()==Unit_Saboteur || unit->getItemID()==Unit_Harvester
-            || unit->getItemID()==Unit_Ornithopter) continue; // Air planner prioritizes active base/worker attackers.
+            || unit->getItemID()==Unit_Saboteur || QuantBotInternal::harvesterItem(unit->getItemID())
+            || QuantBotInternal::ornithopterItem(unit->getItemID())) continue; // Air planner owns aircraft.
         // A human order and a repair run outrank the scramble, and a worker raid
         // cannot cancel an ongoing whole-army base response.
         if (unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::BaseDefence}) != UnitRole::Free) continue;
@@ -287,7 +287,7 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
         return from.isValid() && distanceToBuilding(from)<=kBaseScrambleContactTiles;
     };
     auto value=[&](const ObjectBase* object) {
-        const int price=currentGame->objectData.data[object->getItemID()][object->getOriginalHouseID()].price;
+        const int price=currentGame->objectData.data[object->getItemID()][object->getProductionHouseID()].price;
         return std::max(1,(FixPoint(price)*object->getHealth()/object->getMaxHealth()).lround());
     };
     // Test-only force candidates (docs/formations.md, "Concentrating force"): P counts the
@@ -803,10 +803,10 @@ void QuantBot::launchGroundHunt() {
         if (unit->getOwner()!=getHouse() || unit->getHealth()<=0 || !unit->isActive() || !unit->isRespondable()
             || !unit->canAttack() || unit->getItemID()==Unit_Saboteur
             || unitRole(unit, {UnitRole::Human}) != UnitRole::Free
-            || unit->getItemID()==Unit_Harvester || unit->getItemID()==Unit_Sandworm) continue;
+            || QuantBotInternal::harvesterItem(unit->getItemID()) || unit->getItemID()==Unit_Sandworm) continue;
         // Summoned/scripted troops can have zero purchase price. They still
         // consume combat pressure rather than being effectively free attackers.
-        const int price=std::max(100,currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price);
+        const int price=std::max(100,currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price);
         armyValue+=price;
         if (unit->getAttackMode()==HUNT) committedValue+=price;
         const bool ground=unit->isAGroundUnit();
@@ -876,7 +876,7 @@ void QuantBot::launchGroundHunt() {
             || campaignWave.members.count(unit->getObjectID()))) continue;
         // Campaign waves recruit aircraft only on the raiding difficulties. The
         // air planner owns every other aircraft, including a defensive one.
-        if (limited && unit->getItemID()==Unit_Ornithopter && !autonomousAircraftRaids()) continue;
+        if (limited && QuantBotInternal::ornithopterItem(unit->getItemID()) && !autonomousAircraftRaids()) continue;
         candidates.push_back({unit->getObjectID(),price,0});
         if (launcherItem(unit)) ++launcherCandidates;
         availableValue+=price;
@@ -1188,7 +1188,7 @@ void QuantBot::launchGroundHunt() {
             else doSetAttackMode(unit,HUNT);
         }
         if (launcherItem(unit)) ++launcherDispatched;
-        ++count; value+=std::max(100,currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price);
+        ++count; value+=std::max(100,currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price);
     }
     int formationMembers=0;
     if (formationWave) {
@@ -1382,6 +1382,7 @@ bool QuantBot::orderableCombatUnit(const UnitBase* unit) const {
     // Inactive means inside a carryall or a repair/refinery bay. Those units are
     // neither deployable strength nor available for an order.
     if (!unit->isActive() || !unit->isRespondable()) return false;
+    if (ModManager::instance().isTornieFamilyContentActive() && unit->getAttackMode() == SABOTAGE) return false;
     if (!mobileCombatItem(unit->getItemID()) || !unit->canAttack()) return false;
     return unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
 }
@@ -1476,7 +1477,7 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
         const bool combat = mobileCombatItem(item) && unit->canAttack();
         const bool flying = unit->isAFlyingUnit();
         const bool hostile = unit->getOwner()->getTeamID() != myTeam;
-        const int price = data[item][unit->getOriginalHouseID()].price;
+        const int price = data[item][unit->getProductionHouseID()].price;
         const int64_t power = CombatPowerPolicy::unitPower(price, unit->getHealth().lround(),
                                                            unit->getMaxHealth());
         // Real engine capability, not a weapon-range guess: see
@@ -1615,7 +1616,7 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
     if (!attackedCores.empty()) {
         for (const auto* unit : getUnitList()) {
             if (!orderableCombatUnit(unit) || unitRole(unit, {UnitRole::Repair}) != UnitRole::Free) continue;
-            const int price = data[unit->getItemID()][unit->getOriginalHouseID()].price;
+            const int price = data[unit->getItemID()][unit->getProductionHouseID()].price;
             const int64_t power = CombatPowerPolicy::unitPower(price,
                 unit->getHealth().lround(), unit->getMaxHealth());
             for (auto& core : attackedCores)
@@ -2662,7 +2663,7 @@ const std::map<Uint32,Coord>& QuantBot::colonyGuardPosts() const {
         if (!unit || !unit->getOwner() || unit->getHealth() <= 0 || !unit->isActive()) continue;
         const Uint32 item = unit->getItemID();
         if (!mobileCombatItem(item) || !unit->canAttack()) continue;
-        const int price = data[item][unit->getOriginalHouseID()].price;
+        const int price = data[item][unit->getProductionHouseID()].price;
         const int64_t power = CombatPowerPolicy::unitPower(price,
             unit->getHealth().lround(), unit->getMaxHealth());
         const bool enemy = unit->getOwner()->getTeamID() != myTeam;
@@ -2815,7 +2816,7 @@ Coord QuantBot::findSquadRallyLocation() {
     rallySelectedCycle=now;
     int x=0,y=0,count=0;
     for (const auto* unit:getUnitList()) {
-        if (unit->getOwner()!=getHouse() || !unit->isActive() || unit->getItemID()!=Unit_Harvester) continue;
+        if (unit->getOwner()!=getHouse() || !unit->isActive() || !QuantBotInternal::harvesterItem(unit->getItemID())) continue;
         const auto* harvester=static_cast<const Harvester*>(unit);
         if (harvester->isReturning() || !harvester->isHarvesting()) continue;
         x+=unit->getX(); y+=unit->getY(); ++count;
@@ -3339,7 +3340,7 @@ void QuantBot::retreatAllUnits() {
 			if (pUnit->getOwner() == getHouse()
 				&& pUnit->getItemID() != Unit_Carryall
 				&& pUnit->getItemID() != Unit_Sandworm
-				&& pUnit->getItemID() != Unit_Harvester
+				&& !QuantBotInternal::harvesterItem(pUnit->getItemID())
 				&& pUnit->getItemID() != Unit_MCV
 				&& pUnit->getItemID() != Unit_Frigate
                         && pUnit->getItemID() != Unit_Saboteur) {
@@ -3392,7 +3393,7 @@ void QuantBot::retreatAllUnits() {
             // only reaches the damage callback while it is actually being hit;
             // this recheck answers an attacker that is still standing over it.
             const bool ownAsset=victim && victim->getOwner()==getHouse()
-                && (victim->isAStructure() || victim->getItemID()==Unit_Harvester
+                && (victim->isAStructure() || QuantBotInternal::harvesterItem(victim->getItemID())
                     || victim->getItemID()==Unit_RebelHarvester);
             // The contact's own target is what scrambleUnitsAndDefend reads, so
             // this stays the same call it has always been: no extra protected
@@ -3460,7 +3461,7 @@ void QuantBot::retreatAllUnits() {
                 continue;
             }
             if (!unit || unit->getOwner()!=getHouse() || unitRole(unit, {UnitRole::Human}) != UnitRole::Free
-                || unit->getItemID()==Unit_Ornithopter
+                || QuantBotInternal::ornithopterItem(unit->getItemID())
                 || !target || target->getHealth()<=0 || !target->isActive()
                 || target->getOwner()->getTeamID()==getHouse()->getTeamID()
                 || unitRole(unit, {UnitRole::Repair}) != UnitRole::Free || unit->getAttackMode()==RETREAT
@@ -3575,6 +3576,7 @@ void QuantBot::retreatAllUnits() {
             // Palace saboteurs already hunt autonomously. No tactical or army
             // controller may replace their orders, including forced orders.
             if (pUnit->getItemID()==Unit_Saboteur) continue;
+            if (ModManager::instance().isTornieFamilyContentActive() && pUnit->getAttackMode() == SABOTAGE) continue;
             if (pUnit->getOwner()==getHouse() && unitRole(pUnit, {UnitRole::Human}) != UnitRole::Free) continue;
             // A captured Devastator is worth exactly one thing, so arm it at the first scan
             // that sees it - ahead of kiting, campaign holds, rally, escort and every other
@@ -3669,13 +3671,13 @@ void QuantBot::retreatAllUnits() {
 
             if (bundling && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
-                && pUnit->getItemID() != Unit_Harvester && pUnit->getItemID() != Unit_Saboteur
+                && !QuantBotInternal::harvesterItem(pUnit->getItemID()) && pUnit->getItemID() != Unit_Saboteur
                 && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free && !pUnit->hasATarget() && !pUnit->wasForced()
                 && pUnit->getAttackMode() != HUNT && pUnit->getAttackMode() != RETREAT
                 && bundleUnit(pUnit,bundleTiles,bundleWalkers)) continue;
             if (!builderOnly() && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
-                && pUnit->getItemID() != Unit_Harvester && pUnit->getItemID() != Unit_Saboteur
+                && !QuantBotInternal::harvesterItem(pUnit->getItemID()) && pUnit->getItemID() != Unit_Saboteur
                 && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free && !pUnit->hasATarget() && !pUnit->wasForced()
                 && pUnit->getAttackMode() != HUNT && pUnit->getAttackMode() != RETREAT
                 && squadRallyLocation.isValid()) {
@@ -3702,6 +3704,8 @@ void QuantBot::retreatAllUnits() {
                     if (spiceCache.valid) { spiceCache.valid = false; ++spiceCache.invalidations; }
                 } break;
 
+                case Unit_CapacityHarvester:
+                case Unit_FastHarvester:
                 case Unit_Harvester: {
                     const Harvester* pHarvester = static_cast<const Harvester*>(pUnit);
                     if(pHarvester != nullptr && pHarvester->isActive()) {
@@ -3709,9 +3713,9 @@ void QuantBot::retreatAllUnits() {
                         // A Fighter only keeps harvesters out of danger; their routine is the builder's.
                         if (fighterOnly()) break;
                         // Existing check for early return with half spice
-						if(getHouse()->getNumItems(Structure_Refinery) < 4
+						if(getAIRefineryBays() < 4
 							&& getHouse()->getCredits() < 1000
-							&& pHarvester->getAmountOfSpice() >= HARVESTERMAXSPICE/2) {
+                            && pHarvester->getAmountOfSpice() >= pHarvester->getSpiceCapacity()/2) {
                             doReturn(pHarvester);
                         }
 
@@ -3766,6 +3770,7 @@ void QuantBot::retreatAllUnits() {
                 case Unit_Sandworm: {
                 } break;
 
+                case Unit_EliteOrnithopter:
                 case Unit_Ornithopter: {
                     // Safe strike/defence planner owns targeting and patrol locations.
                 } break;
@@ -3776,9 +3781,11 @@ void QuantBot::retreatAllUnits() {
                     }
 
                     int squadRadius = lround(FixPoint::sqrt(getHouse()->getNumUnits()
-                        - getHouse()->getNumItems(Unit_Harvester)
+                        - getAIHarvesterCount()
                         - getHouse()->getNumItems(Unit_Carryall)
                         - getHouse()->getNumItems(Unit_Ornithopter)
+                        - (ModManager::instance().isTornieFamilyContentActive()
+                            ? getHouse()->getNumItems(Unit_EliteOrnithopter) : 0)
                         - getHouse()->getNumItems(Unit_Sandworm)
                         - getHouse()->getNumItems(Unit_MCV))) + 1;
 
@@ -3786,9 +3793,9 @@ void QuantBot::retreatAllUnits() {
                     if (pUnit->getOwner() != nullptr && pUnit->getOwner()->getHouseID() != pUnit->getOriginalHouseID()) {
                         // Captured Devastators are armed centrally above, before any role or
                         // rally early return can divert them, so they never reach this switch.
-                        if (pUnit->getItemID() == Unit_Harvester) {
+                        if (QuantBotInternal::harvesterItem(pUnit->getItemID())) {
                             const Harvester* pHarvester = static_cast<const Harvester*>(pUnit);
-                            if (pHarvester->getAmountOfSpice() >= HARVESTERMAXSPICE / 5) {
+                            if (pHarvester->getAmountOfSpice() >= pHarvester->getSpiceCapacity() / 5) {
                                 doReturn(pHarvester);
                             }
                             else {
@@ -3805,7 +3812,7 @@ void QuantBot::retreatAllUnits() {
                             moveToOptimalSquadPosition(pUnit, 2,&rallyOrdersRemaining);
                         }
                     }
-                    else if (pUnit->getItemID() != Unit_Ornithopter && pUnit->getItemID() != Unit_Saboteur && pUnit->getAttackMode() != HUNT && !pUnit->hasATarget() && !pUnit->wasForced()) {
+                    else if (!QuantBotInternal::ornithopterItem(pUnit->getItemID()) && pUnit->getItemID() != Unit_Saboteur && pUnit->getAttackMode() != HUNT && !pUnit->hasATarget() && !pUnit->wasForced()) {
                         if (pUnit->getAttackMode() == AREAGUARD && squadCenterLocation.isValid() && (gameMode != GameMode::Campaign)) {
 							if (!pUnit->hasATarget()) {
                                 // Move to optimal position (closer of squad center or rally point, only if outside radius)

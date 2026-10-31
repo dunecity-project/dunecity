@@ -2,21 +2,28 @@
 """Exercise real menu widgets with no public connection or shared user settings.
 Test access is isolated to this diagnostic binary; production objects are unchanged."""
 import argparse
+import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
+import sys
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import discard_profile_assets, require_free_space, scratch_dir
 parser = argparse.ArgumentParser(description="Render real menus and check setup state in an isolated profile.")
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--audio-failure', action='store_true', help='Verify startup recovery when the audio driver cannot open')
 parser.add_argument('--size', action='append', metavar='WxH', help='Run at this window size instead of 640x480, 854x480 and 1280x720 (repeatable)')
 parser.add_argument('--retina-resolution', action='store_true', help='Verify HD selection, Apply/reinitialization and fullscreen with Retina display data')
+parser.add_argument('--tornie-family', action='store_true', help='Run only the six-edition campaign, custom lobby and map editor matrix')
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
+require_free_space()
 subprocess.run(['python3',str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
 target = 'bin/dunecity.app/Contents/MacOS/dunecity'
 commands = subprocess.check_output(['ninja','-C',str(build),'-t','commands',target],text=True).splitlines()
@@ -76,24 +83,38 @@ with (out/'build.log').open('w') as log:
         link = [str(out/'retina-options.o') if arg.endswith('/Menu/OptionsMenu.cpp.o') else arg for arg in link]
     subprocess.run(link,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
 sizes = [tuple(int(v) for v in size.lower().split('x')) for size in args.size] if args.size else [(640, 480), (854, 480), (1280, 720)]
-for width, height in ([(640,480)] if args.retina_resolution else sizes):
-    profile = out / ('profile-' + str(width))
-    profile.mkdir(exist_ok=True)
-    (profile/'Dune City.ini').write_text('[Video]\nPhysical Width = '+str(width)+'\nPhysical Height = '+str(height)+'\nWidth = '+str(width)+'\nHeight = '+str(height)+'\nInterface Height = '+str(height)+'\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Menu tester\n')
-    env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='unavailable-test-driver' if args.audio_failure else 'dummy', MENU_PROBE_OUT=str(out), MENU_PROBE_WIDTH=str(width), MENU_PROBE_HEIGHT=str(height))
-    if args.retina_resolution: env['MENU_RETINA_RESOLUTION']='1'
-    logpath = out / ('run-' + str(width) + '.log')
-    with logpath.open('w') as log:
-        # The complete navigation fixture reloads every bundled graphics pack
-        # and scans the large community maps at each of three screen sizes.
-        # Keep the small Retina check bounded separately; 120 seconds truncated
-        # progressing navigation runs before their final assertions on macOS.
-        runtime_timeout = 120 if args.retina_resolution else 420
-        subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=runtime_timeout)
-    results = [line for line in logpath.read_text(errors="replace").splitlines() if 'MENU_PROBE_PASS:' in line]
-    if len(results) != 1: raise RuntimeError('Missing menu test result; see '+str(logpath))
-    if args.audio_failure:
+family_results = []
+with scratch_dir('menu-probe') as scratch:
+    for width, height in ([(640,480)] if args.retina_resolution else sizes):
+        profile = scratch / ('profile-' + str(width) + 'x' + str(height))
+        profile.mkdir()
+        (profile/'Dune City.ini').write_text('[Video]\nPhysical Width = '+str(width)+'\nPhysical Height = '+str(height)+'\nWidth = '+str(width)+'\nHeight = '+str(height)+'\nInterface Height = '+str(height)+'\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Menu tester\n')
+        env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='unavailable-test-driver' if args.audio_failure else 'dummy', MENU_PROBE_OUT=str(out), MENU_PROBE_WIDTH=str(width), MENU_PROBE_HEIGHT=str(height))
+        if args.retina_resolution: env['MENU_RETINA_RESOLUTION']='1'
+        if args.tornie_family: env['MENU_TORNIE_FAMILY']='1'
+        logpath = out / ('run-' + str(width) + '.log')
+        with logpath.open('w') as log:
+            # The complete navigation fixture reloads every bundled graphics pack
+            # and scans the large community maps at each of three screen sizes.
+            runtime_timeout = 120 if args.retina_resolution else 420
+            subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=runtime_timeout)
         text = logpath.read_text(errors="replace")
-        if 'Continuing with silent audio' not in text or 'Audio driver: dummy' not in text:
-            raise RuntimeError('Missing silent audio recovery evidence; see '+str(logpath))
-    print(results[0])
+        results = [line for line in text.splitlines() if 'MENU_PROBE_PASS:' in line]
+        if len(results) != 1: raise RuntimeError('Missing menu test result; see '+str(logpath))
+        if not args.retina_resolution:
+            rows = [dict(field.split('=', 1) for field in line.split('TORNIE_MENU_PASS: ', 1)[1].split())
+                    for line in text.splitlines() if 'TORNIE_MENU_PASS: ' in line]
+            if {row['mod'] for row in rows} != {'Tornie', 'TornieLite', 'Jericho', 'JerichoLite', 'ArcaKev', 'ArcaKevLite'} or len(rows) != 6:
+                raise RuntimeError('Incomplete Tornie-family menu matrix; see '+str(logpath))
+            for row in rows:
+                family_results.append(dict(width=width, height=height,
+                                           **{key: int(value) if value.isdigit() else value for key, value in row.items()}))
+                print('TORNIE_MENU_PASS: ' + ' '.join(key+'='+value for key, value in row.items()))
+            (out/'tornie-family-results.json').write_text(json.dumps(family_results, indent=2)+'\n')
+        if args.audio_failure:
+            if 'Continuing with silent audio' not in text or 'Audio driver: dummy' not in text:
+                raise RuntimeError('Missing silent audio recovery evidence; see '+str(logpath))
+        discard_profile_assets(profile)
+        shutil.copytree(profile, out / ('profile-' + str(width)), dirs_exist_ok=True)
+        shutil.rmtree(profile)
+        print(results[0])

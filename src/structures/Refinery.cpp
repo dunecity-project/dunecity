@@ -21,6 +21,8 @@
 
 #include <FileClasses/GFXManager.h>
 #include <House.h>
+#include <Game.h>
+#include <mod/ModManager.h>
 #include <SoundPlayer.h>
 #include <Map.h>
 
@@ -35,12 +37,11 @@
 /* how fast is spice extracted */
 #define MAXIMUMHARVESTEREXTRACTSPEED (0.625_fix)
 
-Refinery::Refinery(House* newOwner) : StructureBase(newOwner) {
-    Refinery::init();
+Refinery::Refinery(House* newOwner, int newItemID) : StructureBase(newOwner) {
+    Refinery::init(newItemID);
 
     setHealth(getMaxHealth());
 
-    extractingSpice = false;
     bookings = 0;
 
     firstRun = true;
@@ -49,14 +50,25 @@ Refinery::Refinery(House* newOwner) : StructureBase(newOwner) {
     lastAnimFrame = 3;
 }
 
-Refinery::Refinery(InputStream& stream) : StructureBase(stream) {
-    Refinery::init();
+Refinery::Refinery(InputStream& stream, int newItemID) : StructureBase(stream) {
+    Refinery::init(newItemID);
 
-    extractingSpice = stream.readBool();
-    harvester.load(stream);
+    extractingSpice[0] = stream.readBool();
+    harvesters[0].load(stream);
     bookings = stream.readUint32();
 
-    if(extractingSpice) {
+    if(itemID == Structure_Doublefinery
+       && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546) {
+        extractingSpice[1] = stream.readBool();
+        harvesters[1].load(stream);
+    }
+
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        for(int index = 0; index < getNumBays(); ++index) {
+            if(!extractingSpice[index]) harvesters[index].pointTo(NONE_ID);
+        }
+        refreshAnimation();
+    } else if(extractingSpice[0]) {
         firstAnimFrame = 8;
         lastAnimFrame = 9;
         curAnimFrame = 8;
@@ -69,33 +81,40 @@ Refinery::Refinery(InputStream& stream) : StructureBase(stream) {
     firstRun = false;
 }
 
-void Refinery::init() {
-    itemID = Structure_Refinery;
+void Refinery::init(int newItemID) {
+    itemID = newItemID;
     owner->incrementStructures(itemID);
 
-    structureSize.x = 3;
+    const bool doubleBay = getNumBays() == 2;
+    structureSize.x = doubleBay ? 5 : 3;
     structureSize.y = 2;
 
-    graphicID = ObjPic_Refinery;
+    graphicID = doubleBay ? ObjPic_Doublefinery : ObjPic_Refinery;
     graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
     numImagesX = 10;
     numImagesY = 1;
 }
 
 Refinery::~Refinery() {
-    if(extractingSpice && harvester) {
-        if(harvester.getUnitPointer() != nullptr)
-            harvester.getUnitPointer()->destroy();
-        harvester.pointTo(NONE_ID);
+    for(int index = 0; index < getNumBays(); ++index) {
+        if(extractingSpice[index] && harvesters[index]) {
+            if(auto* unit = harvesters[index].getUnitPointer()) unit->destroy();
+            harvesters[index].pointTo(NONE_ID);
+        }
     }
 }
 
 void Refinery::save(OutputStream& stream) const {
     StructureBase::save(stream);
 
-    stream.writeBool(extractingSpice);
-    harvester.save(stream);
+    // The first bay keeps the classic bool/pointer/bookings byte layout.
+    stream.writeBool(extractingSpice[0]);
+    harvesters[0].save(stream);
     stream.writeUint32(bookings);
+    if(SAVEGAMEVERSION >= SAVEGAMEVERSION_TORNIE546 && itemID == Structure_Doublefinery) {
+        stream.writeBool(extractingSpice[1]);
+        harvesters[1].save(stream);
+    }
 }
 
 ObjectInterface* Refinery::getInterfaceContainer() {
@@ -106,19 +125,117 @@ ObjectInterface* Refinery::getInterfaceContainer() {
     }
 }
 
-void Refinery::assignHarvester(TrackedUnit* newHarvester) {
-    extractingSpice = true;
-    harvester.pointTo(newHarvester);
+int Refinery::getNumBays() const {
+    return itemID == Structure_Doublefinery
+        && ModManager::instance().isTornieFamilyContentActive() ? 2 : 1;
+}
+
+void Refinery::unBook() {
+    if(bookings > 0 || !(ModManager::instance().isTornieFamilyContentActive())) {
+        --bookings;
+    }
+    if(bookings == 0) stopAnimate();
+}
+
+int Refinery::getNumOccupiedBays() const {
+    return int(extractingSpice[0]) + (getNumBays() == 2 ? int(extractingSpice[1]) : 0);
+}
+
+bool Refinery::isFree() const {
+    return getNumOccupiedBays() < getNumBays();
+}
+
+UnitBase* Refinery::getContainedHarvester() {
+    return const_cast<UnitBase*>(static_cast<const Refinery*>(this)->getContainedHarvester());
+}
+
+const UnitBase* Refinery::getContainedHarvester() const {
+    if(!(ModManager::instance().isTornieFamilyContentActive())) {
+        // Legacy refineries retain their historical pointer after deployment.
+        return harvesters[0].getUnitPointer();
+    }
+    for(int index = 0; index < getNumBays(); ++index) {
+        if(extractingSpice[index]) {
+            if(auto* unit = harvesters[index].getUnitPointer()) return unit;
+        }
+    }
+    return nullptr;
+}
+UnitBase* Refinery::getContainedHarvester(int bay) {
+    return const_cast<UnitBase*>(static_cast<const Refinery*>(this)->getContainedHarvester(bay));
+}
+
+const UnitBase* Refinery::getContainedHarvester(int bay) const {
+    return bay >= 0 && bay < getNumBays() && extractingSpice[bay]
+        ? harvesters[bay].getUnitPointer() : nullptr;
+}
+
+
+std::vector<UnitBase*> Refinery::getContainedHarvesters() {
+    std::vector<UnitBase*> result;
+    const int numBays = getNumBays();
+    for(int index = 0; index < numBays; ++index) {
+        if(extractingSpice[index]) {
+            if(auto* unit = harvesters[index].getUnitPointer()) {
+                if(result.empty()) result.reserve(numBays);
+                result.push_back(unit);
+            }
+        }
+    }
+    return result;
+}
+
+bool Refinery::assignHarvester(TrackedUnit* newHarvester) {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        if(!newHarvester) return false;
+        const int numBays = getNumBays();
+        for(int index = 0; index < numBays; ++index) {
+            if(extractingSpice[index] && harvesters[index].getUnitPointer() == newHarvester) return false;
+        }
+        for(int index = 0; index < numBays; ++index) {
+            if(!extractingSpice[index]) {
+                extractingSpice[index] = true;
+                harvesters[index].pointTo(newHarvester);
+                refreshAnimation();
+                return true;
+            }
+        }
+        return false;
+    }
+    extractingSpice[0] = true;
+    harvesters[0].pointTo(newHarvester);
     drawnAngle = 1;
     firstAnimFrame = 8;
     lastAnimFrame = 9;
     curAnimFrame = 8;
+    return true;
 }
 
-void Refinery::deployHarvester(Carryall* pCarryall) {
+void Refinery::deployHarvester(Carryall* carryall) {
+    if(!(ModManager::instance().isTornieFamilyContentActive())) {
+        deployBay(0, carryall);
+        return;
+    }
+    const int numBays = getNumBays();
+    for(int index = 0; index < numBays; ++index) {
+        auto* unit = static_cast<GroundUnit*>(harvesters[index].getUnitPointer());
+        // Both aircraft target this structure, but each must collect its own bay.
+        if(extractingSpice[index] && unit && (!carryall || unit->getCarrier() == carryall)) {
+            deployBay(index, carryall);
+            return;
+        }
+    }
+    if(carryall) carryall->setTarget(nullptr);
+}
+
+void Refinery::deployBay(int index, Carryall* pCarryall) {
+    const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
+    UnitBase* pHarvester = harvesters[index].getUnitPointer();
+    if(familyActive && !pHarvester) return;
+    extractingSpice[index] = false;
+    if(familyActive) harvesters[index].pointTo(NONE_ID);
     unBook();
     drawnAngle = 0;
-    extractingSpice = false;
 
     if(firstRun) {
         if(getOwner() == pLocalHouse) {
@@ -128,7 +245,7 @@ void Refinery::deployHarvester(Carryall* pCarryall) {
 
     firstRun = false;
 
-    UnitBase* pHarvester = harvester.getUnitPointer();
+    // Preserve the legacy invalid-pointer deployment behavior outside the family.
     if(pHarvester == nullptr) {
         return;
     }
@@ -142,15 +259,30 @@ void Refinery::deployHarvester(Carryall* pCarryall) {
         pHarvester->deploy(deployPos);
     }
 
-    if(bookings == 0) {
+    if(familyActive) {
+        refreshAnimation();
+    } else if(bookings == 0) {
         stopAnimate();
     } else {
         startAnimate();
     }
 }
 
+void Refinery::refreshAnimation() {
+    // Object IDs must not be resolved while loading: units can be registered later.
+    const bool occupied = extractingSpice[0] || (getNumBays() == 2 && extractingSpice[1]);
+    drawnAngle = occupied ? 1 : 0;
+    firstAnimFrame = occupied ? 8 : 2;
+    lastAnimFrame = occupied ? 9 : (bookings ? 7 : 3);
+    if(curAnimFrame < firstAnimFrame || curAnimFrame > lastAnimFrame) curAnimFrame = firstAnimFrame;
+}
+
 void Refinery::startAnimate() {
-    if(extractingSpice == false) {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        refreshAnimation();
+        justPlacedTimer = 0;
+        animationCounter = 0;
+    } else if(!extractingSpice[0]) {
         firstAnimFrame = 2;
         lastAnimFrame = 7;
         curAnimFrame = 2;
@@ -160,20 +292,32 @@ void Refinery::startAnimate() {
 }
 
 void Refinery::stopAnimate() {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        refreshAnimation();
+        return;
+    }
     firstAnimFrame = 2;
     lastAnimFrame = 3;
     curAnimFrame = 2;
 }
 
 void Refinery::updateStructureSpecificStuff() {
-    if(extractingSpice) {
-        UnitBase* pHarvester = harvester.getUnitPointer();
+    const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
+    if(familyActive) refreshAnimation();
+    const int numBays = getNumBays();
+    for(int index = 0; index < numBays; ++index) {
+        if(!extractingSpice[index]) continue;
+        UnitBase* pHarvester = harvesters[index].getUnitPointer();
         if(pHarvester == nullptr) {
-            return;
+            if(!familyActive) return;
+            extractingSpice[index] = false;
+            refreshAnimation();
+            continue;
         }
 
         if(harvesterGetAmountOfSpice(pHarvester) > 0) {
             FixPoint extractionSpeed = MAXIMUMHARVESTEREXTRACTSPEED;
+            if(numBays == 2) extractionSpeed = extractionSpeed * 115 / 100;
 
             int scale = floor(5*getHealth()/getMaxHealth());
             if(scale == 0) {
@@ -213,10 +357,10 @@ void Refinery::updateStructureSpecificStuff() {
                 pHarvester->setTarget(nullptr);
                 pHarvester->setDestination(pHarvester->getGuardPoint());
             } else {
-                deployHarvester();
+                deployBay(index, nullptr);
             }
             } else if(!pGroundHarvester->hasBookedCarrier()) {
-                deployHarvester();
+                deployBay(index, nullptr);
             }
         }
     }

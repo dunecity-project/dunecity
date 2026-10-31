@@ -95,12 +95,15 @@ bool isBuildable(TERRAINTYPE t) { return t == Terrain_Rock || t == Terrain_Slab;
 bool isSpiceTerrain(TERRAINTYPE t) {
     return t == Terrain_Spice || t == Terrain_ThickSpice || t == Terrain_SpiceBloom || t == Terrain_SpecialBloom
         || t == Terrain_GreenSpice || t == Terrain_ThickGreenSpice || t == Terrain_GreenSpiceBloom
-        || t == Terrain_RedSpice || t == Terrain_ThickRedSpice || t == Terrain_RedSpiceBloom;
+        || t == Terrain_RedSpice || t == Terrain_ThickRedSpice || t == Terrain_RedSpiceBloom
+        || t == Terrain_PaleLilacSpice || t == Terrain_ThickPaleLilacSpice || t == Terrain_PaleLilacSpiceBloom
+        || t == Terrain_WhiteSpice || t == Terrain_ThickWhiteSpice || t == Terrain_WhiteSpiceBloom;
 }
 
 /// A unit placed on a bloom would set it off while the map loads (Tile::triggerSpiceBloom).
 bool isSpiceBloomTerrain(TERRAINTYPE t) {
-    return t == Terrain_SpiceBloom || t == Terrain_SpecialBloom || t == Terrain_GreenSpiceBloom || t == Terrain_RedSpiceBloom;
+    return t == Terrain_SpiceBloom || t == Terrain_SpecialBloom || t == Terrain_GreenSpiceBloom || t == Terrain_RedSpiceBloom
+        || t == Terrain_PaleLilacSpiceBloom || t == Terrain_WhiteSpiceBloom;
 }
 
 char terrainChar(TERRAINTYPE t) {
@@ -113,6 +116,12 @@ char terrainChar(TERRAINTYPE t) {
         case Terrain_Mountain:      return '@';
         case Terrain_SpiceBloom:    return 'O';
         case Terrain_SpecialBloom:  return 'Q';
+        case Terrain_PaleLilacSpice: return 'l';
+        case Terrain_ThickPaleLilacSpice: return 'L';
+        case Terrain_PaleLilacSpiceBloom: return 'i';
+        case Terrain_WhiteSpice: return 'w';
+        case Terrain_ThickWhiteSpice: return 'W';
+        case Terrain_WhiteSpiceBloom: return 'x';
         default:                    return '-';
     }
 }
@@ -1121,7 +1130,7 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
 
 // ---- Params -------------------------------------------------------------------------------
 
-void Params::clamp(int houseCount) {
+void Params::clamp(int houseCount, bool tornieFamily) {
     if(std::find(kMapSizes.begin(), kMapSizes.end(), mapSize) == kMapSizes.end())
         mapSize = snapTo(mapSize, kMapSizes.data(), kMapSizes.data() + kMapSizes.size());
     rock = static_cast<Rock>(std::clamp(indexOf(rock), 0, indexOf(Rock::All)));
@@ -1139,11 +1148,11 @@ void Params::clamp(int houseCount) {
     // Watching is a single-player choice; a hosted map's players and observers are the lobby's.
     if(multiplayer) spectate = false;
     if(spectateClass.empty()) spectateClass = "qBotMedium";
-    allies = std::clamp(allies, 0, kMaxAllies);
-    enemies = std::clamp(enemies, kMinEnemies, kMaxEnemies);
+    allies = std::clamp(allies, 0, tornieFamily ? NUM_PLAYER_HOUSES - 2 : kMaxAllies);
+    enemies = std::clamp(enemies, kMinEnemies, tornieFamily ? NUM_PLAYER_HOUSES - 1 : kMaxEnemies);
     houseCount = std::max(2, houseCount);
-    starts = std::clamp(starts, kMinStarts, std::max(kMinStarts, maxStarts(houseCount)));
-    const int others = maxOtherHouses(houseCount);
+    starts = std::clamp(starts, kMinStarts, std::max(kMinStarts, maxStarts(houseCount, tornieFamily)));
+    const int others = maxOtherHouses(houseCount, tornieFamily);
     if(allies + enemies > others) enemies = std::max(kMinEnemies, others - allies);
     if(allies + enemies > others) allies = std::max(0, others - enemies);
 }
@@ -1258,6 +1267,7 @@ bool Catalogue::available(int item, int house, int techLevel) const {
 
 Catalogue startCatalogue(const Catalogue& catalogue, int starts) {
     Catalogue shared;
+    shared.tornieFamily = catalogue.tornieFamily;
     shared.itemNames = catalogue.itemNames;
     shared.sizes = catalogue.sizes;
     // A start becomes a house slot; the Natives slot (HOUSE_NATIVES) is never a start.
@@ -1465,7 +1475,7 @@ int displayedPopulation(const std::vector<Placement>& placements, int house) {
 
 Result generate(const Params& requested, const Catalogue& houseCatalogue) {
     Params params = requested;
-    params.clamp(static_cast<int>(houseCatalogue.houses.size()));
+    params.clamp(static_cast<int>(houseCatalogue.houses.size()), houseCatalogue.tornieFamily);
     const bool multiplayer = params.multiplayer;
     // Multiplayer starts are planned as Player1..PlayerN with what every house can field, so
     // every start holds the same base, army and city whichever house the lobby puts there.
@@ -1567,11 +1577,23 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
         for(Plan& plan : plans) { plan.width = maxW; plan.height = maxH; }
         const int left = kMargin, right = size - kMargin - maxW, midX = (size - maxW) / 2;
         const int top = kMargin, bottom = size - kMargin - maxH, midY = (size - maxH) / 2;
-        const Coord ring[] = {{left, top}, {midX, top}, {right, top}, {right, midY},
-                              {right, bottom}, {midX, bottom}, {left, bottom}, {left, midY}};
-        for(int i = 0; i < houses; ++i) {
-            const Coord tl = i == 8 ? Coord(midX, midY) : ring[houses >= 9 ? i : i * 8 / houses];
-            slotCenters.emplace_back(tl.x + maxW / 2, tl.y + maxH / 2);
+        if(houses > 9) {
+            // Twelve perimeter slots in reflected pairs. Smaller matches keep their exact layout.
+            const int dx = (right - left) / 3, dy = (bottom - top) / 3;
+            const Coord ring[] = {{left, top}, {left + dx, top}, {right - dx, top}, {right, top},
+                {right, top + dy}, {right, bottom - dy}, {right, bottom}, {right - dx, bottom},
+                {left + dx, bottom}, {left, bottom}, {left, bottom - dy}, {left, top + dy}};
+            for(int i = 0; i < houses; ++i) {
+                const Coord tl = ring[i * 12 / houses];
+                slotCenters.emplace_back(tl.x + maxW / 2, tl.y + maxH / 2);
+            }
+        } else {
+            const Coord ring[] = {{left, top}, {midX, top}, {right, top}, {right, midY},
+                                  {right, bottom}, {midX, bottom}, {left, bottom}, {left, midY}};
+            for(int i = 0; i < houses; ++i) {
+                const Coord tl = i == 8 ? Coord(midX, midY) : ring[houses >= 9 ? i : i * 8 / houses];
+                slotCenters.emplace_back(tl.x + maxW / 2, tl.y + maxH / 2);
+            }
         }
     } else {
         const int x0 = kMargin + maxW / 2, y0 = kMargin + maxH / 2;

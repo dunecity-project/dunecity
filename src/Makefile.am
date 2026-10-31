@@ -3,6 +3,9 @@ dunelegacy_SOURCES =	AStarSearch.cpp\
 						Bullet.cpp\
 						Choam.cpp\
 						Command.cpp\
+						CommandData.cpp\
+						mod/ChaosMode.cpp\
+						mod/RadarResearch.cpp\
 						CommandManager.cpp\
 						Explosion.cpp\
 						Game.cpp\

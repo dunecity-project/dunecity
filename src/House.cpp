@@ -19,6 +19,7 @@
  */
 
 #include <House.h>
+#include <Achievements/AchievementEvents.h>
 
 #include <globals.h>
 #include <sand.h>
@@ -35,6 +36,7 @@
 #include <GameInterface.h>
 #include <Map.h>
 #include <SoundPlayer.h>
+#include <mod/ModManager.h>
 
 #include <structures/StructureBase.h>
 #include <structures/BuilderBase.h>
@@ -63,7 +65,9 @@ House::House(int newHouse, int newCredits, int maxUnits, int maxHarvesters, Uint
     // Starting cash is deliberately not measured against the storage capacity:
     // a house is created before its structures are placed, so at this point the
     // capacity of every house on the map is still zero.
-    startingCredits = std::clamp(newCredits, 0, MAX_GAME_CREDITS);
+    startingCredits = std::clamp(currentGame
+        ? currentGame->getGameInitSettings().campaignStartingCredits(newCredits, houseID)
+        : newCredits, 0, MAX_GAME_CREDITS);
     cityCredits = 0;
     cityTaxReceipts = 0;
     oldCredits = lround(storedCredits+startingCredits+cityCredits);
@@ -201,6 +205,11 @@ House::House(InputStream& stream) : choam(this) {
             addPlayer(pPlayerData->load(stream,this));
         }
     }
+    if(currentGame && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546) {
+        structuresSold = stream.readUint32();
+        saleCredits = stream.readUint32();
+        loadRadarResearch(stream);
+    }
 }
 
 
@@ -288,6 +297,9 @@ void House::save(OutputStream& stream) const {
         stream.writeString(pPlayer->getPlayerclass());
         pPlayer->save(stream);
     }
+    stream.writeUint32(structuresSold);
+    stream.writeUint32(saleCredits);
+    saveRadarResearch(stream);
 }
 
 
@@ -345,6 +357,39 @@ void House::configureCoopPlayers(const std::vector<std::pair<std::string, std::s
     ai = false;
 }
 
+void House::configureCampaignCoopPlayers(const std::vector<std::pair<std::string, std::string>>& desired) {
+    if(desired.empty() || desired.size() > 2 || !currentGame->isCoopCampaign())
+        THROW(std::runtime_error, "Invalid co-op campaign controller roster.");
+    while(players.size() > desired.size()) {
+        currentGame->unregisterPlayer(players.back().get());
+        players.pop_back();
+    }
+    auto existing = players.begin();
+    for(const auto& [name, type] : desired) {
+        const auto* factory = PlayerFactory::getByPlayerClass(type);
+        if(!factory) THROW(std::runtime_error, "Unknown co-op campaign controller.");
+        if(existing == players.end()) {
+            addPlayer(factory->create(this, name));
+            existing = players.end();
+            continue;
+        }
+        Player* previous = existing->get();
+        currentGame->unregisterPlayer(previous);
+        if(previous->getPlayerclass() == type) {
+            previous->setPlayername(name);
+        } else {
+            auto replacement = factory->create(this, name);
+            replacement->playerID = previous->getPlayerID();
+            *existing = std::move(replacement);
+        }
+        currentGame->registerPlayer(existing->get());
+        ++existing;
+    }
+    ai = std::none_of(players.begin(), players.end(), [](const auto& player) {
+        return dynamic_cast<HumanPlayer*>(player.get()) != nullptr;
+    });
+}
+
 void House::addPlayer(std::unique_ptr<Player> newPlayer) {
     Player* pNewPlayer = newPlayer.get();
 
@@ -355,7 +400,7 @@ void House::addPlayer(std::unique_ptr<Player> newPlayer) {
     }
 
     players.push_back(std::move(newPlayer));
-    if(isCoopGameType(currentGame->gameType)) {
+    if(isCoopGameType(currentGame->gameType) || currentGame->isCoopCampaign()) {
         ai = std::none_of(players.begin(), players.end(), [](const auto& player) {
             return dynamic_cast<HumanPlayer*>(player.get()) != nullptr;
         });
@@ -379,6 +424,64 @@ bool House::hasPower() const {
 
 void House::setProducedPower(int newPower) {
     producedPower = newPower;
+}
+
+int House::getNumHarvesters() const {
+    const int ordinary = numItem[Unit_Harvester] + numItem[Unit_RebelHarvester];
+    return ordinary + (ModManager::instance().isTornieFamilyContentActive()
+        ? numItem[Unit_FastHarvester] + numItem[Unit_CapacityHarvester] : 0);
+}
+
+bool House::hasRefinery() const {
+    return numItem[Structure_Refinery] + numItem[Structure_Worfinery] > 0
+        || (ModManager::instance().isTornieFamilyContentActive() && numItem[Structure_Doublefinery] > 0);
+}
+
+bool House::isAlive() const {
+    const int fightingUnits = numUnits - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall]
+        - getNumHarvesters() - numItem[Unit_Frigate] - numItem[Unit_Sandworm]
+        - numItem[Unit_AmbientAirplane] - numItem[Unit_AmbientHelicopter];
+    return teamID == 0 || isNatives() || numStructures - numItem[Structure_Wall] > 0 || fightingUnits > 0;
+}
+
+bool House::isGroundUnitLimitReached() const {
+    const int limit = getMaxUnits();
+    if(limit == 0) return false;
+    int ground = numUnits - numItem[Unit_Soldier] - numItem[Unit_Trooper]
+        - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Ornithopter] - numItem[Unit_Sandworm];
+    if(ModManager::instance().isTornieFamilyContentActive()) ground -= numItem[Unit_EliteOrnithopter] + numItem[Unit_TameSandworm];
+    return ground + (numItem[Unit_Soldier] + 2) / 3 + (numItem[Unit_Trooper] + 2) / 3 >= limit;
+}
+
+bool House::isInfantryUnitLimitReached() const {
+    const int limit = getMaxUnits();
+    if(limit == 0) return false;
+    int ground = numUnits - numItem[Unit_Soldier] - numItem[Unit_Trooper]
+        - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Ornithopter] - numItem[Unit_Sandworm];
+    if(ModManager::instance().isTornieFamilyContentActive()) ground -= numItem[Unit_EliteOrnithopter] + numItem[Unit_TameSandworm];
+    return ground + numItem[Unit_Soldier] / 3 + numItem[Unit_Trooper] / 3 >= limit;
+}
+
+bool House::isAirUnitLimitReached() const {
+    const int limit = getMaxUnits();
+    if(limit == 0) return false;
+    const int aircraft = numItem[Unit_Carryall] + numItem[Unit_ChemicalCarryall] + numItem[Unit_Ornithopter]
+        + (ModManager::instance().isTornieFamilyContentActive() ? numItem[Unit_EliteOrnithopter] : 0);
+    return aircraft >= 11 * std::max(limit, 25) / 25;
+}
+
+void House::addUnstoredCredits(FixPoint amount) {
+    if(amount <= 0) return;
+    enforceCreditCeiling();
+    startingCredits += std::min(amount, FixPoint(MAX_GAME_CREDITS) - startingCredits - getEarnedCredits());
+}
+
+void House::recordBuildingSale(int refund) {
+    refund = std::max(0, refund);
+    addUnstoredCredits(refund);
+    if(structuresSold < std::numeric_limits<Uint32>::max()) ++structuresSold;
+    saleCredits = static_cast<Uint32>(std::min<std::uint64_t>(std::numeric_limits<Uint32>::max(),
+        static_cast<std::uint64_t>(saleCredits) + refund));
 }
 
 
@@ -462,10 +565,32 @@ void House::setSpiceIncomeMultiplier(Uint32 multiplier) {
     spiceIncomeMultiplier = multiplier;
 }
 
+int House::getFactionID() const {
+    return factionForRuntimeHouse(houseID);
+}
+
+int House::factionForRuntimeHouse(int runtimeHouse) {
+    if(!currentGame || runtimeHouse < 0 || runtimeHouse >= NUM_PLAYER_HOUSES) return runtimeHouse;
+    const auto& context = currentGame->getCoopCampaignContext();
+    return context ? coop::factionForHouse(*context, runtimeHouse) : runtimeHouse;
+}
+
 // The spice quota is measured on the house's physical store. In DuneCity refined spice and city
 // taxes share that store (getEarnedCreditRoom) and taxes fill it first, so a quota counted on
 // spice alone could never be met (Harkonnen m3, Ordos m1: 80 minutes, docs/ai-scenario-matrix.md).
 static void checkQuotaWin(House& house) {
+    const auto& shared = currentGame->getGameInitSettings().getCoopHarvestObjective();
+    if(shared.quota > 0) {
+        if(std::find(shared.houses.begin(), shared.houses.end(), house.getHouseID()) == shared.houses.end()) return;
+        FixPoint stored = 0;
+        for(const int houseID : shared.houses) {
+            if(houseID >= 0 && houseID < NUM_PLAYER_HOUSES) {
+                if(const auto* ally = currentGame->getHouse(houseID)) stored += ally->getStoredCredits();
+            }
+        }
+        if(stored >= shared.quota) house.win();
+        return;
+    }
     if((currentGame->winFlags & WINLOSEFLAGS_QUOTA) == 0 || house.getQuota() == 0) return;
     // A player only ends on its own house's quota (original rule). An observer has no house:
     // any house that meets its quota wins the match for its team.
@@ -483,6 +608,7 @@ void House::addCredits(FixPoint newCredits, bool wasRefined) {
             // Gross statistic: what the refinery processed, before the storage
             // limit decides how much of it the house gets to keep.
             harvestedSpice += newCredits;
+            AchievementEvents::refined(this, static_cast<std::uint64_t>(std::max(0, harvestedSpice.floor())));
             AITelemetry::log().account(houseID, "spice_refined", newCredits.getRawValue());
         }
 
@@ -636,6 +762,12 @@ void House::updateBuildLists() {
 
 void House::update() {
     enforceCreditCapacity();
+    updateRadarResearch();
+    if(ModManager::instance().isTornieFamilyContentActive() && !isNatives()
+       && isAI() && radarResearch.active < 0 && getCredits() >= 2000) {
+        for(int kind = 0; kind < radar::Count; ++kind)
+            if(startRadarResearch(kind)) break;
+    }
     numVisibleEnemyUnits = 0;
     numVisibleFriendlyUnits = 0;
 
@@ -674,6 +806,8 @@ void House::incrementUnits(int itemID, bool addMilitaryValue) {
        && itemID != Unit_MCV
        && itemID != Unit_Harvester
        && itemID != Unit_RebelHarvester
+       && !(ModManager::instance().isTornieFamilyContentActive()
+            && (itemID == Unit_FastHarvester || itemID == Unit_CapacityHarvester))
        && itemID != Unit_Sandworm
        && !isAmbientUnit(itemID)) {
 
@@ -704,7 +838,9 @@ bool House::isUnitLimitReached(int itemID) const {
         return false;
     }
 
-    if(itemID == Unit_Harvester || itemID == Unit_RebelHarvester) {
+    if(itemID == Unit_Harvester || itemID == Unit_RebelHarvester
+       || (ModManager::instance().isTornieFamilyContentActive()
+           && (itemID == Unit_FastHarvester || itemID == Unit_CapacityHarvester))) {
         return isHarvesterLimitReached();
     }
     if(isInfantryUnit(itemID)) {
@@ -722,8 +858,9 @@ void House::decrementUnits(int itemID) {
     numUnits--;
     numItemLosses[itemID]++;
 
-    if(itemID == Unit_Harvester) {
-        decrementHarvesters();
+    if(itemID == Unit_Harvester || (ModManager::instance().isTornieFamilyContentActive()
+        && (itemID == Unit_FastHarvester || itemID == Unit_CapacityHarvester))) {
+        decrementHarvesters(itemID);
     } else {
         numItem[itemID]--;
     }
@@ -738,6 +875,8 @@ void House::decrementUnits(int itemID) {
        && itemID != Unit_MCV
        && itemID != Unit_Harvester
        && itemID != Unit_RebelHarvester
+       && !(ModManager::instance().isTornieFamilyContentActive()
+            && (itemID == Unit_FastHarvester || itemID == Unit_CapacityHarvester))
        && itemID != Unit_Sandworm
        && !isAmbientUnit(itemID)) {
 
@@ -766,6 +905,8 @@ void House::cancelCreatedUnit(int itemID) {
        && itemID != Unit_MCV
        && itemID != Unit_Harvester
        && itemID != Unit_RebelHarvester
+       && !(ModManager::instance().isTornieFamilyContentActive()
+            && (itemID == Unit_FastHarvester || itemID == Unit_CapacityHarvester))
        && itemID != Unit_Sandworm
        && !isAmbientUnit(itemID)) {
 
@@ -869,7 +1010,8 @@ void House::noteDamageLocation(ObjectBase* pObject, int damage, Uint32 damagerID
     This method informs this house that a new unit or structure was built
     \param pObject   the object that was built
 */
-void House::informWasBuilt(ObjectBase* pObject) {
+void House::informWasBuilt(ObjectBase* pObject, bool produced) {
+    AchievementEvents::built(this, pObject, produced);
     int itemID = pObject->getItemID();
     if(pObject->isAStructure()) {
         structureBuiltValue += currentGame->objectData.data[itemID][houseID].price;
@@ -1105,11 +1247,14 @@ void House::freeHarvester(int xPos, int yPos) {
         && getHarvesterDropoff(currentGameMap->getTile(xPos, yPos)->getGroundObject()) != nullptr)
     {
         StructureBase* refinery = getHarvesterDropoff(currentGameMap->getTile(xPos, yPos)->getGroundObject());
+        const bool family = ModManager::instance().isTornieFamilyContentActive();
+        if(family && refinery->getItemID() == Structure_Doublefinery && isGroundUnitLimitReached()) return;
         Coord closestPos = currentGameMap->findClosestEdgePoint(
             refinery->getLocation() + Coord(refinery->getStructureSizeX() - 1, 0), Coord(1,1));
 
-        Carryall* carryall = static_cast<Carryall*>(createUnit(Unit_Carryall));
-        Harvester* harvester = static_cast<Harvester*>(createUnit(Unit_Harvester));
+        const int productionHouse = family ? refinery->getProductionHouseID() : HOUSE_INVALID;
+        Carryall* carryall = static_cast<Carryall*>(createUnit(Unit_Carryall, false, productionHouse));
+        Harvester* harvester = static_cast<Harvester*>(createUnit(Unit_Harvester, false, productionHouse));
         harvester->setAmountOfSpice(5);
         carryall->setOwned(false);
         carryall->giveCargo(harvester);
@@ -1134,7 +1279,7 @@ void House::freeHarvester(int xPos, int yPos) {
 
 
 
-StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int yPos, bool byScenario, bool bForcePlacing) {
+StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int yPos, bool byScenario, bool bForcePlacing, int productionHouseID) {
     if(!currentGameMap->tileExists(xPos,yPos)) {
         return nullptr;
     }
@@ -1262,6 +1407,14 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 delete newObject;
                 THROW(std::runtime_error, "Cannot create structure with itemID %d!", itemID);
             }
+            if(ModManager::instance().isTornieFamilyContentActive()) {
+                const int technology = pBuilder ? pBuilder->getProductionHouseID() : productionHouseID;
+                // Windtraps credited their constructor output before production technology
+                // was known. Remove that contribution before changing the health denominator.
+                newStructure->setHealth(0);
+                newStructure->setProductionHouseID(isPlayerHouseID(technology) ? technology : getFactionID());
+                newStructure->setHealth(newStructure->getMaxHealth());
+            }
 
             const int actualSizeX = newStructure->getStructureSizeX();
             const int actualSizeY = newStructure->getStructureSizeY();
@@ -1343,8 +1496,12 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
             }
 
             // at the beginning of the game the first refinery gets a harvester for free (brought by a carryall)
-            if((itemID == Structure_Refinery) && ( ((currentGame->gameState == GameState::Start) && (numItem[Unit_Harvester] <= 0)) || (builderID != NONE_ID)) ) {
-                freeHarvester(xPos, yPos);
+            const bool family = ModManager::instance().isTornieFamilyContentActive();
+            if((itemID == Structure_Refinery || (family && itemID == Structure_Doublefinery))
+               && (((currentGame->gameState == GameState::Start) && numItem[Unit_Harvester] <= 0
+                    && (!family || byScenario)) || builderID != NONE_ID)) {
+                const int gifts = itemID == Structure_Doublefinery ? 2 : 1;
+                for(int gift = 0; gift < gifts; ++gift) freeHarvester(xPos, yPos);
             }
 
             // if this structure was built by a construction yard this construction yard must be informed
@@ -1407,8 +1564,8 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
 
 
 
-UnitBase* House::createUnit(int itemID, bool byScenario) {
-    ObjectBase* newObject = ObjectBase::createObject(itemID,this,byScenario);
+UnitBase* House::createUnit(int itemID, bool byScenario, int productionHouseID) {
+    ObjectBase* newObject = ObjectBase::createObject(itemID, this, byScenario, productionHouseID);
     UnitBase* newUnit = dynamic_cast<UnitBase*>(newObject);
 
     if(newUnit == nullptr) {
@@ -1427,7 +1584,9 @@ UnitBase* House::placeUnit(int itemID, int xPos, int yPos, bool byScenario) {
     if(currentGameMap->tileExists(xPos, yPos) == true) {
         Tile* pTile = currentGameMap->getTile(xPos,yPos);
 
-        if(itemID == Unit_Saboteur || itemID == Unit_Soldier || itemID == Unit_Trooper) {
+        if(itemID == Unit_Saboteur || itemID == Unit_Soldier || itemID == Unit_Trooper
+           || (ModManager::instance().isTornieFamilyContentActive()
+               && (itemID == Unit_GasInfantry || itemID == Unit_FlameTrooper))) {
             if((pTile->hasANonInfantryGroundObject() == true) || (pTile->infantryNotFull() == false)) {
                 // infantry units can not placed on non-infantry units or structures (or the tile is already full of infantry units)
                 return nullptr;
@@ -1536,11 +1695,13 @@ Coord House::getStrongestUnitPosition() const {
 
 
 
-void House::decrementHarvesters() {
-    numItem[Unit_Harvester]--;
+void House::decrementHarvesters(int itemID) {
+    numItem[itemID] = std::max(0, numItem[itemID] - 1);
+    const int remainingWorkers = numItem[Unit_Harvester]
+        + (ModManager::instance().isTornieFamilyContentActive()
+           ? numItem[Unit_FastHarvester] + numItem[Unit_CapacityHarvester] : 0);
 
-    if(numItem[Unit_Harvester] <= 0) {
-        numItem[Unit_Harvester] = 0;
+    if(remainingWorkers <= 0) {
 
         if(hasRefinery()) {
             Coord   closestPos;

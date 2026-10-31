@@ -701,6 +701,7 @@ private:
     /// Total price of this house's military units: every unit type except
     /// carryalls, harvesters, MCVs and sandworms. Computed live at each use.
     int militaryUnitValue() const;
+    int initialRefineryBays() const;
     /// This house's owned-tile indicator, so Map::isWithinBuildRange() can be
     /// answered in O(1) instead of a 5x5 probe per tile.
     ///
@@ -1648,6 +1649,7 @@ private:
     void build(int militaryValue);
     // build() runs one pass in stages; the pass state is in players/QuantBotBuildPass.h.
     struct BuildPass;
+    int rawPlannedItemCount(const BuildPass& pass, Uint32 item) const;
     struct BuilderTurn;
     struct YardTurn;
     struct CivicPlan;

@@ -27,6 +27,7 @@
 #include <Explosion.h>
 #include <ScreenBorder.h>
 #include <SoundPlayer.h>
+#include <mod/HealingBalance.h>
 
 ChemicalSiegeTank::ChemicalSiegeTank(House* newOwner) : TankBase(newOwner) {
     ChemicalSiegeTank::init();
@@ -136,7 +137,9 @@ void ChemicalSiegeTank::fireHealingMissile(UnitBase* pTarget)
     Coord destination = pTarget->getCenterPoint();
     bulletList.push_back(new Bullet(objectID, &source, &destination, Bullet_Heal,
                                     CHEMICAL_SIEGE_HEAL_AMOUNT, pTarget->isAFlyingUnit(), pTarget));
-    healingReloadTimer = CHEMICAL_SIEGE_HEAL_RELOAD;
+    const int baseReload = ModManager::instance().isTornieFamilyContentActive()
+        ? 120 : CHEMICAL_SIEGE_HEAL_RELOAD;
+    healingReloadTimer = healing::reload(baseReload, getProductionHouseID());
 }
 
 void ChemicalSiegeTank::doAttackObject(Uint32 targetObjectID, bool bForced)

@@ -454,6 +454,10 @@ void CustomGameMenu::onRandomMap()
     const int modChoice = modDropDown.getSelectedIndex();
     const std::string mod = modChoice >= 0 && modChoice < static_cast<int>(availableMods.size())
         ? availableMods[modChoice].name : ModManager::instance().getActiveModName();
+    if(ModManager::instance().isTornieFamilyContent(mod) && !RandomSkirmish::activateMod(mod)) {
+        openWindow(MsgBox::create(_("The chosen mod could not be activated.")));
+        return;
+    }
     std::string path;
     {
         RandomSkirmishMenu generator(mod);

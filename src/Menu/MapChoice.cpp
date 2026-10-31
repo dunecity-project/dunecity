@@ -31,6 +31,7 @@
 #include <misc/FrameYield.h>
 
 #include <sand.h>
+#include <mod/ModManager.h>
 
 MapChoice::MapChoice(int newHouse, unsigned int lastMission, Uint32 oldAlreadyPlayedRegions) : MenuBase() {
     disableQuiting(true);
@@ -45,10 +46,14 @@ MapChoice::MapChoice(int newHouse, unsigned int lastMission, Uint32 oldAlreadyPl
     lastScenario = (lastMission + 1)/3 + 1;
     alreadyPlayedRegions = oldAlreadyPlayedRegions;
     house = newHouse;
+    campaignHouseCount = ModManager::instance().isTornieFamilyContentActive() ? NUM_PLAYER_HOUSES : NUM_CAMPAIGN_HOUSES;
 
     // set up window
     SDL_Texture *pBackground = pGFXManager->getUIGraphic(UI_MapChoiceScreen, house);
-    setBackground(pBackground);
+    if(ModManager::instance().isTornieFamilyContentActive())
+        setBackground(pGFXManager->createFactionFrameBackground(UI_MapChoiceScreen, house));
+    else
+        setBackground(pBackground);
     resize(getTextureSize(pBackground));
 
     centerAreaRect.x = getRendererWidth()/2 - 320;
@@ -210,16 +215,16 @@ void MapChoice::drawSpecificStuff() {
 
         case MAPCHOICESTATE_BLENDING: {
             if(curBlendBlitter == nullptr) {
-                while(  (curHouse2Blit < NUM_CAMPAIGN_HOUSES) &&
-                        (curRegion2Blit >= group[lastScenario].newRegion[(curHouse2Blit + house) % NUM_CAMPAIGN_HOUSES].size())) {
+                while(  (curHouse2Blit < static_cast<unsigned int>(campaignHouseCount)) &&
+                        (curRegion2Blit >= group[lastScenario].newRegion[(curHouse2Blit + house) % campaignHouseCount].size())) {
                         curRegion2Blit = 0;
                         curHouse2Blit++;
                 }
 
-                if((curHouse2Blit < NUM_CAMPAIGN_HOUSES)&&(curRegion2Blit < group[lastScenario].newRegion[(curHouse2Blit + house) % NUM_CAMPAIGN_HOUSES].size())) {
+                if((curHouse2Blit < static_cast<unsigned int>(campaignHouseCount))&&(curRegion2Blit < group[lastScenario].newRegion[(curHouse2Blit + house) % campaignHouseCount].size())) {
                     // there is still some region to blend in
-                    const int pieceNum = (group[lastScenario].newRegion[(curHouse2Blit + house) % NUM_CAMPAIGN_HOUSES])[curRegion2Blit];
-                    sdl2::surface_ptr pPieceSurface = convertSurfaceToDisplayFormat(pGFXManager->getMapChoicePieceSurface(pieceNum,(curHouse2Blit + house) % NUM_CAMPAIGN_HOUSES));
+                    const int pieceNum = (group[lastScenario].newRegion[(curHouse2Blit + house) % campaignHouseCount])[curRegion2Blit];
+                    sdl2::surface_ptr pPieceSurface = convertSurfaceToDisplayFormat(pGFXManager->getMapChoicePieceSurface(pieceNum,(curHouse2Blit + house) % campaignHouseCount));
                     SDL_Rect dest = calcDrawingRect(pPieceSurface.get(), piecePosition[pieceNum].x, piecePosition[pieceNum].y);
                     curBlendBlitter = std::make_unique<BlendBlitter>(std::move(pPieceSurface), mapSurface.get(), dest);
                     curRegion2Blit++;
@@ -403,19 +408,9 @@ void MapChoice::loadINI() {
         std::string strSection = "GROUP" + std::to_string(i);
 
         // read new regions
-        for(int h = 0; h < NUM_CAMPAIGN_HOUSES; h++) {
-            std::string key;
-            switch(h) {
-                case HOUSE_HARKONNEN:   key = "HAR"; break;
-                case HOUSE_ATREIDES:    key = "ATR"; break;
-                case HOUSE_ORDOS:       key = "ORD"; break;
-                case HOUSE_FREMEN:      key = "FRE"; break;
-                case HOUSE_SARDAUKAR:   key = "SAR"; break;
-                case HOUSE_MERCENARY:   key = "MER"; break;
-                case HOUSE_NEUTRAL:     key = "NEU"; break;
-                case HOUSE_REBELS:      key = "REB"; break;
-                case HOUSE_CUSTOM:      key = getHouseRegionPrefix(HOUSE_CUSTOM); break;
-            }
+        for(int h = 0; h < campaignHouseCount; h++) {
+            const std::string key = getHouseRegionPrefix(static_cast<HOUSETYPE>(h));
+            if(key.empty()) continue;
 
             std::string strValue = RegionINI.getStringValue(strSection,key);
             if(strValue != "") {

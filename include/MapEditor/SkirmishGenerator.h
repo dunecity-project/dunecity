@@ -85,13 +85,19 @@ constexpr int kMaxEnemies = 7;
 /// Allies and enemies together: the player plus at most 7 more houses (8 in all).
 constexpr int kMaxOtherHouses = 7;
 
-/// Most other houses this match can field: the shared cap, and the engine's house cap minus the player.
-constexpr int maxOtherHouses(int houseCount) { return houseCount - 1 < kMaxOtherHouses ? houseCount - 1 : kMaxOtherHouses; }
+/// Family matches may field all twelve factions; legacy random skirmishes keep eight.
+constexpr int maxOtherHouses(int houseCount, bool tornieFamily = false) {
+    const int cap = tornieFamily ? NUM_PLAYER_HOUSES - 1 : kMaxOtherHouses;
+    return houseCount - 1 < cap ? houseCount - 1 : cap;
+}
 /// Start positions of a multiplayer random map (Player1..PlayerN sections the lobby assigns).
 constexpr int kMinStarts = 2;
 constexpr int kMaxStarts = 8;
-/// Most start positions this match can field: the shared cap and the engine's house cap.
-constexpr int maxStarts(int houseCount) { return houseCount < kMaxStarts ? houseCount : kMaxStarts; }
+/// Most start positions this edition can field; non-family maps retain their original cap.
+constexpr int maxStarts(int houseCount, bool tornieFamily = false) {
+    const int cap = tornieFamily ? NUM_PLAYER_HOUSES : kMaxStarts;
+    return houseCount < cap ? houseCount : cap;
+}
 /// Seeds tried (seed, seed+1, ...) before giving up on a ground-connected map.
 constexpr int kMaxTerrainAttempts = 8;
 /// No unit type may take more than this share of an army budget (raised to 100/n when
@@ -141,7 +147,7 @@ struct Params {
 
     /// Clamp every field to its legal range; @a houseCount is the number of houses the
     /// engine can field in a custom game (player + allies + enemies never exceed it).
-    void clamp(int houseCount);
+    void clamp(int houseCount, bool tornieFamily = false);
     /// Last-used parameters, section "Random Skirmish" of the configuration file. The
     /// multiplayer screen keeps its own Mirrored starts choice (on by default) and never
     /// writes the mod or Spectate, which there are the host's and the lobby's.
@@ -160,6 +166,7 @@ struct ItemRule {
 };
 
 struct Catalogue {
+    bool tornieFamily = false;                  ///< supplied by the active mod, never a saved menu switch
     std::vector<int> houses;                    ///< houses a custom game can field, menu order
     std::array<std::string, NUM_HOUSES> houseNames;
     std::array<std::string, Num_ItemID> itemNames;

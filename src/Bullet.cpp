@@ -17,6 +17,9 @@
 
 #include <Bullet.h>
 #include <DynastyProjectile.h>
+#include <units/UnitBase.h>
+#include <Achievements/AchievementEvents.h>
+#include <mod/ModManager.h>
 
 #include <globals.h>
 
@@ -56,7 +59,9 @@ Bullet::Bullet(Uint32 shooterID, Coord* newRealLocation, Coord* newRealDestinati
     const bool usesPreciseFlameTrajectory = bulletID == Bullet_Flame
         && pShooter != nullptr
         && (pShooter->getItemID() == Unit_Trooper
-            || pShooter->getItemID() == Structure_Flamepost);
+            || pShooter->getItemID() == Structure_Flamepost
+            || (ModManager::instance().isTornieFamilyContentActive()
+                && (pShooter->getItemID() == Unit_FlameTrooper || pShooter->getItemID() == Unit_FlameQuad)));
     if(usesPreciseFlameTrajectory) {
         // Trooper rockets travel directly to their target. Keep the flame
         // projectile and impact, but remove the delayed point-blank miss.
@@ -77,7 +82,8 @@ Bullet::Bullet(Uint32 shooterID, Coord* newRealLocation, Coord* newRealDestinati
         int diffY = destination.y - newRealLocation->y;
 
         const int sourceUnit = (bulletID == Bullet_SonicTrike) ? Unit_SonicTrike : Unit_SonicTank;
-        int weaponrange = currentGame->objectData.data[sourceUnit][owner->getHouseID()].weaponrange;
+        int weaponrange = ModManager::instance().isTornieFamilyContentActive() && pShooter
+            ? pShooter->getWeaponRange() : currentGame->objectData.data[sourceUnit][owner->getHouseID()].weaponrange;
 
         if((diffX == 0) && (diffY == 0)) {
             diffY = weaponrange*TILESIZE;
@@ -213,12 +219,20 @@ void Bullet::init()
             graphic = pGFXManager->getObjPic(ObjPic_Bullet_MediumRocket, houseID);
         } break;
 
-                case Bullet_Heal: {
+        case Bullet_Slow:
+        case Bullet_Heal: {
             damageRadius = 0;
             speed = 19.2_fix;
             detonationTimer = -1;
             numFrames = 16;
-            graphic = pGFXManager->getObjPic(ObjPic_Bullet_MediumRocket, houseID);
+            graphic = pGFXManager->getObjPic(bulletID == Bullet_Slow ? ObjPic_SlowRocket : ObjPic_Bullet_MediumRocket, houseID);
+        } break;
+        case Bullet_Napalm: {
+            damageRadius = TILESIZE;
+            speed = 32.0_fix;
+            detonationTimer = -1;
+            numFrames = 16;
+            graphic = pGFXManager->getObjPic(ObjPic_NapalmRocket, houseID);
         } break;
 case Bullet_LargeRocket: {
             numFrames = 16;
@@ -461,7 +475,7 @@ void Bullet::updateDynastyProjectile()
             if((distance < 16 || distance > projectileDistance)
                && (detonationTimer == 0 || bulletID == Bullet_TurretRocket)) {
                 if(bulletID == Bullet_TurretRocket && target.getObjPointer()
-                   && target.getObjPointer()->getItemID() == Unit_Ornithopter)
+                   && isOrnithopterUnit(target.getObjPointer()->getItemID()))
                     currentGame->combatStats.turretRocketsProximityDetonated++;
                 // Always explode at the actual missile position. Never snap to a target.
                 destroy();
@@ -510,7 +524,7 @@ void Bullet::update()
         // Mod flame compatibility: track ornithopters while retaining the old fuse.
         ObjectBase* pTarget = target.getObjPointer();
         
-        if(pTarget != nullptr && pTarget->getItemID() == Unit_Ornithopter) {
+        if(pTarget != nullptr && isOrnithopterUnit(pTarget->getItemID())) {
             // Track the moving ornithopter's current position (for both steering AND proximity check)
             destination = pTarget->getCenterPoint();
         }
@@ -547,7 +561,7 @@ void Bullet::update()
         ySpeed = speed * -FixPoint::sin(Deg256ToRad(angle));
 
         drawnAngle = lround(numFrames*angle/256) % numFrames;
-    } else if(bulletID == Bullet_Heal) {
+    } else if(bulletID == Bullet_Heal || bulletID == Bullet_Slow) {
 
         // Mod healing projectiles follow their live target.
         ObjectBase* pTarget = target.getObjPointer();
@@ -620,7 +634,8 @@ void Bullet::update()
 
             const int sourceUnit = (bulletID == Bullet_SonicTrike) ? Unit_SonicTrike : Unit_SonicTank;
             const int sonicDuration = (bulletID == Bullet_SonicTrike) ? 28 : 45;
-            FixPoint weaponDamage = currentGame->objectData.data[sourceUnit][owner->getHouseID()].weapondamage;
+            FixPoint weaponDamage = ModManager::instance().isTornieFamilyContentActive()
+                ? damage : currentGame->objectData.data[sourceUnit][owner->getHouseID()].weapondamage;
 
             FixPoint startDamage = (weaponDamage / 4 + 1) / 4.5_fix;
             FixPoint endDamage = ((weaponDamage-9) / 4 + 1) / 4.5_fix;
@@ -686,6 +701,16 @@ void Bullet::destroy(Uint32 interceptedAirUnit)
     int houseID = owner->getHouseID();
 
     switch(bulletID) {
+        case Bullet_Slow: {
+            if(ModManager::instance().isTornieFamilyContentActive()) {
+                // The impact cloud slows allies too, including forced targets.
+                for(auto* unit : unitList) {
+                    if(unit->getHealth() > 0 && distanceFrom(unit->getCenterPoint(), position) <= TILESIZE/2) unit->applySlow();
+                }
+            }
+            soundPlayer->playSoundAt(Sound_ExplosionGas, position);
+            currentGame->getExplosionList().push_back(new Explosion(Explosion_Gas, position, houseID));
+        } break;
         case Bullet_DRocket: {
             currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, interceptedAirUnit, provenance);
             soundPlayer->playSoundAt(Sound_ExplosionGas, position);
@@ -702,8 +727,23 @@ void Bullet::destroy(Uint32 interceptedAirUnit)
             soundPlayer->playSoundAt(Sound_ExplosionGas, position);
             currentGame->getExplosionList().push_back(new Explosion(Explosion_Gas, position, houseID));
         } break;
+        case Bullet_Napalm: {
+            if(ModManager::instance().isTornieFamilyContentActive()) {
+                soundPlayer->playSoundAt(Sound_ExplosionLarge, position);
+                for(int y = -1; y <= 1; ++y) {
+                    for(int x = -1; x <= 1; ++x) {
+                        const Coord fire(position.x + x*TILESIZE, position.y + y*TILESIZE);
+                        currentGameMap->damage(shooterID, owner, fire, Bullet_Flame, damage, TILESIZE/2, false, true, NONE_ID, provenance);
+                        currentGame->getExplosionList().push_back(
+                            new Explosion(Explosion_FlameImpact, fire, houseID, shooterID, 6, TILESIZE/2, provenance));
+                    }
+                }
+            }
+        } break;
 case Bullet_LargeRocket: {
+            AchievementEvents::beginMissileImpact(owner, shooterID);
             detonateDeathHand(shooterID, owner, position, damage, airAttack, provenance);
+            AchievementEvents::endMissileImpact();
         } break;
 
         case Bullet_Rocket:

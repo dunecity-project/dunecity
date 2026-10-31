@@ -3,51 +3,92 @@
   "mod": {
     "id": "Tornie",
     "displayName": "Tornie",
-    "version": "1.0.524-23",
-    "gameVersion": "1.0.530",
+    "version": "1.0.546",
+    "gameVersion": "1.0.862",
     "author": "Tornie_Panther"
   },
   "source": {
-    "upstream": "Torneko/dunecity-tornie",
-    "tag": "tornie-v1.0.524-23",
-    "commit": "f7eb26269c6832f06aa9412bc752e93e997550fb",
+    "upstream": "Torneko/dunelegacy-tornie",
+    "version": "1.0.546",
+    "commit": "ce89e53ccc51847fcd41540a6a4cd132acf9bf99",
+    "originalModVersion": "1.0.524-2",
     "integrationTarget": "VR48/dunecity",
-    "integrationBaseCommit": "e7a5a1b"
-  },
-  "customHouse": {
-    "slot": 8,
-    "displayName": "Corruptique",
-    "scenarioLetter": "C",
-    "regionPrefix": "COR",
-    "paletteIndex": 192,
-    "fallbackHouse": 2
+    "integrationBaseCommit": "dbd410fc"
   },
   "contentRoots": [
     "campaign",
     "data",
+    "graphics",
     "source-audio",
     "source-sprites"
   ],
+  "playableHouses": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "campaignPlan": "data/CampaignPlan.ini",
   "engineDependencies": [
     {
-      "name": "generic-ninth-house",
-      "status": "integrated-and-regression-gated"
+      "name": "twelve-faction-content",
+      "status": "integrated-and-Tornie-family-scoped"
     },
     {
-      "name": "generic-mod-scoped-mentat-api",
-      "status": "integrated-and-mod-scoped"
+      "name": "captured-production-technology",
+      "status": "integrated-and-Tornie-family-scoped"
     },
     {
-      "name": "love-factory-delivery-building",
-      "status": "integrated-and-mod-scoped"
+      "name": "five-unit-orders",
+      "status": "integrated-and-Tornie-family-scoped"
     },
     {
-      "name": "chemical-units-and-post-upgrades",
-      "status": "integrated-and-mod-scoped"
+      "name": "doublefinery",
+      "status": "integrated-and-Tornie-family-scoped"
     },
     {
-      "name": "guest-house-identities",
-      "status": "available-only-when-Tornie-is-active"
+      "name": "expanded-units",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "building-sales",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "allied-control-construction",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "chaos-mode",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "radar-research",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "windtrap-upgrade",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "easy-mode",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "separate-faction-coop",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "identity-based-mentats",
+      "status": "integrated-and-Tornie-family-scoped"
     }
   ],
   "isolation": {
@@ -56,17 +97,36 @@
     "externalOverrides": [],
     "activationKey": "Tornie",
     "switchingAwayRemovesTornieSearchPath": true,
-    "engineCapabilitiesAreExactModGated": true
+    "engineCapabilitiesAreContentBaseGated": true
   },
   "compatibility": {
     "saveFormatChangedByThisContent": true,
-    "networkPacketLayoutChangedByThisContent": false,
+    "saveVersion": 9878,
+    "networkProtocolVersion": 108,
     "networkChecksumIncludesEngineCapability": true,
-    "fullPayloadTransferSupported": true
+    "engineCapability": "dunecity-tornie-engine/2-save9878-protocol108",
+    "fullPayloadTransferSupported": true,
+    "transport": "direct-peer-to-peer"
   },
   "filenameCase": "exact",
   "checksums": "checksums.sha256",
   "provenance": "PROVENANCE.md",
   "changelog": "CHANGELOG.md",
-  "integrationStatus": "audited Tornie 1.0.524-23 integration for DuneCity 1.0.530"
+  "integrationStatus": "Tornie-family 1.0.546 content port into DuneCity 1.0.862",
+  "customHouse": {
+    "slot": 8,
+    "displayName": "Corruptique",
+    "scenarioLetter": "C",
+    "regionPrefix": "COR",
+    "paletteIndex": 192,
+    "fallbackHouse": 2
+  },
+  "guestHouse": {
+    "slot": 11,
+    "displayName": "Tharpique",
+    "scenarioLetter": "T",
+    "regionPrefix": "THA",
+    "paletteIndex": 136,
+    "fallbackHouse": 5
+  }
 }

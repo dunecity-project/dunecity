@@ -32,6 +32,7 @@
 #include <misc/draw_util.h>
 
 #include <structures/RepairYard.h>
+#include <mod/ModManager.h>
 
 AirUnit::AirUnit(House* newOwner) : UnitBase(newOwner)
 {
@@ -53,6 +54,18 @@ void AirUnit::init()
 }
 
 AirUnit::~AirUnit() = default;
+
+void AirUnit::setProductionHouseID(int houseID) {
+    UnitBase::setProductionHouseID(houseID);
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        currentMaxSpeed = currentGame->objectData.data[itemID][getProductionHouseID()].maxspeed;
+    }
+}
+
+FixPoint AirUnit::getMaxSpeed() const {
+    return ModManager::instance().isTornieFamilyContentActive()
+        ? currentMaxSpeed * owner->radarSpeedFactor(itemID) : currentMaxSpeed;
+}
 
 void AirUnit::save(OutputStream& stream) const
 {
@@ -149,7 +162,7 @@ void AirUnit::navigate() {
 
 void AirUnit::move() {
     FixPoint angleRad = (angle * (FixPt_PI << 1)) / 8;
-    FixPoint speed = getMaxSpeed();
+    FixPoint speed = getMaxSpeed() * getMovementSpeedFactor();
 
     realX += FixPoint::cos(angleRad)*speed;
     realY += -FixPoint::sin(angleRad)*speed;
@@ -188,20 +201,20 @@ void AirUnit::turn() {
         }
 
         if(angleLeft <= angleRight) {
-            angle += std::min(currentGame->objectData.data[itemID][originalHouseID].turnspeed, angleLeft);
+            angle += std::min(currentGame->objectData.data[itemID][getProductionHouseID()].turnspeed, angleLeft);
             if(angle >= NUM_ANGLES) {
                 angle -= NUM_ANGLES;
             }
             drawnAngle = lround(angle) % NUM_ANGLES;
         } else {
-            angle -= std::min(currentGame->objectData.data[itemID][originalHouseID].turnspeed, angleRight);
+            angle -= std::min(currentGame->objectData.data[itemID][getProductionHouseID()].turnspeed, angleRight);
             if(angle < 0) {
                 angle += NUM_ANGLES;
             }
             drawnAngle = lround(angle) % NUM_ANGLES;
         }
     } else {
-        angle -= currentGame->objectData.data[itemID][originalHouseID].turnspeed / 8;
+        angle -= currentGame->objectData.data[itemID][getProductionHouseID()].turnspeed / 8;
         if(angle < 0) {
             angle += NUM_ANGLES;
         }

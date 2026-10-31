@@ -1,0 +1,717 @@
+// Built-in copy of config/Achievements.ini from Tornie upstream 1.0.546.
+#pragma once
+namespace achievements {
+inline constexpr const char* defaultCatalog=
+R"ACHIEVEMENTS(; Dune Legacy Tornie — UTF-8, local achievements. No gameplay effects.
+; Rule + Statistic + Target define extensible rules. Secret=true hides locked names.
+; Roadkill uses a 2000 ms simulation window; spice credits count refinery deposits.
+
+[PACIFISM]
+Name=Pacifism
+NameFr=Pacifisme
+Description=Win without destroying enemy units or structures. Captures are allowed.
+DescriptionFr=Gagner sans détruire d’unité ou de bâtiment ennemi. Les captures sont autorisées.
+Rule=Pacifism
+Statistic=
+Target=1
+Secret=false
+
+[TRUE_PACIFIST]
+Name=True Pacifist
+NameFr=Véritable pacifiste
+Description=Win without dealing damage to an opponent.
+DescriptionFr=Gagner sans infliger de dégâts à un adversaire.
+Rule=TruePacifist
+Statistic=
+Target=1
+Secret=false
+
+[PRISE_DE_CONTROLE]
+Name=Taking Control
+NameFr=Prise de contrôle
+Description=Capture your first enemy structure with infantry.
+DescriptionFr=Capturer un premier bâtiment ennemi avec de l’infanterie.
+Rule=Lifetime
+Statistic=StructuresCaptured
+Target=1
+Secret=false
+
+[INFILTRATION]
+Name=Infiltration
+NameFr=Infiltration
+Description=Capture 10 enemy structures in total.
+DescriptionFr=Capturer 10 bâtiments ennemis au total.
+Rule=Lifetime
+Statistic=StructuresCaptured
+Target=10
+Secret=false
+
+[SANS_TIRER]
+Name=Without Firing a Shot
+NameFr=Sans tirer un coup de feu
+Description=Win after capturing an enemy structure, without any enemy destruction attributed to you.
+DescriptionFr=Gagner en capturant un bâtiment ennemi sans destruction ennemie attribuée au joueur.
+Rule=CapturePacifism
+Statistic=
+Target=1
+Secret=false
+
+[NO_MERCY]
+Name=No Mercy
+NameFr=Aucune pitié
+Description=Win campaign mission 1 with no enemy units or structures remaining.
+DescriptionFr=Gagner la mission 1 d’une campagne après élimination de toutes les forces adverses.
+Rule=NoMercy
+Statistic=
+Target=1
+Secret=false
+
+[TOTAL_ANNIHILATION]
+Name=Total Annihilation
+NameFr=Anéantissement total
+Description=Win a skirmish or custom game with no opposing units or structures remaining.
+DescriptionFr=Gagner une escarmouche ou partie personnalisée sans forces adverses restantes.
+Rule=Annihilation
+Statistic=
+Target=1
+Secret=false
+
+[ROADKILL]
+Name=Roadkill
+NameFr=Charge dévastatrice
+Description=Crush 5 enemy infantry with the same vehicle within 2 simulation seconds.
+DescriptionFr=Écraser 5 fantassins ennemis avec le même véhicule en 2 secondes de simulation.
+Rule=Roadkill
+Statistic=
+Target=5
+Secret=false
+
+[STEAMROLLER]
+Name=Steamroller
+NameFr=Rouleau compresseur
+Description=Crush 10 enemy infantry in one match.
+DescriptionFr=Écraser 10 fantassins ennemis dans une même partie.
+Rule=Match
+Statistic=InfantryCrushed
+Target=10
+Secret=false
+
+[TRUE_COLORS]
+Name=True Colors
+NameFr=Vos vraies couleurs
+Description=Win a custom or multiplayer game with a nonstandard house color.
+DescriptionFr=Gagner une partie personnalisée ou multijoueur avec une couleur différente de celle de la maison.
+Rule=TrueColors
+Statistic=
+Target=1
+Secret=false
+
+[THE_SPICE_MUST_FLOW]
+Name=The Spice Must Flow
+NameFr=L’épice doit couler
+Description=Refine 10,000 spice credits in one match.
+DescriptionFr=Raffiner 10 000 crédits d’épice dans une partie.
+Rule=Match
+Statistic=SpiceHarvested
+Target=10000
+Secret=false
+
+[SPICE_EMPIRE]
+Name=Spice Empire
+NameFr=Empire de l’épice
+Description=Refine 100,000 spice credits in total.
+DescriptionFr=Raffiner 100 000 crédits d’épice cumulés.
+Rule=Lifetime
+Statistic=SpiceHarvested
+Target=100000
+Secret=false
+
+[FIRST_VICTORY]
+Name=First Victory
+NameFr=Première victoire
+Description=Win your first match.
+DescriptionFr=Gagner une première partie.
+Rule=Lifetime
+Statistic=GamesWon
+Target=1
+Secret=false
+
+[CONQUER_ARRAKIS]
+Name=Conquer Arrakis
+NameFr=Conquérir Arrakis
+Description=Complete a campaign by winning its final mission.
+DescriptionFr=Terminer une campagne en gagnant sa mission finale.
+Rule=CampaignCount
+Statistic=Any
+Target=1
+Secret=false
+
+[MASTER_OF_ARRAKIS]
+Name=Master of Arrakis
+NameFr=Maître d’Arrakis
+Description=Complete campaigns for all eight H/A/O/F/S/M/N/R houses across the included mods.
+DescriptionFr=Terminer les campagnes des huit maisons H/A/O/F/S/M/N/R, tous modes confondus.
+Rule=CampaignCount
+Statistic=
+Target=8
+Secret=false
+
+[ATREIDES_COMMANDER]
+Name=Atreides Commander
+NameFr=Commandant Atreides
+Description=Complete an Atreides campaign.
+DescriptionFr=Terminer une campagne Atreides.
+Rule=CampaignHouse
+Statistic=Atreides
+Target=1
+Secret=false
+
+[HARKONNEN_COMMANDER]
+Name=Harkonnen Commander
+NameFr=Commandant Harkonnen
+Description=Complete a Harkonnen campaign.
+DescriptionFr=Terminer une campagne Harkonnen.
+Rule=CampaignHouse
+Statistic=Harkonnen
+Target=1
+Secret=false
+
+[ORDOS_COMMANDER]
+Name=Ordos Commander
+NameFr=Commandant Ordos
+Description=Complete an Ordos campaign.
+DescriptionFr=Terminer une campagne Ordos.
+Rule=CampaignHouse
+Statistic=Ordos
+Target=1
+Secret=false
+
+[FREMEN_COMMANDER]
+Name=Fremen Commander
+NameFr=Commandant Fremen
+Description=Complete a Fremen campaign.
+DescriptionFr=Terminer une campagne Fremen.
+Rule=CampaignHouse
+Statistic=Fremen
+Target=1
+Secret=false
+
+[SARDAUKAR_COMMANDER]
+Name=Sardaukar Commander
+NameFr=Commandant Sardaukar
+Description=Complete a Sardaukar campaign.
+DescriptionFr=Terminer une campagne Sardaukar.
+Rule=CampaignHouse
+Statistic=Sardaukar
+Target=1
+Secret=false
+
+[MERCENARY_COMMANDER]
+Name=Mercenary Commander
+NameFr=Commandant mercenaire
+Description=Complete a Mercenary campaign.
+DescriptionFr=Terminer une campagne des Mercenaires.
+Rule=CampaignHouse
+Statistic=Mercenary
+Target=1
+Secret=false
+
+[NEUTRAL_COMMANDER]
+Name=Neutral Commander
+NameFr=Commandant neutre
+Description=Complete a Neutral campaign.
+DescriptionFr=Terminer une campagne des Neutres.
+Rule=CampaignHouse
+Statistic=Neutral
+Target=1
+Secret=false
+
+[REBEL_COMMANDER]
+Name=Rebel Commander
+NameFr=Commandant rebelle
+Description=Complete a Rebel campaign.
+DescriptionFr=Terminer une campagne des Rebelles.
+Rule=CampaignHouse
+Statistic=Rebels
+Target=1
+Secret=false
+
+[NO_CASUALTIES]
+Name=No Casualties
+NameFr=Aucune perte
+Description=Win a match without losing a unit.
+DescriptionFr=Gagner une partie sans perdre d’unité.
+Rule=NoCasualties
+Statistic=
+Target=1
+Secret=false
+
+[WORM_HUNTER]
+Name=Worm Hunter
+NameFr=Chasseur de vers
+Description=Kill a sandworm.
+DescriptionFr=Tuer un ver des sables.
+Rule=Lifetime
+Statistic=SandwormsKilled
+Target=1
+Secret=false
+
+[SPICE_BLOOM]
+Name=Spice Bloom
+NameFr=Éclosion d’épice
+Description=Trigger your first spice bloom.
+DescriptionFr=Déclencher une première éclosion d’épice.
+Rule=Lifetime
+Statistic=SpiceBloomsTriggered
+Target=1
+Secret=false
+
+[VETERAN_COMMANDER]
+Name=Veteran Commander
+NameFr=Commandant vétéran
+Description=Win 25 matches.
+DescriptionFr=Gagner 25 parties.
+Rule=Lifetime
+Statistic=GamesWon
+Target=25
+Secret=false
+
+[BUILDER]
+Name=Builder
+NameFr=Bâtisseur
+Description=Build 100 structures in total.
+DescriptionFr=Construire 100 structures au total.
+Rule=Lifetime
+Statistic=StructuresBuilt
+Target=100
+Secret=false
+
+[ARMY_OF_ARRAKIS]
+Name=Army of Arrakis
+NameFr=Armée d’Arrakis
+Description=Produce 500 units in total.
+DescriptionFr=Produire 500 unités au total.
+Rule=Lifetime
+Statistic=UnitsBuilt
+Target=500
+Secret=false
+
+[PALACE_POWER]
+Name=Palace Power
+NameFr=Pouvoir du palais
+Description=Successfully activate a palace ability.
+DescriptionFr=Activer avec succès une capacité de palais.
+Rule=Lifetime
+Statistic=PalaceAbilitiesUsed
+Target=1
+Secret=false
+
+[FLAME_MASTER]
+Name=Flame Master
+NameFr=Maître des flammes
+Description=Destroy 50 enemies with Flame Tanks in total.
+DescriptionFr=Détruire 50 ennemis avec des chars lance-flammes au total.
+Rule=Lifetime
+Statistic=FlameTankKills
+Target=50
+Secret=false
+
+[TORNIE_ARSENAL]
+Name=Custom Arsenal
+NameFr=Arsenal personnalisé
+Description=Produce three different custom unit types in one match in Tornie, Jericho or ArcaKev (including Lite).
+)ACHIEVEMENTS"
+R"ACHIEVEMENTS(DescriptionFr=Produire trois types d’unités personnalisées dans une partie de Tornie, Jericho ou ArcaKev (Lite compris).
+Rule=Arsenal
+Statistic=
+Target=3
+Secret=false
+
+[AGAINST_THE_ODDS]
+Name=Against the Odds
+NameFr=Contre toute attente
+Description=Win a custom game against at least one Hard or Brutal enemy AI.
+DescriptionFr=Gagner une partie personnalisée contre au moins une IA ennemie difficile ou brutale.
+Rule=HighDifficulty
+Statistic=
+Target=1
+Secret=false
+
+[HOUSE_COLLECTOR]
+Name=House Collector
+NameFr=Collectionneur de maisons
+Description=Win with all twelve factions: Atreides, Harkonnen, Ordos, Fremen, Sardaukar, Mercenary, Neutral, Rebels, Wildspade, Kleshmersh, Tharpique and Corruptique.
+DescriptionFr=Gagner avec les douze factions : Atreides, Harkonnen, Ordos, Fremen, Sardaukar, Mercenary, Neutral, Rebels, Wildspade, Kleshmersh, Tharpique et Corruptique.
+Rule=VictoryHouses
+Statistic=
+Target=12
+Secret=false
+
+[RED_HARVEST]
+Name=Red Harvest
+NameFr=Récolte rouge
+Description=Collect red spice with a harvester.
+DescriptionFr=Collecter de l’épice rouge avec une moissonneuse.
+Rule=SpiceTypes
+Statistic=
+Target=2
+Secret=false
+
+[GREEN_HARVEST]
+Name=Green Harvest
+NameFr=Récolte verte
+Description=Collect green spice with a harvester.
+DescriptionFr=Collecter de l’épice verte avec une moissonneuse.
+Rule=SpiceTypes
+Statistic=
+Target=4
+Secret=false
+
+[SPICE_COLLECTOR]
+Name=Spice Collector
+NameFr=Collectionneur d’épices
+Description=Collect at least two different spice types in one match.
+DescriptionFr=Collecter au moins deux types différents d’épice dans une partie.
+Rule=SpiceCount
+Statistic=
+Target=2
+Secret=false
+
+[RULER_OF_ARRAKIS]
+Name=Ruler of Arrakis
+NameFr=Souverain d’Arrakis
+Description=Win a campaign mission with a displayed score of at least 1000.
+DescriptionFr=Gagner une mission de campagne avec un score affiché de 1000 ou plus.
+Rule=Lifetime
+Statistic=BestCampaignScore
+Target=1000
+Secret=false
+
+[WILDSPADE_COMMANDER]
+Name=Wildspade Commander
+NameFr=Commandant Wildspade
+Description=Complete the Wildspade campaign.
+DescriptionFr=Terminer la campagne Wildspade.
+Rule=CampaignHouse
+Statistic=Wildspade
+Target=1
+Secret=false
+
+[KLESHMERSH_COMMANDER]
+Name=Kleshmersh Commander
+NameFr=Commandant Kleshmersh
+Description=Complete the Kleshmersh campaign.
+DescriptionFr=Terminer la campagne Kleshmersh.
+Rule=CampaignHouse
+Statistic=Kleshmersh
+Target=1
+Secret=false
+
+[THARPIQUE_COMMANDER]
+Name=Tharpique Commander
+NameFr=Commandant Tharpique
+Description=Complete the Tharpique campaign.
+DescriptionFr=Terminer la campagne Tharpique.
+Rule=CampaignHouse
+Statistic=Tharpique
+Target=1
+Secret=false
+
+[CORRUPTIQUE_COMMANDER]
+Name=Corruptique Commander
+NameFr=Commandant Corruptique
+Description=Complete the Corruptique campaign.
+DescriptionFr=Terminer la campagne Corruptique.
+Rule=CampaignHouse
+Statistic=Corruptique
+Target=1
+Secret=false
+
+[JERICHO_MASTER]
+Name=Master of Jericho
+NameFr=Maître de Jericho
+Description=Complete all twelve campaigns in Jericho.
+DescriptionFr=Terminer les douze campagnes dans Jericho.
+Rule=ModCampaignCount
+Statistic=Jericho
+Target=12
+Secret=false
+
+[MISSILE_BARRAGE]
+Name=Missile Barrage
+NameFr=Barrage de missiles
+Description=Launch at least three palace missiles in a single match.
+DescriptionFr=Lancer au moins trois missiles de palais dans une même partie.
+Rule=Match
+Statistic=PalaceMissilesLaunched
+Target=3
+Secret=false
+
+[BLUE_HARVEST]
+Name=Blue Harvest
+NameFr=Récolte bleue
+Description=Collect blue spice with a harvester.
+DescriptionFr=Collecter de l’épice bleue avec une moissonneuse.
+Rule=SpiceTypes
+Statistic=
+Target=16
+Secret=false
+
+[PURPLE_HARVEST]
+Name=Purple Harvest
+NameFr=Récolte mauve
+Description=Collect purple spice with a harvester.
+DescriptionFr=Collecter de l’épice mauve avec une moissonneuse.
+Rule=SpiceTypes
+Statistic=
+Target=8
+Secret=false
+
+[CHAOS_CONQUEROR]
+Name=Chaos Conqueror
+NameFr=Maître du chaos
+Description=Complete a campaign started with Chaos Mode enabled.
+DescriptionFr=Terminer une campagne commencée avec le mode Chaos activé.
+Rule=ChaosCampaign
+Statistic=
+Target=1
+Secret=false
+
+[COOP_CONQUEROR]
+Name=Together on Arrakis
+NameFr=Ensemble sur Arrakis
+Description=Complete a cooperative campaign with a human or AI ally. Easy Mode is allowed.
+DescriptionFr=Terminer une campagne coop avec un allié humain ou IA. Le mode facile est autorisé.
+Rule=Lifetime
+Statistic=CoopCampaignsCompleted
+Target=1
+
+[FUEL_WASTE]
+Name=Fuel Waste
+NameFr=Gaspillage de carburant
+Description=Resolve a palace missile without damaging any unit or building, including allies.
+DescriptionFr=Faire exploser un missile de Palace sans endommager aucune unité ni aucun bâtiment, alliés inclus.
+Rule=Lifetime
+Statistic=EmptyMissiles
+Target=1
+
+[DEMOLITION_STRIKE]
+Name=Demolition Strike
+NameFr=Frappe démolisseuse
+Description=Destroy at least three enemy buildings with one palace missile.
+DescriptionFr=Détruire au moins trois bâtiments ennemis avec un seul missile de Palace.
+Rule=Lifetime
+Statistic=BestMissileStructures
+Target=3
+
+[ELITE_SCORE]
+Name=Elite Commander
+NameFr=Commandant d’élite
+Description=Score at least 1,500 on the results screen of a won campaign mission.
+DescriptionFr=Atteindre 1 500 points sur l’écran de résultats d’une mission de campagne gagnée.
+Rule=Lifetime
+Statistic=BestCampaignScore
+Target=1500
+
+[LEGENDARY_SCORE]
+Name=Legendary Commander
+NameFr=Commandant légendaire
+Description=Score at least 2,000 in a won campaign mission.
+DescriptionFr=Atteindre 2 000 points dans une mission de campagne gagnée.
+Rule=Lifetime
+Statistic=BestCampaignScore
+Target=2000
+
+[SCORE_COLLECTOR]
+Name=Score Collector
+NameFr=Collectionneur de points
+Description=Accumulate 10,000 points from won solo campaign missions.
+DescriptionFr=Cumuler 10 000 points dans des missions de campagne solo gagnées.
+Rule=Lifetime
+Statistic=CampaignScoreTotal
+Target=10000
+
+[HUNDRED_VICTORIES]
+Name=A Hundred Victories
+NameFr=Cent victoires
+Description=Win 100 games in total.
+DescriptionFr=Gagner 100 parties au total.
+Rule=Lifetime
+Statistic=GamesWon
+Target=100
+
+[HARD_LESSONS]
+Name=Hard Lessons
+NameFr=Leçons difficiles
+Description=Finish 10 games with a defeat. Quitting does not count.
+DescriptionFr=Terminer 10 parties par une défaite. Quitter ne compte pas.
+Rule=Lifetime
+Statistic=GamesLost
+Target=10
+
+[WAR_OF_ATTRITION]
+Name=War of Attrition
+NameFr=Guerre d’usure
+Description=Lose 250 units in total.
+DescriptionFr=Perdre 250 unités au total.
+Rule=Lifetime
+Statistic=UnitsLost
+Target=250
+
+[ENEMY_ARMY]
+Name=Army Breaker
+NameFr=Briseur d’armées
+Description=Destroy 1,000 enemy units in total.
+DescriptionFr=Détruire 1 000 unités ennemies au total.
+Rule=Lifetime
+Statistic=EnemyUnitsDestroyed
+Target=1000
+
+[BASE_BREAKER]
+Name=Base Breaker
+NameFr=Briseur de bases
+Description=Destroy 250 enemy buildings in total.
+DescriptionFr=Détruire 250 bâtiments ennemis au total.
+Rule=Lifetime
+Statistic=EnemyStructuresDestroyed
+Target=250
+
+[MASTER_BUILDER]
+Name=Master Builder
+NameFr=Maître bâtisseur
+Description=Construct 500 buildings in total.
+DescriptionFr=Construire 500 bâtiments au total.
+Rule=Lifetime
+Statistic=StructuresBuilt
+Target=500
+
+[MASS_PRODUCTION]
+Name=Mass Production
+NameFr=Production de masse
+Description=Produce 2,000 units in total.
+DescriptionFr=Produire 2 000 unités au total.
+Rule=Lifetime
+Statistic=UnitsBuilt
+Target=2000
+
+[INFILTRATION_EXPERT]
+Name=Infiltration Expert
+NameFr=Expert en infiltration
+Description=Capture 50 enemy buildings in total.
+DescriptionFr=Capturer 50 bâtiments ennemis au total.
+Rule=Lifetime
+Statistic=StructuresCaptured
+Target=50
+
+[DESERT_EXTERMINATOR]
+Name=Desert Exterminator
+NameFr=Exterminateur du désert
+Description=Defeat 10 sandworms in total, including their half-health retreat.
+DescriptionFr=Vaincre 10 vers des sables au total, y compris leur retraite à mi-vie.
+Rule=Lifetime
+Statistic=SandwormsKilled
+Target=10
+
+[CRUSHING_ADVANCE]
+Name=Crushing Advance
+NameFr=Avancée écrasante
+)ACHIEVEMENTS"
+R"ACHIEVEMENTS(Description=Crush 100 enemy infantry in total.
+DescriptionFr=Écraser 100 fantassins ennemis au total.
+Rule=Lifetime
+Statistic=InfantryCrushed
+Target=100
+
+[SPICE_TYCOON]
+Name=Spice Tycoon
+NameFr=Magnat de l’épice
+Description=Deposit 1,000,000 spice credits in refineries in total.
+DescriptionFr=Déposer 1 000 000 de crédits d’épice dans les raffineries au total.
+Rule=Lifetime
+Statistic=SpiceHarvested
+Target=1000000
+
+[BLOOM_EXPLORER]
+Name=Bloom Explorer
+NameFr=Explorateur d’éruptions
+Description=Trigger 25 spice blooms in total.
+DescriptionFr=Déclencher 25 éruptions d’épice au total.
+Rule=Lifetime
+Statistic=SpiceBloomsTriggered
+Target=25
+
+[PALACE_VETERAN]
+Name=Palace Veteran
+NameFr=Vétéran des Palaces
+Description=Use 50 palace abilities in total.
+DescriptionFr=Utiliser 50 capacités de Palace au total.
+Rule=Lifetime
+Statistic=PalaceAbilitiesUsed
+Target=50
+
+[MISSILE_COMMAND]
+Name=Missile Command
+NameFr=Commandement balistique
+Description=Launch 25 palace missiles in total.
+DescriptionFr=Lancer 25 missiles de Palace au total.
+Rule=Lifetime
+Statistic=PalaceMissilesLaunched
+Target=25
+
+[SELL_FIRST_BUILDING]
+Name=Liquid assets
+NameFr=Liquidités
+Description=Sell your first building.
+DescriptionFr=Vendre votre premier bâtiment.
+Rule=Lifetime
+Statistic=StructuresSold
+Target=1
+
+[ARCAKEV_MASTER]
+Name=Master of ArcaKev
+NameFr=Maître d’ArcaKev
+Description=Complete all twelve campaigns in ArcaKev.
+DescriptionFr=Terminer les douze campagnes dans ArcaKev.
+Rule=ModCampaignCount
+Statistic=ArcaKev
+Target=12
+Secret=false
+
+[ARCAKEV_LITE_MASTER]
+Name=Master of ArcaKev Lite
+NameFr=Maître d’ArcaKev Lite
+Description=Complete all six campaigns in ArcaKev Lite.
+DescriptionFr=Terminer les six campagnes dans ArcaKev Lite.
+Rule=ModCampaignCount
+Statistic=ArcaKevLite
+Target=6
+Secret=false
+
+[COOP_RESCUED]
+Name=Victory Beyond Defeat
+NameFr=La victoire après la défaite
+Description=Be eliminated in co-op and have a surviving ally win the mission for your team.
+DescriptionFr=Être éliminé en coop et remporter la mission grâce à un allié encore en vie.
+Rule=Lifetime
+Statistic=CoopVictoriesRescued
+Target=1
+
+[COOP_RESCUER]
+Name=No Ally Left Behind
+NameFr=Un allié ne tombe jamais seul
+Description=Survive and win a co-op mission after at least one ally has been eliminated.
+DescriptionFr=Survivre et gagner une mission coop après l’élimination d’au moins un allié.
+Rule=Lifetime
+Statistic=CoopVictoriesRescuing
+Target=1
+
+[PALACE_SABOTEUR]
+Name=Palace Infiltrator
+NameFr=Sabotage royal
+Description=Destroy an enemy Palace with a Saboteur.
+DescriptionFr=Détruire un palais ennemi avec un Saboteur.
+Rule=Lifetime
+Statistic=PalacesSabotaged
+Target=1
+)ACHIEVEMENTS";
+}

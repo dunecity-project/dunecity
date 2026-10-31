@@ -15,7 +15,8 @@ inline int factor(int item) {
         case Unit_Saboteur: return 40;
         case Unit_Devastator: return 10;
         case Unit_Tank: return 25;
-        case Unit_SiegeTank: case Unit_Harvester: case Unit_MCV: return 20;
+        case Unit_SiegeTank: case Unit_Harvester: case Unit_CapacityHarvester:
+        case Unit_FastHarvester: case Unit_MCV: return 20;
         case Unit_Launcher: case Unit_Deviator: case Unit_SonicTank: return 30;
         case Unit_Trike: return 45;
         case Unit_RaiderTrike: return 60;
@@ -34,13 +35,15 @@ inline int throttle(int item, TERRAINTYPE terrain) {
     if(terrain == Terrain_Rock) return wheeled ? 112 : 160;
     const bool sand = terrain == Terrain_Sand || terrain == Terrain_SpiceBloom
         || terrain == Terrain_GreenSpiceBloom || terrain == Terrain_RedSpiceBloom
+        || terrain == Terrain_PaleLilacSpiceBloom || terrain == Terrain_WhiteSpiceBloom
         || terrain == Terrain_SpecialBloom;
     return sand && !wheeled ? 112 : 160;
 }
 // Below 16, Dynasty moves 16 units intermittently. Return its average step.
 inline int step(int item, int throttleValue, bool damaged, int cargoPercent) {
     if(damaged) throttleValue -= throttleValue / 4;
-    if(item == Unit_Harvester) throttleValue = (255-cargoPercent)*throttleValue/256;
+    if(item == Unit_Harvester || item == Unit_CapacityHarvester || item == Unit_FastHarvester)
+        throttleValue = (255-cargoPercent)*throttleValue/256;
     int speed = factor(item)*throttleValue/256;
     return speed >= 16 ? (speed/16)*16 : speed;
 }

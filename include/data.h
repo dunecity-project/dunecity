@@ -33,7 +33,9 @@ typedef enum {
     Bullet_Sandworm = 10,
     Bullet_Flame = 11,            ///< Tornie: launcher-like fire missile with flame area damage
     Bullet_SonicTrike = 12,        ///< Tornie: shorter and weaker Sonic Trike wave
-    Bullet_Heal = 13              ///< Tornie: Deviator-style healing missile with direct flight
+    Bullet_Heal = 13,             ///< Tornie: Deviator-style healing missile with direct flight
+    Bullet_Slow = 14,             ///< Tornie 546: timed slowing, no conventional damage
+    Bullet_Napalm = 15            ///< Tornie 546: Palace missile with persistent impact-area fire
 } BulletID_enum;
 
 typedef enum {
@@ -155,7 +157,22 @@ typedef enum {
     Structure_ChaosFactory = 72,       ///< Tornie: two random global unit offers
     Structure_Chemipost = 73,          ///< Tornie: healing variant of the Scoutpost
 
-    ItemID_LastID = 73,
+    // Tornie 1.0.546 additions: append-only across the DuneCity save and wire formats.
+    Unit_Troopers5 = 74,
+    Unit_Infantry5 = 75,
+    Structure_Doublefinery = 76,
+    Unit_FlameQuad = 77,
+    Unit_GasInfantry = 78,
+    Unit_FlameTrooper = 79,
+    Unit_EliteOrnithopter = 80,
+    Unit_RaiderQuad = 81,
+    Unit_RangedTank = 82,
+    Unit_SlowTank = 83,
+    Structure_Slowpost = 84,
+    Unit_CapacityHarvester = 85,
+    Unit_FastHarvester = 86,
+    Unit_TameSandworm = 87,
+    ItemID_LastID = 87,
 
     Num_ItemID
 } ItemID_enum;
@@ -175,7 +192,13 @@ typedef enum {
     Terrain_GreenSpiceBloom,
     Terrain_RedSpice,
     Terrain_ThickRedSpice,
-    Terrain_RedSpiceBloom
+    Terrain_RedSpiceBloom,
+    Terrain_PaleLilacSpice,
+    Terrain_ThickPaleLilacSpice,
+    Terrain_PaleLilacSpiceBloom,
+    Terrain_WhiteSpice,
+    Terrain_ThickWhiteSpice,
+    Terrain_WhiteSpiceBloom
 } TERRAINTYPE;
 
 typedef enum {
@@ -202,14 +225,14 @@ typedef enum {
     \param itemID   the ID of the item (e.g. Unit_Harvester)
     \return true if it is an unit, false otherwise
 */
-inline bool isUnit(int itemID) { return (itemID >= Unit_FirstID && itemID <= Unit_LastID) || (itemID >= Unit_AmbientAirplane && itemID <= Unit_ExtLastID) || itemID == Unit_RebelHarvester || itemID == Unit_SonicTrike || itemID == Unit_ChemicalSiegeTank || itemID == Unit_ChemicalCarryall; }
+inline bool isUnit(int itemID) { return (itemID >= Unit_FirstID && itemID <= Unit_LastID) || (itemID >= Unit_AmbientAirplane && itemID <= Unit_ExtLastID) || itemID == Unit_RebelHarvester || itemID == Unit_SonicTrike || itemID == Unit_ChemicalSiegeTank || itemID == Unit_ChemicalCarryall || itemID == Unit_Troopers5 || itemID == Unit_Infantry5 || (itemID >= Unit_FlameQuad && itemID <= Unit_SlowTank) || (itemID >= Unit_CapacityHarvester && itemID <= Unit_TameSandworm); }
 
 /**
     This function determines if the specified itemID is a structure or not.
     \param itemID   the ID of the item (e.g. Structure_ConstructionYard)
     \return true if it is a structure, false otherwise
 */
-inline bool isStructure(int itemID) { return (itemID >= Structure_FirstID && itemID <= Structure_LastID) || (itemID >= Structure_Stadium && itemID <= Structure_ExtLastID) || (itemID >= Structure_AdvancedWindTrap && itemID <= Structure_AdvancedWindTrapMK2) || itemID == Structure_TechCenter || itemID == Structure_AdvancedWindTrapMK3 || itemID == Structure_Scoutpost || itemID == Structure_LoveFactory || itemID == Structure_Flamepost || itemID == Structure_ChaosFactory || itemID == Structure_Chemipost; }
+inline bool isStructure(int itemID) { return (itemID >= Structure_FirstID && itemID <= Structure_LastID) || (itemID >= Structure_Stadium && itemID <= Structure_ExtLastID) || (itemID >= Structure_AdvancedWindTrap && itemID <= Structure_AdvancedWindTrapMK2) || itemID == Structure_TechCenter || itemID == Structure_AdvancedWindTrapMK3 || itemID == Structure_Scoutpost || itemID == Structure_LoveFactory || itemID == Structure_Flamepost || itemID == Structure_ChaosFactory || itemID == Structure_Chemipost || itemID == Structure_Doublefinery || itemID == Structure_Slowpost; }
 
 /**
     This function determines if the specified itemID is a DuneCity zone structure.
@@ -242,6 +265,20 @@ inline bool isTornieExclusiveItem(int itemID) {
         case Structure_Flamepost:
         case Structure_ChaosFactory:
         case Structure_Chemipost:
+        case Unit_Troopers5:
+        case Unit_Infantry5:
+        case Structure_Doublefinery:
+        case Unit_FlameQuad:
+        case Unit_GasInfantry:
+        case Unit_FlameTrooper:
+        case Unit_EliteOrnithopter:
+        case Unit_RaiderQuad:
+        case Unit_RangedTank:
+        case Unit_SlowTank:
+        case Structure_Slowpost:
+        case Unit_CapacityHarvester:
+        case Unit_FastHarvester:
+        case Unit_TameSandworm:
             return true;
         default:
             return false;
@@ -254,7 +291,9 @@ inline bool isTornieExclusiveItem(int itemID) {
     \param itemID   the ID of the item (e.g. Unit_Carryall)
     \return true if it is a flying unit, false otherwise
 */
-inline bool isFlyingUnit(int itemID) { return (itemID == Unit_Carryall) || (itemID == Unit_ChemicalCarryall) || (itemID == Unit_Ornithopter) || (itemID == Unit_Frigate) || (itemID == Unit_AmbientAirplane) || (itemID == Unit_AmbientHelicopter); }
+inline bool isSandwormUnit(int itemID) { return itemID == Unit_Sandworm || itemID == Unit_TameSandworm; }
+inline bool isOrnithopterUnit(int itemID) { return itemID == Unit_Ornithopter || itemID == Unit_EliteOrnithopter; }
+inline bool isFlyingUnit(int itemID) { return (itemID == Unit_Carryall) || (itemID == Unit_ChemicalCarryall) || isOrnithopterUnit(itemID) || (itemID == Unit_Frigate) || (itemID == Unit_AmbientAirplane) || (itemID == Unit_AmbientHelicopter); }
 inline bool isCarryallUnit(int itemID) {
     return (itemID == Unit_Carryall) || (itemID == Unit_ChemicalCarryall);
 }
@@ -271,7 +310,7 @@ inline bool isAmbientUnit(int itemID) { return (itemID == Unit_AmbientAirplane) 
     \param itemID   the ID of the item (e.g. Unit_Carryall)
     \return true if it is an infantry unit, false otherwise
 */
-inline bool isInfantryUnit(int itemID) { return (itemID == Unit_Soldier) || (itemID == Unit_Trooper) || (itemID == Unit_Infantry) || (itemID == Unit_Troopers) || (itemID == Unit_Saboteur); }
+inline bool isInfantryUnit(int itemID) { return (itemID == Unit_Soldier) || (itemID == Unit_Trooper) || (itemID == Unit_Infantry) || (itemID == Unit_Troopers) || (itemID == Unit_Saboteur) || (itemID == Unit_Troopers5) || (itemID == Unit_Infantry5) || (itemID == Unit_GasInfantry) || (itemID == Unit_FlameTrooper); }
 
 
 #endif // DATA_H

@@ -291,7 +291,7 @@ TEST_CASE("Admission: in-game traffic is refused while still in the lobby",
 }
 
 TEST_CASE("Admission: unknown packet types are refused", "[network][security][admission]") {
-    for(const Uint32 packetType : {0u, 25u, 999u, 0xFFFFFFFFu}) {
+    for(const Uint32 packetType : {0u, 27u, 999u, 0xFFFFFFFFu}) {
         INFO("packet type " << packetType);
         REQUIRE(NetworkPacketPolicy::classifyPacket(
                     context(packetType, LocalRole::Client, SessionPhase::Lobby,
@@ -533,8 +533,8 @@ TEST_CASE("Abuse: the packet budget passes a mod transfer and stops a flood",
     NetworkPacketPolicy::RateWindow window;
     const Uint32 start = 20000;
 
-    // A complete 10 MiB mod transfer is ~160 chunk packets plus handshake traffic.
-    for(Uint32 i = 0; i < 256; i++) {
+    // A full bounded transfer plus its handshake fits the packet budget.
+    for(Uint32 i = 0; i < MAX_MOD_TRANSFER_SIZE / MOD_CHUNK_SIZE + 8; i++) {
         REQUIRE(window.accept(start, 1, NetworkPacketPolicy::kMaxPacketsPerWindow,
                               NetworkPacketPolicy::kTrafficWindowMs));
     }
@@ -558,11 +558,11 @@ TEST_CASE("Abuse: the packet budget passes a mod transfer and stops a flood",
 
 TEST_CASE("Abuse: the byte budget passes a full mod burst and stops bulk garbage",
           "[network][security][abuse]") {
-    const Uint64 modTransferBytes = 10ull * 1024 * 1024;     // MAX_MOD_TRANSFER_SIZE
-    const Uint64 chunkBytes = 64 * 1024;                     // MOD_CHUNK_SIZE
+    const Uint64 modTransferBytes = MAX_MOD_TRANSFER_SIZE;
+    const Uint64 chunkBytes = MOD_CHUNK_SIZE;
     const Uint32 start = 30000;
 
-    SECTION("a requested 10 MiB transfer arriving in one burst is accepted") {
+    SECTION("a requested maximum-sized transfer arriving in one burst is accepted") {
         NetworkPacketPolicy::RateWindow window;
         for(Uint64 sent = 0; sent < modTransferBytes; sent += chunkBytes) {
             REQUIRE(window.accept(start, chunkBytes,
@@ -1190,6 +1190,29 @@ TEST_CASE("Command authorization: a player may only act on objects of its own ho
     }
 }
 
+TEST_CASE("Tornie allied command grants never control Natives or unknown players",
+          "[tornie][command][security][authorization]") {
+    ActorContext context;
+    context.issuerExists = true;
+    context.issuerHasHouse = true;
+    context.issuerHouseID = HOUSE_ATREIDES;
+    context.objectExists = true;
+    context.objectTypeMatches = true;
+    context.objectHasOwner = true;
+    context.objectOwnerHouseID = HOUSE_HARKONNEN;
+    REQUIRE(CommandAuthorization::authorizeActor(context) == Decision::NotOwner);
+    context.alliedControl = true;
+    REQUIRE(CommandAuthorization::authorizeActor(context) == Decision::Allow);
+    context.objectOwnerHouseID = HOUSE_NATIVES;
+    REQUIRE(CommandAuthorization::authorizeActor(context) == Decision::NotOwner);
+    context.objectOwnerHouseID = HOUSE_HARKONNEN;
+    context.issuerHouseID = HOUSE_NATIVES;
+    REQUIRE(CommandAuthorization::authorizeActor(context) == Decision::NotOwner);
+    context.issuerHouseID = HOUSE_ATREIDES;
+    context.issuerExists = false;
+    REQUIRE(CommandAuthorization::authorizeActor(context) == Decision::NoIssuer);
+}
+
 TEST_CASE("Command authorization: every object action is covered, control commands are not",
           "[command][security][authorization]") {
     // Commands whose parameter 0 names an object Command::executeCommand() acts on.
@@ -1205,7 +1228,8 @@ TEST_CASE("Command authorization: every object action is covered, control comman
         CMD_POLICE_REINFORCEMENTS, CMD_ZONE_DEMOLISH, CMD_STRUCTURE_DEMOLISH,
         CMD_UNIT_ATTACKMOVE, CMD_UNIT_PATROL, CMD_UNIT_QUEUEORDER, CMD_BUILDER_SETREPEAT,
         CMD_BUILDER_RESERVE_PLACEMENT, CMD_BUILDER_CANCEL_RESERVATION, CMD_UNIT_FORMATION_MOVE,
-        CMD_UNIT_FORMATION_HUNT
+        CMD_UNIT_FORMATION_HUNT, CMD_STRUCTURE_SELL, CMD_WINDTRAP_POWER_UPGRADE,
+        CMD_SCOUTPOST_SLOWPOST_UPGRADE, CMD_RADAR_RESEARCH
     };
     for(const CMDTYPE commandID : objectActions) {
         INFO("command " << static_cast<int>(commandID));
@@ -1552,7 +1576,7 @@ TEST_CASE("Lobby authorization: a transaction is judged as a whole",
         ENetPacketIStream istream(builder.build());
         ChangeEventList decoded(istream);
         REQUIRE(decoded.changeEventList.size() == rows * eventsPerRow);
-        REQUIRE(decoded.changeEventList.size() == 63);
+        REQUIRE(decoded.changeEventList.size() == 84);
         // getChangeEventListForNewPlayer appends the joining player's seat claim to exactly
         // that list, which is the largest list the lobby ever produces. It has to decode.
         REQUIRE(rows * eventsPerRow + 1 == CHANGEEVENTLIST_MAX_EVENTS);

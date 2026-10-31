@@ -27,6 +27,7 @@
 #include <players/Player.h>
 #include <Game.h>
 #include <Network/NetworkManager.h>
+#include <units/UnitBase.h>
 
 #include <ObjectBase.h>
 #include <GUI/ObjectInterfaces/ObjectInterface.h>
@@ -208,6 +209,10 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
 
     // add ornithopter selection shortcut button just below the radar
     ornithopterSelectButton.setText(_("Ornithopter"));
+    tornieFamilyPresentation = ModManager::instance().isTornieFamilyContentActive();
+    if(tornieFamilyPresentation) {
+        ornithopterSelectButton.setCountedText(_("Ornithopter"), 0);
+    }
     ornithopterSelectButton.setTooltipText(_("Select all ornithopters (Hotkey: O)"));
     ornithopterSelectButton.setOnClick(std::bind(&Game::selectAllOrnithopters, currentGame));
 
@@ -221,6 +226,10 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     ornithopterSelectButton.resize(ornithopterButtonSize.x, ornithopterButtonSize.y);
     windowWidget.addWidget(&ornithopterSelectButton, ornithopterButtonPos, ornithopterButtonSize);
     chemicalCarryallSelectButton.setText(_("Chemical Carryall"));
+    if(tornieFamilyPresentation) {
+        chemicalCarryallSelectButton.setCountedText(_("Chemical Carryall"), 0);
+        refreshAircraftButtons();
+    }
     chemicalCarryallSelectButton.setTooltipText(_("Select all chemical carryalls"));
     chemicalCarryallSelectButton.setOnClick(std::bind(&Game::selectAllChemicalCarryalls, currentGame));
     const int chemicalCarryallButtonHeight = std::max(chemicalCarryallSelectButton.getMinimumSize().y, 36);
@@ -231,7 +240,7 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     );
     chemicalCarryallSelectButton.resize(chemicalCarryallButtonSize.x, chemicalCarryallButtonSize.y);
     windowWidget.addWidget(&chemicalCarryallSelectButton, chemicalCarryallButtonPos, chemicalCarryallButtonSize);
-    chemicalCarryallSelectButton.setVisible(ModManager::instance().isTornieContentActive());
+    chemicalCarryallSelectButton.setVisible(tornieFamilyPresentation);
 
     autoRepairButton.setText(_("Auto repair off"));
     autoRepairButton.setTooltipText(_("Automatically start paid building repairs. Off stops new automatic repairs."));
@@ -379,6 +388,14 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
                                Point(marginX,
                                      getRendererHeight() - labelHeight - marginY),
                                Point(labelWidth, labelHeight));
+        if(tornieFamilyPresentation) {
+            harvesterCountLabel.setTextFontSize(10);
+            harvesterCountLabel.setTextColor(COLOR_WHITE, COLOR_BLACK);
+            harvesterCountLabel.setAlignment(static_cast<Alignment_Enum>(Alignment_Left | Alignment_VCenter));
+            windowWidget.addWidget(&harvesterCountLabel,
+                                   Point(marginX + labelWidth + 8, getRendererHeight() - labelHeight - marginY),
+                                   Point(180, labelHeight));
+        }
 
         if (!settings.video.showWatermark) {
             modVersionLabel.setVisible(false);
@@ -390,7 +407,40 @@ GameInterface::~GameInterface() {
     removeOldContainer();
 }
 
+void GameInterface::refreshAircraftButtons() {
+    if(!tornieFamilyPresentation
+       || (aircraftCountCycle == currentGame->getGameCycleCount() && aircraftCountHouse == pLocalHouse)) return;
+    if(aircraftCountHouse != pLocalHouse && pLocalHouse != nullptr) {
+        const auto color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        ornithopterSelectButton.setTextColor(color);
+        chemicalCarryallSelectButton.setTextColor(color);
+    }
+    aircraftCountCycle = currentGame->getGameCycleCount();
+    aircraftCountHouse = pLocalHouse;
+    int ornithopters = 0;
+    int chemicalCarryalls = 0;
+    for(const auto* unit : unitList) {
+        if(!currentGame->canControlHouse(unit->getOwner()) || !unit->isRespondable()) continue;
+        if(isOrnithopterUnit(unit->getItemID())) ++ornithopters;
+        else if(unit->getItemID() == Unit_ChemicalCarryall) ++chemicalCarryalls;
+    }
+    ornithopterSelectButton.setCount(ornithopters);
+    chemicalCarryallSelectButton.setCount(chemicalCarryalls);
+}
+
 void GameInterface::draw(Point position) {
+    if(tornieFamilyPresentation) {
+        if(currentGame->getSelectedList().empty()) refreshAircraftButtons();
+        const bool showCount = settings.video.showHarvesterCount && pLocalHouse != nullptr;
+        harvesterCountLabel.setVisible(showCount);
+        if(showCount) {
+            const int count = pLocalHouse->getNumHarvesters();
+            if(count != displayedHarvesterCount) {
+                displayedHarvesterCount = count;
+                harvesterCountLabel.setText(_("Harvesters:") + " " + std::to_string(count));
+            }
+        }
+    }
     const std::string pauseText=currentGame->isGamePaused() ? _("Resume")
         : (currentGame->isPauseRequestPending() ? _("Pausing...") : _("Pause"));
     if(pauseButton.getText()!=pauseText) pauseButton.setText(pauseText);
@@ -629,8 +679,9 @@ void GameInterface::updateObjectInterface() {
     crimeOverlayButton.setToggleState(currentGame->getCityOverlayMode() == DuneCity::CityOverlayMode::CrimeRate);
     pollutionOverlayButton.setToggleState(currentGame->getCityOverlayMode() == DuneCity::CityOverlayMode::Pollution);
     if(selection.empty()) {
+        refreshAircraftButtons();
         ornithopterSelectButton.setVisible(true);
-        chemicalCarryallSelectButton.setVisible(ModManager::instance().isTornieContentActive());
+        chemicalCarryallSelectButton.setVisible(tornieFamilyPresentation);
         removeOldContainer();
         return;
     }

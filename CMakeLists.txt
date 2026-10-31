@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Project name and version
-project(DuneCity VERSION 1.0.862 LANGUAGES C CXX)
+project(DuneCity VERSION 1.0.863 LANGUAGES C CXX)
 if(APPLE)
     enable_language(OBJCXX)
 endif()
@@ -311,6 +311,7 @@ if(NOT APPLE)
     else()
         install(FILES 
             config/ObjectData.ini.default
+            config/Achievements.ini
             "config/QuantBot Config.ini.default"
             "config/Dune City.ini"
             config/README.md

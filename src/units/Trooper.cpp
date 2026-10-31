@@ -24,25 +24,31 @@
 #include <mod/ModManager.h>
 #include <SoundPlayer.h>
 #include <units/AmbientAirplane.h>
+#include <Game.h>
+#include <misc/InputStream.h>
+#include <misc/OutputStream.h>
+#include <misc/exceptions.h>
 
-Trooper::Trooper(House* newOwner) : InfantryBase(newOwner) {
-    Trooper::init();
+Trooper::Trooper(House* newOwner, int product) : InfantryBase(newOwner) {
+    Trooper::init(product);
 
     setHealth(getMaxHealth());
 }
 
-Trooper::Trooper(InputStream& stream) : InfantryBase(stream) {
-    Trooper::init();
+Trooper::Trooper(InputStream& stream, int product) : InfantryBase(stream) {
+    Trooper::init(product);
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546) {
+        flameDamageRemainder = stream.readUint8();
+        if(flameDamageRemainder >= 5) THROW(std::runtime_error, "Invalid flame damage remainder");
+    }
 }
 
-void Trooper::init() {
-    itemID = Unit_Trooper;
+void Trooper::init(int product) {
+    itemID = product;
     registerUnit();
 
     numWeapons = 1;
-    const bool kleshmershTrooper = ModManager::instance().isTornieContentActive()
-        && isHouseFaction(static_cast<HOUSETYPE>(owner->getHouseID()), HOUSE_KLESHMERSH);
-    bulletType = kleshmershTrooper ? Bullet_Flame : Bullet_SmallRocket;
+    setProductionHouseID(getProductionHouseID());
 
     graphicID = ObjPic_Trooper;
     graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
@@ -52,6 +58,28 @@ void Trooper::init() {
 }
 
 Trooper::~Trooper() = default;
+
+void Trooper::save(OutputStream& stream) const {
+    InfantryBase::save(stream);
+    stream.writeUint8(flameDamageRemainder);
+}
+
+Sint32 Trooper::flameWeaponDamage(Sint32 base) {
+    // Preserve fractional fifths without consuming additional synchronized RNG.
+    const Sint64 scaled = Sint64(base) * 6 + flameDamageRemainder;
+    flameDamageRemainder = static_cast<Uint8>(scaled % 5);
+    return static_cast<Sint32>(scaled / 5);
+}
+
+void Trooper::setProductionHouseID(int houseID) {
+    UnitBase::setProductionHouseID(houseID);
+    const bool family = ModManager::instance().isTornieFamilyContentActive();
+    const bool kleshmershTrooper = family
+        && ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled()
+        && isHouseFaction(static_cast<HOUSETYPE>(getProductionHouseID()), HOUSE_KLESHMERSH);
+    bulletType = (family && itemID == Unit_FlameTrooper) || kleshmershTrooper
+        ? Bullet_Flame : Bullet_SmallRocket;
+}
 
 bool Trooper::canAttack(const ObjectBase* object) const {
     if ((object != nullptr)

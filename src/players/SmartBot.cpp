@@ -31,6 +31,8 @@
 #include <units/UnitBase.h>
 #include <units/MCV.h>
 #include <units/Harvester.h>
+#include <units/HarvesterHelpers.h>
+#include <mod/ModManager.h>
 
 #include <algorithm>
 
@@ -131,7 +133,8 @@ void SmartBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
     if(pObject->isAStructure()) {
         //scramble some free units to defend
         scrambleUnitsAndDefend(pDamager);
-    } else if(pObject->getItemID() == Unit_Harvester) {
+    } else if(pObject->getItemID() == Unit_Harvester || (ModManager::instance().isTornieFamilyContentActive()
+        && (pObject->getItemID() == Unit_CapacityHarvester || pObject->getItemID() == Unit_FastHarvester))) {
         //scramble some free units to defend
         scrambleUnitsAndDefend(pDamager);
 
@@ -160,6 +163,8 @@ void SmartBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 void SmartBot::scrambleUnitsAndDefend(const ObjectBase* pIntruder) {
     for(const UnitBase* pUnit : getUnitList()) {
         if(pUnit->isRespondable() && (pUnit->getOwner() == getHouse())) {
+            if (ModManager::instance().isTornieFamilyContentActive()
+                && (pUnit->getAttackMode() == SABOTAGE || isHarvesterLikeUnit(pUnit->getItemID()))) continue;
 
             if((pUnit->getAttackMode() != HUNT) && !pUnit->hasATarget()) {
                 Uint32 itemID = pUnit->getItemID();
@@ -255,6 +260,7 @@ Coord SmartBot::findPlaceLocation(Uint32 itemID) {
                     rating = 10000000;
                 } break;
 
+                case Structure_Doublefinery:
                 case Structure_Refinery: {
                     // place near spice
                     Coord spicePos;
@@ -408,9 +414,13 @@ void SmartBot::build() {
             {
                 doRepair(pStructure);
             }
+            if (doUpgradeScoutpost(pStructure, getHouse()->getCredits())) continue;
 
             if(pStructure->isABuilder()) {
                 const BuilderBase* pBuilder = static_cast<const BuilderBase*>(pStructure);
+                if (!pBuilder->isUpgrading() && pBuilder->getProductionQueueSize() == 0
+                    && getHouse()->getCredits() > 1500 && pBuilder->getHealth() >= pBuilder->getMaxHealth()
+                    && hasTornieProductionUpgradeGoal(pBuilder) && doUpgrade(pBuilder)) continue;
 
                 if(!pBuilder->isUpgrading() && pBuilder->getProductionQueueSize() < 1
                    && getHouse()->getCredits() > 1500) {
@@ -446,12 +456,12 @@ void SmartBot::build() {
                             }
 
                             // In case we get given lots of money, it will eventually run out so we need to be prepared
-                            if((getHouse()->getNumItems(Unit_Harvester) < (getHouse()->getNumItems(Unit_SiegeTank)
+                            if((getAIHarvesterCount() < (getHouse()->getNumItems(Unit_SiegeTank)
                                                                           + getHouse()->getNumItems(Unit_Launcher)
                                                                           + getHouse()->getNumItems(Unit_Tank)
                                                                           + getHouse()->getNumItems(Unit_Ornithopter))/2.5_fix)
-                                    && (getHouse()->getNumItems(Unit_Harvester) < harvesterLimit )) {
-                                    doProduceItem(pBuilder, Unit_Harvester);
+                                    && (getAIHarvesterCount() < harvesterLimit )) {
+                                    doProduceItem(pBuilder, chooseTornieHarvester(pBuilder, getHouse()->getCredits()));
                             }
 
 
@@ -467,9 +477,9 @@ void SmartBot::build() {
                             else if((pBuilder->getProductionQueueSize() < 1)
                                     && (pBuilder->getBuildListSize() > 0)) {
 
-                                if(getHouse()->getNumItems(Unit_Harvester) < harvesterLimit
+                                if(getAIHarvesterCount() < harvesterLimit
                                    && focusEconomy()) {
-                                    doProduceItem(pBuilder, Unit_Harvester);
+                                    doProduceItem(pBuilder, chooseTornieHarvester(pBuilder, getHouse()->getCredits()));
                                 } else if(focusMilitary()) {
 
 
@@ -499,7 +509,7 @@ void SmartBot::build() {
 
                             if(getHouse()->getNumItems(Unit_Carryall) < 1
                                || getHouse()->getNumItems(Unit_Carryall) <
-                                  (getHouse()->getNumItems(Structure_Refinery)
+                                  (getAIRefineryBays()
                                    + getHouse()->getNumItems(Structure_RepairYard))) {
                                 doProduceItem(pBuilder, Unit_Carryall);
                             }
@@ -529,8 +539,8 @@ void SmartBot::build() {
 
                             while (money > choam.getPrice(Unit_Harvester)
                                    && choam.getNumAvailable(Unit_Harvester) > 0
-                                   && getHouse()->getNumItems(Unit_Harvester) + buildQueue[Unit_Harvester] < harvesterLimit) {
-                                doProduceItem(pBuilder, Unit_Harvester);
+                                   && getAIHarvesterCount() + buildQueue[Unit_Harvester] < harvesterLimit) {
+                                doProduceItem(pBuilder, chooseTornieHarvester(pBuilder, getHouse()->getCredits()));
                                 buildQueue[Unit_Harvester]++;
                                 money = money - choam.getPrice(Unit_Harvester);
                             }
@@ -604,19 +614,19 @@ void SmartBot::build() {
                                 // We need one wind trap
                                 itemID = Structure_WindTrap;
                                 buildQueue[Structure_WindTrap]++;
-                            } else if(getHouse()->getNumItems(Structure_Refinery) + buildQueue[Structure_Refinery]  < 1
+                            } else if(getAIRefineryBays() + buildQueue[Structure_Refinery]  < 1
                                      && pBuilder->isAvailableToBuild(Structure_Refinery)) {
                                 // We need one refinery
                                 itemID = Structure_Refinery;
                                 buildQueue[Structure_Refinery]++;
                             } else if(pBuilder->isAvailableToBuild(Structure_Refinery)
                                     && ((focusEconomy()
-                                     || (getHouse()->getNumItems(Structure_Refinery) +  buildQueue[Structure_Refinery])  * 3 < getHouse()->getNumItems(Unit_Harvester)
-                                     || getHouse()->getNumItems(Structure_Refinery) +  buildQueue[Structure_Refinery] <
+                                     || (getAIRefineryBays() +  buildQueue[Structure_Refinery])  * 3 < getAIHarvesterCount()
+                                     || getAIRefineryBays() +  buildQueue[Structure_Refinery] <
                                         getHouse()->getNumItems(Structure_HeavyFactory) + buildQueue[Structure_HeavyFactory]
                                         + getHouse()->getNumItems(Structure_HighTechFactory) + buildQueue[Structure_HighTechFactory])
-                                      && (getHouse()->getNumItems(Structure_Refinery) +  buildQueue[Structure_Refinery] < REFINERYLIMIT
-                                      && getHouse()->getNumItems(Unit_Harvester) < harvesterLimit
+                                      && (getAIRefineryBays() +  buildQueue[Structure_Refinery] < REFINERYLIMIT
+                                      && getAIHarvesterCount() < harvesterLimit
                                          ))){
                                 // The most important element of success in dune is having a strong economy
                                 // Due to the exponential growth available, focussing heavily on refinerys
@@ -696,6 +706,11 @@ void SmartBot::build() {
                                 itemID = Structure_RocketTurret;
                             }
 
+                            const Uint32 variant = chooseTornieStructure(pBuilder, itemID, getHouse()->getCredits());
+                            if (variant != itemID && findPlaceLocation(variant).isValid()) {
+                                if (itemID == Structure_Refinery) ++buildQueue[Structure_Refinery];
+                                itemID = variant;
+                            }
                             if(itemID != NONE_ID) {
                                 Coord location = findPlaceLocation(itemID);
 
@@ -805,6 +820,7 @@ void SmartBot::attack() {
     }
 
     for(const UnitBase *pUnit : getUnitList()) {
+        if (ModManager::instance().isTornieFamilyContentActive() && isHarvesterLikeUnit(pUnit->getItemID())) continue;
         if (pUnit->isRespondable()
             && (pUnit->getOwner() == getHouse())
             && pUnit->isActive()
@@ -831,7 +847,9 @@ void SmartBot::checkAllUnits() {
     for(const UnitBase* pUnit : getUnitList()) {
         if(pUnit->getItemID() == Unit_Sandworm) {
                 for(const UnitBase* pUnit2 : getUnitList()) {
-                    if(pUnit2->getOwner() == getHouse() && pUnit2->getItemID() == Unit_Harvester) {
+                    if(pUnit2->getOwner() == getHouse() && (pUnit2->getItemID() == Unit_Harvester
+                        || (ModManager::instance().isTornieFamilyContentActive()
+                            && (pUnit2->getItemID() == Unit_CapacityHarvester || pUnit2->getItemID() == Unit_FastHarvester)))) {
                         const Harvester* pHarvester = static_cast<const Harvester*>(pUnit2);
                         if( getMap().tileExists(pHarvester->getLocation())
                             && !getMap().getTile(pHarvester->getLocation())->isRock()
@@ -861,9 +879,11 @@ void SmartBot::checkAllUnits() {
                 }
             } break;
 
+            case Unit_CapacityHarvester:
+            case Unit_FastHarvester:
             case Unit_Harvester: {
                 const Harvester* pHarvester = static_cast<const Harvester*>(pUnit);
-                if(getHouse()->getCredits() < 1000 && pHarvester->getAmountOfSpice() >= HARVESTERMAXSPICE/2) {
+                if(getHouse()->getCredits() < 1000 && pHarvester->getAmountOfSpice() >= pHarvester->getSpiceCapacity()/2) {
                     doReturn(pHarvester);
                 }
             } break;
@@ -908,5 +928,5 @@ bool SmartBot::focusBase(){
 
 
 int SmartBot::getMaxHarvester() const {
-    return 3*getHouse()->getNumItems(Structure_Refinery);
+    return 3*getAIRefineryBays();
 }

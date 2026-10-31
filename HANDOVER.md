@@ -1,3 +1,29 @@
+## 2026-11-01 — 1.0.863: Tornie 1.0.546 port and five Tornie-family mods (OMP integrator)
+
+- Stefan: website page for the Tornie mod linking Tornie's site (done: https://dunelegacy.com/tornie.html,
+  website 829ab72), then bring in everything from Tornie's latest game, test it with main and release.
+  He chose the full scope (Tornie gameplay + campaigns, separate-faction co-op, and the Jericho,
+  JerichoLite, TornieLite, ArcaKev, ArcaKevLite mods).
+- Upstream: `Torneko/dunelegacy-tornie` ce89e53 (1.0.546); our previous import was 1.0.524-23
+  (f7eb262). Ported feature by feature onto main dbd410fc on branch `feat/tornie-546` (worktree
+  `~/Documents/projects/dunecity-tornie-546`): commit 0822f3f0 + QA fixes ba885028, 667f90c4, 7f30bd39.
+  Feature disposition per area and every adaptation: `mods/Tornie/PROVENANCE.md` and the commit message.
+- Gating: every gameplay/AI/rule change runs only while a Tornie-family mod is active
+  (`ModManager::isTornieFamilyContentActive()`); Vanilla, DuneCity and Dune2R digests are unchanged
+  (234/234 checkpoint digests identical to main, no re-pins). Save 9878 (`SAVEGAMEVERSION_TORNIE546`),
+  protocol 108. Not ported: upstream's authenticated host gameplay relay (no-relay rule) and its
+  packaging/website tooling. Co-op adaptation: four allied houses x two seats (8 humans) over direct
+  P2P; Internet rooms stay at 8 peers, 12 custom houses means humans plus AI.
+- Shared faction frames live once in `data/frames/` (14.7 MB, losslessly recompressed). Mod transfer
+  cap 12 MiB (largest family payload 10.7 MB). The browser package grows by about 54 MB raw.
+- Tests: full ctest 126/127 (natives_probe fails identically on main: "Host: the plane was not shot
+  down"). Gameplay QA: 270 campaigns (6 mods x every house x 5 missions), 12 full-roster 25-minute
+  custom games, native direct-P2P custom and faction co-op with matching digests to cycle 3600, busy
+  9878 save/load (3201 matching samples), 9877 saves from main load. New ctests:
+  `tornie_object_state_roundtrip`, `tornie_gameplay_state`, `pak_concurrent_read_tests`, achievements
+  and Tornie rule tests. Known: Tornie's retained 1.0.545 intros for Jericho/ArcaKev/Lite have
+  unpowered enemy factories by authored design (data identical to upstream).
+
 ## 2026-11-01 — 1.0.862: Construction Yards store 1000 credits in city matches (OMP integrator)
 
 - Stefan: "construction yard to have 1000 credits worth in dunecity mod only (not a setting)".

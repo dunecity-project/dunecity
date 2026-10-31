@@ -513,6 +513,9 @@ IF %ERRORLEVEL% LSS 8 exit 0</Command>
     <ClCompile Include="..\..\src\Bullet.cpp" />
     <ClCompile Include="..\..\src\Choam.cpp" />
     <ClCompile Include="..\..\src\Command.cpp" />
+    <ClCompile Include="..\..\src\CommandData.cpp" />
+    <ClCompile Include="..\..\src\mod\ChaosMode.cpp" />
+    <ClCompile Include="..\..\src\mod\RadarResearch.cpp" />
     <ClCompile Include="..\..\src\CommandManager.cpp" />
     <ClCompile Include="..\..\src\CrashHandler.cpp" />
     <ClCompile Include="..\..\src\CutScenes\CrossBlendVideoEvent.cpp" />

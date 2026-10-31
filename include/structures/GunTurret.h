@@ -23,9 +23,9 @@
 class GunTurret final : public TurretBase
 {
 public:
-    explicit GunTurret(House* newOwner);
-    explicit GunTurret(InputStream& stream);
-    void init();
+    explicit GunTurret(House* newOwner, int unitType = Structure_GunTurret);
+    explicit GunTurret(InputStream& stream, int unitType = Structure_GunTurret);
+    void init(int unitType);
     virtual ~GunTurret();
 };
 

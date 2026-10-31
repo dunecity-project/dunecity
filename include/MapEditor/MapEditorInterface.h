@@ -31,6 +31,7 @@
 #include <GUI/DropDownBox.h>
 #include <GUI/Label.h>
 #include <GUI/ScrollView.h>
+#include <GUI/Checkbox.h>
 
 #include <DataTypes.h>
 
@@ -112,6 +113,7 @@ private:
     void onUnitButton(int unitType);
 
     void onStructureHealthDropDown(bool bInteractive);
+    void onStructurePowerUpgrade();
     void onUnitHealthDropDown(bool bInteractive);
     void onUnitAttackModeDropDown(bool bInteractive);
     void onSelectedUnitRotateLeft();
@@ -172,6 +174,8 @@ private:
     HBox                editorModeTerrain_HBox3;
     HBox                editorModeTerrain_HBox4;
     HBox                editorModeTerrain_HBox5;
+    HBox                editorModeTerrain_HBox6;
+    HBox                editorModeTerrain_HBox7;
 
     SymbolButton        editorModeTerrain_Sand;
     SymbolButton        editorModeTerrain_Dunes;
@@ -184,6 +188,12 @@ private:
     SymbolButton        editorModeTerrain_RedSpice;
     SymbolButton        editorModeTerrain_ThickRedSpice;
     SymbolButton        editorModeTerrain_RedSpiceBloom;
+    SymbolButton        editorModeTerrain_PaleLilacSpice;
+    SymbolButton        editorModeTerrain_ThickPaleLilacSpice;
+    SymbolButton        editorModeTerrain_PaleLilacSpiceBloom;
+    SymbolButton        editorModeTerrain_WhiteSpice;
+    SymbolButton        editorModeTerrain_ThickWhiteSpice;
+    SymbolButton        editorModeTerrain_WhiteSpiceBloom;
     SymbolButton        editorModeTerrain_SpiceBloom;
     SymbolButton        editorModeTerrain_Rock;
     SymbolButton        editorModeTerrain_Mountain;
@@ -235,6 +245,8 @@ private:
     SymbolButton        editorModeStructs_WOR;
     HBox                editorModeStructs_HBoxWorfinery;
     SymbolButton        editorModeStructs_Worfinery;            ///< Tornie: WOR + Refinery combo
+    HBox                editorModeStructs_HBoxDoublefinery;
+    SymbolButton        editorModeStructs_Doublefinery;
     SymbolButton        editorModeStructs_LightFactory;
     HBox                editorModeStructs_HBox4;
     SymbolButton        editorModeStructs_Refinery;
@@ -251,6 +263,7 @@ private:
     HBox                editorModeStructs_HBoxScoutpost;
     SymbolButton        editorModeStructs_Scoutpost;     ///< Tornie: power/defense/recon post
     SymbolButton        editorModeStructs_Flamepost;     ///< Tornie: flame defense post
+    SymbolButton        editorModeStructs_Slowpost;
     SymbolButton        editorModeStructs_Chemipost;     ///< Tornie: healing defense post
     HBox                editorModeStructs_HBoxLoveFactory;
     SymbolButton        editorModeStructs_LoveFactory;
@@ -289,6 +302,9 @@ private:
     SymbolButton        editorModeUnits_Infantry;
     SymbolButton        editorModeUnits_Troopers;
     SymbolButton        editorModeUnits_MCV;
+    HBox                editorModeUnits_HBoxSquads;
+    SymbolButton        editorModeUnits_Infantry5;
+    SymbolButton        editorModeUnits_Troopers5;
     HBox                editorModeUnits_HBox3;
     SymbolButton        editorModeUnits_Trike;
     SymbolButton        editorModeUnits_Raider;
@@ -303,6 +319,18 @@ private:
     HBox                editorModeUnits_HBoxTornieChemical;
     SymbolButton        editorModeUnits_ChemicalSiegeTank;
     SymbolButton        editorModeUnits_ChemicalCarryall;
+    HBox                editorModeUnits_HBoxVariants;
+    SymbolButton        editorModeUnits_RaiderQuad;
+    SymbolButton        editorModeUnits_RangedTank;
+    SymbolButton        editorModeUnits_SlowTank;
+    HBox                editorModeUnits_HBoxHarvesters;
+    SymbolButton        editorModeUnits_CapacityHarvester;
+    SymbolButton        editorModeUnits_FastHarvester;
+    SymbolButton        editorModeUnits_TameSandworm;
+    HBox                editorModeUnits_HBoxFlame;
+    SymbolButton        editorModeUnits_FlameQuad;
+    SymbolButton        editorModeUnits_GasInfantry;
+    SymbolButton        editorModeUnits_FlameTrooper;
     HBox                editorModeUnits_HBox4;
     SymbolButton        editorModeUnits_Tank;
     SymbolButton        editorModeUnits_SiegeTank;
@@ -318,12 +346,14 @@ private:
     HBox                editorModeUnits_HBox7;
     SymbolButton        editorModeUnits_Carryall;
     SymbolButton        editorModeUnits_Ornithopter;
+    SymbolButton        editorModeUnits_EliteOrnithopter;
 
     PictureLabel        bottomBar;
 
     HBox                structureDetailsHBox;
     Label               structureDetailsHealthLabel;
     DropDownBox         structureDetailsHealthDropDownBox;
+    Checkbox            structureDetailsPowerUpgradeCheckbox;
 
     HBox                unitDetailsHBox;
     Label               unitDetailsHealthLabel;

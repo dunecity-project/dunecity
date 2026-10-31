@@ -1,5 +1,6 @@
 #include <Network/NetworkManager.h>
 #include <Network/WorkshopGameContent.h>
+#include <Network/CustomGamePlayerPolicy.h>
 #include <misc/OMemoryStream.h>
 #include <fstream>
 // Test-only entry point, linked against the real menu objects by run-menu-probe.py.
@@ -49,6 +50,7 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
     menuRequire(SDL_SaveBMP(surface.get(),path.c_str())==0,"Screenshot write failed");
 }
 #include "user-map-list-probe.inc"
+#include "tornie-family-menu-probe.inc"
 
 // Captured MBA metrics, substituted only in the diagnostic OptionsMenu object.
 extern "C" int SDLCALL retinaProbeDisplayBounds(int, SDL_Rect* bounds) {
@@ -129,6 +131,12 @@ int runMenuProbe() {
                 && getRendererHeight()==std::atoi(std::getenv("MENU_PROBE_HEIGHT")),
                 "Probe did not render at the requested dimensions");
     settings.general.playerName = "Menu tester";
+    if(std::getenv("MENU_TORNIE_FAMILY")) {
+        settings.network.directDevelopmentEndpoint = "";
+        verifyTornieFamilyMenus();
+        SDL_Log("MENU_PROBE_PASS: all six Tornie-family campaign, custom lobby and editor menus");
+        return MENU_QUIT_DEFAULT;
+    }
     verifySavedUserMapLists();
     settings.network.relayUseDevelopmentEndpoint = true;
     // Disable online discovery in this fixture; admission and transport have separate tests.
@@ -155,6 +163,36 @@ int runMenuProbe() {
         }
         for(const auto& name : OnlineModPolicy::approvedMods()) {
             menuRequire(mods.setActiveMod(name), "Approved mod is not installed");
+            const bool family = mods.isTornieFamilyContentActive();
+            menuRequire(family == (name != "vanilla" && name != "dunecity" && name != "Dune2R"),
+                        "Family capability leaked across mod activation");
+            if(family) {
+                const bool lite = name.size() >= 4 && name.compare(name.size() - 4, 4, "Lite") == 0;
+                const auto& roster = mods.getPlayableHouses();
+                menuRequire(roster.size() == (lite ? 6u : 12u)
+                            && mods.isTornieFamilyLiteContentActive() == lite,
+                            "Edition roster or Lite capability was not loaded from metadata");
+                menuRequire(!mods.isCityModeActive(), "Family mod enabled DuneCity city simulation");
+                ObjectData units;
+                units.loadFromINIFile(mods.getActiveObjectDataPath(), false);
+                for(int house : roster) {
+                    menuRequire(isPlayerHouseID(house), "Edition roster exposed the Natives house");
+                    menuRequire(pGFXManager->createFactionFrameBackground(UI_MapChoiceScreen, house) != nullptr,
+                                "Shared faction region frame cannot load");
+                }
+                if(!lite) {
+                    const auto& cat = mods.getActiveMentatInfo(HOUSE_WILDSPADE);
+                    const auto& husky = mods.getActiveMentatInfo(HOUSE_KLESHMERSH);
+                    menuRequire(cat.enabled && cat.restFromBackground && cat.eyesPatches.size() == 2
+                                && cat.eyesWidth == 98 && cat.foregroundPolygon.size() == 10,
+                                "Guest cat identity lost fitted patch/polygon metadata");
+                    menuRequire(husky.enabled && husky.backgroundAsset == "MentatHusky_Kleshmersh.png",
+                                "Guest husky identity was remapped to a legacy mentat");
+                    menuRequire(mods.getCustomHouseInfo(HOUSE_CUSTOM).scenarioLetter == 'C'
+                                && mods.getCustomHouseInfo(HOUSE_THARPIQUE).scenarioLetter == 'T',
+                                "Edition metadata changed canonical DuneCity faction identities");
+                }
+            }
             if(name == "vanilla" || name == "dunecity" || name == "Dune2R") {
                 // Exercise the installed mod path and real fixed-point loader:
                 // Dune2R inherits Vanilla, while Dune City has a seeded copy.
@@ -627,6 +665,7 @@ int runMenuProbe() {
         menu.populateLevels();
         menuRequire(menu.startLevelDropDown.getNumEntries()==22,"Single mission range wrong");
     }
+    verifyTornieFamilyMenus();
     CustomPlaySetup setup;
     auto files = getFileNamesList(getDuneLegacyDataDir()+"/maps/multiplayer/","ini",true);
     auto dir = getDuneLegacyDataDir()+"/maps/multiplayer/";
@@ -1165,7 +1204,7 @@ int runMenuProbe() {
         };
 
         // A nine-row lobby: the widest shipped map has six house sections, so three numbered
-        // Player sections are appended to it to reach MAX_CUSTOM_GAME_PLAYERS.
+        // Player sections are appended to it to reach the legacy nine-row limit.
         const auto nineRowMap = std::string(std::getenv("MENU_PROBE_OUT")) + "/nine-row-map.ini";
         {
             const auto sixRowMap = dir + "6P - 128x128 - Enclaves.ini";
@@ -1188,14 +1227,14 @@ int runMenuProbe() {
                 menu.update();
                 if(!shared) menuCapture(menu,"custom-spice-income-"+mod);
             }
-            // Nine rows, the most the lobby can ever show.
+            // Nine rows: the legacy limit, and a partial twelve-row family lobby.
             {
                 auto nineSetup = setup;
                 nineSetup.players = ChangeEventList{};
                 GameInitSettings nineInit(getBasename(nineRowMap,true),
                                           readCompleteFile(nineRowMap),false,setup.rules);
                 CustomGamePlayers menu(nineInit,true,false,&nineSetup);
-                menuRequire(menu.numHouses == MAX_CUSTOM_GAME_PLAYERS,
+                menuRequire(menu.numHouses == CustomGamePlayerPolicy::maxPlayers(false),
                     "The nine-row fixture map did not produce nine rows");
                 checkRows(menu, mod + " nine rows", getRendererHeight() > 480);
                 menu.update();

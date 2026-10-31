@@ -18,6 +18,9 @@
 #include <Menu/MainMenu.h>
 #include <Menu/PlaySetup.h>
 #include <GUI/MsgBox.h>
+#include <Achievements/AchievementEvents.h>
+#include <Achievements/AchievementManager.h>
+#include <GUI/dune/AchievementsWindow.h>
 
 #include <globals.h>
 
@@ -91,18 +94,20 @@ public:
         title.setAlignment(Alignment_HCenter);
         const int width = std::min(560, getSize().x - 48);
         const int x = (getSize().x - width) / 2;
-        const int top = std::max(20, (getSize().y - (editors ? 330 : 280)) / 2);
+        const bool showAchievements = !editors && ModManager::instance().isTornieFamilyContentActive();
+        if(showAchievements) AchievementEvents::initializeProfile();
+        const int top = std::max(20, (getSize().y - (editors ? 330 : showAchievements ? 328 : 280)) / 2);
         content.addWidget(&title, Point(x, top), Point(width, 36));
         const char* editorLabels[] = {"Map Editor", "Mod Editor", "Asset Editors", "Back"};
-        const char* extraLabels[] = {"Replays", "How to Play", "About & Credits", "Back"};
+        const char* extraLabels[] = {"Replays", "How to Play", "About & Credits", "Achievements", "Back"};
         const char* descriptions[] = {
             "Create and edit maps using your chosen mod.",
             "Create mods and change units, buildings, rules and AI.",
             "Preview Dune2R sprites and choose animation settings."
         };
-        constexpr int count = 4;
+        const int count = showAchievements ? 5 : 4;
         for(int i = 0; i < count; ++i) {
-            buttons[i].setText(_(editors ? editorLabels[i] : extraLabels[i]));
+            buttons[i].setText(_(editors ? editorLabels[i] : extraLabels[!showAchievements && i == 3 ? 4 : i]));
             const int y = top + 48 + i * (editors ? 69 : 48);
             content.addWidget(&buttons[i], Point(x, y), Point(width, 32));
             if(editors && i < count - 1) {
@@ -120,6 +125,11 @@ public:
             buttons[0].setOnClick([]() { showGameLibrary(true); });
             buttons[1].setOnClick([]() { HowToPlayMenu().showMenu(); });
             buttons[2].setOnClick([]() { AboutMenu().showMenu(); });
+            if(showAchievements) {
+                buttons[3].setText(achievements::AchievementManager::instance().completed()
+                    ? _("Achievements — 100%") : _("Achievements"));
+                buttons[3].setOnClick([this]() { openWindow(new AchievementsWindow()); });
+            }
         }
         buttons[count - 1].setOnClick([this]() { quit(); });
         buttons[0].setActive();
@@ -128,7 +138,7 @@ private:
     StaticContainer content;
     Label title;
     Label descriptionsLabels[3];
-    TextButton buttons[4];
+    TextButton buttons[5];
 };
 } // namespace
 

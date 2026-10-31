@@ -279,8 +279,13 @@ void DirectRoomTransport::pumpSignaling(std::uint32_t nowMs) {
         // fixed. Before that this session still depends on the admission authority - it is how a
         // player is admitted at all - so losing it has to fail closed rather than leave a lobby
         // running on nobody's authority.
+        // A settled match intentionally waits 30 seconds before asking again.
+        // Give that scheduled poll the existing failure grace as well: ordinary
+        // HTTP latency after the idle interval is not evidence of an outage.
+        const auto signalingLostMs = matchStarted_ && !config_.allowLateJoin
+            ? kMatchPollMs + kSignalingLostMs : kSignalingLostMs;
         if(!signalingLost_ && stage_ == SignalingStage::Running
-           && nowMs - lastAnswerMs_ > kSignalingLostMs) {
+           && nowMs - lastAnswerMs_ > signalingLostMs) {
             signalingLost_ = true;
             if(!matchStarted_) {
                 finish(RoomRelay::Close::Timeout,

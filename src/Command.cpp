@@ -18,7 +18,6 @@
 
 #include <Command.h>
 #include <CommandAuthorization.h>
-#include <CommandValidation.h>
 #include <FormationOrders.h>
 #include <misc/CampaignControls.h>
 
@@ -48,87 +47,9 @@
 #include <structures/Scoutpost.h>
 #include <structures/StarPort.h>
 #include <structures/ConstructionYard.h>
-
-Command::Command(Uint8 playerID, CMDTYPE id)
- : playerID(playerID), commandID(id)
-{
-}
-
-Command::Command(Uint8 playerID, CMDTYPE id, Uint32 parameter1)
- : playerID(playerID), commandID(id)
-{
-    parameter.push_back(parameter1);
-}
-
-Command::Command(Uint8 playerID, CMDTYPE id, Uint32 parameter1, Uint32 parameter2)
- : playerID(playerID), commandID(id)
-{
-    parameter.push_back(parameter1);
-    parameter.push_back(parameter2);
-}
-
-Command::Command(Uint8 playerID, CMDTYPE id, Uint32 parameter1, Uint32 parameter2, Uint32 parameter3)
- : playerID(playerID), commandID(id)
-{
-    parameter.push_back(parameter1);
-    parameter.push_back(parameter2);
-    parameter.push_back(parameter3);
-}
-
-Command::Command(Uint8 playerID, CMDTYPE id, Uint32 parameter1, Uint32 parameter2, Uint32 parameter3, Uint32 parameter4)
- : playerID(playerID), commandID(id)
-{
-    parameter.push_back(parameter1);
-    parameter.push_back(parameter2);
-    parameter.push_back(parameter3);
-    parameter.push_back(parameter4);
-}
-
-Command::Command(Uint8 playerID, Uint8* data, Uint32 length)
- : playerID(playerID)
-{
-    if(length % 4 != 0) {
-        THROW(std::invalid_argument, "Command::Command(): Length must be multiple of 4!");
-    }
-
-    if(length < 4) {
-        THROW(std::invalid_argument, "Command::Command(): Command must be at least 4 bytes long!");
-    }
-
-    commandID = (CMDTYPE) *((Uint32*) data);
-
-    if(commandID >= CMD_MAX) {
-        THROW(std::invalid_argument, "Command::Command(): CommandID unknown!");
-    }
-
-    Uint32* pData = (Uint32*) (data+4);
-    for(Uint32 i=0;i<(length-4)/4;i++) {
-        parameter.push_back(*pData);
-        pData++;
-    }
-}
-
-Command::Command(InputStream& stream) {
-    playerID = stream.readUint8();
-    const Uint32 rawCommandID = stream.readUint32();
-    if(!CommandValidation::isKnownCommandID(rawCommandID)) {
-        // Command::executeCommand() throws on an unknown id, and that throw escapes the
-        // simulation loop. Refuse the command while we are still parsing, so the caller
-        // (network receive or replay load) can drop it instead of crashing later.
-        throw InputStream::error("Command::Command(): CommandID unknown!");
-    }
-    commandID = (CMDTYPE) rawCommandID;
-    parameter = stream.readUint32Vector();
-}
-
-Command::~Command() = default;
-
-void Command::save(OutputStream& stream) const {
-    stream.writeUint8(playerID);
-    stream.writeUint32((Uint32) commandID);
-    stream.writeUint32Vector(parameter);
-    stream.flush();
-}
+#include <structures/WindTrap.h>
+#include <structures/Radar.h>
+#include <mod/ModManager.h>
 
 namespace {
 
@@ -163,6 +84,7 @@ CommandAuthorization::ActorContext makeActorContext(Uint8 playerID, Uint32 objec
     if(pObject != nullptr && pObject->getOwner() != nullptr) {
         context.objectHasOwner = true;
         context.objectOwnerHouseID = pObject->getOwner()->getHouseID();
+        context.alliedControl = pIssuer && currentGame->canPlayerControlHouse(pIssuer->getHouse(), pObject->getOwner());
     }
 
     return context;
@@ -230,7 +152,7 @@ void Command::executeCommand() const {
     const auto* human=dynamic_cast<const HumanPlayer*>(currentGame->getPlayerByID(playerID));
     if (unitOrder && human && !parameter.empty()) {
         const auto* unit=dynamic_cast<const UnitBase*>(currentGame->getObjectManager().getObject(parameter[0]));
-        if (unit && unit->getOwner()==human->getHouse())
+        if(unit && currentGame->canPlayerControlHouse(human->getHouse(), unit->getOwner()))
             for (const auto& player:unit->getOwner()->getPlayerList())
                 if (auto* bot=dynamic_cast<QuantBot*>(player.get())) bot->onHumanUnitOrder(unit->getObjectID());
     }
@@ -476,6 +398,44 @@ case CMD_INFANTRY_CAPTURE: {
                 return;
             }
             pStructure->doRepair();
+        } break;
+
+        case CMD_STRUCTURE_SELL: {
+            if(parameter.size() != 1) {
+                THROW(std::invalid_argument, "Command::executeCommand(): CMD_STRUCTURE_SELL needs 1 Parameter!");
+            }
+            if(!ModManager::instance().isTornieFamilyContentActive()) return;
+            auto* structure = dynamic_cast<StructureBase*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], structure)) return;
+            structure->doSell();
+        } break;
+
+        case CMD_WINDTRAP_POWER_UPGRADE: {
+            if(parameter.size() != 1) {
+                THROW(std::invalid_argument, "Command::executeCommand(): CMD_WINDTRAP_POWER_UPGRADE needs 1 Parameter!");
+            }
+            if(!ModManager::instance().isTornieFamilyContentActive()) return;
+            auto* trap = dynamic_cast<WindTrap*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], trap)) return;
+            trap->doPowerUpgrade();
+        } break;
+
+        case CMD_SCOUTPOST_SLOWPOST_UPGRADE: {
+            if(parameter.size() != 1) {
+                THROW(std::invalid_argument, "Command::executeCommand(): CMD_SCOUTPOST_SLOWPOST_UPGRADE needs 1 Parameter!");
+            }
+            if(!ModManager::instance().isTornieFamilyContentActive()) return;
+            auto* post = dynamic_cast<Scoutpost*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], post)) return;
+            post->doUpgradeToSlowpost();
+        } break;
+
+        case CMD_RADAR_RESEARCH: {
+            if(parameter.size() != 2 || parameter[1] >= radar::Count
+               || !ModManager::instance().isTornieFamilyContentActive()) return;
+            auto* building = dynamic_cast<Radar*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], building)) return;
+            building->getOwner()->startRadarResearch(static_cast<int>(parameter[1]));
         } break;
 
         case CMD_BUILDER_UPGRADE: {

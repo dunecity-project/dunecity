@@ -20,6 +20,8 @@
 
 #include <structures/StructureBase.h>
 #include <ObjectPointer.h>
+#include <array>
+#include <vector>
 
 // forward declarations
 class Harvester;
@@ -30,16 +32,16 @@ class Carryall;
 class Refinery final : public StructureBase
 {
 public:
-    explicit Refinery(House* newOwner);
-    explicit Refinery(InputStream& stream);
-    void init();
+    explicit Refinery(House* newOwner, int newItemID = Structure_Refinery);
+    explicit Refinery(InputStream& stream, int newItemID = Structure_Refinery);
+    void init(int newItemID);
     virtual ~Refinery();
 
     void save(OutputStream& stream) const override;
 
     ObjectInterface* getInterfaceContainer() override;
 
-    void assignHarvester(TrackedUnit* newHarvester);
+    bool assignHarvester(TrackedUnit* newHarvester);
     void deployHarvester(Carryall* pCarryall = nullptr);
     void startAnimate();
     void stopAnimate();
@@ -48,18 +50,18 @@ public:
         bookings++;
         startAnimate();
     }
-    inline void unBook() {
-        bookings--;
-        if(bookings == 0) {
-            stopAnimate();
-        }
-    }
-    inline bool isFree() const { return !extractingSpice; }
+    void unBook();
+    bool isFree() const;
+    int getNumBays() const;
+    int getNumOccupiedBays() const;
     inline int getNumBookings() const { return bookings; }  //number of units goings there
-    inline UnitBase* getContainedHarvester() { return harvester.getUnitPointer(); }
-    inline const UnitBase* getContainedHarvester() const { return harvester.getUnitPointer(); }
-    inline const Harvester* getHarvester() const  { return reinterpret_cast<Harvester*>(harvester.getObjPointer()); }
-    inline Harvester* getHarvester() { return reinterpret_cast<Harvester*>(harvester.getObjPointer()); }
+    UnitBase* getContainedHarvester();
+    const UnitBase* getContainedHarvester() const;
+    UnitBase* getContainedHarvester(int bay);
+    const UnitBase* getContainedHarvester(int bay) const;
+    std::vector<UnitBase*> getContainedHarvesters();
+    inline const Harvester* getHarvester() const { return reinterpret_cast<const Harvester*>(getContainedHarvester()); }
+    inline Harvester* getHarvester() { return reinterpret_cast<Harvester*>(getContainedHarvester()); }
 
     bool acceptsHarvesterDropoff() const override { return true; }
     bool isHarvesterDropoffFree() const override { return isFree(); }
@@ -67,7 +69,7 @@ public:
     void bookHarvesterDropoff() override { book(); }
     void unbookHarvesterDropoff() override { unBook(); }
     void startHarvesterDropoffAnimation() override { startAnimate(); }
-    bool receiveHarvester(TrackedUnit* unit) override { assignHarvester(unit); return true; }
+    bool receiveHarvester(TrackedUnit* unit) override { return assignHarvester(unit); }
     void deployContainedHarvester(Carryall* carryall = nullptr) override { deployHarvester(carryall); }
     UnitBase* getContainedHarvesterUnit() override { return getContainedHarvester(); }
     const UnitBase* getContainedHarvesterUnit() const override { return getContainedHarvester(); }
@@ -81,8 +83,11 @@ protected:
 
 private:
 
-    bool            extractingSpice;    ///< Currently extracting spice?
-    ObjectPointer   harvester;          ///< The harverster currently in the refinery
+    void deployBay(int index, Carryall* carryall);
+    void refreshAnimation();
+
+    std::array<bool, 2> extractingSpice{}; ///< Each unloading bay runs independently.
+    std::array<ObjectPointer, 2> harvesters;
     Uint32          bookings;           ///< How many bookings?
 
     bool    firstRun;       ///< On first deploy of a harvester we tell it to the user

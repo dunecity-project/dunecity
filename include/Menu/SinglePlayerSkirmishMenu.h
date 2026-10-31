@@ -36,6 +36,7 @@
 #include <misc/string_util.h>
 #include <DataTypes.h>
 #include <GameInitSettings.h>
+#include <Network/CustomGamePlayerPolicy.h>
 
 class SinglePlayerSkirmishMenu : public MenuBase
 {
@@ -111,6 +112,7 @@ private:
     PictureLabel    duneLegacy;
     PictureLabel    buttonBorder;
 
+    CustomGamePlayerPolicy::HouseRoster houseChoices;
     int currentHouseChoiceScrollPos;
     int selectedButton;
     int mission;

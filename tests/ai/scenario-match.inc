@@ -114,7 +114,7 @@ inline Skirmish parseSkirmish(const std::string& text, int starts) {
         else throw std::runtime_error("Unknown skirmish option: " + key);
     }
     const Params requested = p;
-    p.clamp(getNumCustomGameHouses());
+    p.clamp(getNumCustomGameHouses(), ModManager::instance().isTornieFamilyContentActive());
     if (p.starts != requested.starts || p.mapSize != requested.mapSize || p.credits != requested.credits
         || p.techLevel != requested.techLevel || p.startSide.army != requested.startSide.army
         || p.startSide.city != requested.startSide.city)

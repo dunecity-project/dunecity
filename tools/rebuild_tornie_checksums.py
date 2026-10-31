@@ -7,6 +7,7 @@ import sys
 
 EXCLUDED_FILES = {"checksums.sha256", ".dunecity-managed"}
 NORMALIZED_TEXT_EXTENSIONS = {".ini", ".json", ".md"}
+FAMILY_MODS = ("Tornie", "TornieLite", "Jericho", "JerichoLite", "ArcaKev", "ArcaKevLite")
 
 
 def normalize_text_file(path: Path) -> None:
@@ -27,19 +28,11 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def main() -> int:
-    if len(sys.argv) != 2:
-        print("Usage: rebuild_tornie_checksums.py <mods/Tornie>", file=sys.stderr)
-        return 2
-
-    root = Path(sys.argv[1]).resolve()
+def rebuild(root: Path) -> int:
+    root = root.resolve()
     if not (root / "mod.ini").is_file():
-        print(f"Not a Tornie payload directory: {root}", file=sys.stderr)
+        print(f"Not a family payload directory: {root}", file=sys.stderr)
         return 2
-
-    for path in root.rglob("*"):
-        if path.is_file() and path.suffix.lower() in NORMALIZED_TEXT_EXTENSIONS:
-            normalize_text_file(path)
 
     files: list[tuple[str, Path]] = []
     portable_keys: set[str] = set()
@@ -60,10 +53,34 @@ def main() -> int:
         portable_keys.add(key)
         files.append((relative, path))
 
+    for _, path in files:
+        if path.suffix.lower() in NORMALIZED_TEXT_EXTENSIONS:
+            normalize_text_file(path)
     files.sort(key=lambda item: item[0])
     output = "".join(f"{sha256_file(path)}  {relative}\n" for relative, path in files)
-    (root / "checksums.sha256").write_text(output, encoding="utf-8", newline="\n")
-    print(f"Wrote checksums.sha256 with {len(files)} files")
+    with (root / "checksums.sha256").open("w", encoding="utf-8", newline="\n") as manifest:
+        manifest.write(output)
+    print(f"{root.name}: wrote checksums.sha256 with {len(files)} files")
+    return 0
+
+
+def main() -> int:
+    paths = [Path(argument) for argument in sys.argv[1:]]
+    if not paths:
+        paths = [Path(__file__).resolve().parents[1] / "mods" / name for name in FAMILY_MODS]
+    roots: list[Path] = []
+    for path in paths:
+        if (path / "mod.ini").is_file():
+            roots.append(path)
+        elif all((path / name / "mod.ini").is_file() for name in FAMILY_MODS):
+            roots.extend(path / name for name in FAMILY_MODS)
+        else:
+            print(f"Expected a family mod or the mods directory: {path}", file=sys.stderr)
+            return 2
+    for root in roots:
+        result = rebuild(root)
+        if result:
+            return result
     return 0
 
 

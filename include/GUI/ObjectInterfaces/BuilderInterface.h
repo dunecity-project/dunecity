@@ -64,8 +64,9 @@ protected:
         upgradeProgressBar.setText(_("Upgrade"));
         upgradeProgressBar.setTextColor(color);
         upgradeProgressBar.setVisible(false);
-        topBox.addWidget(&upgradeButton,Point(18,2),Point(83,18));
-        topBox.addWidget(&upgradeProgressBar,Point(18,2),Point(83,18));
+        const int upgradeWidth = ModManager::instance().isTornieFamilyContentActive() ? 75 : 83;
+        topBox.addWidget(&upgradeButton,Point(18,2),Point(upgradeWidth,18));
+        topBox.addWidget(&upgradeProgressBar,Point(18,2),Point(upgradeWidth,18));
 
         mainHBox.addWidget(Spacer::create());
 
@@ -113,6 +114,7 @@ protected:
 
         BuilderBase* pBuilder = dynamic_cast<BuilderBase*>(pObject);
         if(pBuilder != nullptr) {
+            updateSellButton(pBuilder);
             StarPort* pStarport = dynamic_cast<StarPort*>(pBuilder);
             ChaosFactory* pChaosFactory = dynamic_cast<ChaosFactory*>(pBuilder);
             if(pChaosFactory != nullptr) {

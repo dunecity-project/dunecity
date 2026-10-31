@@ -149,9 +149,10 @@ int TechCenter::spawnRandomVehicles(int count) {
     // Keep Tech Center, Unit_Special maps and factory unlocks on the same
     // active-mod ObjectData table.
     const bool modInitialized = ModManager::instance().isInitialized();
-    const bool tornieActive = modInitialized && ModManager::instance().isTornieContentActive();
+    const bool tornieActive = modInitialized && ModManager::instance().isTornieFamilyContentActive();
+    const int technology = tornieActive ? getTechnologyHouseID() : originalHouseID;
     const auto objectDataIxCandidates = discoverHouseSpecialVehicleCandidates([&](int candidate) {
-        const auto& data = currentGame->objectData.data[candidate][originalHouseID];
+        const auto& data = currentGame->objectData.data[candidate][technology];
         return HouseSpecialVehicleCandidateData{
             data.enabled,
             data.builder,
@@ -160,28 +161,28 @@ int TechCenter::spawnRandomVehicles(int count) {
     });
 
     const auto specialVehiclePool = resolveSpecialVehiclePoolForHouse(
-        originalHouseID, tornieActive, objectDataIxCandidates);
+        technology, tornieActive, objectDataIxCandidates);
     const bool useGenericCustomFallback =
-        (isHouseFaction(static_cast<HOUSETYPE>(originalHouseID), HOUSE_CUSTOM)
-         || isHouseFaction(static_cast<HOUSETYPE>(originalHouseID), HOUSE_THARPIQUE))
+        (isHouseFaction(static_cast<HOUSETYPE>(technology), HOUSE_CUSTOM)
+         || isHouseFaction(static_cast<HOUSETYPE>(technology), HOUSE_THARPIQUE))
         && objectDataIxCandidates.empty();
     std::vector<int> vehiclePool;
     for(const auto candidate : specialVehiclePool) {
         const bool candidateEnabled = useGenericCustomFallback
-            ? isEnabledTechCenterVehicle(candidate, originalHouseID)
-            : isTechCenterSpawnCandidate(candidate, originalHouseID);
+            ? isEnabledTechCenterVehicle(candidate, technology)
+            : isTechCenterSpawnCandidate(candidate, technology);
         if(candidateEnabled) {
             vehiclePool.push_back(candidate);
         }
     }
 
-    const HOUSETYPE factionIdentity = getHouseFactionIdentity(static_cast<HOUSETYPE>(originalHouseID));
+    const HOUSETYPE factionIdentity = getHouseFactionIdentity(static_cast<HOUSETYPE>(technology));
     const bool guestNamedHouse = factionIdentity == HOUSE_WILDSPADE
         || factionIdentity == HOUSE_KLESHMERSH;
 
     if(vehiclePool.empty() && !guestNamedHouse) {
         for(const auto fallback : { Unit_Trike, Unit_Quad }) {
-            const auto& data = currentGame->objectData.data[fallback][originalHouseID];
+            const auto& data = currentGame->objectData.data[fallback][technology];
             if(data.enabled && data.builder != ItemID_Invalid) {
                 vehiclePool.push_back(fallback);
             }
@@ -197,7 +198,7 @@ int TechCenter::spawnRandomVehicles(int count) {
         const int idx = currentGame->randomGen.rand(0, static_cast<int>(vehiclePool.size()) - 1);
         const int itemID = vehiclePool[idx];
 
-        UnitBase* newUnit = getOwner()->createUnit(itemID);
+        UnitBase* newUnit = getOwner()->createUnit(itemID, false, tornieActive ? technology : HOUSE_INVALID);
         if(newUnit == nullptr) {
             continue;
         }

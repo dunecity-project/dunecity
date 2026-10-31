@@ -76,7 +76,7 @@ Force::ValueKey valueKeyOf(const ObjectBase* object) {
     value.health = std::max<int64_t>(1, key.health);
     value.id = key.id;
     if (key.cls == Force::ArmedUnit || key.cls == Force::ArmedBuilding) {
-        const auto& data = currentGame->objectData.data[object->getItemID()][object->getOriginalHouseID()];
+        const auto& data = currentGame->objectData.data[object->getItemID()][object->getProductionHouseID()];
         value.dpf = int64_t(std::max(0, data.weapondamage)) * 1000 / std::max(1, data.weaponreloadtime);
     }
     return value;
@@ -84,7 +84,7 @@ Force::ValueKey valueKeyOf(const ObjectBase* object) {
 
 /// One volley of \a unit: its weapon damage (the per-hit damage the target loses).
 int64_t volleyOf(const UnitBase* unit) {
-    return std::max(1, currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].weapondamage);
+    return std::max(1, currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].weapondamage);
 }
 
 } // namespace
@@ -155,7 +155,7 @@ bool groundFighter(const UnitBase* unit) {
 }
 
 int64_t healthValue(const UnitBase* unit) {
-    return CombatPowerPolicy::unitValue(currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price,
+    return CombatPowerPolicy::unitValue(currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price,
                                         unit->getHealth().lround(), unit->getMaxHealth());
 }
 
@@ -1058,7 +1058,7 @@ int QuantBot::bundledShareBps(const std::vector<Uint32>& ids, int radius) {
     for (const Uint32 id : ids) {
         const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit || unit->getHealth() <= 0) continue;
-        const int64_t price = std::max(100, currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price);
+        const int64_t price = std::max(100, currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price);
         total += price;
         const Coord at = unit->getLocation();
         if ((bundlePoint.isValid() && tiles(at, bundlePoint) <= radius)
@@ -1117,7 +1117,7 @@ bool QuantBot::startSplit(const std::vector<const UnitBase*>& units, const Objec
     std::vector<Force::SplitMember> members;
     for (const auto* unit : walkers)
         members.push_back({unit->getObjectID(),
-            std::max(100, currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price),
+            std::max(100, currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price),
             tiles(unit->getLocation(), split.point[0]) - tiles(unit->getLocation(), split.point[1])});
     const auto groups = Force::splitGroups(members, flank ? Force::kFlankShareBps : 5000);
     for (size_t i = 0; i < walkers.size(); ++i) split.members[groups[i]].insert(walkers[i]->getObjectID());

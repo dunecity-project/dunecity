@@ -71,6 +71,9 @@ public:
         invalidateTextures();
     }
 
+    Uint32 getTextColor() const noexcept { return textcolor; }
+    Uint32 getTextShadowColor() const noexcept { return textshadowcolor; }
+
     /**
         This method resizes the button. This method should only
         called if the new size is a valid size for this button (See getMinumumSize).

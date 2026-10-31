@@ -4,15 +4,42 @@
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 #include <mod/ModManager.h>
+#include <Network/GameInitSettingsPolicy.h>
 
 #include <vector>
+#include <sstream>
 
-// GameInitSettings only needs mod identity; these tests never install mods.
+namespace {
+std::string activeTestMod = "vanilla";
+constexpr std::size_t Mod12Bytes = 6;
+struct ActiveTestMod {
+    explicit ActiveTestMod(const std::string& name) { ModManager::instance().setActiveMod(name); }
+    ~ActiveTestMod() { ModManager::instance().setActiveMod("vanilla"); }
+};
+}
+
+// Standalone tests use mod identity and path naming without installing mods.
 ModManager::ModManager() : checksumsDirty(false), initialized(false) {}
 ModManager::~ModManager() = default;
 ModManager& ModManager::instance() { static ModManager manager; return manager; }
-bool ModManager::isInitialized() const { return false; }
-std::string ModManager::getActiveModName() const { return "vanilla"; }
+bool ModManager::isInitialized() const { return activeTestMod != "vanilla"; }
+std::string ModManager::getActiveModName() const { return activeTestMod; }
+std::string ModManager::getModPath(const std::string& name) const {
+    return name.empty() ? modsBasePath : modsBasePath + "/" + name;
+}
+std::string ModManager::getContentBase(const std::string& name) const {
+    return name == "ws-test-tornie" ? "Tornie" : name;
+}
+bool ModManager::isTornieFamilyContent(const std::string& name) const {
+    const auto base = getContentBase(name);
+    return base == "Tornie" || base == "TornieLite" || base == "Jericho"
+        || base == "JerichoLite" || base == "ArcaKev" || base == "ArcaKevLite";
+}
+bool ModManager::setActiveMod(const std::string& name) {
+    activeTestMod = name;
+    activeTornieFamily = isTornieFamilyContent(name);
+    return true;
+}
 ModChecksums ModManager::getEffectiveChecksums() const { return {}; }
 bool isHouseAvailable(HOUSETYPE house) { return house >= 0 && house < NUM_HOUSES; }
 char getHouseScenarioLetter(HOUSETYPE house) {
@@ -53,14 +80,14 @@ TEST_CASE("Original damage is a shared rule preserved by setup, saves and campai
 
     SECTION("MOD5 defaults the new rule off without consuming following save bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("BDOM");
+        const auto marker = bytes.rfind("CDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '5';
         // Everything MOD5 does not know about: the MOD6 rule byte, MOD7's count plus one
         // factor per house, MOD8's plan-sites byte, MOD9's ground-steps byte, MOD10's two
-        // planned-construction bytes and MOD11's city-year byte. Removed so what follows is
+        // planned-construction bytes, MOD11's city-year byte and MOD12's six bytes. Removed so what follows is
         // unmistakably not part of the block.
-        bytes.resize(bytes.size() - (1 + 4 + 4 * original.getHouseInfoList().size() + 1 + 1 + 2 + 1));
+        bytes.resize(bytes.size() - (Mod12Bytes + 1 + 4 + 4 * original.getHouseInfoList().size() + 1 + 1 + 2 + 1));
         bytes.append("tail");
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
@@ -89,10 +116,10 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
     SECTION("MOD7 and older default the rule on without consuming following bytes") {
         const char older = GENERATE('4', '5', '6', '7');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("BDOM");
+        const auto marker = bytes.rfind("CDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
-        std::size_t trailing = 1 + 2 + 1 + 1;                                // MOD11 + MOD10 + MOD9 + MOD8 rule bytes
+        std::size_t trailing = Mod12Bytes + 1 + 2 + 1 + 1;                   // MOD12 through MOD8
         if(older < '7') trailing += 4 + 4 * original.getHouseInfoList().size(); // MOD7
         if(older < '6') trailing += 1;                                       // MOD6 rule byte
         if(older < '5') trailing += 4;                                       // MOD5 yard limit
@@ -106,7 +133,7 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
 
     SECTION("an announced MOD8 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - 5);   // the MOD11 byte, two MOD10 bytes, the MOD9 byte and the MOD8 byte before them
+        bytes.resize(bytes.size() - Mod12Bytes - 5);   // MOD12 through the missing MOD8 byte
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -131,10 +158,10 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("MOD8 streams keep the rule off without consuming following bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("BDOM");
+        const auto marker = bytes.rfind("CDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '8';
-        bytes.resize(bytes.size() - 4);   // the MOD9, two MOD10 and MOD11 bytes MOD8 does not know about
+        bytes.resize(bytes.size() - Mod12Bytes - 4);   // MOD12 through MOD9, which MOD8 does not own
         bytes.append("tail");
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
@@ -144,7 +171,7 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("an announced MOD9 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - 4);   // the MOD11 byte, two MOD10 bytes and the MOD9 byte before them
+        bytes.resize(bytes.size() - Mod12Bytes - 4);   // MOD12 through the missing MOD9 byte
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -183,10 +210,10 @@ TEST_CASE("The planned-construction rules participate in match identity and save
         // A save or replay recorded before the rules existed must replay with the legacy behaviour.
         const char older = GENERATE('8', '9');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("BDOM");
+        const auto marker = bytes.rfind("CDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
-        bytes.resize(bytes.size() - (older == '8' ? 4 : 3));
+        bytes.resize(bytes.size() - Mod12Bytes - (older == '8' ? 4 : 3));
         bytes.append("tail");
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
@@ -197,10 +224,10 @@ TEST_CASE("The planned-construction rules participate in match identity and save
 
     SECTION("an announced MOD10 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("BDOM");
+        const auto marker = bytes.rfind("CDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
-        bytes.resize(bytes.size() - 2);   // MOD11's byte and the last MOD10 byte
+        bytes.resize(bytes.size() - Mod12Bytes - 2);   // MOD12, MOD11 and the missing last MOD10 byte
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -233,9 +260,10 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
         mod10.setGameOptions(planned);
         OMemoryStream mod10Out; mod10Out.open(); mod10.save(mod10Out);
         std::string bytes(mod10Out.getData(), mod10Out.getDataLength());
-        const auto marker = bytes.rfind("BDOM");
+        const auto marker = bytes.rfind("CDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
+        bytes.resize(bytes.size() - Mod12Bytes);
         bytes.back() = 't';   // MOD10 does not own the MOD11 byte; it is the following data
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
@@ -247,7 +275,10 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
 
     SECTION("an announced MOD11 byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.pop_back();
+        const auto marker = bytes.rfind("CDOM");
+        REQUIRE(marker != std::string::npos);
+        bytes[marker] = 'B';
+        bytes.resize(bytes.size() - Mod12Bytes - 1);
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -303,11 +334,11 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("every marker before MOD7 means 1x and leaves the following bytes alone") {
         const char older = GENERATE('!', '2', '3', '4', '5', '6');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("BDOM");
+        const auto marker = bytes.rfind("CDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         // Strip what that older marker cannot account for, so the tail is unambiguous.
-        std::size_t trailing = 1 + 2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size(); // MOD11 + MOD10 + MOD9 + MOD8 + MOD7
+        std::size_t trailing = Mod12Bytes + 1 + 2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size(); // MOD12 through MOD7
         if(older < '6') trailing += 1;                                   // MOD6 rule byte
         if(older < '5') trailing += 4;                                   // MOD5 yard limit
         bytes.resize(bytes.size() - trailing);
@@ -332,7 +363,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
 
     SECTION("an announced MOD7 block that is not there is a truncated stream, not an old one") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - 4 - 5);   // lose the MOD11, MOD10, MOD9 and MOD8 bytes and the last factor
+        bytes.resize(bytes.size() - Mod12Bytes - 4 - 5);   // MOD12 through MOD8 and the last factor
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -340,10 +371,10 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("an explicitly encoded factor outside the range is refused, never clamped") {
         const Uint32 bad = GENERATE(0u, SpiceIncome::kMax + 1, 0xFFFFFFFFu);
         std::string bytes(out.getData(), out.getDataLength());
-        REQUIRE(bytes.size() > 9);
-        // The four bytes before the trailing MOD8, MOD9, two MOD10 and MOD11 rule bytes are the final row's factor.
+        REQUIRE(bytes.size() > Mod12Bytes + 9);
+        // The final row factor precedes the MOD8..MOD12 rule bytes.
         for(int shift = 0; shift < 4; ++shift) {
-            bytes[bytes.size() - 9 + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
+            bytes[bytes.size() - Mod12Bytes - 9 + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
         }
         IMemoryStream hostile(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(hostile); }());
@@ -351,7 +382,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
 
     SECTION("a factor count beyond the lobby's rows is refused before anything is read") {
         std::string bytes(out.getData(), out.getDataLength());
-        const std::size_t countAt = bytes.size() - (2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size());
+        const std::size_t countAt = bytes.size() - (Mod12Bytes + 1 + 2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size());
         // Shortened lists must not silently default the omitted rows; extra entries must not
         // be consumed as if they belonged to nonexistent rows either.
         const Uint32 absurd = GENERATE(0u, 1u, 3u, 9u, 0x7FFFFFFFu);
@@ -634,13 +665,13 @@ TEST_CASE("Legacy MOD3 remains readable and truncated MOD10 fails closed", "[wor
     auto original = makeCoop(false, true);
     OMemoryStream out; out.open(); original.save(out);
     std::string bytes(reinterpret_cast<const char*>(out.getData()), out.getDataLength());
-    const auto marker = bytes.find("BDOM");
+    const auto marker = bytes.find("CDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("old graphics marker") {
         bytes[marker] = '3';
         // three strings, two revision integers, yard limit, original damage,
-        // then MOD7's factor count and one factor per house, then MOD8's, MOD9's, MOD10's and MOD11's rule bytes
-        bytes.resize(bytes.size() - 25 - (4 + 4 * original.getHouseInfoList().size()) - 1 - 1 - 2 - 1);
+        // then MOD7's factor count/array and the MOD8..MOD12 rule bytes.
+        bytes.resize(bytes.size() - 25 - (4 + 4 * original.getHouseInfoList().size()) - 1 - 1 - 2 - 1 - Mod12Bytes);
         IMemoryStream in(bytes.data(), bytes.size());
         GameInitSettings restored(in);
         REQUIRE(restored.getModRevisionHash().empty());
@@ -657,4 +688,215 @@ TEST_CASE("Legacy MOD3 remains readable and truncated MOD10 fails closed", "[wor
         IMemoryStream in(invalid.getData(), invalid.getDataLength());
         REQUIRE_THROWS(GameInitSettings(in));
     }
+}
+
+static GameInitSettings makeSeparateFactionCoop(bool archon) {
+    const std::vector<int> roster{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+    auto session = coop::CoopCampaignSession::create("wire-test", "Tornie", roster,
+        {HOUSE_ATREIDES, HOUSE_HARKONNEN}, {"Host", "Guest"}, 0x12345678u, true);
+    if(archon) {
+        session.enableExpandedAllies(true);
+        session.configureAlly(0, HOUSE_ATREIDES, HUMANPLAYERCLASS, "Host", {"Host", "Second"});
+        session.configureAlly(1, HOUSE_HARKONNEN, HUMANPLAYERCLASS, "Guest", {"Guest", "Fourth"});
+        session.configureAlly(2, HOUSE_WILDSPADE, HUMANPLAYERCLASS, "Fifth", {"Fifth", "Sixth"});
+        session.configureAlly(3, HOUSE_KLESHMERSH, HUMANPLAYERCLASS, "Seventh", {"Seventh", "Eighth"});
+    }
+    session.setAlliedControl(true);
+    session.setAlliedBuilding(true);
+    session.setEasyMode(true);
+    session.setExtraEnemyForces(true);
+    session.setExtraHardEnemyForces(true);
+    session.skipIntroForEasyMode();
+    const auto& context = session.context();
+    std::ostringstream source;
+    source << "[BASIC]\nTechLevel=" << context.stage << "\nCampaignRevision=2\nWinFlags="
+        << WINLOSEFLAGS_QUOTA << "\n[COOP_TEMPLATE]\nSchema=1\nMod=Tornie\nStage=" << context.stage
+        << "\nSourceFaction=" << context.sourceFaction << "\nOriginalMission="
+        << coop::OriginalMissionNumbers[context.stage-1] + context.missionVariant
+        << "\nParticipantCount=6\nEnemyFaction1=0\nEnemyFaction2=2\nEnemyFaction3=3\nEnemyFaction4=4\nSharedQuota=2000\n";
+    for(int slot = 1; slot <= 6; ++slot) source << "[Player" << slot << "]\nCredits=1500\n";
+    for(int ally = 3; ally <= 4; ++ally)
+        source << "[COOP_EXTRA_PLAYER" << ally << "]\nCredits=1500\n[COOP_EXTRA_UNITS"
+            << ally << "]\n[COOP_EXTRA_STRUCTURES" << ally << "]\n";
+    const auto map = session.prepareMap(source.str());
+    const auto prepared = coop::readContext(map);
+    REQUIRE(prepared);
+    SettingsClass::GameOptionsClass options;
+    options.alliedControl = true;
+    options.alliedBuilding = true;
+    options.easyMode = true;
+    options.chaosMode = true;
+    options.sellingBuildings = false;
+    GameInitSettings init("coop.ini", map, "Test separate-faction co-op", archon, options);
+    init.setModIdentity("ws-test-tornie", "checksum");
+    init.setRandomSeed(0x3456789au);
+    for(const auto& slot : prepared->slots) {
+        if(!slot.active()) continue;
+        GameInitSettings::HouseInfo house(static_cast<HOUSETYPE>(slot.house), slot.team());
+        if(slot.playerClass == HUMANPLAYERCLASS) {
+            for(const auto& name : slot.humanNames()) house.addPlayerInfo({name, HUMANPLAYERCLASS});
+        } else {
+            house.addPlayerInfo({slot.playerName, slot.playerClass});
+        }
+        init.addHouseInfo(house);
+    }
+    return init;
+}
+
+TEST_CASE("MOD12 co-op settings retain faction roles, eight controllers and objectives over the wire",
+          "[tornie][coop][network][save]") {
+    const bool archon = GENERATE(false, true);
+    auto original = makeSeparateFactionCoop(archon);
+    OMemoryStream out; out.open(); original.save(out); out.writeUint32(0xabcdef01u);
+    IMemoryStream input(out.getData(), out.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+    REQUIRE(restored.getFiledata() == original.getFiledata());
+    REQUIRE(restored.getRandomSeed() == original.getRandomSeed());
+    REQUIRE(restored.getGameOptions().getHash() == original.getGameOptions().getHash());
+    REQUIRE(restored.getGameOptions().alliedControl);
+    REQUIRE(restored.getGameOptions().alliedBuilding);
+    REQUIRE(restored.getGameOptions().easyMode);
+    REQUIRE(restored.getGameOptions().chaosMode);
+    REQUIRE_FALSE(restored.getGameOptions().sellingBuildings);
+    const auto& context = restored.getCoopCampaignContext();
+    REQUIRE(context);
+    REQUIRE(context->stage == 2);
+    REQUIRE(context->extraEnemyForces);
+    REQUIRE(context->extraHardEnemyForces);
+    REQUIRE(context->humanNames().size() == (archon ? 8 : 2));
+    REQUIRE(context->slots[1].faction == context->slots[2].faction);
+    REQUIRE(context->slots[1].house != context->slots[2].house);
+    REQUIRE(restored.getCoopHarvestObjective().quota == (archon ? 4000 : 2000));
+    for(const int row : context->alliedSlots()) {
+        REQUIRE(restored.isEasyModeHouse(context->slots[row].house));
+        REQUIRE(restored.campaignPurchasePrice(100, context->slots[row].house) == 75);
+        REQUIRE(restored.campaignStartingCredits(1500, context->slots[row].house) == 2000);
+    }
+    REQUIRE_FALSE(restored.isEasyModeHouse(context->slots[2].house));
+    REQUIRE(restored.campaignPurchasePrice(100, context->slots[2].house) == 100);
+    REQUIRE(restored.campaignStartingCredits(1500, context->slots[2].house) == 1500);
+    std::string reason;
+    REQUIRE(GameInitSettingsPolicy::isAcceptableReceivedGameInitSettings(restored, reason));
+    restored.setScenarioData("[BASIC]\n");
+    REQUIRE_FALSE(restored.getCoopCampaignContext());
+    REQUIRE(restored.getCoopHarvestObjective().quota == 0);
+    REQUIRE_FALSE(restored.isEasyModeHouse(HOUSE_ATREIDES));
+}
+
+TEST_CASE("MOD12 is append-only and every announced rule byte is required",
+          "[tornie][coop][save]") {
+    const auto original = makeSeparateFactionCoop(false);
+    OMemoryStream out; out.open(); original.save(out);
+    const std::string encoded(out.getData(), out.getDataLength());
+    SECTION("a MOD11 stream consumes none of the six new fields") {
+        auto bytes = encoded;
+        const auto marker = bytes.rfind("CDOM");
+        REQUIRE(marker != std::string::npos);
+        bytes[marker] = 'B';
+        bytes.resize(bytes.size() - Mod12Bytes);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+        REQUIRE_FALSE(restored.getGameOptions().alliedControl);
+        REQUIRE_FALSE(restored.getGameOptions().alliedBuilding);
+        REQUIRE_FALSE(restored.getGameOptions().easyMode);
+        REQUIRE_FALSE(restored.getGameOptions().chaosMode);
+        REQUIRE(restored.getGameOptions().sellingBuildings);
+    }
+    SECTION("truncating any part of MOD12 is not mistaken for an old save") {
+        const int missing = GENERATE(1, 2, 3, 4, 5, 6);
+        auto bytes = encoded;
+        bytes.resize(bytes.size() - missing);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("Tornie-only player limits apply to writers and received direct lobby settings",
+          "[tornie][network][playerlimit]") {
+    GameInitSettings init("twelve.ini", "[BASIC]\n", "Twelve", false, SettingsClass::GameOptionsClass{});
+    init.setModIdentity("ws-test-tornie", "checksum");
+    for(int house = 0; house < NUM_PLAYER_HOUSES; ++house) {
+        GameInitSettings::HouseInfo row(static_cast<HOUSETYPE>(house), house+1);
+        row.addPlayerInfo({"Player " + std::to_string(house), house ? "qBotHard" : HUMANPLAYERCLASS});
+        init.addHouseInfo(row);
+    }
+    std::string reason;
+    REQUIRE(GameInitSettingsPolicy::isAcceptableReceivedGameInitSettings(init, reason));
+    OMemoryStream out; out.open();
+    REQUIRE_NOTHROW(init.save(out));
+    IMemoryStream input(out.getData(), out.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getHouseInfoList().size() == NUM_PLAYER_HOUSES);
+    restored.setModIdentity("vanilla", "");
+    REQUIRE_FALSE(GameInitSettingsPolicy::isAcceptableReceivedGameInitSettings(restored, reason));
+    OMemoryStream forbidden; forbidden.open();
+    REQUIRE_THROWS(restored.save(forbidden));
+    init.clearHouseInfo();
+    GameInitSettings::HouseInfo natives(HOUSE_NATIVES, 1);
+    natives.addPlayerInfo({"Forbidden", HUMANPLAYERCLASS});
+    init.addHouseInfo(natives);
+    REQUIRE_FALSE(GameInitSettingsPolicy::isAcceptableReceivedGameInitSettings(init, reason));
+}
+
+TEST_CASE("Tornie Easy campaign opening and Chaos eligibility survive saves without changing other mods",
+          "[tornie][campaign][save]") {
+    SettingsClass::GameOptionsClass options;
+    options.easyMode = true;
+    options.chaosMode = true;
+    {
+        ActiveTestMod active("Tornie");
+        GameInitSettings original(HOUSE_ATREIDES, options);
+        REQUIRE(original.getMission() == 2);
+        REQUIRE(original.isChaosCampaignEligible());
+        OMemoryStream out; out.open(); original.save(out);
+        IMemoryStream input(out.getData(), out.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.isChaosCampaignEligible());
+        GameInitSettings next(restored, 5, 3, 0);
+        REQUIRE(next.isChaosCampaignEligible());
+    }
+    GameInitSettings vanilla(HOUSE_ATREIDES, options);
+    REQUIRE(vanilla.getMission() == 1);
+    REQUIRE_FALSE(vanilla.isEasyModeEnabled());
+    REQUIRE_FALSE(vanilla.isChaosModeEnabled());
+    REQUIRE(vanilla.campaignStartingCredits(1500, HOUSE_ATREIDES) == 1500);
+}
+
+TEST_CASE("Separate co-op saved setup retains every allied participant and controller",
+          "[tornie][coop][save]") {
+    const auto original = makeSeparateFactionCoop(true);
+    const auto houses = original.getHouseInfoList();
+    OMemoryStream saved;
+    writeSavedSetup(saved, SAVEGAMEVERSION_TORNIE546, original, houses, std::vector<Uint32>(houses.size(), 1));
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings::HouseInfoList loadedHouses;
+    const auto loaded = GameInitSettings::readSaveSetup(input, loadedHouses);
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+    REQUIRE(loadedHouses.size() == houses.size());
+    std::size_t humanControllers = 0;
+    for(const auto& house : loadedHouses)
+        for(const auto& player : house.playerInfoList) humanControllers += player.playerClass == HUMANPLAYERCLASS;
+    REQUIRE(humanControllers == 8);
+    REQUIRE(loaded.getCoopCampaignContext()->humanNames().size() == 8);
+    const auto snapshot = loaded.networkSnapshot("not an INI: binary checkpoint");
+    REQUIRE_FALSE(snapshot.getCoopCampaignContext());
+}
+
+TEST_CASE("Choosing an authored support faction never replaces a family campaign opponent",
+          "[tornie][coop][campaign]") {
+    const std::string edition = GENERATE(as<std::string>{}, "Jericho", "JerichoLite", "ArcaKev", "ArcaKevLite");
+    const std::vector<int> roster{0, 1, 2, 3, 4, 5};
+    const auto session = coop::CoopCampaignSession::create("support", edition, roster,
+        {HOUSE_ATREIDES, HOUSE_HARKONNEN}, {"Host", "Guest"}, 7, false);
+    const std::string source = "[BASIC]\nTechLevel=1\n[COOP_TEMPLATE]\nSchema=1\nMod=" + edition
+        + "\nStage=1\nSourceFaction=1\nOriginalMission=1\nParticipantCount=5\nEnemyFaction1=0\nEnemyFaction2=2\nEnemyFaction3=3\n"
+          "[Player1]\n[Player2]\n[Player3]\n[Player4]\n[Player5]\n";
+    const auto context = coop::readContext(session.prepareMap(source));
+    REQUIRE(context);
+    REQUIRE(context->slots[1].faction == HOUSE_HARKONNEN);
+    REQUIRE(context->slots[2].faction == HOUSE_HARKONNEN);
+    REQUIRE(context->slots[1].house != context->slots[2].house);
 }

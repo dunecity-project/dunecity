@@ -21,11 +21,13 @@
 #include <dunecity/CityConstants.h>
 #include <globals.h>
 #include <sand.h>
+#include <mod/ModManager.h>
 
 namespace SkirmishGenerator {
 
 Catalogue makeCatalogue(const ObjectData& data, bool cityMode) {
     Catalogue catalogue;
+    catalogue.tornieFamily = ModManager::instance().isTornieFamilyContentActive();
     for(int house = 0; house < NUM_HOUSES; ++house) {
         // Only houses a custom game can field have a name outside their mod (guest houses).
         if(!isCustomGameHouseAvailable(static_cast<HOUSETYPE>(house))) continue;

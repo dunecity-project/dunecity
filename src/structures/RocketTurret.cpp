@@ -30,6 +30,7 @@
 #include <House.h>
 #include <Game.h>
 #include <Map.h>
+#include <mod/ModManager.h>
 #include <units/AmbientAirplane.h>
 
 #include <algorithm>
@@ -73,7 +74,7 @@ void RocketTurret::updateStructureSpecificStuff() {
 bool RocketTurret::canAttack(const ObjectBase* object) const {
     if((object != nullptr)
         && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->getItemID() == Unit_Sandworm)
-        && (object->getItemID() == Unit_Ornithopter || object->isVisible(getOwner()->getTeamID()))
+        && (isOrnithopterUnit(object->getItemID()) || object->isVisible(getOwner()->getTeamID()))
         && !AmbientAirplane::crashEndangers(*this, *object)) {
         return true;
     } else {
@@ -89,7 +90,7 @@ const ObjectBase* RocketTurret::findTarget() const {
     // Script_Structure_FindTarget explicitly sees ornithopters at triple range,
     // even outside unveiled terrain. Other aircraft retain the normal range.
     for(const auto* unit : unitList) {
-        if(unit->getItemID() != Unit_Ornithopter || unit->getHealth() <= 0 || !canAttack(unit)) continue;
+        if(!isOrnithopterUnit(unit->getItemID()) || unit->getHealth() <= 0 || !canAttack(unit)) continue;
         const int distance = DynastyProjectile::distance(center*4, unit->getCenterPoint()*4);
         if(distance <= getWeaponRange()*3*TILESIZE*4 && distance < bestDistance) {
             best = unit;
@@ -104,7 +105,7 @@ int RocketTurret::closeCannonReloadTime() const {
     // (128 cycles) in this engine, while a standalone gun turret keeps its
     // 240-cycle reload. Scale the configured Gun-Turret value by 128/240 so a mod
     // that retunes the gun turret still moves this cannon with it.
-    const int gunTurretReload = currentGame->objectData.data[Structure_GunTurret][originalHouseID].weaponreloadtime;
+    const int gunTurretReload = currentGame->objectData.data[Structure_GunTurret][getTechnologyHouseID()].weaponreloadtime;
     return std::max(1, gunTurretReload * closeCannonReloadNumerator / closeCannonReloadDenominator);
 }
 
@@ -113,13 +114,19 @@ void RocketTurret::attack() {
         Coord centerPoint = getCenterPoint();
         ObjectBase* pObject = target.getObjPointer();
         Coord targetCenterPoint = pObject->getClosestCenterPoint(location);
+        const int technology = getTechnologyHouseID();
+        const bool closeRange = distanceFrom(centerPoint, targetCenterPoint) < 3 * TILESIZE;
+        const int baseDamage = currentGame->objectData.data[
+            closeRange ? Structure_GunTurret : itemID][technology].weapondamage;
+        const int damage = ModManager::instance().isTornieFamilyContentActive()
+            ? owner->radarAttackDamage(itemID, baseDamage) : baseDamage;
 
-        if(distanceFrom(centerPoint, targetCenterPoint) < 3 * TILESIZE) {
+        if(closeRange) {
             // we are just shooting a bullet as a gun turret would do
             // Dynasty also uses its cannon against aircraft inside three tiles.
             {
                 bulletList.push_back( new Bullet( objectID, &centerPoint, &targetCenterPoint, Bullet_ShellTurret,
-                                                       currentGame->objectData.data[Structure_GunTurret][originalHouseID].weapondamage,
+                                                       damage,
                                                        pObject->isAFlyingUnit(),
                                                        pObject ) );
 
@@ -129,13 +136,13 @@ void RocketTurret::attack() {
             }
         } else {
             // MULTIPLAYER-SAFE: Track turret rocket firing
-            if(pObject->getItemID() == Unit_Ornithopter) {
+            if(isOrnithopterUnit(pObject->getItemID())) {
                 currentGame->combatStats.rocketTurretFiresOnOrni++;
                 currentGame->combatStats.turretRocketsSpawned++;
             }
             
             bulletList.push_back( new Bullet( objectID, &centerPoint, &targetCenterPoint, bulletType,
-                                                   currentGame->objectData.data[itemID][originalHouseID].weapondamage,
+                                                   damage,
                                                    pObject->isAFlyingUnit(),
                                                    pObject ) );
 
@@ -145,7 +152,7 @@ void RocketTurret::attack() {
         }
     } else if((weaponTimer != 0) && (target.getObjPointer() != nullptr)) {
         // MULTIPLAYER-SAFE: Track when weapon timer blocks firing
-        if(target.getObjPointer()->getItemID() == Unit_Ornithopter) {
+        if(isOrnithopterUnit(target.getObjPointer()->getItemID())) {
             currentGame->combatStats.rocketTurretFireBlocked++;
         }
     }

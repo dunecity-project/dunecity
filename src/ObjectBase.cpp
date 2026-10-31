@@ -17,6 +17,7 @@
  */
 
 #include <ObjectBase.h>
+#include <Achievements/AchievementEvents.h>
 #include <players/QuantBot.h>
 #include <DynastyProjectile.h>
 
@@ -36,6 +37,8 @@
 
 #include <SpecialVehicle.h>
 #include <mod/ModManager.h>
+#include <mod/RadarResearch.h>
+#include <mod/HealingBalance.h>
 
 //structures
 #include <structures/Barracks.h>
@@ -91,6 +94,8 @@
 #include <units/AmbientAirplane.h>
 #include <units/AmbientHelicopter.h>
 #include <units/RocketTrike.h>
+#include <units/FlameQuad.h>
+#include <units/GasInfantry.h>
 #include <units/SonicTrike.h>
 #include <units/FlameTank.h>
 #include <units/EliteLauncher.h>
@@ -271,14 +276,26 @@ Coord ObjectBase::getClosestCenterPoint(const Coord& objectLocation) const {
 }
 
 
+int ObjectBase::getProductionHouseID() const {
+    return ModManager::instance().isTornieFamilyContentActive()
+        ? House::factionForRuntimeHouse(originalHouseID) : originalHouseID;
+}
+
 int ObjectBase::getMaxHealth() const {
-    return currentGame->objectData.data[itemID][originalHouseID].hitpoints;
+    const int base = currentGame->objectData.data[itemID][getProductionHouseID()].hitpoints;
+    return ModManager::instance().isTornieFamilyContentActive() && owner
+        && radar::aircraft(itemID) && owner->hasRadarSpecialization(HOUSE_WILDSPADE)
+        ? base * 125 / 100 : base;
 }
 
 void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                               const DeviationReward::Provenance& provenance) {
     // Multi-impact missiles must not award repeated kills for the same dead object.
     if (damage >= 0 && getHealth() <= 0) return;
+    if(damage > 0 && ModManager::instance().isTornieFamilyContentActive() && owner
+       && owner->hasRadarSpecialization(HOUSE_CUSTOM) && radar::conventionalTank(itemID)) {
+        damage = std::max(1, damage * 80 / 100);
+    }
     // Immortality guard: Human-controlled houses are invulnerable in single-player modes when option is enabled
     // This applies when ANY human player controls the house (not just AI players)
     if(damage > 0) {
@@ -373,6 +390,8 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
     // interval is still the one that was current when this hit was dispatched: a timer
     // exhausted by this very hit only reverts ownership on the next update.
     DeviationReward::recordAbsorbed(this, (healthBefore*1000).lround(), damage, damagerOwner, damagerID);
+    if(damage > 0 && healthBefore > 0)
+        AchievementEvents::damage(this, damagerID, damagerOwner, getHealth() <= 0);
 
     getOwner()->noteDamageLocation(this, damage, damagerID);
 }
@@ -381,7 +400,8 @@ void ObjectBase::handleInterfaceEvent(SDL_Event* event) {
 }
 
 bool ObjectBase::mayShowOwnerInterface() const {
-    return pLocalHouse == owner || debug || (currentGame != nullptr && currentGame->isObserving());
+    return pLocalHouse == owner || debug
+        || (currentGame && (currentGame->canControlHouse(owner) || currentGame->isObserving()));
 }
 
 ObjectInterface* ObjectBase::getInterfaceContainer() {
@@ -970,7 +990,7 @@ const ObjectBase* ObjectBase::findTarget() const {
 
     // Special handling for Ornithopter: check if this is an Ornithopter and if so,
     // skip the spatial grid to let Ornithopter::findTarget() handle QuantBot-style scoring
-    if(getItemID() != Unit_Ornithopter) {
+    if(!isOrnithopterUnit(getItemID())) {
         if(const SpatialGrid* grid = currentGame->getSpatialGrid()) {
             bool terrainRejected=false;
             if(const ObjectBase* target = findTargetViaGrid(*this, *grid, checkRange, huntMode,&terrainRejected)) {
@@ -984,7 +1004,9 @@ const ObjectBase* ObjectBase::findTarget() const {
 }
 
 int ObjectBase::getViewRange() const {
-    return currentGame->objectData.data[itemID][originalHouseID].viewrange;
+    const int base = currentGame->objectData.data[itemID][getProductionHouseID()].viewrange;
+    return base + (ModManager::instance().isTornieFamilyContentActive() && owner
+        ? owner->radarSightBonus(itemID) : 0);
 }
 
 int ObjectBase::getAreaGuardRange() const {
@@ -992,20 +1014,24 @@ int ObjectBase::getAreaGuardRange() const {
 }
 
 int ObjectBase::getWeaponRange() const {
-    return currentGame->objectData.data[itemID][originalHouseID].weaponrange;
+    const int base = currentGame->objectData.data[itemID][getProductionHouseID()].weaponrange;
+    return base + (ModManager::instance().isTornieFamilyContentActive() && owner
+        ? owner->radarWeaponRangeBonus(itemID, base) : 0);
 }
 
 int ObjectBase::getWeaponReloadTime() const {
-    return currentGame->objectData.data[itemID][originalHouseID].weaponreloadtime;
+    const int base = currentGame->objectData.data[itemID][getProductionHouseID()].weaponreloadtime;
+    return itemID == Structure_Chemipost && ModManager::instance().isTornieFamilyContentActive()
+        ? healing::reload(base, static_cast<const StructureBase*>(this)->getTechnologyHouseID()) : base;
 }
 
 int ObjectBase::getInfSpawnProp() const {
-    return currentGame->objectData.data[itemID][originalHouseID].infspawnprop;
+    return currentGame->objectData.data[itemID][getProductionHouseID()].infspawnprop;
 }
 
-ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario) {
+ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario, int productionHouseID) {
     if(isTornieExclusiveItem(itemID)
-       && !ModManager::instance().isTornieContentActive()) {
+       && !ModManager::instance().isTornieFamilyContentActive()) {
         SDL_Log("ObjectBase::createObject(): rejected Tornie-only ItemID %d outside Tornie", itemID);
         return nullptr;
     }
@@ -1015,6 +1041,7 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario) 
         case Structure_Barracks:            newObject = new Barracks(Owner); break;
         case Structure_ConstructionYard:    newObject = new ConstructionYard(Owner); break;
         case Structure_GunTurret:           newObject = new GunTurret(Owner); break;
+        case Structure_Slowpost:            newObject = new Scoutpost(Owner, Structure_Slowpost); break;
         case Structure_HeavyFactory:        newObject = new HeavyFactory(Owner); break;
         case Structure_HighTechFactory:     newObject = new HighTechFactory(Owner); break;
         case Structure_IX:                  newObject = new IX(Owner); break;
@@ -1022,6 +1049,7 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario) 
         case Structure_Palace:              newObject = new Palace(Owner); break;
         case Structure_Radar:               newObject = new Radar(Owner); break;
         case Structure_Refinery:            newObject = new Refinery(Owner); break;
+        case Structure_Doublefinery:        newObject = new Refinery(Owner, Structure_Doublefinery); break;
         case Structure_RepairYard:          newObject = new RepairYard(Owner); break;
         case Structure_RocketTurret:        newObject = new RocketTurret(Owner); break;
         case Structure_Silo:                newObject = new Silo(Owner); break;
@@ -1053,25 +1081,35 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario) 
         case Unit_Deviator:                 newObject = new Deviator(Owner); break;
         case Unit_Frigate:                  newObject = new Frigate(Owner); break;
         case Unit_Harvester:                newObject = new Harvester(Owner); break;
+        case Unit_CapacityHarvester:        newObject = new Harvester(Owner, Unit_CapacityHarvester); break;
+        case Unit_FastHarvester:            newObject = new Harvester(Owner, Unit_FastHarvester); break;
         case Unit_RebelHarvester:           newObject = new RebelHarvester(Owner); break;
         case Unit_Soldier:                  newObject = new Soldier(Owner); break;
         case Unit_Launcher:                 newObject = new Launcher(Owner); break;
         case Unit_MCV:                      newObject = new MCV(Owner); break;
         case Unit_Ornithopter:              newObject = new Ornithopter(Owner); break;
+        case Unit_EliteOrnithopter:         newObject = new Ornithopter(Owner, Unit_EliteOrnithopter); break;
         case Unit_Quad:                     newObject = new Quad(Owner); break;
+        case Unit_RaiderQuad:               newObject = new Quad(Owner, Unit_RaiderQuad); break;
         case Unit_Saboteur:                 newObject = new Saboteur(Owner); break;
         // Every sandworm belongs to the Natives house, whoever asked for it (a map, a
         // reinforcement, a mod): worms must never show up as some player's unit.
         case Unit_Sandworm:                 newObject = new Sandworm(currentGame->getOrCreateNativesHouse()); break;
+        case Unit_TameSandworm:             newObject = new Sandworm(Owner, Unit_TameSandworm); break;
         case Unit_SiegeTank:                newObject = new SiegeTank(Owner); break;
         case Unit_SonicTank:                newObject = new SonicTank(Owner); break;
         case Unit_Tank:                     newObject = new Tank(Owner); break;
+        case Unit_RangedTank:              newObject = new Tank(Owner, Unit_RangedTank); break;
+        case Unit_SlowTank:                newObject = new Tank(Owner, Unit_SlowTank); break;
         case Unit_Trike:                    newObject = new Trike(Owner); break;
         case Unit_RaiderTrike:              newObject = new RaiderTrike(Owner); break;
         case Unit_Trooper:                  newObject = new Trooper(Owner); break;
         case Unit_AmbientAirplane:          newObject = new AmbientAirplane(Owner); break;
         case Unit_AmbientHelicopter:        newObject = new AmbientHelicopter(Owner); break;
         case Unit_RocketTrike:              newObject = new RocketTrike(Owner); break;
+        case Unit_FlameQuad:                newObject = new FlameQuad(Owner); break;
+        case Unit_GasInfantry:              newObject = new GasInfantry(Owner); break;
+        case Unit_FlameTrooper:             newObject = new Trooper(Owner, Unit_FlameTrooper); break;
         case Unit_SonicTrike:               newObject = new SonicTrike(Owner); break;
         case Unit_FlameTank:                newObject = new FlameTank(Owner); break;
         case Unit_EliteLauncher:            newObject = new EliteLauncher(Owner); break;
@@ -1079,8 +1117,11 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario) 
         case Unit_ChemicalSiegeTank:        newObject = new ChemicalSiegeTank(Owner); break;
         case Unit_Special: {
             const bool modInitialized = ModManager::instance().isInitialized();
-            const bool tornieActive = modInitialized && ModManager::instance().isTornieContentActive();
-            const int houseID = Owner->getHouseID();
+            const bool tornieActive = modInitialized && ModManager::instance().isTornieFamilyContentActive();
+            const int houseID = tornieActive
+                ? (productionHouseID >= 0 && productionHouseID < NUM_HOUSES
+                    ? productionHouseID : Owner->getFactionID())
+                : Owner->getHouseID();
             const auto objectDataIxCandidates = discoverHouseSpecialVehicleCandidates([&](int candidate) {
                 const auto& data = currentGame->objectData.data[candidate][houseID];
                 return HouseSpecialVehicleCandidateData{
@@ -1127,6 +1168,12 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario) 
     }
 
     newObject->byScenario = byScenario;
+    if(newObject->isAUnit() && ModManager::instance().isTornieFamilyContentActive()) {
+        static_cast<UnitBase*>(newObject)->setProductionHouseID(
+            productionHouseID >= 0 && productionHouseID < NUM_HOUSES
+                ? productionHouseID : Owner->getFactionID());
+        newObject->setHealth(newObject->getMaxHealth());
+    }
 
     Uint32 objectID = currentGame->getObjectManager().addObject(newObject);
     newObject->setObjectID(objectID);
@@ -1136,7 +1183,7 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario) 
 
 ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objectID) {
     if(isTornieExclusiveItem(itemID)
-       && !ModManager::instance().isTornieContentActive()) {
+       && !ModManager::instance().isTornieFamilyContentActive()) {
         SDL_Log("ObjectBase::loadObject(): rejected Tornie-only ItemID %d outside Tornie", itemID);
         return nullptr;
     }
@@ -1145,6 +1192,7 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
         case Structure_Barracks:            newObject = new Barracks(stream); break;
         case Structure_ConstructionYard:    newObject = new ConstructionYard(stream); break;
         case Structure_GunTurret:           newObject = new GunTurret(stream); break;
+        case Structure_Slowpost:            newObject = new Scoutpost(stream, Structure_Slowpost); break;
         case Structure_HeavyFactory:        newObject = new HeavyFactory(stream); break;
         case Structure_HighTechFactory:     newObject = new HighTechFactory(stream); break;
         case Structure_IX:                  newObject = new IX(stream); break;
@@ -1152,6 +1200,7 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
         case Structure_Palace:              newObject = new Palace(stream); break;
         case Structure_Radar:               newObject = new Radar(stream); break;
         case Structure_Refinery:            newObject = new Refinery(stream); break;
+        case Structure_Doublefinery:        newObject = new Refinery(stream, Structure_Doublefinery); break;
         case Structure_RepairYard:          newObject = new RepairYard(stream); break;
         case Structure_RocketTurret:        newObject = new RocketTurret(stream); break;
         case Structure_Silo:                newObject = new Silo(stream); break;
@@ -1183,23 +1232,33 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
         case Unit_Deviator:                 newObject = new Deviator(stream); break;
         case Unit_Frigate:                  newObject = new Frigate(stream); break;
         case Unit_Harvester:                newObject = new Harvester(stream); break;
+        case Unit_CapacityHarvester:        newObject = new Harvester(stream, Unit_CapacityHarvester); break;
+        case Unit_FastHarvester:            newObject = new Harvester(stream, Unit_FastHarvester); break;
         case Unit_RebelHarvester:           newObject = new RebelHarvester(stream); break;
         case Unit_Soldier:                  newObject = new Soldier(stream); break;
         case Unit_Launcher:                 newObject = new Launcher(stream); break;
         case Unit_MCV:                      newObject = new MCV(stream); break;
         case Unit_Ornithopter:              newObject = new Ornithopter(stream); break;
+        case Unit_EliteOrnithopter:         newObject = new Ornithopter(stream, Unit_EliteOrnithopter); break;
         case Unit_Quad:                     newObject = new Quad(stream); break;
+        case Unit_RaiderQuad:               newObject = new Quad(stream, Unit_RaiderQuad); break;
         case Unit_Saboteur:                 newObject = new Saboteur(stream); break;
         case Unit_Sandworm:                 newObject = new Sandworm(stream); break;
+        case Unit_TameSandworm:             newObject = new Sandworm(stream, Unit_TameSandworm); break;
         case Unit_SiegeTank:                newObject = new SiegeTank(stream); break;
         case Unit_SonicTank:                newObject = new SonicTank(stream); break;
         case Unit_Tank:                     newObject = new Tank(stream); break;
+        case Unit_RangedTank:               newObject = new Tank(stream, Unit_RangedTank); break;
+        case Unit_SlowTank:                 newObject = new Tank(stream, Unit_SlowTank); break;
         case Unit_Trike:                    newObject = new Trike(stream); break;
         case Unit_RaiderTrike:              newObject = new RaiderTrike(stream); break;
         case Unit_Trooper:                  newObject = new Trooper(stream); break;
         case Unit_AmbientAirplane:          newObject = new AmbientAirplane(stream); break;
         case Unit_AmbientHelicopter:        newObject = new AmbientHelicopter(stream); break;
         case Unit_RocketTrike:              newObject = new RocketTrike(stream); break;
+        case Unit_FlameQuad:                newObject = new FlameQuad(stream); break;
+        case Unit_GasInfantry:              newObject = new GasInfantry(stream); break;
+        case Unit_FlameTrooper:             newObject = new Trooper(stream, Unit_FlameTrooper); break;
         case Unit_SonicTrike:               newObject = new SonicTrike(stream); break;
         case Unit_FlameTank:                newObject = new FlameTank(stream); break;
         case Unit_EliteLauncher:            newObject = new EliteLauncher(stream); break;
@@ -1223,11 +1282,11 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
 bool ObjectBase::targetInWeaponRange() const {
     const auto* object = target.getObjPointer();
     if(!object) return false;
-    if(itemID == Structure_RocketTurret && object->getItemID() == Unit_Ornithopter)
+    if(itemID == Structure_RocketTurret && isOrnithopterUnit(object->getItemID()))
         return DynastyProjectile::distance(getCenterPoint()*4, object->getCenterPoint()*4)
             <= getWeaponRange()*3*TILESIZE*4;
     Coord coord = (target.getObjPointer())->getClosestPoint(location);
     FixPoint dist = blockDistance(location,coord);
 
-    return ( dist <= currentGame->objectData.data[itemID][originalHouseID].weaponrange);
+    return dist <= getWeaponRange();
 }

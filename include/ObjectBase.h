@@ -229,6 +229,7 @@ public:
 
     inline int getOriginalHouseID() const { return originalHouseID; }
     virtual void setOriginalHouseID(int i) { originalHouseID = i; }
+    virtual int getProductionHouseID() const;
     inline House* getOwner() { return owner; }
     inline const House* getOwner() const { return owner; }
 
@@ -236,7 +237,7 @@ public:
     inline SpatialGridHandle& getGridHandle() noexcept { return gridHandle; }
     inline const SpatialGridHandle& getGridHandle() const noexcept { return gridHandle; }
 
-    static ObjectBase* createObject(int itemID, House* Owner, bool byScenario);
+    static ObjectBase* createObject(int itemID, House* Owner, bool byScenario, int productionHouseID = HOUSE_INVALID);
     static ObjectBase* loadObject(InputStream& stream, int itemID, Uint32 objectID);
 
 protected:

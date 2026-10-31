@@ -126,6 +126,7 @@ target_sources(dunecity
         Bullet.cpp
         Choam.cpp
         Command.cpp
+        CommandData.cpp
         CommandManager.cpp
         CityScore.cpp
         CrashHandler.cpp
@@ -152,6 +153,15 @@ target_sources(dunecity
         sand.cpp
         SoundPlayer.cpp
         Tile.cpp
+
+        # Separate-house Tornie-family campaign progression
+        Campaign/CoopCampaignSession.cpp
+        Campaign/CoopCampaignTransition.cpp
+        Campaign/CoopCampaignRuntime.cpp
+
+        # Offline local achievements (observations never participate in simulation)
+        Achievements/AchievementManager.cpp
+        Achievements/AchievementEvents.cpp
 
         # Audio
         audio/sounds.cpp
@@ -204,6 +214,7 @@ target_sources(dunecity
         GUI/DropDownBox.cpp
         GUI/TextView.cpp
         GUI/RadioButtonManager.cpp
+        GUI/dune/AchievementsWindow.cpp
         GUI/dune/ChatManager.cpp
         GUI/dune/FeedbackWindow.cpp
         GUI/dune/CityBudgetWindow.cpp
@@ -229,6 +240,7 @@ target_sources(dunecity
         Menu/RandomSkirmishMenu.cpp
         Menu/CustomGameMenu.cpp
         Menu/CustomGamePlayers.cpp
+        Menu/CoopCampaignMenu.cpp
         Menu/CustomGameStatsMenu.cpp
         Menu/OptionsMenu.cpp
         Menu/AboutMenu.cpp
@@ -251,6 +263,7 @@ target_sources(dunecity
         # Network
         Network/LANGameFinderAndAnnouncer.cpp
         Network/NetworkManager.cpp
+        Network/CoopCampaignTransport.cpp
     Network/WebRtcPeerLifecycle.cpp
         Network/LateJoin.cpp
         Network/ObserverStream.cpp
@@ -302,6 +315,8 @@ target_sources(dunecity
         mod/WorkshopClient.cpp
         Menu/WorkshopTransferMenu.cpp
         mod/ModManager.cpp
+        mod/ChaosMode.cpp
+        mod/RadarResearch.cpp
 
         # Structures
         structures/StructureBase.cpp
@@ -366,6 +381,8 @@ target_sources(dunecity
         units/AmbientAirplane.cpp
         units/AmbientHelicopter.cpp
         units/RocketTrike.cpp
+        units/FlameQuad.cpp
+        units/GasInfantry.cpp
         units/SonicTrike.cpp
         units/FlameTank.cpp
         units/EliteLauncher.cpp
@@ -378,6 +395,7 @@ target_sources(dunecity
         CutScenes/Intro.cpp
         CutScenes/Meanwhile.cpp
         CutScenes/Finale.cpp
+        CutScenes/CampaignStory.cpp
         CutScenes/VideoEvent.cpp
         CutScenes/WSAVideoEvent.cpp
         CutScenes/FadeOutVideoEvent.cpp
@@ -738,6 +756,7 @@ if(NOT EMSCRIPTEN)
     file(GLOB_RECURSE COMMUNITY_MOD_FILES CONFIGURE_DEPENDS
         "${MODS_DIR}/community-*/*" "${MODS_DIR}/new/*")
     set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS
+        "${CMAKE_SOURCE_DIR}/config/Achievements.ini"
         "${CMAKE_SOURCE_DIR}/config/ObjectData.ini.default" ${BUNDLED_OBJECT_DATA} ${COMMUNITY_MOD_FILES})
 endif()
 
@@ -766,6 +785,10 @@ endfunction()
 # CONFIGURE_DEPENDS discovers new scenarios and their catalogue sidecars.
 file(GLOB_RECURSE DUNECITY_BUNDLED_MAP_FILES CONFIGURE_DEPENDS "${DATA_DIR}/maps/*.ini")
 set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS ${DUNECITY_BUNDLED_MAP_FILES})
+
+# Family-only score/region art is shared once, never duplicated in six mod payloads.
+file(GLOB DUNECITY_FACTION_FRAME_FILES CONFIGURE_DEPENDS "${DATA_DIR}/frames/*.png")
+set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS ${DUNECITY_FACTION_FRAME_FILES})
 
 if(APPLE)
     # For macOS bundle, copy data files directly to Resources/ (not Resources/data/)
@@ -808,6 +831,7 @@ if(APPLE)
         # Copy config template files (.ini.default and .ini) to Resources/config/
         COMMAND ${CMAKE_COMMAND} -E copy
             "${CMAKE_SOURCE_DIR}/config/ObjectData.ini.default"
+            "${CMAKE_SOURCE_DIR}/config/Achievements.ini"
             "${CMAKE_SOURCE_DIR}/config/QuantBot Config.ini.default"
             "${CMAKE_SOURCE_DIR}/config/Dune City.ini"
             "${CMAKE_SOURCE_DIR}/config/README.md"
@@ -866,6 +890,7 @@ elseif(NOT EMSCRIPTEN)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${BUILD_RUNTIME_DIR}/config"
         COMMAND ${CMAKE_COMMAND} -E copy
             "${CMAKE_SOURCE_DIR}/config/ObjectData.ini.default"
+            "${CMAKE_SOURCE_DIR}/config/Achievements.ini"
             "${CMAKE_SOURCE_DIR}/config/QuantBot Config.ini.default"
             "${CMAKE_SOURCE_DIR}/config/Dune City.ini"
             "${BUILD_RUNTIME_DIR}/config/"
@@ -926,6 +951,7 @@ if(WIN32)
         FILES "${DATA_DIR}/HeraldNeu.png"
         DESTINATION data
     )
+    install(DIRECTORY "${DATA_DIR}/frames" DESTINATION data)
     
     # Vanilla-specific loose overrides are loaded from the runtime data
     # directory. Development builds already copy them there, but CPack used

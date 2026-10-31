@@ -40,6 +40,8 @@ public:
         }
     }
 
+    void setPreserveContentWidth(bool value) { preserveWidth = value; }
+
     void setContent(Widget* newContent) {
         if(content == newContent) {
             return;
@@ -65,7 +67,11 @@ public:
     }
 
     Point getMinimumSize() const override {
-        return scrollbar.getMinimumSize();
+        auto size = scrollbar.getMinimumSize();
+        if(preserveWidth && content != nullptr) {
+            size.x = std::max(size.x, content->getMinimumSize().x + scrollbar.getMinimumSize().x);
+        }
+        return size;
     }
 
     void resize(Point newSize) override {
@@ -191,6 +197,7 @@ private:
     }
 
     Widget* content = nullptr;
+    bool preserveWidth = false;
     ScrollBar scrollbar;
 };
 

@@ -959,6 +959,15 @@
     <ClCompile Include="..\..\src\Command.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\CommandData.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\mod\ChaosMode.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\mod\RadarResearch.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\CommandManager.cpp">
       <Filter>src</Filter>
     </ClCompile>

@@ -20,8 +20,10 @@
 
 #include "Animation.h"
 #include <misc/SDL2pp.h>
+#include <FileClasses/Palette.h>
 
 #include <initializer_list>
+#include <memory>
 
 /// A class for loading a *.WSA-File.
 /**
@@ -41,6 +43,7 @@ public:
     virtual ~Wsafile();
 
     sdl2::surface_ptr getPicture(Uint32 FrameNumber) const;
+    void setPaletteOverride(const std::shared_ptr<const Palette>& value) { paletteOverride = value; }
     sdl2::surface_ptr getAnimationAsPictureRow(int numFramesX = std::numeric_limits<int>::max()) const;
     std::unique_ptr<Animation> getAnimation(unsigned int startindex, unsigned int endindex, bool bDoublePic=true, bool bSetColorKey=true) const;
 
@@ -75,6 +78,7 @@ private:
     std::unique_ptr<unsigned char[]> readfile(SDL_RWops* rwop, int* filesize) const;
     void readdata(std::initializer_list<SDL_RWops*> files);
     std::vector<unsigned char> decodedFrames;
+    std::shared_ptr<const Palette> paletteOverride;
 
     Uint16 numFrames = 0;
     Uint16 sizeX = 0;

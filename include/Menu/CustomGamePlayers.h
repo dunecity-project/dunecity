@@ -33,6 +33,7 @@
 #include <GUI/Checkbox.h>
 #include <GUI/TextView.h>
 #include <GUI/TextBox.h>
+#include <GUI/ScrollView.h>
 #include <GUI/dune/AIPlayerSelector.h>
 
 #include <Network/ChangeEventList.h>
@@ -152,6 +153,9 @@ private:
     void checkPlayerBoxes();
     void addAllPlayersToGameInitSettings();
     bool addPlayerToHouseInfo(GameInitSettings::HouseInfo& newHouseInfo, int player, const std::string& playername);
+    void initializeSeparateCoopLobby();
+    void updateSeparateCoopControls();
+    void assembleSeparateCoopSettings();
 
     void onNext();
     void onCancel();
@@ -163,6 +167,12 @@ private:
     void disableAllDropDownBoxes();
 
     GameInitSettings::HouseInfoList fixedCoopHouses;
+    std::optional<coop::CoopCampaignSession> separateCoopSession;
+    SettingsClass::GameOptionsClass separateCoopOptions;
+    bool separateCoopSourcePending = false;
+    bool separateCoopSetupCommitted = false;
+    bool separateCoopSetupTransferPending = false;
+    std::array<int, MAX_CUSTOM_GAME_PLAYERS> lastCoopFactionSelections{};
     GameInitSettings                gameInitSettings;
     GameInitSettings::HouseInfoList houseInfoListSetup;     ///< only used if we are loading a savegame
 
@@ -178,6 +188,7 @@ private:
     // left VBox with player list and map options
     VBox            leftVBox;
     HBox            playerListHBox;
+    ScrollView      playerListScroll;
     VBox            playerListVBox;
 
     // right VBox with mini map

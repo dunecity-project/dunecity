@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify bundled mods in the actual Emscripten file table and data archive."""
+"""Verify all six Tornie-family mods and DuneCity content in the browser archive."""
 import argparse
 from decimal import Decimal
 import hashlib
@@ -8,12 +8,19 @@ from pathlib import Path, PurePosixPath
 import re
 
 
-REQUIRED = (
-    '/mods/Tornie/mod.ini', '/mods/Tornie/manifest.json',
-    '/mods/Tornie/checksums.sha256', '/mods/Tornie/ObjectData.ini',
-    '/mods/Tornie/GameOptions.ini', '/mods/Tornie/QuantBot Config.ini',
-    '/mods/Tornie/CustomHouse.ini', '/mods/Dune2R/mod.ini',
-    '/mods/Dune2R/GameOptions.ini', '/mods/Dune2R/asset-catalog.ini',
+FAMILY_MODS = ('Tornie', 'TornieLite', 'Jericho', 'JerichoLite', 'ArcaKev', 'ArcaKevLite')
+REQUIRED = tuple(
+    f'/mods/{mod}/{relative}'
+    for mod in FAMILY_MODS
+    for relative in ('mod.ini', 'manifest.json', 'checksums.sha256', 'ObjectData.ini',
+                     'GameOptions.ini', 'QuantBot Config.ini', 'CustomHouse.ini')
+) + (
+    '/mods/Dune2R/mod.ini', '/mods/Dune2R/GameOptions.ini', '/mods/Dune2R/asset-catalog.ini',
+)
+FACTION_FRAMES = tuple(
+    f'CampaignHerald{house}.png' for house in (
+        'Harkonnen', 'Atreides', 'Ordos', 'Fremen', 'Sardaukar', 'Mercenary',
+        'Neutral', 'Rebels', 'Corruptique', 'Wildspade', 'Kleshmersh', 'Tharpique')
 )
 CITY_MAPS = (
     '4P - 128x128 - 4 corners.ini', '4P - 192x192 - DuneCity.ini',
@@ -34,7 +41,7 @@ FILE_RECORD = re.compile(
     r'"?end"?\s*:\s*(\d+(?:\.\d+)?(?:[eE]\+?\d+)?)\s*[,}]')
 
 
-def check_payload(javascript, data, skin_payload=None):
+def check_payload(javascript, data, skin_payload=None, frame_payload=None):
     files = {}
     for encoded, start, end in FILE_RECORD.findall(javascript):
         name = json.loads(encoded)
@@ -53,24 +60,33 @@ def check_payload(javascript, data, skin_payload=None):
                             '/mods/Dune2R/graphics_compact/objpics/')):
             raise ValueError('Optional Dune2R art must download separately: ' + name)
 
-    checked = set()
-    manifest = files['/mods/Tornie/checksums.sha256'].decode('utf-8')
-    for line in manifest.splitlines():
-        if not line.strip():
-            continue
-        match = re.fullmatch(r'([0-9a-f]{64})  (.+)', line)
-        if not match:
-            raise ValueError('Invalid Tornie checksum entry')
-        digest, relative = match.groups()
-        path = PurePosixPath(relative)
-        if path.is_absolute() or '..' in path.parts or relative in checked:
-            raise ValueError('Invalid Tornie checksum path: ' + relative)
-        checked.add(relative)
-        name = '/mods/Tornie/' + relative
-        if name not in files or hashlib.sha256(files[name]).hexdigest() != digest:
-            raise ValueError('Missing or corrupt Tornie payload: ' + relative)
-    if not checked:
-        raise ValueError('Empty Tornie checksum manifest')
+    verified_family_files = {}
+    for mod in FAMILY_MODS:
+        checked = set()
+        manifest = files[f'/mods/{mod}/checksums.sha256'].decode('utf-8')
+        for line in manifest.splitlines():
+            if not line.strip():
+                continue
+            match = re.fullmatch(r'([0-9a-f]{64})  (.+)', line)
+            if not match:
+                raise ValueError(f'Invalid {mod} checksum entry')
+            digest, relative = match.groups()
+            path = PurePosixPath(relative)
+            if path.is_absolute() or '..' in path.parts or relative in checked:
+                raise ValueError(f'Invalid {mod} checksum path: ' + relative)
+            checked.add(relative)
+            name = f'/mods/{mod}/' + relative
+            if name not in files or hashlib.sha256(files[name]).hexdigest() != digest:
+                raise ValueError(f'Missing or corrupt {mod} payload: ' + relative)
+        if not checked:
+            raise ValueError(f'Empty {mod} checksum manifest')
+        verified_family_files[mod] = len(checked)
+    if frame_payload is None:
+        frame_root = Path(__file__).resolve().parents[1] / 'data/frames'
+        frame_payload = {name: (frame_root / name).read_bytes() for name in FACTION_FRAMES}
+    for relative, expected in frame_payload.items():
+        if files.get('/frames/' + relative) != expected:
+            raise ValueError('Missing or corrupt shared faction frame: ' + relative)
     if skin_payload is None:
         skin_root = Path(__file__).resolve().parents[1] / 'mods/dunecity/graphics_skins'
         skin_payload = {p.relative_to(skin_root).as_posix(): p.read_bytes()
@@ -90,7 +106,12 @@ def check_payload(javascript, data, skin_payload=None):
         name = '/maps/singleplayer/' + relative
         if files.get(name) != (map_root / relative).read_bytes():
             raise ValueError('Missing or corrupt DuneCity map metadata: ' + relative)
-    return {'verified_tornie_files': len(checked),
+    return {'verified_family_files': verified_family_files,
+            'verified_shared_faction_frames': len(frame_payload),
+            'family_payload_bytes': {
+                mod: sum(len(value) for name, value in files.items() if name.startswith(f'/mods/{mod}/'))
+                for mod in FAMILY_MODS},
+            'shared_faction_frame_bytes': sum(map(len, frame_payload.values())),
             'verified_dunecity_skin_files': len(skin_payload),
             'verified_dunecity_maps': len(CITY_MAPS),
             'verified_dunecity_map_metadata': len(CITY_MAP_METADATA),

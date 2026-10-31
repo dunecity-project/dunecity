@@ -439,7 +439,7 @@ bool QuantBot::huntPartySuperior(const BlobParty& party) const {
     const auto& data = currentGame->objectData.data;
     const Coord at = party.goal;
     auto power = [&](const ObjectBase* object) {
-        return CombatPowerPolicy::unitPower(data[object->getItemID()][object->getOriginalHouseID()].price,
+        return CombatPowerPolicy::unitPower(data[object->getItemID()][object->getProductionHouseID()].price,
             object->getHealth().lround(), object->getMaxHealth());
     };
     int64_t enemy = 0, own = 0;
@@ -476,13 +476,13 @@ bool QuantBot::huntPartyRealFight(const BlobParty& party, const ObjectBase* cont
             || unit->getHealth() <= 0 || !unit->isActive()
             || !unit->canAttack() || !mobileCombatItem(unit->getItemID()) || !unit->isVisible(myTeam)
             || tiles(at, unit->getLocation()) > BlobWavePolicy::kLocalRadiusTiles) continue;
-        hostile += CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getOriginalHouseID()].price,
+        hostile += CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getProductionHouseID()].price,
             unit->getHealth().lround(), unit->getMaxHealth());
     }
     for (const Uint32 id : party.members) {
         const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit || unit->getHealth() <= 0) continue;
-        own += CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getOriginalHouseID()].price,
+        own += CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getProductionHouseID()].price,
             unit->getHealth().lround(), unit->getMaxHealth());
     }
     // A fight is real when the enemy there is at least a quarter of the party.
@@ -667,7 +667,7 @@ void QuantBot::updateHuntParties() {
                             || !unit->isActive() || !unit->canAttack()
                             || !mobileCombatItem(unit->getItemID())) continue;
                         if (tiles(at, unit->getLocation()) > BlobWavePolicy::kLocalRadiusTiles) continue;
-                        const int64_t power = CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getOriginalHouseID()].price,
+                        const int64_t power = CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getProductionHouseID()].price,
                             unit->getHealth().lround(), unit->getMaxHealth());
                         if (unit->getOwner()->getTeamID() == myTeam) { if (!unit->isAFlyingUnit()) friendly += power; }
                         else if (unit->isVisible(myTeam)) hostile += power;

@@ -346,11 +346,20 @@ void runLegacyMap() {
 void runMenu() {
     {
         RandomSkirmishMenu menu;
+        // The original fixed slider assertions below exercise legacy content, independently
+        // of the last-used edition persisted by a previous probe.
+        for(size_t i = 0; i < menu.availableMods.size(); ++i) {
+            if(menu.availableMods[i].name == "vanilla") {
+                menu.modBox.setSelectedItem(static_cast<int>(i));
+                menu.onModChanged();
+                break;
+            }
+        }
         skirmishRequire(menu.houseBox.getNumEntries() == menu.houseCount + 1, "House choice is not Random + every custom-game house");
         skirmishRequire(menu.houseCount >= 8, "Fewer houses than a vanilla custom game fields");
         // Allies 0-6 and enemies 1-7, never more than 7 together: moving one past the total pushes
         // the other down, through the real slider input.
-        const int others = maxOtherHouses(menu.houseCount);
+        const int others = maxOtherHouses(menu.houseCount, menu.tornieFamily);
         skirmishRequire(others == kMaxOtherHouses, "The engine cannot field the player plus seven houses");
         skirmishRequire(menu.alliesBox.getEntryIntData(menu.alliesBox.getNumEntries() - 1) == kMaxAllies
                         && menu.enemiesBox.getEntryIntData(menu.enemiesBox.getNumEntries() - 1) == kMaxEnemies,
@@ -423,8 +432,22 @@ void runMenu() {
             chooseMod(name);
             skirmishRequire(!menu.enemyCityBox.isVisible() && !menu.allyCityBox.isVisible() && !menu.enemyCityCaption->isVisible(),
                             std::string("City rows shown for non-city mod ") + name);
+            if(std::string(name) == "Tornie") {
+                skirmishRequire(menu.tornieFamily && menu.houseCount == 12
+                                && menu.houseBox.getNumEntries() == 13,
+                                "Full edition does not expose twelve faction choices");
+                skirmishRequire(maxOtherHouses(menu.houseCount, menu.tornieFamily) == 11
+                                && menu.alliesBox.getEntryIntData(menu.alliesBox.getNumEntries() - 1) == 10
+                                && menu.enemiesBox.getEntryIntData(menu.enemiesBox.getNumEntries() - 1) == 11,
+                                "Full edition does not expose twelve-house skirmish counts");
+                for(int i = 0; i < menu.houseBox.getNumEntries(); ++i)
+                    skirmishRequire(menu.houseBox.getEntryIntData(i) != HOUSE_NATIVES, "Random skirmish offers Natives");
+            }
             if(std::string(name) == "vanilla") skirmishCapture(menu, "random-skirmish-vanilla");
         }
+        chooseMod("TornieLite");
+        skirmishRequire(menu.tornieFamily && menu.houseCount == 6 && menu.houseBox.getNumEntries() == 7,
+                        "Lite edition does not expose its declared six-faction roster");
         chooseMod("dunecity");
         skirmishRequire(menu.enemyCityBox.isVisible() && menu.enemyCityCaption->isVisible() && menu.enemyCityBox.isEnabled(),
                         "City rows hidden for the DuneCity mod");
@@ -622,9 +645,9 @@ void runMultiplayerLobby() {
             skirmishRequire(hidden->getParent() == nullptr, "The multiplayer screen shows a single-player control");
         skirmishRequire(menu.symmetricBox.isChecked(), "Mirrored starts are not on by default for a hosted map");
         skirmishRequire(menu.startsBox.getEntryIntData(0) == kMinStarts
-                        && menu.startsBox.getEntryIntData(menu.startsBox.getNumEntries() - 1) == maxStarts(menu.houseCount),
+                        && menu.startsBox.getEntryIntData(menu.startsBox.getNumEntries() - 1) == maxStarts(menu.houseCount, menu.tornieFamily),
                         "Start positions do not run from 2 to the house cap");
-        skirmishRequire(maxStarts(menu.houseCount) == kMaxStarts, "The engine cannot field eight starts");
+        skirmishRequire(maxStarts(menu.houseCount, menu.tornieFamily) == kMaxStarts, "The legacy mod cannot field eight starts");
         skirmishRequire(menu.startCityBox.isVisible() && menu.startCityCaption->isVisible(), "City row hidden for the DuneCity host mod");
         skirmishRequire(!menu.hostModLabel.getText().empty(), "The host's mod is not shown");
         probeSelect(menu.sizeBox, 128);

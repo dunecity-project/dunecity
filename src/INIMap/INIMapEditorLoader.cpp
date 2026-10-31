@@ -5,12 +5,16 @@
 #include <MapEditor/MapEditor.h>
 #include <MapEditor/ReinforcementInfo.h>
 #include <AITeamInfo.h>
+#include <structures/WindTrap.h>
+#include <mod/ModManager.h>
 
 #include <MapSeed.h>
 #include <ScreenBorder.h>
 
 #include <misc/format.h>
 #include <misc/exceptions.h>
+#include <misc/SpiceGeneration.h>
+#include <INIMap/SpiceVariants.h>
 
 #include <sand.h>
 #include <globals.h>
@@ -49,6 +53,7 @@ void INIMapEditorLoader::load() {
 void INIMapEditorLoader::loadMap() {
 
     version = inifile->getIntValue("BASIC", "Version", 1);
+    const unsigned spiceMask = activeSpiceVariantMask();
 
     if(version < 2) {
         // we have all houses fixed
@@ -265,6 +270,14 @@ void INIMapEditorLoader::loadMap() {
                         // Tornie red spice bloom
                         type = Terrain_RedSpiceBloom;
                     } break;
+                    case 'l':
+                    case 'L':
+                    case 'i':
+                    case 'w':
+                    case 'W':
+                    case 'x':
+                        type = spiceTerrainForMapChar(rowString.at(x));
+                        break;
 
                     case '%': {
                         // Rock
@@ -292,7 +305,32 @@ void INIMapEditorLoader::loadMap() {
                     } break;
                 }
 
-                pMapEditor->map(x,y) = type;
+                pMapEditor->map(x,y) = static_cast<TERRAINTYPE>(allowedSpiceTerrain(type, spiceMask));
+            }
+        }
+    }
+
+    const int variantPercent = inifile->getIntValue("MAP", "SpiceVariantPercent", 0);
+    if(spiceMask != 0 && variantPercent > 0) {
+        const int width = pMapEditor->map.getSizeX();
+        const int height = pMapEditor->map.getSizeY();
+        std::string terrain(static_cast<size_t>(width) * height, '-');
+        for(int y = 0; y < height; ++y) {
+            for(int x = 0; x < width; ++x) {
+                const auto type = pMapEditor->getTerrain(x, y);
+                terrain[static_cast<size_t>(y) * width + x] =
+                    type == Terrain_Spice ? '~' : type == Terrain_ThickSpice ? '+' : '-';
+            }
+        }
+        const auto variants = SpiceVariants::apply(std::move(terrain), width, variantPercent,
+            static_cast<uint32_t>(inifile->getIntValue("MAP", "SpiceVariantSeed", 0)),
+            inifile->getIntValue("MAP", "SpiceVariantVersion", 1));
+        for(int y = 0; y < height; ++y) {
+            for(int x = 0; x < width; ++x) {
+                const int type = allowedSpiceTerrain(spiceTerrainForMapChar(variants[static_cast<size_t>(y) * width + x]), spiceMask);
+                if(type != Terrain_Sand && type != Terrain_Spice && type != Terrain_ThickSpice) {
+                    pMapEditor->map(x, y) = static_cast<TERRAINTYPE>(type);
+                }
             }
         }
     }
@@ -363,6 +401,8 @@ void INIMapEditorLoader::loadChoam()
     if(!inifile->hasSection("CHOAM")) {
         return;
     }
+    const bool familyContent = ModManager::instance().isTornieFamilyContentActive();
+    const bool customUnitsEnabled = ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled();
 
     for(const INIFile::Key& key : inifile->getSection("CHOAM")) {
         std::string UnitStr = key.getKeyName();
@@ -372,6 +412,8 @@ void INIMapEditorLoader::loadChoam()
             logWarning(key.getLineNumber(), "Invalid unit string: '" + UnitStr + "'");
             continue;
         }
+        if((unitID >= Unit_Troopers5 && !familyContent)
+           || (familyContent && !customUnitsEnabled && isTornieExclusiveItem(unitID))) continue;
 
         int num = key.getIntValue(-2);
         if(num == -2) {
@@ -400,7 +442,19 @@ void INIMapEditorLoader::loadUnits()
     for(const INIFile::Key& key : inifile->getSection("UNITS")) {
         if(key.getKeyName().find("ID") == 0) {
             int unitID = 0;
-            parseString(key.getKeyName().substr(2), unitID);
+            const bool parsedID = parseString(key.getKeyName().substr(2), unitID);
+            if(ModManager::instance().isTornieFamilyContentActive()) {
+                const auto usedID = [&](int id) {
+                    return std::any_of(pMapEditor->units.begin(), pMapEditor->units.end(),
+                                       [&](const auto& unit) { return unit.id == id; });
+                };
+                if(!parsedID || usedID(unitID)) {
+                    unitID = 0;
+                    while(usedID(unitID)) {
+                        ++unitID;
+                    }
+                }
+            }
 
             std::string HouseStr, UnitStr, health, PosStr, rotation, mode;
             splitString(key.getStringValue(), HouseStr, UnitStr, health, PosStr, rotation, mode);
@@ -434,6 +488,10 @@ void INIMapEditorLoader::loadUnits()
                 logWarning(key.getLineNumber(), "Invalid unit string: '" + UnitStr + "'!");
                 continue;
             }
+            if(itemID >= Unit_Troopers5 && itemID <= Unit_TameSandworm
+               && !ModManager::instance().isTornieFamilyContentActive()) {
+                continue;
+            }
 
             int iHealth;
             if(!parseString(health, iHealth) || (iHealth < 0) || (iHealth > 256)) {
@@ -447,7 +505,7 @@ void INIMapEditorLoader::loadUnits()
                 attackmode = AREAGUARD;
             }
 
-            if(itemID == Unit_Soldier || itemID == Unit_Saboteur || itemID == Unit_Trooper || itemID == Unit_Infantry || itemID == Unit_Troopers) {
+            if(isInfantryUnit(itemID)) {
                 if(angle == UP) {
                     angle = UP;
                 } else if (angle == DOWN) {
@@ -517,7 +575,19 @@ void INIMapEditorLoader::loadStructures()
         } else if(tmpkey.compare(0,2,"ID") == 0) {
             // other structure
             int structureID = 0;
-            parseString(tmpkey.substr(2), structureID);
+            const bool parsedID = parseString(tmpkey.substr(2), structureID);
+            if(ModManager::instance().isTornieFamilyContentActive()) {
+                const auto usedID = [&](int id) {
+                    return std::any_of(pMapEditor->structures.begin(), pMapEditor->structures.end(),
+                                       [&](const auto& structure) { return structure.id == id; });
+                };
+                if(!parsedID || usedID(structureID)) {
+                    structureID = 0;
+                    while(usedID(structureID)) {
+                        ++structureID;
+                    }
+                }
+            }
 
             std::string HouseStr, BuildingStr, health, PosStr;
             splitString(tmp, HouseStr, BuildingStr, health, PosStr);
@@ -549,8 +619,16 @@ void INIMapEditorLoader::loadStructures()
                 logWarning(key.getLineNumber(), "Invalid building string: '" + BuildingStr + "'!");
                 continue;
             }
+            if(itemID >= Unit_Troopers5 && itemID <= Unit_TameSandworm
+               && !ModManager::instance().isTornieFamilyContentActive()) {
+                continue;
+            }
 
-            pMapEditor->structures.emplace_back(structureID, houseID, itemID, iHealth, Coord(getXPos(pos),getYPos(pos)));
+            const bool powerUpgraded = itemID == Structure_WindTrap
+                && ModManager::instance().isTornieFamilyContentActive()
+                && WindTrap::supportsPowerUpgrade(houseID)
+                && inifile->getBoolValue("WINDTRAPUPGRADES", tmpkey, false);
+            pMapEditor->structures.emplace_back(structureID, houseID, itemID, iHealth, Coord(getXPos(pos),getYPos(pos)), powerUpgraded);
         } else {
             logWarning(key.getLineNumber(), "Invalid structure key: '" + tmpkey + "'!");
             continue;
@@ -593,6 +671,10 @@ void INIMapEditorLoader::loadReinforcements()
         Uint32 unitID = getItemIDByName(strUnitName);
         if((unitID == ItemID_Invalid) || !isUnit(unitID)) {
             logWarning(key.getLineNumber(), "Invalid unit string: '" + strUnitName + "'!");
+            continue;
+        }
+        if(unitID >= Unit_Troopers5 && unitID <= Unit_TameSandworm
+           && !ModManager::instance().isTornieFamilyContentActive()) {
             continue;
         }
 

@@ -189,6 +189,8 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
 
     houseCount = 0;
     for(int h = 0; h < NUM_HOUSES; ++h) houseCount += isCustomGameHouseAvailable(static_cast<HOUSETYPE>(h)) ? 1 : 0;
+    tornieFamily = ModManager::instance().isTornieFamilyContentActive();
+    rosterMod = ModManager::instance().getActiveModName();
 
     const int width = getSize().x, height = getSize().y;
     // Rows fit between the title and the status line, however short the window.
@@ -232,7 +234,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(0, row++, _("Credits"), &creditsBox);
         addRow(0, row++, _("Tech level"), &techBox);
 
-        for(int starts = kMinStarts; starts <= std::max(kMinStarts, maxStarts(houseCount)); ++starts)
+        for(int starts = kMinStarts; starts <= std::max(kMinStarts, maxStarts(houseCount, tornieFamily)); ++starts)
             startsBox.addEntry(std::to_string(starts), starts);
         fillSide(startBaseBox, startArmyBox, startCityBox);
         row = 0;
@@ -378,8 +380,19 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         params.mod = hostMod;
         params.mode = RandomSkirmish::modeForMod(hostMod);
     }
+    if(!multiplayer) {
+        // Resolve the selected edition before clamping counts or selecting a faction.
+        int modIndex = -1;
+        for(const std::string& wanted : {params.mod, ModManager::instance().getActiveModName()}) {
+            for(size_t i = 0; i < availableMods.size() && modIndex < 0; ++i)
+                if(availableMods[i].matchesSelectionName(wanted)) modIndex = static_cast<int>(i);
+        }
+        if(modIndex < 0 && !availableMods.empty()) modIndex = 0;
+        if(modIndex >= 0) modBox.setSelectedItem(modIndex);
+    }
+    onModChanged();
     if(!params.fixedSeed) params.seed = freshSeed();
-    params.clamp(houseCount);
+    params.clamp(houseCount, tornieFamily);
     loaded = params;
     showParams(params);
 }
@@ -422,14 +435,6 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     fixedSeedBox.setChecked(params.fixedSeed);
     selectData(houseBox, params.house);
     selectData(creditsBox, params.credits);
-    // The last-used mod, else the active one, else the first listed.
-    int modIndex = -1;
-    for(const std::string& wanted : {params.mod, ModManager::instance().getActiveModName()}) {
-        for(size_t i = 0; i < availableMods.size() && modIndex < 0; ++i)
-            if(availableMods[i].matchesSelectionName(wanted)) modIndex = static_cast<int>(i);
-    }
-    if(modIndex < 0 && !availableMods.empty()) modIndex = 0;
-    if(modIndex >= 0) modBox.setSelectedItem(modIndex);
     selectData(techBox, params.techLevel);
     enemiesAlliedBox.setChecked(params.enemiesAllied);
     for(auto [side, ai, base, army, city] : {std::tuple{&params.allySide, &allyAI, &allyBaseBox, &allyArmyBox, &allyCityBox},
@@ -454,13 +459,14 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(startBaseBox, static_cast<int>(params.startSide.base));
     selectData(startArmyBox, params.startSide.army);
     selectData(startCityBox, params.startSide.city);
-    // Fixed ranges (allies 0-6, enemies 1-7, within the engine's house cap); the sum is kept
-    // within kMaxOtherHouses by onPlayersChanged.
-    const int others = maxOtherHouses(houseCount);
+    // Counts follow the edition roster; other content keeps the original 6-allies/7-enemies caps.
+    const int others = maxOtherHouses(houseCount, tornieFamily);
     alliesBox.clearAllEntries();
-    for(int i = 0; i <= std::min(kMaxAllies, others - kMinEnemies); ++i) alliesBox.addEntry(std::to_string(i), i);
+    for(int i = 0; i <= std::min(tornieFamily ? NUM_PLAYER_HOUSES - 2 : kMaxAllies, others - kMinEnemies); ++i)
+        alliesBox.addEntry(std::to_string(i), i);
     enemiesBox.clearAllEntries();
-    for(int i = kMinEnemies; i <= std::min(kMaxEnemies, others); ++i) enemiesBox.addEntry(std::to_string(i), i);
+    for(int i = kMinEnemies; i <= std::min(tornieFamily ? NUM_PLAYER_HOUSES - 1 : kMaxEnemies, others); ++i)
+        enemiesBox.addEntry(std::to_string(i), i);
     selectData(alliesBox, params.allies);
     selectData(enemiesBox, params.enemies);
     onPlayersChanged(false);
@@ -468,9 +474,8 @@ void RandomSkirmishMenu::showParams(const Params& params) {
 }
 
 void RandomSkirmishMenu::onPlayersChanged(bool alliesMoved) {
-    // Allies and enemies share kMaxOtherHouses (and the engine's house cap): the slider the
-    // player did not touch gives way.
-    const int others = maxOtherHouses(houseCount);
+    // The slider the player did not touch gives way to this edition's total house cap.
+    const int others = maxOtherHouses(houseCount, tornieFamily);
     const int alliesNow = std::max(0, alliesBox.getSelectedEntryIntData());
     const int enemiesNow = std::max(kMinEnemies, enemiesBox.getSelectedEntryIntData());
     if(alliesNow + enemiesNow > others) {
@@ -491,7 +496,51 @@ std::string RandomSkirmishMenu::selectedMod() const {
     return index >= 0 && index < static_cast<int>(availableMods.size()) ? availableMods[index].name : std::string();
 }
 
+void RandomSkirmishMenu::refreshFamilyRoster() {
+    auto& mods = ModManager::instance();
+    const auto mod = selectedMod();
+    const bool selectedFamily = mods.isTornieFamilyContent(mod);
+    // Do not change legacy mod-selection behavior unless entering or leaving family content.
+    if((!selectedFamily && !tornieFamily) || mod == rosterMod) return;
+    if(!RandomSkirmish::activateMod(mod)) {
+        statusLabel.setText(_("The chosen mod could not be activated."));
+        return;
+    }
+    const int house = houseBox.getSelectedEntryIntData();
+    const int allies = std::max(0, alliesBox.getSelectedEntryIntData());
+    const int enemies = std::max(kMinEnemies, enemiesBox.getSelectedEntryIntData());
+    const int starts = std::max(kMinStarts, startsBox.getSelectedEntryIntData());
+    tornieFamily = selectedFamily;
+    rosterMod = mod; // Selection callbacks below must not re-enter this refresh.
+    houseCount = getNumCustomGameHouses();
+    if(!multiplayer) {
+        houseBox.clearAllEntries();
+        houseBox.addEntry(_("Random"), HOUSE_INVALID);
+        for(int h = 0; h < NUM_PLAYER_HOUSES; ++h) {
+            if(isCustomGameHouseAvailable(static_cast<HOUSETYPE>(h)))
+                houseBox.addEntry(getHouseNameByNumber(static_cast<HOUSETYPE>(h)), h);
+        }
+        selectData(houseBox, house);
+        const int others = maxOtherHouses(houseCount, tornieFamily);
+        const int maxAllies = std::min(tornieFamily ? NUM_PLAYER_HOUSES - 2 : kMaxAllies, others - kMinEnemies);
+        const int maxEnemies = std::min(tornieFamily ? NUM_PLAYER_HOUSES - 1 : kMaxEnemies, others);
+        alliesBox.clearAllEntries();
+        for(int i = 0; i <= maxAllies; ++i) alliesBox.addEntry(std::to_string(i), i);
+        enemiesBox.clearAllEntries();
+        for(int i = kMinEnemies; i <= maxEnemies; ++i) enemiesBox.addEntry(std::to_string(i), i);
+        selectData(alliesBox, std::clamp(allies, 0, maxAllies));
+        selectData(enemiesBox, std::clamp(enemies, kMinEnemies, maxEnemies));
+        onPlayersChanged(false);
+    } else {
+        startsBox.clearAllEntries();
+        const int maximum = std::max(kMinStarts, maxStarts(houseCount, tornieFamily));
+        for(int i = kMinStarts; i <= maximum; ++i) startsBox.addEntry(std::to_string(i), i);
+        selectData(startsBox, std::clamp(starts, kMinStarts, maximum));
+    }
+}
+
 void RandomSkirmishMenu::onModChanged() {
+    refreshFamilyRoster();
     // City size exists only for a mod that runs the city simulation; other mods hide the rows.
     const bool city = RandomSkirmish::modeForMod(selectedMod()) == Mode::DuneCity;
     for(Widget* widget : std::initializer_list<Widget*>{&allyCityBox, &enemyCityBox, &playerCityBox, &startCityBox,
@@ -546,7 +595,7 @@ Params RandomSkirmishMenu::readParams() const {
         params.startSide.base = static_cast<BaseSize>(startBaseBox.getSelectedEntryIntData());
         params.startSide.army = startArmyBox.getSelectedEntryIntData();
         params.startSide.city = startCityBox.getSelectedEntryIntData();
-        params.clamp(houseCount);
+        params.clamp(houseCount, tornieFamily);
         return params;
     }
     params.house = houseBox.getSelectedEntryIntData();
@@ -569,7 +618,7 @@ Params RandomSkirmishMenu::readParams() const {
     params.spectate = spectateBox.isChecked();
     const std::string watchedAI = spectateAI.getPlayerClass();
     if(!watchedAI.empty()) params.spectateClass = watchedAI;
-    params.clamp(houseCount);
+    params.clamp(houseCount, tornieFamily);
     return params;
 }
 

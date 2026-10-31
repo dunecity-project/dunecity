@@ -22,6 +22,7 @@ public:
     void init(int newItemID);
     ~Scoutpost() override;
 
+    bool canBeCaptured() const override;
     bool canAttack(const ObjectBase* object) const override;
     ObjectInterface* getInterfaceContainer() override;
     void setHealth(FixPoint newHealth) override;
@@ -39,6 +40,12 @@ public:
     int getChemipostUpgradeCost() const;
     void handleChemipostUpgradeClick();
     void doUpgradeToChemipost();
+
+    bool isSlowpostUpgradeEligible() const;
+    bool canUpgradeToSlowpost() const;
+    int getSlowpostUpgradeCost() const;
+    void handleSlowpostUpgradeClick();
+    void doUpgradeToSlowpost();
 
 protected:
     void updateStructureSpecificStuff() override;

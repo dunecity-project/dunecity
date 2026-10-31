@@ -53,6 +53,15 @@ public:
     virtual void saveObserverRuntime(OutputStream& stream) const;
     virtual void loadObserverRuntime(InputStream& stream);
 
+    // Factory technology is independent of permanent ownership and deviation.
+    int getProductionHouseID() const override;
+    virtual void setProductionHouseID(int houseID);
+    void refreshRadarResearch();
+    void applySlow();
+    int getSlowTimer() const { return slowTimer; }
+    FixPoint getMovementSpeedFactor() const;
+    bool canCaptureStructures() const;
+
     void blitToScreen() override;
 
     ObjectInterface* getInterfaceContainer() override;
@@ -616,6 +625,7 @@ public:
         DrawnStepScope& operator=(const DrawnStepScope&) = delete;
     };
 
+    friend struct TornieUnitStateFixture;
 protected:
     // Counts belong to the original house even while a unit is deviated.
     void registerUnit();
@@ -645,6 +655,8 @@ protected:
     // Persisted so saves and observer checkpoints continue mid-step exactly.
     Uint64 dynastyRouteTick = 0;
     Uint64 dynastyStepStart = 0, dynastyStepEnd = 0;
+    // Family speed effects advance the existing step clock without relocating its origin.
+    FixPoint dynastyStepTimeOffset = 0;
     FixPoint dynastyStartX = 0, dynastyStartY = 0;
     Coord dynastyEndpoint = Coord::Invalid();
 
@@ -707,8 +719,10 @@ protected:
     int      numWeapons;             ///< How many weapons do we have?
     int      bulletType;             ///< Type of bullet to shot with
     int      lastFiredBulletType;    ///< Bullet actually fired, including distance-based weapon changes
+    int      slowTimer = 0;
 
     // unit state/properties
+    int      productionHouseID = HOUSE_INVALID;
     Coord    guardPoint;             ///< The guard point where to return to after the micro-AI hunted some nearby enemy unit
     Coord    attackPos;              ///< The position to attack
     bool     goingToRepairYard;      ///< Are we currently going to a repair yard?

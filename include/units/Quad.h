@@ -23,9 +23,9 @@
 class Quad final : public GroundUnit
 {
 public:
-    explicit Quad(House* newOwner);
-    explicit Quad(InputStream& stream);
-    void init();
+    explicit Quad(House* newOwner, int unitType = Unit_Quad);
+    explicit Quad(InputStream& stream, int unitType = Unit_Quad);
+    void init(int unitType);
     virtual ~Quad();
 
     void playAttackSound() override;

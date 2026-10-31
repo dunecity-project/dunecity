@@ -90,12 +90,21 @@
 #include <dunecity/TrafficSimulation.h>
 #include <Command.h>
 #include <CommandManager.h>
+#include <mod/ModManager.h>
 
 #include <algorithm>
 #include <set>
 
 // Helpers shared by more than one QuantBot subsystem file.
 namespace QuantBotInternal {
+inline bool ornithopterItem(Uint32 item) {
+    return item == Unit_Ornithopter
+        || (item == Unit_EliteOrnithopter && ModManager::instance().isTornieFamilyContentActive());
+}
+inline bool harvesterItem(Uint32 item) {
+    return item == Unit_Harvester || ((item == Unit_CapacityHarvester || item == Unit_FastHarvester)
+        && ModManager::instance().isTornieFamilyContentActive());
+}
 // Mobile combat units only; defined in QuantBotArmy.cpp.
 bool mobileCombatItem(Uint32 item);
 // Desired-overlap tier for city defence; defined in QuantBotPlacement.cpp.

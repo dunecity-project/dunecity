@@ -16,6 +16,8 @@
  */
 
 #include <units/RebelHarvester.h>
+#include <Achievements/AchievementEvents.h>
+#include <misc/SpiceEffects.h>
 
 #include <globals.h>
 
@@ -89,8 +91,7 @@ void RebelHarvester::init()
 
     graphicID = ObjPic_Harvester;
     graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
-    const bool tornieActive = ModManager::instance().isInitialized()
-        && ModManager::instance().isTornieContentActive();
+    const bool tornieActive = ModManager::instance().isTornieFamilyContentActive();
     gunGraphicID = tornieActive ? ObjPic_HarvestankGunTornie : -1;
     turretGraphic = tornieActive ? pGFXManager->getObjPic(gunGraphicID, getOwner()->getHouseID()) : zoomable_texture{};
 
@@ -186,6 +187,7 @@ void RebelHarvester::blitToScreen()
 void RebelHarvester::checkPos()
 {
     TrackedUnit::checkPos();
+    const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
 
     // Log LONG-TERM stuck harvesters (30+ seconds) - ANY harvester not moving
     static std::map<Uint32, int> idleLogCounters;
@@ -245,7 +247,7 @@ void RebelHarvester::checkPos()
                 // Check if path to refinery is blocked - request carryall if stuck.
                 // Waiting for the scheduler to compute a route is not a failure.
                 if(!awaitingPickup && !moving && pathList.empty() && destination != location
-                   && !hasPendingPathRequest()) {
+                   && !hasPendingPathRequest() && (!familyActive || !nextSpotFound)) {
                     // Not moving, no path, but has a destination - path is likely blocked
                     returnPathFailCounter++;
                     if(returnPathFailCounter >= 3) {
@@ -282,7 +284,8 @@ void RebelHarvester::checkPos()
                             returnPathFailCounter = 0;
                         }
                     }
-                } else if(moving || !pathList.empty()) {
+                } else if(moving || !pathList.empty()
+                          || (familyActive && (nextSpotFound || hasPendingPathRequest()))) {
                     // Successfully moving or have path - reset counter
                     returnPathFailCounter = 0;
                 }
@@ -321,8 +324,9 @@ void RebelHarvester::checkPos()
             }
         } else if (harvestingMode && !hasBookedCarrier() && destination.isValid() && (blockDistance(location, destination) >= MIN_CARRYALL_LIFT_DISTANCE)) {
             requestCarryall();
-        } else if(harvestingMode && destination != location && pathList.empty() && !moving) {
-            // Stuck in harvesting mode with unreachable destination
+        } else if(harvestingMode && destination != location && pathList.empty() && !moving
+                  && (!familyActive || (!nextSpotFound && !hasPendingPathRequest()))) {
+            // A queued route or staged final waypoint is still navigation, not a blockage.
             // Give pathfinding a few cycles to resolve, then try carryall or give up
             pathFailCounter++;
             if(pathFailCounter >= 3) {
@@ -339,7 +343,8 @@ void RebelHarvester::checkPos()
                 }
                 // If already has a booked carrier, just wait
             }
-        } else if(harvestingMode && (!pathList.empty() || moving)) {
+        } else if(harvestingMode && (!pathList.empty() || moving
+                  || (familyActive && (nextSpotFound || hasPendingPathRequest())))) {
             // Successfully moving or have path - reset counter
             pathFailCounter = 0;
         } else if(respondable && !harvestingMode && attackMode != STOP) {
@@ -584,6 +589,7 @@ void RebelHarvester::setReturned()
 void RebelHarvester::move()
 {
     TrackedUnit::move();
+    const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
     
     // Log harvesters sitting on spice tiles
     static std::map<Uint32, int> onSpiceCounter;
@@ -599,8 +605,15 @@ void RebelHarvester::move()
 
                     if(tile->hasSpice()) {
 
+                        AchievementEvents::spice(getOwner(), tile);
                         int beforeTileType = tile->getType();
-                        spice += tile->harvestSpice();
+                        const bool healingSpice = familyActive && tile->isPaleLilacSpice();
+                        const FixPoint harvested = tile->harvestSpice();
+                        spice += harvested;
+                        if(healingSpice && harvested > 0
+                           && spiceHealingTick(currentGame->getGameCycleCount(), getObjectID())) {
+                            addHealth();
+                        }
                         int afterTileType = tile->getType();
 
                         if(beforeTileType != afterTileType) {
@@ -625,7 +638,7 @@ void RebelHarvester::move()
                 } else {
                     doReturn();
                 }
-            } else if(pathList.empty()) {
+            } else if(pathList.empty() && (!familyActive || (!nextSpotFound && !hasPendingPathRequest()))) {
                 // Stuck: in harvesting mode with a destination, but can't path there.
                 // If a carryall is coming to deliver us, preserve harvestingMode so
                 // checkPos() doesn't reset guardPoint/destination back to the old tile.
@@ -673,7 +686,7 @@ FixPoint RebelHarvester::extractSpice(FixPoint extractionSpeed)
 
 void RebelHarvester::setSpeeds()
 {
-    FixPoint speed = getMaxSpeed();
+    FixPoint speed = getMaxSpeed() * getMovementSpeedFactor();
 
     if(isBadlyDamaged()) {
         speed *= HEAVILYDAMAGEDSPEEDMULTIPLIER;

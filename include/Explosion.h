@@ -59,6 +59,9 @@ private:
     /// Serialized with the damage payload from SAVEGAMEVERSION 9849 so a flame that is
     /// still burning across a save keeps both its damage and its beneficiary.
     DeviationReward::Provenance provenance;
+    int extraFireCycles = 0;
+    bool fireExtensionGranted = false;
+    bool extendingFire = false;
 };
 
 

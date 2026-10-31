@@ -16,6 +16,7 @@
  */
 
 #include <Menu/CampaignStatsMenu.h>
+#include <Achievements/AchievementManager.h>
 
 #include <globals.h>
 
@@ -70,7 +71,10 @@ CampaignStatsMenu::CampaignStatsMenu(int level) : MenuBase()
 
     // set up window
     SDL_Texture *pBackground = pGFXManager->getUIGraphic(UI_GameStatsBackground);
-    setBackground(pBackground);
+    if(ModManager::instance().isTornieFamilyContentActive())
+        setBackground(pGFXManager->createFactionFrameBackground(UI_GameStatsBackground, localHouseID));
+    else
+        setBackground(pBackground);
     resize(getTextureSize(pBackground));
     if(showTaxStatistics) {
         // Reuse the original framed row artwork for all four groups instead
@@ -523,6 +527,8 @@ void CampaignStatsMenu::calculateScore(int level)
     }
 
     totalScore -= ((totalTime/60) + 1);
+    if(ModManager::instance().isTornieFamilyContentActive() && !currentGame->areCheatsEnabled())
+        achievements::AchievementManager::instance().campaignScore(totalScore);
 
     for(const UnitBase* pUnit : unitList) {
         if(pUnit->getItemID() == Unit_Harvester) {

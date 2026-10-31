@@ -31,6 +31,7 @@ class ObjectData;
 #include <AITeamInfo.h>
 #include <data.h>
 #include <Choam.h>
+#include <mod/RadarResearch.h>
 
 #include <players/Player.h>
 
@@ -54,8 +55,12 @@ public:
     void addPlayer(std::unique_ptr<Player> newPlayer);
     void configureNetworkPlayers(const std::vector<std::pair<std::string, std::string>>& desired);
     void configureCoopPlayers(const std::vector<std::pair<std::string, std::string>>& desired);
+    void configureCampaignCoopPlayers(const std::vector<std::pair<std::string, std::string>>& desired);
 
     inline int getHouseID() const { return houseID; }
+    /// Ownership stays on the runtime house; co-op duplicates retain their chosen faction rules.
+    int getFactionID() const;
+    static int factionForRuntimeHouse(int runtimeHouse);
     inline int getTeamID() const { return teamID; }
     /// The non-player owner of sandworms and crime troopers (see HOUSE_NATIVES).
     inline bool isNatives() const { return houseID == HOUSE_NATIVES; }
@@ -66,14 +71,14 @@ public:
     bool isAutoRepairEnabled() const { return autoRepairEnabled; }
     void setAutoRepairEnabled(bool enabled) { autoRepairEnabled = enabled; }
     /// Team 0 (anonymous houses) and the Natives house never die: neither is a side of the match.
-    inline bool isAlive() const { return (teamID == 0) || isNatives() || !(((numStructures - numItem[Structure_Wall]) <= 0) && (((numUnits - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Harvester] - numItem[Unit_RebelHarvester] - numItem[Unit_Frigate] - numItem[Unit_Sandworm] - numItem[Unit_AmbientAirplane] - numItem[Unit_AmbientHelicopter]) <= 0))); }
+    bool isAlive() const;
 
     inline bool hasCarryalls() const { return (numItem[Unit_Carryall] + numItem[Unit_ChemicalCarryall] > 0); }
     inline bool hasBarracks() const { return (numItem[Structure_Barracks] > 0); }
     inline bool hasIX() const { return (numItem[Structure_IX] > 0); }
     inline bool hasLightFactory() const { return (numItem[Structure_LightFactory] > 0); }
     inline bool hasHeavyFactory() const { return (numItem[Structure_HeavyFactory] > 0); }
-    inline bool hasRefinery() const { return (numItem[Structure_Refinery] + numItem[Structure_Worfinery] > 0); }
+    bool hasRefinery() const;
     inline bool hasRepairYard() const { return (numItem[Structure_RepairYard] > 0); }
     inline bool hasStarPort() const { return (numItem[Structure_StarPort] > 0); }
     inline bool hasLoveFactory() const { return (numItem[Structure_LoveFactory] > 0); }
@@ -89,6 +94,7 @@ public:
 
     inline int getNumStructures() const { return numStructures; };
     inline int getNumUnits() const { return numUnits; };
+    int getNumHarvesters() const;
     inline int getNumItems(int itemID) const { return (isStructure(itemID) || isUnit(itemID)) ? numItem[itemID] : 0; };
 
     inline int getCapacity() const { return capacity; }
@@ -176,33 +182,19 @@ public:
         stop city crime from raising its troopers.
         \return true, if the limit is already reached, false if building further ground units is allowed
     */
-    inline bool isGroundUnitLimitReached() const {
-        const int limit = getMaxUnits();
-        if (limit == 0) return false;  // 0 = unlimited units
-        int numGroundUnit = numUnits - numItem[Unit_Soldier] - numItem[Unit_Trooper] - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Ornithopter] - numItem[Unit_Sandworm];
-        return (numGroundUnit + (numItem[Unit_Soldier]+2)/3 + (numItem[Unit_Trooper]+2)/3  >= limit);
-    };
+    bool isGroundUnitLimitReached() const;
 
     /**
         This function checks if the limit for infantry units is already reached. Infantry units are only counted as 1/3.
         \return true, if the limit is already reached, false if building further infantry units is allowed
     */
-    inline bool isInfantryUnitLimitReached() const {
-        const int limit = getMaxUnits();
-        if (limit == 0) return false;  // 0 = unlimited units
-        int numGroundUnit = numUnits - numItem[Unit_Soldier] - numItem[Unit_Trooper] - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Ornithopter] - numItem[Unit_Sandworm];
-        return (numGroundUnit + numItem[Unit_Soldier]/3 + numItem[Unit_Trooper]/3  >= limit);
-    };
+    bool isInfantryUnitLimitReached() const;
 
     /**
         This function checks if the limit for air units is already reached.
         \return true, if the limit is already reached, false if building further air units is allowed
     */
-    inline bool isAirUnitLimitReached() const {
-        const int limit = getMaxUnits();
-        if (limit == 0) return false;  // 0 = unlimited units
-        return (numItem[Unit_Carryall] + numItem[Unit_ChemicalCarryall] + numItem[Unit_Ornithopter] >= 11*std::max(limit,25)/25);
-    }
+    bool isAirUnitLimitReached() const;
 
     /**
         Check the appropriate house limit for a specific unit type.
@@ -217,7 +209,7 @@ public:
     inline bool isHarvesterLimitReached() const {
         const int limit = getMaxHarvesters();
         if (limit == 0) return false;  // 0 = unlimited harvesters
-        return ((numItem[Unit_Harvester] + numItem[Unit_RebelHarvester]) >= limit);
+        return getNumHarvesters() >= limit;
     }
 
     inline Choam& getChoam() { return choam; };
@@ -269,12 +261,30 @@ public:
     /// absolute credit ceiling.
     void returnCredits(FixPoint newCredits, FixPoint fromStartingCredits = 0);
     FixPoint takeCredits(FixPoint amount);
+    void addUnstoredCredits(FixPoint amount);
+    void recordBuildingSale(int refund);
+    Uint32 getStructuresSold() const { return structuresSold; }
+    Uint32 getSaleCredits() const { return saleCredits; }
 
     void printStat() const;
 
     void updateBuildLists();
 
     void update();
+    bool hasRadarResearch(int kind) const;
+    bool hasRadarSpecialization(HOUSETYPE identity) const;
+    bool canStartRadarResearch(int kind) const;
+    bool startRadarResearch(int kind);
+    void updateRadarResearch();
+    int radarUnitPrice(int item, int price) const;
+    FixPoint radarSpeedFactor(int item) const;
+    int radarSightBonus(int item) const;
+    int radarWeaponRangeBonus(int item, int base) const;
+    int radarAttackDamage(int item, int damage) const;
+    int getRadarResearchActive() const { return radarResearch.active; }
+    int getRadarResearchRemaining() const { return radarResearch.remaining; }
+    void saveRadarResearch(OutputStream& stream) const;
+    void loadRadarResearch(InputStream& stream);
 
     void incrementUnits(int itemID, bool addMilitaryValue = true);
     void decrementUnits(int itemID);
@@ -291,7 +301,7 @@ public:
     */
     void noteDamageLocation(ObjectBase* pObject, int damage, Uint32 damagerID);
 
-    void informWasBuilt(ObjectBase* pObject);
+    void informWasBuilt(ObjectBase* pObject, bool produced = true);
     void informHasKilled(Uint32 itemID);
     void informHasDamaged(Uint32 itemID, Uint32 damage);
 
@@ -300,8 +310,8 @@ public:
 
     void freeHarvester(int xPos, int yPos);
     void freeHarvester(const Coord& coord) { freeHarvester(coord.x, coord.y); };
-    StructureBase* placeStructure(Uint32 builderID, int itemID, int xPos, int yPos, bool byScenario = false, bool bForcePlacing = false);
-    UnitBase* createUnit(int itemID, bool byScenario = false);
+    StructureBase* placeStructure(Uint32 builderID, int itemID, int xPos, int yPos, bool byScenario = false, bool bForcePlacing = false, int productionHouseID = HOUSE_INVALID);
+    UnitBase* createUnit(int itemID, bool byScenario = false, int productionHouseID = HOUSE_INVALID);
     UnitBase* placeUnit(int itemID, int xPos, int yPos, bool byScenario = false);
 
     Coord getCenterOfMainBase() const;
@@ -317,7 +327,7 @@ public:
 
 protected:
     bool autoRepairEnabled = false;
-    void decrementHarvesters();
+    void decrementHarvesters(int itemID);
 
     /**
         Books as much of \a amount as the refinery/silo storage can still hold.
@@ -348,6 +358,9 @@ protected:
     CombatReward::Totals combatRewards[Num_ItemID];
     Sint32 numItemDamageInflicted[Num_ItemID]; /// Amount of damage inflicted by a specific unit type owned by the player
     DeviationReward::HouseCounters deviationCounters; ///< measured Deviator contribution (SAVEGAMEVERSION 9849)
+    radar::State radarResearch;
+    Uint32 structuresSold = 0;
+    Uint32 saleCredits = 0;
 
     int capacity;             ///< Total spice capacity
     int producedPower;        ///< Power prodoced by this player

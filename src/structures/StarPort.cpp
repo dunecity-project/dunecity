@@ -27,6 +27,7 @@
 #include <Map.h>
 #include <SoundPlayer.h>
 #include <units/HarvesterHelpers.h>
+#include <mod/ModManager.h>
 
 #include <players/HumanPlayer.h>
 #include <players/QuantBot.h>
@@ -132,10 +133,12 @@ void StarPort::save(OutputStream& stream) const {
 void StarPort::doBuildRandom() {
     if(!buildList.empty()) {
         int item2Produce = ItemID_Invalid;
+        const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
 
         do {
             item2Produce = std::next(buildList.begin(), currentGame->randomGen.rand(0, static_cast<Sint32>(buildList.size())-1))->itemID;
-        } while((item2Produce == Unit_Harvester) || (item2Produce == Unit_MCV) || isCarryallUnit(item2Produce));
+        } while((familyActive ? isHarvesterLikeUnit(item2Produce) : item2Produce == Unit_Harvester)
+                || item2Produce == Unit_MCV || isCarryallUnit(item2Produce));
 
         doProduceItem(item2Produce);
     }
@@ -268,16 +271,17 @@ void StarPort::updateBuildList() {
     std::list<BuildItem>::iterator iter = buildList.begin();
 
     Choam& choam = owner->getChoam();
+    const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
 
     for(int i = 0; itemOrder[i] != ItemID_Invalid; ++i) {
 
-        const ObjectData::ObjectDataStruct& objData = currentGame->objectData.data[itemOrder[i]][originalHouseID];
+        const ObjectData::ObjectDataStruct& objData = currentGame->objectData.data[itemOrder[i]][getTechnologyHouseID()];
 
         // Exclude ornithopters from starport in campaign games (can still build from factory)
         bool isOrnithopterInCampaign = (itemOrder[i] == Unit_Ornithopter && isCampaignGameType(currentGame->gameType));
 
         if(itemOrder[i] != Unit_ChemicalCarryall && objData.enabled && (choam.getNumAvailable(itemOrder[i]) != INVALID) && !isOrnithopterInCampaign) {
-            insertItem(buildList, iter, itemOrder[i], choam.getPrice(itemOrder[i]));
+            insertItem(buildList, iter, itemOrder[i], choam.getPrice(itemOrder[i], !familyActive));
         } else {
             removeItem(buildList, iter, itemOrder[i]);
         }
@@ -285,7 +289,7 @@ void StarPort::updateBuildList() {
 }
 
 bool StarPort::deploySingleUnit(Uint32 unitItemID, bool announce) {
-    UnitBase* newUnit = getOwner()->createUnit(unitItemID);
+    UnitBase* newUnit = getOwner()->createUnit(unitItemID, false, getTechnologyHouseID());
     if(newUnit == nullptr) {
         return false;
     }
@@ -327,7 +331,7 @@ bool StarPort::deploySingleUnit(Uint32 unitItemID, bool announce) {
         }
     }
 
-    newUnit->getOwner()->informWasBuilt(newUnit);
+    newUnit->getOwner()->informWasBuilt(newUnit, false);
     return true;
 }
 
@@ -341,6 +345,14 @@ void StarPort::deployOrderedItem(Uint32 orderedItemID) {
     } else if(unitItemID == Unit_Troopers) {
         unitItemID = Unit_Trooper;
         count = 3;
+    } else if(ModManager::instance().isTornieFamilyContentActive()) {
+        if(unitItemID == Unit_Infantry5) {
+            unitItemID = Unit_Soldier;
+            count = 5;
+        } else if(unitItemID == Unit_Troopers5) {
+            unitItemID = Unit_Trooper;
+            count = 5;
+        }
     }
 
     for(int i = 0; i < count; i++) {

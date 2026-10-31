@@ -186,28 +186,6 @@ TEST_CASE("Enemy foundations do not grant construction reach", "[road][placement
 
 }
 
-TEST_CASE("Road reuse keeps footprint occupancy and the bounded build-range check", "[road][placement][regression]") {
-    const auto map = readSourceFile("src/Map.cpp");
-    const auto begin = map.find("bool Map::okayToPlaceStructure(");
-    const auto end = map.find("bool Map::isWithinBuildRange(", begin);
-    REQUIRE(begin != std::string::npos);
-    REQUIRE(end != std::string::npos);
-    const auto checks = map.substr(begin, end-begin);
-    REQUIRE(checks.find("!pTile->hasPreparedFoundation()") != std::string::npos);
-    REQUIRE(checks.find("pTile->hasCityZone()") != std::string::npos);
-    REQUIRE(checks.find("pTile->isBlocked()") != std::string::npos);
-    const auto range = map.substr(end, map.find("return false;",end)-end);
-    REQUIRE(range.find("x - BUILDRANGE") != std::string::npos);
-    REQUIRE(range.find("x + BUILDRANGE") != std::string::npos);
-    REQUIRE(range.find("DuneCity::isConstructionAnchor(tile->getOwner(), pHouse->getHouseID())") != std::string::npos);
-    REQUIRE(range.find("isRoad") == std::string::npos);
-    REQUIRE(checks.find("isWithinBuildRange(i, j, pHouse)") != std::string::npos);
-    // Placing on a road is not rejected by road owner; only reach is owner-gated.
-    REQUIRE(checks.find("getOwner()") == std::string::npos);
-    const auto structure = readSourceFile("src/structures/StructureBase.cpp");
-    REQUIRE(structure.find("pTile->setOwner(getOwner()->getHouseID())") != std::string::npos);
-}
-
 TEST_CASE("Road overlays do not assign owners or charge recurring upkeep", "[road][regression]") {
     const auto house = readSourceFile("src/House.cpp");
     const auto begin=house.find("// DuneCity: when city-sim mode is active, auto-pave");

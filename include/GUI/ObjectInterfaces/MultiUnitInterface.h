@@ -111,7 +111,7 @@ protected:
         destructButton.setOnClick(std::bind(&MultiUnitInterface::onDestruct, this));
 
         healButton.setVisible(false);
-        if(ModManager::instance().isTornieContentActive()) {
+        if(ModManager::instance().isTornieFamilyContentActive()) {
 
             healButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Heal)});
             healButton.setTooltipText(_("Heal an allied unit"));
@@ -199,6 +199,17 @@ protected:
         retreatButton.setToggleButton(true);
         retreatButton.setOnClick(std::bind(&MultiUnitInterface::onRetreat, this));
         buttonVBox.addWidget(&retreatButton,26);
+
+        if(ModManager::instance().isTornieFamilyContentActive()) {
+            buttonVBox.addWidget(VSpacer::create(buttonGap));
+            sabotageButton.setText(_("Sabotage"));
+            sabotageButton.setTextColor(color);
+            sabotageButton.setTooltipText(_("Infantry will hunt enemy buildings to capture them"));
+            sabotageButton.setToggleButton(true);
+            sabotageButton.setOnClick(std::bind(&MultiUnitInterface::onSabotage, this));
+            buttonVBox.addWidget(&sabotageButton, 26);
+        }
+        sabotageButton.setVisible(false);
 
         buttonVBox.addWidget(VSpacer::create(buttonGap));
         buttonVBox.addWidget(Spacer::create());
@@ -300,13 +311,17 @@ protected:
         setAttackMode(RETREAT);
     }
 
+    void onSabotage() {
+        setAttackMode(SABOTAGE);
+    }
+
     void setAttackMode(ATTACKMODE newAttackMode) {
 
         UnitBase* pLastUnit = nullptr;
         for(const Uint32 selectedUnitID : currentGame->getSelectedList()) {
             ObjectBase* pObject = currentGame->getObjectManager().getObject(selectedUnitID);
             UnitBase* pUnit = dynamic_cast<UnitBase*>(pObject);
-            if(pUnit != nullptr) {
+            if(pUnit != nullptr && (newAttackMode != SABOTAGE || pUnit->canCaptureStructures())) {
                 pLastUnit = pUnit;
                 pUnit->handleSetAttackModeClick(newAttackMode);
             }
@@ -344,6 +359,7 @@ protected:
         bool bAmbush = true;
         bool bHunt = true;
         bool bRetreat = true;
+        bool bSabotage = true;
 
         bool bShowAttack = false;
         bool bShowHeal = false;
@@ -370,6 +386,7 @@ protected:
                 bAmbush = bAmbush && (attackMode == AMBUSH);
                 bHunt = bHunt && (attackMode == HUNT);
                 bRetreat = bRetreat && (attackMode == RETREAT);
+                if(pUnit->canCaptureStructures()) bSabotage = bSabotage && attackMode == SABOTAGE;
 
                 if(pUnit->canHeal()) {
                     bShowHeal = true;
@@ -387,12 +404,8 @@ protected:
                     bShowRepair = true;
                 }
 
+                if(pUnit->canCaptureStructures()) bShowCapture = true;
                 switch(pUnit->getItemID()) {
-                    case Unit_Soldier:
-                    case Unit_Trooper: {
-                        bShowCapture = true;
-                    } break;
-
                     case Unit_MCV: {
                         bShowDeploy = true;
                     } break;
@@ -415,6 +428,8 @@ protected:
         attackButton.setVisible(bShowAttack);
         healButton.setVisible(bShowHeal);
         captureButton.setVisible(bShowCapture);
+        sabotageButton.setVisible(ModManager::instance().isTornieFamilyContentActive() && bShowCapture);
+        sabotageButton.setToggleState(bSabotage);
         returnButton.setVisible(bShowReturn);
         deployButton.setVisible(bShowDeploy);
         destructButton.setVisible(bShowDevastate);
@@ -462,6 +477,7 @@ protected:
     TextButton      ambushButton;
     TextButton      huntButton;
     TextButton      retreatButton;
+    TextButton      sabotageButton;
 };
 
 #endif //MULTIUNITINTERFACE_H

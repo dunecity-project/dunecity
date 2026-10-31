@@ -621,7 +621,7 @@ void ConstructionYard::updateReservedPlacement() {
 }
 
 void ConstructionYard::updateStructureSpecificStuff() {
-    if(!ModManager::instance().isTornieContentActive()
+    if(!ModManager::instance().isTornieFamilyContentActive()
        || currentGame == nullptr || getOwner() == nullptr || !getOwner()->isAI()
        || currentGame->techLevel < 9
        || getOwner()->getNumItems(Structure_LoveFactory) > 0

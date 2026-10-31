@@ -96,6 +96,7 @@ private:
     std::array<TGroup, 9> group;
 
     int house;
+    int campaignHouseCount;
     unsigned int lastScenario;
     Uint32 alreadyPlayedRegions;
     sdl2::surface_ptr mapSurface;

@@ -27,20 +27,35 @@
 #define DUNESFILLER 1
 
 static bool isGeneratorThinSpice(TERRAINTYPE type) {
-    return type == Terrain_Spice || type == Terrain_GreenSpice || type == Terrain_RedSpice;
+    return type == Terrain_Spice || type == Terrain_GreenSpice || type == Terrain_RedSpice
+        || type == Terrain_PaleLilacSpice || type == Terrain_WhiteSpice;
 }
 
 static bool isGeneratorSpice(TERRAINTYPE type) {
     return type == Terrain_Spice || type == Terrain_ThickSpice
         || type == Terrain_GreenSpice || type == Terrain_ThickGreenSpice
-        || type == Terrain_RedSpice || type == Terrain_ThickRedSpice;
+        || type == Terrain_RedSpice || type == Terrain_ThickRedSpice
+        || type == Terrain_PaleLilacSpice || type == Terrain_ThickPaleLilacSpice
+        || type == Terrain_WhiteSpice || type == Terrain_ThickWhiteSpice;
 }
 
 static TERRAINTYPE getGeneratorThickSpice(TERRAINTYPE type) {
     switch(type) {
         case Terrain_GreenSpice: return Terrain_ThickGreenSpice;
         case Terrain_RedSpice:   return Terrain_ThickRedSpice;
+        case Terrain_PaleLilacSpice: return Terrain_ThickPaleLilacSpice;
+        case Terrain_WhiteSpice: return Terrain_ThickWhiteSpice;
         default:                 return Terrain_ThickSpice;
+    }
+}
+
+static TERRAINTYPE getGeneratorSpiceBloom(TERRAINTYPE type) {
+    switch(type) {
+        case Terrain_GreenSpice: return Terrain_GreenSpiceBloom;
+        case Terrain_RedSpice: return Terrain_RedSpiceBloom;
+        case Terrain_PaleLilacSpice: return Terrain_PaleLilacSpiceBloom;
+        case Terrain_WhiteSpice: return Terrain_WhiteSpiceBloom;
+        default: return Terrain_SpiceBloom;
     }
 }
 
@@ -48,8 +63,8 @@ class MapGenerator {
 
 public:
 
-    MapGenerator(int sizeX, int sizeY, int randSeed, int rockfields = ROCKFIELDS, int spicefields = SPICEFIELDS, MirrorMode mirrorMode = MirrorModeNone, int greenSpicefields = 0, int redSpicefields = 0)
-     : map(sizeX, sizeY), randGen(randSeed), rockfields(rockfields), spicefields(spicefields), greenSpicefields(greenSpicefields), redSpicefields(redSpicefields) {
+    MapGenerator(int sizeX, int sizeY, int randSeed, int rockfields, int spicefields, MirrorMode mirrorMode, int greenSpicefields, int redSpicefields, TERRAINTYPE greenSpiceTerrain, TERRAINTYPE redSpiceTerrain)
+     : map(sizeX, sizeY), randGen(randSeed), rockfields(rockfields), spicefields(spicefields), greenSpicefields(greenSpicefields), redSpicefields(redSpicefields), greenSpiceTerrain(greenSpiceTerrain), redSpiceTerrain(redSpiceTerrain) {
          mapMirror = MapMirror::createMapMirror(mirrorMode, sizeX, sizeY);
     }
 
@@ -90,14 +105,14 @@ public:
             thickThickSpiceSpots(Terrain_Spice, Terrain_ThickSpice);
         }
 
-        addSpiceFields(Terrain_GreenSpice, greenSpicefields);
-        addSpiceFields(Terrain_RedSpice, redSpicefields);
+        addSpiceFields(greenSpiceTerrain, greenSpicefields);
+        addSpiceFields(redSpiceTerrain, redSpicefields);
 
         if(greenSpicefields > 0) {
-            addSpiceBlooms(randGen.rand(0, greenSpicefields), Terrain_GreenSpiceBloom);
+            addSpiceBlooms(randGen.rand(0, greenSpicefields), getGeneratorSpiceBloom(greenSpiceTerrain));
         }
         if(redSpicefields > 0) {
-            addSpiceBlooms(randGen.rand(0, redSpicefields), Terrain_RedSpiceBloom);
+            addSpiceBlooms(randGen.rand(0, redSpicefields), getGeneratorSpiceBloom(redSpiceTerrain));
         }
 
         // Spice fields
@@ -405,6 +420,8 @@ private:
     int spicefields;
     int greenSpicefields;
     int redSpicefields;
+    TERRAINTYPE greenSpiceTerrain;
+    TERRAINTYPE redSpiceTerrain;
 
     std::unique_ptr<MapMirror>      mapMirror;
 };
@@ -418,8 +435,8 @@ private:
     \param spicefields  num spice fields to add
     \return the generated map
 */
-MapData generateRandomMap(int sizeX, int sizeY, int randSeed, int rockfields, int spicefields, MirrorMode mirrorMode, int greenSpicefields, int redSpicefields) {
-    MapGenerator mapGenerator(sizeX, sizeY, randSeed, rockfields, spicefields, mirrorMode, greenSpicefields, redSpicefields);
+MapData generateRandomMap(int sizeX, int sizeY, int randSeed, int rockfields, int spicefields, MirrorMode mirrorMode, int greenSpicefields, int redSpicefields, TERRAINTYPE greenSpiceTerrain, TERRAINTYPE redSpiceTerrain) {
+    MapGenerator mapGenerator(sizeX, sizeY, randSeed, rockfields, spicefields, mirrorMode, greenSpicefields, redSpicefields, greenSpiceTerrain, redSpiceTerrain);
 
     mapGenerator.generateMap();
 

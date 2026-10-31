@@ -23,6 +23,26 @@ cmake --build build -j$(nproc)
 
 The Tornie Mod is **enabled by default** at `mods/Tornie/`. To switch mods (vanilla / dunecity / Tornie), use the in-game **Mods** menu.
 
+### Tornie-family campaigns and co-op
+
+Tornie, Jericho and ArcaKev offer twelve playable factions; their Lite editions use the six-house roster declared by the mod. Derived Workshop copies retain their base edition's roster. Full-family custom games support twelve house slots (humans plus AI); Internet rooms retain the existing eight-human-peer limit. Natives remain a non-player faction.
+
+In the campaign house screen, **Online co-op** keeps DuneCity's existing shared-house campaign. **Online faction co-op** is an additional Tornie-family mode with two or four allied bases. Archon mode adds a second controller to each of four bases, for up to eight players over direct peer-to-peer connections. Allies can choose the same faction or a campaign's authored support-enemy faction without replacing that enemy.
+
+Faction co-op uses the mod's `campaign/coop` mission variants, shared harvest objectives and allied reinforcements. Its setup offers +5 and +10 units for each active enemy, optional allied control/building, Chaos Mode, and Easy Mode (starts at mission two and benefits every active ally). Progress and resumable checkpoints are stored under the profile's `coop` directory, separately from solo campaign progression.
+
+**Extras → Achievements** shows the 73 offline awards. The local profile and run statistics are observational only: achievements do not change simulation state, randomness, multiplayer commands or game rules. The new faction, campaign and achievement behavior is restricted to Tornie-family content; other mods keep their existing selection and lobby limits.
+
+For native release QA, `tests/ai/tornie-gameplay-matrix.py --results <directory>` schedules every edition's data-defined houses at missions 001, 011, 020, 021 and 022, plus 25-minute Hard/Brutal custom games. Submit this batch through `dunecity-queue` on managed hosts. Its CSV evidence includes mission/region identities, actual production and combat damage, coloured-spice coverage and deterministic checkpoints. Tornie/Tornie Lite use the revised 546 opponent counts; Jericho/ArcaKev retain their authored 545 campaigns. Quota introductions may finish before ten minutes, and enemies without an authored factory are not expected to manufacture units. `--categories isolation` runs fixed seeds in Vanilla, Dune City and Dune2R; `--baseline-root <main-checkout> --build-dir <main-build>` compares an existing read-only main build without modifying that checkout.
+
+The `tornie_object_state_roundtrip` CTest also destroys a fully occupied Doublefinery after save/load, checking that both bay occupants are removed and all ten tiles of its five-by-two footprint receive the correct rubble without blocking the map.
+
+In Tornie-family content, an explicit human attack order for either Ornithopter hull keeps its selected target, including an enemy harvester, until that target is released or destroyed; the aircraft then resumes Hunt. `tornie_gameplay_state` covers this command behavior together with manufacturing, combat, sales, research and deterministic continuation of live family state.
+
+The matrix retains actual production counts and natural victory/defeat times rather than treating a ten-minute cap as ten minutes played. Factory-use assertions require a powered, funded, legal unit-production option; original campaigns that require a manual opening are explicitly annotated, not converted into new campaign recipes. These functional checks are not a campaign-balance certification.
+
+Two-process direct-play QA uses `tests/network/run-late-join-probe.py --build-dir <native-build> --output-dir <fresh-results> --tornie-case custom` (or `--tornie-case campaign`). Both native players must agree on settings, executed human commands and every 300-cycle digest through cycle 3600; the campaign uses distinct Atreides and Mercenary bases with the authored enemy roles retained. These fixtures use direct WebRTC with no TURN or gameplay relay. A settled match's signaling-service loss timeout includes its intentional idle polling interval plus the normal failure grace, so a healthy poll is not reported as an outage.
+
 ---
 
 ## What's in the box
@@ -32,7 +52,7 @@ The Tornie Mod is **enabled by default** at `mods/Tornie/`. To switch mods (vani
 | Dune Legacy engine (combat, units, structures) | ✅ Stable | Upstream v0.96 base + 576+ Tornie commits |
 | 16-phase Micropolis city simulation | ✅ Integrated | Runs every tick alongside combat |
 | 8th house **HOUSE_REBELS** | ✅ Stable | Dark grey tint from `Custom_IBM.PAL` |
-| Tornie Mod (campaigns, units, sprites) | ✅ 260 PAK entries | 8 house campaigns × 22 scenarios + custom data |
+| Tornie-family content | Integrated | Twelve-house full editions, six-house Lite editions, solo and separate-faction co-op campaigns |
 | Per-house color tint (units/structures) | ✅ v1.0.426 | Vanilla v1.0.305 path + Custom_IBM.PAL for REBELS |
 | Custom units (FlameTank, EliteSiegeTank, RocketTrike, etc.) | ✅ Loaded | 8-direction palette-indexed strips |
 | Discord Rich Presence | ✅ Optional | Auto-shows current mod + version |

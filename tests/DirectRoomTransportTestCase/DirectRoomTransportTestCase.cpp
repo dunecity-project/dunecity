@@ -771,6 +771,31 @@ TEST_CASE("A started match outlives the signaling service", "[direct][resilience
     REQUIRE(harness.transport->setRoomPhase(RoomRelay::Phase::Match));
     harness.drain();
 
+    SECTION("a healthy settled poll has time to answer after its scheduled interval") {
+        harness.pump(2, 1); // Send and acknowledge the pending match-phase request.
+        harness.drain();
+        harness.service->silent = true;
+        harness.pump(1, 30000); // The next settled-match poll is now due.
+        harness.pump(1, 100);   // A normal round trip must not report an outage.
+        REQUIRE_FALSE(harness.transport->signalingLost());
+        for(const auto& event : harness.drain())
+            REQUIRE(event.type != RoomSessionTransport::Event::Type::Diagnostic);
+
+        harness.service->silent = false;
+        harness.pump(1, 200);
+        REQUIRE_FALSE(harness.transport->signalingLost());
+        for(const auto& event : harness.drain())
+            REQUIRE(event.type != RoomSessionTransport::Event::Type::Diagnostic);
+
+        // Do not hide a real outage: the existing grace still expires, while
+        // gameplay continues directly between the connected players.
+        harness.service->silent = true;
+        harness.pump(40, 5000);
+        REQUIRE(harness.transport->signalingLost());
+        REQUIRE(harness.transport->isJoined());
+        REQUIRE(harness.transport->connectedPeerCount() == 1);
+    }
+
     SECTION("the service simply stops answering") {
         harness.service->silent = true;
         // Far beyond any session expiry the service might apply.

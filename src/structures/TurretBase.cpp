@@ -24,6 +24,7 @@
 #include <House.h>
 #include <Bullet.h>
 #include <SoundPlayer.h>
+#include <mod/ModManager.h>
 
 #include <players/HumanPlayer.h>
 
@@ -77,7 +78,7 @@ void TurretBase::updateStructureSpecificStuff() {
     if(target && (target.getObjPointer() != nullptr)) {
         if(!canAttack(target.getObjPointer()) || !targetInWeaponRange()) {
             // MULTIPLAYER-SAFE: Track when turret loses ornithopter target
-            if(getItemID() == Structure_RocketTurret && target.getObjPointer()->getItemID() == Unit_Ornithopter) {
+            if(getItemID() == Structure_RocketTurret && isOrnithopterUnit(target.getObjPointer()->getItemID())) {
                 currentGame->combatStats.rocketTurretLosesOrniTarget++;
             }
             
@@ -124,7 +125,7 @@ void TurretBase::updateStructureSpecificStuff() {
                 }
                 
                 // MULTIPLAYER-SAFE: Track firing opportunities for rocket turrets vs ornithopters
-                if(getItemID() == Structure_RocketTurret && target.getObjPointer()->getItemID() == Unit_Ornithopter) {
+                if(getItemID() == Structure_RocketTurret && isOrnithopterUnit(target.getObjPointer()->getItemID())) {
                     if(shouldFire) {
                         currentGame->combatStats.orniInRangeCorrectAngle++;
                     } else {
@@ -153,7 +154,7 @@ void TurretBase::updateStructureSpecificStuff() {
         const ObjectBase* newTarget = findTarget();
         
         // MULTIPLAYER-SAFE: Track stats unconditionally (doesn't affect game logic)
-        if(getItemID() == Structure_RocketTurret && newTarget && newTarget->getItemID() == Unit_Ornithopter) {
+        if(getItemID() == Structure_RocketTurret && newTarget && isOrnithopterUnit(newTarget->getItemID())) {
             currentGame->combatStats.rocketTurretTargetsOrni++;
         }
         
@@ -216,7 +217,7 @@ void TurretBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
 }
 
 void TurretBase::turnLeft() {
-    angle += currentGame->objectData.data[itemID][originalHouseID].turnspeed;
+    angle += currentGame->objectData.data[itemID][getTechnologyHouseID()].turnspeed;
     if (angle >= 7.5_fix)    //must keep drawnangle between 0 and 7
         angle -= 8;
     drawnAngle = lround(angle);
@@ -224,7 +225,7 @@ void TurretBase::turnLeft() {
 }
 
 void TurretBase::turnRight() {
-    angle -= currentGame->objectData.data[itemID][originalHouseID].turnspeed;
+    angle -= currentGame->objectData.data[itemID][getTechnologyHouseID()].turnspeed;
     if(angle < -0.5_fix) {
         //must keep angle between 0 and 7
         angle += 8;
@@ -238,9 +239,11 @@ void TurretBase::attack() {
         Coord centerPoint = getCenterPoint();
         ObjectBase* pObject = target.getObjPointer();
         Coord targetCenterPoint = pObject->getClosestCenterPoint(location);
+        int damage = currentGame->objectData.data[itemID][getTechnologyHouseID()].weapondamage;
+        if(ModManager::instance().isTornieFamilyContentActive()) damage = owner->radarAttackDamage(itemID, damage);
 
         bulletList.push_back( new Bullet( objectID, &centerPoint, &targetCenterPoint,bulletType,
-                                               currentGame->objectData.data[itemID][originalHouseID].weapondamage,
+                                               damage,
                                                pObject->isAFlyingUnit(),
                                                pObject) );
 

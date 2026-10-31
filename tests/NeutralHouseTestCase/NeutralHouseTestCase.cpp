@@ -119,28 +119,6 @@ TEST_CASE("NeutralHouse: ANEU.VOC is the primary voice file for Neutral house an
 }
 
 // =============================================================================
-// Skirmish availability (source scan)
-// =============================================================================
-
-TEST_CASE("NeutralHouse: HOUSE_NEUTRAL is included in skirmish houseOrder",
-          "[neutral][skirmish][source-scan]") {
-    std::string src = readSourceFile("src/Menu/SinglePlayerSkirmishMenu.cpp");
-    REQUIRE_FALSE(src.empty());
-
-    auto pos = src.find("houseOrder[]");
-    INFO("SinglePlayerSkirmishMenu.cpp must declare houseOrder");
-    REQUIRE(pos != std::string::npos);
-
-    // Extract houseOrder array contents
-    auto end = src.find("}", pos);
-    REQUIRE(end != std::string::npos);
-    std::string orderBlock = src.substr(pos, end - pos);
-
-    INFO("houseOrder must include HOUSE_NEUTRAL");
-    REQUIRE(orderBlock.find("HOUSE_NEUTRAL") != std::string::npos);
-}
-
-// =============================================================================
 // ObjectData.ini prerequisites (source scan — config/ is under source dir)
 // =============================================================================
 

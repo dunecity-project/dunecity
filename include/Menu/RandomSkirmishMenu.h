@@ -94,6 +94,7 @@ private:
     /// Allies or enemies moved: the other one gives way so their sum stays within the cap.
     void onPlayersChanged(bool alliesMoved = true);
     void onModChanged();
+    void refreshFamilyRoster();
     /// Spectate toggled: the AI that plays the watched house is chosen only while watching.
     void onSpectateChanged();
     /// The mod selected in the Mod box, or "" when none is listed.
@@ -108,6 +109,8 @@ private:
     void addHeader(int column, int row, const std::string& caption);
 
     int houseCount = 8;
+    bool tornieFamily = false;
+    std::string rosterMod;
     bool multiplayer = false;
     std::string hostMod;                     ///< multiplayer: the mod the hosted game plays
     std::string createdMap;

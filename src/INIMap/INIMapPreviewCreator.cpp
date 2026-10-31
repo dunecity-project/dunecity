@@ -9,6 +9,8 @@
 #include <misc/format.h>
 #include <misc/exceptions.h>
 #include <misc/FrameYield.h>
+#include <misc/SpiceGeneration.h>
+#include <INIMap/SpiceVariants.h>
 
 #include <mmath.h>
 #include <sand.h>
@@ -34,6 +36,8 @@ INIMapPreviewCreator::~INIMapPreviewCreator() = default;
 */
 sdl2::surface_ptr INIMapPreviewCreator::createMinimapImageOfMap(int borderWidth, Uint32 borderColor) {
     checkFeatures();
+    const unsigned spiceMask = activeSpiceVariantMask();
+    const int variantPercent = inifile->getIntValue("MAP", "SpiceVariantPercent", 0);
 
     auto pMinimap = sdl2::surface_ptr{ SDL_CreateRGBSurface(0, 128+2*borderWidth, 128+2*borderWidth, SCREEN_BPP, RMASK, GMASK, BMASK, AMASK) };
     if(pMinimap == nullptr) {
@@ -140,6 +144,31 @@ sdl2::surface_ptr INIMapPreviewCreator::createMinimapImageOfMap(int borderWidth,
             }
         }
 
+        std::string spiceVariants;
+        if(spiceMask != 0 && variantPercent > 0) {
+            spiceVariants.assign(static_cast<size_t>(sizeX) * sizeY, '-');
+            for(int y = 0; y < sizeY; ++y) {
+                for(int x = 0; x < sizeX; ++x) {
+                    const int type = SeedMap[(y + logicalOffsetY) * 64 + x + logicalOffsetX] >> 4;
+                    spiceVariants[static_cast<size_t>(y) * sizeX + x] = type == 0xb ? '~' : type == 0xc ? '+' : '-';
+                }
+            }
+            for(const char* key : {"Bloom", "Special"}) {
+                for(const auto& value : splitStringToStringVector(inifile->getStringValue("MAP", key))) {
+                    int position;
+                    if(!parseString(value, position)) continue;
+                    const int x = position % logicalSizeX - logicalOffsetX;
+                    const int y = position / logicalSizeX - logicalOffsetY;
+                    if(x >= 0 && x < sizeX && y >= 0 && y < sizeY) {
+                        spiceVariants[static_cast<size_t>(y) * sizeX + x] = '-';
+                    }
+                }
+            }
+            spiceVariants = SpiceVariants::apply(std::move(spiceVariants), sizeX, variantPercent,
+                static_cast<uint32_t>(inifile->getIntValue("MAP", "SpiceVariantSeed", 0)),
+                inifile->getIntValue("MAP", "SpiceVariantVersion", 1));
+        }
+
         for(int y = 0; y < sizeY; y++) {
 #ifdef __EMSCRIPTEN__
             // Browser build: this preview render runs inside a click handler
@@ -186,6 +215,10 @@ sdl2::surface_ptr INIMapPreviewCreator::createMinimapImageOfMap(int borderWidth,
                         // Thick spice
                         color = COLOR_THICKSPICE;
                     } break;
+                }
+                if(!spiceVariants.empty()) {
+                    const auto type = spiceTerrainForMapChar(spiceVariants[static_cast<size_t>(y) * sizeX + x]);
+                    if(type != Terrain_Sand) color = getColorByTerrainType(allowedSpiceTerrain(type, spiceMask));
                 }
 
                 for(int i=0;i<scale;i++) {
@@ -269,6 +302,8 @@ sdl2::surface_ptr INIMapPreviewCreator::createMinimapImageOfMap(int borderWidth,
         scaleInfo.offsetY += borderWidth;
 
         std::vector<Uint32> tileColors(sizeX * sizeY, MapRGBA(pMinimap->format, COLOR_BLACK));
+        std::string spiceVariants;
+        if(spiceMask != 0 && variantPercent > 0) spiceVariants.assign(static_cast<size_t>(sizeX) * sizeY, '-');
 
         for(int y=0;y<sizeY;y++) {
 #ifdef __EMSCRIPTEN__
@@ -320,35 +355,20 @@ sdl2::surface_ptr INIMapPreviewCreator::createMinimapImageOfMap(int borderWidth,
                         color = COLOR_THICKSPICE;
                     } break;
 
-                    case 'g': {
-                        // Tornie green spice
-                        color = COLOR_RGB(28, 124, 48);
-                    } break;
-
-                    case 'G': {
-                        // Tornie thick green spice
-                        color = COLOR_RGB(28, 124, 48);
-                    } break;
-
-                    case 'b': {
-                        // Tornie green spice bloom
-                        color = COLOR_RGB(28, 124, 48);
-                    } break;
-
-                    case 'r': {
-                        // Tornie red spice
-                        color = COLOR_RGB(154, 48, 38);
-                    } break;
-
-                    case 'R': {
-                        // Tornie thick red spice
-                        color = COLOR_RGB(154, 48, 38);
-                    } break;
-
-                    case 'B': {
-                        // Tornie red spice bloom
-                        color = COLOR_RGB(154, 48, 38);
-                    } break;
+                    case 'g':
+                    case 'G':
+                    case 'b':
+                    case 'r':
+                    case 'R':
+                    case 'B':
+                    case 'l':
+                    case 'L':
+                    case 'i':
+                    case 'w':
+                    case 'W':
+                    case 'x':
+                        color = getColorByTerrainType(allowedSpiceTerrain(spiceTerrainForMapChar(rowString.at(x)), spiceMask));
+                        break;
 
                     case '%': {
                         // Rock
@@ -372,10 +392,27 @@ sdl2::surface_ptr INIMapPreviewCreator::createMinimapImageOfMap(int borderWidth,
                 }
 
                 tileColors[y * sizeX + x] = MapRGBA(pMinimap->format, color);
+                if(!spiceVariants.empty()) {
+                    const int type = allowedSpiceTerrain(spiceTerrainForMapChar(rowString.at(x)), spiceMask);
+                    spiceVariants[static_cast<size_t>(y) * sizeX + x] =
+                        type == Terrain_Spice ? '~' : type == Terrain_ThickSpice ? '+' : '-';
+                }
             }
 
             for(int x=rowLength; x < sizeX; x++) {
                 tileColors[y * sizeX + x] = MapRGBA(pMinimap->format, COLOR_DESERTSAND);
+            }
+        }
+
+        if(!spiceVariants.empty()) {
+            spiceVariants = SpiceVariants::apply(std::move(spiceVariants), sizeX, variantPercent,
+                static_cast<uint32_t>(inifile->getIntValue("MAP", "SpiceVariantSeed", 0)),
+                inifile->getIntValue("MAP", "SpiceVariantVersion", 1));
+            for(size_t index = 0; index < spiceVariants.size(); ++index) {
+                const auto type = spiceTerrainForMapChar(spiceVariants[index]);
+                if(type != Terrain_Sand) {
+                    tileColors[index] = MapRGBA(pMinimap->format, getColorByTerrainType(allowedSpiceTerrain(type, spiceMask)));
+                }
             }
         }
 

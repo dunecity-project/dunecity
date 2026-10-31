@@ -104,6 +104,18 @@ display name, engine family, exact map-to-mod dependency, and every file's path,
 size and SHA-256. Revision numbers are labels; hashes remain the permanent
 references in saves, replays, and network settings.
 
+Loading a pinned mod must not upgrade its on-disk AI configuration: missing
+Tornie-family priorities use in-memory defaults in immutable revisions and the
+checksummed bundled family payloads. Editable derived mods can persist upgrades.
+This keeps both Workshop SHA-256 identities and the synchronized rule checksums
+stable while loading and exporting a save.
+
+Some older built-in revisions contain an unquoted empty `Version` before a later
+valid version entry. Compatibility reconstruction keeps those historical bytes
+opaque and serializes only the valid `Game Version` stamp fragment. Current
+metadata remains valid INI; no historical payload or saved revision hash is
+rewritten to repair the old layout.
+
 ## Multiplayer and saves
 
 Approved shipped mods (Vanilla, Dune City, Tornie and Dune2R) use their installed

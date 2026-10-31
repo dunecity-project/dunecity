@@ -3,11 +3,18 @@
 
 Requires the existing macOS Ninja Release build and bundled game assets. Uses an isolated
 profile and dummy SDL drivers. Logs and the test executable are retained in --output-dir.
+
+--tornie-case custom|campaign instead runs exactly two native direct peers for 3,600
+cycles, comparing every 300-cycle digest, network-delivered settings and human orders.
+The campaign is Tornie faction1/coop04 with separate Atreides/Mercenary controllers.
 """
 import argparse
+from contextlib import ExitStack
+import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import struct
 import tempfile
@@ -29,7 +36,13 @@ parser.add_argument('--busy',action='store_true',help='Exercise moving armies an
 parser.add_argument('--suspended-paths', action='store_true',
                     help='Require real transfer of suspended A* jobs (native solo spectator fixture only).')
 parser.add_argument('--mode', choices=['replace','share_ai','share_human','abort','spectate','reject_spectate','promote'],default='replace')
+parser.add_argument('--tornie-case', choices=['custom', 'campaign'],
+                    help='Two Tornie native players over direct WebRTC; no late join, TURN or relay.')
 args = parser.parse_args()
+if args.tornie_case and (args.browser or args.endpoint or args.solo or args.city or args.busy
+                        or args.stall or args.suspended_paths or args.mode != 'replace'
+                        or args.host_binary or args.newcomer_binary):
+    parser.error('--tornie-case is a standalone two-native-peer fixture')
 if args.suspended_paths and (not args.solo or args.browser or args.mode != 'spectate'):
     parser.error('--suspended-paths requires a native --solo --mode spectate fixture')
 if args.twin_cities and not args.city:
@@ -52,10 +65,15 @@ main = (root / 'src/main.cpp').read_text()
 needle = 'int menuResult = MainMenu().showMenu();'
 if main.count(needle) != 1:
     raise RuntimeError('Main menu entry changed; update the test injection point.')
-main = main.replace(needle, 'int menuResult = runLateJoinProbe();')
+main = main.replace(needle, 'int menuResult = ' + ('runTorniePeerProbe' if args.tornie_case else 'runLateJoinProbe') + '();')
 main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
+if args.tornie_case:
+    clamp = 'clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);'
+    if main.count(clamp) != 1:
+        raise RuntimeError('Window-size fixture injection point changed.')
+    main = main.replace(clamp, '(void)displayIndex;')
 pos = main.index('int main(')
-include = root / 'tests/network/late-join-probe.inc'
+include = root / 'tests/network' / ('tornie-peer-probe.inc' if args.tornie_case else 'late-join-probe.inc')
 main = main[:pos] + '#include "' + str(include) + '"\n' + main[pos:]
 source = out / 'late-join-probe-main.cpp'
 source.write_text(main)
@@ -138,7 +156,22 @@ with (out / 'build.log').open('w') as log:
 import sys, time
 sys.path.insert(0,str(root/'tools/p2p-signaling/test'))
 from test_signaling import ServiceFixture
+lifecycle = ExitStack()
+profile_root = out
+if args.tornie_case:
+    sys.path.insert(0, str(root / 'tests/performance'))
+    from probe_profile import MINIMAL_INI, require_free_space, scratch_dir
+    require_free_space()
+    profile_root = lifecycle.enter_context(scratch_dir('tornie-network-' + args.tornie_case))
+    tempfile.tempdir = str(profile_root)
 service=None if args.endpoint else ServiceFixture()
+if args.tornie_case:
+    service.write_config(ice_servers=[])
+    (out / 'transport.json').write_text(json.dumps({
+        'transport': 'DirectP2P', 'backend': 'libdatachannel/P2PKit',
+        'signaling': 'http://127.0.0.1:' + str(service.port),
+        'ice_servers': [], 'turn': False, 'gameplay_relay': False,
+    }, indent=2) + '\n')
 if args.endpoint:
     from urllib.parse import urlsplit
     if urlsplit(args.endpoint).scheme!='https' or urlsplit(args.endpoint).hostname!='dunelegacy.com' or '/play-test-' not in urlsplit(args.endpoint).path:
@@ -178,10 +211,15 @@ if args.browser and args.endpoint:
     (out/'browser.json').write_text(json.dumps({'url':args.endpoint.rsplit('/p2p',1)[0]+'/?relay='+quote(args.endpoint,safe='')}))
 try:
     originals=('Host',) if args.solo else ('Host','Partner')
-    roles=originals if args.browser else originals+('Newcomer',)
+    roles=originals if args.browser or args.tornie_case else originals+('Newcomer',)
     for role in roles:
         log=(out/(role+'.log')).open('w'); logs.append(log)
-        env=dict(os.environ,DUNECITY_USERDIR=str(out/('profile-'+role)),SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',JOIN_ROLE=role,JOIN_MODE=args.mode,JOIN_OUT=str(out),JOIN_ENDPOINT=args.endpoint or ('http://127.0.0.1:'+str(service.port)))
+        profile = profile_root / ('profile-' + role)
+        if args.tornie_case:
+            profile.mkdir()
+            (profile / 'Dune City.ini').write_text(MINIMAL_INI)
+        env=dict(os.environ,DUNECITY_USERDIR=str(profile),SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',JOIN_ROLE=role,JOIN_MODE=args.mode,JOIN_OUT=str(out),JOIN_ENDPOINT=args.endpoint or ('http://127.0.0.1:'+str(service.port)))
+        if args.tornie_case: env['JOIN_TORNIE_CASE'] = args.tornie_case
         if args.solo: env['JOIN_SOLO']='1'
         if args.city: env['JOIN_CITY']='1'
         if args.twin_cities: env['JOIN_TWIN_CITIES']='1'
@@ -190,13 +228,35 @@ try:
         if args.suspended_paths: env['JOIN_CHECKPOINT_TRACE']='1'
         if args.stall: env['JOIN_STALL']='1'
         role_binary = (args.host_binary if role=='Host' else args.newcomer_binary if role=='Newcomer' else None) or binary
+        if args.tornie_case:
+            (out / (role + '-launch.json')).write_text(json.dumps({
+                'command': [str(role_binary.resolve()), '--window', '--showlog'],
+                'cwd': str(out), 'profile': str(profile), 'case': args.tornie_case,
+                'role': role, 'endpoint': env['JOIN_ENDPOINT'],
+            }, indent=2) + '\n')
         processes.append(subprocess.Popen([str(role_binary.resolve()),'--window','--showlog'],cwd=out,env=env,stdout=log,stderr=subprocess.STDOUT))
     deadline=time.monotonic()+(620 if args.browser or os.environ.get('JOIN_FAST_WARMUP') else 170)
+    if args.tornie_case: deadline = time.monotonic() + 620
     while time.monotonic()<deadline:
-        compared=originals if args.mode=='abort' or args.browser or args.stall or os.environ.get('JOIN_DESYNC_ALWAYS') else roles
+        compared=originals if args.tornie_case or args.mode=='abort' or args.browser or args.stall or os.environ.get('JOIN_DESYNC_ALWAYS') else roles
         if all((out/(role+'-digest')).exists() for role in compared) and (args.mode!='abort' or (out/'Newcomer-cancelled').exists()):
             values=[(out/(role+'-digest')).read_text() for role in compared]
             if len(set(values))!=1: raise RuntimeError('State mismatch: '+str(values))
+            if args.tornie_case:
+                for suffix in ('settings', 'trace', 'commands'):
+                    evidence = [(out / (role + '-' + suffix)).read_bytes() for role in originals]
+                    if len(set(evidence)) != 1:
+                        raise RuntimeError('Tornie peer ' + suffix + ' mismatch')
+                trace = (out / 'Host-trace').read_text().splitlines()
+                if len(trace) != 13:
+                    raise RuntimeError('Expected 13 matching checkpoints, cycles 0 through 3600')
+                summary = {
+                    'case': args.tornie_case, 'status': 'PASS', 'transport': 'DirectP2P',
+                    'peers': list(originals), 'pids': [p.pid for p in processes],
+                    'final_cycle': 3600, 'matching_checkpoints': 13,
+                    'matching_settings': True, 'matching_executed_commands': True,
+                    'executed_moves_per_player': 12, 'final_digest': values[0],
+                }
             if args.suspended_paths:
                 matched = False
                 for host_runtime in out.glob('checkpoint-*-Host/runtime'):
@@ -231,6 +291,11 @@ try:
     else: raise RuntimeError('Join probe timed out')
     for p in processes:
         if p.wait(timeout=15)!=0: raise RuntimeError('Probe process failed')
+    if args.tornie_case:
+        for role in originals:
+            if (out / (role + '.log')).read_text(errors='replace').count('TORNIE_PEER_PROBE_PASS:') != 1:
+                raise RuntimeError('Missing successful native peer completion: ' + role)
+        (out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(str(len(values))+' real peers continued with matching state ('+args.mode+'): '+values[0])
 finally:
     for p in processes:
@@ -239,5 +304,16 @@ finally:
         try: p.wait(timeout=5)
         except subprocess.TimeoutExpired: p.kill()
     for log in logs: log.close()
+    if args.tornie_case:
+        for role in originals:
+            profile = profile_root / ('profile-' + role)
+            evidence = out / ('profile-' + role)
+            evidence.mkdir(exist_ok=True)
+            for name in ('Dune City.ini', 'Dune City.log'):
+                if (profile / name).is_file():
+                    shutil.copy2(profile / name, evidence / name)
+        if service:
+            shutil.copy2(Path(service.tmp) / 'php-server.log', out / 'php-server.log')
     if service: service.stop()
     if args.browser and not args.endpoint: web.shutdown()
+    lifecycle.__exit__(*sys.exc_info())

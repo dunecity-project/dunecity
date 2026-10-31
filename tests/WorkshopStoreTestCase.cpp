@@ -290,11 +290,22 @@ TEST_CASE("Legacy builtin metadata pins require unchanged payload and mode","[wo
         REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.849") == pin);
         REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.850") != pin);
 
-        INIFile resaved((historical / "mod.ini").string());
-        resaved.setStringValue("Mod", "Game Version", "1.0.852");
-        REQUIRE(resaved.saveChangesTo((historical / "mod.ini").string()));
+        // Restamping changes only this raw fragment; the historical blank Version is
+        // checksum data, not metadata to feed back into the INI parser.
+        auto restamped = metadata;
+        const std::string oldStamp = "Game Version = 1.0.849\n";
+        const std::string newStamp = "Game Version = 1.0.852\n";
+        const auto stampOffset = restamped.find(oldStamp);
+        REQUIRE(stampOffset != std::string::npos);
+        restamped.replace(stampOffset, oldStamp.size(), newStamp);
+        ShippedFixture::put(historical / "mod.ini", restamped);
         const auto currentPin = Workshop::contentHash("mod", "", f.shipped.displayName, f.shipped.base, "", historical);
         REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.852") == currentPin);
+
+        restamped.replace(stampOffset, newStamp.size(), "Game Version = \"1.0.852 test#build\"\n");
+        ShippedFixture::put(historical / "mod.ini", restamped);
+        const auto quotedPin = Workshop::contentHash("mod", "", f.shipped.displayName, f.shipped.base, "", historical);
+        REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.852 test#build") == quotedPin);
 
         current.setBoolValue("Mod", "Enables City Mode", !city);
         REQUIRE(current.saveChangesTo(metadataPath));

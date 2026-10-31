@@ -958,6 +958,8 @@ void DeviationProbe::legacyLedger() {
         [&]{ tank->deviationEpisode = DeviationReward::Episode(); },
         [&]{ tank->deviationEpisode = distinctiveEpisode; });
     require(unitBytes.second == 17, "The control-interval record is not the expected 17 bytes");
+    constexpr size_t kEmptyOrderQueueBlock = 1 + 1 + 1 + 4 + 4;
+    constexpr size_t kTornieUnitFields = 4 + 4 + 8; // production house, slow timer and step offset (9878)
     // 9854 appended the hunt-toward goal and retry count after the 9844 Dynasty fields,
     // which follow the control interval. A pre-9849 record has neither, so drop them too.
     {
@@ -978,13 +980,11 @@ void DeviationProbe::legacyLedger() {
         // 9855 appended the player order queue right after the hunt-toward record: an empty
         // queue count, the dispatched flag, the walk retries and the break-off point.
         require(tank->getOrderQueue().empty(), "The legacy fixture unit carries queued orders");
-        constexpr size_t kEmptyOrderQueueBlock = 1 + 1 + 1 + 4 + 4;
         unitBytes.first.erase(first - unitBytes.second, (last - first) + kEmptyOrderQueueBlock);
     }
-    // 9857 appended the formation membership (group, slot, speed cap) after the hunt-toward
-    // record, 9859 the hunting flag and facing after it and 9860 the form-up tile, resume kind
-    // and pace unit type; a pre-9849 record has none of it.
-    // The hunt-toward bytes are already gone.
+    // 9857 appended formation membership, 9859 hunt/facing, 9860 form-up state and 9878
+    // production technology/slow state. A pre-9849 record has none of these.
+    // The control interval, hunt-toward bytes and empty order queue are already gone.
     {
         tank->leaveFormation();
         OMemoryStream a; a.open(); tank->save(a);
@@ -1005,7 +1005,9 @@ void DeviationProbe::legacyLedger() {
         size_t last = before.size();
         while(last > first && before[last-1] == after[last-1]) --last;
         require(last - first == 35, "The formation record is not the expected 35 bytes");
-        unitBytes.first.erase(first - unitBytes.second - 9, last - first);
+        require(last + kTornieUnitFields <= before.size(), "The Tornie unit tail is not where expected");
+        unitBytes.first.erase(first - unitBytes.second - 9 - kEmptyOrderQueueBlock,
+                              (last - first) + kTornieUnitFields);
     }
 
     game->loadedSavegameVersion = 9848;
@@ -1080,7 +1082,8 @@ void DeviationProbe::legacyLedger() {
     }
     game->loadedSavegameVersion = 9848;
     {
-        const std::string old = flameBytes.substr(0, flameBytes.size() - (4 + 4 + 4 + 24));
+        // Remove both the 9849 damage/provenance block and the 9878 extended-fire block.
+        const std::string old = flameBytes.substr(0, flameBytes.size() - (4 + 4 + 4 + 24 + 4 + 1 + 1));
         IMemoryStream in(old.data(), old.size());
         Explosion restored(in);
         require(in.getRemainingLength() == 0, "A pre-9849 flame record read outside its bytes");

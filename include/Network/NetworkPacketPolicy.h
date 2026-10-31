@@ -194,6 +194,22 @@ inline PacketVerdict classifyPacket(const PacketContext& context) {
             if(!established) return PacketVerdict::RejectPreHandshake;
             return PacketVerdict::Accept;
 
+        case NETWORKPACKET_COOP_SETUP_TRANSFER:
+            // Direct-only checkpoint offers/chunks and their acknowledgments. The session
+            // checks each operation's sender; the relay has no carried-message entry for it.
+            if(!identified)  return PacketVerdict::RejectUnidentifiedPeer;
+            if(!established) return PacketVerdict::RejectPreHandshake;
+            if(inGame)       return PacketVerdict::RejectWrongPhase;
+            return PacketVerdict::Accept;
+
+        case NETWORKPACKET_COOP_CAMPAIGN_CONTROL:
+            // Both directions share a wire record. The payload router checks the operation's
+            // role and the active separate-house campaign; ordinary matches cannot use it.
+            if(!identified)  return PacketVerdict::RejectUnidentifiedPeer;
+            if(!established) return PacketVerdict::RejectPreHandshake;
+            if(!inGame)      return PacketVerdict::RejectWrongPhase;
+            return PacketVerdict::Accept;
+
         case NETWORKPACKET_STARTGAME:
             if(!identified)  return PacketVerdict::RejectUnidentifiedPeer;
             if(isHost)       return PacketVerdict::RejectWrongRole;
@@ -414,14 +430,14 @@ inline bool isExpectedOrderingRefusal(PacketVerdict verdict) {
 
 /// Length of the window the traffic budgets below are measured over.
 constexpr Uint32 kTrafficWindowMs = 1000;
-/// Packets one peer may deliver per window. A full 10 MiB mod transfer is ~160 packets and
+/// Packets one peer may deliver per window. A full 12 MiB transfer uses 192 chunks and
 /// in-game traffic is a few dozen per second.
 constexpr Uint32 kMaxPacketsPerWindow = 4096;
 /// Bytes one peer may deliver per window outside a mod transfer. Gameplay traffic is a few
 /// KiB/s; the headroom covers a full-size map packet arriving with the rest of the handshake.
 constexpr Uint64 kMaxPeerBytesPerWindow = 8ull * 1024 * 1024;
 /// Raised byte budget while this peer is delivering a mod transfer that was asked for. A
-/// complete 10 MiB transfer arriving in a single burst (loopback or LAN) stays inside it.
+/// complete 12 MiB transfer arriving in a single burst (loopback or LAN) stays inside it.
 constexpr Uint64 kMaxModTransferBytesPerWindow = 24ull * 1024 * 1024;
 /// Largest selection a peer may announce. A player can box-select an army, so this is well
 /// above any real control group, but it is bounded: the set is copied into the receiving

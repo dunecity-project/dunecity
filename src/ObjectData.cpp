@@ -26,6 +26,7 @@
 #include <misc/string_util.h>
 #include <misc/FileSystem.h>
 #include <main.h>
+#include <mod/ModManager.h>
 
 #include <cstdint>
 #include <cstdio>
@@ -137,7 +138,7 @@ void ObjectData::logSettings() const {
     SDL_Log("===============================================================");
 }
 
-void ObjectData::loadFromINIFile(const std::string& filename, bool preferUserConfig)
+void ObjectData::loadFromINIFile(const std::string& filename, bool preferUserConfig, bool applyContentPolicy)
 {
     // Try to load from user directory first, fall back to install directory
     std::string userConfigPath = getObjectDataConfigFilepath();
@@ -290,11 +291,51 @@ void ObjectData::loadFromINIFile(const std::string& filename, bool preferUserCon
             data[itemID][h].upgradeLevel = loadIntValue(*objectDataFile, sectionName, "UpgradeLevel", getHouseScenarioLetter(static_cast<HOUSETYPE>(h)), defaultData.upgradeLevel);
         }
     }
+
+    const bool tornieFamily = ModManager::instance().isTornieFamilyContentActive();
+    if(tornieFamily) {
+        // Orders inherit the single unit's house blueprint, while keeping their own
+        // availability and prerequisites. Five soldiers/troopers cost three singles.
+        for(const auto orderID : {Unit_Troopers5, Unit_Infantry5}) {
+            const auto singleID = orderID == Unit_Troopers5 ? Unit_Trooper : Unit_Soldier;
+            for(int h = 0; h < NUM_HOUSES; ++h) {
+                if(!data[orderID][h].enabled) continue;
+                const auto order = data[orderID][h];
+                data[orderID][h] = data[singleID][h];
+                auto& squad = data[orderID][h];
+                squad.enabled = order.enabled;
+                squad.price *= 3;
+                squad.builder = order.builder;
+                squad.techLevel = order.techLevel;
+                squad.upgradeLevel = order.upgradeLevel;
+                squad.prerequisiteStructuresSet = order.prerequisiteStructuresSet;
+            }
+        }
+    } else {
+        // Old/default object tables can enable unspecified sections by default.
+        // New IDs must never become products in unrelated mods.
+        for(int item = Unit_Troopers5; item < Num_ItemID; ++item)
+            for(auto& object : data[item]) object.enabled = false;
+    }
+    if(applyContentPolicy && tornieFamily
+       && !ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled())
+        applyNeutralVanillaRules();
     
     // Clean up
     delete objectDataFile;
     
     SDL_Log("ObjectData loaded from: %s", loadedPath.c_str());
+}
+
+void ObjectData::applyNeutralVanillaRules() {
+    ObjectData vanilla;
+    vanilla.loadFromINIFile(getDuneLegacyDataDir() + "/config/ObjectData.ini.default", false, false);
+    for(int item = 0; item < Num_ItemID; ++item) {
+        if(isTornieExclusiveItem(item)) vanilla.data[item][HOUSE_NEUTRAL].enabled = false;
+    }
+    *this = vanilla;
+    for(int item = 0; item < Num_ItemID; ++item)
+        for(auto& houseData : data[item]) houseData = vanilla.data[item][HOUSE_NEUTRAL];
 }
 
 void ObjectData::save(OutputStream& stream) const
@@ -486,7 +527,10 @@ std::string ObjectData::getEffectiveHash() const {
     std::string dataStr;
     
     // Hash all unit/structure data for all houses
-    for (int itemID = 0; itemID < Num_ItemID; itemID++) {
+    // New Tornie-only rows do not change any unrelated mod's capability hash.
+    const int itemCount = ModManager::instance().isTornieFamilyContentActive()
+        ? static_cast<int>(Num_ItemID) : static_cast<int>(Unit_Troopers5);
+    for (int itemID = 0; itemID < itemCount; itemID++) {
         for (int houseID = 0; houseID < NUM_HOUSES; houseID++) {
             const ObjectDataStruct& obj = data[itemID][houseID];
             

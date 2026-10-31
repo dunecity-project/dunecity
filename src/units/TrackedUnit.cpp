@@ -56,8 +56,11 @@ void TrackedUnit::checkPos()
 {
     GroundUnit::checkPos();
 
-    if(active && justStoppedMoving)
-        currentGameMap->getTile(location.x, location.y)->squash();
+    if(active && justStoppedMoving) {
+        auto* tile = currentGameMap->getTile(location.x, location.y);
+        if(ModManager::instance().isTornieFamilyContentActive()) tile->squash(this);
+        else tile->squash();
+    }
 }
 
 bool TrackedUnit::canPass(int xPos, int yPos) const

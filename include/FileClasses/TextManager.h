@@ -23,6 +23,7 @@
 #include <memory>
 #include "FileClasses/IndexedTextFile.h"
 #include "FileClasses/MentatTextFile.h"
+#include <Campaign/CampaignPlan.h>
 
 #include <vector>
 #include <map>
@@ -56,7 +57,7 @@ public:
         This method returns a briefing text for the specified mission.
         \param  mission     the mission number (0 = house description, 1 - 9 missions)
         \param  texttype    one of MISSION_DESCRIPTION, MISSION_WIN, MISSION_LOSE, MISSION_ADVICE
-        \param  house       the house to get the text from (only HOUSE_ATREIDES, HOUSE_ORDOS and HOUSE_HARKONNEN)
+        \param  house       the campaign faction (Tornie-family roles come from CampaignPlan.ini)
         \return the briefing text
     */
     std::string getBriefingText(unsigned int mission, unsigned int texttype, int house) const;
@@ -122,6 +123,7 @@ private:
     std::array<std::unique_ptr<MentatTextFile>,3> mentatStrings;            ///< The MENTAT?.<EXTENSION> mentat menu texts
 
     std::map<std::string,std::unique_ptr<IndexedTextFile> > origDuneText;   ///< This map contains all the loaded original Dune II (indexed) text files
+    std::map<int, campaign::CampaignPlan> campaignTextPlans;
 
     mutable std::map<std::string, std::string> localizedString;             ///< The mapping between English text and localized text
 };

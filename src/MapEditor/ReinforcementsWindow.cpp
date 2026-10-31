@@ -131,10 +131,13 @@ ReinforcementsWindow::ReinforcementsWindow(MapEditor* pMapEditor, HOUSETYPE curr
         Unit_Carryall, Unit_Devastator, Unit_Deviator, Unit_Frigate, Unit_Harvester, Unit_RebelHarvester,
         Unit_Soldier, Unit_Launcher, Unit_MCV, Unit_Ornithopter, Unit_Quad, Unit_Saboteur,
         Unit_Sandworm, Unit_SiegeTank, Unit_SonicTank, Unit_Tank, Unit_Trike, Unit_RaiderTrike,
-        Unit_Trooper, Unit_RocketTrike, Unit_SonicTrike, Unit_FlameTank, Unit_EliteLauncher, Unit_EliteSiegeTank, Unit_ChemicalSiegeTank
+        Unit_Trooper, Unit_Infantry5, Unit_Troopers5, Unit_RaiderQuad, Unit_RangedTank, Unit_SlowTank,
+        Unit_CapacityHarvester, Unit_FastHarvester, Unit_TameSandworm, Unit_EliteOrnithopter,
+        Unit_FlameQuad, Unit_GasInfantry, Unit_FlameTrooper, Unit_RocketTrike, Unit_SonicTrike,
+        Unit_FlameTank, Unit_EliteLauncher, Unit_EliteSiegeTank, Unit_ChemicalSiegeTank
     };
     for(int itemID : reinforcementUnits) {
-        if(isTornieExclusiveItem(itemID) && !ModManager::instance().isTornieContentActive()) {
+        if(isTornieExclusiveItem(itemID) && !ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled()) {
             continue;
         }
         if(itemID == Unit_Carryall || itemID == Unit_Ornithopter || itemID == Unit_Frigate) {

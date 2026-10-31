@@ -65,7 +65,7 @@ protected:
         producedEnergyLabel.setTextColor(color);
         textVBox.addWidget(&producedEnergyLabel, (Sint32)18);
 
-        if(ModManager::instance().isTornieContentActive()) {
+        if(ModManager::instance().isTornieFamilyContentActive()) {
             flamepostUpgradeButton.setText(_("Upgrade"));
             flamepostUpgradeButton.setTextColor(color);
             flamepostUpgradeButton.setTooltipText(_("Requires House IX"));
@@ -79,6 +79,32 @@ protected:
             chemipostUpgradeButton.setVisible(false);
             chemipostUpgradeButton.setOnClick(std::bind(&WindTrapInterface::onChemipostUpgrade, this));
             textVBox.addWidget(&chemipostUpgradeButton, (Sint32)26);
+
+            slowpostUpgradeButton.setText(_("Upgrade"));
+            slowpostUpgradeButton.setTextColor(color);
+            slowpostUpgradeButton.setTooltipText(_("Requires House IX and Tech Level 7"));
+            slowpostUpgradeButton.setVisible(false);
+            slowpostUpgradeButton.setOnClick([this]() {
+                if(auto* post = dynamic_cast<Scoutpost*>(
+                       currentGame->getObjectManager().getObject(this->objectID))) {
+                    post->handleSlowpostUpgradeClick();
+                }
+            });
+            textVBox.addWidget(&slowpostUpgradeButton, (Sint32)26);
+        }
+
+        if(ModManager::instance().isTornieFamilyContentActive()) {
+            powerUpgradeButton.setText(_("Power x2") + " (150)");
+            powerUpgradeButton.setTextColor(color);
+            powerUpgradeButton.setTooltipText(_("Requires House IX and Tech Level 7"));
+            powerUpgradeButton.setVisible(false);
+            powerUpgradeButton.setOnClick([this]() {
+                if(auto* trap = dynamic_cast<WindTrap*>(
+                       currentGame->getObjectManager().getObject(this->objectID))) {
+                    trap->handlePowerUpgradeClick();
+                }
+            });
+            textVBox.addWidget(&powerUpgradeButton, (Sint32)26);
         }
 
         cityStats_.attachTo(textVBox, color, false,
@@ -109,6 +135,13 @@ protected:
         requiredEnergyLabel.setText(" " + _("Required") + ": " + std::to_string(pOwner->getPowerRequirement()));
         producedEnergyLabel.setText(" " + _("Produced") + ": " + std::to_string(pOwner->getProducedPower()));
 
+        const auto* trap = dynamic_cast<const WindTrap*>(pObject);
+        const bool canPowerUpgrade = trap && trap->isPowerUpgradeEligible()
+            && !currentGame->isObserving() && pLocalPlayer
+            && currentGame->canControlHouse(pOwner);
+        powerUpgradeButton.setVisible(canPowerUpgrade);
+        powerUpgradeButton.setEnabled(canPowerUpgrade && pOwner->getCredits() >= 150);
+
         Scoutpost* pScoutpost = dynamic_cast<Scoutpost*>(pObject);
         const bool showFlamepostUpgrade = pScoutpost != nullptr
             && pScoutpost->isFlamepostUpgradeEligible()
@@ -126,6 +159,16 @@ protected:
         if(showChemipostUpgrade) {
             chemipostUpgradeButton.setText(_("Upgrade"));
             chemipostUpgradeButton.setTooltipText(_("Upgrade this Scoutpost to a healing Chemipost"));
+        }
+
+        const bool showSlowpostUpgrade = pScoutpost && pScoutpost->isSlowpostUpgradeEligible()
+            && pOwner->getNumItems(Structure_IX) > 0 && !currentGame->isObserving()
+            && pLocalPlayer && currentGame->canControlHouse(pOwner);
+        slowpostUpgradeButton.setVisible(showSlowpostUpgrade);
+        if(showSlowpostUpgrade) {
+            slowpostUpgradeButton.setEnabled(pScoutpost->canUpgradeToSlowpost());
+            slowpostUpgradeButton.setTooltipText(_("Upgrade this Scoutpost to a Slowpost") + " ("
+                + std::to_string(pScoutpost->getSlowpostUpgradeCost()) + " " + _("credits") + ")");
         }
 
         cityStats_.update(dynamic_cast<StructureBase*>(pObject));
@@ -157,6 +200,8 @@ private:
     Label      producedEnergyLabel;
     TextButton flamepostUpgradeButton;
     TextButton chemipostUpgradeButton;
+    TextButton powerUpgradeButton;
+    TextButton slowpostUpgradeButton;
 
     CityStatsBox cityStats_;
 };

@@ -23,6 +23,9 @@
 #include <FileClasses/GFXManager.h>
 #include <House.h>
 #include <Game.h>
+#include <Command.h>
+#include <mod/ModManager.h>
+#include <players/HumanPlayer.h>
 
 #include <GUI/ObjectInterfaces/WindTrapInterface.h>
 
@@ -33,6 +36,9 @@ WindTrap::WindTrap(House* newOwner) : StructureBase(newOwner) {
 }
 
 WindTrap::WindTrap(InputStream& stream) : StructureBase(stream) {
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546) {
+        powerUpgraded = stream.readBool();
+    }
     WindTrap::init();
 }
 
@@ -93,7 +99,52 @@ void WindTrap::setHealth(FixPoint newHealth) {
 }
 
 int WindTrap::getProducedPower() const {
-    const int nominal = abs(currentGame->objectData.data[itemID][originalHouseID].power);
-    // Dynasty enhanced: output follows health, with no half-output floor.
+    const int nominal = abs(currentGame->objectData.data[itemID][getProductionHouseID()].power);
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        return lround(getHealth() / getMaxHealth() * nominal * (powerUpgraded ? 2 : 1));
+    }
+    // Preserve DuneCity's health scaling and rounding outside the Tornie family.
     return DuneCity::windtrapOutput(nominal, getHealth(), getMaxHealth());
+}
+
+void WindTrap::save(OutputStream& stream) const {
+    StructureBase::save(stream);
+    stream.writeBool(powerUpgraded);
+}
+
+bool WindTrap::supportsPowerUpgrade(HOUSETYPE house) {
+    return ModManager::instance().isTornieFamilyContentActive()
+        && isHouseFaction(house, HOUSE_REBELS);
+}
+
+bool WindTrap::isPowerUpgradeEligible() const {
+    return !powerUpgraded && currentGame && owner && getHealth() > 0
+        && supportsPowerUpgrade(static_cast<HOUSETYPE>(getTechnologyHouseID()))
+        && currentGame->techLevel >= 7 && owner->getNumItems(Structure_IX) > 0;
+}
+
+void WindTrap::handlePowerUpgradeClick() {
+    if(isPowerUpgradeEligible() && pLocalPlayer && !currentGame->isObserving()
+       && currentGame->canControlHouse(owner)) {
+        currentGame->getCommandManager().addCommand(
+            Command(pLocalPlayer->getPlayerID(), CMD_WINDTRAP_POWER_UPGRADE, objectID));
+    }
+}
+
+bool WindTrap::doPowerUpgrade() {
+    if(!isPowerUpgradeEligible() || owner->getCredits() < 150) return false;
+    owner->takeCredits(150);
+    inheritPowerUpgrade(true);
+    return true;
+}
+
+void WindTrap::inheritPowerUpgrade(bool upgraded) {
+    if(!ModManager::instance().isTornieFamilyContentActive()) return;
+    const int before = getProducedPower();
+    powerUpgraded = upgraded;
+    owner->setProducedPower(owner->getProducedPower() - before + getProducedPower());
+}
+
+bool WindTrap::usesGreenPowerAnimation() const {
+    return ModManager::instance().isTornieFamilyContentActive() && powerUpgraded;
 }

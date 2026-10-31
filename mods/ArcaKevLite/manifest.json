@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "mod": {
+    "id": "ArcaKevLite",
+    "displayName": "ArcaKev Lite",
+    "version": "1.0.546",
+    "gameVersion": "1.0.862",
+    "author": "Tornie_Panther"
+  },
+  "source": {
+    "upstream": "Torneko/dunelegacy-tornie",
+    "version": "1.0.546",
+    "commit": "ce89e53ccc51847fcd41540a6a4cd132acf9bf99",
+    "originalModVersion": "1.0.524-2",
+    "integrationTarget": "VR48/dunecity",
+    "integrationBaseCommit": "dbd410fc"
+  },
+  "contentRoots": [
+    "campaign",
+    "data",
+    "graphics",
+    "source-audio",
+    "source-sprites"
+  ],
+  "playableHouses": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "campaignPlan": "data/CampaignPlan.ini",
+  "engineDependencies": [
+    {
+      "name": "twelve-faction-content",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "captured-production-technology",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "five-unit-orders",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "doublefinery",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "expanded-units",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "building-sales",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "allied-control-construction",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "chaos-mode",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "radar-research",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "windtrap-upgrade",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "easy-mode",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "separate-faction-coop",
+      "status": "integrated-and-Tornie-family-scoped"
+    },
+    {
+      "name": "identity-based-mentats",
+      "status": "integrated-and-Tornie-family-scoped"
+    }
+  ],
+  "isolation": {
+    "contentRootIsolated": true,
+    "root": "mods/ArcaKevLite",
+    "externalOverrides": [],
+    "activationKey": "ArcaKevLite",
+    "switchingAwayRemovesTornieSearchPath": true,
+    "engineCapabilitiesAreContentBaseGated": true
+  },
+  "compatibility": {
+    "saveFormatChangedByThisContent": true,
+    "saveVersion": 9878,
+    "networkProtocolVersion": 108,
+    "networkChecksumIncludesEngineCapability": true,
+    "engineCapability": "dunecity-tornie-engine/2-save9878-protocol108",
+    "fullPayloadTransferSupported": true,
+    "transport": "direct-peer-to-peer"
+  },
+  "filenameCase": "exact",
+  "checksums": "checksums.sha256",
+  "provenance": "PROVENANCE.md",
+  "changelog": "CHANGELOG.md",
+  "integrationStatus": "Tornie-family 1.0.546 content port into DuneCity 1.0.862"
+}

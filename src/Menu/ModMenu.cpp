@@ -20,7 +20,9 @@ bool immutableMod(const std::string& name) {
     return std::filesystem::is_regular_file(file) && INIFile(file.string()).getBoolValue("Workshop", "Immutable", false);
 }
 bool bundledMod(const std::string& name) {
-    return name == "vanilla" || name == "dunecity" || name == "Dune2R" || name == "Tornie";
+    return name == "vanilla" || name == "dunecity" || name == "Dune2R"
+        || name == "Tornie" || name == "TornieLite" || name == "Jericho"
+        || name == "JerichoLite" || name == "ArcaKev" || name == "ArcaKevLite";
 }
 }
 

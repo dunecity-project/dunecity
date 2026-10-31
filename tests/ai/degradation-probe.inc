@@ -21,9 +21,21 @@ void runStructureDegradationProbe(Game& game) {
     auto* house=pLocalHouse;
     house->setAutoRepairEnabled(false);
     const bool concreteRequired=game.getGameInitSettings().getGameOptions().concreteRequired;
-    require(concreteRequired==(ModManager::instance().getActiveModName()!="Tornie"
-        && ModManager::instance().getActiveModName()!="dunecity"),
+    const auto& mods = ModManager::instance();
+    const std::string contentBase = mods.getContentBase(mods.getActiveModName());
+    require(concreteRequired==(contentBase!="Tornie" && contentBase!="dunecity"),
             "Degradation fixture did not load the selected mod's concrete default");
+    // Family defaults must not upgrade/rewrite the nonfamily AI configurations:
+    // doing so changes saved-mod identity before degradation is even exercised.
+    const QuantBotConfig defaults;
+    const bool family = mods.isTornieFamilyContentActive();
+    for (const char* name : {"Doublefinery", "Slowpost"})
+        require((defaults.findStructurePriority(name) != nullptr) == family,
+                "Family structure priorities leaked across mod boundaries");
+    for (const char* name : {"Troopers5", "Infantry5", "FlameQuad", "GasInfantry", "FlameTrooper",
+             "EliteOrnithopter", "RaiderQuad", "RangedTank", "SlowTank", "CapacityHarvester", "FastHarvester", "TameSandworm"})
+        require((defaults.findUnitPriority(name) != nullptr) == family,
+                "Family unit priorities leaked across mod boundaries");
 
     // Diagnostic fixture ground: free rock so every foundation case is placeable.
     for(int y=0;y<currentGameMap->getSizeY();++y)

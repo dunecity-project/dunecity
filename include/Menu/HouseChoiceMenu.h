@@ -30,6 +30,7 @@
 #include <DataTypes.h>
 #include <GUI/TextView.h>
 #include <mod/ModInfo.h>
+#include <Network/CustomGamePlayerPolicy.h>
 
 class HouseChoiceMenu : public MenuBase {
 public:
@@ -40,6 +41,7 @@ public:
 
     // Static accessors for AI settings (so SinglePlayerMenu can read them)
     static bool isOnline() { return s_online; }
+    static bool isSeparateFactionCoop() { return s_online && s_separateFactionCoop; }
     static bool isSingleMission() { return s_singleMission; }
     static bool isPublicGame() { return s_publicGame; }
     static int getStartLevel() { return s_startLevel; }
@@ -52,6 +54,7 @@ public:
 
 private:
     void updateConnection();
+    void populateConnections();
     void populateLevels();
     void onHouseButton(int button);
     void onModSelectionChanged(bool interactive);
@@ -94,11 +97,13 @@ private:
     TextButton      gameOptionsButton;
 
     bool showLobby;
+    CustomGamePlayerPolicy::HouseRoster houseChoices;
     int currentHouseChoiceScrollPos;
 
     // Static storage for AI settings
     static int s_house;
     static bool s_online, s_singleMission, s_publicGame;
+    static bool s_separateFactionCoop;
     static int s_startLevel;
     static std::string s_partnerClass;
     static std::string s_enemyClass;

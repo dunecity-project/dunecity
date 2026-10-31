@@ -38,6 +38,25 @@ TEST_CASE("Save compat: current Num_ItemID >= legacy",
     REQUIRE(Num_ItemID >= LEGACY_NUM_ITEM_ID_DUNELEGACY);
 }
 
+TEST_CASE("Save compat: Tornie 546 IDs append without replacing city or legacy objects",
+          "[save-compat][tornie]") {
+    const int appended[] = {Unit_Troopers5, Unit_Infantry5, Structure_Doublefinery,
+        Unit_FlameQuad, Unit_GasInfantry, Unit_FlameTrooper, Unit_EliteOrnithopter,
+        Unit_RaiderQuad, Unit_RangedTank, Unit_SlowTank, Structure_Slowpost,
+        Unit_CapacityHarvester, Unit_FastHarvester, Unit_TameSandworm};
+    for(int index = 0; index < 14; ++index) REQUIRE(appended[index] == 74 + index);
+    REQUIRE(Structure_Chemipost == 73);
+    REQUIRE(Num_ItemID == 88);
+    REQUIRE(isStructure(Structure_Doublefinery));
+    REQUIRE(isStructure(Structure_Slowpost));
+    REQUIRE_FALSE(isUnit(Structure_Slowpost));
+    REQUIRE(isInfantryUnit(Unit_Infantry5));
+    REQUIRE(isInfantryUnit(Unit_Troopers5));
+    REQUIRE(isOrnithopterUnit(Unit_EliteOrnithopter));
+    REQUIRE(isFlyingUnit(Unit_EliteOrnithopter));
+    REQUIRE(isSandwormUnit(Unit_TameSandworm));
+}
+
 TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
           "[save-compat][regression]") {
     // 9852 adds the QuantBot army posture block (posture, entry cycle, attrition
@@ -64,7 +83,9 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9874 adds the continuous-ground-steps match rule (GameInitSettings MOD9).
     // 9875 saves the QuantBot role byte in place of the support flag (docs/ai-roles.md).
     // 9876 adds the MOD10 planned-construction rules; 9877 adds the MOD11 slow city year.
-    REQUIRE(SAVEGAMEVERSION == 9877);
+    // 9878 adds the integrated Tornie 1.0.546 object and family gameplay state.
+    REQUIRE(SAVEGAMEVERSION == 9878);
+    REQUIRE(SAVEGAMEVERSION_TORNIE546 == 9878);
     REQUIRE(SAVEGAMEVERSION_AI_ROLE == 9875);
     REQUIRE(SAVEGAMEVERSION_NATIVES == 9871);
     REQUIRE(SAVEGAMEVERSION_NATIVES_TEAM == 9873);

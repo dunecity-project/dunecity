@@ -24,6 +24,7 @@
 #include <FileClasses/FontManager.h>
 #include <misc/MenuPalette.h>
 #include <misc/string_util.h>
+#include <mod/ModManager.h>
 
 void DamageRulesCheckbox::setExplanation(const std::string& title, const std::string& text) {
     explanationTitle = title;
@@ -76,7 +77,7 @@ void DamageRulesCheckbox::drawOverlay(Point) {
 
 
 GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGameOptions)
- : Window(50,50,626,370), gameOptions(initialGameOptions) {
+ : Window(50, 50, 626, ModManager::instance().isTornieFamilyContentActive() ? 444 : 370), gameOptions(initialGameOptions) {
 
     setWindowWidget(&vbox);
     vbox.addWidget(VSpacer::create(6));
@@ -167,6 +168,19 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(&planBuildingSitesCheckbox);
     vboxLeft.addWidget(VSpacer::create(6));
 
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        alliedControlCheckbox.setText(_("Allied control"));
+        alliedControlCheckbox.setTooltipText(_("Allies may command each other's units and buildings. Ownership and credits remain separate."));
+        alliedControlCheckbox.setChecked(gameOptions.alliedControl);
+        vboxLeft.addWidget(&alliedControlCheckbox);
+        vboxLeft.addWidget(VSpacer::create(6));
+        alliedBuildingCheckbox.setText(_("Allied construction"));
+        alliedBuildingCheckbox.setTooltipText(_("Extend construction range from allied land without sharing ownership or credits."));
+        alliedBuildingCheckbox.setChecked(gameOptions.alliedBuilding);
+        vboxLeft.addWidget(&alliedBuildingCheckbox);
+        vboxLeft.addWidget(VSpacer::create(6));
+    }
+
     vboxLeft.addWidget(VSpacer::create(14));
 
 
@@ -207,6 +221,24 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
         _("Use original Dune II damage against ground units, as reproduced by Dune Dynasty classic. Tank hits rise from 12 to 25; Launcher rockets from 37 to 75. Splash halves every quarter tile and stops at one tile. Unchecked keeps DuneCity balance. Building damage, aircraft hits and special weapons keep their existing rules."));
     vboxRight.addWidget(&originalUnitDamageCheckbox);
     vboxRight.addWidget(VSpacer::create(6));
+
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        sellingBuildingsCheckbox.setText(_("Building sales"));
+        sellingBuildingsCheckbox.setTooltipText(_("Sell buildings for 50% of their purchase and upgrade costs; Easy campaign allies receive 75%."));
+        sellingBuildingsCheckbox.setChecked(gameOptions.sellingBuildings);
+        vboxRight.addWidget(&sellingBuildingsCheckbox);
+        vboxRight.addWidget(VSpacer::create(6));
+        easyModeCheckbox.setText(_("Easy campaign"));
+        easyModeCheckbox.setTooltipText(_("Start at mission 2, reduce purchase prices by 25 credits and grant 500 extra starting credits in the first mission. Co-op allies share these benefits."));
+        easyModeCheckbox.setChecked(gameOptions.easyMode);
+        vboxRight.addWidget(&easyModeCheckbox);
+        vboxRight.addWidget(VSpacer::create(6));
+        chaosModeCheckbox.setText(_("Chaos Mode"));
+        chaosModeCheckbox.setTooltipText(_("Exchange same-tier building technologies among playable factions. The seeded donor table persists in saves."));
+        chaosModeCheckbox.setChecked(gameOptions.chaosMode);
+        vboxRight.addWidget(&chaosModeCheckbox);
+        vboxRight.addWidget(VSpacer::create(6));
+    }
 
     gameSpeedMinus.setTextures(pGFXManager->getUIGraphic(UI_Minus), pGFXManager->getUIGraphic(UI_Minus_Pressed));
     gameSpeedMinus.setOnClick(std::bind(&GameOptionsWindow::onGameSpeedMinus, this));
@@ -264,6 +296,13 @@ void GameOptionsWindow::onOK() {
     gameOptions.maximumNumberOfUnitsOverride = maxUnitsOverrideCheckbox.isChecked() ? maxUnitsOverrideTextBox.getValue() : -1;
     gameOptions.maximumNumberOfHarvestersOverride = maxHarvestersOverrideCheckbox.isChecked() ? maxHarvestersOverrideTextBox.getValue() : -1;
     gameOptions.maximumNumberOfConstructionYardsOverride = maxConstructionYardsOverrideCheckbox.isChecked() ? maxConstructionYardsOverrideTextBox.getValue() : -1;
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        gameOptions.alliedControl = alliedControlCheckbox.isChecked();
+        gameOptions.alliedBuilding = alliedBuildingCheckbox.isChecked();
+        gameOptions.easyMode = easyModeCheckbox.isChecked();
+        gameOptions.chaosMode = chaosModeCheckbox.isChecked();
+        gameOptions.sellingBuildings = sellingBuildingsCheckbox.isChecked();
+    }
 
     if(rememberDefaults.isChecked()) saveGameOptionsAsDefaults(gameOptions);
     Window* pParentWindow = dynamic_cast<Window*>(getParent());

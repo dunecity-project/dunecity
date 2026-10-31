@@ -23,11 +23,13 @@
 class Tank final : public TankBase
 {
 public:
-    explicit Tank(House* newOwner);
-    explicit Tank(InputStream& stream);
-    void init();
+    explicit Tank(House* newOwner, int unitType = Unit_Tank);
+    explicit Tank(InputStream& stream, int unitType = Unit_Tank);
+    void init(int unitType);
     virtual ~Tank();
 
+    using TankBase::canAttack;
+    bool canAttack(const ObjectBase* object) const override;
     void blitToScreen() override;
 
     void destroy() override;

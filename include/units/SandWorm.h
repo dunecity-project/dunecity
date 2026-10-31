@@ -25,9 +25,9 @@
 class Sandworm final : public GroundUnit
 {
 public:
-    explicit Sandworm(House* newOwner);
-    explicit Sandworm(InputStream& stream);
-    void init();
+    explicit Sandworm(House* newOwner, int unitType = Unit_Sandworm);
+    explicit Sandworm(InputStream& stream, int unitType = Unit_Sandworm);
+    void init(int unitType);
     virtual ~Sandworm();
 
     void save(OutputStream& stream) const override;
@@ -73,11 +73,17 @@ public:
             case Terrain_ThickSpice:    return 1.25_fix;
             case Terrain_GreenSpice:    return 1.25_fix;
             case Terrain_ThickGreenSpice: return 1.25_fix;
+            case Terrain_PaleLilacSpice:
+            case Terrain_ThickPaleLilacSpice:
+            case Terrain_WhiteSpice:
+            case Terrain_ThickWhiteSpice: return 1.25_fix;
             case Terrain_RedSpice:      return 1.25_fix;
             case Terrain_ThickRedSpice: return 1.25_fix;
             case Terrain_SpiceBloom:    return 1.25_fix;
             case Terrain_GreenSpiceBloom: return 1.25_fix;
             case Terrain_RedSpiceBloom: return 1.25_fix;
+            case Terrain_PaleLilacSpiceBloom:
+            case Terrain_WhiteSpiceBloom: return 1.25_fix;
             case Terrain_SpecialBloom:  return 1.25_fix;
             default:                    return 1.0_fix;
         }

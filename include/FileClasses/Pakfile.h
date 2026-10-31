@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string>
 #include <vector>
+#include <mutex>
 #include <inttypes.h>
 
 #define PAKFILE_RWOP_TYPE   0x9A5F17EC
@@ -31,6 +32,7 @@
 /**
     This class can be used to read PAK-Files. PAK-Files are archive files used by Dune2.
     The files inside the PAK-File can an be read through SDL_RWops.
+    Separate entry handles may be read concurrently; each handle must be used by only one thread at a time.
 */
 class Pakfile
 {
@@ -81,6 +83,8 @@ private:
 
     bool write;
     SDL_RWops * fPakFile;
+    // Each entry has its own logical cursor, but all native entries share this file.
+    std::mutex readMutex;
     std::string filename;
 
     char* writeOutData;
