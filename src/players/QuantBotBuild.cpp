@@ -2385,8 +2385,13 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // so without this a city whose refinery count never reaches the
             // proactive unlock rule's three (a no-spice city keeps one storage
             // refinery) owns no rocket defence when the first wing arrives.
+            // Proactive cover waits for a four-zone city opening (a low-cash
+            // no-spice city otherwise saved for the upgrade from its third zone
+            // on and never grew); aircraft over the base never wait.
+            const int cityZones=pass.itemCount[Structure_ZoneResidential]+pass.itemCount[Structure_ZoneCommercial]
+                +pass.itemCount[Structure_ZoneIndustrial];
             if (botConfig().force.defencePrerequisites && pass.citySimEnabled && getHouse()->hasPower()
-                && (pass.airEngaged || pass.uncoveredCoreAssets>0) && pass.routineRocketsAllowed
+                && (pass.airEngaged || (pass.uncoveredCoreAssets>0 && cityZones>=4)) && pass.routineRocketsAllowed
                 && data[Structure_RocketTurret][houseID].enabled
                 && data[Structure_RocketTurret][houseID].techLevel<=currentGame->techLevel
                 && !campaignAvailableToBuild(builder,Structure_RocketTurret)) {
