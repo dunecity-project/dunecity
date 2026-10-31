@@ -39,18 +39,6 @@
 
 using namespace SkirmishGenerator;
 
-namespace {
-/// The role as the selector's Role box names it; the partner's player name uses it too.
-std::string roleLabel(AIRole role) {
-    switch(role) {
-        case AIRole::Builder: return _("Builder");
-        case AIRole::Fighter: return _("Fighter");
-        case AIRole::Both:
-        default:              return _("Builder + Fighter");
-    }
-}
-}
-
 namespace RandomSkirmish {
 
 bool activateMod(const std::string& modName) {
@@ -98,7 +86,7 @@ GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptions
                 info.addPlayerInfo(GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS));
             }
             if(const auto* partner = PlayerFactory::getByPlayerClass(house.partnerClass))
-                info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName + " (" + roleLabel(partner->getRole()) + ")", house.partnerClass));
+                info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName + " (" + AIPlayerSelector::roleLabel(partner->getRole()) + ")", house.partnerClass));
         } else {
             const auto* player = PlayerFactory::getByPlayerClass(house.playerClass);
             info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName, player ? house.playerClass : std::string(DEFAULTAIPLAYERCLASS)));

@@ -153,9 +153,7 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
             humanHouseInfo.addPlayerInfo( GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS) );
 
             if(supportSelected) {
-                const AIRole role = partner->getRole();
-                const char* roleLabel = role == AIRole::Builder ? "Builder" : role == AIRole::Fighter ? "Fighter" : "Builder + Fighter";
-                std::string allyName = getHouseNameByNumber((HOUSETYPE) houseID) + " (" + _(roleLabel) + ")";
+                std::string allyName = getHouseNameByNumber((HOUSETYPE) houseID) + " (" + AIPlayerSelector::roleLabel(partner->getRole()) + ")";
                 humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(allyName, partnerClass));
             }
 

@@ -128,6 +128,16 @@ public:
         return playerclass.empty() ? -1 : PlayerFactory::getIndexByPlayerClass(playerclass);
     }
 
+    /// The role as the Role box names it, translated; partner AIs carry it in their player name.
+    static std::string roleLabel(AIRole role) {
+        switch(role) {
+            case AIRole::Builder: return _("Builder");
+            case AIRole::Fighter: return _("Fighter");
+            case AIRole::Both:
+            default:              return _("Builder + Fighter");
+        }
+    }
+
     DropDownBox aiBox;
     DropDownBox difficultyBox;
     DropDownBox roleBox;
@@ -161,15 +171,6 @@ private:
         return PlayerFactory::find(family, currentDifficulty(), showRole ? selectedRole() : AIRole::Both);
     }
 
-    static const char* roleLabel(AIRole role) {
-        switch(role) {
-            case AIRole::Builder: return "Builder";
-            case AIRole::Fighter: return "Fighter";
-            case AIRole::Both:
-            default:              return "Builder + Fighter";
-        }
-    }
-
     /// Rebuilds the difficulty and role boxes for the selected AI, keeping the wanted values if offered.
     void refill(const std::string& wantedDifficulty, AIRole wantedRole) {
         const std::string family = selectedFamily();
@@ -188,7 +189,7 @@ private:
         const std::string family = selectedFamily();
         roles = family.empty() || !showRole ? std::vector<AIRole>() : PlayerFactory::getRoles(family, currentDifficulty());
         roleBox.clearAllEntries();
-        for(size_t i = 0; i < roles.size(); i++) roleBox.addEntry(_(roleLabel(roles[i])), static_cast<int>(i));
+        for(size_t i = 0; i < roles.size(); i++) roleBox.addEntry(roleLabel(roles[i]), static_cast<int>(i));
         if(roles.empty()) roleBox.addEntry("-", 0);
         const auto role = std::find(roles.begin(), roles.end(), wantedRole);
         roleBox.setSelectedItem(role != roles.end() ? static_cast<int>(role - roles.begin()) : 0);

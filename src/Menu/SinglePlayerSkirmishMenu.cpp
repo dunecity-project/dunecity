@@ -61,16 +61,6 @@ int getMaxHouseScrollPos() {
 }
 
 constexpr int kNoPartner = 0;
-
-/// The role as the selector's Role box names it; the partner's player name uses it too.
-std::string roleLabel(AIRole role) {
-    switch(role) {
-        case AIRole::Builder: return _("Builder");
-        case AIRole::Fighter: return _("Fighter");
-        case AIRole::Both:
-        default:              return _("Builder + Fighter");
-    }
-}
 } // namespace
 
 SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase(), campaignCoop(campaignCoop)
@@ -315,7 +305,7 @@ void SinglePlayerSkirmishMenu::onStart()
             humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS));
 
             if(partner != nullptr) {
-                std::string allyName = getHouseNameByNumber(static_cast<HOUSETYPE>(houseID)) + " (" + roleLabel(partner->getRole()) + ")";
+                std::string allyName = getHouseNameByNumber(static_cast<HOUSETYPE>(houseID)) + " (" + AIPlayerSelector::roleLabel(partner->getRole()) + ")";
                 humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(allyName, partner->getPlayerClass()));
             }
 

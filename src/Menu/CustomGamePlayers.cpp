@@ -66,16 +66,6 @@ int getCustomGameHouseCount() {
     return getNumCustomGameHouses();
 }
 
-/// The role as the seat's Role box names it; a partner AI's player name uses it too.
-std::string roleLabel(AIRole role) {
-    switch(role) {
-        case AIRole::Builder: return _("Builder");
-        case AIRole::Fighter: return _("Fighter");
-        case AIRole::Both:
-        default:              return _("Builder + Fighter");
-    }
-}
-
 bool isBonusColorSlot(int colorSlot) {
     switch(colorSlot) {
         case HOUSECOLOR_CUSTOM_TEAL:
@@ -2139,7 +2129,7 @@ bool CustomGamePlayers::addPlayerToHouseInfo(GameInitSettings::HouseInfo& newHou
             } else {
                 // The house's second controller is its partner, named for its role like in the
                 // other menus that add one.
-                playerName = getHouseNameByNumber(houseID) + " (" + roleLabel(pPlayerData->getRole()) + ")";
+                playerName = getHouseNameByNumber(houseID) + " (" + AIPlayerSelector::roleLabel(pPlayerData->getRole()) + ")";
             }
             playerClass = pPlayerData->getPlayerClass();
 
