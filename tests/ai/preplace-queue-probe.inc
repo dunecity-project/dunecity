@@ -632,17 +632,17 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
                 require(a->doReservePlacement(Structure_WindTrap, plot.x, plot.y), "Shared-queue order refused");
             }
         };
-        // Control: with the rule off the idle yards leave the busy yard's queue alone.
+        // Control: with the rule off the idle yards leave the busy yard's queue alone. The front
+        // is held so nothing is built on the plots the second arm plans again.
         planAll();
+        a->doSetOnHold(true);
         advance(*game, MILLI2CYCLES(2000));
-        require(a->getProductionQueueSize() >= 2 && busyOthers().empty(), "Orders left their yard with the shared queue off");
+        require(a->getProductionQueueSize() == 3 && busyOthers().empty(), "Orders left their yard with the shared queue off");
+        // Cancelling the held front last also releases the hold.
         while(a->getProductionQueueSize() > 0) {
             require(a->doCancelReservation(a->getProductionQueue().back().reservationID), "Shared-queue control cleanup failed");
         }
-        for(const Coord& plot : sharedPlots) {
-            if(StructureBase* built = structureAt(house, Structure_WindTrap, plot)) built->destroy();
-        }
-        advance(*game, 2);
+        require(!a->isOnHold(), "The control arm left the yard on hold");
 
         game->gameInitSettings.gameOptions.sharedYardQueue = true;
         planAll();
