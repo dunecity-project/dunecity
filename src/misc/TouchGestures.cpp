@@ -8,6 +8,17 @@ float TouchGestures::spread() const {
     return std::max(1.0f, std::hypot(static_cast<float>(first.x - second.x), static_cast<float>(first.y - second.y)));
 }
 
+std::array<int, 2> TouchGestures::edgeAt(int x, int y) const {
+    if(!mapArea.contains(x, y) || mapControls.contains(x, y)) return {0, 0};
+    return {x < mapArea.x + kEdgeWidth ? -1 : (x >= mapArea.x + mapArea.w - kEdgeWidth ? 1 : 0),
+            y < mapArea.y + kEdgeWidth ? -1 : (y >= mapArea.y + mapArea.h - kEdgeWidth ? 1 : 0)};
+}
+
+std::array<int, 2> TouchGestures::edgeScroll() const {
+    if(fingersDown != 1 || (state != State::Edge && state != State::Pressed)) return {0, 0};
+    return edgeAt(first.x, first.y);
+}
+
 TouchGestures::Actions TouchGestures::fingerDown(int64_t finger, int x, int y, uint32_t ms) {
     Actions out;
     if(state == State::Idle) {
@@ -18,12 +29,13 @@ TouchGestures::Actions TouchGestures::fingerDown(int64_t finger, int x, int y, u
         startY = y;
         startMs = ms;
         state = State::Pending;
+        if(edgeAt(x, y) != std::array<int, 2>{0, 0}) state = State::Edge;
         out.add(Kind::Motion, x, y);
         return out;
     }
 
     ++fingersDown;
-    if(state != State::Pending) {
+    if(state != State::Pending && state != State::Edge) {
         return out;  // a dragging finger or an ongoing two-finger gesture ignores extra fingers
     }
 
@@ -35,11 +47,13 @@ TouchGestures::Actions TouchGestures::fingerDown(int64_t finger, int x, int y, u
         startMs = ms;
         moving = false;
         state = State::TwoFinger;
-    } else {
+    } else if(state != State::Edge) {
         // The first finger has been held still: the second finger's tap right-clicks under it.
         out.add(Kind::Motion, first.x, first.y);
         out.add(Kind::RightClick, first.x, first.y);
         state = State::Done;
+    } else {
+        state = State::Done; // an edge hold must not turn into a map order
     }
     return out;
 }
@@ -56,6 +70,10 @@ TouchGestures::Actions TouchGestures::fingerMotion(int64_t finger, int x, int y,
                 out.add(Kind::Motion, x, y);
                 state = State::Pressed;
             }
+        } break;
+
+        case State::Edge: {
+            if(finger == first.id) { first.x = x; first.y = y; }
         } break;
 
         case State::Pressed: {
@@ -114,9 +132,13 @@ TouchGestures::Actions TouchGestures::fingerUp(int64_t finger, int x, int y, uin
     switch(state) {
         case State::Pending: {
             if(finger != first.id) break;
-            // Still within the slop: a clean click where the finger came down.
-            out.add(Kind::LeftDown, startX, startY);
-            out.add(Kind::LeftUp, startX, startY);
+            // A held icon must never enqueue an item before its cancel action.
+            if(ms - startMs >= kLongPressMs) {
+                out.add(Kind::RightClick, startX, startY);
+            } else {
+                out.add(Kind::LeftDown, startX, startY);
+                out.add(Kind::LeftUp, startX, startY);
+            }
             state = State::Done;
         } break;
 

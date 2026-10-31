@@ -181,6 +181,8 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     const int zoomControlsRight = showViewControls
         ? viewControlsRight - 2 * viewButtonWidth - 2 * viewButtonGap
         : viewControlsRight;
+    mapViewControlsRect = SDL_Rect{zoomControlsRight - 2 * zoomButtonSize - 6, viewControlsY,
+        viewControlsRight - (zoomControlsRight - 2 * zoomButtonSize - 6), zoomButtonSize};
     windowWidget.addWidget(&zoomOutButton,
         Point(zoomControlsRight - 2 * zoomButtonSize - 6, viewControlsY),
         Point(zoomButtonSize, zoomButtonSize));

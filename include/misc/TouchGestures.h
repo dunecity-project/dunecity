@@ -19,6 +19,8 @@
       between neighbouring steps, and lifting them quickly without either is a right
       click at their midpoint.
     - Holding one finger and then tapping a second is a right click at the first finger.
+    - Holding still for kLongPressMs and releasing is a right click without a left click.
+    - A gesture beginning at the configured map edge scrolls without clicking.
 */
 class TouchGestures {
 public:
@@ -43,6 +45,8 @@ public:
 
     static constexpr uint32_t kTwoFingerWindowMs = 150;
     static constexpr uint32_t kTwoFingerTapMs = 350;
+    static constexpr uint32_t kLongPressMs = 550;
+    static constexpr int kEdgeWidth = 20;
     static constexpr int kTapSlop = 10;
     static constexpr int kPanSlop = 12;
     static constexpr float kPinchSlop = 1.15f;
@@ -52,11 +56,23 @@ public:
     Actions fingerMotion(int64_t finger, int x, int y, uint32_t ms);
     Actions fingerUp(int64_t finger, int x, int y, uint32_t ms);
 
+    struct Rect {
+        int x = 0, y = 0, w = 0, h = 0;
+        bool contains(int px, int py) const {
+            return w > 0 && h > 0 && px >= x && py >= y && px < x + w && py < y + h;
+        }
+    };
+    void setMapArea(Rect area, Rect controls) { mapArea = area; mapControls = controls; }
+    /// Held touch only: never scroll from a lifted finger's stale mouse position.
+    std::array<int, 2> edgeScroll() const;
+
     /// Forgets all fingers, e.g. when the app leaves the foreground mid-touch.
     void reset() { *this = TouchGestures{}; }
 
 private:
-    enum class State { Idle, Pending, Pressed, TwoFinger, Done };
+    enum class State { Idle, Pending, Pressed, Edge, TwoFinger, Done };
+    std::array<int, 2> edgeAt(int x, int y) const;
+    Rect mapArea, mapControls;
 
     struct Finger {
         int64_t id = 0;

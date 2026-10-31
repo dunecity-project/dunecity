@@ -16,8 +16,64 @@
   `quantbot_custom_attack`, role save/load in `quantbot_army_recovery`, skirmish case `partner-fighter`
   (a minute, nothing queued/upgraded/placed). Throwaway 15-minute Fighter Hard smoke: 70 units hunting by
   minute 2, enemy beaten by minute 3, own structures 16 -> 16.
-- **Open:** commits sit on local `integrate/feature-batch` above the unmerged zoom commits (PR #112).
+- Zoom commits (PR #112) are now in main as 1.0.858; staging merged origin/main on 2026-10-31.
   Pre-existing: the quick skirmish co-op column overlaps the bottom-left crest at 640x480 classic.
+
+## 2026-10-30 — Approved touch/zoom release 1.0.858 and Android 0.2.33
+
+PR #112 merged at 46fe5a3551acbc6762e9622dd4f6330d341f9217 and immutable
+v1.0.858 was published by stable workflow 41160055892 after all platforms,
+Linux sanitizer CTests, Mac renderer/cache/performance probes and Mac signing/
+notarization passed. Main's duplicate build 41159972485 was cancelled. All eight
+public desktop package sizes/hashes, three signed updater feeds, appcasts and
+both historical repository redirects were verified. Windows/Mac/Linux archives
+retain all 902 DuneCity skin files byte-identical to source.
+
+Android 0.2.33 / 1000553 is public, using engine 1.0.858 and the exact APK the
+user approved on the connected phone. Public SHA256 matches the installed file:
+bf1aca4be8caf37be16102838c55d9be7dee06214c0bae80927689b567748590.
+Existing upgrade certificate, signature schemes and 16 KiB alignment verified;
+5,147 canonical payload files include all 902 skin files. App data was retained.
+The user explicitly confirmed both edge scrolling and unstacking work correctly.
+
+SourceForge mirror 41161671724 succeeded, read back seven packages and confirmed
+all OS defaults. Website a14bc0f publishes the exact stable-run browser artifact
+and Android links/release copy; TestFlight links and its 1.0.857 label are retained.
+All browser asset hashes and security policy pass locally and in staged Git blobs.
+Redundant browser rebuild 41161671779 was cancelled. Deployment 41161986457 passed.
+Live release pages show the new Android links and versions; the browser manifest
+points to the tagged source. All eight live browser artifacts, including the
+88,255,572-byte data archive, passed HTTPS readback SHA256 verification. Desktop
+remains GitHub latest after the Android publication. Publication complete.
+No iOS/TestFlight upload in this task.
+
+## 2026-10-30 — Android touch follow-up on PR #112
+
+User requested Android map-edge scrolling and convenient build-queue removal,
+and authorized fixes on integrate/zoom-steps plus an APK installed over ADB.
+Start from Stefan's d0d5c375, already including current main. Add a 20-logical-pixel
+map-edge hold that never clicks and stops on release, multitouch, dialogs or focus
+loss. Use the map boundary beside the sidebar, excluding the zoom/view controls;
+keep physical mouse edge scrolling. A stationary 550-ms hold and release emits
+one right click without an initial left click. BuilderList touch right click
+cancels one directly through its existing synchronized command, while physical
+mouse right click keeps pause-then-cancel. Cursor visibility overrides no longer
+freeze physical/touch input identity. Two-finger pan/pinch and box selection stay.
+
+Candidate engine 1.0.858; Android 0.2.33 / 1000553. Regression cases cover holds,
+edge directions/corners, release, selection drag, HUD exclusion and multitouch.
+PR checks 41150440890 passed all platforms and all 16 Linux sanitizer CTests.
+Android runner 41150433814 passed. Signed APK has 5,147 canonical payload files,
+including all 902 DuneCity skin files; signature and 16 KiB alignment verified.
+No local native compilation. Installed over Android 0.2.26 with app data retained.
+USB dropped during large transfers; resumable chunks and full on-device SHA256
+verification completed successfully. The user tested edge scrolling and queue
+removal and explicitly approved publication. Do not keep driving the phone UI.
+
+Application source: cdffc059563a25d24e31e2f35479d6d52cdd6a1b.
+APK SHA256: bf1aca4be8caf37be16102838c55d9be7dee06214c0bae80927689b567748590.
+Proceed with PR #112 merge, stable desktop/browser release 1.0.858 and Android
+0.2.33 publication, preserving the separately maintained iOS TestFlight links.
 
 ## 2026-10-29 — iPhone/iPad public TestFlight beta (engine 1.0.857)
 
