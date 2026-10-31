@@ -1,3 +1,24 @@
+## 2026-10-31 — AI roles: Builder, Fighter, Both (local, not pushed)
+
+- **At Stefan's request:** every menu that picks an AI shows AI / Difficulty / Role drop-downs
+  (`include/GUI/dune/AIPlayerSelector.h`) instead of one long list. Role: Both (normal QuantBot), Builder
+  (the former "AI Support", `qBotSupport*`), Fighter (new `qBotFighter*`: commands units, attacks, defends,
+  never builds/produces/repairs). Opponent pickers show AI + Difficulty only. Design and exact Fighter
+  gates: `docs/ai-roles.md`.
+- Class strings stay the identity (saves, replays, lobby `ChangePlayer` index); Fighter classes are
+  appended to `PlayerFactory`. Save 9875 (role byte; older flag loads as Builder/Both), protocol 104.
+  Match reports add `ai_role`. Builder and Both keep their previous behaviour (`supportMode` reads became
+  `builderOnly()`).
+- Menus: campaign house choice + quick start, quick skirmish (centre column 180 px), random skirmish (partner
+  moved to the right column, Spectate merged with the watched house's AI row, City skin in the left column),
+  lobby seats (fixed box + selector per seat; seat-2 loaded-game bug fixed), Options campaign AI (Both only).
+- Verified in `build-int`: ctest 118/118 on 281587af. New checks: Fighter readiness in
+  `quantbot_custom_attack`, role save/load in `quantbot_army_recovery`, skirmish case `partner-fighter`
+  (a minute, nothing queued/upgraded/placed). Throwaway 15-minute Fighter Hard smoke: 70 units hunting by
+  minute 2, enemy beaten by minute 3, own structures 16 -> 16.
+- **Open:** commits sit on local `integrate/feature-batch` above the unmerged zoom commits (PR #112).
+  Pre-existing: the quick skirmish co-op column overlaps the bottom-left crest at 640x480 classic.
+
 ## 2026-10-29 — iPhone/iPad public TestFlight beta (engine 1.0.857)
 
 - **At Stefan's request:** App Store packaging (asset-catalog icon, `PrivacyInfo.xcprivacy`,
