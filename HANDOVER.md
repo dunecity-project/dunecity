@@ -1,3 +1,17 @@
+## 2026-11-01 — 1.0.862: Construction Yards store 1000 credits in city matches (OMP integrator)
+
+- Stefan: "construction yard to have 1000 credits worth in dunecity mod only (not a setting)".
+  Both mods load `ObjectData.ini.default`, so it is a city-match override at match start in
+  `Game.cpp` (beside the city reactor balance): `ConstructionYard.capacity = 1000` when city sim
+  is on. Kept in the save's object data, so older city saves keep yards with no storage; vanilla
+  is untouched. Protocol 107 (a 106 peer would start the same mod without it).
+- QuantBot treats storage that comes only from yards as missing, so it still buys its first
+  Refinery as in 1.0.861. Without that, on the 64x64 low-cash fixture house 2 zoned into the room
+  its Refinery used to take, boxed itself in at 2 zones and sat on 1442 credits for 24 minutes.
+- Tests: `credit-storage-probe` asserts 1000 (city) / 0 (vanilla) and that placing and destroying a
+  yard adds and removes it. Focused ctests passed (unit, credit storage both mods, no-spice x3,
+  growth installments, scenario-matrix smoke); the full cluster suite was not rerun.
+
 ## 2026-10-31 — 1.0.861: slow city year, three of Stefan's saves fixed, AI tuning verdicts (OMP integrator)
 
 - **Slow City Year (Stefan: "if one budget year is 60 seconds, now make it 120 seconds", growth too):**
