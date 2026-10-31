@@ -16,7 +16,9 @@
   DefencePrerequisites` (default ON) makes the yard upgrade / Radar a protected capital project.
   A/B: no-spice 1v1 16 seeds, blue wiped out 8/16 → 0/16, ornithopter kills 3.6 → 0, city gross
   +6859 [+5679,+8026]; matrix 112 games/arm neutral (time-outs 3 → 6). Leak left: CITY-POWER
-  windtraps still buy while the project saves.
+  windtraps still buy while the project saves. Proactive (no aircraft yet) cover waits for a
+  four-zone city: without that gate the low-cash no-spice ctest city saved from its third zone on
+  and never grew, and the DuneCity m22 smoke campaign was lost.
 - **`blocked.dls`:** a finished planned Refinery's range came from two planned Industrial zones the
   player then cancelled; Retry Planned Placement retried forever and blocked the yard. Now a plan whose
   range no buildable planned plot can supply is cancelled with refund ("out of build range"). Save
@@ -24,8 +26,15 @@
 - **Tuning (74af1197, switches off vs on, paired):** none accepted, all stay off.
   `DeathHandTurrets` campaign 192: +0.00 [0,0]; `SpreadVsDeathHand` campaign 192: −0.01 [−0.04,+0.02];
   FFA cells not scoreable by `--compare`; `SmallMapYardCap` ladder short maps QH-v-QM +0.04
-  [0,+0.12], QB-v-QH −0.04 [−0.19,+0.07]. Six-player FFA (dhturrets) still running at release time.
-  Results: `~/Documents/projects/dunecity-results/tuning-1031/`.
+  [0,+0.12], QB-v-QH −0.04 [−0.19,+0.07]. Six-player FFA rs192 Brutal: off 18 clean games, 4 won by
+  the measured house, 14 no winner by 120 min; dhturrets 19, 4 won, 15 no winner (inconclusive;
+  12 of 48 runs failed in the harness). Results: `~/Documents/projects/dunecity-results/tuning-1031/`.
+- **Side effects of the slow year on fixtures:** `quantbot_police_budget` runs with
+  `tests/ai/game-options/classic-city-year.ini` (its bills are stated in classic years); the no-spice
+  progress check plays 24 min (12 city years). On the low-cash map house 0 is now overrun before
+  its opening matters (economy half speed, armies unchanged) — watch this in play.
+- Final: cluster ctest 118/118 on 2ac76bd3+ (perf_regression failed once on the loaded Pro, passed
+  on the mini). Installed on the Air 2026-11-01, backup `before-1.0.861-*`, runtime check passed.
 
 ## 2026-10-31 — Probe games no longer reach the public usage statistics (OMP)
 
