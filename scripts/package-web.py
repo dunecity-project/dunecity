@@ -43,6 +43,30 @@ def allow_relay_connections(text, sources):
         raise RuntimeError('Expected exactly one connect-src policy')
     return text
 
+# GitHub rejects files over 100 MB, and the website repository stores the package. A larger
+# artifact is committed as ordered parts; the website deploy joins them (deploy/play_parts.py)
+# before compressing and serving, so browsers still fetch one file.
+PART_BYTES = 64 * 1024 * 1024
+
+
+def split_large_artifacts(play_root, names):
+    split = {}
+    for name in names:
+        for stale in play_root.glob(name + '.part-*'):
+            stale.unlink()
+        path = play_root / name
+        if path.stat().st_size <= PART_BYTES:
+            continue
+        parts = []
+        with path.open('rb') as source:
+            for chunk in iter(lambda: source.read(PART_BYTES), b''):
+                part = f'{name}.part-{len(parts):03d}'
+                (play_root / part).write_bytes(chunk)
+                parts.append(part)
+        path.unlink()
+        split[name] = parts
+    return split
+
 
 def package(build_root, play_root, relay_origin=None, allow_loopback_relay=False):
     sources = relay_sources(relay_origin, allow_loopback_relay) if relay_origin else []
@@ -82,6 +106,7 @@ def package(build_root, play_root, relay_origin=None, allow_loopback_relay=False
         header_text = header_text.replace('; upgrade-insecure-requests', '')
     headers.write_text(header_text)
     names = [name for name in files if name != '.htaccess']
+    hashes = {name: hashlib.sha256((play_root / name).read_bytes()).hexdigest() for name in names}
     manifest = {
         'version': version,
         'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip(),
@@ -90,8 +115,11 @@ def package(build_root, play_root, relay_origin=None, allow_loopback_relay=False
         'relayOrigins': [],  # retained for old manifest readers; gameplay is direct-only
         'signalingOrigins': sources,
         'gameTransport': 'direct-webrtc',
-        'sha256': {name: hashlib.sha256((play_root / name).read_bytes()).hexdigest() for name in names},
+        'sha256': hashes,
     }
+    split = split_large_artifacts(play_root, names)
+    if split:
+        manifest['split'] = split
     (play_root / 'build.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(f'Packaged DuneCity {version} at {play_root}')
 
