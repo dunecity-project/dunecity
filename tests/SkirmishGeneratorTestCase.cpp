@@ -412,6 +412,14 @@ TEST_CASE("Random skirmish: every structure and unit is on a legal tile", "[skir
         REQUIRE(countSections(r.ini, "UNITS") == static_cast<int>(r.units.size()));
         for(const auto& h : r.houses) if(h.base == BaseSize::None && h.role != Role::Human)
             REQUIRE(std::count_if(r.units.begin(), r.units.end(), [&](const Placement& u) { return u.house == h.house && u.item == Unit_MCV; }) == 1);
+        // The MCV's yard footprint (its tile and the three right of and below it) and the lane
+        // round it carry no other unit, so the army never stops the opening deployment.
+        for(const auto& mcv : r.units) if(mcv.item == Unit_MCV)
+            for(const auto& u : r.units) {
+                if(&u == &mcv) continue;
+                INFO("MCV " << mcv.x << "," << mcv.y << " unit " << u.item << " at " << u.x << "," << u.y);
+                REQUIRE_FALSE((u.x >= mcv.x - 1 && u.x <= mcv.x + 2 && u.y >= mcv.y - 1 && u.y <= mcv.y + 2));
+            }
         // Every house's Construction Yard (or MCV) sits on its own plateau.
         for(const auto& h : r.houses) {
             bool start = false;

@@ -975,7 +975,11 @@ struct Layout {
         seen[from.y * size + from.x] = 1;
         size_t next = 0;
         int placed = 0;
+        // An MCV deploys its Construction Yard on its own tile and the three right of and below
+        // it: the army that follows leaves that footprint, and a one-tile lane round it, free.
+        Coord yard(-1, -1);
         auto clear = [&](int x, int y) {
+            if(yard.x >= 0 && x >= yard.x - 1 && x <= yard.x + 2 && y >= yard.y - 1 && y <= yard.y + 2) return false;
             if(at(x, y) != Free || map(x, y) == Terrain_Mountain || isSpiceBloomTerrain(map(x, y)) || !ownable(x, y, planIndex)) return false;
             for(int dy = -1; dy <= 1; ++dy) for(int dx = -1; dx <= 1; ++dx)
                 if(inside(x + dx, y + dy) && (at(x + dx, y + dy) == Building || at(x + dx, y + dy) == WallTile
@@ -989,6 +993,7 @@ struct Layout {
                 for(int item : slots[next]) {
                     Placement p; p.house = house; p.item = item; p.x = c.x; p.y = c.y;
                     result.units.push_back(p);
+                    if(item == Unit_MCV) yard = c;
                     ++placed;
                 }
                 ++next;

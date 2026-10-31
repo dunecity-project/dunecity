@@ -1227,9 +1227,124 @@ void runMcvDeploymentProbe(Game& game) {
         unitList=savedUnits;structureList=savedStructures;
     }
 
+    // 10. The reported MCV-only start: no yard yet, an all-rock plateau (so the
+    //     opening step has no sand to offer), and the army packed onto the
+    //     MCV's yard footprint and every tile round it. The MCV must deploy
+    //     where it stands, the units must make way, and none may be lost.
+    {
+        constexpr int plotSize=24;
+        Coord plot=Coord::Invalid();
+        for(int y=4;y+plotSize+4<currentGameMap->getSizeY() && plot.isInvalid();++y)
+            for(int x=4;x+plotSize+4<currentGameMap->getSizeX() && plot.isInvalid();++x) {
+                bool clear=true;
+                for(int dy=-4;dy<=plotSize+4 && clear;++dy)
+                    for(int dx=-4;dx<=plotSize+4 && clear;++dx)
+                        if(currentGameMap->getTile(x+dx,y+dy)->hasAGroundObject()) clear=false;
+                if(clear) plot=Coord(x,y);
+            }
+        require(plot.isValid(),"Boxed-in MCV fixture needs a clear region");
+        auto spot=[&](int x,int y){ return Coord(plot.x+x,plot.y+y); };
+        auto savedUnits=unitList;auto savedStructures=structureList;
+        const int savedYards=house->numItem[Structure_ConstructionYard];
+        unitList.clear();structureList.clear();
+        house->numItem[Structure_ConstructionYard]=0;
+        for(int y=-4;y<=plotSize+4;++y) for(int x=-4;x<=plotSize+4;++x) {
+            auto* tile=currentGameMap->getTile(plot.x+x,plot.y+y);
+            tile->setType(Terrain_Rock);tile->setRoad(false);tile->setOwner(INVALID);
+        }
+        bot->reservedStructures.clear();bot->recentStructureLosses.clear();
+        bot->builderPlaceLocations.clear();bot->planningBuilder=NONE_ID;
+        bot->clearPlacementCache();
+        bot->mcvExpansionSites.clear();bot->mcvSurveyCycles.clear();
+        bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+        bot->refreshTacticalDanger();
+        bot->openingDispersal.clear();bot->openingDispersalUntil=0;
+        const auto savedConfig=bot->configOverride;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        bot->configOverride=config;
+        struct RestoreBoxed {
+            RobustList<UnitBase*> units; RobustList<StructureBase*> structures;
+            House* house; int yards; QuantBot* bot; decltype(savedConfig) config;
+            ~RestoreBoxed() {
+                unitList=units;structureList=structures;
+                house->numItem[Structure_ConstructionYard]=yards;
+                bot->configOverride=config;
+            }
+        } restoreBoxed{savedUnits,savedStructures,house,savedYards,bot,savedConfig};
+
+        const Coord mcvAt=spot(12,12);
+        auto* mcv=static_cast<MCV*>(house->createUnit(Unit_MCV,true));
+        require(mcv!=nullptr,"Boxed-in MCV fixture could not create the MCV");
+        mcv->deploy(mcvAt);
+        require(mcv->getLocation()==mcvAt,"Boxed-in MCV fixture could not place the MCV");
+        const Uint32 mcvID=mcv->getObjectID();
+        std::vector<UnitBase*> army;
+        auto troop=[&](Uint32 item,Coord at) {
+            auto* unit=house->createUnit(item,true);
+            require(unit!=nullptr,"Boxed-in MCV fixture could not create a unit");
+            unit->deploy(at);
+            require(unit->getLocation()==at,"Boxed-in MCV fixture could not place a unit");
+            bot->doSetAttackMode(unit,AREAGUARD);
+            unit->setForced(false);
+            army.push_back(unit);
+        };
+        // The yard footprint (MCV tile plus right, below and diagonal) and the
+        // whole ring round it, as the generator's nearest-tile fill packed them.
+        const Uint32 vehicles[]={Unit_Trike,Unit_Tank,Unit_Launcher,Unit_Quad};
+        int v=0;
+        for(int y=-1;y<=2;++y) for(int x=-1;x<=2;++x) {
+            if(x==0 && y==0) continue;
+            const Coord at=mcvAt+Coord(x,y);
+            if(x==0 && y==1) {
+                for(int i=0;i<5;++i) troop(Unit_Soldier,at);   // A full squad below the MCV.
+            } else {
+                troop(vehicles[v++%4],at);
+            }
+        }
+        require(!mcv->canDeploy(),"The boxed-in fixture must block the yard footprint, or it tests nothing");
+        bot->initialMilitaryValue=-1;                 // The once-per-game opening init.
+        bot->attackTimer=MILLI2CYCLES(600000);        // No wave interferes with the opening.
+
+        // Off arm: the reported behaviour. Nothing makes way and no yard appears.
+        config->force.clearMcvFootprint=false;
+        bot->update();
+        require(bot->openingDispersal.empty(),"All-rock fixture: the opening step must have nowhere to send anyone");
+        const Uint32 offDeadline=game.getGameCycleCount()+MILLI2CYCLES(20000);
+        while(game.getGameCycleCount()<offDeadline && game.getObjectManager().getObject(mcvID)) {
+            replan(mcv);
+            tick(10);
+        }
+        require(game.getObjectManager().getObject(mcvID)!=nullptr
+                && house->getNumItems(Structure_ConstructionYard)==0,
+            "The off arm deployed anyway, so the fixture does not reproduce the boxed-in MCV");
+
+        // On arm, from a standing start: the units step aside and the MCV
+        // becomes a yard where it stands.
+        config->force.clearMcvFootprint=true;
+        mcv->setForced(false);
+        bot->doMove2Pos(mcv,mcv->getX(),mcv->getY(),false);
+        bot->mcvSurveyCycles.clear();
+        const Coord standing=mcv->getLocation();
+        require(standing==mcvAt,"The boxed-in MCV moved in the off arm");
+        const Uint32 start=game.getGameCycleCount(),deadline=start+MILLI2CYCLES(30000);
+        while(game.getObjectManager().getObject(mcvID) && game.getGameCycleCount()<deadline) {
+            replan(mcv);
+            tick(10);
+        }
+        require(game.getObjectManager().getObject(mcvID)==nullptr,
+            "A boxed-in MCV was still undeployed after 30 seconds");
+        require(yardNear(standing,0),"The boxed-in MCV did not deploy where it stood");
+        for(auto* unit:army)
+            require(game.getObjectManager().getObject(unit->getObjectID())!=nullptr,
+                "A unit was lost making way for the yard");
+        SDL_Log("MCV_DEPLOYMENT_NOTE: boxed-in MCV deployed at %d,%d after %u cycles; %zu units made way",
+            standing.x,standing.y,game.getGameCycleCount()-start,army.size());
+    }
+
     SDL_Log("MCV_DEPLOYMENT_PASS: prompt same-rock deployment at every difficulty, one driven arrival,"
         " distinct reservations, blocked-site handling, the colony gate,"
         " space-driven colonisation of safe reclaimed rock, the market colonist of a city"
-        " with no factory, and cramped factory placement that compromises roading only");
+        " with no factory, cramped factory placement that compromises roading only,"
+        " and an opening MCV boxed in by its own army");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=mcv_deployment outcome=passed");
 }

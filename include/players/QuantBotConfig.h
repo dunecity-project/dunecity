@@ -139,7 +139,7 @@ struct QuantBotConfig {
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
-    /// RespectServiceOwnership; optional keys, the code defaults
+    /// RespectServiceOwnership, ClearMcvFootprint; optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -220,6 +220,9 @@ struct QuantBotConfig {
         /// Light-raider tactical orders leave repair and carryall-pickup ownership intact.
         /// Independent candidate; off until same-build mechanics/outcome acceptance.
         bool respectServiceOwnership;
+        /// An undeployed MCV steps its own units off its Construction Yard footprint (and the
+        /// ring hemming them in) instead of waiting for ever. On by default: a bug fix.
+        bool clearMcvFootprint;
     };
     ForceSettings force;
 

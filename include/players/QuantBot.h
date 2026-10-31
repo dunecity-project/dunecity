@@ -451,6 +451,11 @@ private:
     bool mcvSiteUsable(const MCV* pMCV, Coord site) const;
     /// May this MCV turn into a yard where it stands right now?
     bool mcvMayDeployHere(const MCV* pMCV, bool expansion);
+    /// mcvMayDeployHere() without MCV::canDeploy(): every rule but the footprint itself.
+    bool mcvSiteRulesAllow(const MCV* pMCV, bool expansion);
+    /// Step our own units off this MCV's yard footprint when they are all that
+    /// stands in the way; true while that clearance is under way.
+    bool clearMcvFootprint(const MCV* pMCV);
     /// Does this footprint share a rock formation with one of our structures?
     bool onOwnRockFormation(Coord site) const;
     /// Sites remembered by our other, still undeployed MCVs.
@@ -492,6 +497,8 @@ private:
     /// Local deploy search window, and the free rock wanted around a new yard.
     static constexpr int kMcvLocalRadius = 20;
     static constexpr int kMcvDeployRoom = 12;
+    /// How far past the footprint clearMcvFootprint() looks for free ground.
+    static constexpr int kMcvClearanceReach = 6;
     Coord findPlaceLocation(Uint32 itemID);
     /// `clearedZones` are object ids this placement is about to demolish; their
     /// tiles count as passable, because by the time the building stands they

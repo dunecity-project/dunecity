@@ -468,8 +468,12 @@ Coord QuantBot::findLocalDeploySite(const MCV* pMCV, Coord current) {
 }
 
 bool QuantBot::mcvMayDeployHere(const MCV* pMCV, bool expansion) {
+    return pMCV->canDeploy()&&mcvSiteRulesAllow(pMCV,expansion);
+}
+
+bool QuantBot::mcvSiteRulesAllow(const MCV* pMCV, bool expansion) {
     const Coord at=pMCV->getLocation();
-    if(!pMCV->canDeploy()||overlapsReservedStructure(at.x,at.y,2,2)
+    if(overlapsReservedStructure(at.x,at.y,2,2)
         || !preservesGroundAccess(Structure_ConstructionYard,at)) return false;
     // An opening yard keeps the original rule: a legal footprint is enough.
     if(!expansion) return true;
@@ -487,6 +491,84 @@ bool QuantBot::mcvMayDeployHere(const MCV* pMCV, bool expansion) {
     const auto assigned=mcvExpansionSites.find(pMCV->getObjectID());
     const bool approvedSite=assigned!=mcvExpansionSites.end()&&assigned->second==at;
     return expansionDefenceReady(approvedSite)&&!nearRecentStructureLoss(at.x,at.y,2,2);
+}
+
+/**
+    Our own units parked on the yard footprint keep MCV::canDeploy() false for
+    as long as they stand there, and nothing else moves them: a generated
+    MCV-only start puts the whole army on the nearest tiles round the MCV, and
+    on an all-rock plateau the opening step has no sand to send them to.
+
+    When such units are all that stands in the way, step them, and the ring
+    hemming them in, out to the nearest free ground, while the MCV stays put.
+    Anything else on the footprint (another house's unit, a human-commanded
+    unit, another MCV, the wrong ground) is left to the ordinary relocation.
+*/
+bool QuantBot::clearMcvFootprint(const MCV* pMCV) {
+    const Coord at=pMCV->getLocation();
+    const Coord size=getStructureSize(Structure_ConstructionYard);
+    const int limit=currentGame->getGameInitSettings().getGameOptions().maximumNumberOfConstructionYardsOverride;
+    if(limit>0&&getHouse()->getNumItems(Structure_ConstructionYard)>=limit) return false;
+    const auto& map=getMap();
+    for(int dy=0;dy<size.y;++dy) for(int dx=0;dx<size.x;++dx) {
+        if(!map.tileExists(at.x+dx,at.y+dy)) return false;
+        const auto* tile=map.getTile(at.x+dx,at.y+dy);
+        if(!tile->isRock()||tile->hasAStructure()) return false;
+    }
+    // Margin 0 is the footprint, margin 1 the ring round it.
+    auto within=[&](Coord p,int margin) {
+        return p.x>=at.x-margin&&p.x<at.x+size.x+margin&&p.y>=at.y-margin&&p.y<at.y+size.y+margin;
+    };
+    auto ours=[&](const UnitBase* unit) {
+        return unit->getOwner()==getHouse()&&unit->isRespondable()&&unit->getItemID()!=Unit_MCV
+            &&unitRole(unit,{UnitRole::Human})==UnitRole::Free;
+    };
+    auto leaving=[&](const UnitBase* unit) { return unit->isMoving()&&!within(unit->getDestination(),1); };
+    std::vector<const UnitBase*> movers;
+    int blockers=0,departing=0;
+    for(const auto* unit:getUnitList()) {
+        if(unit==pMCV||!unit->isActive()||!unit->isAGroundUnit()||unit->isAFlyingUnit()) continue;
+        const Coord p=unit->getLocation();
+        if(!within(p,1)) continue;
+        const bool onFootprint=within(p,0);
+        if(!ours(unit)) {
+            if(onFootprint) return false;
+            continue;
+        }
+        blockers+=onFootprint;
+        if(leaving(unit)) departing+=onFootprint;
+        else movers.push_back(unit);
+    }
+    if(blockers==0) return false;
+    std::sort(movers.begin(),movers.end(),
+        [](const UnitBase* a,const UnitBase* b) { return a->getObjectID()<b->getObjectID(); });
+    std::set<std::pair<int,int>> taken;
+    int ordered=0;
+    for(const auto* unit:movers) {
+        const Coord from=unit->getLocation();
+        Coord best=Coord::Invalid();
+        int bestWalk=std::numeric_limits<int>::max();
+        // The nearest ring of free ground outside the cleared zone that has any.
+        for(int margin=2;margin<=kMcvClearanceReach&&best.isInvalid();++margin)
+            for(int y=at.y-margin;y<at.y+size.y+margin;++y)
+                for(int x=at.x-margin;x<at.x+size.x+margin;++x) {
+                    const Coord p(x,y);
+                    if(within(p,margin-1)||!map.tileExists(p)||taken.count({x,y})) continue;
+                    const auto* tile=map.getTile(p);
+                    if(tile->isMountain()||tile->hasAStructure()||tile->hasAGroundObject()
+                        ||tile->isSpiceBloom()||!unit->canPass(x,y)||dangerAt(p)>0) continue;
+                    const int walk=blockDistance(from,p).lround();
+                    if(walk<bestWalk) { bestWalk=walk; best=p; }
+                }
+        if(best.isInvalid()) continue;
+        doMove2Pos(unit,best.x,best.y,true);
+        taken.insert({best.x,best.y});
+        ++ordered;
+        traceDecision("mcv_footprint_step",AITelemetry::Record().set("mcv",pMCV->getObjectID())
+            .set("unit",unit->getObjectID()).set("item",unit->getItemID())
+            .set("from_x",from.x).set("from_y",from.y).set("x",best.x).set("y",best.y));
+    }
+    return ordered>0||departing>0;
 }
 
 void QuantBot::manageMcv(const MCV* pMCV) {
@@ -586,11 +668,19 @@ void QuantBot::manageMcv(const MCV* pMCV) {
     const int formationYards=report&&expansion ? yardsOnFormation(location) : 0;
     const bool colonyMission=report&&colonyMissionDue(pMCV);
     const bool deployed=ready&&doDeploy(pMCV);
+    bool clearing=false;
     if(deployed) {
         mcvExpansionSites.erase(id);
         mcvSurveyCycles.erase(id);
         rockSurveyCycle=std::numeric_limits<Uint32>::max();
         clearPlacementCache();
+    } else if(!deployableHere&&(!expansion||atTarget)&&botConfig().force.clearMcvFootprint
+        &&mcvSiteRulesAllow(pMCV,expansion)&&clearMcvFootprint(pMCV)) {
+        // Our own units are all that block the yard here: they step aside and
+        // the MCV stays. The survey clock restarts, so it is not driven off or
+        // given another site while they leave.
+        mcvSurveyCycles[id]=cycle;
+        clearing=true;
     } else if(!expansion&&stale) {
         mcvSurveyCycles[id]=cycle;
         const Coord pos=findMcvPlaceLocation(pMCV);
@@ -619,7 +709,7 @@ void QuantBot::manageMcv(const MCV* pMCV) {
             .set("x",location.x).set("y",location.y)
             .set("target_x",target.isValid()?target.x:-1).set("target_y",target.isValid()?target.y:-1)
             .set("site",choice).set("expansion",expansion).set("deployed",deployed)
-            .set("at_target",atTarget).set("can_deploy",couldDeploy)
+            .set("at_target",atTarget).set("can_deploy",couldDeploy).set("clearing_footprint",clearing)
             .set("own_formation",ownFormation)
             .set("formation_yards",formationYards)
             .set("colony_mission",colonyMission)
