@@ -322,13 +322,15 @@ protected:
     /**
         Books as much of \a amount as the refinery/silo storage can still hold.
         The rest is destroyed and reported as storage_lost; the caller adds the
-        returned amount to whichever earned pool it belongs to.
+        returned amount to whichever earned pool it belongs to. \a cityTax
+        only selects the warning text shown to the local player.
     */
-    FixPoint acceptEarnedCredits(FixPoint amount);
+    FixPoint acceptEarnedCredits(FixPoint amount, bool cityTax = false);
     void enforceCreditCeiling();
 
     /// Tells the local player that storage is full, at most once every 5 seconds.
-    void warnStorageFull();
+    /// \a cityTax names city tax income as what is lost instead of spice.
+    void warnStorageFull(bool cityTax = false);
 
     std::list<std::unique_ptr<Player> > players;        ///< List of associated players that control this house
 

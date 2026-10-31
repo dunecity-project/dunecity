@@ -134,7 +134,8 @@ void runControlsProbe(Game& game) {
         capture("city-budget.bmp");
         auto* budget=static_cast<CityBudgetWindow*>(game.pInGameMenu.get());
         for(const auto* text : {"Police stations: 83 | -8300/yr", "Rocket turrets: 376 | -5640/yr",
-                               "Net Annual: +86305.0/yr", "Projected Tax: +102245/yr"})
+                               "Net Annual: +86305.0/yr", "Projected Tax: +102245/yr",
+                               "(lost: no Refinery/Silo)", "Storage: 99999/99999"})
             require(GUIStyle::getInstance().getTextWidth(text,14)<=budget->forecastVBox.getSize().x,
                     "Established-city forecast text exceeds its column");
         require(budget->getSize().x<=getRendererWidth() && budget->getSize().y<=getRendererHeight(),

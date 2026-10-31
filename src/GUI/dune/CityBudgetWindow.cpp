@@ -103,9 +103,10 @@ CityBudgetWindow::CityBudgetWindow()
     allocationPairHBox.addWidget(&taxHBox);allocationPairHBox.addWidget(HSpacer::create(16));allocationPairHBox.addWidget(&policeHBox);
     mainVBox.addWidget(&allocationPairHBox,36);mainVBox.addWidget(VSpacer::create(12));
     configureSectionHeading(forecastHeadingLabel,_("Annual forecast"));forecastVBox.addWidget(&forecastHeadingLabel,22);
+    // The cash-flow row has room for a second line: the reason earned income is lost.
     for(auto* label : {&incomeLabel,&policeCostLabel,&policeStationCostLabel,&rocketTurretCostLabel,
-                       &gunTurretCostLabel,&roadCostLabel,&netLabel,&perSecondLabel}) {
-        configureValueLabel(*label);forecastVBox.addWidget(label,22);
+                       &gunTurretCostLabel,&roadCostLabel,&netLabel,&perSecondLabel,&storageLabel}) {
+        configureValueLabel(*label);forecastVBox.addWidget(label,label==&perSecondLabel ? 36 : 22);
     }
     configureSectionHeading(cityStatusHeadingLabel,_("City status"));statusVBox.addWidget(&cityStatusHeadingLabel,22);
     for(auto* label : {&totalPopLabel,&unemploymentLabel,&resPopLabel,&comPopLabel,&indPopLabel,
@@ -283,7 +284,18 @@ void CityBudgetWindow::updateDisplay() {
     const FixPoint netAnnual = FixPoint(projected) - paying;
     netLabel.setText(fmt::sprintf("Net Annual: %+.1f/yr", netAnnual.toDouble()));
     const int yearSeconds = static_cast<int>(DuneCity::cyclesPerCityYear() * 60 / DuneCity::kCyclesPerMinute);
-    perSecondLabel.setText(fmt::sprintf("Cash Flow: %+.1f/sec", (netAnnual / yearSeconds).toDouble()));
+    // Taxes share the refinery/silo store with spice (House::acceptEarnedCredits):
+    // without room the projected income is destroyed, and the readout says so.
+    const int capacity = house ? house->getCapacity() : 0;
+    storageLabel.setText(fmt::sprintf("Storage: %d/%d", house ? house->getEarnedCredits().lround() : 0, capacity));
+    std::string cashFlow = fmt::sprintf("Cash Flow: %+.1f/sec", (netAnnual / yearSeconds).toDouble());
+    const bool incomeLost = house && netAnnual > 0 && house->getEarnedCreditRoom() <= 0;
+    if (incomeLost) {
+        cashFlow += capacity <= 0 ? "\n(lost: no Refinery/Silo)" : "\n(lost: storage full)";
+    }
+    perSecondLabel.setText(cashFlow);
+    perSecondLabel.setTextColor(incomeLost ? COLOR_RGB(255,80,80) : COLOR_WHITE);
+    storageLabel.setTextColor(incomeLost ? COLOR_RGB(255,80,80) : COLOR_WHITE);
 
     // The slider's pending value is seeded once in the constructor so
     // subsequent +/- clicks edit the pending copy without being clobbered.

@@ -9,7 +9,9 @@ industrial lots when their demand is negative.
 
 One Refinery remains necessary in the shipped mod: it provides 1,005 credits of
 storage at tech 1 and unlocks the 10,000-credit Silo. Without storage, city tax is
-discarded. The new `city_income_storage` rule uses the cheapest legal, placeable
+discarded; the player is told so by a city-tax storage ticker message and by the
+City Budget window, which shows `Storage: earned/capacity` and marks positive cash
+flow as lost when there is no room. The new `city_income_storage` rule uses the cheapest legal, placeable
 capacity source from the actual mod tables. It does not buy a refinery for spice
 income when no spice exists. A transport requires a real harvesting fleet or
 vehicle repair traffic.

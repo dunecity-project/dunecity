@@ -93,6 +93,7 @@ private:
     Label roadCostLabel;
     Label netLabel;
     Label perSecondLabel;
+    Label storageLabel;
 
     Label cityStatusHeadingLabel;
     Label totalPopLabel;

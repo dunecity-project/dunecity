@@ -414,11 +414,11 @@ void House::enforceCreditCapacity() {
     storedCredits -= fromStored;
     cityCredits -= excess - fromStored;
     AITelemetry::log().account(houseID, "storage_lost", excess.getRawValue());
-    warnStorageFull();
+    warnStorageFull(excess > fromStored);
 }
 
 
-FixPoint House::acceptEarnedCredits(FixPoint amount) {
+FixPoint House::acceptEarnedCredits(FixPoint amount, bool cityTax) {
     if(amount <= 0) {
         return 0;
     }
@@ -428,13 +428,13 @@ FixPoint House::acceptEarnedCredits(FixPoint amount) {
     const FixPoint lost = amount - accepted;
     if(lost > 0) {
         AITelemetry::log().account(houseID, "storage_lost", lost.getRawValue());
-        warnStorageFull();
+        warnStorageFull(cityTax);
     }
     return accepted;
 }
 
 
-void House::warnStorageFull() {
+void House::warnStorageFull(bool cityTax) {
     if((this != pLocalHouse) || (currentGame == nullptr)) {
         return;
     }
@@ -444,7 +444,13 @@ void House::warnStorageFull() {
         return;
     }
     nextStorageWarningCycle = currentCycle + MILLI2CYCLES(5*1000);
-    currentGame->addToNewsTicker(_("@DUNE.ENG|145#As insufficient spice storage is available, spice is lost."));
+    if(cityTax) {
+        currentGame->addToNewsTicker(capacity <= 0
+            ? _("No spice storage: city tax income is lost. Build a Refinery or Silo.")
+            : _("Storage full: city tax income is lost. Build a Silo."));
+    } else {
+        currentGame->addToNewsTicker(_("@DUNE.ENG|145#As insufficient spice storage is available, spice is lost."));
+    }
 }
 
 
@@ -495,7 +501,7 @@ void House::addCityCredits(FixPoint amount) {
 
     if(amount > 0) {
         // Tax income is earned income: it needs storage like spice does.
-        cityCredits += acceptEarnedCredits(amount);
+        cityCredits += acceptEarnedCredits(amount, true);
         checkQuotaWin(*this);
     } else {
         // Police funding can exceed the tax take; the city never goes negative.
