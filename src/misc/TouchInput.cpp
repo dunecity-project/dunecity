@@ -129,7 +129,7 @@ void pushActions(const TouchGestures::Actions& actions) {
 
 namespace TouchInput {
 
-bool translateTouchEvent(SDL_Event& event) {
+bool translateTouchEvent(SDL_Event& event, const SDL_Rect* mapArea, const SDL_Rect* mapControls) {
 #ifdef __ANDROID__
     if((event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) &&
        (event.key.keysym.sym == SDLK_AC_BACK || event.key.keysym.scancode == SDL_SCANCODE_AC_BACK)) {
@@ -140,6 +140,10 @@ bool translateTouchEvent(SDL_Event& event) {
 #endif
 
 #ifdef DUNECITY_MOBILE
+    const auto rect = [](const SDL_Rect* r) {
+        return r ? TouchGestures::Rect{r->x, r->y, r->w, r->h} : TouchGestures::Rect{};
+    };
+    gestures.setMapArea(rect(mapArea), rect(mapControls));
     if(event.type == SDL_APP_WILLENTERBACKGROUND
        || (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)) {
         // Fingers on the screen now may never report their FINGERUP.
@@ -170,6 +174,15 @@ bool translateTouchEvent(SDL_Event& event) {
     return true;
 #else
     return false;
+#endif
+}
+
+SDL_Point edgeScroll() {
+#ifdef DUNECITY_MOBILE
+    const auto direction = gestures.edgeScroll();
+    return SDL_Point{direction[0], direction[1]};
+#else
+    return SDL_Point{0, 0};
 #endif
 }
 

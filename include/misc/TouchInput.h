@@ -9,7 +9,10 @@ namespace TouchInput {
     On phones and tablets, consumes finger events and pushes the mouse events and map
     gestures they amount to (misc/TouchGestures.h). Returns true for a consumed event.
 */
-bool translateTouchEvent(SDL_Event& event);
+bool translateTouchEvent(SDL_Event& event, const SDL_Rect* mapArea = nullptr,
+                         const SDL_Rect* mapControls = nullptr);
+/// Current held-finger edge direction in screen space, independent of zoom.
+SDL_Point edgeScroll();
 
 enum class MapGestureKind : Sint32 { Pan = 1, ZoomIn = 2, ZoomOut = 3 };
 

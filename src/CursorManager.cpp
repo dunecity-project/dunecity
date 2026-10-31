@@ -101,14 +101,8 @@ void presentWithCursor(int mode, bool contextual) {
 
 void updateCursorVisibilityForInput(const SDL_Event& event) {
 #ifdef DUNECITY_MOBILE
-    if (settings.video.cursorVisibility != 0) {
-        // SDL's Android activity and pointer-icon handling may change cursor
-        // visibility during focus and view transitions. Forced modes are
-        // authoritative, so restore them whenever input reaches the game.
-        applyCursorVisibilitySetting();
-        return;
-    }
-
+    // Input identity also controls touch gestures, independently of whether
+    // the user forces the cursor visible or hidden.
     bool visibilityChanged = false;
     switch (event.type) {
         case SDL_FINGERDOWN:
@@ -145,7 +139,7 @@ void updateCursorVisibilityForInput(const SDL_Event& event) {
             break;
     }
 
-    if (visibilityChanged) {
+    if (visibilityChanged || settings.video.cursorVisibility != 0) {
         applyCursorVisibilitySetting();
     }
 #else

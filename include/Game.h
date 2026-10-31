@@ -520,6 +520,10 @@ public:
     */
     void cycleDune2RZoom();
 
+    /// One zoom step (misc/ZoomSteps.h) closer or further, around the middle of the map area.
+    void zoomIn();
+    void zoomOut();
+
     /**
         Crossfades local presentation between classic and Dune2R visuals.
     */
@@ -722,13 +726,17 @@ private:
     void finishMatchAnalytics();
     std::string buildMatchAnalyticsPayload(bool finishedMatch) const;
 
-    void applyDune2RZoom(int zoomLevel);
-
     /// Two-finger pan and pinch over the game view on phones and tablets.
     void handleMapGesture(const TouchInput::MapGesture& gesture);
 
-    /// Changes the zoom level, keeping the map point under (screenX, screenY) in place.
-    void zoomAround(int zoomLevel, int screenX, int screenY);
+    /**
+        Switches to a zoom step (misc/ZoomSteps.h), keeping the map point under
+        (screenX, screenY) in place. Local view only: never saved or sent.
+        \return false at either end of the steps, or if the step cannot be drawn
+    */
+    bool setZoomStep(int step, int screenX, int screenY, bool announce);
+    /// Applies zoomStep's sprite level and drawing board without moving the view.
+    bool applyZoomStepView(int step);
 
     /**
         Checks whether the cursor is on the radar view
@@ -1229,6 +1237,9 @@ private:
     std::unique_ptr<MetaServerClient> matchAnalyticsClient;
     std::string matchAnalyticsID;
     bool matchAnalyticsStarted = false;
+
+    int zoomStep = 1;                           ///< ZoomSteps::kScales index; local view only
+    sdl2::texture_ptr zoomBoardTexture;         ///< offscreen map for steps between sprite levels (ScreenBorder::drawsOffscreen)
 
 
     std::unique_ptr<SpatialGrid>    spatialGrid;            ///< Spatial partition for fast proximity queries

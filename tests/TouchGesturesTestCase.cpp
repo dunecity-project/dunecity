@@ -43,6 +43,64 @@ TEST_CASE("A tap clicks where the finger came down, and only once it lifts", "[t
     CHECK(only(seen, Kind::LeftUp) == std::vector<Seen>{{Kind::LeftUp, 100, 200, 0, 0}});
 }
 
+TEST_CASE("Hold and release right-clicks once without first left-clicking", "[touch]") {
+    TouchGestures g;
+    std::vector<Seen> seen;
+    add(seen, g.fingerDown(1, 540, 260, 1000));
+    add(seen, g.fingerMotion(1, 543, 258, 1200));
+    add(seen, g.fingerUp(1, 543, 258, 1000 + TouchGestures::kLongPressMs));
+    CHECK_FALSE(any(seen, {Kind::LeftDown, Kind::LeftUp}));
+    CHECK(only(seen, Kind::RightClick) == std::vector<Seen>{{Kind::RightClick, 540, 260, 0, 0}});
+    seen.clear();
+    add(seen, g.fingerDown(2, 540, 260, 2000));
+    add(seen, g.fingerUp(2, 540, 260, 2100));
+    CHECK(only(seen, Kind::LeftDown).size() == 1);
+    CHECK(only(seen, Kind::RightClick).empty());
+}
+
+TEST_CASE("Touch map edges scroll while held and never click or stick after release", "[touch]") {
+    for(const auto position : {std::array<int,4>{5,200,-1,0}, {475,200,1,0},
+                              {200,45,0,-1}, {200,475,0,1}, {5,475,-1,1}}) {
+        TouchGestures g;
+        g.setMapArea({0,40,480,440}, {300,46,170,44});
+        std::vector<Seen> seen;
+        add(seen, g.fingerDown(1,position[0],position[1],100));
+        CHECK(g.edgeScroll() == std::array<int,2>{position[2],position[3]});
+        add(seen, g.fingerUp(1,position[0],position[1],900));
+        CHECK(g.edgeScroll() == std::array<int,2>{0,0});
+        CHECK_FALSE(any(seen,{Kind::LeftDown,Kind::LeftUp,Kind::RightClick}));
+    }
+}
+
+TEST_CASE("Touch edge excludes HUD and sidebar and stops for multitouch or focus loss", "[touch]") {
+    TouchGestures g;
+    g.setMapArea({0,40,480,440}, {300,46,170,44});
+    g.fingerDown(1,460,50,0); // zoom button, inside the top edge band
+    CHECK(g.edgeScroll() == std::array<int,2>{0,0});
+    auto tap = g.fingerUp(1,460,50,80);
+    CHECK(tap.count == 2);
+    CHECK(tap.items[0].kind == Kind::LeftDown);
+    g.fingerDown(1,540,200,100); // sidebar is not the right map edge
+    CHECK(g.edgeScroll() == std::array<int,2>{0,0});
+    g.fingerUp(1,540,200,180);
+    g.fingerDown(1,5,200,200);
+    g.fingerDown(2,100,200,240);
+    CHECK(g.edgeScroll() == std::array<int,2>{0,0});
+    g.reset();
+    CHECK(g.edgeScroll() == std::array<int,2>{0,0});
+}
+
+TEST_CASE("Dragging a selection into a map edge scrolls without turning it into a hold", "[touch]") {
+    TouchGestures g;
+    g.setMapArea({0,40,480,440}, {});
+    g.fingerDown(1,100,200,0);
+    g.fingerMotion(1,5,200,100);
+    CHECK(g.edgeScroll() == std::array<int,2>{-1,0});
+    const auto up = g.fingerUp(1,5,200,1000);
+    CHECK(up.items[up.count-1].kind == Kind::LeftUp);
+    CHECK(g.edgeScroll() == std::array<int,2>{0,0});
+}
+
 TEST_CASE("A one-finger drag presses at its start and releases where it ends", "[touch]") {
     TouchGestures g;
     std::vector<Seen> seen;
@@ -79,17 +137,17 @@ TEST_CASE("Two fingers moved together pan by their midpoint and never click", "[
     CHECK(only(seen, Kind::Pan).back().y == 130);
 }
 
-TEST_CASE("Spreading two fingers zooms in one level per step, pinching zooms out", "[touch]") {
+TEST_CASE("Spreading two fingers zooms in one step per 1.2x, pinching zooms out", "[touch]") {
     TouchGestures g;
     std::vector<Seen> seen;
     add(seen, g.fingerDown(1, 300, 200, 0));
     add(seen, g.fingerDown(2, 340, 200, 20));      // 40 px apart
-    add(seen, g.fingerMotion(2, 350, 200, 40));    // 50: below one step
+    add(seen, g.fingerMotion(2, 347, 200, 40));    // 47: 1.175x, below one step
     CHECK(only(seen, Kind::ZoomIn).empty());
-    add(seen, g.fingerMotion(2, 355, 200, 60));    // 55: 1.375x
-    add(seen, g.fingerMotion(2, 375, 200, 80));    // 75: 1.36x the last step
+    add(seen, g.fingerMotion(2, 349, 200, 60));    // 49: 1.225x
+    add(seen, g.fingerMotion(2, 359, 200, 80));    // 59: 1.2x the last step
     CHECK(only(seen, Kind::ZoomIn).size() == 2);
-    add(seen, g.fingerMotion(2, 330, 200, 100));   // 30: pinched to 0.4x
+    add(seen, g.fingerMotion(2, 330, 200, 100));   // 30: pinched to 0.5x
     CHECK(only(seen, Kind::ZoomOut).size() == 1);
     CHECK_FALSE(any(seen, {Kind::LeftDown, Kind::RightClick}));
 }

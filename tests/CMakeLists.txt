@@ -38,6 +38,7 @@ target_sources(dunelegacy_tests
         FormationPlannerTestCase.cpp
         FramePacingTestCase.cpp
         TouchGesturesTestCase.cpp
+        ZoomStepsTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/misc/TouchGestures.cpp
         ${CMAKE_SOURCE_DIR}/src/FormationPlanner.cpp
         # The army-recovery test asserts that every new behavioural config field

@@ -25,6 +25,18 @@ adds:
 Android Back button                   -> Escape
 ```
 
+Tap a production icon to add one item. Hold it still for at least 550 ms and
+release to remove one queued item, without adding an item first. Touch removal
+uses the ordinary synchronized cancel command directly; physical mouse right
+click retains its pause-then-cancel behavior. Two-finger right click still works.
+
+Hold within 20 logical pixels of the map boundary to scroll, including its right
+edge immediately beside the sidebar. Lift to stop. Edge holds do not select or
+issue orders. Zoom/view buttons and the sidebar are excluded. Dragging a selection
+into the edge also scrolls. Two-finger pan/pinch suspends edge scrolling; dialogs
+and focus loss stop it. Touch scrolling does not depend on desktop mouse focus
+or the last position of a lifted finger. These shared controls apply to all mods.
+
 External mice use Android's native system cursor rather than SDL color
 cursors. The Video options expose three cursor policies:
 
