@@ -7,8 +7,12 @@ repair capacity, peaceful coverage and bargain imports wait for that opening.
 The ordinary demand chooser selects R/I/C; it does not force commercial or
 industrial lots when their demand is negative.
 
-One Refinery remains necessary in the shipped mod: it provides 1,005 credits of
-storage at tech 1 and unlocks the 10,000-credit Silo. Without storage, city tax is
+Since 1.0.862 every Construction Yard in a city match (a mod that enables city
+mode, such as Dune City) stores 1,000 credits, so the first city tax is banked
+before any Refinery; vanilla yards store nothing. The value is set when the match
+starts (`Game.cpp`, next to the city reactor balance) and kept in the save, so
+older city saves keep yards without storage. A Refinery adds 1,005 credits at
+tech 1 and unlocks the 10,000-credit Silo. Without room, city tax is
 discarded; the player is told so by a city-tax storage ticker message and by the
 City Budget window, which shows `Storage: earned/capacity` and marks positive cash
 flow as lost when there is no room. The new `city_income_storage` rule uses the cheapest legal, placeable

@@ -326,7 +326,9 @@
 //      The Mentat AI is retired: its playerDataList entries are gone, so later AI indices moved.
 // 106: MOD11 slow city year: the city year (budget, zone growth) lasts 120 s. An older peer
 //      cannot read the added settings byte (save 9877).
-#define NETWORK_PROTOCOL_VERSION            106
+// 107: city matches give the Construction Yard 1000 credits of storage at match start;
+//      a 106 peer would start the same mod with none and desync.
+#define NETWORK_PROTOCOL_VERSION            107
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

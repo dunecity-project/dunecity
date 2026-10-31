@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 106;
+static constexpr int kWireProtocolVersion = 107;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -118,8 +118,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // (docs/ai-roles.md, save 9875).
     // 105 adds the MOD10 planned-construction rules (docs/preplace-queue.md, save 9876) and
     // removes the retired Mentat classes from the PlayerFactory list the lobby indexes.
-    // 106 adds the MOD11 slow-city-year rule (save 9877).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 106);
+    // 106 adds the MOD11 slow-city-year rule (save 9877); 107 gives city-match yards storage.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 107);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

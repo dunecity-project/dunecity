@@ -912,8 +912,13 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
 
             // Apply the city reactor balance only to a city match. ObjectData
             // also loads non-city mods and must preserve their configured stats.
-            if (citySimEnabled_) for (int h = 0; h < NUM_HOUSES; ++h)
+            // City matches also give the Construction Yard 1000 credits of storage,
+            // so city tax is banked before the first Refinery or Silo (Stefan,
+            // 1.0.862). Stored in the save: older city saves keep a yard with none.
+            if (citySimEnabled_) for (int h = 0; h < NUM_HOUSES; ++h) {
                 objectData.data[Structure_NuclearPlant][h].hitpoints = 750;
+                objectData.data[Structure_ConstructionYard][h].capacity = 1000;
+            }
 
             objectData.logSettings();
 

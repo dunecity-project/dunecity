@@ -158,6 +158,17 @@ void runCreditStorageProbe(Game& game) {
     require(house->getEarnedCredits()==FixPoint(baseCapacity),
             "Credits above the remaining storage were left to leak away later");
 
+    // --- 5b. A DuneCity Construction Yard stores 1000 credits (so city tax is
+    //         banked before the first Refinery); outside city mods it stores none. ---
+    const int yardStorage=game.isCitySimEnabled() ? 1000 : 0;
+    require(game.objectData.data[Structure_ConstructionYard][house->getHouseID()].capacity==yardStorage,
+            "Construction Yard storage is not 1000 in a city match and 0 otherwise");
+    auto* storageYard=house->placeStructure(NONE_ID,Structure_ConstructionYard,plot.x,plot.y,false,true);
+    require(storageYard!=nullptr,"The storage fixture could not place a Construction Yard");
+    require(house->capacity==baseCapacity+yardStorage,"A placed Construction Yard did not add its storage");
+    storageYard->destroy();
+    require(house->capacity==baseCapacity,"Destroying the Construction Yard did not remove its storage");
+
     // --- 6. Loading: a saved balance is not clamped until the world is back. ---
     // The saved balance is far above anything the reloaded silo can hold, the
     // way a save written before the limit covered city income looks on resume.
