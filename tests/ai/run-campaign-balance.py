@@ -497,7 +497,8 @@ else:
         # QuantBot.cpp and its subsystem files implement one class. The preserved
         # object(s), from a build before or after that split, replace all of them.
         split = [f'/players/QuantBot{part}.cpp{object_suffix}' for part in
-                 ('', 'SaveLoad', 'Colonisation', 'Build', 'Placement', 'Army', 'Blob', 'Air', 'Harvesters')]
+                 ('', 'SaveLoad', 'Colonisation', 'Build', 'BuildProducers', 'BuildYard', 'Placement', 'Army', 'Blob',
+                  'Air', 'Harvesters')]
         present = [arg for arg in link if any(arg.replace('\\', '/').endswith(name) for name in split)]
         if len(present) != len(split):
             raise RuntimeError('Expected the QuantBot subsystem objects in the diagnostic link.')

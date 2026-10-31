@@ -27,6 +27,7 @@
 #include <players/GroundAccessPolicy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotColonisationPolicy.h>
+#include <players/QuantBotFoundationPolicy.h>
 #include <units/MCV.h>
 class Harvester;
 #include <players/QuantBotConfig.h>
@@ -1632,6 +1633,167 @@ private:
     void checkAllUnits();
     void retreatAllUnits();
     void build(int militaryValue);
+    // build() runs one pass in stages; the pass state is in players/QuantBotBuildPass.h.
+    struct BuildPass;
+    struct BuilderTurn;
+    struct YardTurn;
+    struct CivicPlan;
+    struct CapitalCandidate;
+    // Planning, in order (QuantBotBuild.cpp).
+    /// Clears the per-pass caches and expired reservations.
+    void resetBuildPass();
+    /// Queue-inclusive item counts and the producers' current load.
+    void planBuildInventory(BuildPass& pass);
+    /// Spendable cash, military budget, spice competition, support queues and reserves.
+    void planBuildBudget(BuildPass& pass);
+    /// Per-house city statistics, custom-city valve tuning and power demand sampling.
+    void planCityState(BuildPass& pass);
+    /// IX/Palace eligibility timers and the strategic reserve they protect.
+    void planStrategicReserve(BuildPass& pass);
+    /// Harvester targets, refinery queues, rock expansion and the opening fleet.
+    void planSpiceEconomy(BuildPass& pass);
+    /// Generation costs, city power reserve, nuclear plan and the yard target.
+    void planPowerAndYards(BuildPass& pass);
+    /// Population ceiling and the city growth limits.
+    void planCityPopulation(BuildPass& pass);
+    /// Structural civic need and the spice trip forecast.
+    void planCivicNeedAndTrips(BuildPass& pass);
+    /// Periodic stats log and telemetry snapshot.
+    void traceBuildState(BuildPass& pass);
+    /// Learned unit mix, anti-air floor and the funded army plan.
+    void planUnitMix(BuildPass& pass);
+    /// Income forecast, producer lanes and the shared-spending decision.
+    void planCapitalForecast(BuildPass& pass);
+    /// City yards, civic reserve, storage and the no-spice bootstrap.
+    void planCityBootstrap(BuildPass& pass);
+    /// First heavy factory funding and transport targets.
+    void planOpeningProduction(BuildPass& pass);
+    /// Rocket coverage, core infrastructure and crime exposure.
+    void planDefenceCoverage(BuildPass& pass);
+    /// Scores every producer's candidate purchases.
+    void planCapitalCandidates(BuildPass& pass);
+    /// Chooses the protected capital purchase for this pass.
+    void chooseCapitalPlan(BuildPass& pass);
+    /// Orders this pass's producers.
+    void planBuildOrder(BuildPass& pass);
+    /// Records what the capital plan achieved.
+    void traceCapitalOutcome(BuildPass& pass);
+    // Planning helpers shared by the producers and yards (QuantBotBuild.cpp).
+    bool openingFleetIncomplete(BuildPass& pass);
+    bool openingWorkersNeeded(BuildPass& pass);
+    int harvesterInvestmentReserve(BuildPass& pass);
+    bool needsFirstTransport(BuildPass& pass);
+    static int initialCityPopulation(Uint32 item);
+    bool cityAdmitsStructure(BuildPass& pass, Uint32 item);
+    AITelemetry::Record decisionState(BuildPass& pass);
+    bool campaignPowerNeeded(BuildPass& pass, int nextDemand);
+    bool powerGenerationPending(BuildPass& pass);
+    Uint32 chooseCityZone(BuildPass& pass, const BuilderBase* builder, bool bootstrap, bool missingOnly = false);
+    bool canBuildMilitaryVehicle(BuildPass& pass, const BuilderBase* factory);
+    CivicPlan planCivicForYard(BuildPass& pass, const BuilderBase* yard);
+    void forecastSpiceTrip(BuildPass& pass, Coord site);
+    int workerAnnualIncome(BuildPass& pass);
+    bool factoryPrefersHarvester(BuildPass& pass, const BuilderBase* factory);
+    Uint32 chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, bool opening);
+    bool infantryQuotaAdmits(BuildPass& pass, int value);
+    bool cityInfantryItem(BuildPass& pass, Uint32 item);
+    bool cityTroopContentExists(BuildPass& pass);
+    static int purchasePrice(const BuilderBase* builder, Uint32 item);
+    QuantBotFoundationPolicy::Plan foundationPlan(const BuilderBase* builder, Uint32 item, Coord site, const std::vector<Uint32>& clearedZones = std::vector<Uint32>{});
+    std::vector<QuantBotFoundationPolicy::SlabOrder> foundationOrders(const BuilderBase* builder, Uint32 item, Coord site);
+    Sint32 repairPrice(const StructureBase* structure);
+    bool repairPolicyMaintains(BuildPass& pass, const StructureBase* structure);
+    bool canFundCapacityMcv(BuildPass& pass, int price);
+    Uint32 affordableCityZone(BuildPass& pass, const BuilderBase* builder, int budget);
+    int buildingCapitalCost(BuildPass& pass, Uint32 item);
+    int cityBuildTicks(BuildPass& pass, Uint32 item);
+    bool cityBootstrapNeeded(BuildPass& pass);
+    int cityBootstrapReserve(BuildPass& pass);
+    int coreCoverageShortfall(BuildPass& pass);
+    bool storageExpansionNeeded(BuildPass& pass);
+    int proactiveCoverageShortfall(BuildPass& pass);
+    bool proactiveSavingHold(BuildPass& pass, int price);
+    bool capitalPending(BuildPass& pass);
+    int capitalReserve(BuildPass& pass, Uint32 builder);
+    // One producer's turn (QuantBotBuildProducers.cpp).
+    /// Repairs a damaged structure under the repair policy.
+    void buildRepair(BuildPass& pass, const StructureBase* pStructure);
+    /// One producer's turn: shared rules, then its type's handler.
+    void buildProducer(BuildPass& pass, const StructureBase* pStructure);
+    /// Per-builder bookkeeping and status telemetry.
+    void beginBuilderTurn(BuildPass& pass, BuilderTurn& turn);
+    /// Starport MCV recovery; true ends the turn.
+    bool recoverBuilderConstruction(BuildPass& pass, BuilderTurn& turn);
+    /// Bulk-slab yard upgrade; true ends the turn.
+    bool upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn);
+    /// Campaign repair capacity; true ends the turn.
+    bool buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn);
+    /// Withholds the cash this builder must not spend.
+    void reserveBuilderCash(BuildPass& pass, BuilderTurn& turn);
+    /// Capital and low-priority unit purchases; true ends the turn.
+    bool buildCapitalUnits(BuildPass& pass, BuilderTurn& turn);
+    /// Light factory production.
+    void buildLightFactory(BuildPass& pass, BuilderTurn& turn);
+    /// WOR production.
+    void buildWOR(BuildPass& pass, BuilderTurn& turn);
+    /// Barracks production.
+    void buildBarracks(BuildPass& pass, BuilderTurn& turn);
+    /// High-tech factory production.
+    void buildHighTechFactory(BuildPass& pass, BuilderTurn& turn);
+    /// Heavy factory production.
+    void buildHeavyFactory(BuildPass& pass, BuilderTurn& turn);
+    /// Starport purchases.
+    void buildStarPort(BuildPass& pass, BuilderTurn& turn);
+    bool produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32 itemID, int sourceLine, const char* rule = "unit_mix_or_prerequisite");
+    bool upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine);
+    bool queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 item, int sourceLine, const char* rule="campaign_rebuild");
+    bool queueCampaignWindtrap(BuildPass& pass, BuilderTurn& turn, int nextDemand);
+    Uint32 economicGenerator(BuildPass& pass, BuilderTurn& turn);
+    // A construction yard's turn (QuantBotBuildYard.cpp).
+    /// A construction yard's turn: selection, ordering and placement.
+    void buildConstructionYard(BuildPass& pass, BuilderTurn& turn);
+    /// Production lane backlogs for the yard's factory rules.
+    void planYardLanes(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Yard status logging.
+    void traceYardStatus(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Legacy campaign rebuild list; true ends the turn.
+    bool buildCampaignYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Rule-ordered structure selection and ordering; true ends the turn.
+    bool buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Selection state, storage priority and protected growth.
+    void startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Turret goals and counter-air defence.
+    void chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Essential infrastructure, power recovery and economic generation.
+    void chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// No-spice opening, civics, services and the seed economy.
+    void chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Core protection, power reserve, reactor and production recovery.
+    void chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// City opening refineries, zones, vehicle factory and first transport.
+    void chooseYardCityOpening(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Crime services, refineries and repair support.
+    void chooseYardServicesAndRefineries(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Tech progression, production lanes, starport, radar and light factory.
+    void chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Barracks, repair yard, yard upgrade, turrets and factories.
+    void chooseYardMilitaryInfrastructure(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// IX, heavy factory expansion, refineries and repair expansion.
+    void chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Crime service, palace, vanilla defences, battery and zones.
+    void chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Power investment, deduplication, retries and budget checks.
+    void vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Sites and orders the chosen structure; true ends the turn.
+    bool placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Spare-capacity zoning and concrete.
+    void useSpareYardCapacity(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Places a finished structure; true ends the turn.
+    bool placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    bool onInstallments(BuilderTurn& turn, Uint32 item);
+    bool hasPowerBufferForTurret(BuildPass& pass);
+    void selectCrimeService(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn, const char* rule);
+    bool starportUnlocks(BuildPass& pass, BuilderTurn& turn, Uint32 goal);
     /// Fires a ready palace weapon: summon/saboteur, or the Death Hand at the largest enemy base.
     void firePalaceWeapon(const Palace* pPalace);
     /// The Fighter role's build-phase work instead of build(): retreat point and palace weapons.
