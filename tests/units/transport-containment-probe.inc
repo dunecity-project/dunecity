@@ -310,6 +310,37 @@ int runTransportContainmentProbe() {
                            && refinery->getContainedHarvester(1) == capacity
                            && capacity->getAmountOfSpice() == spiceAfter,
                            "A partially occupied Doublefinery did not round-trip");
+        // A campaign fight destroys a five-wide Doublefinery, not merely its
+        // save record. Both hidden bay occupants and every footprint tile must go.
+        fast = dynamic_cast<Harvester*>(game->getObjectManager().getObject(fastID));
+        containmentRequire(fast && fast->isActive(), "Released first-bay harvester did not reload");
+        fast->setTarget(refinery);
+        fast->setReturned();
+        containmentRequire(refinery->getNumOccupiedBays() == 2,
+                           "Destruction regression needs both Doublefinery bays occupied");
+        const Coord wreckAt = refinery->getLocation();
+        House* refineryOwner = refinery->getOwner();
+        const int doublefineriesBefore = refineryOwner->getNumItems(Structure_Doublefinery);
+        const auto explosionsBefore = game->getExplosionList().size();
+        refinery->setHealth(0);
+        refinery->destroy();
+        containmentRequire(game->getObjectManager().getObject(refineryID) == nullptr
+                           && game->getObjectManager().getObject(fastID) == nullptr
+                           && game->getObjectManager().getObject(capacityID) == nullptr,
+                           "Destroyed Doublefinery retained itself or a hidden bay occupant");
+        containmentRequire(refineryOwner->getNumItems(Structure_Doublefinery) == doublefineriesBefore - 1,
+                           "Doublefinery destruction did not update the house inventory");
+        const int rubble[] = {Destroyed3x2Structure_TopLeft, Destroyed3x2Structure_TopCenter,
+            Destroyed3x2Structure_TopCenter, Destroyed3x2Structure_TopCenter, Destroyed3x2Structure_TopRight,
+            Destroyed3x2Structure_BottomLeft, Destroyed3x2Structure_BottomCenter,
+            Destroyed3x2Structure_BottomCenter, Destroyed3x2Structure_BottomCenter, Destroyed3x2Structure_BottomRight};
+        for(int y = 0; y < 2; ++y) for(int x = 0; x < 5; ++x) {
+            const Tile* tile = currentGameMap->getTile(wreckAt + Coord(x, y));
+            containmentRequire(!tile->hasAStructure() && tile->getDestroyedStructureTile() == rubble[y * 5 + x],
+                               "Doublefinery destruction left a blocked or incorrect rubble tile");
+        }
+        containmentRequire(game->getExplosionList().size() >= explosionsBefore + 10,
+                           "Doublefinery destruction omitted a footprint explosion");
         SDL_Log("TORNIE_STATE_PROBE_PASS: mod=%s family=1 bays=2 captured_tech=1 slow=1 checks=%d",
                 mod.c_str(), gContainmentChecks);
         game.reset();
