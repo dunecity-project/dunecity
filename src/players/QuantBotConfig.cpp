@@ -329,7 +329,8 @@ QuantBotConfig::QuantBotConfig() {
     force.smallMapYardCap = false;
     force.deathHandTurrets = false;
     force.spreadVsDeathHand = false;
-    force.defencePrerequisites = false;
+    // On since 1.0.861: no-spice 1v1, 16 seeds, blue wiped out 8/16 -> 0/16; matrix neutral.
+    force.defencePrerequisites = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
