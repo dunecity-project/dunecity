@@ -736,6 +736,15 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
         && QuantBotColonisationPolicy::colonisationAllowed(colonisationDemand(0,0)))
         pass.cityYardTarget=std::min(pass.cityYardTarget,QuantBotColonisationPolicy::productionYardCeiling(
             yardFormations(),getHouse()->getNumItems(Structure_ConstructionYard),colonySiteOpen(),builtOut));
+    // force.smallMapYardCap (short-map ladder, HANDOVER 2026-10-24): on a small map (neither
+    // side above 96 tiles) a custom Hard/Brutal bot holds Medium's two city yards until its
+    // first wave launches; MCVs for a third yard delayed its heavy factory and army behind
+    // Medium's. Exhausted rock (below) still adds a yard, and a lost yard leaves capacity
+    // under two, so it is still rebuilt.
+    if(botConfig().force.smallMapYardCap && difficulty>=Difficulty::Hard && gameMode==GameMode::Custom
+        && !builderOnly() && !isCampaignGameType(currentGame->gameType) && customWave.launched==0
+        && std::max(currentGameMap->getSizeX(),currentGameMap->getSizeY())<=96)
+        pass.cityYardTarget=std::min(pass.cityYardTarget,2);
     if(pass.rockExpansionNeeded)pass.cityYardTarget=std::max(pass.cityYardTarget,getHouse()->getNumItems(Structure_ConstructionYard)+1);
     pass.yardLimit = getGameInitSettings().getGameOptions().maximumNumberOfConstructionYardsOverride;
     if(pass.yardLimit > 0) pass.cityYardTarget = std::min(pass.cityYardTarget, pass.yardLimit);

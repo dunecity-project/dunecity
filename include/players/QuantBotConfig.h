@@ -139,7 +139,8 @@ struct QuantBotConfig {
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
-    /// RespectServiceOwnership, ClearMcvFootprint; optional keys, the code defaults
+    /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
+    /// SpreadVsDeathHand; optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -223,6 +224,16 @@ struct QuantBotConfig {
         /// An undeployed MCV steps its own units off its Construction Yard footprint (and the
         /// ring hemming them in) instead of waiting for ever. On by default: a bug fix.
         bool clearMcvFootprint;
+        /// 2026-10-31 tuning candidates (off until same-build acceptance).
+        /// Short-map ladder: Hard/Brutal on small maps keep Medium's city-yard target and
+        /// opening tempo instead of buying MCVs for a third yard.
+        bool smallMapYardCap;
+        /// Free-for-all finishing: the Palace's Death Hand aims at the densest cluster of seen
+        /// enemy turrets guarding the house the waves are attacking.
+        bool deathHandTurrets;
+        /// Campaign survival: while an enemy can fire a Death Hand, the yard, refineries and
+        /// factories are placed apart so one missile cannot take out several of them.
+        bool spreadVsDeathHand;
     };
     ForceSettings force;
 

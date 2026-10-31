@@ -19,6 +19,8 @@
 // and the Death Hand target.
 
 #include "QuantBotInternal.h"
+#include <DynastyProjectile.h>
+#include <array>
 
 int QuantBot::visibleHostileAircraft() const {
     if (getHouse()==nullptr) return 0;
@@ -714,12 +716,88 @@ bool QuantBot::authorizesAircraftTarget(const UnitBase* aircraft, const ObjectBa
     return false;
 }
 
+namespace {
+/// DeathHandTurrets: the fewest seen enemy turrets one Death Hand must be able to hit before
+/// it is aimed at turrets instead of the production ranking.
+constexpr int kDeathHandMinTurrets = 4;
+
+/// The tiles, relative to the aimed tile, whose structures a Death Hand landing there damages.
+/// The missile lands on a tile centre and Map::damage hurts a structure only when one of the
+/// seventeen blast centres (DynastyProjectile::deathHandBlast*) lies inside its footprint:
+/// the 3x3 block around the impact plus eight tiles two away.
+std::array<Coord, DynastyProjectile::deathHandBlastCentres> deathHandHitTiles() {
+    const auto tileOf = [](int pixels) { return (pixels >= 0 ? pixels : pixels - (TILESIZE - 1)) / TILESIZE; };
+    std::array<Coord, DynastyProjectile::deathHandBlastCentres> tiles;
+    for (int i = 0; i < DynastyProjectile::deathHandBlastCentres; ++i)
+        tiles[i] = Coord(tileOf(TILESIZE/2 + DynastyProjectile::deathHandBlastX[i]),
+                         tileOf(TILESIZE/2 + DynastyProjectile::deathHandBlastY[i]));
+    return tiles;
+}
+}
+
 Coord QuantBot::findBestDeathHandTarget(int enemyHouseID) {
 	const QuantBotConfig& config = botConfig();
 	const int myTeam = getHouse()->getTeamID();
 
     const Coord reactorTarget = findNuclearMissileTarget();
     if (reactorTarget.isValid()) return reactorTarget;
+
+    // DeathHandTurrets (force.deathHandTurrets): aim at the seen enemy turret whose tile hits
+    // the most seen enemy turrets of the team our ground wave is fighting, else of any enemy
+    // team, once that is at least kDeathHandMinTurrets; else the production ranking below.
+    if (config.force.deathHandTurrets) {
+        struct SeenTurret { Coord at; int team; };
+        std::vector<SeenTurret> turrets;
+        for (const StructureBase* structure : getStructureList())
+            if (structure->isActive() && knownEnemyStructure(structure) && structure->canAttack()
+                && structure->isVisible(myTeam) && !structure->getOwner()->isNatives())
+                turrets.push_back({structure->getLocation(), structure->getOwner()->getTeamID()});
+        // The wave's team: H's / Z's weakest house when those rules lead it, else the team most
+        // of the wave's ground units are shooting at (ties to the lower team id).
+        int waveTeam = -1;
+        if (forceVariant(kForceFinishWeakest) || forceVariant(kForceMassAssault)) {
+            waveTeam = finishTargetTeam();
+        } else {
+            std::map<int, int> engaged;
+            for (const Uint32 id : customWave.members) {
+                const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+                if (!unit || unit->getOwner() != getHouse() || unit->getHealth() <= 0 || !unit->isAGroundUnit()) continue;
+                const ObjectBase* target = unit->getTarget();
+                if (target && target->getOwner() && target->getOwner()->getTeamID() != myTeam
+                    && !target->getOwner()->isNatives()) ++engaged[target->getOwner()->getTeamID()];
+            }
+            int most = 0;
+            for (const auto& [team, count] : engaged)
+                if (count > most) { most = count; waveTeam = team; }
+        }
+        const auto hitTiles = deathHandHitTiles();
+        // Candidate centres are the turret tiles; -1 counts every enemy team's turrets.
+        const auto bestCluster = [&](int team, int& bestCount) {
+            Coord best = Coord::Invalid();
+            bestCount = 0;
+            for (const auto& centre : turrets) {
+                if (team >= 0 && centre.team != team) continue;
+                int count = 0;
+                for (const auto& other : turrets) {
+                    if (team >= 0 && other.team != team) continue;
+                    const Coord offset = other.at - centre.at;
+                    if (std::find(hitTiles.begin(), hitTiles.end(), offset) != hitTiles.end()) ++count;
+                }
+                if (count > bestCount) { bestCount = count; best = centre.at; }
+            }
+            return best;
+        };
+        int hits = 0;
+        Coord aim = waveTeam >= 0 ? bestCluster(waveTeam, hits) : Coord::Invalid();
+        const bool waveCluster = hits >= kDeathHandMinTurrets;
+        if (!waveCluster) aim = bestCluster(-1, hits);
+        if (hits >= kDeathHandMinTurrets) {
+            traceDecision("deathhand_turret_aim", AITelemetry::Record().set("x", aim.x).set("y", aim.y)
+                .set("turrets", hits).set("wave_team", waveTeam).set("wave_cluster", waveCluster ? 1 : 0)
+                .set("seen_turrets", static_cast<int>(turrets.size())));
+            return aim;
+        }
+    }
 
 	const StructureBase* bestTarget = nullptr;
 	double bestScore = -1.0;

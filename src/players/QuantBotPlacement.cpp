@@ -139,6 +139,16 @@ AITelemetry::Record siteQualityRecord(const SiteQuality& q) {
         .set("enemy_fire_risk", q.fireRisk).set("rear_score", q.rear).set("reactor_clearance", q.clearsReactor ? 1 : 0);
     return record.set("tier", q.tier).set("score", q.score);
 }
+
+// force.spreadVsDeathHand: the buildings one Death Hand must not take out together.
+bool deathHandCritical(Uint32 item) {
+    return item == Structure_ConstructionYard || item == Structure_Refinery || item == Structure_HeavyFactory
+        || item == Structure_LightFactory || item == Structure_HighTechFactory || item == Structure_Palace;
+}
+// Clear tiles kept between two of them. Bullet::detonateDeathHand() lands its blast centres up to
+// two tiles (128 world units) from the impact, and a structure is hit when a centre lies on it, so
+// one missile's centres span four tiles: a four-tile gap keeps any missile to one building.
+constexpr int kDeathHandSpreadTiles = 2 * (128 / TILESIZE);
 } // namespace
 
 namespace QuantBotInternal {
@@ -738,16 +748,52 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         return !blastChecked || clearsBlastSites(blastSites, Coord(x, y), Coord(newSizeX, newSizeY));
     };
 
+    // force.spreadVsDeathHand: while an enemy palace can fire a Death Hand, a critical building
+    // keeps kDeathHandSpreadTiles clear tiles from our other critical buildings and their
+    // reservations, so one missile cannot hit two of them. A hard filter only while some legal
+    // site meets it: a spaced site always outranks an unspaced one, the search passes go on
+    // looking for one, and when there is none the ordinary choice stands.
+    auto enemyDeathHand = [&] {
+        for (const auto* structure : getStructureList()) {
+            if (structure->getItemID() != Structure_Palace || structure->getOwner() == nullptr
+                || structure->getOwner()->getTeamID() == getHouse()->getTeamID()) continue;
+            const auto* palace = static_cast<const Palace*>(structure);
+            if (palace->usesTargetedSpecialWeapon() || palace->usesTornieMainRebelsRandomSpecial()) return true;
+        }
+        return false;
+    };
+    const bool spreadVsDeathHand = botConfig().force.spreadVsDeathHand && deathHandCritical(itemID) && enemyDeathHand();
+    std::vector<std::array<int, 4>> deathHandSites;
+    if (spreadVsDeathHand) {
+        for (const auto* structure : getStructureList())
+            if (structure->getOwner() == getHouse() && structure->getHealth() > 0 && deathHandCritical(structure->getItemID())) {
+                const Coord location = structure->getLocation(), size = structure->getStructureSize();
+                deathHandSites.push_back({location.x, location.y, size.x, size.y});
+            }
+        for (const auto& entry : reservedStructures)
+            if (entry.first != planningBuilder && deathHandCritical(entry.second.item)) {
+                const Coord size = getStructureSize(entry.second.item);
+                deathHandSites.push_back({entry.second.location.x, entry.second.location.y, size.x, size.y});
+            }
+    }
+    auto spreadFromDeathHandSites = [&](int x, int y) {
+        for (const auto& site : deathHandSites)
+            if (CityPlacementPolicy::footprintDistance(x, y, newSizeX, newSizeY, site[0], site[1], site[2], site[3])
+                <= kDeathHandSpreadTiles) return false;
+        return true;
+    };
+    bool bestSpread = false;
+
     // Keep the fast ordinary search, but never treat its averaged base centre
     // as the limit of a spread-out city's buildable territory.
     AITelemetry::PerformanceScope candidateScope("ai.placement.candidates",
         getGameCycleCount(), getHouse()->getHouseID(), static_cast<int>(itemID));
     for (int searchPass=0; searchPass<3; ++searchPass) {
         if (searchPass==1) {
-            if (bestLocation.isValid() && itemID != Structure_NuclearPlant) break;
+            if (bestLocation.isValid() && itemID != Structure_NuclearPlant && !(spreadVsDeathHand && !bestSpread)) break;
             startX=0; startY=0; endX=mapW-newSizeX; endY=mapH-newSizeY;
         }
-        if (searchPass==2 && (bestLocation.isValid() || !roadingFallbackItem)) break;
+        if (searchPass==2 && ((bestLocation.isValid() && !(spreadVsDeathHand && !bestSpread)) || !roadingFallbackItem)) break;
         // Only the road-layout preferences are dropped. Engine placement, ground
         // egress, reservations, blast clearance and threat rules still decide.
         const bool relaxRoading = searchPass==2;
@@ -1282,11 +1328,15 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                 quality.enemyClearance = enemyClearance; quality.lossRisk = lossRisk; quality.fireRisk = fireRisk;
                 quality.rear = rear; quality.clearsReactor = clearsReactor;
 
-				// Pick this location if it has the best score
-				if (itemID == Structure_NuclearPlant ? reactorRank > bestReactorRank
+				// Pick this location if it has the best score. force.spreadVsDeathHand: a site
+				// spaced from the other critical buildings outranks every unspaced one.
+                const bool spread = spreadVsDeathHand && spreadFromDeathHandSites(placeLocationX, placeLocationY);
+				if (spreadVsDeathHand && spread != bestSpread ? spread
+                    : itemID == Structure_NuclearPlant ? reactorRank > bestReactorRank
                     : factoryPlacement ? factoryRank > bestFactoryRank
                     : CityPlacementPolicy::preferCitySite(lossRisk==0,infill,siteTier,locationScore,
                         bestSafe,bestInfill,bestSiteTier,bestLocationScore)) {
+                    bestSpread = spread;
                     bestReactorRank = reactorRank;
                     bestFactoryRank = factoryRank;
                     bestSiteTier = siteTier;
@@ -1303,6 +1353,9 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 
     } // search passes
     if (haveBestSite) bestQuality = siteQualityRecord(bestSite);
+    if (spreadVsDeathHand)
+        bestQuality.set("death_hand_spread",bestSpread ? 1 : 0)
+            .set("death_hand_sites",static_cast<int>(deathHandSites.size()));
     if (bestLocation.isInvalid()) {
         bestLocation = findRedevelopmentSite(itemID);
         if (bestLocation.isValid()) { bestQuality.set("redevelopment",1); roadingRelaxed=false; }
