@@ -207,41 +207,42 @@ uint64_t terrainDigest(const MapData& map) {
 } // namespace
 
 TEST_CASE("Random skirmish: pinned seeds give the same map on every platform", "[skirmish][generator][determinism]") {
-    // Digests of the 1.0.845 macOS generator, where clang evaluates function arguments left to
-    // right. MSVC evaluates them right to left, so Coord(random.rand(..), random.rand(..)) built
-    // a different map from the same seed on Windows; macOS, the browser and Windows must agree.
+    // Digests of the macOS generator (re-pinned when the 1.0.862 batch cut mountains by 35%
+    // relative to rock), where clang evaluates function arguments left to right. MSVC evaluates
+    // them right to left, so Coord(random.rand(..), random.rand(..)) built a different map from
+    // the same seed on Windows; macOS, the browser and Windows must agree.
     struct Pin { int size; uint32_t seed; Mode mode; uint64_t terrain, ini; };
     const Pin pins[] = {
-        {64, 1u, Mode::Vanilla, 0x83c3c700c756d591ull, 0xbf83cb4fc15448faull},
-        {64, 1u, Mode::DuneCity, 0x4331038d9e4e6229ull, 0xae8359fdcf7f5154ull},
-        {64, 7101u, Mode::Vanilla, 0x1f4a047aa11fec05ull, 0x2a56672130a7eaa2ull},
+        {64, 1u, Mode::Vanilla, 0x919294c20c525201ull, 0x9843030d06816a8bull},
+        {64, 1u, Mode::DuneCity, 0x0e81a92bc6ffa459ull, 0xa21e8c8f2d525744ull},
+        {64, 7101u, Mode::Vanilla, 0x47a907848315865dull, 0xb4784d85f7bd5878ull},
         {64, 7101u, Mode::DuneCity, 0xaf295ea1269c0d65ull, 0x8811eb11bf1fbe5dull},
-        {64, 7202u, Mode::Vanilla, 0x94f4a45973d513e6ull, 0xe6eed494d2659e93ull},
-        {64, 7202u, Mode::DuneCity, 0xd4013a0680085eeaull, 0x510d6dedde40027bull},
+        {64, 7202u, Mode::Vanilla, 0x2462bec98f79776eull, 0xfaf7cab9d8ffc819ull},
+        {64, 7202u, Mode::DuneCity, 0x9b9d22a6d6b5f33eull, 0x0f5fbb115c680eafull},
         {64, 7303u, Mode::Vanilla, 0x57d49737c3a65b55ull, 0xb2c50f0efb1d7deeull},
-        {64, 7303u, Mode::DuneCity, 0xa8cb2f47655bd3c1ull, 0xf6fdb0c72eb9865full},
-        {64, 4000000000u, Mode::Vanilla, 0x61c7cd10b13acaebull, 0xd981122ff4235673ull},
-        {64, 4000000000u, Mode::DuneCity, 0x967b3520c6a00460ull, 0xbd265224d27672ddull},
-        {128, 1u, Mode::Vanilla, 0x2b644ba5152c9eadull, 0x5b4437232501fc25ull},
-        {128, 1u, Mode::DuneCity, 0x1718f1fcb46416c5ull, 0xbf5c56369d3d72d4ull},
-        {128, 7101u, Mode::Vanilla, 0x16be56325988f5fdull, 0x428d662a502c333full},
-        {128, 7101u, Mode::DuneCity, 0x6cab022adbcfb22dull, 0x9c8f49445c1b001cull},
-        {128, 7202u, Mode::Vanilla, 0x42c2676e49455511ull, 0x81d3eb09c0b0c585ull},
-        {128, 7202u, Mode::DuneCity, 0xa221b75fd4d35734ull, 0x824dd4f62dbde9a2ull},
-        {128, 7303u, Mode::Vanilla, 0x5ab457a674fac1a9ull, 0x6f11398377eedb1dull},
-        {128, 7303u, Mode::DuneCity, 0x09c4f7bccae6a8f9ull, 0x5cececd4826bdf92ull},
-        {128, 4000000000u, Mode::Vanilla, 0x08cee2efe7c6286full, 0x68e7469d8e83bf34ull},
-        {128, 4000000000u, Mode::DuneCity, 0x448eb306f7cae475ull, 0xf7c64dcda9ce6d1aull},
-        {192, 1u, Mode::Vanilla, 0xa168a478eef24995ull, 0x35cb2f70e07a1550ull},
-        {192, 1u, Mode::DuneCity, 0x26d45d8bd26a5cc1ull, 0x491f09310c92fd06ull},
-        {192, 7101u, Mode::Vanilla, 0x01ffa14de9f47df9ull, 0x7a01e3699ff7c0efull},
-        {192, 7101u, Mode::DuneCity, 0xefcc1416919ddff1ull, 0x540067a35eea6fa7ull},
-        {192, 7202u, Mode::Vanilla, 0x81eef02bb000223full, 0x680dc741e425025bull},
-        {192, 7202u, Mode::DuneCity, 0xe41e988186f9dfc5ull, 0xfbc6ff417bda8142ull},
-        {192, 7303u, Mode::Vanilla, 0x6bc5ee8f43404f6dull, 0xe98bd11de45c4f6aull},
-        {192, 7303u, Mode::DuneCity, 0x7a6ab4ab4ab1c89dull, 0xd7af6c741d6d14d0ull},
-        {192, 4000000000u, Mode::Vanilla, 0x0f69ae590efaf89cull, 0x242d2afda6c4af5full},
-        {192, 4000000000u, Mode::DuneCity, 0x6b12df167779cabdull, 0xcc79c837501cc0e2ull},
+        {64, 7303u, Mode::DuneCity, 0x68211e3b5fd3dfc1ull, 0x57986a2cfd2f082full},
+        {64, 4000000000u, Mode::Vanilla, 0x6d43e283f9fbd161ull, 0x98ffcb7158abfe0bull},
+        {64, 4000000000u, Mode::DuneCity, 0xb3fe1d18afe7bd28ull, 0xfc479cf809a996d6ull},
+        {128, 1u, Mode::Vanilla, 0xf80ededdede9821dull, 0xcebf6dcc204868a2ull},
+        {128, 1u, Mode::DuneCity, 0xf65f7bf05b52b4cdull, 0x2e47b30f614a108eull},
+        {128, 7101u, Mode::Vanilla, 0xfbc1cc80d4ae0d1dull, 0xd043a60760dcd53full},
+        {128, 7101u, Mode::DuneCity, 0xe0ec8b93db10d50dull, 0xf82adf296ee927e8ull},
+        {128, 7202u, Mode::Vanilla, 0x53df3d01bfaac431ull, 0xd0ee236b4f4d2523ull},
+        {128, 7202u, Mode::DuneCity, 0x24eee0179f36288cull, 0x88d3ebac148fa380ull},
+        {128, 7303u, Mode::Vanilla, 0x117825ccdc36aaa1ull, 0x5be820d978f23541ull},
+        {128, 7303u, Mode::DuneCity, 0x188a0e8959f058f1ull, 0x0a967edc050f8beeull},
+        {128, 4000000000u, Mode::Vanilla, 0xfa2324134e5a7ad7ull, 0xd2000a68d6ec4d98ull},
+        {128, 4000000000u, Mode::DuneCity, 0x4d7dc8c5e869d521ull, 0x723b92ce25e44c7full},
+        {192, 1u, Mode::Vanilla, 0xbab619cdbbf6a4fdull, 0x061455970708b5f5ull},
+        {192, 1u, Mode::DuneCity, 0x036a2f373fb58da1ull, 0xe8dcf64563ffeff1ull},
+        {192, 7101u, Mode::Vanilla, 0xe1b62dc004f98e19ull, 0xf827b38045764e70ull},
+        {192, 7101u, Mode::DuneCity, 0x7800a78c6316f101ull, 0x113e7db33daeefaaull},
+        {192, 7202u, Mode::Vanilla, 0x3f8c14c462b0ad51ull, 0xe8ea70cbedf6a928ull},
+        {192, 7202u, Mode::DuneCity, 0x757ea88575b5aab7ull, 0x822c98135bd90e5bull},
+        {192, 7303u, Mode::Vanilla, 0x0c35f5de63e9fb15ull, 0x1908380e0a680a5eull},
+        {192, 7303u, Mode::DuneCity, 0x030c80bf8a2290d5ull, 0x7ce27ad430eed061ull},
+        {192, 4000000000u, Mode::Vanilla, 0x2da78f0e76b2afd2ull, 0x05770bb08f9e547cull},
+        {192, 4000000000u, Mode::DuneCity, 0x1934776a3c484da3ull, 0xcdae87f547f91a62ull},
     };
     for(const Pin& pin : pins) {
         Params p = params(pin.size, 1, 2, pin.mode, 8, pin.seed);

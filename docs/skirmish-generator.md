@@ -164,10 +164,12 @@ never serialized or sent, and no protocol, save or map format changed.
     irregular width: smooth value noise between 2 and 7 tiles, plus a tile of per-tile jitter,
     smoothed with the editor's fill-in rule, plus three editor-style rock lobes walked out from
     beyond the rim. The core is never the outline.
-  - Mountains, never within about 3 tiles of a core: massifs in rock at least 5 tiles from the
-    sand and a ragged 10–16 tiles from every core, wandering ridges (one per 60 rock tiles
+  - Mountains, never within about 3 tiles of a core: massifs in rock at least 8 tiles from the
+    sand and a ragged 10–16 tiles from every core, wandering ridges (one per 110 rock tiles
     outside the cores) through rock fields away from the rims, and clumps of outcrops on the rims
-    within 3 tiles of the sand. The map border counts as an edge of the rock.
+    within 3 tiles of the sand (4 per 40 tiles of core width + height). The map border counts as
+    an edge of the rock. Over random configurations that is about 0.23 mountain tiles per rock
+    tile.
   - Spice fields grow like the editor's: random walks over sand and dunes that turn thick where
     they cross themselves, then the editor's fill-in passes for spice and thick spice, until the
     spice target is reached. The first field goes beside every start (toward the map centre),

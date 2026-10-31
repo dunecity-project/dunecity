@@ -54,9 +54,11 @@ constexpr int kZonesPerPolice = 16;
 constexpr int kMaxCityRows = 8;     ///< city blocks across the base-to-edge axis
 constexpr int kNoiseCell = 6;       ///< lattice spacing of the rim noise
 constexpr int kCoreClearance = 2;   ///< no mountain this close to a start's clean core
-constexpr int kMassifDepth = 5;     ///< rock this deep inside a rock field becomes a mountain massif
-constexpr int kRidgeEvery = 60;     ///< one mountain ridge per this many rock tiles outside the cores
-constexpr int kOutcropsPerStart = 6;  ///< rim outcrops per 40 tiles of core width + height
+// Massif depth, ridge spacing and outcrop count together give about 0.23 mountain tiles per
+// rock tile over random configurations (0.35 before; mountains cut by 35% relative to rock).
+constexpr int kMassifDepth = 8;     ///< rock this deep inside a rock field becomes a mountain massif
+constexpr int kRidgeEvery = 110;    ///< one mountain ridge per this many rock tiles outside the cores
+constexpr int kOutcropsPerStart = 4;  ///< rim outcrops per 40 tiles of core width + height
 constexpr int kBlastGap = 5;        ///< footprint distance a reactor keeps from protected buildings
 
 int ceilDiv(int a, int b) { return (a + b - 1) / b; }
