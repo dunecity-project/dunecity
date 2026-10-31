@@ -239,9 +239,14 @@ std::vector<ConstructionYard::HouseGhost> ConstructionYard::houseGhosts(const Ho
             continue;
         }
         const auto* yard = static_cast<const ConstructionYard*>(structure);
+        std::vector<Uint32> planOrders;
+        for(const ProductionQueueItem& entry : yard->getProductionQueue()) {
+            if(entry.reservationID != 0) planOrders.push_back(entry.planOrder);
+        }
+        std::size_t reserved = 0;
         for(const PlacementReservation::Ghost& ghost : PlacementReservation::ghostsInQueueOrder(yard->getProductionQueue())) {
             ghosts.push_back({yard, ghost});
-            slots.push_back({static_cast<std::size_t>(ghost.number - 1), yardOrder});
+            slots.push_back({planOrders[reserved++], static_cast<std::size_t>(ghost.number - 1), yardOrder});
         }
         ++yardOrder;
     }
@@ -285,11 +290,23 @@ bool ConstructionYard::doReservePlacement(Uint32 itemID, int x, int y) {
         return false;
     }
 
+    // Next in the house's shared queue: after every plot the house still has planned.
+    Uint32 lastPlanned = 0;
+    for(const StructureBase* structure : structureList) {
+        if(structure->getOwner() != owner || structure->getItemID() != Structure_ConstructionYard) {
+            continue;
+        }
+        for(const ProductionQueueItem& entry : static_cast<const ConstructionYard*>(structure)->getProductionQueue()) {
+            if(entry.reservationID != 0) lastPlanned = std::max(lastPlanned, entry.planOrder);
+        }
+    }
+
     ProductionQueueItem& order = currentProductionQueue.back();
     order.reservationID = nextReservationID;
     order.plotX = x;
     order.plotY = y;
     order.reservationFailed = false;
+    order.planOrder = lastPlanned + 1;
     nextReservationID = PlacementReservation::nextReservationID(nextReservationID);
     return true;
 }
@@ -417,7 +434,7 @@ void ConstructionYard::takeSharedQueueWork() {
             for(auto entry = yard->currentProductionQueue.begin(); entry != yard->currentProductionQueue.end(); ++entry, ++position) {
                 if(position == 0 || entry->reservationID == 0 || !mayReserveItem(entry->itemID)) continue;
                 offers.push_back({yard, entry});
-                slots.push_back({position, yardOrder});
+                slots.push_back({entry->planOrder, position, yardOrder});
                 break;
             }
         }

@@ -221,17 +221,19 @@ inline std::uint32_t chooseYard(const std::vector<YardLoad>& candidates, std::ui
 }
 
 /**
-    Shared yard queue: the house's planned orders are one queue, ordered by queue position and
-    then by the yard's place in the structure list. A position in one yard's queue is the
-    position of the shared order, so the orders the least-work routing spread over the yards
-    keep the order in which they were planned.
+    Shared yard queue: the house's planned orders are one queue, in the order they were planned
+    (ProductionQueueItem::planOrder), then by queue position and the yard's place in the
+    structure list. Orders loaded from saves without a plan order (0) keep the order the
+    least-work routing spread them over the yards in.
 */
 struct SharedSlot {
+    std::uint32_t planOrder = 0;   ///< ProductionQueueItem::planOrder
     std::size_t position = 0;      ///< place in its own yard's queue (0 = that yard's front)
     std::size_t yardOrder = 0;     ///< the yard's place among the house's yards
 };
 
 inline bool sharedBefore(const SharedSlot& a, const SharedSlot& b) {
+    if(a.planOrder != b.planOrder) return a.planOrder < b.planOrder;
     return a.position != b.position ? a.position < b.position : a.yardOrder < b.yardOrder;
 }
 

@@ -87,6 +87,9 @@ public:
     /// The planned plot was invalid when the order finished: it waits to be
     /// placed by hand like an unreserved order.
     bool   reservationFailed = false;
+    /// Place in the house's shared yard queue (PlacementReservation::sharedBefore): one more
+    /// than the latest plot the house had planned when this one was. 0 for saves before 9876.
+    Uint32 planOrder = 0;
 };
 
 

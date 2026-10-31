@@ -169,21 +169,22 @@ TEST_CASE("Pre-placement: orders spread over the house's Construction Yards", "[
 TEST_CASE("Pre-placement: an idle yard takes the next order of the shared queue", "[preplace][yards][shared]") {
     // Nothing waiting: only fronts, which stay where their money and progress are.
     REQUIRE(pickSharedOrder({}) == -1);
-    REQUIRE(pickSharedOrder({{0, 0}, {0, 1}}) == -1);
-    // The earliest queue position wins over the yard's place in the list...
-    REQUIRE(pickSharedOrder({{3, 0}, {1, 2}, {2, 1}}) == 1);
-    // ...and on the same position the earlier yard's order is first in the shared queue.
-    REQUIRE(pickSharedOrder({{1, 2}, {1, 1}}) == 1);
-    // Orders the least-work routing alternated over two yards (A0 B0 A1 B1 A2, listed here yard
-    // by yard) come back in the order they were planned.
-    const std::vector<SharedSlot> planned = {{0, 0}, {0, 1}, {1, 0}, {1, 1}, {2, 0}};
-    std::vector<SharedSlot> shared = {{0, 0}, {1, 0}, {2, 0}, {0, 1}, {1, 1}};
+    REQUIRE(pickSharedOrder({{5, 0, 0}, {9, 0, 1}}) == -1);
+    // The order planned first wins, wherever it waits...
+    REQUIRE(pickSharedOrder({{40, 1, 0}, {30, 3, 2}, {35, 2, 1}}) == 1);
+    // ...a front never moves, however early it was planned...
+    REQUIRE(pickSharedOrder({{10, 0, 0}, {30, 1, 1}}) == 1);
+    // ...and orders loaded from a save without a plan order (0) go by queue position, then by
+    // the earlier yard.
+    REQUIRE(pickSharedOrder({{0, 3, 0}, {0, 1, 2}, {0, 2, 1}}) == 1);
+    REQUIRE(pickSharedOrder({{0, 1, 2}, {0, 1, 1}}) == 1);
+    // Ghost numbers: plan order, even after a yard took an order planned later than another
+    // yard's waiting one. Yard 0 holds plans 10 and 30, yard 1 holds 20 and 40.
+    std::vector<SharedSlot> shared = {{10, 0, 0}, {30, 1, 0}, {20, 0, 1}, {40, 1, 1}};
     std::stable_sort(shared.begin(), shared.end(), sharedBefore);
-    REQUIRE(shared.size() == planned.size());
-    for(std::size_t i = 0; i < planned.size(); ++i) {
-        REQUIRE(shared[i].position == planned[i].position);
-        REQUIRE(shared[i].yardOrder == planned[i].yardOrder);
-    }
+    std::vector<std::uint32_t> numbered;
+    for(const SharedSlot& slot : shared) numbered.push_back(slot.planOrder);
+    REQUIRE(numbered == std::vector<std::uint32_t>{10, 20, 30, 40});
 }
 
 TEST_CASE("Pre-placement: retry retains obstructions and hostile units cancel", "[preplace][completion]") {

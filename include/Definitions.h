@@ -197,7 +197,7 @@
 //       flag: 0 Both, 1 Builder (the former support mode), 2 Fighter. An older save's flag
 //       loads as Builder or Both.
 // 9876: GameInitSettings MOD10 adds the hashed planned-construction rules (placement retry,
-//       shared yard queue).
+//       shared yard queue); production queue entries add their shared-queue plan order.
 #define SAVEGAMEVERSION     9876
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
 #define SAVEGAMEVERSION_NATIVES 9871

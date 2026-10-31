@@ -140,6 +140,16 @@ static bool savegameHasPlacementReservations() {
         && (currentGame == nullptr || currentGame->getLoadedSavegameVersion() >= kPlacementReservationSaveVersion);
 }
 
+// SAVEGAMEVERSION 9876 adds each reserved order's place in the house's shared yard queue.
+// Older saves load it as 0 and order by queue position.
+static constexpr Uint32 kPlanOrderSaveVersion = 9876;
+static constexpr bool kSavesPlanOrder = SAVEGAMEVERSION >= kPlanOrderSaveVersion;
+
+static bool savegameHasPlanOrder() {
+    return kSavesPlanOrder
+        && (currentGame == nullptr || currentGame->getLoadedSavegameVersion() >= kPlanOrderSaveVersion);
+}
+
 void ProductionQueueItem::save(OutputStream& stream) const {
     stream.writeUint32(itemID);
     stream.writeUint32(price);
@@ -152,6 +162,9 @@ void ProductionQueueItem::save(OutputStream& stream) const {
         stream.writeSint32(plotY);
         stream.writeBool(reservationFailed);
     }
+    if(kSavesPlanOrder) {
+        stream.writeUint32(planOrder);
+    }
 }
 
 void ProductionQueueItem::load(InputStream& stream) {
@@ -163,6 +176,9 @@ void ProductionQueueItem::load(InputStream& stream) {
         plotX = stream.readSint32();
         plotY = stream.readSint32();
         reservationFailed = stream.readBool();
+    }
+    if(savegameHasPlanOrder()) {
+        planOrder = stream.readUint32();
     }
 }
 

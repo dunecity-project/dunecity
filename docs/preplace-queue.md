@@ -32,18 +32,23 @@ an exact refund and queue progress. The off/on setting round-trips in the unit t
 
 With the `Shared Yard Queue` match option (default on) the house's planned orders form one queue
 that every Construction Yard works from. A new order still goes at order time to the yard with the
-least work (below). When a yard runs empty it takes the next planned order still waiting in another
-yard's queue: the earliest queue position, then the earlier yard in the structure list
-(`PlacementReservation::pickSharedOrder`), checked twice a second per yard in the tick. A yard's
-front order never moves: it is the one with paid progress, or the finished building waiting for its
-plot. Moved orders keep their plot and cost nothing extra; they take the new yard's next
-reservation id. Yards that cannot build the item, or are upgrading, take nothing. Unreserved orders
-stay in their own yard. Ghost numbers run 1..n through the shared queue instead of per yard
-(`ConstructionYard::houseGhosts`). AI houses never create reservations, so the AI is unaffected.
+least work (below). Each planned order records its place in the shared queue
+(`ProductionQueueItem::planOrder`: one more than the latest plot the house still has planned).
+When a yard runs empty it takes the earliest planned order still waiting in another yard's queue
+(`PlacementReservation::pickSharedOrder`; ties, such as orders loaded from older saves, go by queue
+position and then the earlier yard), checked twice a second per yard in the tick. A yard's front
+order never moves: it is the one with paid progress, or the finished building waiting for its
+plot. Moved orders keep their plot and plan order and cost nothing extra; they take the new yard's
+next reservation id. Yards that cannot build the item, or are upgrading, take nothing. Unreserved
+orders stay in their own yard. Ghost numbers run 1..n through the shared queue in plan order
+instead of per yard (`ConstructionYard::houseGhosts`). AI houses never create reservations, so the
+AI is unaffected.
 
-The option is hashed and is the second MOD10 byte (save 9876, protocol 105); settings predating
-MOD10 read it as off. `preplace_queue_probe` runs it off (orders stay put) and on (two idle yards
-take the two orders waiting behind a busy yard; all three are built on plan) in one build.
+The option is hashed and is the second MOD10 byte; settings predating MOD10 read it as off. Save
+9876 also stores each queue entry's plan order (protocol 105). `preplace_queue_probe` runs it off
+(orders stay put) and on (two idle yards take the two orders waiting behind a busy yard, the ghosts
+read 1-3 in plan order across the three yards, all three are built on plan; screenshot
+`preplace-shared-queue.png`) in one build.
 
 ## Legacy control behaviour
 

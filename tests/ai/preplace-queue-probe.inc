@@ -663,6 +663,23 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
         }
         std::sort(takenPlots.begin(), takenPlots.end());
         require(takenPlots == std::vector<int>({1, 2}), "A taken order lost its plot");
+        // The ghosts number the plots 1..3 in plan order, across the three yards.
+        std::vector<int> ghostNumbers(3, 0);
+        for(const ConstructionYard::HouseGhost& planned : ConstructionYard::houseGhosts(house)) {
+            for(int i = 0; i < 3; ++i) {
+                if(planned.ghost.x == sharedPlots[i].x && planned.ghost.y == sharedPlots[i].y) ghostNumbers[i] = planned.ghost.number;
+            }
+        }
+        require(ghostNumbers == std::vector<int>({1, 2, 3}), "Shared ghost numbers do not follow the plan order");
+        game->unselectAll(game->selectedList); game->selectedList.clear();
+        currentGameMap->viewMap(house->getHouseID(), site(7,2), 12);
+        screenborder->setNewScreenCenter(Coord(site(7,2).x * TILESIZE, site(7,2).y * TILESIZE));
+        SDL_SetRenderTarget(renderer, nullptr);
+        game->drawScreen();
+        auto sharedImage = renderReadSurface(renderer);
+        require(sharedImage != nullptr && SavePNG(sharedImage.get(), "preplace-shared-queue.png") == 0,
+            "Could not capture preplace-shared-queue.png");
+        SDL_Log("PREPLACE_SCREENSHOT: preplace-shared-queue.png (ghosts 1-3 over three yards)");
         require(advanceUntil(*game, 3000, [&] {
                     for(const Coord& plot : sharedPlots) if(structureAt(house, Structure_WindTrap, plot) == nullptr) return false;
                     return true;
