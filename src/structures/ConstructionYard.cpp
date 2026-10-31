@@ -185,6 +185,7 @@ bool ConstructionYard::update() {
     if(BuilderBase::update() == false) {
         return false;
     }
+    takeSharedQueueWork();
     keepPlannedPlotsClear();
     updateReservedPlacement();
     return true;
@@ -227,6 +228,39 @@ std::vector<PlacementReservation::Footprint> ConstructionYard::reservedFootprint
         }
     }
     return footprints;
+}
+
+std::vector<ConstructionYard::HouseGhost> ConstructionYard::houseGhosts(const House* house) {
+    std::vector<HouseGhost> ghosts;
+    std::vector<PlacementReservation::SharedSlot> slots;
+    std::size_t yardOrder = 0;
+    for(const StructureBase* structure : structureList) {
+        if(structure->getOwner() != house || structure->getItemID() != Structure_ConstructionYard) {
+            continue;
+        }
+        const auto* yard = static_cast<const ConstructionYard*>(structure);
+        for(const PlacementReservation::Ghost& ghost : PlacementReservation::ghostsInQueueOrder(yard->getProductionQueue())) {
+            ghosts.push_back({yard, ghost});
+            slots.push_back({static_cast<std::size_t>(ghost.number - 1), yardOrder});
+        }
+        ++yardOrder;
+    }
+    if(currentGame == nullptr || !currentGame->getGameInitSettings().getGameOptions().sharedYardQueue) {
+        return ghosts;
+    }
+    // One queue: number the plots by their shared order.
+    std::vector<std::size_t> order(ghosts.size());
+    for(std::size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+        return PlacementReservation::sharedBefore(slots[a], slots[b]);
+    });
+    std::vector<HouseGhost> shared;
+    shared.reserve(ghosts.size());
+    for(std::size_t rank = 0; rank < order.size(); ++rank) {
+        shared.push_back(ghosts[order[rank]]);
+        shared.back().ghost.number = static_cast<int>(rank) + 1;
+    }
+    return shared;
 }
 
 PlacementReservation::Verdict ConstructionYard::checkReservationPlot(Uint32 itemID, int x, int y,
@@ -353,6 +387,69 @@ void ConstructionYard::keepPlannedPlotsClear() {
             moveUnitsOffPlot(entry.itemID, entry.plotX, entry.plotY, true, retry);
         }
     }
+}
+
+void ConstructionYard::takeSharedQueueWork() {
+    // An idle yard pulls the next planned order from the house's other yards. Only the queue
+    // behind each front moves: those entries hold no money and no progress, and the plot is the
+    // house's, so any yard that can build the item can take it. Checked twice a second, at a
+    // per-yard phase, in structure-list order, so every peer moves the same order.
+    if(!currentGame->getGameInitSettings().getGameOptions().sharedYardQueue
+       || !currentProductionQueue.empty() || isUpgrading()
+       || owner->getNumItems(Structure_ConstructionYard) < 2) {
+        return;
+    }
+    const Uint32 period = MILLI2CYCLES(500);
+    if(period != 0 && (currentGame->getGameCycleCount() + objectID) % period != 0) {
+        return;
+    }
+    struct Offer { ConstructionYard* yard; std::list<ProductionQueueItem>::iterator entry; };
+    std::vector<Offer> offers;
+    std::vector<PlacementReservation::SharedSlot> slots;
+    std::size_t yardOrder = 0;
+    for(StructureBase* structure : structureList) {
+        if(structure->getOwner() != owner || structure->getItemID() != Structure_ConstructionYard) {
+            continue;
+        }
+        auto* yard = static_cast<ConstructionYard*>(structure);
+        if(yard != this) {
+            std::size_t position = 0;
+            for(auto entry = yard->currentProductionQueue.begin(); entry != yard->currentProductionQueue.end(); ++entry, ++position) {
+                if(position == 0 || entry->reservationID == 0 || !mayReserveItem(entry->itemID)) continue;
+                offers.push_back({yard, entry});
+                slots.push_back({position, yardOrder});
+                break;
+            }
+        }
+        ++yardOrder;
+    }
+    const int pick = PlacementReservation::pickSharedOrder(slots);
+    if(pick < 0) {
+        return;
+    }
+    ConstructionYard* donor = offers[static_cast<std::size_t>(pick)].yard;
+    ProductionQueueItem moved = *offers[static_cast<std::size_t>(pick)].entry;
+    donor->currentProductionQueue.erase(offers[static_cast<std::size_t>(pick)].entry);
+    for(BuildItem& buildItem : donor->buildList) {
+        if(buildItem.itemID == moved.itemID && buildItem.num > 0) {
+            buildItem.num--;
+            break;
+        }
+    }
+    for(BuildItem& buildItem : buildList) {
+        if(buildItem.itemID == moved.itemID) {
+            buildItem.num++;
+            moved.price = buildItem.price;
+            break;
+        }
+    }
+    // Ids are unique per yard: the order takes this yard's next one.
+    moved.reservationID = nextReservationID;
+    nextReservationID = PlacementReservation::nextReservationID(nextReservationID);
+    currentProductionQueue.push_back(moved);
+    clearProductionProgress();
+    currentProducedItem = moved.itemID;
+    reservedPlacementWaitCycles = 0;
 }
 
 bool ConstructionYard::foreignUnitsOnPlot(Uint32 itemID, int x, int y) const {

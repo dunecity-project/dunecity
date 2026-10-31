@@ -28,6 +28,23 @@ exercises both policies in one build, including two-yard range dependencies, rec
 reservation, a structure removed from a plot, own/allied Hold units, and hostile cancellation with
 an exact refund and queue progress. The off/on setting round-trips in the unit tests.
 
+## 2026-10-31: one shared queue for all Construction Yards
+
+With the `Shared Yard Queue` match option (default on) the house's planned orders form one queue
+that every Construction Yard works from. A new order still goes at order time to the yard with the
+least work (below). When a yard runs empty it takes the next planned order still waiting in another
+yard's queue: the earliest queue position, then the earlier yard in the structure list
+(`PlacementReservation::pickSharedOrder`), checked twice a second per yard in the tick. A yard's
+front order never moves: it is the one with paid progress, or the finished building waiting for its
+plot. Moved orders keep their plot and cost nothing extra; they take the new yard's next
+reservation id. Yards that cannot build the item, or are upgrading, take nothing. Unreserved orders
+stay in their own yard. Ghost numbers run 1..n through the shared queue instead of per yard
+(`ConstructionYard::houseGhosts`). AI houses never create reservations, so the AI is unaffected.
+
+The option is hashed and is the second MOD10 byte (save 9876, protocol 105); settings predating
+MOD10 read it as off. `preplace_queue_probe` runs it off (orders stay put) and on (two idle yards
+take the two orders waiting behind a busy yard; all three are built on plan) in one build.
+
 ## Legacy control behaviour
 
 The detailed fallback and enemy-wait rules below apply when `Retry Planned Placement=false`.
@@ -60,8 +77,9 @@ The detailed fallback and enemy-wait rules below apply when `Retry Planned Place
 - Alt is not used here (reserved for the controls slice's repeat toggle). Only Construction Yard
   lists change; factory lists are untouched.
 - Ghosts: the owning house's reserved plots (and the house an observer views) are drawn as
-  translucent footprints with a white outline, numbered by position in that yard's production queue
-  (unreserved orders keep their number). The plot under construction shows its progress below the
+  translucent footprints with a white outline, numbered by position in the house's shared queue
+  (per yard with `Shared Yard Queue=false`; unreserved orders keep their number). The plot under
+  construction shows its progress below the
   number. A plot that fell back turns red and shows `N !`. Other houses never see them.
 - Cancel: right-click a ghost (with no own unit selected), or right-click the item in the list (the
   existing cancel, which removes the most recently queued order of that item, together with its

@@ -84,6 +84,19 @@ public:
     /// Every plot the house has reserved in any of its yards, in structure-list order.
     static std::vector<PlacementReservation::Footprint> reservedFootprints(const House* house);
 
+    /// A planned plot of one of the house's yards, as the player sees it.
+    struct HouseGhost {
+        const ConstructionYard* yard;
+        PlacementReservation::Ghost ghost;
+    };
+
+    /**
+        Every planned plot of the house's yards. With the Shared Yard Queue rule the ghosts are
+        numbered 1..n through the one shared queue (PlacementReservation::sharedBefore);
+        without it each yard numbers its own queue.
+    */
+    static std::vector<HouseGhost> houseGhosts(const House* house);
+
     /**
         Ask this house's units standing on the plot to move off it (deterministic). The
         pre-placement queue and the AI's planned sites (Player::doMoveOwnUnitsOffPlot) both
@@ -102,6 +115,9 @@ private:
 
     /// Once a second, own idle units are moved off every planned plot of this yard.
     void keepPlannedPlotsClear();
+
+    /// Shared Yard Queue: an idle yard takes the next waiting planned order of another yard.
+    void takeSharedQueueWork();
 
     void moveUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOnly, bool includeAllies);
     bool hostileUnitsOnPlot(Uint32 itemID, int x, int y) const;

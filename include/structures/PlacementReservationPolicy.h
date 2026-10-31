@@ -220,6 +220,35 @@ inline std::uint32_t chooseYard(const std::vector<YardLoad>& candidates, std::ui
     return best != nullptr ? best->yardID : 0;
 }
 
+/**
+    Shared yard queue: the house's planned orders are one queue, ordered by queue position and
+    then by the yard's place in the structure list. A position in one yard's queue is the
+    position of the shared order, so the orders the least-work routing spread over the yards
+    keep the order in which they were planned.
+*/
+struct SharedSlot {
+    std::size_t position = 0;      ///< place in its own yard's queue (0 = that yard's front)
+    std::size_t yardOrder = 0;     ///< the yard's place among the house's yards
+};
+
+inline bool sharedBefore(const SharedSlot& a, const SharedSlot& b) {
+    return a.position != b.position ? a.position < b.position : a.yardOrder < b.yardOrder;
+}
+
+/**
+    The waiting order an idle yard takes next: the earliest in the shared queue among the
+    offers. Each other yard offers at most its first planned order behind its front; the front
+    stays where its money and progress are. Returns the index into offers, or -1.
+*/
+inline int pickSharedOrder(const std::vector<SharedSlot>& offers) {
+    int best = -1;
+    for(std::size_t i = 0; i < offers.size(); ++i) {
+        if(offers[i].position == 0) continue;
+        if(best < 0 || sharedBefore(offers[i], offers[static_cast<std::size_t>(best)])) best = static_cast<int>(i);
+    }
+    return best;
+}
+
 } // namespace PlacementReservation
 
 #endif // PLACEMENT_RESERVATION_POLICY_H

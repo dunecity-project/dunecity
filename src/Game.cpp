@@ -156,7 +156,6 @@ std::string analyticsArray(const std::vector<std::string>& rows) {
 
 std::string analyticsAIType(const std::string& playerClass) {
     if (playerClass.rfind("qBot", 0) == 0) return "qbot";
-    if (playerClass.rfind("mentat", 0) == 0) return "mentat";
     if (playerClass.rfind("AIPlayer", 0) == 0) return "classic";
     if (playerClass == "CampaignAIPlayer") return "campaign";
     if (playerClass == "SmartBot") return "smartbot";
@@ -3546,65 +3545,62 @@ void Game::drawReservationGhosts()
     SDL_Texture* invalidPlace = pGFXManager->getUIGraphic(currentZoomlevel == 0 ? UI_InvalidPlace_Zoomlevel0
         : (currentZoomlevel == 1 ? UI_InvalidPlace_Zoomlevel1 : UI_InvalidPlace_Zoomlevel2));
 
-    for(const StructureBase* structure : structureList) {
-        if(structure->getOwner() != pLocalHouse || structure->getItemID() != Structure_ConstructionYard) {
+    // One house-wide list: with the Shared Yard Queue rule the numbers run through all yards.
+    for(const ConstructionYard::HouseGhost& planned : ConstructionYard::houseGhosts(pLocalHouse)) {
+        const ConstructionYard* yard = planned.yard;
+        const PlacementReservation::Ghost& ghost = planned.ghost;
+        const Coord size = getStructureSize(ghost.itemID);
+        SDL_Rect area = { screenborder->world2screenX(ghost.x*TILESIZE), screenborder->world2screenY(ghost.y*TILESIZE), 0, 0 };
+        area.w = screenborder->world2screenX((ghost.x + size.x)*TILESIZE) - area.x;
+        area.h = screenborder->world2screenY((ghost.y + size.y)*TILESIZE) - area.y;
+        if(area.x + area.w < 0 || area.y + area.h < 0 || area.x > getRendererWidth() || area.y > getRendererHeight()) {
             continue;
         }
-        const auto* yard = static_cast<const ConstructionYard*>(structure);
-        for(const PlacementReservation::Ghost& ghost : PlacementReservation::ghostsInQueueOrder(yard->getProductionQueue())) {
-            const Coord size = getStructureSize(ghost.itemID);
-            SDL_Rect area = { screenborder->world2screenX(ghost.x*TILESIZE), screenborder->world2screenY(ghost.y*TILESIZE), 0, 0 };
-            area.w = screenborder->world2screenX((ghost.x + size.x)*TILESIZE) - area.x;
-            area.h = screenborder->world2screenY((ghost.y + size.y)*TILESIZE) - area.y;
-            if(area.x + area.w < 0 || area.y + area.h < 0 || area.x > getRendererWidth() || area.y > getRendererHeight()) {
-                continue;
-            }
 
-            SDL_Texture* tileTexture = ghost.failed ? invalidPlace : validPlace;
-            Uint8 previousAlpha = SDL_ALPHA_OPAQUE;
-            SDL_GetTextureAlphaMod(tileTexture, &previousAlpha);
-            SDL_SetTextureAlphaMod(tileTexture, 110);
-            for(int dy = 0; dy < size.y; ++dy) {
-                for(int dx = 0; dx < size.x; ++dx) {
-                    SDL_Rect tile = calcDrawingRect(tileTexture, screenborder->world2screenX((ghost.x + dx)*TILESIZE),
-                                                    screenborder->world2screenY((ghost.y + dy)*TILESIZE));
-                    SDL_RenderCopy(renderer, tileTexture, nullptr, &tile);
-                }
+        SDL_Texture* tileTexture = ghost.failed ? invalidPlace : validPlace;
+        Uint8 previousAlpha = SDL_ALPHA_OPAQUE;
+        SDL_GetTextureAlphaMod(tileTexture, &previousAlpha);
+        SDL_SetTextureAlphaMod(tileTexture, 110);
+        for(int dy = 0; dy < size.y; ++dy) {
+            for(int dx = 0; dx < size.x; ++dx) {
+                SDL_Rect tile = calcDrawingRect(tileTexture, screenborder->world2screenX((ghost.x + dx)*TILESIZE),
+                                                screenborder->world2screenY((ghost.y + dy)*TILESIZE));
+                SDL_RenderCopy(renderer, tileTexture, nullptr, &tile);
             }
-            SDL_SetTextureAlphaMod(tileTexture, previousAlpha);
-            // Finished but blocked by units: amber, "waiting" until the plot clears or the player
-            // places the building elsewhere.
-            const bool waiting = ghost.inProduction && !ghost.failed && yard->isReservedPlacementBlocked();
-            renderDrawRect(renderer, &area, ghost.failed ? COLOR_RGB(255,60,60) : (waiting ? COLOR_RGB(255,190,40) : COLOR_WHITE));
+        }
+        SDL_SetTextureAlphaMod(tileTexture, previousAlpha);
+        // Finished but blocked by units: amber, "waiting" until the plot clears or the player
+        // places the building elsewhere.
+        const bool waiting = ghost.inProduction && !ghost.failed && yard->isReservedPlacementBlocked();
+        renderDrawRect(renderer, &area, ghost.failed ? COLOR_RGB(255,60,60) : (waiting ? COLOR_RGB(255,190,40) : COLOR_WHITE));
 
-            // Queue number on top; the plot under construction adds its progress below.
-            std::vector<std::string> lines = { std::to_string(ghost.number) + (ghost.failed ? " !" : "") };
-            if(waiting) {
-                lines.push_back(_("waiting"));
-            } else if(ghost.inProduction && !ghost.failed) {
-                const BuildItem* buildItem = nullptr;
-                for(const BuildItem& item : yard->getBuildList()) {
-                    if(item.itemID == ghost.itemID) buildItem = &item;
-                }
-                if(buildItem != nullptr && buildItem->price > 0) {
-                    const int percent = std::min(100, static_cast<int>(lround(yard->getProductionProgress() * 100 / static_cast<int>(buildItem->price))));
-                    lines.push_back(std::to_string(percent) + "%");
-                }
+        // Queue number on top; the plot under construction adds its progress below.
+        std::vector<std::string> lines = { std::to_string(ghost.number) + (ghost.failed ? " !" : "") };
+        if(waiting) {
+            lines.push_back(_("waiting"));
+        } else if(ghost.inProduction && !ghost.failed) {
+            const BuildItem* buildItem = nullptr;
+            for(const BuildItem& item : yard->getBuildList()) {
+                if(item.itemID == ghost.itemID) buildItem = &item;
             }
-            std::vector<sdl2::texture_ptr> textures;
-            int labelHeight = 0;
-            for(const std::string& line : lines) {
-                textures.push_back(pFontManager->createTextureWithText(line, COLOR_WHITE, 12));
-                labelHeight += getHeight(textures.back().get());
+            if(buildItem != nullptr && buildItem->price > 0) {
+                const int percent = std::min(100, static_cast<int>(lround(yard->getProductionProgress() * 100 / static_cast<int>(buildItem->price))));
+                lines.push_back(std::to_string(percent) + "%");
             }
-            int lineY = area.y + (area.h - labelHeight)/2;
-            for(const sdl2::texture_ptr& texture : textures) {
-                SDL_Rect labelArea = calcDrawingRect(texture.get(), area.x + area.w/2, lineY, HAlign::Center, VAlign::Top);
-                SDL_Rect labelBack = { labelArea.x - 2, labelArea.y, labelArea.w + 4, labelArea.h };
-                renderFillRect(renderer, &labelBack, COLOR_HALF_TRANSPARENT);
-                SDL_RenderCopy(renderer, texture.get(), nullptr, &labelArea);
-                lineY += labelArea.h;
-            }
+        }
+        std::vector<sdl2::texture_ptr> textures;
+        int labelHeight = 0;
+        for(const std::string& line : lines) {
+            textures.push_back(pFontManager->createTextureWithText(line, COLOR_WHITE, 12));
+            labelHeight += getHeight(textures.back().get());
+        }
+        int lineY = area.y + (area.h - labelHeight)/2;
+        for(const sdl2::texture_ptr& texture : textures) {
+            SDL_Rect labelArea = calcDrawingRect(texture.get(), area.x + area.w/2, lineY, HAlign::Center, VAlign::Top);
+            SDL_Rect labelBack = { labelArea.x - 2, labelArea.y, labelArea.w + 4, labelArea.h };
+            renderFillRect(renderer, &labelBack, COLOR_HALF_TRANSPARENT);
+            SDL_RenderCopy(renderer, texture.get(), nullptr, &labelArea);
+            lineY += labelArea.h;
         }
     }
 }

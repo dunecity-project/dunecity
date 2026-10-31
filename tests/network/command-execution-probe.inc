@@ -96,9 +96,9 @@ int runOwnershipProbe() {
         if(marker == std::string::npos) throw std::runtime_error("MOD10 fixture missing");
         // Everything after MOD4's payload: the yard limit, the original-damage byte,
         // MOD7's factor count plus one factor per house, MOD8's plan-sites byte, MOD9's
-        // ground-steps byte and MOD10's placement-retry byte.
+        // ground-steps byte and MOD10's two planned-construction bytes.
         const auto afterMod4 = 4 + 1
-            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size() + 1 + 1 + 1;
+            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size() + 1 + 1 + 2;
         legacy[marker]='4'; legacy.resize(legacy.size()-afterMod4);
         IMemoryStream oldInput(legacy.data(),legacy.size());
         GameInitSettings old(oldInput);

@@ -91,8 +91,12 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     require(planRule, "The plan-building-sites match rule must default to on");
 
     require(game->gameInitSettings.gameOptions.retryPlannedPlacement, "Placement retry must default on");
-    // Exercise the previous behaviour as the explicit control in this same engine build.
+    require(game->gameInitSettings.gameOptions.sharedYardQueue, "The shared yard queue must default on");
+    // Exercise the previous behaviour as the explicit control in this same engine build. The
+    // per-yard sections below need each yard to keep its own queue; the shared queue has its
+    // own section.
     game->gameInitSettings.gameOptions.retryPlannedPlacement = false;
+    game->gameInitSettings.gameOptions.sharedYardQueue = false;
 
     // Fixture area: a 14x9 patch (plus a 2-tile margin) away from every object and from the
     // house's own ground, turned into plain rock. The fixture yard sits in its top-left corner,
@@ -609,6 +613,63 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
             "Queue did not advance after hostile occupation cancellation");
         require(a->getProductionQueueSize()==0, "Cancellation left queue stuck");
         SDL_Log("PREPLACE_PROBE: hostile infantry cancelled one finished order, exact refund, next order auto-placed");
+
+        // ---- Shared yard queue: idle yards take the planned orders waiting behind a busy one. ----
+        const std::vector<Coord> sharedPlots = {site(8,0), site(11,0), site(11,3)};
+        auto busyOthers = [&] {
+            std::vector<ConstructionYard*> busy;
+            for(StructureBase* s : structureList) {
+                if(s != a && s->getOwner() == house && s->getItemID() == Structure_ConstructionYard
+                   && static_cast<ConstructionYard*>(s)->getProductionQueueSize() > 0) {
+                    busy.push_back(static_cast<ConstructionYard*>(s));
+                }
+            }
+            return busy;
+        };
+        require(busyOthers().empty() && a->getProductionQueueSize() == 0, "Shared-queue fixture: yards are not idle");
+        auto planAll = [&] {
+            for(const Coord& plot : sharedPlots) {
+                require(a->doReservePlacement(Structure_WindTrap, plot.x, plot.y), "Shared-queue order refused");
+            }
+        };
+        // Control: with the rule off the idle yards leave the busy yard's queue alone.
+        planAll();
+        advance(*game, MILLI2CYCLES(2000));
+        require(a->getProductionQueueSize() >= 2 && busyOthers().empty(), "Orders left their yard with the shared queue off");
+        while(a->getProductionQueueSize() > 0) {
+            require(a->doCancelReservation(a->getProductionQueue().back().reservationID), "Shared-queue control cleanup failed");
+        }
+        for(const Coord& plot : sharedPlots) {
+            if(StructureBase* built = structureAt(house, Structure_WindTrap, plot)) built->destroy();
+        }
+        advance(*game, 2);
+
+        game->gameInitSettings.gameOptions.sharedYardQueue = true;
+        planAll();
+        const Uint32 frontID = a->getProductionQueue().front().reservationID;
+        require(advanceUntil(*game, MILLI2CYCLES(1500), [&] { return a->getProductionQueueSize() == 1; }),
+            "Idle yards did not take the orders waiting behind the busy yard");
+        require(a->getProductionQueue().front().reservationID == frontID, "The busy yard's order under construction moved");
+        const std::vector<ConstructionYard*> helpers = busyOthers();
+        require(helpers.size() == 2, "The two waiting orders did not go to two idle yards");
+        std::vector<int> takenPlots;
+        for(ConstructionYard* helper : helpers) {
+            require(helper->getProductionQueueSize() == 1 && helper->getProductionQueue().front().reservationID != 0,
+                "A helper yard did not take exactly one planned order");
+            const ProductionQueueItem& taken = helper->getProductionQueue().front();
+            for(int i = 1; i < 3; ++i) {
+                if(taken.plotX == sharedPlots[i].x && taken.plotY == sharedPlots[i].y) takenPlots.push_back(i);
+            }
+        }
+        std::sort(takenPlots.begin(), takenPlots.end());
+        require(takenPlots == std::vector<int>({1, 2}), "A taken order lost its plot");
+        require(advanceUntil(*game, 3000, [&] {
+                    for(const Coord& plot : sharedPlots) if(structureAt(house, Structure_WindTrap, plot) == nullptr) return false;
+                    return true;
+                }), "The shared queue's buildings were not all placed on plan");
+        require(a->getProductionQueueSize() == 0 && busyOthers().empty(), "The shared queue did not drain");
+        game->gameInitSettings.gameOptions.sharedYardQueue = false;
+        SDL_Log("PREPLACE_PROBE: shared queue: two idle yards took the orders waiting behind a busy one, all 3 built on plan (off: orders stayed)");
     }
 
     // ---- A destroyed yard takes its reservations with it, refunding as a dying builder does today. ----

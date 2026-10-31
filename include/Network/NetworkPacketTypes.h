@@ -321,8 +321,9 @@
 // 104: AI roles (docs/ai-roles.md): five qBotFighter* player classes appended to the
 //      PlayerFactory list the lobby indexes, and QuantBot's role byte (save 9875). A 103 peer
 //      cannot create a Fighter and would play it as another AI.
-// 105: MOD10 planned-placement recovery: retry obstructions, clear allies, cancel enemies.
-//      An older peer cannot read the added settings byte (save 9876).
+// 105: MOD10 planned construction: retry obstructions, clear allies, cancel enemies, and the
+//      shared yard queue. An older peer cannot read the two added settings bytes (save 9876).
+//      The Mentat AI is retired: its playerDataList entries are gone, so later AI indices moved.
 #define NETWORK_PROTOCOL_VERSION            105
 
 // Mod transfer limits

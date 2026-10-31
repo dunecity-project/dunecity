@@ -166,6 +166,26 @@ TEST_CASE("Pre-placement: orders spread over the house's Construction Yards", "[
     REQUIRE(picks == std::vector<std::uint32_t>{3, 4, 3, 4});
 }
 
+TEST_CASE("Pre-placement: an idle yard takes the next order of the shared queue", "[preplace][yards][shared]") {
+    // Nothing waiting: only fronts, which stay where their money and progress are.
+    REQUIRE(pickSharedOrder({}) == -1);
+    REQUIRE(pickSharedOrder({{0, 0}, {0, 1}}) == -1);
+    // The earliest queue position wins over the yard's place in the list...
+    REQUIRE(pickSharedOrder({{3, 0}, {1, 2}, {2, 1}}) == 1);
+    // ...and on the same position the earlier yard's order is first in the shared queue.
+    REQUIRE(pickSharedOrder({{1, 2}, {1, 1}}) == 1);
+    // Orders the least-work routing alternated over two yards (A0 B0 A1 B1 A2, listed here yard
+    // by yard) come back in the order they were planned.
+    const std::vector<SharedSlot> planned = {{0, 0}, {0, 1}, {1, 0}, {1, 1}, {2, 0}};
+    std::vector<SharedSlot> shared = {{0, 0}, {1, 0}, {2, 0}, {0, 1}, {1, 1}};
+    std::stable_sort(shared.begin(), shared.end(), sharedBefore);
+    REQUIRE(shared.size() == planned.size());
+    for(std::size_t i = 0; i < planned.size(); ++i) {
+        REQUIRE(shared[i].position == planned[i].position);
+        REQUIRE(shared[i].yardOrder == planned[i].yardOrder);
+    }
+}
+
 TEST_CASE("Pre-placement: retry retains obstructions and hostile units cancel", "[preplace][completion]") {
     REQUIRE(decideCompletion(false, false, true, false) == Completion::Retry);
     REQUIRE(decideCompletion(false, true, true, false) == Completion::Retry);

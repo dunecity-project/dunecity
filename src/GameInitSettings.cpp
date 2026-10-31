@@ -212,6 +212,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     // independently of future new-game defaults, so their saves and replays stay exact.
     gameOptions.continuousGroundSteps = false;
     gameOptions.retryPlannedPlacement = false;
+    gameOptions.sharedYardQueue = false;
 
     // Read mod info (added in version with mod system)
     // Use marker to detect presence for backward compatibility
@@ -288,6 +289,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             }
             if(modMarker == GAMEINIT_MOD10_MARKER) {
                 gameOptions.retryPlannedPlacement = stream.readBool();
+                gameOptions.sharedYardQueue = stream.readBool();
             }
         }
     } catch (InputStream::eof&) {
@@ -453,8 +455,9 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.planBuildingSites);
     // MOD9: the continuous-ground-steps rule, appended after the MOD8 byte.
     stream.writeBool(gameOptions.continuousGroundSteps);
-    // MOD10: the planned-placement recovery rule; streams without it read as off (legacy).
+    // MOD10: the planned-construction rules; streams without them read as off (legacy).
     stream.writeBool(gameOptions.retryPlannedPlacement);
+    stream.writeBool(gameOptions.sharedYardQueue);
 }
 
 
