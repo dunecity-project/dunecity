@@ -32,7 +32,14 @@
   for CI compression and in the server's staged web root. 1.0.863 was packaged by hand from the
   tag build's Emscripten artifact (website 656b4cc). Live play/build.json is 1.0.863 at a0ae91c3, all
   8 artifact hashes match, `.data` serves as one file (`br`, 79.7 MB; parts 404), the main menu loads.
-  Android stays 0.2.33 (engine 1.0.858), iOS TestFlight 1.0.857: neither can play online with 1.0.863.
+  Android stays 0.2.33 (engine 1.0.858) and cannot play online with 1.0.863.
+- iOS (Stefan: "can you rebuild iphone?"): `scripts/build-ios.sh` from staging 34b172dc. Simulator
+  "Dune City iPhone" (iOS 27.0), upgraded from the 1.0.857 install: all six family mods seed, a
+  Tornie 1.0.546 Atreides campaign mission starts, and units take orders. Uploaded with `--testflight` as
+  1.0.863 (20261031.2324), with What to Test set and the build added to the Public group. It is in
+  internal testing and waiting for Beta App Review (external), submitted 2026-11-01. The website keeps
+  "TestFlight (engine 1.0.857)" until review approves it. The picker lists mods in directory order
+  (Tornie is last on iOS); that is how the picker already worked.
 
 ## 2026-11-01 — 1.0.862: Construction Yards store 1000 credits in city matches (OMP integrator)
 
