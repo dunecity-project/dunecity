@@ -60,5 +60,6 @@ void verifyCampaignMapLibrary() {
         lobby.update();
         menuRequire(lobby.numHouses >= 2, "Custom Game lobby does not seat the campaign mission's houses");
     }
-    SDL_Log("MENU_PROBE_PASS: campaign missions exported, listed in editor and Custom Game, loadable by both");
+    // Not MENU_PROBE_PASS: the runner accepts exactly one result line per run.
+    SDL_Log("CAMPAIGN_MAPS_OK: campaign missions exported, listed in editor and Custom Game, loadable by both");
 }
