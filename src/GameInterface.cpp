@@ -61,6 +61,20 @@ namespace {
 // minimum supported interface height.
 constexpr int kSidebarRowHeight = 36;
 constexpr int kSidebarRowPitch = 38;
+
+/// Short sidebar labels: the full names ("Heavy Vehicle Factory (5)") only fit the row at an
+/// unreadable font size. The tooltip keeps the full name.
+std::string builderShortcutLabel(int itemID) {
+    switch(itemID) {
+        case Structure_ConstructionYard:  return _("Con. Yard");
+        case Structure_LightFactory:      return _("Light Factory");
+        case Structure_HeavyFactory:      return _("Heavy Factory");
+        case Structure_HighTechFactory:   return _("Hi-Tech");
+        case Structure_StarPort:          return _("Starport");
+        case Structure_ChaosFactory:      return _("Chaos Factory");
+        default:                          return resolveItemName(itemID);
+    }
+}
 }
 
 void SkipMissionButton::updateTextures() {
@@ -339,7 +353,7 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     for(std::size_t i = 0; i < kBuilderShortcutTypes.size(); ++i) {
         const int itemID = kBuilderShortcutTypes[i];
         TextButton& button = builderButtons[i];
-        button.setText(resolveItemName(itemID));
+        button.setText(builderShortcutLabel(itemID));
         button.setTooltipText(fmt::sprintf(_("Open the build menu of your least busy %s"), resolveItemName(itemID)));
         button.setOnClick([itemID]() { currentGame->selectBuilderOfType(itemID); });
         button.setVisible(false);
@@ -459,8 +473,8 @@ void GameInterface::updateBuilderButtons(bool nothingSelected) {
         const bool fits = y + kSidebarRowHeight <= getRendererHeight() - 2;
         button.setVisible(count > 0 && fits);
         if(!button.isVisible()) continue;
-        const std::string text = count > 1 ? fmt::sprintf("%s (%d)", resolveItemName(kBuilderShortcutTypes[i]), count)
-                                           : resolveItemName(kBuilderShortcutTypes[i]);
+        const std::string label = builderShortcutLabel(kBuilderShortcutTypes[i]);
+        const std::string text = count > 1 ? fmt::sprintf("%s (%d)", label, count) : label;
         if(button.getText() != text) button.setText(text);
         if(builderButtonY[i] != y) {
             // Repositioning resizes, which rebuilds the textures: only when the row moves.

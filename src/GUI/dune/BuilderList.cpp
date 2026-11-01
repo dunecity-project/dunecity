@@ -197,7 +197,7 @@ BuilderList::BuilderList(Uint32 builderObjectID) {
     pPlaceItTextTexture = createFittedOverlayText(_("PLACE IT"));
     pBlockedTextTexture = createFittedOverlayText(_("BLOCKED"));
     pPlacingTextTexture = createFittedOverlayText(_("PLACING"));
-    pPlanningTextTexture = createFittedOverlayText(_("PLAN\nSITE"));
+    pPlanningTextTexture = createFittedOverlayText(_("PLANNING"));
     pOnHoldTextTexture = createFittedOverlayText(_("ON HOLD"));
     pUnitLimitReachedTextTexture = createFittedOverlayText(_("UNIT\nLIMIT"));
     pHarvesterLimitReachedTextTexture = createFittedOverlayText(_("HARVESTER\nLIMIT"));
@@ -494,6 +494,8 @@ void BuilderList::draw(Point position) {
                     drawCentered(harvester ? pHarvesterLimitReachedTextTexture.get() : pUnitLimitReachedTextTexture.get());
                 }
             } else if(planningSelected) {
+                // Darkened like the progress overlay, so the caption reads on any picture.
+                renderFillRect(renderer, &button, COLOR_HALF_TRANSPARENT);
                 drawCentered(pPlanningTextTexture.get());
             }
 

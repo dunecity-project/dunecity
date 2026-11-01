@@ -94,7 +94,6 @@ void sharedFactoryQueue(Game& game) {
     require(ai != nullptr, "Factory pool fixture needs an AI-only house");
     auto& rule = game.gameInitSettings.gameOptions.sharedFactoryQueue;
     require(rule, "Shared Factory Queue must default on");
-    const Uint32 savedCycle = game.gameCycleCount;
     const bool savedInstantBuild = game.gameInitSettings.gameOptions.instantBuild;
     game.gameInitSettings.gameOptions.instantBuild = false;
 
@@ -237,7 +236,6 @@ void sharedFactoryQueue(Game& game) {
     game.objectData.data[Unit_Tank][human->getHouseID()] = humanTankData;
     game.objectData.data[Unit_Tank][ai->getHouseID()] = aiTankData;
     human->maxUnits = humanMaxUnits; ai->maxUnits = aiMaxUnits;
-    game.gameCycleCount = savedCycle;
     game.gameInitSettings.gameOptions.instantBuild = savedInstantBuild;
     SDL_Log("FACTORY_QUEUE_PROBE_PASS: human five-tank queue shared and built; off/AI/hold/upgrade/phase controls, money, counts, price and repeat preserved");
 }
@@ -248,7 +246,7 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     using namespace PreplaceProbe;
     House* house = pLocalHouse;
     require(house != nullptr && game->isCitySimEnabled(), "Probe needs the dunecity mod and a local house");
-    sharedFactoryQueue(*game);
+    const GameInitSettings factorySettings = game->getGameInitSettings();
     auto& planRule = game->gameInitSettings.gameOptions.planBuildingSites;
     require(planRule, "The plan-building-sites match rule must default to on");
 
@@ -890,6 +888,19 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     require(oldYard->getCurrentProducedItem() == Structure_WindTrap && oldYard->getProductionQueueSize() == 2,
         "A 9854 order was not left for the player to place");
     SDL_Log("PREPLACE_PROBE: 9854 save loaded; its orders keep the manual flow");
+
+    // The factory fixture changes terrain, object ids, RNG, credits and construction/loss
+    // bookkeeping, not just its four builders. Run it in a fresh match after all yard/save
+    // checks instead of trying to undo those effects (or rewinding the simulation clock).
+    game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+    game = std::make_unique<Game>();
+    currentGame = game.get();
+    game->bReplay = true;
+    game->initGame(factorySettings);
+    game->bReplay = false;
+    game->initializeGameLoop();
+    game->bPause = false;
+    sharedFactoryQueue(*game);
 
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=preplace_queue outcome=passed");
 }
