@@ -20,13 +20,14 @@ class Channel {
 }
 let pc;
 class PC {
- connectionState='new';channel=new Channel();
+ connectionState='new';iceConnectionState='new';iceGatheringState='new';channel=new Channel();stats=new Map();
  constructor(config){this.config=config;pc=this}
  createDataChannel(){return this.channel}
  async createOffer(){return {type:'offer',sdp}}
  async setLocalDescription(d){this.localDescription=d}
  async setRemoteDescription(d){this.remoteDescription=d}
  async addIceCandidate(){}
+ async getStats(){return this.stats}
  close(){this.connectionState='closed'}
 }
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
@@ -92,4 +93,23 @@ test('failed RTC negotiation keeps a bounded reason instead of a silent disconne
   assert.match(bridge.lastError(handle),/WebRTC failed; ICE failed/);
   assert.equal(pc.connectionState,'closed');
  } finally {bridge.close(handle)}
+});
+
+test('ICE diagnosis records selected types, not candidate addresses or credentials',async()=>{
+ const {handle,pc}=create(),warnings=[],previous=console.warn;
+ console.warn=(...values)=>warnings.push(values.join(' '));
+ try {
+  pc.stats=new Map([
+   ['transport',{type:'transport',selectedCandidatePairId:'pair'}],
+   ['pair',{type:'candidate-pair',localCandidateId:'local',remoteCandidateId:'remote'}],
+   ['local',{type:'local-candidate',candidateType:'host',address:'192.0.2.1',port:50000}],
+   ['remote',{type:'remote-candidate',candidateType:'srflx',address:'192.0.2.2',port:50001}],
+  ]);
+  pc.connectionState='failed';pc.iceConnectionState='failed';pc.iceGatheringState='complete';
+  pc.onconnectionstatechange({type:'connectionstatechange'});await tick();
+  assert.equal(bridge.state(handle),3);
+  assert.equal(warnings.length,1);
+  assert.match(warnings[0],/phase=failed ice=failed gathering=complete selected_local=host selected_remote=srflx/);
+  assert.doesNotMatch(warnings[0],/192\.0\.2\.|50000|50001|fingerprint|candidateId/);
+ } finally {console.warn=previous;bridge.close(handle)}
 });

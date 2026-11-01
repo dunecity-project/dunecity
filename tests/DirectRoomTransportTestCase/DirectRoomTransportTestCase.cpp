@@ -13,6 +13,7 @@
 */
 
 #include <catch2/catch_test_macros.hpp>
+#include <SDL_log.h>
 
 #include <Network/DirectRoomTransport.h>
 #include <Network/NetworkPacketPolicy.h>
@@ -26,6 +27,24 @@
 #include <vector>
 
 namespace {
+
+struct CapturedConnectionLogs {
+    std::string text;
+    SDL_LogOutputFunction previous;
+    void* previousData = nullptr;
+    SDL_LogPriority priority = SDL_LogGetPriority(SDL_LOG_CATEGORY_APPLICATION);
+    CapturedConnectionLogs() {
+        SDL_LogGetOutputFunction(&previous, &previousData);
+        SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_WARN);
+        SDL_LogSetOutputFunction([](void* data, int, SDL_LogPriority, const char* message) {
+            static_cast<CapturedConnectionLogs*>(data)->text += std::string(message) + "\n";
+        }, this);
+    }
+    ~CapturedConnectionLogs() {
+        SDL_LogSetOutputFunction(previous, previousData);
+        SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, priority);
+    }
+};
 
 /// 32 colon-separated octets, the only shape a sha-256 fingerprint has.
 const std::string kFingerprintA =
@@ -164,6 +183,7 @@ public:
     bool                      initiator = false;
     /// Set by a test to stand in for a channel that is full or has gone away.
     bool                      refuseSends = false;
+    std::string               error;
 
     bool setRemoteDescription(P2PSignal::SignalKind kind, const std::string& sdp) override {
         appliedDescriptions.emplace_back(kind, sdp);
@@ -200,13 +220,11 @@ public:
         return true;
     }
     State state() const override { return current; }
-    const std::string& lastError() const override { return error_; }
+    const std::string& lastError() const override { return error; }
 
     /// Queues a value as if the peer had sent it.
     void deliver(const std::string& value) { inbox.push_back(value); }
 
-private:
-    std::string error_;
 };
 
 /**
@@ -1055,6 +1073,69 @@ TEST_CASE("A peer that never connects is a player-facing failure", "[direct]") {
         }
     }
     REQUIRE(explained);
+}
+
+TEST_CASE("Direct setup failures identify the completed phase without guessing NAT", "[direct][regression]") {
+    CapturedConnectionLogs logs;
+    Harness h;
+    h.join();
+    h.deliverPoll("status=ok\nphase=lobby\n" + peerRecord(2, "client", "Ada", "browser")
+        + fingerprintRecord(2, kFingerprintA) + "cursor=0\n");
+    auto channel = h.channels[0];
+    bool described = true, timeout = false;
+    std::string expected;
+    SECTION("no remote description is a signaling failure") {
+        described = false;
+        channel->error = "ice negotiation failed";
+        expected = "Connection setup did not finish exchanging details";
+    }
+    SECTION("native ICE failure explains direct-only networking") {
+        channel->error = "ice negotiation failed";
+        expected = "no relay fallback";
+    }
+    SECTION("browser ICE failure explains direct-only networking") {
+        channel->error = "WebRTC failed; ICE failed";
+        expected = "no relay fallback";
+    }
+    SECTION("a non-ICE backend failure does not blame a router") {
+        channel->error = "data channel error";
+        expected = "direct data channel did not open";
+    }
+    SECTION("a deadline alone is not proof of blocked NAT") {
+        timeout = true;
+        expected = "direct data channel did not open";
+    }
+    if(described) {
+        channel->localSignals.push_back({P2PSignal::SignalKind::Offer, sdpWith(kFingerprintB)});
+        channel->localSignals.push_back({P2PSignal::SignalKind::Candidate,
+            "0|candidate:2 1 udp 2122260223 192.0.2.1 50000 typ host"});
+        h.pump(16, 400);
+        h.deliverPoll("status=ok\nphase=lobby\n" + peerRecord(2, "client", "Ada", "browser")
+            + fingerprintRecord(2, kFingerprintA)
+            + "sig=2|1|answer|" + hexOf(sdpWith(kFingerprintA)
+                + "a=candidate:3 1 udp 2122260223 192.0.2.2 51000 typ srflx\r\n") + "\ncursor=1\n");
+    }
+    if(!timeout) channel->current = DirectPeerConnection::State::Failed;
+    h.pump(1, timeout ? 46000 : 100);
+    bool explained = false;
+    for(const auto& event : h.drain()) {
+        if(event.message.find(expected) != std::string::npos) {
+            explained = true;
+            if(expected != "no relay fallback") {
+                REQUIRE(event.message.find("NAT") == std::string::npos);
+                REQUIRE(event.message.find("firewall") == std::string::npos);
+            }
+        }
+    }
+    REQUIRE(explained);
+    REQUIRE(logs.text.find("phase=" + std::string(!described ? "signaling"
+        : expected == "no relay fallback" ? "ice" : "data_channel")) != std::string::npos);
+    if(described) {
+        REQUIRE(logs.text.find("local_description_published=1 remote_description_applied=1") != std::string::npos);
+        REQUIRE(logs.text.find("local_host=1 local_srflx=0 local_prflx=0 remote_host=0 remote_srflx=1") != std::string::npos);
+    }
+    REQUIRE(logs.text.find("192.0.2.") == std::string::npos);
+    REQUIRE(logs.text.find(kFingerprintA) == std::string::npos);
 }
 
 TEST_CASE("A refused session is reported in the player's words", "[direct]") {

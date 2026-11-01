@@ -12,7 +12,8 @@ WebSocket relay do not implement this feature.
 The old five/seven-field requests remain compatible. Elapsed time is wall time
 since the first match start, including pauses. Running games are listed only
 when the host is active, opted in, and has a transport seat available. Selecting
-a row shows full metadata; compact rows show map, mod and waiting/elapsed time.
+a row shows full metadata; compact rows and details explicitly say **In progress**
+alongside elapsed time, or Waiting before start. The running-game action is **Spectate**.
 
 A compatibility-checked `/v1/admission/request` creates a private request ticket,
 not a room seat. `/v1/admission/request-status` polls it using the same claims;
@@ -69,6 +70,17 @@ Public seating events retain their existing named activity log. Each resumed
 roster commitment also records the updated public start roster with a fresh
 start ID, without another public-lobby start notification or anonymous new-match
 count. Server analytics settings remain independent of browser diagnostics.
+
+Connection failures distinguish unfinished signaling, an explicit ICE failure after
+both descriptions were exchanged, and a data channel that never opened. Only the
+explicit ICE case suggests a blocked firewall/NAT route and states that no relay
+fallback exists. A timeout or generic backend error is not proof that NAT is at fault.
+`Direct connection failed` logs the phase, elapsed/deadline state, spectator roles,
+STUN-server count, description exchange, and gathered/received host, server-reflexive
+and peer-reflexive candidate types. Native `Direct ICE` lines and the browser console
+also record ICE/gathering states and selected local/remote candidate **types** (or
+`none` if no pair was selected). No candidate addresses, SDP, fingerprints or tokens
+are logged. A selected pair can exist before the encrypted data channel opens.
 
 `tools/p2p-signaling/test/test_late_join.py` exercises real HTTP admission,
 name-bound grants, cancellation, authorization, compatibility and rate allowances.
@@ -163,9 +175,11 @@ identical after the viewer leaves. Service tests cover unchanged match phase,
 host-only viewer links, grants and old-protocol compatibility. Transport tests
 cover unready/congested viewers independently of player readiness and broadcasts.
 
-## Spectator-first entry (1.0.730, protocol 9; unreleased)
+## Spectator-first entry (from 1.0.730, protocol 9)
 
-Joining a running public game now enters as a spectator directly. In Options,
+Selecting **Spectate** for a running public game enters as a spectator directly,
+without the older protocol-8 mode prompt. While connecting, the status explicitly
+says it is connecting to the host to spectate, not receiving a pregame setup. In Options,
 the viewer can Request to play or cancel a pending request. The authenticated
 viewer session uses `/v1/p2p/join-requests` actions `request_play`, `cancel_play`
 and `play_status`; no new admission ticket or second connection is created.

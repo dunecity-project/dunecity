@@ -1287,18 +1287,46 @@
       return 0;
     }
     const pc = peerConnection;
+    let selectedLocal = "none", selectedRemote = "none";
+    const reportIce = (phase, warning = false) => {
+      const ice = pc.iceConnectionState, gathering = pc.iceGatheringState;
+      const log = () => {
+        console[warning ? "warn" : "info"](`Direct ICE: phase=${phase} ice=${ice} gathering=${gathering} selected_local=${selectedLocal} selected_remote=${selectedRemote}`);
+      };
+      void pc.getStats().then((stats) => {
+        let pair;
+        stats.forEach((report) => {
+          if (report.type === "transport" && report.selectedCandidatePairId)
+            pair = stats.get(report.selectedCandidatePairId);
+        });
+        if (!pair) stats.forEach((report) => {
+          if (report.type === "candidate-pair" && report.nominated && report.state === "succeeded") pair = report;
+        });
+        if (pair) {
+          const types = ["host", "srflx", "prflx", "relay"];
+          const local = stats.get(pair.localCandidateId)?.candidateType;
+          const remote = stats.get(pair.remoteCandidateId)?.candidateType;
+          selectedLocal = types.includes(local) ? local : "none";
+          selectedRemote = types.includes(remote) ? remote : "none";
+        }
+        log();
+      }).catch(log);
+    };
     const stateChanged = pc.onconnectionstatechange;
     pc.onconnectionstatechange = (event) => {
       if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
         const ice = ["new", "checking", "connected", "completed", "disconnected", "failed", "closed"].includes(pc.iceConnectionState) ? pc.iceConnectionState : "unknown";
+        reportIce("failed", true);
         fail(connection, `WebRTC ${pc.connectionState}; ICE ${ice}`);
       } else {
         stateChanged?.call(pc, event);
+        if (pc.connectionState === "connected") reportIce("ice_connected");
       }
     };
     connection.transport.on("connect", () => {
       if (connection.state !== State.Failed && connection.state !== State.Closed) {
         connection.state = State.Connected;
+        reportIce("channel_open");
       }
     });
     connection.transport.on("message", (value) => {

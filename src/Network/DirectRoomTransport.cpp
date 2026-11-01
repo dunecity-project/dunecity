@@ -98,6 +98,14 @@ std::string fieldsFor(const DirectRoomTransport::Config& config) {
     return body;
 }
 
+unsigned candidateTypes(const std::string& payload) {
+    unsigned types = 0;
+    if(payload.find(" typ host") != std::string::npos) types |= 1;
+    if(payload.find(" typ srflx") != std::string::npos) types |= 2;
+    if(payload.find(" typ prflx") != std::string::npos) types |= 4;
+    return types;
+}
+
 } // namespace
 
 DirectRoomTransport::DirectRoomTransport() : DirectRoomTransport(Dependencies()) { }
@@ -408,6 +416,9 @@ void DirectRoomTransport::handleSessionResult(const BoundedHttpClient::Result& r
     maxPeers_    = response.maxPeers;
     phase_       = response.phase;
     iceServers_  = response.iceServers;
+    SDL_Log("Direct session admitted: protocol=%u role=%s spectator=%d phase=%s stun_servers=%zu",
+        static_cast<unsigned>(config_.gameProtocolVersion), isHost() ? "host" : "client", localSpectator_,
+        phase_ == RoomRelay::Phase::Match ? "match" : "lobby", iceServers_.size());
     if(!response.roomCode.empty()) {
         roomCode_ = response.roomCode;
     }
@@ -626,6 +637,9 @@ void DirectRoomTransport::handlePostResult(const BoundedHttpClient::Result& resu
 
     haveInFlightSignal_ = false;
     if(succeeded) {
+        if(inFlightSignal_.kind != P2PSignal::SignalKind::Candidate) {
+            if(auto* link = findLink(inFlightSignal_.to)) link->localDescriptionPublished = true;
+        }
         return;
     }
     if(!refused && inFlightSignal_.attempts < kMaxSignalAttempts) {
@@ -685,8 +699,10 @@ void DirectRoomTransport::applySignal(const P2PSignal::SignalRecord& record) {
             refuse(*link, "relayed candidate refused");
             return;
         }
-        if(link->connection && !link->connection->addRemoteCandidate(record.payload)) {
-            refuse(*link, "candidate refused");
+        if(link->connection) {
+            if(link->connection->addRemoteCandidate(record.payload))
+                link->remoteCandidateTypes |= candidateTypes(record.payload);
+            else refuse(*link, "candidate refused");
         }
         return;
     }
@@ -721,8 +737,11 @@ void DirectRoomTransport::applyDescription(Link& link, const P2PSignal::SignalRe
         refuse(link, "description carries a relayed candidate");
         return;
     }
-    if(link.connection && !link.connection->setRemoteDescription(record.kind, record.payload)) {
-        refuse(link, "description refused");
+    if(link.connection) {
+        if(link.connection->setRemoteDescription(record.kind, record.payload)) {
+            link.remoteDescriptionApplied = true;
+            link.remoteCandidateTypes |= candidateTypes(record.payload);
+        } else refuse(link, "description refused");
     }
 }
 
@@ -761,6 +780,7 @@ void DirectRoomTransport::pumpConnections(std::uint32_t nowMs) {
 
         DirectPeerConnection::LocalSignal signal;
         while(link->connection->pollLocalSignal(signal)) {
+            link->localCandidateTypes |= candidateTypes(signal.payload);
             if(P2PSignal::mentionsRelayCandidate(signal.payload)) {
                 continue;   // never published: this build has no relay to offer
             }
@@ -796,6 +816,8 @@ void DirectRoomTransport::pumpConnections(std::uint32_t nowMs) {
         const DirectPeerConnection::State state = link->connection->state();
         if(state == DirectPeerConnection::State::Connected && !link->connected) {
             link->connected  = true;
+            SDL_Log("Direct data channel opened: local_spectator=%d remote_spectator=%d elapsed_ms=%u",
+                localSpectator_, isSpectatorPeer(peerId), static_cast<unsigned>(nowMs-link->startedMs));
             readinessDirty_  = true;
             if(!link->announced) {
                 link->announced = true;
@@ -843,21 +865,30 @@ void DirectRoomTransport::pumpConnections(std::uint32_t nowMs) {
             const Peer* peer = findPeer(peerId);
             const std::string name = peer != nullptr && !peer->name.empty()
                                          ? peer->name : std::string("another player");
-            // A failed handshake does not establish that the network blocked it.
-            // Keep this rare failure visible even when performance diagnostics are off;
-            // log only locally generated state and categories, never SDP or credentials.
+            // A timeout or generic backend failure alone does not establish that NAT blocked it.
+            // Record each completed handshake phase and candidate types, never addresses/SDP.
             const auto& detail=link->connection->lastError();
             const char* category=detail.empty() ? "no_backend_reason" : "backend_error";
             for(const auto* known : {"ICE", "ice", "fingerprint", "queue", "backlog", "channel", "WebRTC"})
                 if(detail.find(known)!=std::string::npos) { category=known; break; }
+            const bool described = link->localDescriptionPublished && link->remoteDescriptionApplied;
+            const bool iceFailed = detail == "ice negotiation failed" || detail.find("ICE failed") != std::string::npos;
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                "Direct connection failed: state=%d connected=%d timeout=%d elapsed_ms=%u local_spectator=%d remote_spectator=%d cause=%s",
+                "Direct connection failed: phase=%s state=%d connected=%d timeout=%d elapsed_ms=%u local_spectator=%d remote_spectator=%d cause=%s stun_servers=%zu local_description_published=%d remote_description_applied=%d local_host=%d local_srflx=%d local_prflx=%d remote_host=%d remote_srflx=%d remote_prflx=%d",
+                link->connected ? "gameplay" : !described ? "signaling" : iceFailed ? "ice" : "data_channel",
                 static_cast<int>(state), link->connected, deadlineMissed,
-                static_cast<unsigned>(nowMs-link->startedMs), localSpectator_, peer && peer->spectator, category);
+                static_cast<unsigned>(nowMs-link->startedMs), localSpectator_, peer && peer->spectator, category,
+                iceServers_.size(), link->localDescriptionPublished, link->remoteDescriptionApplied,
+                bool(link->localCandidateTypes & 1), bool(link->localCandidateTypes & 2), bool(link->localCandidateTypes & 4),
+                bool(link->remoteCandidateTypes & 1), bool(link->remoteCandidateTypes & 2), bool(link->remoteCandidateTypes & 4));
             const std::string reason = link->connected
                 ? "The direct connection to " + name + " was lost."
-                : "Could not open a direct connection to " + name
-                      + ". The connection failed before the game could load.";
+                : "Could not open a direct connection to " + name + ". "
+                    + (!described
+                        ? "Connection setup did not finish exchanging details through the game service. Please try again."
+                        : iceFailed
+                            ? "The networks could not establish a direct route. A firewall or NAT may be blocking it. Try another network; this game has no relay fallback."
+                            : "Connection details were exchanged, but the direct data channel did not open. Please try again or use another network.");
             dropLink(peerId, reason);
             continue;       // dropLink erased this entry
         }
