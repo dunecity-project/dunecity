@@ -78,27 +78,40 @@ inline bool unlimited(int difficulty) {
 }
 
 /// The approved displayed-population matrix. kUnlimited where uncapped.
-inline int populationLimit(int difficulty, int mapArea) {
+/// @a hardMatchesLargest (QuantBotConfig force.hardCityMatch, on by default since the
+/// 2026-11-01 change) is Hard's 20k/40k/60k/90k row; off keeps the former
+/// 20k/40k/80k/120k row. Either way this is the base ceiling before
+/// withLargestRival().
+inline int populationLimit(int difficulty, int mapArea, bool hardMatchesLargest) {
     if (unlimited(difficulty)) return kUnlimited;
     static constexpr int kMatrix[3][4] = {
         {  5000,  10000,  20000,  30000 }, // Easy
         { 10000,  20000,  40000,  60000 }, // Medium
-        { 20000,  40000,  80000, 120000 }, // Hard
+        { 20000,  40000,  80000, 120000 }, // Hard (switch off)
     };
-    return kMatrix[difficulty][areaBand(mapArea)];
+    static constexpr int kHardMatchingLargest[4] = { 20000, 40000, 60000, 90000 };
+    const int band = areaBand(mapArea);
+    return difficulty == Hard && hardMatchesLargest ? kHardMatchingLargest[band] : kMatrix[difficulty][band];
 }
 
-/// Shared R+C+I ceiling derived from the population ceiling, rounded up so a
+/// Hard (with force.hardCityMatch) may grow past its base ceiling while another house's
+/// city is bigger, up to that house's displayed population: the ceiling is the larger of
+/// the two. It never shrinks below the base, and an uncapped base stays uncapped.
+inline int withLargestRival(int baseLimit, int largestOtherDisplayPopulation) {
+    if (baseLimit == kUnlimited) return kUnlimited;
+    return std::max(baseLimit, largestOtherDisplayPopulation);
+}
+
+/// Shared R+C+I ceiling for a displayed-population ceiling, rounded up so a
 /// small map still gets a workable city. Uncapped wherever population is.
-inline int zoneLimit(int difficulty, int mapArea) {
-    const int population = populationLimit(difficulty, mapArea);
-    if (population == kUnlimited) return kUnlimited;
-    return (population * kZoneCapReferenceZones + kZoneCapReferencePopulation - 1)
-         / kZoneCapReferencePopulation;
+inline int zoneLimit(int displayPopulationLimit) {
+    if (displayPopulationLimit == kUnlimited) return kUnlimited;
+    return static_cast<int>((static_cast<int64_t>(displayPopulationLimit) * kZoneCapReferenceZones
+                             + kZoneCapReferencePopulation - 1) / kZoneCapReferencePopulation);
 }
 
-inline Limits limits(int difficulty, int mapArea) {
-    return Limits{populationLimit(difficulty, mapArea), zoneLimit(difficulty, mapArea)};
+inline Limits limits(int displayPopulationLimit) {
+    return Limits{displayPopulationLimit, zoneLimit(displayPopulationLimit)};
 }
 
 /// This policy is a custom-game rule only. Campaign games (including the

@@ -140,7 +140,7 @@ struct QuantBotConfig {
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
-    /// SpreadVsDeathHand, DefencePrerequisites; optional keys, the code defaults
+    /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch; optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -239,6 +239,11 @@ struct QuantBotConfig {
         /// upgrade, then a missing prerequisite such as the Radar) becomes a protected capital
         /// project, so its price is saved instead of spent on bargains or plots.
         bool defencePrerequisites;
+        /// Custom DuneCity games, Hard only (QuantBotCityPolicy): the city population ceiling is
+        /// 20,000 / 40,000 / 60,000 / 90,000 by map size, raised to the largest other house's
+        /// city while that one is bigger. Off: the fixed 20,000 / 40,000 / 80,000 / 120,000.
+        /// On by default (Stefan, 2026-11-01).
+        bool hardCityMatch;
     };
     ForceSettings force;
 

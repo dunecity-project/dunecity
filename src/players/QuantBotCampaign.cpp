@@ -25,7 +25,20 @@ int QuantBot::getCityPopulationLimit(int mapArea) const {
        || gameMode != GameMode::Custom || isCampaignGameType(currentGame->gameType)) return 0;
     // All custom-game QuantBots share the same difficulty ceiling, including
     // helpers in a human-controlled house and support-mode controllers.
-    return std::max(0, QuantBotCityPolicy::populationLimit(static_cast<int>(difficulty),mapArea));
+    const bool hardCityMatch = difficulty == Difficulty::Hard && botConfig().force.hardCityMatch;
+    int limit = QuantBotCityPolicy::populationLimit(static_cast<int>(difficulty), mapArea, hardCityMatch);
+    // Hard grows past its base ceiling while another house's city (last census, the same
+    // structure population the ceiling is checked against) is bigger, up to that city.
+    const auto* sim = currentGame->getCitySimulation();
+    if(hardCityMatch && sim && sim->isInitialized()) {
+        int largestOther = 0;
+        for(int h=0; h<DuneCity::kMaxCityHouses; ++h)
+            if(h != getHouse()->getHouseID() && currentGame->getHouse(static_cast<HOUSETYPE>(h)))
+                largestOther = std::max(largestOther,
+                    QuantBotCityPolicy::displayPopulation(sim->getHouseState(h).getTotalPop()));
+        limit = QuantBotCityPolicy::withLargestRival(limit, largestOther);
+    }
+    return std::max(0, limit);
 }
 
 bool QuantBot::isAlliedWithHuman() const {

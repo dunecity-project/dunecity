@@ -337,6 +337,25 @@ draws: no Harkonnen advantage overall. The start decides more than the house (th
 a seed in 41 of 72 pairs, the same house in 27); the one house effect is Habbanya-Penny, Atreides 25-10 from
 either start. Every ladder seed is now played with both houses (`#swap`).
 
+## City population ceilings (custom DuneCity games, protocol 110)
+
+Each capped QuantBot's displayed city population (`QuantBotCityPolicy`), checked both when it orders
+population-bearing buildings and in natural zone growth; the R+C+I zone allowance is 48 zones per
+20,000 of the ceiling, rounded up. Human houses and campaigns are never capped.
+
+| Difficulty | up to 32x32 | up to 64x64 | up to 128x128 | larger |
+|---|---|---|---|---|
+| Easy | 5,000 | 10,000 | 20,000 | 30,000 |
+| Medium | 10,000 | 20,000 | 40,000 | 60,000 |
+| Hard | 20,000 | 40,000 | 60,000 | 90,000 |
+| Brutal, Defend | none | none | none | none |
+
+Hard (Stefan, 2026-11-01; `[Force Concentration] HardCityMatch`, hashed, on): while any other house's
+city is bigger than Hard's ceiling, the ceiling rises to that city's population (last census), so
+Hard keeps pace with a large human or Brutal city but no further. Off restores the former fixed Hard
+row 20,000 / 40,000 / 80,000 / 120,000. In the 1.0.864 1v3 on the MacBook Air (160x160, three Hard
+houses) one Hard city sat at its 120,000 ceiling from minute ~50 while the human's was ~56,000.
+
 ## Ladder and campaign candidates (protocol 98, default off)
 
 These candidates are hashed `[Force Concentration]` settings, not environment-variable gameplay

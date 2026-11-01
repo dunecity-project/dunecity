@@ -335,7 +335,9 @@
 // 109: MOD13 shared factory queue (save 9879); older peers cannot read the new byte and
 //      would leave factories idle instead of pooling orders, desynchronising production.
 //      Also road plots can be reserved: a 108 peer refuses the reservation command.
-#define NETWORK_PROTOCOL_VERSION            109
+// 110: QuantBot HardCityMatch (hashed, on): Hard's custom city ceiling is 20k/40k/60k/90k and
+//      rises to the largest other house's city, so a 109 peer grows a different city.
+#define NETWORK_PROTOCOL_VERSION            110
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

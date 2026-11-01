@@ -350,6 +350,8 @@ QuantBotConfig::QuantBotConfig() {
     force.spreadVsDeathHand = false;
     // On since 1.0.861: no-spice 1v1, 16 seeds, blue wiped out 8/16 -> 0/16; matrix neutral.
     force.defencePrerequisites = true;
+    // Stefan, 2026-11-01: Hard's city 20k/40k/60k/90k, growing to the largest other city.
+    force.hardCityMatch = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -645,6 +647,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "DeathHandTurrets", force.deathHandTurrets);
         iniFile.setBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
         iniFile.setBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
+        iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -768,6 +771,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.deathHandTurrets = iniFile.getBoolValue("Force Concentration", "DeathHandTurrets", force.deathHandTurrets);
     force.spreadVsDeathHand = iniFile.getBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
     force.defencePrerequisites = iniFile.getBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
+    force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1250,6 +1254,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("deathHandTurrets", force.deathHandTurrets);
     addNamed("spreadVsDeathHand", force.spreadVsDeathHand);
     addNamed("defencePrerequisites", force.defencePrerequisites);
+    addNamed("hardCityMatch", force.hardCityMatch);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);

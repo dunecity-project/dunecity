@@ -813,8 +813,9 @@ void QuantBot::planCityPopulation(BuildPass& pass) {
     // Custom-game city size ceiling for this bot, including shared-house
     // helpers. Campaign games keep their own separate gates.
     pass.populationCeiling = getCityPopulationLimit(getMap().getSizeX()*getMap().getSizeY());
+    // The land allowance scales with the effective ceiling, including Hard's raised one.
     pass.cityGrowthLimits = pass.populationCeiling > 0
-        ? QuantBotCityPolicy::limits(static_cast<int>(difficulty), getMap().getSizeX()*getMap().getSizeY())
+        ? QuantBotCityPolicy::limits(pass.populationCeiling)
         : QuantBotCityPolicy::Limits{};
     pass.cityZonesIncludingQueued = pass.itemCount[Structure_ZoneResidential]
         + pass.itemCount[Structure_ZoneCommercial] + pass.itemCount[Structure_ZoneIndustrial];

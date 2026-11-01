@@ -24,17 +24,17 @@ void runCustomCityCapProbe(Game& game) {
     bot->gameMode=QuantBot::GameMode::Custom;bot->role=AIRole::Both;
     bot->difficulty=QuantBot::Difficulty::Easy;
     const int area=currentGameMap->getSizeX()*currentGameMap->getSizeY();
-    require(bot->getCityPopulationLimit(area)==QuantBotCityPolicy::populationLimit(QuantBotCityPolicy::Easy,area),
+    require(bot->getCityPopulationLimit(area)==QuantBotCityPolicy::populationLimit(QuantBotCityPolicy::Easy,area,true),
         "Shared Easy helper is missing its city ceiling");
     bot->difficulty=QuantBot::Difficulty::Medium;
-    const int mediumCap=QuantBotCityPolicy::populationLimit(QuantBotCityPolicy::Medium,area);
+    const int mediumCap=QuantBotCityPolicy::populationLimit(QuantBotCityPolicy::Medium,area,true);
     require(bot->getCityPopulationLimit(area)==mediumCap,"Shared Medium helper is missing its city ceiling");
     bot->role=AIRole::Builder;
     require(bot->getCityPopulationLimit(area)==mediumCap,"Support helper is missing its city ceiling");
     bot->role=AIRole::Both;
     bot->difficulty=QuantBot::Difficulty::Hard;
-    require(bot->getCityPopulationLimit(256*256)==120000,"Hard256 map ceiling must be120000");
-    const int hardCap=QuantBotCityPolicy::populationLimit(QuantBotCityPolicy::Hard,area);
+    require(bot->getCityPopulationLimit(256*256)==90000,"Hard 256 map ceiling must be 90000");
+    const int hardCap=QuantBotCityPolicy::populationLimit(QuantBotCityPolicy::Hard,area,true);
     require(bot->getCityPopulationLimit(area)==hardCap,"Shared Hard helper is missing its city ceiling");
     bot->difficulty=QuantBot::Difficulty::Easy;
     std::list<std::unique_ptr<Player>> humanPlayers;
@@ -155,6 +155,30 @@ void runCustomCityCapProbe(Game& game) {
     bot->difficulty=QuantBot::Difficulty::Brutal;
     ready();sim->runZoneGrowth();
     require(vacant->getResidentialPopulation()>0,"Brutal growth was capped or fixture cannot grow");
+    // HardCityMatch: while another house's city is bigger, Hard's ceiling rises to it, and
+    // natural growth uses the raised ceiling; Medium keeps its own.
+    House* rival=nullptr;
+    for(int h=0;h<DuneCity::kMaxCityHouses && !rival;++h)
+        if(h!=house->getHouseID())rival=game.getHouse(static_cast<HOUSETYPE>(h));
+    require(rival,"City cap fixture needs a second house");
+    const int ownPopulation=sim->houseState_[house->getHouseID()].getTotalPop();
+    auto bigRival=[&]() {
+        auto& state=sim->houseState_[rival->getHouseID()];
+        state.resPop=ownPopulation+1000;state.comPop=0;state.indPop=0;
+    };
+    bigRival();
+    bot->difficulty=QuantBot::Difficulty::Hard;
+    require(bot->getCityPopulationLimit(area)==(ownPopulation+1000)*QuantBotCityPolicy::kPopDisplayMultiplier,
+        "Hard ceiling did not rise to the bigger rival city");
+    bot->difficulty=QuantBot::Difficulty::Medium;
+    require(bot->getCityPopulationLimit(area)==mediumCap,"Medium followed a bigger rival city");
+    auto* raised=place();require(raised,"No rival-raise fixture site");raised->setResidentialPopulation(0);
+    bot->difficulty=QuantBot::Difficulty::Medium;
+    bigRival();ready();sim->runZoneGrowth();
+    require(raised->getResidentialPopulation()==0,"Medium city grew past its ceiling beside a bigger rival");
+    bot->difficulty=QuantBot::Difficulty::Hard;
+    bigRival();ready();sim->runZoneGrowth();
+    require(raised->getResidentialPopulation()>0,"Hard city did not grow towards a bigger rival city");
     house->players.splice(house->players.end(),humanPlayers);
     // A human in the house stays unrestricted: the same oversized city still
     // accepts a newly placed lot and still grows it naturally, at every capped
@@ -177,5 +201,5 @@ void runCustomCityCapProbe(Game& game) {
         clearQueues();
     }
     bot->difficulty=QuantBot::Difficulty::Easy;
-    SDL_Log("CUSTOM_CITY_CAP_PROBE_PASS: capped helper refuses orders and growth, human placement and natural growth continue, Brutal grows, campaign excluded");
+    SDL_Log("CUSTOM_CITY_CAP_PROBE_PASS: capped helper refuses orders and growth, Hard grows to a bigger rival city, human placement and natural growth continue, Brutal grows, campaign excluded");
 }
