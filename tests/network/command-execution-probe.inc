@@ -444,6 +444,13 @@ int runOwnershipProbe() {
             if(!cityInterface.skipMissionButton.isVisible() || skip->position.y < pollution->position.y + pollution->size.y
                || skip->position.y + skip->size.y > 480)
                 throw std::runtime_error("city sidebar skip overlaps Pollution or falls below compact screen");
+            // AI behaviour (docs/ai-roles.md): with the city overlays and Skip mission the sidebar
+            // has no row left, so the partner switch sits beside the zoom controls.
+            const auto* aiRole = cityInterface.windowWidget.getWidgetDataFromWidget(&cityInterface.aiRoleButton);
+            const auto* zoomIn = cityInterface.windowWidget.getWidgetDataFromWidget(&cityInterface.zoomInButton);
+            if(!aiRole || cityInterface.aiRoleInSidebar || !cityInterface.aiRoleButton.isVisible()
+               || aiRole->position.y != zoomIn->position.y || aiRole->position.x + aiRole->size.x > zoomIn->position.x)
+                throw std::runtime_error("city AI behaviour switch missing or not beside the zoom controls");
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); SDL_RenderClear(renderer);
             cityInterface.draw(Point(0,0));
             auto citySidebar = renderReadSurface(renderer);
@@ -520,6 +527,46 @@ int runOwnershipProbe() {
             game->getSelectedList().clear();
             interface.updateObjectInterface();
             if(!interface.skipMissionButton.isVisible()) throw std::runtime_error("campaign sidebar skip missing");
+            // AI behaviour (docs/ai-roles.md): this house has QuantBot partners, so the switch is the
+            // row under Auto repair; a click queues the next role and the command applies it.
+            {
+                auto data = [&](Widget& widget) { return interface.windowWidget.getWidgetDataFromWidget(&widget); };
+                const auto* aiRole = data(interface.aiRoleButton);
+                const auto* repair = data(interface.autoRepairButton);
+                const auto* paths = data(interface.movementPathsButton);
+                if(!aiRole || !interface.aiRoleInSidebar || !interface.aiRoleButton.isVisible()
+                   || aiRole->position.y < repair->position.y + repair->size.y
+                   || aiRole->position.y + aiRole->size.y > paths->position.y)
+                    throw std::runtime_error("campaign AI behaviour row missing or overlapping");
+                const QuantBot* partner = nullptr;
+                for(const auto& player : pLocalHouse->getPlayerList())
+                    if(!partner) partner = dynamic_cast<const QuantBot*>(player.get());
+                if(!partner || partner->getRole() != AIRole::Builder || interface.aiRoleButton.getText() != "AI: Build")
+                    throw std::runtime_error("AI behaviour label does not show the Builder partner");
+                const auto queued = game->getCommandManager().timeslot;
+                interface.aiRoleButton.handleMouseLeft(5, 5, true);
+                interface.aiRoleButton.handleMouseLeft(5, 5, false);
+                const Command* sent = nullptr;
+                for(const auto& cycle : game->getCommandManager().timeslot)
+                    for(const auto& command : cycle)
+                        if(command.getCommandID() == CMD_AI_SUPPORT_ROLE) sent = &command;
+                if(!sent || sent->getParameter() != std::vector<Uint32>{static_cast<Uint32>(AIRole::Fighter)}
+                   || sent->getPlayerID() != pLocalPlayer->getPlayerID())
+                    throw std::runtime_error("AI behaviour click did not queue Fight from the local player");
+                sent->executeCommand();
+                interface.updateObjectInterface();
+                if(partner->getRole() != AIRole::Fighter || interface.aiRoleButton.getText() != "AI: Fight")
+                    throw std::runtime_error("AI behaviour command did not switch the partner to Fight");
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); SDL_RenderClear(renderer);
+                interface.draw(Point(0,0));
+                auto aiSidebar = renderReadSurface(renderer);
+                SavePNG(aiSidebar.get(), "ai-behaviour-sidebar.png");
+                game->getCommandManager().timeslot = queued;
+                for(const auto& player : pLocalHouse->getPlayerList())
+                    if(auto* bot = dynamic_cast<QuantBot*>(player.get())) bot->setRole(AIRole::Builder);
+                interface.updateObjectInterface();
+                SDL_Log("AI_BEHAVIOUR_UI_PROBE_PASS: sidebar row, click queues Fight, label follows the partner");
+            }
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); SDL_RenderClear(renderer);
             interface.draw(Point(0,0));
             auto sidebar = renderReadSurface(renderer);

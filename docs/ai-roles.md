@@ -72,9 +72,10 @@ A human whose house has a QuantBot partner gets an "AI behaviour" button on the 
 "AI: Build", "AI: Fight" or "AI: Both". Each click moves to the next role in that order and wraps around.
 
 - Layout (`GameInterface`): the sidebar row under Auto repair, shown while nothing is selected, when the
-  whole stack below it (Movement paths, the three city overlays, Stats, Skip mission) still fits the screen.
-  On a compact screen (480 lines with the city overlays and Skip mission) it sits beside the zoom controls
-  above the sidebar, always visible, so no sidebar row is lost. No partner, observer or replay: no button.
+  whole stack below it (Movement paths, the three city overlays, Stats, Skip mission) still ends above the
+  480-line minimum (`SCREEN_MIN_HEIGHT`). Otherwise (city overlays with Skip mission, or the Tornie chemical
+  row) it sits left of the zoom controls, just left of the sidebar, always visible, so no sidebar control is
+  pushed down. No partner, observer or replay: no button.
 - The click sends `CMD_AI_SUPPORT_ROLE(role)` (protocol 110). Every peer accepts it only from a
   `HumanPlayer` with a house and a role 0-3, and calls `QuantBot::setRole()` on every QuantBot in that
   house. The bot's class string and name do not change; queued production and current unit orders stay.

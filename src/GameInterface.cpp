@@ -320,8 +320,9 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
 
     // AI behaviour: switch the house's AI partner between None, Build, Fight and Both. Only a
     // house with a QuantBot partner gets it. It takes the row under Auto repair when the whole
-    // stack below still fits the screen; on a compact screen (480 lines with the city overlays
-    // and Skip mission) it sits beside the zoom controls instead, so no sidebar row is lost.
+    // stack below still ends above the 480-line minimum, as every stacked control must; when it
+    // would not (city overlays with Skip mission, or the Tornie chemical row) it sits beside the
+    // zoom controls instead, so no sidebar control is pushed down.
     aiRoleButton.setTooltipText(_("AI behaviour: what your AI partner does. Click to switch: "
                                   "None, Build (economy only), Fight (army only), Both."));
     aiRoleButton.setOnClick([]() {
@@ -333,7 +334,7 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
         aiRoleButton.setText(aiRoleLabel(partner->getRole()));
         const int rowsBelow = 1 + (currentGame->isCitySimEnabled() ? 3 : 0) + 1
             + (currentGame->canSkipMission() ? 1 : 0);
-        aiRoleInSidebar = sidebarRowY + rowsBelow * kSidebarRowPitch + kSidebarRowHeight <= getRendererHeight() - 2;
+        aiRoleInSidebar = sidebarRowY + rowsBelow * kSidebarRowPitch + kSidebarRowHeight <= SCREEN_MIN_HEIGHT;
         if(aiRoleInSidebar) {
             windowWidget.addWidget(&aiRoleButton,
                 Point(getRendererWidth() - sideBar.getSize().x + 24, nextSidebarRow()),
