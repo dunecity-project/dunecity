@@ -41,6 +41,33 @@ the portable ZIP remains available. Stable feeds and binaries are uploaded to a
 draft before publication. Do not replace assets in an already published release;
 use a new version. No update feed is emitted for `latest-dev`.
 
+## Release checklist: every channel (verified for 1.0.864, 2026-11-01)
+
+One release touches all of these; each is a separate gate. Report each one as verified,
+held or untested. Never claim one channel from another channel's evidence.
+
+| # | Channel | How it is produced | Verify |
+|---|---|---|---|
+| 1 | Version and notes | `scripts/bump-version.sh X.Y.Z` (+ `--check`). Bump the network protocol for deterministic AI/sim changes and the save version for format changes. Write `releases/desktop/X.Y.Z.md`. | `--check` passes; notes say which protocol/save players need |
+| 2 | Tests on every computer | `dunecity-queue ctest` (below), one agent per native platform, PR CI | Report names the machine for each check |
+| 3 | Windows, macOS, Linux | Merge the PR, push tag `vX.Y.Z`. **Build Dune Legacy** builds Windows EXE/ZIP, macOS DMG/ZIP (signed and notarized on the mini's self-hosted runner, `docs/macos-release-runner.md`), Linux AppImage/DEB/RPM/tar.gz, and signs the update feeds on the mini (`docs/desktop-updates.md`) | 13 assets on the GitHub release, which is marked Latest: 8 packages, 3 `updates-*.txt`, 2 appcasts |
+| 4 | SourceForge Files | Automatic: **Sync SourceForge release** after the stable build | 7 packages + README + SHA256SUMS read back; `dunecity-vX.Y.Z` tag; three OS defaults |
+| 5 | Browser (`/play`) | Automatic: **Publish browser build** commits to the website repo, then **Deploy to Droplet** | Live `play/build.json` has the version and the tag commit; every listed artifact hash matches; a real browser reaches the main menu |
+| 6 | Website pages | The release job updates links, labels and `changelog.html`. The "New in X.Y.Z" prose on `website/index.html` and `website/dune-city.html` is manual | Live pages show the new prose; Android and TestFlight labels match what is actually published |
+| 7 | iPhone/iPad (TestFlight) | `scripts/build-ios.sh --testflight` on the mini, then App Store Connect steps (below) | Build `VALID`, in the Public group, Beta App Review submitted |
+| 8 | Android | Independent version line; signed with the existing upgrade key; needs Stefan's phone (below) | Published only after a phone test and Stefan's explicit "publish" |
+| 9 | Records | `HANDOVER.md` entry (docs-only PR, `[skip ci]`); Hindsight memory | Machines per check and untested platforms are listed |
+
+Order: 1 → 2 → merge + tag (3) → 4 and 5 start automatically. Do 6 after the release job's
+website commit. 7 can run while 3 builds; 8 has its own gates. Cancel main's duplicate
+**Build Dune Legacy** run started by the merge (and runs started by docs-only merges); never
+cancel the tag build, the SourceForge sync or the browser publish.
+
+Not part of a normal release: the legacy SourceForge web page (its download link follows
+the SourceForge default), `/Applications` on Stefan's Mac (only when asked, see step 2
+below), the Discord bot and the relay/signaling services (deploy them separately before a
+client that needs them).
+
 ## Test on every available computer (Stefan, 2026-11-01)
 
 Every build, release candidate and release is tested on all reachable machines in parallel,
@@ -154,7 +181,9 @@ exceeds that. `package-web.py` then commits it as ordered 64 MiB parts
 (`dunecity.data.part-000`, ...) listed under `split` in `build.json`, whose `sha256` stays the
 hash of the whole file. The website's `deploy/play_parts.py` joins the parts before CI
 compression and in the server's staged web root, so browsers still download one file;
-`check-web-security.py` hashes the parts in order.
+`check-web-security.py` hashes the parts in order. The live site serves only the joined
+`dunecity.data`: the part URLs return 404 by design. Check the joined file against
+`build.json`'s hash.
 
 For an authorized browser hotfix, build current committed source locally:
 
@@ -217,6 +246,51 @@ next scheduled deploy. Website main 9a85d48 contains the gateway and additive re
 Untracked play-test-* previews are also removed; restore previews after deployment,
 or finish their tests before publishing. The private loopback relay and SQLite data
 live outside the deployed webroot and are preserved.
+
+## iPhone and iPad: TestFlight
+
+Details: `IOS_PORT.md` ("Distribution"). Upload from the Mac mini, where the team's Apple ID
+is signed into Xcode. The upload command uses no API key. Test first on the mini's
+simulators (iPhone and iPad), then build the exact committed release tree:
+
+```sh
+agent-workspace run --project dunecity --owner OWNER --tests --wait -- nice -n 10 env JOBS=4 /bin/bash -c \
+  'scripts/build-ios.sh --device && /usr/libexec/PlistBuddy -c "Print :NSBluetoothAlwaysUsageDescription" build-ios-device/bin/dunecity.app/Info.plist && scripts/build-ios.sh --testflight'
+```
+
+The build number is the UTC time (`YYYYMMDD.HHMM`); App Store Connect shows it without the
+leading zero (`20261101.356`). After processing, use the App Store Connect API key
+(1Password `Agent-Operator`, "App Store Connect API key", read with `agent-op`) to set the
+en-US "What to Test" text, add the build to the **Public** group (public link
+https://testflight.apple.com/join/nsEVY7Eb) and submit it for Beta App Review. A missing
+usage string is rejected at upload (ITMS-90683 needed `NSBluetoothAlwaysUsageDescription`,
+1.0.864); check `IDE/iOS/Info.plist` before uploading. The website's TestFlight engine label
+changes only after Apple approves the build for external testing.
+
+## Android
+
+Android has its own version line (`android-version.json`, `net.dunecity.dune2r`, e.g.
+0.2.33 / 1000553 on engine 1.0.858) and is never the repository's Latest release.
+
+1. Candidate: `gh workflow run build.yml --ref BRANCH -f android_package_probe=true`, then download
+   `DuneCity-Android-Runner-Candidate`. The runner signs it with a throwaway debug key, so it
+   cannot be installed over a public APK.
+2. Re-sign it locally with the existing upgrade key (certificate SHA-256
+   `a29825bfecef94665244e1963e3c7dc64eadb387ae52820a793d26e193c21b60`, DN "Android Debug").
+   Use `zipalign -P 16`, then `apksigner sign` and `verify`. Compare every non-signature entry
+   before and after. Never upload the key to a hosted runner, and never generate a new key:
+   installed copies could then no longer upgrade.
+   **As of 1.0.864 nobody can find this keystore** on the mini, Air, Pro, Windows PC or in
+   1Password. Once Stefan finds it, store it in 1Password `Agent-Operator`.
+3. Install with `adb install -r` on Stefan's phone, keeping app data. He tests it, and the APK
+   is published only after he says "publish".
+4. `gh release create android-vX.Y.Z DuneLegacy.apk SHA256SUMS.txt --target SOURCE_SHA --latest=false`,
+   download it again and compare the hash. Then update the Android links and labels in both
+   website pages.
+
+When any of these gates is missing, Android stays on its previous version. Say so in the
+notes, on the website labels and in the report: an older Android build cannot play online
+with a newer protocol.
 
 ## In-game feedback service
 
