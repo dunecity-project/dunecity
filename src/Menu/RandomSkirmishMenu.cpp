@@ -113,8 +113,8 @@ std::string saveMap(const Result& result) {
 namespace {
 
 constexpr int kRowGap = 3;
-constexpr int kLeftColumnRows = 17;   ///< Map (7) + Game (6) + You start with (4)
-constexpr int kMultiplayerRows = 12;  ///< Map (7) + Game (4), and a row of slack
+constexpr int kLeftColumnRows = 18;   ///< Map (8) + Game (6) + You start with (4)
+constexpr int kMultiplayerRows = 13;  ///< Map (8) + Game (4), and a row of slack
 
 constexpr int kNoPartner = 0;         ///< the partner selector's "None" entry
 constexpr int kMaxContentWidth = 800;
@@ -203,6 +203,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     for(int size : kMapSizes) sizeBox.addEntry(std::to_string(size) + " x " + std::to_string(size), size);
     for(int i = 0; i < static_cast<int>(kRockPercent.size()); ++i) rockBox.addEntry(std::to_string(kRockPercent[i]) + "%", i);
     for(int i = 0; i < 5; ++i) spiceBox.addEntry(_(kSpiceNames[i]), i);
+    for(int worms : kWormChoices) wormsBox.addEntry(worms == 0 ? std::string(_("None")) : std::to_string(worms), worms);
     symmetricBox.setText(_("Mirrored starts"));
     seedBox.setAllowedChars("0123456789");
     seedBox.setMaximumTextLength(10);
@@ -217,6 +218,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     addRow(0, row++, _("Size"), &sizeBox);
     addRow(0, row++, _("Rock"), &rockBox);
     addRow(0, row++, _("Spice"), &spiceBox);
+    addRow(0, row++, _("Sandworms"), &wormsBox);
     addRow(0, row++, _("Layout"), &symmetricBox);
     addRow(0, row++, _("Seed"), &seedBox);
     addRow(0, row++, "", &fixedSeedBox);
@@ -430,6 +432,7 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(sizeBox, params.mapSize);
     selectData(rockBox, static_cast<int>(params.rock));
     selectData(spiceBox, static_cast<int>(params.spice));
+    selectData(wormsBox, params.worms);
     symmetricBox.setChecked(params.symmetric);
     seedBox.setText(std::to_string(params.seed));
     fixedSeedBox.setChecked(params.fixedSeed);
@@ -579,6 +582,7 @@ Params RandomSkirmishMenu::readParams() const {
     params.mapSize = sizeBox.getSelectedEntryIntData();
     params.rock = static_cast<Rock>(rockBox.getSelectedEntryIntData());
     params.spice = static_cast<Spice>(spiceBox.getSelectedEntryIntData());
+    params.worms = wormsBox.getSelectedEntryIntData();
     params.symmetric = symmetricBox.isChecked();
     const std::string seed = seedBox.getText();
     if(!seed.empty()) {

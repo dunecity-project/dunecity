@@ -26,7 +26,7 @@ map-editor format and starts it through the normal CustomGame path,
 ## Parameters
 All of these are saved as last-used values in the configuration file, section `[Random Skirmish]`.
 
-Settings with an order (Size, Rock, Spice, Credits, Tech level, Allies, Enemies, and each side's
+Settings with an order (Size, Rock, Spice, Sandworms, Credits, Tech level, Allies, Enemies, and each side's
 Base, Army and City) are horizontal sliders (`include/GUI/Slider.h`): lowest on the left, highest
 on the right, the chosen step's text beside the track. Click or drag on the track, use the mouse
 wheel, or Left/Right when the slider is active. "Random" is the rightmost step of Army and City.
@@ -43,6 +43,15 @@ Mod, house, AI and AI partner stay drop-downs.
   - Spice: None, Low 6%, Medium 12%, High 18%, Very high 24% of the map (spice, thick spice and
     blooms; Very high matches the map editor's default random map). Thick spice share inside the
     fields 0/10/25/40/55%.
+  - Sandworms: None (default), 1, 2, 3, 4, 6 or 8 worms on the map at the start (`placeWorms`, also on
+    the multiplayer Random Map screen). Each starts on plain sand or spice (never a bloom, a building
+    or a unit), at least 20 tiles (a fifth of the map side on small maps) from every start, spread
+    apart where the map allows. They are drawn from their own seed, so the rest of the map is
+    unchanged by the count. Written as `Fremen,Sandworm` units: the loader gives every worm to the
+    Natives house. A multiplayer map's starts are `[PlayerN]`, so Fremen names no start and worms
+    appear whichever starts are played; on a single-player map they appear unless Fremen is one of
+    its houses and that house is left out in a Custom Game lobby. Killed worms come back only with
+    the "Killed Sandworms Respawn" game rule.
   - "Mirrored starts".
   - Seed. It is shown and editable, and "New" rolls a fresh one. "Keep this seed" stops a new seed
     from being rolled on each visit. This checkbox is an addition, because "random by default" and

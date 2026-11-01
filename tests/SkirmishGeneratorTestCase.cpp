@@ -1219,6 +1219,68 @@ TEST_CASE("Random skirmish: no unit starts on a spice bloom", "[skirmish][genera
     REQUIRE(mapsWithBlooms > 0);
 }
 
+TEST_CASE("Random skirmish: sandworms start on open sand away from every start", "[skirmish][generator][worms]") {
+    auto withoutWorms = [](const std::string& ini) {
+        std::istringstream in(ini);
+        std::string out, line;
+        while(std::getline(in, line)) if(line.find("Sandworm") == std::string::npos) out += line + "\n";
+        return out;
+    };
+    std::vector<Params> cases;
+    for(uint32_t seed : {11u, 20261101u}) {
+        cases.push_back(params(128, 1, 2, Mode::Vanilla, 9, seed));
+        cases.push_back(params(64, 0, 1, Mode::DuneCity, 9, seed));
+        cases.push_back(multiplayerParams(4, 128, Mode::Vanilla, BaseSize::Medium, 3, 0, true, 9, seed));
+    }
+    for(Params p : cases) {
+        const bool multiplayer = p.multiplayer;
+        const Catalogue& houses = p.mode == Mode::DuneCity ? city() : vanilla();
+        p.worms = 0;
+        const Result none = generate(p, houses);
+        REQUIRE(none.worms.empty());
+        for(int count : {1, 4, 8}) {
+            p.worms = count;
+            const Result r = generate(p, houses);
+            INFO("size " << p.mapSize << " multiplayer " << multiplayer << " seed " << p.seed << " worms " << count);
+            REQUIRE(static_cast<int>(r.worms.size()) == count);
+            // Worms never change the rest of the map.
+            REQUIRE(withoutWorms(r.ini) == none.ini);
+            const int clearance = std::min(kWormStartClearance, p.mapSize / 5);
+            std::set<std::pair<int, int>> taken;
+            for(const Placement& u : r.units) taken.insert({u.x, u.y});
+            for(const Placement& w : r.worms) {
+                const TERRAINTYPE t = r.map(w.x, w.y);
+                REQUIRE((t == Terrain_Sand || t == Terrain_Dunes || t == Terrain_Spice || t == Terrain_ThickSpice));
+                for(const HouseSetup& h : r.houses)
+                    REQUIRE(std::max(std::abs(h.start.x - w.x), std::abs(h.start.y - w.y)) >= clearance / 2);
+                REQUIRE(taken.insert({w.x, w.y}).second);
+                for(const Placement& s : r.structures) {
+                    const Coord size = houses.sizes[s.item];
+                    REQUIRE_FALSE((w.x >= s.x && w.x < s.x + size.x && w.y >= s.y && w.y < s.y + size.y));
+                }
+            }
+            // Written as units the loader hands to the Natives house, whichever starts are played.
+            size_t lines = 0;
+            for(size_t at = r.ini.find("=Fremen,Sandworm,256,"); at != std::string::npos; at = r.ini.find("=Fremen,Sandworm,256,", at + 1)) ++lines;
+            REQUIRE(lines == r.worms.size());
+            REQUIRE(r.ini.find("Sandworms=" + std::to_string(count)) != std::string::npos);
+        }
+    }
+
+    // The choice is remembered and snaps to the menu's values.
+    INIFile config(false, std::string());
+    Params saved;
+    saved.worms = 6;
+    saved.save(config);
+    Params loaded;
+    loaded.load(config);
+    REQUIRE(loaded.worms == 6);
+    config.setIntValue("Random Skirmish", "Sandworms", 100);
+    loaded.load(config);
+    loaded.clamp(8);
+    REQUIRE(loaded.worms == 8);
+}
+
 TEST_CASE("Random skirmish: start catalogue is what every house can field", "[skirmish][generator][multiplayer]") {
     for(const Catalogue* c : {&vanilla(), &city()}) {
         const Catalogue starts = startCatalogue(*c, 4);
