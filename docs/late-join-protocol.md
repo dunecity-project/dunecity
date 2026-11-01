@@ -242,8 +242,11 @@ python3 tests/network/run-late-join-probe.py --mode spectate --city --twin-citie
 
 Warm-up is restricted to a solo host and spectator-only modes. It runs without
 frame delays until the requested checkpoint, then resumes normal cadence once
-the spectator transfer begins. The viewer still deliberately stops reading for
-five seconds. Spatial checks verify moving units remain indexed at their current
+the spectator transfer begins. The viewer deliberately stops reading for at least
+five seconds and requires the original players to advance more than 100 cycles.
+It allows another bounded 15 seconds for that progress on a loaded machine,
+without reading the viewer's network or reducing the cycle requirement. Spatial
+checks verify moving units remain indexed at their current
 positions and that reversing cell insertion order leaves target selection
 unchanged. The final comparison also checks that the host continues after the
 viewer leaves. `JOIN_SEED` sets only the integration fixture's initial RNG seed.
