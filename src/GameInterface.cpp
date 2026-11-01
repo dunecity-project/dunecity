@@ -50,6 +50,19 @@
 #include <cstdlib>
 #include <string>
 
+#include <sand.h>
+#include <structures/BuilderBase.h>
+
+namespace {
+// The stacked sidebar controls are laid out from one cursor rather than from
+// hardcoded offsets. Adding the Stats item made an eight-row city stack, so
+// the row pitch is tightened from 40 to 38 - the buttons keep their full
+// 36-pixel click target and the whole stack still ends above the 480-line
+// minimum supported interface height.
+constexpr int kSidebarRowHeight = 36;
+constexpr int kSidebarRowPitch = 38;
+}
+
 void SkipMissionButton::updateTextures() {
     Button::updateTextures();
     if(pUnpressedTexture) return;
@@ -251,13 +264,6 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     });
     const int autoRepairY = 146 + ornithopterButtonHeight + 4
         + (ModManager::instance().isTornieContentActive() ? chemicalCarryallButtonHeight + 4 : 0);
-    // The stacked sidebar controls are laid out from one cursor rather than from
-    // hardcoded offsets. Adding the Stats item made an eight-row city stack, so
-    // the row pitch is tightened from 40 to 38 - the buttons keep their full
-    // 36-pixel click target and the whole stack still ends above the 480-line
-    // minimum supported interface height.
-    constexpr int kSidebarRowHeight = 36;
-    constexpr int kSidebarRowPitch = 38;
     int sidebarRowY = autoRepairY;
     const auto nextSidebarRow = [&]() {
         const int y = sidebarRowY;
@@ -322,9 +328,24 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     skipMissionButton.setTooltipText(_("Skip this mission and continue to the next level (confirmation required)."));
     skipMissionButton.setOnClick(std::bind(&Game::onSkipMission, currentGame));
     skipMissionButton.setVisible(currentGame->canSkipMission());
+    builderRowsTop = nextSidebarRow();
     windowWidget.addWidget(&skipMissionButton,
-        Point(getRendererWidth() - sideBar.getSize().x + 24, nextSidebarRow()),
+        Point(getRendererWidth() - sideBar.getSize().x + 24, builderRowsTop),
         Point(ornithopterButtonWidth, kSidebarRowHeight));
+
+    // Builder shortcuts: one per builder type the house owns, stacked below the controls
+    // above by updateBuilderButtons(). Each opens the build menu of the least busy builder.
+    builderRowWidth = ornithopterButtonWidth;
+    for(std::size_t i = 0; i < kBuilderShortcutTypes.size(); ++i) {
+        const int itemID = kBuilderShortcutTypes[i];
+        TextButton& button = builderButtons[i];
+        button.setText(resolveItemName(itemID));
+        button.setTooltipText(fmt::sprintf(_("Open the build menu of your least busy %s"), resolveItemName(itemID)));
+        button.setOnClick([itemID]() { currentGame->selectBuilderOfType(itemID); });
+        button.setVisible(false);
+        windowWidget.addWidget(&button, Point(getRendererWidth() - sideBar.getSize().x + 24, builderRowsTop),
+                               Point(builderRowWidth, kSidebarRowHeight));
+    }
 
     // add chat manager; in city mode below the population and RCI readouts (added next, at
     // topBar - 4 .. topBar - 4 + 22 + 18), which the first chat lines otherwise overwrite.
@@ -426,6 +447,28 @@ void GameInterface::refreshAircraftButtons() {
     }
     ornithopterSelectButton.setCount(ornithopters);
     chemicalCarryallSelectButton.setCount(chemicalCarryalls);
+}
+
+void GameInterface::updateBuilderButtons(bool nothingSelected) {
+    // Below the skip-mission row when it shows; a row that would run off the sidebar is left out.
+    int y = builderRowsTop + (skipMissionButton.isVisible() ? kSidebarRowPitch : 0);
+    const int x = getRendererWidth() - sideBar.getSize().x + 24;
+    for(std::size_t i = 0; i < kBuilderShortcutTypes.size(); ++i) {
+        TextButton& button = builderButtons[i];
+        const int count = nothingSelected && pLocalHouse != nullptr ? pLocalHouse->getNumItems(kBuilderShortcutTypes[i]) : 0;
+        const bool fits = y + kSidebarRowHeight <= getRendererHeight() - 2;
+        button.setVisible(count > 0 && fits);
+        if(!button.isVisible()) continue;
+        const std::string text = count > 1 ? fmt::sprintf("%s (%d)", resolveItemName(kBuilderShortcutTypes[i]), count)
+                                           : resolveItemName(kBuilderShortcutTypes[i]);
+        if(button.getText() != text) button.setText(text);
+        if(builderButtonY[i] != y) {
+            // Repositioning resizes, which rebuilds the textures: only when the row moves.
+            windowWidget.setWidgetGeometry(&button, Point(x, y), Point(builderRowWidth, kSidebarRowHeight));
+            builderButtonY[i] = y;
+        }
+        y += kSidebarRowPitch;
+    }
 }
 
 void GameInterface::draw(Point position) {
@@ -674,6 +717,7 @@ void GameInterface::updateObjectInterface() {
     // yields the sidebar while something is selected, like the controls above.
     statsButton.setVisible(selection.empty());
     skipMissionButton.setVisible(selection.empty() && currentGame->canSkipMission());
+    updateBuilderButtons(selection.empty());
     // Keep pressed states in sync with keyboard shortcuts and other overlays.
     landValueOverlayButton.setToggleState(currentGame->getCityOverlayMode() == DuneCity::CityOverlayMode::LandValue);
     crimeOverlayButton.setToggleState(currentGame->getCityOverlayMode() == DuneCity::CityOverlayMode::CrimeRate);

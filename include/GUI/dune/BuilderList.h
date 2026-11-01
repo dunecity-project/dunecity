@@ -158,6 +158,8 @@ private:
     sdl2::texture_ptr    pAlreadyBuiltTextTexture;
     sdl2::texture_ptr    pPlaceItTextTexture;
     sdl2::texture_ptr    pBlockedTextTexture;   ///< planned plot blocked by units
+    sdl2::texture_ptr    pPlacingTextTexture;   ///< the finished building is on the placing cursor
+    sdl2::texture_ptr    pPlanningTextTexture;  ///< the building is on the plan-placement cursor
     sdl2::texture_ptr    pOnHoldTextTexture;
     sdl2::texture_ptr    pUnitLimitReachedTextTexture;
     sdl2::texture_ptr    pHarvesterLimitReachedTextTexture;

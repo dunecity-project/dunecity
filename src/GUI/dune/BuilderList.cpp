@@ -196,6 +196,8 @@ BuilderList::BuilderList(Uint32 builderObjectID) {
     pAlreadyBuiltTextTexture = createFittedOverlayText(_("ALREADY\nBUILT"));
     pPlaceItTextTexture = createFittedOverlayText(_("PLACE IT"));
     pBlockedTextTexture = createFittedOverlayText(_("BLOCKED"));
+    pPlacingTextTexture = createFittedOverlayText(_("PLACING"));
+    pPlanningTextTexture = createFittedOverlayText(_("PLAN\nSITE"));
     pOnHoldTextTexture = createFittedOverlayText(_("ON HOLD"));
     pUnitLimitReachedTextTexture = createFittedOverlayText(_("UNIT\nLIMIT"));
     pHarvesterLimitReachedTextTexture = createFittedOverlayText(_("HARVESTER\nLIMIT"));
@@ -434,6 +436,12 @@ void BuilderList::draw(Point position) {
                 SDL_RenderCopy(renderer, pConcrete, &srcConcrete, &destConcrete);
             }
 
+            // The building on the placing cursor (finished, placed by hand) or the plan cursor.
+            const bool placingSelected = buildItem.itemID == pBuilder->getCurrentProducedItem()
+                && pBuilder->mayPlaceByHand()
+                && currentGame->currentCursorMode == Game::CursorMode_Placing && !currentGame->isPlanningPlacement();
+            const bool planningSelected = currentGame->getPlanningItemID() == buildItem.itemID;
+
             // draw price
             const int shownPrice = buildItem.itemID == pBuilder->getCurrentProducedItem()
                 ? pBuilder->getCurrentProductionPrice() : buildItem.price;
@@ -470,17 +478,32 @@ void BuilderList::draw(Point position) {
                 SDL_Rect progressBar = { button.x, button.y, max_x, button.h };
                 renderFillRect(renderer, &progressBar, COLOR_HALF_TRANSPARENT);
 
-                if(pBuilder->isWaitingToPlace()) {
+                if(placingSelected) {
+                    drawCentered(pPlacingTextTexture.get());
+                } else if(pBuilder->isWaitingToPlace()) {
                     drawCentered(pPlaceItTextTexture.get());
                 } else if(pBuilder->mayPlaceByHand()) {
                     // A planned plot blocked by units: it waits, or the player places it elsewhere.
                     drawCentered(pBlockedTextTexture.get());
+                } else if(planningSelected) {
+                    drawCentered(pPlanningTextTexture.get());
                 } else if(pBuilder->isOnHold()) {
                     drawCentered(pOnHoldTextTexture.get());
                 } else if(pBuilder->isUnitLimitReached(buildItem.itemID)) {
                     const bool harvester = isHarvesterLikeUnit(buildItem.itemID);
                     drawCentered(harvester ? pHarvesterLimitReachedTextTexture.get() : pUnitLimitReachedTextTexture.get());
                 }
+            } else if(planningSelected) {
+                drawCentered(pPlanningTextTexture.get());
+            }
+
+            if(placingSelected || planningSelected) {
+                // The building on the placing or plan-placement cursor: a gold frame, two pixels wide.
+                const Uint32 selectedEdge = COLOR_RGB(245,199,103);
+                SDL_Rect outer{button.x - 1, button.y - 1, button.w + 2, button.h + 2};
+                SDL_Rect inner{button.x, button.y, button.w, button.h};
+                renderDrawRect(renderer, &outer, selectedEdge);
+                renderDrawRect(renderer, &inner, selectedEdge);
             }
 
             if(buildItem.num > 0) {

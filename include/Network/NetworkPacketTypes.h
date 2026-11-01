@@ -332,7 +332,9 @@
 //      a 106 peer would start the same mod with none and desync.
 // 108: Tornie-family 1.0.546 objects, technology, rules, research and cooperative campaigns.
 //      Older peers cannot interpret the new object IDs, commands or settings (save 9878).
-#define NETWORK_PROTOCOL_VERSION            108
+// 109: MOD13 shared factory queue (save 9879); older peers cannot read the new byte and
+//      would leave factories idle instead of pooling orders, desynchronising production.
+#define NETWORK_PROTOCOL_VERSION            109
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

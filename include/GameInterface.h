@@ -31,6 +31,8 @@
 #include <GUI/dune/NewsTicker.h>
 #include <GUI/dune/DisasterNotification.h>
 
+#include <array>
+#include <data.h>
 #include <vector>
 #include <functional>
 #include <climits>
@@ -128,6 +130,8 @@ private:
     void makeContainerReadOnlyWhileObserving();
     void drawCityStatsOverlay();
     void updateJoinRequestButton();
+    /// Shows a shortcut for each builder type the local house owns below the stacked controls.
+    void updateBuilderButtons(bool nothingSelected);
 
 
     ObjectInterface*    pObjectContainer;       ///< The container holding information about the currently selected unit/structure
@@ -168,6 +172,15 @@ private:
     bool                tornieFamilyPresentation = false;
     Uint32              aircraftCountCycle = static_cast<Uint32>(-1);
     const House*        aircraftCountHouse = nullptr;
+    /// Builder types with a shortcut on the empty-selection sidebar, in build order.
+    static constexpr std::array<int, 9> kBuilderShortcutTypes{
+        Structure_ConstructionYard, Structure_Barracks, Structure_WOR, Structure_Worfinery,
+        Structure_LightFactory, Structure_HeavyFactory, Structure_HighTechFactory,
+        Structure_StarPort, Structure_ChaosFactory};
+    std::array<TextButton, kBuilderShortcutTypes.size()> builderButtons; ///< Opens a builder's build menu
+    int                 builderRowsTop = 0;     ///< First row below the stacked controls (the skip-mission row)
+    int                 builderRowWidth = 0;
+    std::array<int, kBuilderShortcutTypes.size()> builderButtonY{}; ///< Current row of each shortcut
 
     bool                showCityStatsOverlay;   ///< Whether to show the city stats overlay
 

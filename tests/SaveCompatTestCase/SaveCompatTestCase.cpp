@@ -84,7 +84,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9875 saves the QuantBot role byte in place of the support flag (docs/ai-roles.md).
     // 9876 adds the MOD10 planned-construction rules; 9877 adds the MOD11 slow city year.
     // 9878 adds the integrated Tornie 1.0.546 object and family gameplay state.
-    REQUIRE(SAVEGAMEVERSION == 9878);
+    // 9879 adds the MOD13 shared factory queue rule without new per-builder state.
+    REQUIRE(SAVEGAMEVERSION == 9879);
     REQUIRE(SAVEGAMEVERSION_TORNIE546 == 9878);
     REQUIRE(SAVEGAMEVERSION_AI_ROLE == 9875);
     REQUIRE(SAVEGAMEVERSION_NATIVES == 9871);

@@ -563,6 +563,8 @@ public:
     */
     void selectAllOrnithopters();
     void selectAllChemicalCarryalls();
+    /// Selects the local house's least busy builder of @a itemID (a sidebar shortcut).
+    void selectBuilderOfType(int itemID);
 
     /**
         This method unselects all units/structures in the list aList.

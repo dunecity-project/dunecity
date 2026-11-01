@@ -103,6 +103,7 @@ target_sources(dunelegacy_tests
         BuilderListLayoutTestCase.cpp
         PalaceUnitLimitRegressionTestCase/PalaceUnitLimitRegressionTestCase.cpp
         PlacementReservationTestCase/PlacementReservationTestCase.cpp
+        FactoryQueueTestCase/FactoryQueueTestCase.cpp
         ZonePowerTestCase/ZonePowerTestCase.cpp
         CityEffectsTestCase/CityEffectsTestCase.cpp
         ../src/fixmath/fix32.c

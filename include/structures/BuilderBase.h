@@ -245,6 +245,7 @@ public:
 
 protected:
     virtual void updateProductionProgress();
+    void takeSharedFactoryQueueWork();
 
     void removeBuiltItemFromProductionQueue();
 

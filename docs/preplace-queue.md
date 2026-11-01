@@ -59,6 +59,54 @@ The option is hashed and is the second MOD10 byte; settings predating MOD10 read
 read 1-3 in plan order across the three yards, all three are built on plan; screenshot
 `preplace-shared-queue.png`) in one build.
 
+## 2026-11-01: shared ordinary factory queues
+
+`Shared Factory Queue` is a separate hashed match rule, default **on** for new games. For a
+human-controlled house (`!House::isAI()`, including shared human/AI control), each idle Light
+Factory, Heavy Factory, High-Tech Factory, Barracks, WOR or Worfinery can pull waiting orders
+from another of the same type and owner. The house must own at least two of that type; neither
+the receiver nor the donor may be upgrading or on hold. AI-only houses are unchanged.
+Construction Yards retain their separate reserved-order pool above. Starports, Chaos Factories,
+Love Factories and other producers never participate.
+
+An empty factory checks twice a second, staggered by `(gameCycle + objectID) % MILLI2CYCLES(500)`.
+Each donor offers its first eligible waiting entry. The lowest zero-based queue position wins,
+then the earlier factory in `structureList`; object ids and UI selection do not break ties.
+An entry unavailable in the receiver's build list (including upgrade/prerequisite gates) or
+blocked by the house's per-item unit limit is skipped. The first entry matching the donor's
+`currentProducedItem` is protected as in progress, even when its item id appears several times;
+if no current item is selected, entry 0 is protected conservatively.
+
+These factories enqueue orders without taking credits (`BuilderBase::doProduceItem`); only
+`updateProductionProgress` pays for the current item as it builds. A waiting entry therefore
+has no invested progress, and an entry with nonzero `startingCreditsPaid` is never transferred.
+Moving it splices the queue node, updates both factories' queued counts, adopts the receiver's
+price and starts with zero progress and zero credit provenance. The donor's paid progress and
+both builders' repeat flags stay where they were. No new per-builder saved state is needed.
+
+The INI/mod `GameOptions.ini` key is `[Game Options] Shared Factory Queue`; like Shared Yard
+Queue it has no lobby checkbox. GameInitSettings MOD13 (`0x4D4F4444`, `MODD`) appends its boolean
+after MOD12's `chaosCampaignEligible`. **Save 9879 / protocol 109** are required: an older peer
+could neither consume the byte nor simulate the pooled production. Every older stream,
+including released MOD12 (Tornie 1.0.546), reads the rule as **off**. A missing MOD13 byte is a
+truncated stream, not a legacy save.
+
+Focused `[factoryqueue]` Catch2 cases cover the eligible builder set, deterministic pick order,
+duplicate/current-entry protection, paid entries and receiver availability/limit filtering.
+The existing `--preplace-probe` engine run also exercises two human Heavy Factories: five tanks
+ordered on one, a waiting tank moved with no money/progress transfer, then genuinely paid for
+and built by the other. It checks switch-off and AI-only controls, hold/upgrade/phase gates,
+queued counts, receiver pricing and repeat isolation. After the integration build, run:
+
+```sh
+nice -n 10 python3 tests/ai/run-campaign-balance.py --build-dir build-int \
+  --output-dir /Users/stefan/Documents/projects/outputs/shared-factory-queue \
+  --preplace-probe --mod dunecity
+```
+
+The factory assertions emit `FACTORY_QUEUE_PROBE_PASS`; the overall yard/factory run must end
+with `CAMPAIGN_BALANCE_RESULT: probe=preplace_queue outcome=passed`.
+
 ## Legacy control behaviour
 
 The detailed fallback and enemy-wait rules below apply when `Retry Planned Placement=false`.

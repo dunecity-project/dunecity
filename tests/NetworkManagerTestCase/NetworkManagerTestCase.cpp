@@ -31,7 +31,7 @@ static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
 static constexpr int kWireCoopCampaignControl = 25;
 static constexpr int kWireCoopSetupTransfer = 26;
-static constexpr int kWireProtocolVersion = 108;
+static constexpr int kWireProtocolVersion = 109;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -124,7 +124,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // removes the retired Mentat classes from the PlayerFactory list the lobby indexes.
     // 106 adds the MOD11 slow-city-year rule (save 9877); 107 gives city-match yards storage.
     // 108 integrates Tornie-family 1.0.546 objects, rules and cooperative campaigns (save 9878).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 108);
+    // 109 appends MOD13's shared factory queue rule (save 9879); production differs from older peers.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 109);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

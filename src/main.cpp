@@ -1345,6 +1345,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.continuousGroundSteps = myINIFile.getBoolValue("Game Options", "Continuous Ground Steps", false);
             settings.gameOptions.retryPlannedPlacement = myINIFile.getBoolValue("Game Options", "Retry Planned Placement", true);
             settings.gameOptions.sharedYardQueue = myINIFile.getBoolValue("Game Options", "Shared Yard Queue", true);
+            settings.gameOptions.sharedFactoryQueue = myINIFile.getBoolValue("Game Options", "Shared Factory Queue", true);
             settings.gameOptions.slowCityYear = myINIFile.getBoolValue("Game Options", "Slow City Year", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
             settings.gameOptions.alliedBuilding = myINIFile.getBoolValue("Game Options", "Allied Building", false);

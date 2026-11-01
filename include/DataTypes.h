@@ -290,7 +290,8 @@ public:
            sandwormsRespawn(false), killedSandwormsDropSpice(false), manualCarryallDrops(false), maximumNumberOfUnitsOverride(-1),
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
            immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true),
-           continuousGroundSteps(false), retryPlannedPlacement(true), sharedYardQueue(true), slowCityYear(true)  {
+           continuousGroundSteps(false), retryPlannedPlacement(true), sharedYardQueue(true),
+           sharedFactoryQueue(true), slowCityYear(true)  {
         }
 
 
@@ -315,6 +316,7 @@ public:
                     && (continuousGroundSteps == goc.continuousGroundSteps)
                     && (retryPlannedPlacement == goc.retryPlannedPlacement)
                     && (sharedYardQueue == goc.sharedYardQueue)
+                    && (sharedFactoryQueue == goc.sharedFactoryQueue)
                     && (slowCityYear == goc.slowCityYear)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -353,6 +355,7 @@ public:
             optStr += "/groundSteps=" + std::to_string(continuousGroundSteps);
             optStr += "/retryPlans=" + std::to_string(retryPlannedPlacement);
             optStr += "/sharedYardQueue=" + std::to_string(sharedYardQueue);
+            optStr += "/sharedFactoryQueue=" + std::to_string(sharedFactoryQueue);
             optStr += "/slowCityYear=" + std::to_string(slowCityYear);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
@@ -410,6 +413,9 @@ public:
         /// Planned orders form one house-wide queue: an idle Construction Yard takes the next
         /// waiting planned order from another yard's queue (docs/preplace-queue.md).
         bool        sharedYardQueue;
+        /// Idle ordinary factories take waiting orders from another of the same type, for
+        /// houses with human control only. Paid imports and Construction Yards are excluded.
+        bool        sharedFactoryQueue;
         /// The city year (budget and zone growth) lasts 120 s instead of 60 s, so taxes, police
         /// costs and growth run at half the classic pace (DuneCity::cyclesPerCityYear).
         bool        slowCityYear;

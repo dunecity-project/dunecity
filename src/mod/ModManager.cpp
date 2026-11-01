@@ -1016,6 +1016,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Continuous Ground Steps") result.continuousGroundSteps = parseBool(value);
             else if (key == "Retry Planned Placement") result.retryPlannedPlacement = parseBool(value);
             else if (key == "Shared Yard Queue") result.sharedYardQueue = parseBool(value);
+            else if (key == "Shared Factory Queue") result.sharedFactoryQueue = parseBool(value);
             else if (key == "Slow City Year") result.slowCityYear = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);
             else if (key == "City Effects") result.cityEffects = parseBool(value);
