@@ -1,7 +1,6 @@
 #include <INIMap/CampaignMapLibrary.h>
 
 #include <FileClasses/FileManager.h>
-#include <GameInitSettings.h>
 #include <globals.h>
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
@@ -28,7 +27,11 @@ std::string exportMaps() {
         if(!isHouseAvailable(houseID)) continue;
         for(int mission = 1; mission <= 22; ++mission) {
             try {
-                const std::string scenario = GameInitSettings::getScenarioFilename(houseID, mission);
+                // Same naming as the campaign itself (GameInitSettings::getScenarioFilename).
+                std::string scenario = "SCEN?0??.INI";
+                scenario[4] = getHouseScenarioLetter(houseID);
+                scenario[6] = static_cast<char>('0' + mission / 10);
+                scenario[7] = static_cast<char>('0' + mission % 10);
                 const std::string target = dir + getHouseNameByNumber(houseID) + " Mission " + missionLabel(mission) + ".ini";
                 if(existsFile(target) || !pFileManager->exists(scenario)) continue;
                 auto rw = pFileManager->openFile(scenario);
