@@ -1,3 +1,21 @@
+## 2026-11-01 — Hard city ceiling and in-game AI behaviour switch (OMP integrator, unreleased)
+
+- Stefan: Medium to Hard QuantBot was too big a jump. Cause (MBA game on 1.0.864, 160×160, three
+  Hard bots): Hard's custom city ceiling was 120,000 on maps above 128×128, twice Medium's 60,000.
+- 13e86c24, switch `[Force Concentration] HardCityMatch` (hashed, default on): Hard's ceiling is
+  20k/40k/60k/90k (≤32², ≤64², ≤128², larger) and rises to the largest other house's city
+  population while another house is bigger. Off restores 20k/40k/80k/120k. Details:
+  `docs/ai-scenario-matrix.md` "City population ceilings".
+- a1906c6b, 5608ee37, bc57ec04: a human whose house has a QuantBot partner switches it between
+  None, Build, Fight and Both with an "AI: …" button on the right (`CMD_AI_SUPPORT_ROLE`, new
+  `AIRole::Off`, save 9880). Sidebar row under Auto repair when the stack fits 480 lines,
+  otherwise left of the zoom controls. Details: `docs/ai-roles.md` "Switching the partner in game".
+- One protocol bump for both: 110. App version not bumped.
+- Checked: `dunelegacy_tests`, `quantbot_custom_attack` (city cap and role switch probe),
+  `quantbot_army_recovery` (role save round trip), `game_command_regressions` (button row,
+  zoom-side placement, click queues and applies Fight; screenshots `ai-behaviour-sidebar.png`,
+  `skip-mission-city-sidebar.png`), `stats_ui_*`, `rts_controls_probe`, `menu_navigation_probe`.
+
 ## 2026-11-01 — Campaign missions as maps (OMP integrator, unreleased)
 
 - Stefan: put every campaign map into single player with readable names, so it can be played
