@@ -1,3 +1,24 @@
+## 2026-11-01 — Campaign missions as maps (OMP integrator, unreleased)
+
+- Stefan: put every campaign map into single player with readable names, so it can be played
+  in Custom Game or edited in the map editor.
+- `CampaignMapLibrary` (src/INIMap) copies the active mod's `SCEN?0??.INI` scenarios, as the
+  campaign itself resolves them (PAKs and mod overrides), into
+  `<user data>/maps/campaign/<mod>/` as "<House> Mission <N>[ (A|B|C)].ini". It writes them at
+  runtime from the player's own data, so nothing copyrighted is committed or shipped.
+  Existing files are never overwritten, so edits survive; deleting a file restores the original.
+  Level 1 and 9 have one mission, levels 2-7 have three (A-C), level 8 has two.
+  Vanilla exports 176 files: 22 each for Atreides, Harkonnen, Ordos, Fremen, Sardaukar,
+  Mercenary, Neutral and Rebels, each file distinct.
+- Custom Game lists them under SP Maps (and All Maps). The editor's Load Map window has a new
+  Campaign tab.
+- Commits 8de91ab7, addae7d2, e37a383a. `verifyCampaignMapLibrary` in the menu probe checks:
+  labels; the export is byte-identical to the scenario; edit survival and restore; 66
+  original-house entries in the editor tab; editor load; the Custom Game entry; the lobby seats.
+  A headless 3-minute custom game on "Atreides Mission 3 (B)" ran to the time limit.
+  Cluster ctest: 128/129 (only `natives_probe`, which fails on main too).
+- No gameplay change, so no config switch, protocol or save bump.
+
 ## 2026-11-01 — 1.0.864: builder shortcuts, road plans, AI support, Sandworms, Play Online random skirmish (OMP integrator)
 
 - Shipped: v1.0.864 tag at merge 4fb0469e (PR #117), protocol 109, save 9879. Notes:
