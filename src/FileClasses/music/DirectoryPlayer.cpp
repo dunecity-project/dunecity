@@ -47,7 +47,8 @@ DirectoryPlayer::DirectoryPlayer() : MusicPlayer(settings.audio.playMusic, setti
                                                                         "/music/meanwhile/",
                                                                         "/music/finaleH/",
                                                                         "/music/finaleA/",
-                                                                        "/music/finaleO/"
+                                                                        "/music/finaleO/",
+                                                                        "/music/credits/"
                                                                     };
 
     for(int i=0;i<MUSIC_NUM_MUSIC_TYPES;i++) {
@@ -77,6 +78,7 @@ DirectoryPlayer::~DirectoryPlayer() {
 
 void DirectoryPlayer::changeMusic(MUSICTYPE musicType)
 {
+    if(musicType == MUSIC_CREDITS && musicFileList[MUSIC_CREDITS].empty()) musicType = MUSIC_MENU;
     int musicNum = -1;
     std::string filename = "";
 
@@ -145,11 +147,11 @@ bool DirectoryPlayer::isMusicPlaying() {
     return Mix_PlayingMusic();
 }
 
-void DirectoryPlayer::setMusic(bool value) {
+void DirectoryPlayer::setMusic(bool value, MUSICTYPE musicType) {
     musicOn = value;
 
     if(musicOn) {
-        changeMusic(MUSIC_RANDOM);
+        changeMusic(musicType);
     } else if(music != nullptr) {
         Mix_HaltMusic();
     }

@@ -102,6 +102,7 @@ void XMIPlayer::changeMusic(MUSICTYPE musicType)
             musicNum = 2;
         } break;
 
+        case MUSIC_CREDITS:
         case MUSIC_MENU: {
             filename = "DUNE7.XMI";
             musicNum = 6;
@@ -269,11 +270,11 @@ bool XMIPlayer::isMusicPlaying() {
     return Mix_PlayingMusic();
 }
 
-void XMIPlayer::setMusic(bool value) {
+void XMIPlayer::setMusic(bool value, MUSICTYPE musicType) {
     musicOn = value;
 
     if(musicOn) {
-        changeMusic(MUSIC_RANDOM);
+        changeMusic(musicType);
     } else if(music != nullptr) {
         Mix_HaltMusic();
     }

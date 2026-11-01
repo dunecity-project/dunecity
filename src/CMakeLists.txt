@@ -200,6 +200,8 @@ target_sources(dunecity
         FileClasses/adl/surroundopl.cpp
         FileClasses/adl/woodyopl.cpp
         FileClasses/music/ADLPlayer.cpp
+        FileClasses/music/AlternativeMusicPlayer.cpp
+        FileClasses/music/SoundtrackPack.cpp
         FileClasses/music/DirectoryPlayer.cpp
         FileClasses/music/XMIPlayer.cpp
         FileClasses/xmidi/xmidi.cpp

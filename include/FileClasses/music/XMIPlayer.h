@@ -56,7 +56,7 @@ public:
         turns music playing on or off
         @param value when true the function turns music on
     */
-    void setMusic(bool value) override;
+    void setMusic(bool value, MUSICTYPE musicType = MUSIC_RANDOM) override;
 
     /**
         Sets the volume of the music channel

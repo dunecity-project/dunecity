@@ -234,6 +234,7 @@ public:
         bool        playMusic;
         int         musicVolume;
         std::string musicType;
+        bool        alternativeSoundtrack = false; ///< Local optional pack; current soundtrack remains the default.
         bool        adlHarmonicStereo;
         bool        playCreditsSFX;
     } audio;

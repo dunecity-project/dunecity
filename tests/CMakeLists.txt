@@ -11,6 +11,8 @@ add_executable(dunelegacy_tests)
 target_sources(dunelegacy_tests
     PRIVATE
         WorkshopStoreTestCase.cpp
+        SoundtrackPackTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/FileClasses/music/SoundtrackPack.cpp
         AchievementsTestCase/AchievementsTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/Achievements/AchievementManager.cpp
         # Random Skirmish generator: the pure generator over the real map generator/mirror.
@@ -221,6 +223,7 @@ add_test(NAME pak_concurrent_read_tests COMMAND dunelegacy_tests "[pak][threadin
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 # Local revision store: snapshots, pinning, verified imports and retired sharing-queue cleanup.
 add_test(NAME workshop_store_tests COMMAND dunelegacy_tests "[workshop]")
+add_test(NAME soundtrack_pack_tests COMMAND dunelegacy_tests "[music][soundtrack]")
 add_test(NAME preplace_queue_tests COMMAND dunelegacy_tests "[preplace]")
 add_test(NAME tornie_building_sale_tests COMMAND dunelegacy_tests "[tornie][sale]")
 add_test(NAME tornie_chaos_persistence_tests COMMAND dunelegacy_tests "[tornie][chaos]")
