@@ -91,9 +91,6 @@ void runArmyRecoveryContinuationProbe(std::unique_ptr<Game>& game) {
         Tail tail;
         for(int frame=0;frame<100;++frame) {
             const Uint32 cycle=world.getGameCycleCount();
-            if(frame<2 && world.getCitySimulation()) for(int h=0;h<5;++h){const auto& s=world.getCitySimulation()->getHouseState(h);
-                SDL_Log("TMPDIAG frame=%d h=%d tax=%d lv=%d base=%d police=%d micro=%d",frame,h,s.taxRate,s.avgLandValue,s.taxBaseEighths,s.policeFundingPercent,
-                    world.getGameInitSettings().getGameOptions().micropolisLandValue);}
             tick(world);
             auto* resumed=botFor(world);
             require(resumed,"A continued world lost its bot");

@@ -207,6 +207,9 @@ void CitySimulation::loadObserverRuntime(InputStream& stream) {
         status.averageLandValue=stream.readSint32(); status.averagePollution=stream.readSint32();
         status.averageCrime=stream.readSint32(); status.averageTraffic=stream.readSint32();
         status.sampledStructures=stream.readSint32();
+        // The load-time reconcile rescans the city; the live host's tax land value is the one
+        // its scans left, which the status carries (they are the same average).
+        houseState_[h].avgLandValue=status.averageLandValue;
     }
     const auto layer=[&](auto& map) {
         const int bs=map.getBlockSize();
