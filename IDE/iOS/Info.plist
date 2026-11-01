@@ -118,5 +118,9 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Dune City finds and hosts multiplayer games on your local network.</string>
+	<!-- SDL's game controller support references CoreBluetooth (ITMS-90683 on 1.0.863). The game
+	     never scans for devices itself; iOS asks only if a Bluetooth controller is used. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Dune City uses Bluetooth to connect wireless game controllers.</string>
 </dict>
 </plist>
