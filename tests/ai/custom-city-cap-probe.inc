@@ -257,12 +257,17 @@ void runCustomCityCapProbe(Game& game) {
         require(block.isValid(),"No empty block beside the yard for the land value check");
         auto scan=[&](){sim->runEffectsScans();return sim->houseState_[house->getHouseID()].avgLandValue;};
         rule=true;
-        const int before=scan();
+        // Land value reads the previous scan's crime, so settle that feedback first.
+        int before=scan();
+        for(int i=0;i<8;++i){const int next=scan();if(next==before)break;before=next;}
+        require(scan()==before,"The Micropolis land value does not settle between scans");
         require(before>0,"The house has no tax land value under the Micropolis rule");
         auto* parked=house->createUnit(Unit_Trike,true);
         require(parked,"No unit for the land value check");
         parked->deploy(Coord(2*block.x,2*block.y));
-        require(scan()==before,"A parked unit changed the Micropolis tax land value");
+        const int withUnit=scan();
+        SDL_Log("CUSTOM_CITY_CAP_PROBE: micropolis land value %d without and %d with a parked unit",before,withUnit);
+        require(withUnit==before,"A parked unit changed the Micropolis tax land value");
         require(sim->landValueMap_.get(block.x,block.y)==0,"A unit developed land under the Micropolis rule");
         rule=false;
         scan();
