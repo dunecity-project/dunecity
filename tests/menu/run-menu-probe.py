@@ -65,6 +65,29 @@ link[link.index('-o')+1] = str(binary)
 link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
 with (out/'build.log').open('w') as log:
     subprocess.run(compile_command,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+    # Drive nested menus synchronously through their real widgets. Only this
+    # diagnostic object gains a hook; the production menu loop stays unchanged.
+    menu_base = (root/'src/Menu/MenuBase.cpp').read_text()
+    menu_entry = 'int MenuBase::showMenu() {'
+    if menu_base.count(menu_entry) != 1:
+        raise RuntimeError('Nested menu fixture injection point changed.')
+    menu_base = menu_base.replace(menu_entry, menu_entry + '''
+    extern bool driveOnlineRandomSkirmishProbe(MenuBase&);
+    if(driveOnlineRandomSkirmishProbe(*this)) return retVal;
+''')
+    menu_source, menu_obj = out/'menu-base.cpp', out/'menu-base.o'
+    menu_source.write_text(menu_base)
+    menu_compile = shlex.split(next(line for line in commands if ' -c ' in line and '/src/Menu/MenuBase.cpp' in line))
+    for option in ('-include','-MT','-MF'):
+        if option in menu_compile:
+            position = menu_compile.index(option)
+            del menu_compile[position:position+2]
+    for option in ('-MD','-MMD'):
+        if option in menu_compile: menu_compile.remove(option)
+    menu_compile[menu_compile.index('-o')+1] = str(menu_obj)
+    menu_compile[menu_compile.index('-c')+1] = str(menu_source)
+    subprocess.run(menu_compile,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+    link = [str(menu_obj) if arg.endswith('/Menu/MenuBase.cpp.o') else arg for arg in link]
     if args.retina_resolution:
         # The real menu code gets the captured MBA desktop/window/backing sizes.
         # Only this private object substitutes the display-query functions.

@@ -12,6 +12,7 @@
 #include <Menu/Dune2RReadinessMenu.h>
 #include <mod/Dune2RAssetManager.h>
 #include <Menu/CrossplayMenu.h>
+#include <Menu/RandomSkirmishMenu.h>
 #include <Menu/OptionsMenu.h>
 #include <Menu/AboutMenu.h>
 #include <Menu/HowToPlayMenu.h>
@@ -51,6 +52,64 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
 }
 #include "user-map-list-probe.inc"
 #include "tornie-family-menu-probe.inc"
+
+struct OnlineRandomProbeState {
+    bool cancel = false;
+    bool publicGame = true;
+    bool generated = false;
+    bool playersShown = false;
+    std::string path;
+};
+OnlineRandomProbeState* onlineRandomProbe = nullptr;
+
+// Called only by the diagnostic MenuBase object built by run-menu-probe.py.
+// The real Play Online callback and playCustomGame own every menu transition.
+bool driveOnlineRandomSkirmishProbe(MenuBase& menu) {
+    if(!onlineRandomProbe) return false;
+    auto& state = *onlineRandomProbe;
+    if(auto* generator = dynamic_cast<RandomSkirmishMenu*>(&menu)) {
+        menuRequire(generator->multiplayer && generator->hostMod == "vanilla",
+                    "Online random skirmish did not open the active mod's multiplayer generator");
+        if(state.cancel) {
+            generator->backButton.handleMouseLeft(10,10,true);
+            generator->backButton.handleMouseLeft(10,10,false);
+            menuRequire(generator->isQuiting() && generator->getCreatedMap().empty(),
+                        "Cancelling online random skirmish created a map");
+            return true;
+        }
+        for(int i=0; i<generator->sizeBox.getNumEntries(); ++i)
+            if(generator->sizeBox.getEntryIntData(i)==96) generator->sizeBox.setSelectedItem(i);
+        for(int i=0; i<generator->startsBox.getNumEntries(); ++i)
+            if(generator->startsBox.getEntryIntData(i)==2) generator->startsBox.setSelectedItem(i);
+        generator->seedBox.setText("20261101");
+        generator->fixedSeedBox.setChecked(true);
+        generator->nextButton.handleMouseLeft(10,10,true);
+        generator->nextButton.handleMouseLeft(10,10,false);
+        state.path = generator->getCreatedMap();
+        menuRequire(generator->isQuiting() && !state.path.empty() && existsFile(state.path),
+                    "Online random skirmish Next did not save its generated map");
+        state.generated = true;
+        return true;
+    }
+    if(auto* players = dynamic_cast<CustomGamePlayers*>(&menu)) {
+        menuRequire(state.generated && players->setup && players->setup->online,
+                    "Online random skirmish did not reach online player setup");
+        const auto& setup = *players->setup;
+        menuRequire(setup.map>=0 && setup.map<static_cast<int>(setup.maps.size())
+                    && setup.maps[setup.map]==state.path
+                    && players->gameInitSettings.getFilename()==getBasename(state.path,true),
+                    "Online random skirmish player setup selected another map");
+        menuRequire(setup.publicGame==state.publicGame
+                    && players->setupVisibility.getSelectedIndex()==(state.publicGame ? 1 : 0),
+                    "Online random skirmish lost Play Online's public/private choice");
+        state.playersShown = true;
+        menuCapture(*players,state.publicGame ? "online-random-public-players" : "online-random-private-players");
+        players->quit(MENU_QUIT_GAME_FINISHED);
+        return true;
+    }
+    menuRequire(false,"Online random skirmish detoured through a map chooser or unexpected menu");
+    return true;
+}
 
 // Captured MBA metrics, substituted only in the diagnostic OptionsMenu object.
 extern "C" int SDLCALL retinaProbeDisplayBounds(int, SDL_Rect* bounds) {
@@ -1473,6 +1532,50 @@ int runMenuProbe() {
     setup.players=original;
     {
         CrossplayMenu menu;
+        menu.stage = CrossplayMenu::Stage::Choosing;
+        menu.refreshControls();
+        menuRequire(menu.hostRandomSkirmishButton.getParent()==&menu.windowWidget
+                    && menu.hostRandomSkirmishButton.getText()==_("Create Random Skirmish")
+                    && menu.hostRandomSkirmishButton.isEnabled(),
+                    "Play Online is missing its random skirmish button");
+        menuRequire(menu.visibilityChoice.getParent()==&menu.windowWidget
+                    && menu.hostRandomSkirmishButton.getSize().x>=190,
+                    "Online random skirmish or visibility does not fit the small-window layout");
+        const auto settingsName = settings.general.playerName;
+        settings.general.playerName = "";
+        menu.hostRandomSkirmishButton.handleMouseLeft(10,10,true);
+        menu.hostRandomSkirmishButton.handleMouseLeft(10,10,false);
+        menuRequire(menu.hasChildWindow(),"Random hosting bypasses the settings player name");
+        menu.closeChildWindow(); menu.processChildWindowOpenCloses();
+        settings.general.playerName = settingsName;
+        const auto preferredMod = settings.general.customGameMod;
+        settings.general.customGameMod = "dunecity";
+        for(int scenario=0; scenario<3; ++scenario) {
+            OnlineRandomProbeState state;
+            state.cancel = scenario==0;
+            state.publicGame = scenario!=2;
+            menu.visibilityChoice.setSelectedItem(state.publicGame ? 1 : 0);
+            onlineRandomProbe = &state;
+            menu.hostRandomSkirmishButton.handleMouseLeft(10,10,true);
+            menu.hostRandomSkirmishButton.handleMouseLeft(10,10,false);
+            onlineRandomProbe = nullptr;
+            menuRequire(state.cancel ? !state.generated && !state.playersShown : state.generated && state.playersShown,
+                        "Online random skirmish did not finish its expected generator/player flow");
+            menuRequire(!menu.isQuiting() && !pNetworkManager,
+                        "Online random skirmish cancel/setup opened a connection or left Play Online");
+            if(!state.path.empty()) std::filesystem::remove(state.path);
+        }
+        settings.general.customGameMod = preferredMod;
+        menu.stage = CrossplayMenu::Stage::Requesting; menu.refreshControls();
+        menuRequire(!menu.hostRandomSkirmishButton.isEnabled(),"Random hosting stays enabled while joining");
+        menu.stage = CrossplayMenu::Stage::HostReady; menu.refreshControls();
+        menuRequire(menu.hostRandomSkirmishButton.getText()==_("Generate a Random Map"),
+                    "Random hosting lost its in-room alternate label");
+        menu.hostingCoop = true; menu.refreshControls();
+        menuRequire(!menu.hostRandomSkirmishButton.isEnabled(),"A campaign host can generate a custom random map");
+    }
+    {
+        CrossplayMenu menu;
         const auto settingsName = settings.general.playerName;
         settings.general.playerName = "";
         menu.onHostCustomGame();
@@ -1493,11 +1596,26 @@ int runMenuProbe() {
         coop.mode="coop"; coop.hostName="Campaign host"; coop.roomCode="AAAA-BBBB-CCCC"; coop.players=1; coop.maxPeers=2;
         custom.mode="custom"; custom.hostName="Custom host"; custom.roomCode="DDDD-EEEE-FFFF"; custom.players=2; custom.maxPeers=4;
         coop.modName="vanilla"; custom.modName="dunecity";
-        coop.mapName="Atreides mission 4"; custom.mapName="Habbanya-Autumn";
-        custom.running=true; custom.allowLateJoin=true; custom.elapsedSeconds=620;
+        coop.mapName="Atreides mission 4"; custom.mapName="SCENA001.INI";
+        custom.running=true; custom.allowLateJoin=true; custom.elapsedSeconds=46*60;
         menuRequire(menu.modFilter.getSelectedEntryIntData()==-1,"All mods must be the default");
         menu.allPublicGames={coop,custom}; menu.refreshDirectory();
         menuRequire(menu.publicGames.size()==2,"All mods hides another mod");
+        menuRequire(menu.publicGameList.getEntry(1).find("In progress, 46 min")!=std::string::npos,
+            "Running game row does not identify a game in progress");
+        const auto runningRow = menu.publicGameList.getEntry(1);
+        const auto stateEnd = runningRow.find("In progress, 46 min") + std::string("In progress, 46 min").size();
+        menuRequire(static_cast<int>(GUIStyle::getInstance().getTextWidth(runningRow.substr(0,stateEnd),14))
+            <= menu.publicGameList.getSize().x-24, "Running game state is clipped off the row");
+        menu.publicGameList.setSelectedItem(1); menu.refreshControls();
+        menuRequire(menu.selectedGameDetails.getText().find("In progress, 46 minutes played")!=std::string::npos
+            && menu.joinPublicButton.getText()==_("Spectate"),
+            "Running game details or action hide spectator entry");
+        menuCapture(menu,"online-game-in-progress");
+        menu.publicGameList.setSelectedItem(0); menu.refreshControls();
+        menuRequire(menu.selectedGameDetails.getText().find("Waiting to start")!=std::string::npos
+            && menu.joinPublicButton.getText()==_("Join Game"),
+            "Waiting game retains the running game's spectator action");
         for(int i=0;i<static_cast<int>(menu.availableMods.size());++i) {
             if(menu.availableMods[i].name!="dunecity") continue;
             menu.modFilter.setSelectedItem(i+1); menu.refreshDirectory();

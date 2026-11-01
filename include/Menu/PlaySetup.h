@@ -42,7 +42,9 @@ void rememberPlayMode(PlayModeScope scope, bool online);
 // restarts. Mods activated automatically (a save, a join, a campaign) do not change it.
 void rememberCustomGameMod(const std::string& modName);
 SettingsClass::GameOptionsClass initialCustomGameRules();
-void playCustomGame(bool online);
+// A random-map start opens the multiplayer generator for the active mod, then skips
+// the map browser. Cancelling the generator leaves without opening a connection.
+void playCustomGame(bool online, bool publicGame = true, bool randomMap = false);
 void showGameLibrary(bool replays = false);
 bool hasRecentGame();
 void continueRecentGame();

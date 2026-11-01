@@ -82,6 +82,47 @@ Homebase is a four-against-one scenario whose Fremen slot starts with a large ar
 Earlier catalogue maps already bundled: Reacciona rapido forro, Alto mapa HD and La
 guerra dei ricchi (1.0.827), and the Dune City maps in `data/maps/singleplayer/`.
 
+### Popular-map refresh (2026-11-01)
+
+The website's [usage report](https://dunelegacy.com/metaserver/usage.php), generated
+at 2026-11-01 01:32:43 UTC, lists these top 15 names for its default rolling-day
+view (since 2026-10-31 01:32:43 UTC). Counts group identically named maps rather
+than identifying exact revisions.
+
+| Map | Sessions | Bundling status |
+| --- | ---: | --- |
+| 6P - 512x512 - Alto mapa HD | 27 | Already bundled |
+| 8P - 384x384 - Colonist | 20 | Added, catalogue v1 |
+| 6P - 256x256 - Alkozeltser 4 | 17 | Already bundled |
+| 2P - 128x128 - 1v1 - Habbanya-Penny Revised | 16 | Already bundled |
+| Vela proba 256x256 | 11 | Unavailable in published catalogue |
+| 2P - 64x128 - 1v1 - Sihaya-Roxy | 8 | Already bundled |
+| 2P - 128x128 - 1v1 - Tuono-Orac | 4 | Already bundled |
+| 2P - 128x31 - 1v1 - Tuono-Restal | 4 | Already bundled |
+| 8P - 448x448 -La guerra dei ricchi | 4 | Already bundled |
+| 2P - 128x128 - 1v1 - Habbanya-Penny | 3 | Already bundled |
+| 2P - 128x128 - 1v1 - Sihaya-Ferryman | 3 | Already bundled |
+| 2P - 128x31 - 1v1 - Tuono-Servalan | 3 | Already bundled |
+| 2P - 192x192 - Kleiner Lvl | 3 | Already bundled |
+| 2P - 192x192 - Random 1v1 Vanilla T9 660865743 | 3 | Unavailable in published catalogue |
+| 4P - 192x192 - Random 2v2 Vanilla T9 35589764 | 3 | Unavailable in published catalogue |
+
+Colonist is the exact 150,877-byte catalogue payload (384×384, eight player
+sections and eight MCV starts). It declares `License=CC-BY-SA` and supplies no
+author. The manifest records its item, revision and SHA-256; its sidecar follows
+the existing immutable bundled-map convention. It declares `Mod=vanilla` and
+contains no city structures, so it is offered under Vanilla, matching the
+catalogue's building category. Its publication nevertheless pinned a historical
+Dune City dependency; that discrepancy is retained in the provenance rather
+than importing an old mod or changing the map.
+
+The other three missing names occur in neither the 1,109 latest/deduplicated
+catalogue entries nor the complete 1,290 published map revisions checked for
+this refresh. Analytics names alone do not supply map bytes, author, licence or
+revision identity. They are not bundled or regenerated from seeds; their exact
+published files and redistribution metadata are required first. No map was
+excluded for restrictive licence terms.
+
 ## Versions and storage
 
 A draft has a permanent item ID. Changed content creates the next numbered
@@ -125,6 +166,13 @@ hot joining. Join Online -> Create Campaign retains the editable pregame lobby.
 Admission and readiness compare a self-identifying approved-mod token based on
 the installed rules, alongside the matching app/protocol version and runtime
 configuration. A joiner selects the corresponding installed mod locally.
+
+Play Online also offers **Create Custom Game** and **Create Random Skirmish**.
+Choose public or private visibility there before creating a game. Random Skirmish
+opens the multiplayer generator for the active mod, saves the generated map in MP
+User Maps, and goes straight to the usual online player/team setup with that map
+selected. Create Lobby then uses the same hosting flow as a custom map; cancelling
+the generator returns to Play Online without creating a room.
 
 New/authored mods require the pregame lobby, with hot joining disabled even for
 copies based on an approved mod. An online host of such a mod uploads that exact

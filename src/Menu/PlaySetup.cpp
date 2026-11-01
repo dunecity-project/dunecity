@@ -3,6 +3,7 @@
 #include <Menu/CustomGameMenu.h>
 #include <Menu/CrossplayMenu.h>
 #include <Menu/Dune2RReadinessMenu.h>
+#include <Menu/RandomSkirmishMenu.h>
 #include <Menu/MenuBase.h>
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/INIFile.h>
@@ -174,18 +175,34 @@ SettingsClass::GameOptionsClass initialCustomGameRules() {
     return effectiveGameOptions;
 }
 
-void playCustomGame(bool online) {
+void playCustomGame(bool online, bool publicGame, bool randomMap) {
     CustomPlaySetup setup;
-    setup.rules = initialCustomGameRules();
+    setup.rules = randomMap
+        ? effectiveGameOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions)
+        : initialCustomGameRules();
     setup.maps = maps();
     setup.mods = ModManager::instance().listModChoices();
     setup.online = online;
+    setup.publicGame = publicGame;
     // One controller per house is the legible default; advanced sharing stays available.
     setup.sharedHouse = false;
     for(size_t i = 0; i < setup.mods.size(); ++i)
         if(setup.mods[i].matchesSelectionName(ModManager::instance().getActiveModName())) setup.mod = static_cast<int>(i);
-    if(setup.maps.empty()) { PlayError(_("No custom maps found. Create a map in Editors > Map Editor, then return here.")).showMenu(); return; }
     bool chooseMap = true;
+    if(randomMap) {
+        RandomSkirmishMenu generator(ModManager::instance().getActiveModName());
+        generator.showMenu();
+        const auto& path = generator.getCreatedMap();
+        if(path.empty()) return;
+        const auto found = std::find(setup.maps.begin(), setup.maps.end(), path);
+        if(found == setup.maps.end()) {
+            setup.map = static_cast<int>(setup.maps.size());
+            setup.maps.push_back(path);
+        } else setup.map = static_cast<int>(found - setup.maps.begin());
+        setup.mapCategory = 3;
+        chooseMap = false;
+    }
+    if(setup.maps.empty()) { PlayError(_("No custom maps found. Create a map in Editors > Map Editor, then return here.")).showMenu(); return; }
     for(;;) {
         if(chooseMap) {
             CustomGameMenu browser(false, false, &setup);
