@@ -220,6 +220,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     addRow(0, row++, _("Spice"), &spiceBox);
     addRow(0, row++, _("Sandworms"), &wormsBox);
     addRow(0, row++, _("Layout"), &symmetricBox);
+    const int seedRow = row;        // the "New" button joins this row below
     addRow(0, row++, _("Seed"), &seedBox);
     addRow(0, row++, "", &fixedSeedBox);
     addHeader(0, row++, _("Game"));
@@ -333,7 +334,6 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     // The seed field shares its row with the "New" button.
     const int columnWidth = columnSpan(width);
     const int controlX = columnX(width, 0) + columnWidth * 2 / 5;
-    const int seedRow = 5;
     const int top = 44;
     windowWidget.setWidgetGeometry(&seedBox, Point(controlX, top + seedRow * rowPitch),
                                    Point(columnWidth - columnWidth * 2 / 5 - 64, rowPitch - kRowGap));
