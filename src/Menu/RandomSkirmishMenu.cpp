@@ -419,13 +419,21 @@ void RandomSkirmishMenu::addRow(int column, int row, const std::string& caption,
     const int x = columnX(getSize().x, column);
     const int y = 44 + row * rowPitch;
     const int captionWidth = columnWidth * 2 / 5;
+    // Desert skins: rows level with the top crests (53x54, 11 px in) keep clear of them, as the
+    // first header does: the left caption starts after the left crest, the right control stops
+    // before the right one. Short windows make rows thin enough to reach that band.
+    const bool crestBand = MenuTheme::isDesertUISkin() && y < 11 + 54;
+    const int captionX = crestBand && column == 0 ? std::max(x + 8, 11 + 53 + 6) : x + 8;
+    const int controlX = x + captionWidth;
+    int controlWidth = columnWidth - captionWidth;
+    if(crestBand && column == 1) controlWidth = std::min(controlWidth, getSize().x - 11 - 53 - 6 - controlX);
     if(!caption.empty() && usedCaptions < static_cast<int>(captions.size())) {
         Label& label = captions[usedCaptions++];
         label.setText(caption);
         label.setTextFontSize(13);
-        windowWidget.addWidget(&label, Point(x + 8, y), Point(captionWidth - 8, rowPitch - kRowGap));
+        windowWidget.addWidget(&label, Point(captionX, y), Point(x + captionWidth - captionX, rowPitch - kRowGap));
     }
-    windowWidget.addWidget(control, Point(x + captionWidth, y), Point(columnWidth - captionWidth, rowPitch - kRowGap));
+    windowWidget.addWidget(control, Point(controlX, y), Point(controlWidth, rowPitch - kRowGap));
 }
 
 void RandomSkirmishMenu::showParams(const Params& params) {

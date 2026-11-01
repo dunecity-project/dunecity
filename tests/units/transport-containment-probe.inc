@@ -250,7 +250,9 @@ int runTransportContainmentProbe() {
             game->initGame(GameInitSettings(filename));
             game->bReplay = false;
             game->initializeGameLoop();
-            containmentRequire(game->getLoadedSavegameVersion() == SAVEGAMEVERSION_TORNIE546,
+            // Saved by this build, so it carries the current format (9878 Tornie fields included).
+            containmentRequire(game->getLoadedSavegameVersion() == SAVEGAMEVERSION
+                                   && SAVEGAMEVERSION >= SAVEGAMEVERSION_TORNIE546,
                                "Tornie state save did not use the integrated format version");
         };
         loadState(gBoundarySave);

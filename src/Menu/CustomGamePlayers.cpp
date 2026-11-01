@@ -251,13 +251,15 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         setupConnection.addEntry(_("Online"), 1);
         setupConnection.setSelectedItem(setup->online ? 1 : 0);
         setupConnection.setOnSelectionChange([this](bool interactive) { if(interactive) { setup->online = setupConnection.getSelectedIndex() == 1; rememberPlayMode(PlayModeScope::CustomGame, setup->online); rebuildSetup(true); } });
-        setupModeRow.addWidget(&setupConnection, 120);
+        // Below 800 px the fixed controls narrow so an online row (visibility, Shared house,
+        // AI support, Game Rules) still fits 640 px.
+        setupModeRow.addWidget(&setupConnection, compactPlayers ? 100 : 120);
         setupVisibility.addEntry(_("Private - invite code"), 0);
         setupVisibility.addEntry(_("Public - anyone"), 1);
         setupVisibility.setSelectedItem(setup->publicGame ? 1 : 0);
         setupVisibility.setEnabled(setup->online);
         setupVisibility.setOnSelectionChange([this](bool) { setup->publicGame = setupVisibility.getSelectedIndex() == 1; });
-        if(setup->online) setupModeRow.addWidget(&setupVisibility, 180);
+        if(setup->online) setupModeRow.addWidget(&setupVisibility, compactPlayers ? 168 : 180);
         setupShared.setText(_("Shared house"));
         setupShared.setChecked(setup->sharedHouse);
         setupShared.setEnabled(!spectating);
@@ -318,7 +320,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         }
         setupRules.setText(_("Game Rules"));
         setupRules.setOnClick([this]() { openWindow(GameOptionsWindow::create(setup->rules)); });
-        setupModeRow.addWidget(&setupRules, 110);
+        setupModeRow.addWidget(&setupRules, compactPlayers ? 96 : 110);
         mainVBox.addWidget(VSpacer::create(6));
         mainVBox.addWidget(&setupModeRow, 28);
     }
