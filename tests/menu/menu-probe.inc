@@ -52,6 +52,7 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
 }
 #include "user-map-list-probe.inc"
 #include "tornie-family-menu-probe.inc"
+#include "campaign-map-library-probe.inc"
 
 struct OnlineRandomProbeState {
     bool cancel = false;
@@ -197,6 +198,7 @@ int runMenuProbe() {
         return MENU_QUIT_DEFAULT;
     }
     verifySavedUserMapLists();
+    verifyCampaignMapLibrary();
     settings.network.relayUseDevelopmentEndpoint = true;
     // Disable online discovery in this fixture; admission and transport have separate tests.
     settings.network.directDevelopmentEndpoint = "";

@@ -76,6 +76,7 @@ private:
     HBox            mapTypeButtonsHBox;
     TextButton      singleplayerUserMapsButton;
     TextButton      multiplayerUserMapsButton;
+    TextButton      campaignMapsButton;
     ListBox         mapList;
 
     // right VBox with mini map

@@ -170,6 +170,7 @@ target_sources(dunecity
         INIMap/INIMapLoader.cpp
         INIMap/INIMapEditorLoader.cpp
         INIMap/INIMapPreviewCreator.cpp
+        INIMap/CampaignMapLibrary.cpp
 
         # FileClasses
         FileClasses/Animation.cpp

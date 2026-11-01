@@ -37,6 +37,7 @@
 #include <misc/FrameYield.h>
 #include <misc/string_util.h>
 
+#include <INIMap/CampaignMapLibrary.h>
 #include <INIMap/INIMapPreviewCreator.h>
 #include <INIMap/MapCatalogue.h>
 #include <GameInitSettings.h>
@@ -508,7 +509,8 @@ void CustomGameMenu::onMapTypeChange(int buttonID) {
     singleplayerUserMapsButton.setToggleState(buttonID==1);
     multiplayerMapsButton.setToggleState(buttonID==2);
     multiplayerUserMapsButton.setToggleState(buttonID==3);
-    std::array<std::string,4> dirs;
+    // dirs[4]: the active mod's campaign missions, listed with the SP Maps.
+    std::array<std::string,5> dirs;
     dirs[0]=getDuneLegacyDataDir()+"/maps/singleplayer/";
     dirs[2]=getDuneLegacyDataDir()+"/maps/multiplayer/";
     for(int i:{0,2})if(getFileNamesList(dirs[i],"ini",true,FileListOrder_Name_Asc).empty())
@@ -516,8 +518,10 @@ void CustomGameMenu::onMapTypeChange(int buttonID) {
     char path[FILENAME_MAX];
     if(fnkdat("maps/singleplayer/",path,sizeof(path),FNKDAT_USER|FNKDAT_CREAT)>=0)dirs[1]=path;
     if(fnkdat("maps/multiplayer/",path,sizeof(path),FNKDAT_USER|FNKDAT_CREAT)>=0)dirs[3]=path;
-    for(int i=0;i<4;++i) {
-        if(buttonID!=4 && buttonID!=i)continue;
+    if(buttonID==0||buttonID==4)dirs[4]=CampaignMapLibrary::exportMaps();
+    for(int i=0;i<5;++i) {
+        const int category=i==4?0:i;
+        if(buttonID!=4 && buttonID!=category)continue;
         if(dirs[i].empty())continue;
         for(const auto& file:getFileNamesList(dirs[i],"ini",true,FileListOrder_Name_CaseInsensitive_Asc)) {
             if(file.size()>=13 && file.substr(file.size()-13)==".workshop.ini")continue;
