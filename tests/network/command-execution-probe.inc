@@ -17,6 +17,7 @@
 #include <Map.h>
 #include <ScreenBorder.h>
 #include <players/HumanPlayer.h>
+#include <players/QuantBot.h>
 #include <Menu/MenuBase.h>
 #include <Menu/HouseChoiceMenu.h>
 #include <Network/NetworkManager.h>
