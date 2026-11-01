@@ -1,3 +1,24 @@
+## 2026-11-01 — 1.0.864: builder shortcuts, road plans, AI support, Sandworms, Play Online random skirmish (OMP integrator)
+
+- Shipped: v1.0.864 tag at merge 4fb0469e (PR #117), protocol 109, save 9879. Notes:
+  `releases/desktop/1.0.864.md`. GitHub release has 13 assets; SourceForge files synced; browser
+  build published (website f3431a8); home/DuneCity "New in 1.0.864" prose (website c3e0cde).
+- Machines per check (policy "Use every available computer", POLICY.md and `docs/release-operations.md`):
+  full ctest over air/mini/pro/pc via `dunecity-queue ctest`, 128/129 (only `natives_probe`, which
+  fails on main too); iPhone and iPad on the mini's simulators; browser on the mini with pinned
+  Emscripten 4.0.14; Windows portable ZIP on the PC (software renderer); Linux/Windows/macOS in CI.
+- Untested: Android on a device (no device, no upgrade keystore: Android stays 0.2.33, plan in
+  `outputs/release-1.0.864/android/publication-plan.txt`); Windows GPU renderer (SSH session 0 has no
+  desktop). Evidence: `~/Documents/projects/outputs/release-1.0.864/`.
+- TestFlight: build 20261101.0356 uploaded, Public group, waiting for Beta App Review; the plist now has
+  `NSBluetoothAlwaysUsageDescription` (ITMS-90683).
+- Release fixes found by the cluster run: CustomGamePlayers narrows the online setup row below 800 px
+  (AI support made it 44 px too wide at 640); Random Skirmish rows in the top crest band keep clear of
+  the corner crests; the containment probe checks the current save version instead of 9878.
+- Cluster guard: the PC's "Stefan is playing DuneCity" pause was wrong (the PC is agents-only; the
+  DuneCity process was the Windows smoke). `machines.json` pc guard is off.
+- Soundtrack packs are local-only (licensing): the Options row shows only when a pack is installed.
+
 ## 2026-11-01 — 1.0.863: Tornie 1.0.546 port and five Tornie-family mods (OMP integrator)
 
 - Stefan: website page for the Tornie mod linking Tornie's site (done: https://dunelegacy.com/tornie.html,
