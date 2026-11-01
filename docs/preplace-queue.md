@@ -134,8 +134,10 @@ The detailed fallback and enemy-wait rules below apply when `Retry Planned Place
   overlap are house-wide, so any yard can take any valid plot; yards that cannot build the item
   (upgrade level, one-palace rule) are skipped. With the rule OFF a list click still orders on
   the selected yard, since that yard is where the finished building waits to be placed.
-- All structures go through this flow (vanilla, slabs, R/C/I zones, Police, Stadium, Airport,
-  Nuclear Plant). **Road and Power Line** keep the old flow (they build instantly).
+- All structures go through this flow (vanilla, slabs, roads, R/C/I zones, Police, Stadium,
+  Airport, Nuclear Plant). A road is planned one tile per click; planning stays on the road, so
+  a run of road is clicked out and the yard lays each tile on its plot (since 1.0.864; before,
+  Road kept the order-then-place flow).
 - Alt is not used here (reserved for the controls slice's repeat toggle). Only Construction Yard
   lists change; factory lists are untouched.
 - Ghosts: the owning house's reserved plots (and the house an observer views) are drawn as
@@ -192,7 +194,6 @@ The detailed fallback and enemy-wait rules below apply when `Retry Planned Place
   normal right-click order wins, so a move order on a planned plot never cancels a building.
 - Yard destruction refund is covered by the real-engine probe, not a unit test: there is no
   reservation-specific refund logic to unit test (the rule is "same as today").
-- Power Line excluded alongside Road (also instant).
 
 ## Verification (Mac mini, Release, 2026-10-13)
 

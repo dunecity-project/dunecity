@@ -334,6 +334,7 @@
 //      Older peers cannot interpret the new object IDs, commands or settings (save 9878).
 // 109: MOD13 shared factory queue (save 9879); older peers cannot read the new byte and
 //      would leave factories idle instead of pooling orders, desynchronising production.
+//      Also road plots can be reserved: a 108 peer refuses the reservation command.
 #define NETWORK_PROTOCOL_VERSION            109
 
 // Mod transfer limits

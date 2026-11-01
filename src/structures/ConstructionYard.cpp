@@ -196,8 +196,9 @@ bool ConstructionYard::isReservedPlacementBlocked() const {
 }
 
 bool ConstructionYard::isReservableItem(Uint32 itemID) {
-    // Roads and power lines build instantly, so they keep the order-then-place flow.
-    return isStructure(itemID) && !DuneCity::isCityTileTool(itemID);
+    // Every structure is planned, roads included: the planning cursor stays on the road, so a
+    // run of road is planned tile by tile and the yard lays each one on its plot.
+    return isStructure(itemID);
 }
 
 bool ConstructionYard::mayReserveItem(Uint32 itemID) const {

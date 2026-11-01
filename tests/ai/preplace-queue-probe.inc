@@ -505,6 +505,40 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
         "The reserved order behind the placed one was not built on plan");
     SDL_Log("PREPLACE_PROBE: mixed queue kept order (unreserved waited for the player, reserved followed on plan)");
 
+    // ---- Roads are planned like every other building: two road tiles, laid on plan. ----
+    {
+        auto& roadData = game->objectData.data[Structure_Road][pLocalHouse->getHouseID()];
+        roadData.enabled = true; roadData.builder = Structure_ConstructionYard; roadData.techLevel = 1;
+        roadData.upgradeLevel = 0; roadData.prerequisiteStructuresSet.reset();
+        fixtureYard->updateBuildList();
+        require(fixtureYard->getBuildItem(Structure_Road) != nullptr, "Road is not in the fixture yard's list");
+        require(fixtureYard->mayReserveItem(Structure_Road), "A road cannot be planned");
+        // Two neighbouring free rock tiles in range, clear of the plots later sections use.
+        const auto roadOk = [&](Coord c) {
+            const Tile* tile = currentGameMap->getTile(c.x, c.y);
+            return tile != nullptr && !tile->isRoad() && !tile->hasAStructure() && !tile->hasAGroundObject()
+                && currentGameMap->okayToPlaceStructure(c.x, c.y, 1, 1, false, house, false, Structure_Road);
+        };
+        Coord first = Coord::Invalid();
+        for(int dy = 6; dy < H && first.isInvalid(); ++dy)
+            for(int dx = 0; dx + 1 < 9 && first.isInvalid(); ++dx)
+                if(roadOk(at(dx, dy)) && roadOk(at(dx + 1, dy))) first = at(dx, dy);
+        require(first.isValid(), "No free road plots in the fixture");
+        const Coord second(first.x + 1, first.y);
+        reserve(*game, yardID, Structure_Road, first);
+        reserve(*game, yardID, Structure_Road, second);
+        advance(*game, 3);
+        require(fixtureYard->getProductionQueueSize() == 2
+                && fixtureYard->getProductionQueue().front().reservationID != 0
+                && fixtureYard->getProductionQueue().back().reservationID != 0, "The road plots were not reserved");
+        require(advanceUntil(*game, 1200, [&] {
+                    return currentGameMap->getTile(first.x, first.y)->isRoad() && currentGameMap->getTile(second.x, second.y)->isRoad()
+                        && fixtureYard->getProductionQueueSize() == 0; }),
+            "The planned roads were not laid on their plots");
+        require(!fixtureYard->isWaitingToPlace(), "A planned road waited to be placed by hand");
+        SDL_Log("PREPLACE_PROBE: two planned road tiles laid on plan without placement clicks");
+    }
+
     // ---- Units and planned plots. ----
     {
         House* enemyHouse = game->getHouse(enemyPlayer->getHouse()->getHouseID());
