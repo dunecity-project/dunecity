@@ -6,3 +6,5 @@ mods/Tornie/**/*.md text eol=lf
 mods/Tornie/**/*.sha256 text eol=lf
 mods/community-*/** -text
 mods/new/** -text
+# Catalogue maps keep their published bytes (data/maps/community-maps.json pins SHA-256).
+data/maps/multiplayer/*Colonist.ini -text

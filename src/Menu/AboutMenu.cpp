@@ -21,6 +21,7 @@
 
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
+#include <FileClasses/music/SoundtrackPack.h>
 
 AboutMenu::AboutMenu() : MenuBase()
 {
@@ -43,8 +44,12 @@ AboutMenu::AboutMenu() : MenuBase()
 
     credits.setTextFontSize(14);
     credits.setAutohideScrollbar(false);
+    const auto soundtrack = SoundtrackPack::loadInstalled();
+    const std::string soundtrackCredit = soundtrack
+        ? "ALTERNATIVE SOUNDTRACK\n" + soundtrack->creditText() + "\n\n" : "";
     credits.setText(
-        "Dune Legacy, DuneCity, and Dune2R have been built and maintained by many people.\n\n"
+        std::string("Dune Legacy, DuneCity, and Dune2R have been built and maintained by many people.\n\n")
+        + soundtrackCredit +
         "PROJECT LEADERSHIP\n"
         "Stefan van der Wel - creator of Dune Legacy and DuneCity\n"
         "Vukasin Ristic - Dune Legacy repository maintainer; DuneCity maintainer and gameplay developer; "
@@ -75,11 +80,13 @@ AboutMenu::AboutMenu() : MenuBase()
     backButton.setActive();
     windowWidget.addWidget(&backButton, Point(panelX + (panelWidth - 180) / 2, panelY + panelHeight - 40),
                            Point(180, 32));
+
+    if(soundtrack && settings.audio.alternativeSoundtrack && musicPlayer) musicPlayer->changeMusic(MUSIC_CREDITS);
 }
 
 AboutMenu::~AboutMenu()
 {
-    ;
+    if(settings.audio.alternativeSoundtrack && musicPlayer) musicPlayer->changeMusic(MUSIC_MENU);
 }
 
 void AboutMenu::onBack()

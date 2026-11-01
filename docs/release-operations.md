@@ -41,6 +41,17 @@ the portable ZIP remains available. Stable feeds and binaries are uploaded to a
 draft before publication. Do not replace assets in an already published release;
 use a new version. No update feed is emitted for `latest-dev`.
 
+## Test on every available computer (Stefan, 2026-11-01)
+
+Every build, release candidate and release is tested on all reachable machines in parallel,
+not on the Mac mini alone (`~/.config/agent-workspace/POLICY.md`, "Use every available
+computer"). The full suite runs through `dunecity-queue ctest --cwd <staging> --wait`, which
+spreads it over the MacBook Pro, Windows PC, MacBook Air and mini. Native checks run on the
+machine that is that platform: Windows packages on the Windows PC, iOS on the mini's
+simulators, the browser build on the mini with the pinned Emscripten 4.0.14. Run one agent
+per platform while PR CI runs. Android needs Stefan's phone. The release report names the
+machine for each check and lists every untested platform.
+
 ## An authorized desktop release
 
 1. Inspect dirty files and current tags; preserve other work. Follow `AGENTS.md`

@@ -161,6 +161,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Continuous Ground Steps", options.continuousGroundSteps);
     config.setBoolValue(section, "Retry Planned Placement", options.retryPlannedPlacement);
     config.setBoolValue(section, "Shared Yard Queue", options.sharedYardQueue);
+    config.setBoolValue(section, "Shared Factory Queue", options.sharedFactoryQueue);
     config.setBoolValue(section, "Slow City Year", options.slowCityYear);
     config.setBoolValue(section, "Allied Control", options.alliedControl);
     config.setBoolValue(section, "Allied Building", options.alliedBuilding);
@@ -199,6 +200,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Continuous Ground Steps", options.continuousGroundSteps);
     readBool("Retry Planned Placement", options.retryPlannedPlacement);
     readBool("Shared Yard Queue", options.sharedYardQueue);
+    readBool("Shared Factory Queue", options.sharedFactoryQueue);
     readBool("Slow City Year", options.slowCityYear);
     readBool("Allied Control", options.alliedControl);
     readBool("Allied Building", options.alliedBuilding);

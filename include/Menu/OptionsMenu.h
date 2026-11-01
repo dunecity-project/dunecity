@@ -128,6 +128,8 @@ private:
     Checkbox    playMusicCheckbox;
     HBox        audioHBox2;
     Checkbox    playCreditsSFXCheckbox;
+    HBox        soundtrackHBox;
+    Checkbox    alternativeSoundtrackCheckbox;
 
     HBox        networkPortHBox;
     TextBox     portTextBox;

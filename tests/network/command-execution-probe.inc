@@ -92,13 +92,13 @@ int runOwnershipProbe() {
         if(copy.getGameOptions().maximumNumberOfConstructionYardsOverride != before+1)
             throw std::runtime_error("Yard cap lost in network/save setup");
         std::string legacy(output.getData(),output.getDataLength());
-        const auto marker = legacy.rfind("CDOM");
-        if(marker == std::string::npos) throw std::runtime_error("MOD12 fixture missing");
+        const auto marker = legacy.rfind("DDOM");
+        if(marker == std::string::npos) throw std::runtime_error("MOD13 fixture missing");
         // Everything after MOD4's payload: the yard limit, the original-damage byte,
         // MOD7's factor count plus one factor per house, MOD8's plan-sites byte, MOD9's
-        // ground-steps byte, MOD10's two planned-construction bytes, MOD11 and MOD12's six bytes.
+        // ground-steps byte, MOD10's two planned-construction bytes, MOD11, MOD12 and MOD13.
         const auto afterMod4 = 4 + 1
-            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size() + 1 + 1 + 2 + 1 + 6;
+            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size() + 1 + 1 + 2 + 1 + 6 + 1;
         legacy[marker]='4'; legacy.resize(legacy.size()-afterMod4);
         IMemoryStream oldInput(legacy.data(),legacy.size());
         GameInitSettings old(oldInput);

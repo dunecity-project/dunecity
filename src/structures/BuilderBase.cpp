@@ -19,6 +19,7 @@
 
 #include <structures/BuilderBase.h>
 #include <structures/PlacementReservationPolicy.h>
+#include <structures/FactoryQueuePolicy.h>
 
 #include <FileClasses/TextManager.h>
 
@@ -772,10 +773,72 @@ int BuilderBase::getUpgradeCost() const {
 
 
 
+void BuilderBase::takeSharedFactoryQueueWork() {
+    if(!FactoryQueue::builderSharesQueue(itemID)
+       || !currentGame->getGameInitSettings().getGameOptions().sharedFactoryQueue
+       || !currentProductionQueue.empty() || isUpgrading() || isOnHold()
+       || owner->isAI() || owner->getNumItems(itemID) < 2) {
+        return;
+    }
+    const Uint32 period = MILLI2CYCLES(500);
+    if(period != 0 && (currentGame->getGameCycleCount() + objectID) % period != 0) {
+        return;
+    }
+
+    BuilderBase* donor = nullptr;
+    std::list<ProductionQueueItem>::iterator selectedEntry;
+    FactoryQueue::SharedSlot selectedSlot;
+    std::size_t structureOrder = 0;
+    for(StructureBase* structure : structureList) {
+        const std::size_t order = structureOrder++;
+        if(structure == this || structure->getOwner() != owner || structure->getItemID() != itemID) {
+            continue;
+        }
+        auto* builder = static_cast<BuilderBase*>(structure);
+        if(builder->isOnHold() || builder->isUpgrading()) {
+            continue;
+        }
+        const auto waiting = FactoryQueue::firstWaitingOrder(builder->currentProductionQueue,
+            builder->currentProducedItem, [&](Uint32 product) {
+                // BuilderBase::isUnitLimitReached depends on the current item, which is invalid
+                // on an idle receiver. Ask the house about the offered unit directly.
+                return isAvailableToBuild(product) && !owner->isUnitLimitReached(product);
+            });
+        if(waiting.first == builder->currentProductionQueue.end()) {
+            continue;
+        }
+        const FactoryQueue::SharedSlot slot{waiting.second, order};
+        if(donor == nullptr || FactoryQueue::shouldPickOrder(slot, selectedSlot)) {
+            donor = builder;
+            selectedEntry = waiting.first;
+            selectedSlot = slot;
+        }
+    }
+    if(donor == nullptr) {
+        return;
+    }
+
+    // Ordinary factories charge only updateProductionProgress(), never doProduceItem(). The
+    // protected current entry holds all paid progress; firstWaitingOrder also rejects any
+    // entry with startingCreditsPaid. Splicing a waiting entry moves no money or repeat flags.
+    const Uint32 product = selectedEntry->itemID;
+    if(BuildItem* item = donor->getBuildItem(product); item != nullptr && item->num > 0) {
+        --item->num;
+    }
+    BuildItem* item = getBuildItem(product);
+    ++item->num;
+    selectedEntry->price = item->price;
+    currentProductionQueue.splice(currentProductionQueue.end(), donor->currentProductionQueue, selectedEntry);
+    clearProductionProgress();
+    currentProducedItem = product;
+}
+
 bool BuilderBase::update() {
     if(StructureBase::update() == false) {
         return false;
     }
+
+    takeSharedFactoryQueueWork();
 
     if(isUnit(currentProducedItem) && (productionProgress >= getCurrentProductionPrice())) {
         deployTimer--;

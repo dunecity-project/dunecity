@@ -33,6 +33,7 @@
 #include <FileClasses/INIFile.h>
 #include <mod/ModManager.h>
 #include <FileClasses/music/MusicPlayer.h>
+#include <FileClasses/music/AlternativeMusicPlayer.h>
 
 #include <SoundPlayer.h>
 
@@ -424,6 +425,23 @@ OptionsMenu::OptionsMenu() : MenuBase()
     audioHBox2.addWidget(Spacer::create(), 0.5);
 
     pages[2].addWidget(&audioHBox2, 32);
+    pages[2].addWidget(VSpacer::create(6));
+    soundtrackHBox.addWidget(Spacer::create(), 0.5);
+    alternativeSoundtrackCheckbox.setText(_("Alternative soundtrack"));
+    alternativeSoundtrackCheckbox.setChecked(settings.audio.alternativeSoundtrack);
+    const auto soundtrack = SoundtrackPack::loadInstalled();
+    alternativeSoundtrackCheckbox.setEnabled(soundtrack.has_value() || settings.audio.alternativeSoundtrack);
+    alternativeSoundtrackCheckbox.setTooltipText(soundtrack
+        ? (soundtrack->author.empty() ? _("Author not supplied") : soundtrack->author)
+            + " - " + (soundtrack->youtube.empty() ? _("YouTube link not supplied") : soundtrack->youtube)
+        : _("Install music/dune2-remake/manifest.ini in user data."));
+    alternativeSoundtrackCheckbox.setOnClick(std::bind(&OptionsMenu::onChangeOption, this, true));
+    // Only players who installed a pack (or left the option on) see it; the pack is not shipped.
+    if(soundtrack || settings.audio.alternativeSoundtrack) {
+        soundtrackHBox.addWidget(&alternativeSoundtrackCheckbox, 480);
+        soundtrackHBox.addWidget(Spacer::create(), 0.5);
+        pages[2].addWidget(&soundtrackHBox, 32);
+    }
     const char* audioDriver = SDL_GetCurrentAudioDriver();
     if(audioDriver && std::string(audioDriver) == "dummy") {
         pages[2].addWidget(Label::create(_("Audio unavailable. Restart the game to retry.")), 32);
@@ -577,6 +595,7 @@ void OptionsMenu::onChangeOption(bool bInteractive) {
     bChanged |= (settings.audio.playSFX != playSFXCheckbox.isChecked());
     bChanged |= (settings.audio.playMusic != playMusicCheckbox.isChecked());
     bChanged |= (settings.audio.playCreditsSFX != playCreditsSFXCheckbox.isChecked());
+    bChanged |= (settings.audio.alternativeSoundtrack != alternativeSoundtrackCheckbox.isChecked());
 
     bChanged |= (settings.gameOptions != currentGameOptions);
 
@@ -690,6 +709,8 @@ void OptionsMenu::onOptionsOK() {
     settings.video.uiSkin = validatedUISkin(uiSkinDropDownBox.getSelectedEntryIntData());
     settings.video.startMenuMode = validatedStartMenuMode(startMenuModeDropDownBox.getSelectedEntryIntData());
 
+    const bool soundtrackChanged = settings.audio.alternativeSoundtrack != alternativeSoundtrackCheckbox.isChecked();
+    settings.audio.alternativeSoundtrack = alternativeSoundtrackCheckbox.isChecked();
     settings.audio.playSFX = playSFXCheckbox.isChecked();
     settings.audio.playMusic = playMusicCheckbox.isChecked();
     settings.audio.playCreditsSFX = playCreditsSFXCheckbox.isChecked();
@@ -705,7 +726,11 @@ void OptionsMenu::onOptionsOK() {
     // sound is not reinitialized when restarting
     // => music and sound player do not reload settings
     soundPlayer->setSound(settings.audio.playSFX);
-    if(musicPlayer->isMusicOn() != settings.audio.playMusic) {
+    if(soundtrackChanged) {
+        musicPlayer.reset();
+        musicPlayer = createMusicPlayer();
+        musicPlayer->changeMusic(MUSIC_MENU);
+    } else if(musicPlayer->isMusicOn() != settings.audio.playMusic) {
         musicPlayer->setMusic(settings.audio.playMusic);
         musicPlayer->changeMusic(MUSIC_INTRO);
     }
@@ -816,6 +841,7 @@ void OptionsMenu::saveConfiguration2File() {
 
     myINIFile.setBoolValue("Audio","Play SFX",settings.audio.playSFX);
     myINIFile.setBoolValue("Audio","Play Music",settings.audio.playMusic);
+    myINIFile.setBoolValue("Audio", "Alternative Soundtrack", settings.audio.alternativeSoundtrack);
     myINIFile.setBoolValue("Audio","Play Credits SFX",settings.audio.playCreditsSFX);
 
     myINIFile.setIntValue("Game Options","Game Speed",settings.gameOptions.gameSpeed);
@@ -837,6 +863,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("Game Options", "Continuous Ground Steps", settings.gameOptions.continuousGroundSteps);
     myINIFile.setBoolValue("Game Options", "Retry Planned Placement", settings.gameOptions.retryPlannedPlacement);
     myINIFile.setBoolValue("Game Options", "Shared Yard Queue", settings.gameOptions.sharedYardQueue);
+    myINIFile.setBoolValue("Game Options", "Shared Factory Queue", settings.gameOptions.sharedFactoryQueue);
     myINIFile.setBoolValue("Game Options", "Slow City Year", settings.gameOptions.slowCityYear);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);
 

@@ -120,6 +120,8 @@ CrossplayMenu::CrossplayMenu() : MenuBase() {
     joinButton.setOnClick([this]() { onJoin(); });
     hostCustomGameButton.setText(_("Create Custom Game"));
     hostCustomGameButton.setOnClick([this]() { onHostCustomGame(); });
+    hostRandomSkirmishButton.setText(_("Create Random Skirmish"));
+    hostRandomSkirmishButton.setOnClick([this]() { onHostRandomSkirmish(); });
     hostCoopButton.setText(_("Create Campaign"));
     hostCoopButton.setOnClick([this]() { onHostCampaignCoop(); });
     visibilityChoice.addEntry(_("Private - invite code"));
@@ -197,21 +199,24 @@ void CrossplayMenu::layoutControls() {
         place(&directoryLabel,x,120,leftWidth-170,26);
         place(&refreshGamesButton,x+leftWidth-165,120,85,26);
         place(&moreGamesButton,x+leftWidth-75,120,75,26);
-        place(&publicGameList,x,150,leftWidth,h-372);
-        place(&selectedGameDetails,x,h-218,leftWidth,40);
-        place(&joinLabel,x,h-174,95,26);
-        place(&joinPublicButton,x+leftWidth-130,h-174,130,28);
-        place(&joinCodeTextBox,x,h-138,leftWidth-130,28);
-        place(&joinButton,x+leftWidth-125,h-138,125,28);
+        place(&publicGameList,x,150,leftWidth,h-406);
+        place(&selectedGameDetails,x,h-252,leftWidth,40);
+        place(&joinLabel,x,h-208,95,26);
+        place(&joinPublicButton,x+leftWidth-130,h-208,130,28);
+        place(&joinCodeTextBox,x,h-172,leftWidth-130,28);
+        place(&joinButton,x+leftWidth-125,h-172,125,28);
         place(&chatTitle,chatX,49,chatWidth,26);
         place(&chatLabel,chatX,78,chatWidth,32);
-        place(&chatHistory,chatX,114,chatWidth,h-338);
-        place(&waitingLabel,chatX,h-218,chatWidth,24);
-        place(&waitingNames,chatX,h-192,chatWidth,46);
-        place(&chatInput,chatX,h-138,chatWidth-65,28);
-        place(&chatSendButton,chatX+chatWidth-60,h-138,60,28);
-        place(&hostCoopButton,x,h-99,(w-10)/2,28);
-        place(&hostCustomGameButton,x+(w+10)/2,h-99,(w-10)/2,28);
+        place(&chatHistory,chatX,114,chatWidth,h-372);
+        place(&waitingLabel,chatX,h-252,chatWidth,24);
+        place(&waitingNames,chatX,h-226,chatWidth,46);
+        place(&chatInput,chatX,h-172,chatWidth-65,28);
+        place(&chatSendButton,chatX+chatWidth-60,h-172,60,28);
+        place(&visibilityChoice,x,h-133,std::min(w,300),28);
+        const int hostWidth = (w-20)/3;
+        place(&hostCoopButton,x,h-99,hostWidth,28);
+        place(&hostCustomGameButton,x+hostWidth+10,h-99,hostWidth,28);
+        place(&hostRandomSkirmishButton,x+2*(hostWidth+10),h-99,w-2*(hostWidth+10),28);
 
     }
     place(&statusLabel,crestX,h-65,w-(crestX-x),26);
@@ -247,8 +252,14 @@ void CrossplayMenu::refreshDirectory() {
         if(last!=std::string::npos) mapLabel=mapLabel.substr(last+3);
         if(mapLabel.size()>22) mapLabel=mapLabel.substr(0,19)+"...";
         if(modLabel.size()>14) modLabel=modLabel.substr(0,11)+"...";
-        publicGameList.addEntry((mapLabel.empty() ? _("Unknown map") : mapLabel)
-            + " - " + modLabel + " - " + (game.running ? std::to_string(game.elapsedSeconds/60)+_(" min") : _("Waiting")));
+        if(mapLabel.empty()) mapLabel = _("Unknown map");
+        const std::string stateLabel = game.running
+            ? _("In progress") + ", " + std::to_string(game.elapsedSeconds/60)+_(" min") : _("Waiting");
+        std::string row = mapLabel + " - " + modLabel + " - " + stateLabel;
+        // On compact screens the state must not disappear off the clipped right edge.
+        if(game.running && static_cast<int>(GUIStyle::getInstance().getTextWidth(row,14)) > publicGameList.getSize().x-24)
+            row = stateLabel + " - " + mapLabel + " - " + modLabel;
+        publicGameList.addEntry(row);
         if(game.roomCode == selectedRoom) publicGameList.setSelectedItem(static_cast<int>(publicGames.size())-1);
     }
     directoryLabel.setText(publicGames.empty() ? _("No games available") : _("Available games"));
@@ -284,6 +295,7 @@ void CrossplayMenu::refreshControls() {
     const bool busy = stage==Stage::WaitingForApproval || (stage == Stage::Requesting) || (stage == Stage::Connecting);
 
     hostCustomGameButton.setEnabled(idle);
+    hostRandomSkirmishButton.setEnabled(idle);
     hostCoopButton.setEnabled(idle);
     const bool invite = idle && showPrivateJoin;
     joinLabel.setVisible(invite);
@@ -306,18 +318,21 @@ void CrossplayMenu::refreshControls() {
     if(selected>=0 && static_cast<size_t>(selected)<publicGames.size()) {
         const auto& game=publicGames[selected];
         selectedGameDetails.setText(game.hostName+" | "+game.mapName+" | "+game.modName+"\n"
-            + (game.running ? std::to_string(game.elapsedSeconds/60)+_(" minutes played") : _("Waiting to start"))
+            + (game.running ? _("In progress") + ", " + std::to_string(game.elapsedSeconds/60)+_(" minutes played") : _("Waiting to start"))
             + " | " + std::to_string(game.players)+_(" players"));
     } else selectedGameDetails.setText(_("Select a game to see its details."));
-    joinPublicButton.setText(_("Join Game"));
+    joinPublicButton.setText(selected >= 0 && static_cast<std::size_t>(selected) < publicGames.size()
+        && publicGames[selected].running ? _("Spectate") : _("Join Game"));
     joinPublicButton.setEnabled(idle && selected >= 0
         && static_cast<std::size_t>(selected) < publicGames.size());
 
-    // Once in a room as the host, the two host buttons become "what do you want to play".
+    // Once in a room as the host, the host buttons become "what do you want to play".
     if(stage == Stage::HostReady) {
         hostCustomGameButton.setEnabled(!hostingCoop && !visibilityPending);
+        hostRandomSkirmishButton.setEnabled(!hostingCoop && !visibilityPending);
         hostCoopButton.setEnabled(hostingCoop && !visibilityPending);
         hostCustomGameButton.setText(_("Choose a Map"));
+        hostRandomSkirmishButton.setText(_("Generate a Random Map"));
         hostCoopButton.setText(_("Choose a Campaign Mission"));
     }
 
@@ -545,7 +560,12 @@ bool CrossplayMenu::validatePlayerName() {
 
 void CrossplayMenu::onHostCustomGame() {
     if(!validatePlayerName()) return;
-    playCustomGame(true);
+    playCustomGame(true, visibilityChoice.getSelectedIndex() == 1);
+    refreshPublicGames();
+}
+void CrossplayMenu::onHostRandomSkirmish() {
+    if(!validatePlayerName()) return;
+    playCustomGame(true, visibilityChoice.getSelectedIndex() == 1, true);
     refreshPublicGames();
 }
 void CrossplayMenu::onHostCampaignCoop() {
@@ -744,6 +764,7 @@ void CrossplayMenu::teardownSession(std::string reason) {
     stage = Stage::Choosing;
     if(!reason.empty()) setStatus(reason);
     hostCustomGameButton.setText(_("Create Custom Game"));
+    hostRandomSkirmishButton.setText(_("Create Random Skirmish"));
     hostCoopButton.setText(_("Create Campaign Co-op"));
     refreshControls();
 }
@@ -933,7 +954,8 @@ void CrossplayMenu::update() {
                 : _("Your private game is open. Opening the lobby..."));
         } else {
             stage = Stage::ClientWaiting;
-            setStatus(_("Connecting to the host and receiving game setup..."));
+            setStatus(joiningAsSpectator ? _("Connecting directly to the host to spectate...")
+                                        : _("Connecting to the host and receiving game setup..."));
         }
         refreshControls();
         if(!preparedGame) refreshPublicGames();

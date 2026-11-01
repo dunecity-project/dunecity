@@ -84,6 +84,10 @@ constexpr int kMinEnemies = 1;
 constexpr int kMaxEnemies = 7;
 /// Allies and enemies together: the player plus at most 7 more houses (8 in all).
 constexpr int kMaxOtherHouses = 7;
+/// Sandworms the map starts with (the menu's choices); 0 keeps the generator's worm-free maps.
+constexpr std::array<int, 7> kWormChoices{0, 1, 2, 3, 4, 6, 8};
+/// A worm starts at least this many tiles (octagonal) from every start, where the map allows.
+constexpr int kWormStartClearance = 20;
 
 /// Family matches may field all twelve factions; legacy random skirmishes keep eight.
 constexpr int maxOtherHouses(int houseCount, bool tornieFamily = false) {
@@ -116,6 +120,7 @@ struct Params {
     int mapSize = 128;
     Rock rock = Rock::Medium;
     Spice spice = Spice::Medium;
+    int worms = 0;                  ///< one of kWormChoices
     bool symmetric = false;
     uint32_t seed = 1;
     bool fixedSeed = false;         ///< menu only: keep the seed instead of rolling a new one
@@ -226,6 +231,7 @@ struct Result {
     std::vector<Placement> tiles;       ///< concrete, walls, roads
     std::vector<Placement> structures;
     std::vector<Placement> units;
+    std::vector<Placement> worms;       ///< sandworms (written as Fremen; the Natives house owns them)
     std::string name;           ///< descriptive file stem
     std::string ini;
 };

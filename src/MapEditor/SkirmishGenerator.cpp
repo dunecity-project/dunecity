@@ -1103,6 +1103,13 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
         std::snprintf(key, sizeof(key), "ID%04d", ++id);
         line(std::string(key) + "=" + house(p.house) + "," + catalogue.itemNames[p.item] + ",256," + pos(p) + ",64,Area Guard");
     }
+    // A worm's house string only decides whether it is placed: Fremen never names an unused
+    // start section here, so the worm always appears, and the loader gives it to the Natives.
+    for(const Placement& p : result.worms) {
+        char key[16];
+        std::snprintf(key, sizeof(key), "ID%04d", ++id);
+        line(std::string(key) + "=Fremen,Sandworm,256," + pos(p) + ",64,Area Guard");
+    }
     line("");
     // Provenance only; the loader ignores this section.
     line("[RANDOMSKIRMISH]");
@@ -1110,6 +1117,7 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
     line("MapSeed=" + std::to_string(result.mapSeed));
     line("Rock=" + std::to_string(kRockPercent[indexOf(params.rock)]));
     line("Spice=" + std::to_string(indexOf(params.spice)));
+    if(!result.worms.empty()) line("Sandworms=" + std::to_string(result.worms.size()));
     line(std::string("Symmetric=") + (params.symmetric ? "true" : "false"));
     // A multiplayer map's starts are open: who plays them, and on which team, is the lobby's choice.
     if(params.multiplayer) line("Starts=" + std::to_string(result.houses.size()));
@@ -1135,6 +1143,7 @@ void Params::clamp(int houseCount, bool tornieFamily) {
         mapSize = snapTo(mapSize, kMapSizes.data(), kMapSizes.data() + kMapSizes.size());
     rock = static_cast<Rock>(std::clamp(indexOf(rock), 0, indexOf(Rock::All)));
     spice = static_cast<Spice>(std::clamp(indexOf(spice), 0, indexOf(Spice::VeryHigh)));
+    worms = snapTo(worms, kWormChoices.data(), kWormChoices.data() + kWormChoices.size());
     mode = static_cast<Mode>(std::clamp(indexOf(mode), 0, indexOf(Mode::DuneCity)));
     credits = snapTo(credits, kCreditPresets.data(), kCreditPresets.data() + kCreditPresets.size());
     techLevel = std::clamp(techLevel, 1, 9);
@@ -1165,6 +1174,7 @@ void Params::load(const INIFile& config) {
     mapSize = config.getIntValue(kSection, "Map Size", mapSize);
     rock = static_cast<Rock>(config.getIntValue(kSection, "Rock", indexOf(rock)));
     spice = static_cast<Spice>(config.getIntValue(kSection, "Spice", indexOf(spice)));
+    worms = config.getIntValue(kSection, "Sandworms", worms);
     // The multiplayer screen keeps its own layout choice, mirrored unless the host changed it.
     symmetric = config.getBoolValue(kSection, multiplayer ? "Multiplayer Symmetric" : "Symmetric", symmetric);
     const std::string seedText = config.getStringValue(kSection, "Seed", std::to_string(seed));
@@ -1203,6 +1213,7 @@ void Params::save(INIFile& config) const {
     config.setIntValue(kSection, "Map Size", mapSize);
     config.setIntValue(kSection, "Rock", indexOf(rock));
     config.setIntValue(kSection, "Spice", indexOf(spice));
+    config.setIntValue(kSection, "Sandworms", worms);
     config.setBoolValue(kSection, multiplayer ? "Multiplayer Symmetric" : "Symmetric", symmetric);
     config.setStringValue(kSection, "Seed", std::to_string(seed));
     config.setBoolValue(kSection, "Fixed Seed", fixedSeed);
@@ -1473,6 +1484,60 @@ int displayedPopulation(const std::vector<Placement>& placements, int house) {
 
 // ---- Generator ----------------------------------------------------------------------------
 
+namespace {
+
+/// @a count sandworms on free sand or spice, kept clear of every start and spread apart: a
+/// seeded shuffle of the candidates, taking the first that keeps its distance. Where the map is
+/// too crowded the spacing between worms is halved, then dropped; the start clearance (scaled
+/// down on small maps) always holds, so a worm never opens beside a base. Drawn from its own
+/// seed, so the rest of the map is the same whatever the worm count.
+std::vector<Placement> placeWorms(const Result& result, int count, const Catalogue& catalogue, uint32_t seed) {
+    std::vector<Placement> worms;
+    if(count <= 0) return worms;
+    const int size = result.map.getSizeX();
+    std::vector<char> blocked(static_cast<std::size_t>(size) * size, 0);
+    auto block = [&](int x, int y, int w, int h) {
+        for(int yy = std::max(0, y); yy < std::min(size, y + h); ++yy)
+            for(int xx = std::max(0, x); xx < std::min(size, x + w); ++xx) blocked[yy * size + xx] = 1;
+    };
+    for(const Placement& p : result.tiles) block(p.x, p.y, 1, 1);
+    for(const Placement& p : result.units) block(p.x, p.y, 1, 1);
+    for(const Placement& p : result.structures) block(p.x, p.y, catalogue.sizes[p.item].x, catalogue.sizes[p.item].y);
+
+    const int clearance = std::min(kWormStartClearance, size / 5);
+    std::vector<Coord> candidates;
+    for(int y = 0; y < size; ++y) {
+        for(int x = 0; x < size; ++x) {
+            const TERRAINTYPE t = result.map(x, y);
+            // A unit on a bloom sets it off while the map loads; plain sand and spice only.
+            const bool bloom = t == Terrain_SpiceBloom || t == Terrain_SpecialBloom || t == Terrain_GreenSpiceBloom
+                || t == Terrain_RedSpiceBloom || t == Terrain_PaleLilacSpiceBloom || t == Terrain_WhiteSpiceBloom;
+            if(blocked[y * size + x] || bloom || !(isSandTile(t) || isSpiceTerrain(t))) continue;
+            const bool nearStart = std::any_of(result.houses.begin(), result.houses.end(), [&](const HouseSetup& h) {
+                return octagonal(h.start.x - x, h.start.y - y) < clearance;
+            });
+            if(!nearStart) candidates.emplace_back(x, y);
+        }
+    }
+    Random random(seed);
+    for(int i = static_cast<int>(candidates.size()) - 1; i > 0; --i)
+        std::swap(candidates[i], candidates[random.rand(0, i)]);
+
+    for(int spacing = std::max(8, size / 4); static_cast<int>(worms.size()) < count; spacing /= 2) {
+        for(const Coord& c : candidates) {
+            if(static_cast<int>(worms.size()) >= count) break;
+            const bool crowded = std::any_of(worms.begin(), worms.end(), [&](const Placement& w) {
+                return octagonal(w.x - c.x, w.y - c.y) < std::max(1, spacing);
+            });
+            if(!crowded) worms.push_back(Placement{HOUSE_INVALID, Unit_Sandworm, c.x, c.y});
+        }
+        if(spacing == 0) break;
+    }
+    return worms;
+}
+
+} // namespace
+
 Result generate(const Params& requested, const Catalogue& houseCatalogue) {
     Params params = requested;
     params.clamp(static_cast<int>(houseCatalogue.houses.size()), houseCatalogue.tornieFamily);
@@ -1734,6 +1799,7 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
             ? displayedPopulation(result.structures, plan.setup.house) : 0;
         result.houses.push_back(plan.setup);
     }
+    result.worms = placeWorms(result, params.worms, catalogue, mix(params.seed, 0x5A2D7u));
 
     // Name: "<N>P - <S>x<S> - Random <a>v<e> <Mode> T<tech> <seed>", multiplayer "... Random <N> starts ...".
     const std::string teams = multiplayer ? std::to_string(houses) + " starts"

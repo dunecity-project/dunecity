@@ -50,12 +50,6 @@ inline bool isCityOnlyStructure(int itemID) {
         || itemID == Structure_Airport;
 }
 
-// Roads and power lines are one-tile city tools that finish at once; they keep
-// the order-then-place flow instead of the Construction Yard pre-placement queue.
-inline bool isCityTileTool(int itemID) {
-    return itemID == Structure_Road || itemID == Structure_PowerLine;
-}
-
 // Construction reach follows owned tiles, regardless of their foundation.
 // Enemy roads, like enemy concrete, may be covered inside our normal build
 // range but never grant a foothold or extend that range themselves.

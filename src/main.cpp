@@ -32,9 +32,7 @@
 #include <FileClasses/TextManager.h>
 #include <FileClasses/INIFile.h>
 #include <FileClasses/Palfile.h>
-#include <FileClasses/music/DirectoryPlayer.h>
-#include <FileClasses/music/ADLPlayer.h>
-#include <FileClasses/music/XMIPlayer.h>
+#include <FileClasses/music/AlternativeMusicPlayer.h>
 
 #include <GUI/GUIStyle.h>
 #include <GUI/dune/DuneStyle.h>
@@ -721,6 +719,7 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "#              The \"music\"-directory should contain 5 subdirectories named attack, intro, peace, win and lose\n"
                                 "#              Put any mp3, ogg or mid file there and it will be played in the particular situation\n"
                                 "Music Type = adl\n"
+                                "Alternative Soundtrack = false # Optional local music/dune2-remake/manifest.ini; missing slots use Music Type\n"
                                 "ADL Harmonic Stereo = false # Legacy detuned stereo effect; false gives clean, pitch-stable playback\n"
                                 "Play Music = true\n"
                                 "Music Volume = 64           # Volume between 0 and 128\n"
@@ -1263,6 +1262,7 @@ int main(int argc, char *argv[]) {
             settings.video.startMenuMode = validatedStartMenuMode(myINIFile.getIntValue("Video", "Start Menu Mode", 0));
             settings.video.cursorScale = myINIFile.getIntValue("Video","Cursor Scale",0);
             settings.audio.musicType = myINIFile.getStringValue("Audio","Music Type","adl");
+            settings.audio.alternativeSoundtrack = myINIFile.getBoolValue("Audio", "Alternative Soundtrack", false);
             settings.audio.adlHarmonicStereo = myINIFile.getBoolValue("Audio","ADL Harmonic Stereo", false);
             settings.audio.playMusic = myINIFile.getBoolValue("Audio","Play Music", true);
             settings.audio.musicVolume = myINIFile.getIntValue("Audio","Music Volume", 64);
@@ -1345,6 +1345,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.continuousGroundSteps = myINIFile.getBoolValue("Game Options", "Continuous Ground Steps", false);
             settings.gameOptions.retryPlannedPlacement = myINIFile.getBoolValue("Game Options", "Retry Planned Placement", true);
             settings.gameOptions.sharedYardQueue = myINIFile.getBoolValue("Game Options", "Shared Yard Queue", true);
+            settings.gameOptions.sharedFactoryQueue = myINIFile.getBoolValue("Game Options", "Shared Factory Queue", true);
             settings.gameOptions.slowCityYear = myINIFile.getBoolValue("Game Options", "Slow City Year", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
             settings.gameOptions.alliedBuilding = myINIFile.getBoolValue("Game Options", "Allied Building", false);
@@ -1667,20 +1668,7 @@ int main(int argc, char *argv[]) {
                     SDL_Log("Starting sound player...");
                     soundPlayer = std::make_unique<SoundPlayer>();
 
-                    if(settings.audio.musicType == "directory") {
-                        SDL_Log("Starting directory music player...");
-                        musicPlayer = std::make_unique<DirectoryPlayer>();
-                    } else if(settings.audio.musicType == "adl") {
-                        SDL_Log("Starting ADL music player...");
-                        musicPlayer = std::make_unique<ADLPlayer>();
-                    } else if(settings.audio.musicType == "xmi") {
-                        SDL_Log("Starting XMI music player...");
-                        musicPlayer = std::make_unique<XMIPlayer>();
-                    } else {
-                        THROW(std::runtime_error, "Invalid music type: '%'", settings.audio.musicType);
-                    }
-
-                    //musicPlayer->changeMusic(MUSIC_INTRO);
+                    musicPlayer = createMusicPlayer();
                 }
 
                 WebRuntime::markGameReady();

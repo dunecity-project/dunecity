@@ -187,7 +187,15 @@ int runLateJoinProbe() {
         if(observer && !std::getenv("JOIN_MATCH_CONTROLS")) {
             joinWrite(out+"/observer-delaying",std::to_string(network.observerFrontier()));
             SDL_Delay(std::getenv("JOIN_STALL") ? 40000 : 5000); // Deliberately stop reading: the players must keep simulating.
-            if(!std::filesystem::exists(out+"/Host-advanced") || (!solo && !std::filesystem::exists(out+"/Partner-advanced"))) throw std::runtime_error("players waited for spectator loading");
+            const auto playersAdvanced = [&]() {
+                return std::filesystem::exists(out+"/Host-advanced")
+                    && (solo || std::filesystem::exists(out+"/Partner-advanced"));
+            };
+            // Keep the 100-cycle progress requirement, not a minimum wall-clock FPS.
+            // The viewer still does no network work, for at least five seconds.
+            const Uint32 progressDeadline=SDL_GetTicks()+15000;
+            while(!playersAdvanced() && !SDL_TICKS_PASSED(SDL_GetTicks(),progressDeadline)) SDL_Delay(5);
+            if(!playersAdvanced()) throw std::runtime_error("players did not advance 100 cycles while spectator loading");
         }
         if(observer && std::getenv("JOIN_STALL")) {
             wait([&](){network.update(); return cancelled || !network.getRelayClient()->isJoined();});

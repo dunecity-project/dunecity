@@ -130,7 +130,7 @@ private:
     Label* skinCaption = nullptr;            ///< "City skin", shown only for a city-sim mod
 
     // Settings that run from low to high are sliders; choices without an order are drop-downs.
-    Slider sizeBox, rockBox, spiceBox;
+    Slider sizeBox, rockBox, spiceBox, wormsBox;
     Checkbox symmetricBox;
     TextBox seedBox;
     TextButton newSeedButton;

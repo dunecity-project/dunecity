@@ -44,6 +44,7 @@ typedef enum {  MUSIC_ATTACK = 0,   /*!< Played when at least one of player's un
                 MUSIC_FINALE_H,     /*!< Harkonnen finale cutscene background music. */
                 MUSIC_FINALE_A,     /*!< Atreides finale cutscene background music. */
                 MUSIC_FINALE_O,     /*!< Ordos finale cutscene background music. */
+                MUSIC_CREDITS,      /*!< About screen background music (menu music by default). */
                 MUSIC_NUM_MUSIC_TYPES,
 
                 MUSIC_RANDOM = 0xFF /*!< Random music (attack music or peace music) */
@@ -85,7 +86,7 @@ public:
         turns music playing on or off
         @param value when true the function turns music on
     */
-    virtual void setMusic(bool value) = 0;
+    virtual void setMusic(bool value, MUSICTYPE musicType = MUSIC_RANDOM) = 0;
 
     /**
         Returns whether music is currently being played

@@ -251,18 +251,36 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         setupConnection.addEntry(_("Online"), 1);
         setupConnection.setSelectedItem(setup->online ? 1 : 0);
         setupConnection.setOnSelectionChange([this](bool interactive) { if(interactive) { setup->online = setupConnection.getSelectedIndex() == 1; rememberPlayMode(PlayModeScope::CustomGame, setup->online); rebuildSetup(true); } });
-        setupModeRow.addWidget(&setupConnection, 120);
+        // Below 800 px the fixed controls narrow so an online row (visibility, Shared house,
+        // AI support, Game Rules) still fits 640 px.
+        setupModeRow.addWidget(&setupConnection, compactPlayers ? 100 : 120);
         setupVisibility.addEntry(_("Private - invite code"), 0);
         setupVisibility.addEntry(_("Public - anyone"), 1);
         setupVisibility.setSelectedItem(setup->publicGame ? 1 : 0);
         setupVisibility.setEnabled(setup->online);
         setupVisibility.setOnSelectionChange([this](bool) { setup->publicGame = setupVisibility.getSelectedIndex() == 1; });
-        if(setup->online) setupModeRow.addWidget(&setupVisibility, 180);
+        if(setup->online) setupModeRow.addWidget(&setupVisibility, compactPlayers ? 168 : 180);
         setupShared.setText(_("Shared house"));
         setupShared.setChecked(setup->sharedHouse);
         setupShared.setEnabled(!spectating);
         setupShared.setOnClick([this]() { setup->sharedHouse = setupShared.isChecked(); rebuildSetup(true); });
         setupModeRow.addWidget(&setupShared, 1.0);
+        setupAISupport.setText(_("AI support"));
+        setupAISupport.setTooltipText(_("An AI shares your house and builds your base (Builder). "
+                                        "Change its AI, difficulty or role in your Player 2 seat."));
+        setupAISupport.setChecked(setup->aiSupport);
+        setupAISupport.setEnabled(!spectating);
+        setupAISupport.setOnClick([this]() {
+            setup->aiSupport = setupAISupport.isChecked();
+            // Turning it off empties the partner seat it filled; the seat stays with Shared house.
+            const int partner = localPartnerSlot();
+            if(!setup->aiSupport && partner >= 0 && getSeatPlayer(partner) > PLAYER_HUMAN
+               && !houseInfo[partner / 2].seats[partner % 2].fixed) {
+                houseInfo[partner / 2].seats[partner % 2].selector.selectSpecial(PLAYER_OPEN);
+            }
+            rebuildSetup(true);
+        });
+        setupModeRow.addWidget(&setupAISupport, 1.0);
         // Offline only. Online keeps the row free of a control that must never apply there.
         if(!setup->online) {
             setupSpectate.setText(_("Spectate"));
@@ -302,7 +320,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         }
         setupRules.setText(_("Game Rules"));
         setupRules.setOnClick([this]() { openWindow(GameOptionsWindow::create(setup->rules)); });
-        setupModeRow.addWidget(&setupRules, 110);
+        setupModeRow.addWidget(&setupRules, compactPlayers ? 96 : 110);
         mainVBox.addWidget(VSpacer::create(6));
         mainVBox.addWidget(&setupModeRow, 28);
     }
@@ -894,6 +912,15 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     if(setup && !setup->players.changeEventList.empty()) onReceiveChangeEventList(setup->players);
     if(initialPlayers) onReceiveChangeEventList(*initialPlayers);
     restoringSetup = false;
+
+    // AI support: an open partner seat beside the local player gets a Builder QuantBot.
+    if(setup && setup->aiSupport && !spectating) {
+        const int partner = localPartnerSlot();
+        if(partner >= 0 && getSeatPlayer(partner) == PLAYER_OPEN) {
+            selectSeatPlayer(partner, PlayerFactory::getIndexByPlayerClass("qBotSupportMedium"));
+            checkPlayerBoxes();
+        }
+    }
 
     if(pNetworkManager != nullptr) {
         pNetworkManager->setOnPeerDisconnected(std::bind(&CustomGamePlayers::onPeerDisconnected, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -3025,6 +3052,13 @@ std::string CustomGamePlayers::getSeatName(int slot) const {
     }
     const PlayerFactory::PlayerData* pPlayerData = PlayerFactory::getByIndex(getSeatPlayer(slot));
     return (pPlayerData != nullptr) ? pPlayerData->getName() : seat.selector.aiBox.getSelectedEntry();
+}
+
+int CustomGamePlayers::localPartnerSlot() const {
+    for(int slot = 0; slot < 2 * numHouses; ++slot) {
+        if(getSeatPlayer(slot) == PLAYER_HUMAN && getSeatName(slot) == settings.general.playerName) return slot ^ 1;
+    }
+    return -1;
 }
 
 void CustomGamePlayers::setSeatFixed(int slot, const std::string& text, int player) {

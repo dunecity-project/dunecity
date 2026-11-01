@@ -113,8 +113,8 @@ std::string saveMap(const Result& result) {
 namespace {
 
 constexpr int kRowGap = 3;
-constexpr int kLeftColumnRows = 17;   ///< Map (7) + Game (6) + You start with (4)
-constexpr int kMultiplayerRows = 12;  ///< Map (7) + Game (4), and a row of slack
+constexpr int kLeftColumnRows = 18;   ///< Map (8) + Game (6) + You start with (4)
+constexpr int kMultiplayerRows = 13;  ///< Map (8) + Game (4), and a row of slack
 
 constexpr int kNoPartner = 0;         ///< the partner selector's "None" entry
 constexpr int kMaxContentWidth = 800;
@@ -203,6 +203,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     for(int size : kMapSizes) sizeBox.addEntry(std::to_string(size) + " x " + std::to_string(size), size);
     for(int i = 0; i < static_cast<int>(kRockPercent.size()); ++i) rockBox.addEntry(std::to_string(kRockPercent[i]) + "%", i);
     for(int i = 0; i < 5; ++i) spiceBox.addEntry(_(kSpiceNames[i]), i);
+    for(int worms : kWormChoices) wormsBox.addEntry(worms == 0 ? std::string(_("None")) : std::to_string(worms), worms);
     symmetricBox.setText(_("Mirrored starts"));
     seedBox.setAllowedChars("0123456789");
     seedBox.setMaximumTextLength(10);
@@ -217,7 +218,9 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     addRow(0, row++, _("Size"), &sizeBox);
     addRow(0, row++, _("Rock"), &rockBox);
     addRow(0, row++, _("Spice"), &spiceBox);
+    addRow(0, row++, _("Sandworms"), &wormsBox);
     addRow(0, row++, _("Layout"), &symmetricBox);
+    const int seedRow = row;        // the "New" button joins this row below
     addRow(0, row++, _("Seed"), &seedBox);
     addRow(0, row++, "", &fixedSeedBox);
     addHeader(0, row++, _("Game"));
@@ -331,7 +334,6 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     // The seed field shares its row with the "New" button.
     const int columnWidth = columnSpan(width);
     const int controlX = columnX(width, 0) + columnWidth * 2 / 5;
-    const int seedRow = 5;
     const int top = 44;
     windowWidget.setWidgetGeometry(&seedBox, Point(controlX, top + seedRow * rowPitch),
                                    Point(columnWidth - columnWidth * 2 / 5 - 64, rowPitch - kRowGap));
@@ -417,19 +419,28 @@ void RandomSkirmishMenu::addRow(int column, int row, const std::string& caption,
     const int x = columnX(getSize().x, column);
     const int y = 44 + row * rowPitch;
     const int captionWidth = columnWidth * 2 / 5;
+    // Desert skins: rows level with the top crests (53x54, 11 px in) keep clear of them, as the
+    // first header does: the left caption starts after the left crest, the right control stops
+    // before the right one. Short windows make rows thin enough to reach that band.
+    const bool crestBand = MenuTheme::isDesertUISkin() && y < 11 + 54;
+    const int captionX = crestBand && column == 0 ? std::max(x + 8, 11 + 53 + 6) : x + 8;
+    const int controlX = x + captionWidth;
+    int controlWidth = columnWidth - captionWidth;
+    if(crestBand && column == 1) controlWidth = std::min(controlWidth, getSize().x - 11 - 53 - 6 - controlX);
     if(!caption.empty() && usedCaptions < static_cast<int>(captions.size())) {
         Label& label = captions[usedCaptions++];
         label.setText(caption);
         label.setTextFontSize(13);
-        windowWidget.addWidget(&label, Point(x + 8, y), Point(captionWidth - 8, rowPitch - kRowGap));
+        windowWidget.addWidget(&label, Point(captionX, y), Point(x + captionWidth - captionX, rowPitch - kRowGap));
     }
-    windowWidget.addWidget(control, Point(x + captionWidth, y), Point(columnWidth - captionWidth, rowPitch - kRowGap));
+    windowWidget.addWidget(control, Point(controlX, y), Point(controlWidth, rowPitch - kRowGap));
 }
 
 void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(sizeBox, params.mapSize);
     selectData(rockBox, static_cast<int>(params.rock));
     selectData(spiceBox, static_cast<int>(params.spice));
+    selectData(wormsBox, params.worms);
     symmetricBox.setChecked(params.symmetric);
     seedBox.setText(std::to_string(params.seed));
     fixedSeedBox.setChecked(params.fixedSeed);
@@ -579,6 +590,7 @@ Params RandomSkirmishMenu::readParams() const {
     params.mapSize = sizeBox.getSelectedEntryIntData();
     params.rock = static_cast<Rock>(rockBox.getSelectedEntryIntData());
     params.spice = static_cast<Spice>(spiceBox.getSelectedEntryIntData());
+    params.worms = wormsBox.getSelectedEntryIntData();
     params.symmetric = symmetricBox.isChecked();
     const std::string seed = seedBox.getText();
     if(!seed.empty()) {

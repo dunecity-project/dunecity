@@ -20,6 +20,10 @@
 #include <misc/exceptions.h>
 #include <misc/FrameYield.h>
 
+#ifdef __EMSCRIPTEN__
+#include <SDL2/SDL_timer.h>
+#endif
+
 #include <fstream>
 #include <iostream>
 #include <cctype>
@@ -884,6 +888,9 @@ void INIFile::readfile(SDL_RWops * file) {
     Key* newKey;
 
     bool readfinished = false;
+#ifdef __EMSCRIPTEN__
+    Uint32 lastBrowserYield = SDL_GetTicks();
+#endif
 
     while(!readfinished) {
         lineNum++;
@@ -898,8 +905,12 @@ void INIFile::readfile(SDL_RWops * file) {
         // parse. Each line is fully consumed before the next one starts and
         // no file position is cached across the yield (SDL_RWread resumes
         // from the stream's own state), so the parse is unchanged.
-        if((lineNum & 31) == 0) {
+        // The yield waits until 8 ms of parsing have passed: yielding every 32 lines
+        // cost a timer round trip per yield, and opening Custom Game (187 maps,
+        // ~3,400 yields) took about a minute.
+        if((lineNum & 31) == 0 && SDL_GetTicks() - lastBrowserYield >= 8) {
             yieldFrameToBrowser();
+            lastBrowserYield = SDL_GetTicks();
         }
 #endif
 

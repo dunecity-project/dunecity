@@ -40,6 +40,7 @@
 #include <rtc/rtc.hpp>
 
 #include <chrono>
+#include <cstdio>
 #include <deque>
 #include <stdexcept>
 #include <memory>
@@ -50,6 +51,29 @@
 #include <vector>
 
 namespace {
+
+const char* iceStateName(rtc::PeerConnection::IceState state) {
+    switch(state) {
+        case rtc::PeerConnection::IceState::New: return "new";
+        case rtc::PeerConnection::IceState::Checking: return "checking";
+        case rtc::PeerConnection::IceState::Connected: return "connected";
+        case rtc::PeerConnection::IceState::Completed: return "completed";
+        case rtc::PeerConnection::IceState::Failed: return "failed";
+        case rtc::PeerConnection::IceState::Disconnected: return "disconnected";
+        case rtc::PeerConnection::IceState::Closed: return "closed";
+    }
+    return "unknown";
+}
+
+const char* candidateTypeName(rtc::Candidate::Type type) {
+    switch(type) {
+        case rtc::Candidate::Type::Host: return "host";
+        case rtc::Candidate::Type::ServerReflexive: return "srflx";
+        case rtc::Candidate::Type::PeerReflexive: return "prflx";
+        case rtc::Candidate::Type::Relayed: return "relay";
+        default: return "none";
+    }
+}
 
 /// Milliseconds from a monotonic clock, for chunk-group expiry only.
 std::uint32_t monotonicMs() {
@@ -92,6 +116,8 @@ struct ChannelState {
     bool                                  closed = false;
     DirectPeerConnection::State           state  = DirectPeerConnection::State::New;
     std::string                           lastError;
+    rtc::PeerConnection::IceState         iceState = rtc::PeerConnection::IceState::New;
+    rtc::PeerConnection::GatheringState   gatheringState = rtc::PeerConnection::GatheringState::New;
     std::deque<DirectPeerConnection::LocalSignal> signals;
     std::deque<std::string>               values;
     std::size_t                           valueBytes = 0;
@@ -207,6 +233,22 @@ public:
             shared->signals.push_back(std::move(signal));
         });
 
+        connection_->onIceStateChange([weak](rtc::PeerConnection::IceState state) {
+            const auto shared = weak.lock();
+            if(!shared) return;
+            std::lock_guard<std::mutex> guard(shared->mutex);
+            if(shared->closed) return;
+            shared->iceState = state;
+            if(state == rtc::PeerConnection::IceState::Failed)
+                shared->failLocked("ice negotiation failed");
+        });
+        connection_->onGatheringStateChange([weak](rtc::PeerConnection::GatheringState state) {
+            const auto shared = weak.lock();
+            if(!shared) return;
+            std::lock_guard<std::mutex> guard(shared->mutex);
+            if(!shared->closed) shared->gatheringState = state;
+        });
+
         connection_->onStateChange([weak](rtc::PeerConnection::State state) {
             const auto shared = weak.lock();
             if(!shared) {
@@ -223,7 +265,7 @@ public:
                     }
                     break;
                 case rtc::PeerConnection::State::Failed:
-                    shared->failLocked("ice negotiation failed");
+                    shared->failLocked("WebRTC connection failed");
                     break;
                 case rtc::PeerConnection::State::Closed:
                 case rtc::PeerConnection::State::Disconnected:
@@ -387,9 +429,23 @@ public:
 
     /// Copies the worker threads' view into a snapshot the game thread may read without a lock.
     void update() override {
-        std::lock_guard<std::mutex> guard(shared_->mutex);
-        stateSnapshot_ = shared_->state;
-        errorSnapshot_ = shared_->lastError;
+        const State previous = stateSnapshot_;
+        rtc::PeerConnection::IceState ice;
+        {
+            std::lock_guard<std::mutex> guard(shared_->mutex);
+            stateSnapshot_ = shared_->state;
+            errorSnapshot_ = shared_->lastError;
+            ice = shared_->iceState;
+        }
+        if(ice != iceSnapshot_) {
+            iceSnapshot_ = ice;
+            if(ice == rtc::PeerConnection::IceState::Connected || ice == rtc::PeerConnection::IceState::Completed)
+                logIce("ice_connected");
+        }
+        if(stateSnapshot_ != previous) {
+            if(stateSnapshot_ == State::Connected) logIce("channel_open");
+            else if(stateSnapshot_ == State::Failed || stateSnapshot_ == State::Closed) logIce("failed");
+        }
     }
 
     void close() override {
@@ -397,6 +453,7 @@ public:
         std::shared_ptr<rtc::PeerConnection> connection;
         {
             std::lock_guard<std::mutex> guard(shared_->mutex);
+            if(shared_->closed) return;
             if(shared_->state != State::Failed) {
                 shared_->state = State::Closed;
             }
@@ -406,6 +463,7 @@ public:
             shared_->valueBytes = 0;
             shared_->assembler.reset();
         }
+        if(stateSnapshot_ == State::New || stateSnapshot_ == State::Connecting) logIce("closed_before_channel");
         connection.swap(connection_);
         stateSnapshot_ = State::Closed;
         // Closing can block while the library drains its threads, and those threads take the
@@ -448,6 +506,27 @@ public:
     const std::string& lastError() const override { return errorSnapshot_; }
 
 private:
+    void logIce(const char* phase) {
+        rtc::Candidate local, remote;
+        if(connection_ && connection_->getSelectedCandidatePair(&local, &remote)) {
+            selectedLocal_ = local.type();
+            selectedRemote_ = remote.type();
+        }
+        rtc::PeerConnection::IceState ice;
+        rtc::PeerConnection::GatheringState gathering;
+        {
+            std::lock_guard<std::mutex> guard(shared_->mutex);
+            ice = shared_->iceState;
+            gathering = shared_->gatheringState;
+        }
+        // stderr is the game's native log and also works in the SDL-free interop tool.
+        std::fprintf(stderr,
+            "Direct ICE: phase=%s ice=%s gathering=%s selected_local=%s selected_remote=%s\n",
+            phase, iceStateName(ice), gathering == rtc::PeerConnection::GatheringState::Complete ? "complete"
+                : gathering == rtc::PeerConnection::GatheringState::InProgress ? "gathering" : "new",
+            candidateTypeName(selectedLocal_), candidateTypeName(selectedRemote_));
+    }
+
     /// Hands one already-validated candidate to the library.
     bool applyCandidate(const std::string& candidate) {
         const std::size_t split = candidate.find('|');
@@ -616,6 +695,8 @@ private:
     /// Game-thread copies, refreshed by update(), so no reference outlives a lock.
     State                                stateSnapshot_ = State::New;
     std::string                          errorSnapshot_;
+    rtc::PeerConnection::IceState         iceSnapshot_ = rtc::PeerConnection::IceState::New;
+    rtc::Candidate::Type selectedLocal_ = rtc::Candidate::Type::Unknown, selectedRemote_ = rtc::Candidate::Type::Unknown;
     bool                                 initiator_     = false;
     bool                                 remoteDescriptionSet_ = false;
     /// Candidates that arrived before the description they belong to.

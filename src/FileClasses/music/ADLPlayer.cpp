@@ -83,6 +83,7 @@ void ADLPlayer::changeMusic(MUSICTYPE musicType)
             musicNum = 2;
         } break;
 
+        case MUSIC_CREDITS:
         case MUSIC_MENU: {
             filename = "DUNE7.ADL";
             musicNum = 6;
@@ -224,11 +225,11 @@ bool ADLPlayer::isMusicPlaying() {
     return (pSoundAdlibPC != nullptr) && pSoundAdlibPC->isPlaying();
 }
 
-void ADLPlayer::setMusic(bool value) {
+void ADLPlayer::setMusic(bool value, MUSICTYPE musicType) {
     musicOn = value;
 
     if(musicOn) {
-        changeMusic(MUSIC_RANDOM);
+        changeMusic(musicType);
     } else {
         Mix_HookMusic(nullptr, nullptr);
 

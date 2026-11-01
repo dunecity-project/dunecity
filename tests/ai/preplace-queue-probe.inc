@@ -81,12 +81,172 @@ int countCommands(Game& game, CMDTYPE id) {
     return count;
 }
 
+// The same real-engine run also covers ordinary factories, without player/AI decisions
+// issuing extra orders. Only these factories tick; the real BuilderBase pays and deploys.
+void sharedFactoryQueue(Game& game) {
+    House* human = pLocalHouse;
+    require(human != nullptr && !human->isAI(), "Factory pool fixture needs a human-controlled house");
+    House* ai = nullptr;
+    for(int h = 0; h < NUM_HOUSES && ai == nullptr; ++h) {
+        House* candidate = game.getHouse(h);
+        if(candidate && candidate != human && candidate->isAI() && !candidate->getPlayerList().empty()) ai = candidate;
+    }
+    require(ai != nullptr, "Factory pool fixture needs an AI-only house");
+    auto& rule = game.gameInitSettings.gameOptions.sharedFactoryQueue;
+    require(rule, "Shared Factory Queue must default on");
+    const bool savedInstantBuild = game.gameInitSettings.gameOptions.instantBuild;
+    game.gameInitSettings.gameOptions.instantBuild = false;
+
+    const int W = 14, H = 12, M = 3;
+    Coord origin = Coord::Invalid();
+    for(int y = M; y + H + M < currentGameMap->getSizeY() && origin.isInvalid(); ++y) {
+        for(int x = M; x + W + M < currentGameMap->getSizeX() && origin.isInvalid(); ++x) {
+            bool clear = true;
+            for(int dy = -M; dy < H + M && clear; ++dy) for(int dx = -M; dx < W + M && clear; ++dx) {
+                const Tile* tile = currentGameMap->getTile(x + dx, y + dy);
+                clear = !tile->hasAGroundObject() && !tile->hasCityZone();
+            }
+            if(clear) origin = Coord(x, y);
+        }
+    }
+    require(origin.isValid(), "No clear shared factory fixture area");
+    for(int dy = 0; dy < H; ++dy) for(int dx = 0; dx < W; ++dx) {
+        Tile* tile = currentGameMap->getTile(origin.x + dx, origin.y + dy);
+        tile->setType(Terrain_Rock);
+        tile->setRoad(false);
+        tile->setOwner(NONE_ID);
+    }
+    const auto humanTankData = game.objectData.data[Unit_Tank][human->getHouseID()];
+    const auto aiTankData = game.objectData.data[Unit_Tank][ai->getHouseID()];
+    const int humanMaxUnits = human->maxUnits;
+    const int aiMaxUnits = ai->maxUnits;
+    human->maxUnits = ai->maxUnits = 0; // The house's ordinary unlimited setting.
+    for(House* house : {human, ai}) {
+        auto& data = game.objectData.data[Unit_Tank][house->getHouseID()];
+        data.enabled = true; data.builder = Structure_HeavyFactory;
+        data.techLevel = 1; data.upgradeLevel = 0; data.prerequisiteStructuresSet.reset();
+        data.price = 100; data.buildtime = 4;
+        house->startingCredits += 20000;
+    }
+    auto factory = [&](House* house, int dx, int dy) {
+        auto* builder = dynamic_cast<BuilderBase*>(house->placeStructure(NONE_ID, Structure_HeavyFactory,
+            origin.x + dx, origin.y + dy, true, true));
+        require(builder != nullptr, "Could not place shared factory fixture");
+        builder->updateBuildList();
+        require(builder->isAvailableToBuild(Unit_Tank), "Fixture factory cannot build tanks");
+        return builder;
+    };
+    BuilderBase* donor = factory(human, 0, 0);
+    BuilderBase* receiver = factory(human, 5, 0);
+    BuilderBase* aiDonor = factory(ai, 0, 6);
+    BuilderBase* aiReceiver = factory(ai, 5, 6);
+    donor->getBuildItem(Unit_Tank)->price = 140;
+    const FixPoint beforeOrder = totalCredits(human);
+    donor->doProduceItem(Unit_Tank, true);
+    require(donor->getProductionQueueSize() == 5 && totalCredits(human) == beforeOrder,
+        "Queuing five tanks must not charge any money");
+    for(const auto& entry : donor->getProductionQueue())
+        require(entry.startingCreditsPaid == 0, "An ordinary factory order carries upfront money");
+    donor->updateProductionProgress();
+    const FixPoint progress = donor->getProductionProgress();
+    const FixPoint provenance = donor->getProductionProgressFromStartingCredits();
+    require(progress > 0 && totalCredits(human) == beforeOrder - progress,
+        "Factory progress must be paid only as construction advances");
+    donor->repeatItems.set(Unit_Tank, true);
+
+    const Uint32 period = MILLI2CYCLES(500);
+    require(period > 0, "Shared factory phase needs a nonzero period");
+    auto tickReceiver = [&](BuilderBase* builder, Uint32 cycles) {
+        for(Uint32 i = 0; i < cycles; ++i) {
+            require(builder->update(), "Fixture factory was destroyed");
+            ++game.gameCycleCount;
+        }
+    };
+    rule = false;
+    tickReceiver(receiver, 2 * period);
+    require(donor->getProductionQueueSize() == 5 && receiver->getProductionQueueSize() == 0,
+        "Rule off moved a factory order");
+    rule = true;
+    aiDonor->doProduceItem(Unit_Tank, true);
+    tickReceiver(aiReceiver, 2 * period);
+    require(aiDonor->getProductionQueueSize() == 5 && aiReceiver->getProductionQueueSize() == 0,
+        "An AI-only house pooled factory orders");
+
+    // Check hold/upgrade gates and the phase without advancing any paid work.
+    game.gameCycleCount += (period - (game.gameCycleCount + receiver->getObjectID()) % period) % period;
+    for(BuilderBase* builder : {donor, receiver}) {
+        builder->doSetOnHold(true);
+        receiver->takeSharedFactoryQueueWork();
+        require(receiver->getProductionQueueSize() == 0, "A held factory donated or took work");
+        builder->doSetOnHold(false);
+        builder->upgrading = true;
+        receiver->takeSharedFactoryQueueWork();
+        require(receiver->getProductionQueueSize() == 0, "An upgrading factory donated or took work");
+        builder->upgrading = false;
+    }
+    UnitBase* limitTank = human->createUnit(Unit_Tank, true);
+    require(limitTank != nullptr, "Could not create the factory unit-limit fixture");
+    limitTank->deploy(origin + Coord(10, 4));
+    human->maxUnits = 1;
+    require(human->isUnitLimitReached(Unit_Tank), "Factory unit-limit fixture did not fill the cap");
+    receiver->takeSharedFactoryQueueWork();
+    require(receiver->getProductionQueueSize() == 0, "An idle factory ignored the offered tank's unit limit");
+    human->maxUnits = 0;
+    limitTank->destroy();
+    ++game.gameCycleCount;
+    receiver->takeSharedFactoryQueueWork();
+    require(receiver->getProductionQueueSize() == 0, "Factory pooling ran outside its per-object phase");
+    game.gameCycleCount += period - 1;
+    const FixPoint beforeMove = totalCredits(human);
+    receiver->takeSharedFactoryQueueWork();
+    require(donor->getProductionQueueSize() == 4 && receiver->getProductionQueueSize() == 1
+        && receiver->getCurrentProducedItem() == Unit_Tank, "Idle Heavy Factory did not take a waiting tank");
+    require(donor->getProductionProgress() == progress
+        && donor->getProductionProgressFromStartingCredits() == provenance,
+        "Pooling moved the active tank's paid progress or credit provenance");
+    require(totalCredits(human) == beforeMove && receiver->getProductionProgress() == 0
+        && receiver->getProductionProgressFromStartingCredits() == 0,
+        "Transferring a waiting tank changed money or progress");
+    require(donor->getBuildItem(Unit_Tank)->num == 4 && receiver->getBuildItem(Unit_Tank)->num == 1
+        && receiver->getProductionQueue().front().price == receiver->getBuildItem(Unit_Tank)->price,
+        "Pooling did not repair counts or take the receiver's price");
+    require(donor->isRepeating(Unit_Tank) && !receiver->isRepeating(Unit_Tank),
+        "Pooling moved a repeat flag");
+
+    std::vector<Uint32> tanksBefore;
+    for(UnitBase* unit : unitList) if(unit->getOwner() == human && unit->getItemID() == Unit_Tank)
+        tanksBefore.push_back(unit->getObjectID());
+    const int count = human->getNumItems(Unit_Tank);
+    for(int i = 0; i < 500 && human->getNumItems(Unit_Tank) == count; ++i) tickReceiver(receiver, 1);
+    require(human->getNumItems(Unit_Tank) == count + 1 && receiver->getProductionQueueSize() == 0,
+        "The receiving Heavy Factory did not really pay for and build its tank");
+    require(donor->getProductionQueueSize() == 4 && donor->getProductionProgress() == progress,
+        "Building the transferred tank changed the donor's active order");
+    for(UnitBase* unit : unitList) {
+        if(unit->getOwner() == human && unit->getItemID() == Unit_Tank
+           && std::find(tanksBefore.begin(), tanksBefore.end(), unit->getObjectID()) == tanksBefore.end()) {
+            unit->destroy();
+            break;
+        }
+    }
+    for(BuilderBase* builder : {donor, receiver, aiDonor, aiReceiver}) {
+        while(builder->getProductionQueueSize()) builder->doCancelItem(builder->getProductionQueue().back().itemID);
+        builder->destroy();
+    }
+    game.objectData.data[Unit_Tank][human->getHouseID()] = humanTankData;
+    game.objectData.data[Unit_Tank][ai->getHouseID()] = aiTankData;
+    human->maxUnits = humanMaxUnits; ai->maxUnits = aiMaxUnits;
+    game.gameInitSettings.gameOptions.instantBuild = savedInstantBuild;
+    SDL_Log("FACTORY_QUEUE_PROBE_PASS: human five-tank queue shared and built; off/AI/hold/upgrade/phase controls, money, counts, price and repeat preserved");
+}
+
 } // namespace PreplaceProbe
 
 void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     using namespace PreplaceProbe;
     House* house = pLocalHouse;
     require(house != nullptr && game->isCitySimEnabled(), "Probe needs the dunecity mod and a local house");
+    const GameInitSettings factorySettings = game->getGameInitSettings();
     auto& planRule = game->gameInitSettings.gameOptions.planBuildingSites;
     require(planRule, "The plan-building-sites match rule must default to on");
 
@@ -344,6 +504,40 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     require(advanceUntil(*game, 400, [&] { return structureAt(house, Structure_WindTrap, pAfter) != nullptr; }),
         "The reserved order behind the placed one was not built on plan");
     SDL_Log("PREPLACE_PROBE: mixed queue kept order (unreserved waited for the player, reserved followed on plan)");
+
+    // ---- Roads are planned like every other building: two road tiles, laid on plan. ----
+    {
+        auto& roadData = game->objectData.data[Structure_Road][pLocalHouse->getHouseID()];
+        roadData.enabled = true; roadData.builder = Structure_ConstructionYard; roadData.techLevel = 1;
+        roadData.upgradeLevel = 0; roadData.prerequisiteStructuresSet.reset();
+        fixtureYard->updateBuildList();
+        require(fixtureYard->getBuildItem(Structure_Road) != nullptr, "Road is not in the fixture yard's list");
+        require(fixtureYard->mayReserveItem(Structure_Road), "A road cannot be planned");
+        // Two neighbouring free rock tiles in range, clear of the plots later sections use.
+        const auto roadOk = [&](Coord c) {
+            const Tile* tile = currentGameMap->getTile(c.x, c.y);
+            return tile != nullptr && !tile->isRoad() && !tile->hasAStructure() && !tile->hasAGroundObject()
+                && currentGameMap->okayToPlaceStructure(c.x, c.y, 1, 1, false, house, false, Structure_Road);
+        };
+        Coord first = Coord::Invalid();
+        for(int dy = 6; dy < H && first.isInvalid(); ++dy)
+            for(int dx = 0; dx + 1 < 9 && first.isInvalid(); ++dx)
+                if(roadOk(at(dx, dy)) && roadOk(at(dx + 1, dy))) first = at(dx, dy);
+        require(first.isValid(), "No free road plots in the fixture");
+        const Coord second(first.x + 1, first.y);
+        reserve(*game, yardID, Structure_Road, first);
+        reserve(*game, yardID, Structure_Road, second);
+        advance(*game, 3);
+        require(fixtureYard->getProductionQueueSize() == 2
+                && fixtureYard->getProductionQueue().front().reservationID != 0
+                && fixtureYard->getProductionQueue().back().reservationID != 0, "The road plots were not reserved");
+        require(advanceUntil(*game, 1200, [&] {
+                    return currentGameMap->getTile(first.x, first.y)->isRoad() && currentGameMap->getTile(second.x, second.y)->isRoad()
+                        && fixtureYard->getProductionQueueSize() == 0; }),
+            "The planned roads were not laid on their plots");
+        require(!fixtureYard->isWaitingToPlace(), "A planned road waited to be placed by hand");
+        SDL_Log("PREPLACE_PROBE: two planned road tiles laid on plan without placement clicks");
+    }
 
     // ---- Units and planned plots. ----
     {
@@ -728,6 +922,19 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     require(oldYard->getCurrentProducedItem() == Structure_WindTrap && oldYard->getProductionQueueSize() == 2,
         "A 9854 order was not left for the player to place");
     SDL_Log("PREPLACE_PROBE: 9854 save loaded; its orders keep the manual flow");
+
+    // The factory fixture changes terrain, object ids, RNG, credits and construction/loss
+    // bookkeeping, not just its four builders. Run it in a fresh match after all yard/save
+    // checks instead of trying to undo those effects (or rewinding the simulation clock).
+    game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+    game = std::make_unique<Game>();
+    currentGame = game.get();
+    game->bReplay = true;
+    game->initGame(factorySettings);
+    game->bReplay = false;
+    game->initializeGameLoop();
+    game->bPause = false;
+    sharedFactoryQueue(*game);
 
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=preplace_queue outcome=passed");
 }

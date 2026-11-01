@@ -93,7 +93,7 @@ private:
     TextButton cancelLaunch;
     HBox setupMapRow, setupModeRow;
     DropDownBox setupMap, setupMod, setupConnection, setupVisibility;
-    Checkbox setupShared, setupSpectate;
+    Checkbox setupShared, setupAISupport, setupSpectate;
     TextButton setupRules, setupBrowseMaps;
     /// True when this offline setup is watching an all-AI match (CustomPlaySetup::spectate).
     bool spectating = false;
@@ -125,6 +125,8 @@ private:
     int getSeatPlayer(int slot) const;
     /// What the seat shows: the seated human's name, the AI's name, "open" or "closed".
     std::string getSeatName(int slot) const;
+    /// The other seat of the local player's house (AI support sits there), or -1.
+    int localPartnerSlot() const;
     /// Shows only this entry in the seat: a seated human or a loaded game's fixed player.
     void setSeatFixed(int slot, const std::string& text, int player);
     /// Offers the seat's open / closed / AI choice and selects player in it.

@@ -72,6 +72,7 @@ private:
     void refreshDirectory();
     void layoutControls();
     void onHostCustomGame();
+    void onHostRandomSkirmish();
     void onHostCampaignCoop();
     void onJoin();
     void onBack();
@@ -183,6 +184,7 @@ private:
 
     HBox            hostHBox;
     TextButton      hostCustomGameButton;
+    TextButton      hostRandomSkirmishButton;
     TextButton      hostCoopButton;
 
     HBox            joinHBox;

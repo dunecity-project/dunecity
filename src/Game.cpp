@@ -5956,6 +5956,31 @@ void Game::selectAllOrnithopters()
     screenborder->setNewScreenCenter(averagePosition * TILESIZE);
 }
 
+void Game::selectBuilderOfType(int itemID)
+{
+    // The sidebar shortcut opens the build menu of the local house's least busy builder of
+    // this type (fewest queued orders, then the oldest). The view stays where it is.
+    const BuilderBase* best = nullptr;
+    for(const StructureBase* pStructure : structureList) {
+        if(pStructure->getOwner() != pLocalHouse || pStructure->getItemID() != itemID) continue;
+        const auto* pBuilder = dynamic_cast<const BuilderBase*>(pStructure);
+        if(pBuilder != nullptr && (best == nullptr || pBuilder->getProductionQueueSize() < best->getProductionQueueSize())) {
+            best = pBuilder;
+        }
+    }
+    if(best == nullptr) {
+        return;
+    }
+
+    unselectAll(selectedList);
+    selectedList.clear();
+    ObjectBase* pObject = objectManager.getObject(best->getObjectID());
+    pObject->setSelected(true);
+    selectedList.insert(pObject->getObjectID());
+    selectionChanged();
+    setCursorMode(CursorMode_Normal);
+}
+
 void Game::selectAllChemicalCarryalls()
 {
     std::set<Uint32> chemicalCarryallIDs;

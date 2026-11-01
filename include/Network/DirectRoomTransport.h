@@ -234,6 +234,9 @@ private:
         RoomRelay::Role role        = RoomRelay::Role::Unknown;   ///< remembered across removal
         std::uint32_t startedMs     = 0;
         std::uint32_t refusals      = 0;
+        // Handshake progress only; never retain candidate addresses or SDP for diagnostics.
+        bool localDescriptionPublished = false, remoteDescriptionApplied = false;
+        unsigned localCandidateTypes = 0, remoteCandidateTypes = 0;
 
         /**
             Ingress accounting, applied before anything expensive happens to a message.
