@@ -436,9 +436,12 @@ OptionsMenu::OptionsMenu() : MenuBase()
             + " - " + (soundtrack->youtube.empty() ? _("YouTube link not supplied") : soundtrack->youtube)
         : _("Install music/dune2-remake/manifest.ini in user data."));
     alternativeSoundtrackCheckbox.setOnClick(std::bind(&OptionsMenu::onChangeOption, this, true));
-    soundtrackHBox.addWidget(&alternativeSoundtrackCheckbox, 480);
-    soundtrackHBox.addWidget(Spacer::create(), 0.5);
-    pages[2].addWidget(&soundtrackHBox, 32);
+    // Only players who installed a pack (or left the option on) see it; the pack is not shipped.
+    if(soundtrack || settings.audio.alternativeSoundtrack) {
+        soundtrackHBox.addWidget(&alternativeSoundtrackCheckbox, 480);
+        soundtrackHBox.addWidget(Spacer::create(), 0.5);
+        pages[2].addWidget(&soundtrackHBox, 32);
+    }
     const char* audioDriver = SDL_GetCurrentAudioDriver();
     if(audioDriver && std::string(audioDriver) == "dummy") {
         pages[2].addWidget(Label::create(_("Audio unavailable. Restart the game to retry.")), 32);
