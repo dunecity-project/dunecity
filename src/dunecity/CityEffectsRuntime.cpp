@@ -329,11 +329,28 @@ void CitySimulation::runEffectsScans() {
     // land. Off keeps the earlier rule, where any ground object (a unit too) develops a block.
     const bool micropolisLandValue = currentGame->getGameInitSettings().getGameOptions().micropolisLandValue;
     static_assert(kMaxCityHouses <= 32, "block owner masks hold one bit per city house");
-    auto tileStructure = [](const Tile* t) -> const StructureBase* {
-        if (!t->hasANonInfantryGroundObject()) return nullptr;
-        const ObjectBase* object = t->getNonInfantryGroundObject();
-        return object && object->isAStructure() ? static_cast<const StructureBase*>(object) : nullptr;
+    // Buildings on the map, decided by membership of their origin tile's object list rather than
+    // its order: which object is listed first (a unit docked on a building) is not saved state,
+    // so a loaded game or an observer checkpoint must reach the same result.
+    auto placedBuildings = [&](auto&& visit) {
+        for (const StructureBase* building : structureList) {
+            const Coord at = building->getLocation();
+            if (!map.tileExists(at.x, at.y)) continue;
+            const auto& objects = map.getTile(at.x, at.y)->getNonInfantryGroundObjectList();
+            if (std::find(objects.begin(), objects.end(), building->getObjectID()) == objects.end()) continue;
+            visit(at.x, at.y, building);
+        }
     };
+    constexpr int kNoBuilding = -2;
+    std::vector<int> buildingOwnerAt(micropolisLandValue ? static_cast<size_t>(mapWidth_) * mapHeight_ : 0, kNoBuilding);
+    if (micropolisLandValue)
+        placedBuildings([&](int x, int y, const StructureBase* building) {
+            const Coord size = building->getStructureSize();
+            const int owner = building->getOwner() ? building->getOwner()->getHouseID() : -1;
+            for (int ty = y; ty < std::min(mapHeight_, y + size.y); ++ty)
+                for (int tx = x; tx < std::min(mapWidth_, x + size.x); ++tx)
+                    buildingOwnerAt[static_cast<size_t>(ty) * mapWidth_ + tx] = owner;
+        });
 
     // Per-block terrain feature count (raw, pre-smooth).
     std::vector<int> terrainRaw(blocksW * blocksH, 0);
@@ -370,11 +387,10 @@ void CitySimulation::runEffectsScans() {
                 openSand[static_cast<size_t>(wy) * mapWidth_ + wx] = 1;
             }
             if (micropolisLandValue) {
-                const StructureBase* building = tileStructure(t);
-                if (t->isRoad() || building) {
+                const int building = buildingOwnerAt[static_cast<size_t>(wy) * mapWidth_ + wx];
+                if (t->isRoad() || building != kNoBuilding) {
                     developed[idx] = 1;
-                    const int owner = building && building->getOwner()
-                        ? building->getOwner()->getHouseID() : t->getOwner();
+                    const int owner = building != kNoBuilding ? building : t->getOwner();
                     if (owner >= 0 && owner < kMaxCityHouses) blockOwners[idx] |= 1u << owner;
                 }
             } else if (t->isRoad() || t->hasAGroundObject()) {
@@ -464,7 +480,7 @@ void CitySimulation::runEffectsScans() {
         // once at its centre; roads, walls and units do not move it. A cluster without such a
         // building (roads only) keeps the centroid of its developed blocks.
         std::vector<long long> zoneX(sumX.size(), 0), zoneY(sumX.size(), 0), zones(sumX.size(), 0);
-        forEachStructureOrigin(map, [&](int x, int y, const StructureBase* building) {
+        placedBuildings([&](int x, int y, const StructureBase* building) {
             if (building->getItemID() == Structure_Wall) return;
             const Coord size = building->getStructureSize();
             const int cx = std::min(mapWidth_ - 1, x + size.x / 2), cy = std::min(mapHeight_ - 1, y + size.y / 2);
