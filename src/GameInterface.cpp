@@ -25,6 +25,7 @@
 #include <House.h>
 #include <Command.h>
 #include <players/Player.h>
+#include <players/QuantBot.h>
 #include <Game.h>
 #include <Network/NetworkManager.h>
 #include <units/UnitBase.h>
@@ -73,6 +74,35 @@ std::string builderShortcutLabel(int itemID) {
         case Structure_StarPort:          return _("Starport");
         case Structure_ChaosFactory:      return _("Chaos Factory");
         default:                          return resolveItemName(itemID);
+    }
+}
+
+/// The QuantBot partner sharing the local human's house, if any (docs/ai-roles.md).
+const QuantBot* localAiPartner() {
+    if(!pLocalHouse || !pLocalPlayer || currentGame->isObserving() || currentGame->isReplay()) return nullptr;
+    for(const auto& player : pLocalHouse->getPlayerList())
+        if(const auto* bot = dynamic_cast<const QuantBot*>(player.get())) return bot;
+    return nullptr;
+}
+
+std::string aiRoleLabel(AIRole role) {
+    switch(role) {
+        case AIRole::Off:     return _("AI: None");
+        case AIRole::Builder: return _("AI: Build");
+        case AIRole::Fighter: return _("AI: Fight");
+        case AIRole::Both:
+        default:              return _("AI: Both");
+    }
+}
+
+/// The click order None, Build, Fight, Both, None...
+AIRole nextAiRole(AIRole role) {
+    switch(role) {
+        case AIRole::Off:     return AIRole::Builder;
+        case AIRole::Builder: return AIRole::Fighter;
+        case AIRole::Fighter: return AIRole::Both;
+        case AIRole::Both:
+        default:              return AIRole::Off;
     }
 }
 }
@@ -287,6 +317,36 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     windowWidget.addWidget(&autoRepairButton,
         Point(getRendererWidth() - sideBar.getSize().x + 24, nextSidebarRow()),
         Point(ornithopterButtonWidth, kSidebarRowHeight));
+
+    // AI behaviour: switch the house's AI partner between None, Build, Fight and Both. Only a
+    // house with a QuantBot partner gets it. It takes the row under Auto repair when the whole
+    // stack below still fits the screen; on a compact screen (480 lines with the city overlays
+    // and Skip mission) it sits beside the zoom controls instead, so no sidebar row is lost.
+    aiRoleButton.setTooltipText(_("AI behaviour: what your AI partner does. Click to switch: "
+                                  "None, Build (economy only), Fight (army only), Both."));
+    aiRoleButton.setOnClick([]() {
+        if(const auto* partner = localAiPartner())
+            currentGame->getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(),
+                CMD_AI_SUPPORT_ROLE, static_cast<Uint32>(nextAiRole(partner->getRole()))));
+    });
+    if(const auto* partner = localAiPartner()) {
+        aiRoleButton.setText(aiRoleLabel(partner->getRole()));
+        const int rowsBelow = 1 + (currentGame->isCitySimEnabled() ? 3 : 0) + 1
+            + (currentGame->canSkipMission() ? 1 : 0);
+        aiRoleInSidebar = sidebarRowY + rowsBelow * kSidebarRowPitch + kSidebarRowHeight <= getRendererHeight() - 2;
+        if(aiRoleInSidebar) {
+            windowWidget.addWidget(&aiRoleButton,
+                Point(getRendererWidth() - sideBar.getSize().x + 24, nextSidebarRow()),
+                Point(ornithopterButtonWidth, kSidebarRowHeight));
+        } else {
+            const int x = mapViewControlsRect.x - viewButtonGap - viewButtonWidth;
+            windowWidget.addWidget(&aiRoleButton, Point(x, viewControlsY), Point(viewButtonWidth, zoomButtonSize));
+            mapViewControlsRect.w += mapViewControlsRect.x - x;
+            mapViewControlsRect.x = x;
+        }
+    } else {
+        aiRoleButton.setVisible(false);
+    }
 
     movementPathsButton.setText(_("Movement paths"));
     movementPathsButton.setTooltipText(_("Show or hide movement paths for selected units"));
@@ -718,6 +778,13 @@ void GameInterface::updateObjectInterface() {
     // Auto repair is an order about a house's credits, so it is not an observer's to give.
     autoRepairButton.setVisible(selection.empty() && pLocalHouse && pLocalPlayer
                                 && !currentGame->isObserving());
+    // The partner's live role, which a command changes a few cycles after the click.
+    const QuantBot* partner = localAiPartner();
+    if(partner) {
+        const std::string roleText = aiRoleLabel(partner->getRole());
+        if(aiRoleButton.getText() != roleText) aiRoleButton.setText(roleText);
+    }
+    aiRoleButton.setVisible(partner && (!aiRoleInSidebar || selection.empty()));
     // Movement paths and the city overlays only change what this machine draws.
     movementPathsButton.setVisible(selection.empty());
     movementPathsButton.setToggleState(settings.general.showMovementPaths);

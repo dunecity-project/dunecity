@@ -337,6 +337,8 @@
 //      Also road plots can be reserved: a 108 peer refuses the reservation command.
 // 110: QuantBot HardCityMatch (hashed, on): Hard's custom city ceiling is 20k/40k/60k/90k and
 //      rises to the largest other house's city, so a 109 peer grows a different city.
+//      CMD_AI_SUPPORT_ROLE: a human switches the house's AI partner (None/Build/Fight/Both)
+//      in game; a 109 peer cannot validate the new command id (save 9880).
 #define NETWORK_PROTOCOL_VERSION            110
 
 // Mod transfer limits

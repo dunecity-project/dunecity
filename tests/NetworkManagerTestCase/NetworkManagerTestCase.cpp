@@ -125,7 +125,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 106 adds the MOD11 slow-city-year rule (save 9877); 107 gives city-match yards storage.
     // 108 integrates Tornie-family 1.0.546 objects, rules and cooperative campaigns (save 9878).
     // 109 appends MOD13's shared factory queue rule (save 9879); production differs from older peers.
-    // 110 changes Hard's custom city ceiling (QuantBot HardCityMatch); city growth differs.
+    // 110 changes Hard's custom city ceiling (QuantBot HardCityMatch); city growth differs. It
+    // also appends CMD_AI_SUPPORT_ROLE, the in-game AI partner switch (save 9880).
     REQUIRE(NETWORK_PROTOCOL_VERSION == 110);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }

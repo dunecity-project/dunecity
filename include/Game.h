@@ -537,6 +537,7 @@ public:
     void rememberOrderHeading(const Command& command);
 
     bool canSkipMission() const;
+    bool isReplay() const { return bReplay; }
 
     /**
         Cycles the local Dune2R presentation zoom without changing game state.

@@ -21,7 +21,7 @@
 #include <dunecity/CityStructurePopulation.h>
 
 int QuantBot::getCityPopulationLimit(int mapArea) const {
-    if(!currentGame || !currentGame->isCitySimEnabled()
+    if(!currentGame || !currentGame->isCitySimEnabled() || switchedOff()
        || gameMode != GameMode::Custom || isCampaignGameType(currentGame->gameType)) return 0;
     // All custom-game QuantBots share the same difficulty ceiling, including
     // helpers in a human-controlled house and support-mode controllers.
@@ -141,6 +141,7 @@ int QuantBot::campaignHarvesterCeiling() const {
 }
 
 bool QuantBot::campaignCanAddHarvester() const {
+    if (switchedOff()) return true;
     const int ceiling = campaignHarvesterCeiling();
     return ceiling < 0 || campaignCommittedCount(Unit_Harvester)
         + campaignCommittedCount(Unit_RebelHarvester) < ceiling;

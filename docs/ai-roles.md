@@ -57,9 +57,35 @@ settings load.
 list, whose index the lobby sends, so they came with network protocol 104.
 
 QuantBot saves its role as one byte where it used to save the support flag (save 9875). An older save's flag
-loads as Builder or Both, and a `qBotSupport*` class still forces Builder.
+loads as Builder or Both, and a pre-9875 `qBotSupport*` class loads as Builder. From save 9880 the byte may
+also be 3 (Off); a 9875-9879 save holding 3 is corrupt and loads as Both.
 
 A partner sharing the human's house is named after the house and its role, e.g. "Atreides (Builder)" or
 "Atreides (Fighter)"; a Both partner keeps its AI's name, "Atreides (QuantBot)".
 
-Match reports carry `ai_role` next to the existing `ai_support` (true for Builder).
+Match reports carry `ai_role` next to the existing `ai_support` (true for Builder). For a QuantBot they
+report its live role, so a partner switched in game reports what it was doing at the end.
+
+## Switching the partner in game (AI behaviour)
+
+A human whose house has a QuantBot partner gets an "AI behaviour" button on the right: "AI: None",
+"AI: Build", "AI: Fight" or "AI: Both". Each click moves to the next role in that order and wraps around.
+
+- Layout (`GameInterface`): the sidebar row under Auto repair, shown while nothing is selected, when the
+  whole stack below it (Movement paths, the three city overlays, Stats, Skip mission) still fits the screen.
+  On a compact screen (480 lines with the city overlays and Skip mission) it sits beside the zoom controls
+  above the sidebar, always visible, so no sidebar row is lost. No partner, observer or replay: no button.
+- The click sends `CMD_AI_SUPPORT_ROLE(role)` (protocol 110). Every peer accepts it only from a
+  `HumanPlayer` with a house and a role 0-3, and calls `QuantBot::setRole()` on every QuantBot in that
+  house. The bot's class string and name do not change; queued production and current unit orders stay.
+- None is `AIRole::Off`: `update()` and `onDamage()` return at once, so the partner gives no orders,
+  builds nothing and repairs nothing. It also imposes no difficulty house rules: no city population
+  ceiling, no harvester ceiling, no lifted unit-count limit or military-value override, no police
+  reinforcement cap, no autonomous air or rocket hunts, and harvesters stopped by the engine restart
+  as they do for a human house.
+- Switching to Build or None turns the attack timer off, as a Builder starts. Switching from Build or
+  None to Fight or Both starts it the way a human-allied partner starts (0 in a campaign, otherwise the
+  seeded custom attack delay); Fight and Both switch between each other without touching it.
+- The probe `custom-city-cap-probe.inc` (ctest `quantbot_custom_attack`) checks the command's
+  authorization, Off's limits and empty update, and the timer on every switch; `army-recovery-probe.inc`
+  checks the save round trip.

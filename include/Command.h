@@ -88,6 +88,8 @@ typedef enum {
     CMD_SCOUTPOST_SLOWPOST_UPGRADE,    ///< SCOUTPOST_SLOWPOST_UPGRADE(OBJECT_ID)
     CMD_RADAR_RESEARCH,               ///< RADAR_RESEARCH(OBJECT_ID, RESEARCH_KIND)
 
+    CMD_AI_SUPPORT_ROLE,              ///< AI_SUPPORT_ROLE(ROLE): AIRole for the QuantBot partner in the issuing human's house
+
     CMD_MAX
 } CMDTYPE;
 

@@ -92,6 +92,7 @@ inline int exactParameterCount(CMDTYPE commandID) {
         case CMD_WINDTRAP_POWER_UPGRADE:         return 1;
         case CMD_SCOUTPOST_SLOWPOST_UPGRADE:     return 1;
         case CMD_RADAR_RESEARCH:                return 2;
+        case CMD_AI_SUPPORT_ROLE:               return 1;
 
         // The city commands read up to three optional parameters
         // (CitySimulation::executeCityCommand substitutes 0 for missing ones).

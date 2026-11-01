@@ -25,17 +25,21 @@
     Both:    builds the base and commands the army (the normal AI).
     Builder: builds and runs the economy, never attacks or defends (the former "AI Support").
     Fighter: commands units, attacks and defends, never builds or produces.
+    Off:     does nothing; only reachable by its human partner switching it off in game
+             (CMD_AI_SUPPORT_ROLE, save 9880). No player class starts as Off.
 */
 enum class AIRole : std::uint8_t {
     Both = 0,
     Builder = 1,
-    Fighter = 2
+    Fighter = 2,
+    Off = 3
 };
 
 inline const char* aiRoleName(AIRole role) {
     switch(role) {
         case AIRole::Builder: return "Builder";
         case AIRole::Fighter: return "Fighter";
+        case AIRole::Off:     return "Off";
         case AIRole::Both:
         default:              return "Both";
     }

@@ -866,6 +866,19 @@ case CMD_INFANTRY_CAPTURE: {
             if (house) house->setAutoRepairEnabled(parameter[0] != 0);
         } break;
 
+        case CMD_AI_SUPPORT_ROLE: {
+            // A human switches the QuantBot partner sharing its own house (docs/ai-roles.md);
+            // the role is decided here, on every peer, from the issuer and the parameter only.
+            if (parameter.size() != 1 || parameter[0] > static_cast<Uint32>(AIRole::Off)) return;
+            const auto* issuer = dynamic_cast<const HumanPlayer*>(currentGame->getPlayerByID(playerID));
+            if (!issuer || !issuer->getHouse()) return;
+            auto* house = currentGame->getHouse(issuer->getHouse()->getHouseID());
+            if (!house) return;
+            for (const auto& player : house->getPlayerList())
+                if (auto* bot = dynamic_cast<QuantBot*>(player.get()))
+                    bot->setRole(static_cast<AIRole>(parameter[0]));
+        } break;
+
         default: {
             THROW(std::invalid_argument, "Command::executeCommand(): Unknown CommandID!");
         } break;

@@ -184,6 +184,13 @@ public:
     bool builderOnly() const { return role == AIRole::Builder; }
     /// The Fighter role: commands units, attacks and defends; never builds, produces or repairs.
     bool fighterOnly() const { return role == AIRole::Fighter; }
+    /// Off (docs/ai-roles.md): its human partner switched it off in game. It issues no orders,
+    /// builds nothing and imposes none of its difficulty's house rules until switched back on.
+    bool switchedOff() const { return role == AIRole::Off; }
+    /// The in-game role switch (CMD_AI_SUPPORT_ROLE), run on every peer at the same cycle.
+    /// Builder and Off stop the attack timer; a switch back to Both or Fighter restarts it the
+    /// way a human-allied controller's timer starts. Queued production and given orders stay.
+    void setRole(AIRole newRole);
 
     // Only opposing QuantBots in Dune City campaigns use this policy.
     QuantBotCityCampaignPolicy::Limits campaignCityLimits() const;

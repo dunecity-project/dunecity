@@ -200,6 +200,41 @@ void runCustomCityCapProbe(Game& game) {
         require(hasZone(),"Human construction order inherited the helper's city limit");
         clearQueues();
     }
+    // In-game AI behaviour switch (CMD_AI_SUPPORT_ROLE, docs/ai-roles.md): the human sharing the
+    // house sets the partner's role; nobody else can, and an unknown role is refused.
+    {
+        const HumanPlayer* human=nullptr;
+        for(const auto& player:house->players)
+            if(auto* candidate=dynamic_cast<const HumanPlayer*>(player.get()))human=candidate;
+        require(human,"Role switch fixture needs the human");
+        auto send=[&](Uint8 issuer,Uint32 role){Command(issuer,CMD_AI_SUPPORT_ROLE,role).executeCommand();};
+        bot->role=AIRole::Both;bot->difficulty=QuantBot::Difficulty::Hard;
+        send(bot->getPlayerID(),static_cast<Uint32>(AIRole::Off));
+        require(bot->role==AIRole::Both,"The AI partner switched itself through the human command");
+        send(human->getPlayerID(),4);
+        require(bot->role==AIRole::Both,"An unknown role was accepted");
+        send(human->getPlayerID(),static_cast<Uint32>(AIRole::Off));
+        require(bot->role==AIRole::Off,"The human could not switch the partner to None");
+        require(bot->attackTimer==std::numeric_limits<Sint32>::max(),"A switched-off partner still has an attack timer");
+        require(!bot->ignoresUnitCountLimit(),"A switched-off Hard partner still lifts the house unit limit");
+        require(bot->getCityPopulationLimit(area)==0,"A switched-off partner still caps the city");
+        // Off does nothing in update(): with Brutal's uncapped zoning, cash and every timer due,
+        // the queues stay empty.
+        clearQueues();bot->difficulty=QuantBot::Difficulty::Brutal;
+        house->takeCredits(house->getCredits());house->addCredits(100000);ready();
+        bot->buildTimer=0;
+        for(int i=0;i<4;++i)bot->update();
+        for(auto* builder:yards)require(builder->getProductionQueueSize()==0,"A switched-off partner queued production");
+        send(human->getPlayerID(),static_cast<Uint32>(AIRole::Builder));
+        require(bot->role==AIRole::Builder && bot->attackTimer==std::numeric_limits<Sint32>::max(),
+            "Build must not launch waves");
+        send(human->getPlayerID(),static_cast<Uint32>(AIRole::Fighter));
+        require(bot->role==AIRole::Fighter && bot->attackTimer<std::numeric_limits<Sint32>::max(),
+            "Fight did not restart the attack timer");
+        send(human->getPlayerID(),static_cast<Uint32>(AIRole::Both));
+        require(bot->role==AIRole::Both,"The human could not switch the partner back to Both");
+        clearQueues();
+    }
     bot->difficulty=QuantBot::Difficulty::Easy;
-    SDL_Log("CUSTOM_CITY_CAP_PROBE_PASS: capped helper refuses orders and growth, Hard grows to a bigger rival city, human placement and natural growth continue, Brutal grows, campaign excluded");
+    SDL_Log("CUSTOM_CITY_CAP_PROBE_PASS: capped helper refuses orders and growth, Hard grows to a bigger rival city, human placement and natural growth continue, Brutal grows, campaign excluded, human switches the AI partner None/Build/Fight/Both");
 }

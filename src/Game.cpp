@@ -1195,8 +1195,10 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
                 << ",\"player_class\":" << AITelemetry::Record::quote(playerClass)
                 << ",\"shared_house_players\":" << players.size();
             if (std::string(controller) == "ai" || qbot) {
+                // A QuantBot's role can be switched in game (CMD_AI_SUPPORT_ROLE): report its live one.
                 const auto* playerData = PlayerFactory::getByPlayerClass(playerClass);
-                const AIRole role = playerData != nullptr ? playerData->getRole() : AIRole::Both;
+                const AIRole role = qbot ? qbot->getRole()
+                    : playerData != nullptr ? playerData->getRole() : AIRole::Both;
                 row << ",\"ai_type\":" << AITelemetry::Record::quote(aiType)
                     << ",\"ai_support\":" << (role == AIRole::Builder ? "true" : "false")
                     << ",\"ai_role\":" << AITelemetry::Record::quote(aiRoleName(role));

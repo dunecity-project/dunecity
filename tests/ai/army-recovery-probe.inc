@@ -1646,8 +1646,9 @@ void runArmyRecoveryProbe(Game& game) {
             require(std::string(again.getData(),again.getDataLength())==bytes,
                 "Re-saving a loaded bot produced different bytes");
             // The role byte (save 9875, docs/ai-roles.md): every role round-trips, and an older
-            // save's support flag, stored in the same byte, loads as Builder or Both.
-            for(AIRole role:{AIRole::Fighter,AIRole::Builder,AIRole::Both}) {
+            // save's support flag, stored in the same byte, loads as Builder or Both. Off (3)
+            // exists from save 9880; a 9879 save holding 3 is corrupt and loads as Both.
+            for(AIRole role:{AIRole::Fighter,AIRole::Builder,AIRole::Both,AIRole::Off}) {
                 const AIRole keepRole=bot->role;
                 bot->role=role;
                 OMemoryStream roleOut; roleOut.open();
@@ -1657,7 +1658,14 @@ void runArmyRecoveryProbe(Game& game) {
                 IMemoryStream roleIn(roleBytes.data(),roleBytes.size());
                 QuantBot reloaded(roleIn,owner);
                 require(reloaded.role==role,"A save and load changed the AI role");
-                if(role==AIRole::Fighter) continue;
+                if(role==AIRole::Off) {
+                    currentGame->loadedSavegameVersion=SAVEGAMEVERSION_AI_ROLE_OFF-1;
+                    IMemoryStream oldIn(roleBytes.data(),roleBytes.size());
+                    QuantBot beforeOff(oldIn,owner);
+                    currentGame->loadedSavegameVersion=SAVEGAMEVERSION;
+                    require(beforeOff.role==AIRole::Both,"A pre-9880 save loaded the Off role");
+                }
+                if(role==AIRole::Fighter || role==AIRole::Off) continue;
                 currentGame->loadedSavegameVersion=SAVEGAMEVERSION_AI_ROLE-1;
                 IMemoryStream flagIn(roleBytes.data(),roleBytes.size());
                 QuantBot fromFlag(flagIn,owner);

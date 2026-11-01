@@ -229,7 +229,7 @@ bool QuantBot::autonomousCustomArmy() const {
     // Medium joined Hard and Brutal (docs/ai-scenario-matrix.md, "Difficulty ladder"): its
     // 40% standing raid share traded evenly with Easy's home army for 60 minutes. Medium now
     // differs from Hard in its economy, limits and air raids, not in how its army attacks.
-    return !builderOnly() && currentGame!=nullptr && gameMode==GameMode::Custom
+    return !builderOnly() && !switchedOff() && currentGame!=nullptr && gameMode==GameMode::Custom
         && !isCampaignGameType(currentGame->gameType)
         && (difficulty==Difficulty::Medium || difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
 }

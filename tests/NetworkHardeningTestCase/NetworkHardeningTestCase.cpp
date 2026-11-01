@@ -1239,7 +1239,7 @@ TEST_CASE("Command authorization: every object action is covered, control comman
     // Commands that carry no acting object: they are authorized by issuer identity alone.
     const CMDTYPE nonObjectCommands[] = {
         CMD_PLAYER_PAUSE, CMD_PLAYER_RESUME, CMD_TEST_SYNC, CMD_HOUSE_AUTO_REPAIR, CMD_CAMPAIGN_SKIP, CMD_MATCH_PAUSE,
-        CMD_CITY_PLACE_ZONE, CMD_CITY_SET_TAX_RATE, CMD_CITY_SET_BUDGET, CMD_CITY_TOOL
+        CMD_CITY_PLACE_ZONE, CMD_CITY_SET_TAX_RATE, CMD_CITY_SET_BUDGET, CMD_CITY_TOOL, CMD_AI_SUPPORT_ROLE
     };
     for(const CMDTYPE commandID : nonObjectCommands) {
         INFO("command " << static_cast<int>(commandID));

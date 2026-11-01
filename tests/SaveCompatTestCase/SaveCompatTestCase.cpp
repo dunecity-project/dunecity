@@ -85,9 +85,11 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9876 adds the MOD10 planned-construction rules; 9877 adds the MOD11 slow city year.
     // 9878 adds the integrated Tornie 1.0.546 object and family gameplay state.
     // 9879 adds the MOD13 shared factory queue rule without new per-builder state.
-    REQUIRE(SAVEGAMEVERSION == 9879);
+    // 9880 lets the QuantBot role byte hold Off (an AI partner switched off in game).
+    REQUIRE(SAVEGAMEVERSION == 9880);
     REQUIRE(SAVEGAMEVERSION_TORNIE546 == 9878);
     REQUIRE(SAVEGAMEVERSION_AI_ROLE == 9875);
+    REQUIRE(SAVEGAMEVERSION_AI_ROLE_OFF == 9880);
     REQUIRE(SAVEGAMEVERSION_NATIVES == 9871);
     REQUIRE(SAVEGAMEVERSION_NATIVES_TEAM == 9873);
     REQUIRE(SAVEGAMEVERSION >= 9818);

@@ -182,6 +182,8 @@ bool QuantBot::hasExplicitUnitCountOverride() const {
 }
 
 bool QuantBot::ignoresUnitCountLimit() const {
+    // A partner switched off imposes nothing on its house.
+    if (switchedOff()) return false;
     // Hard is unchanged: it always ignores the authored count ceiling.
     if (difficulty == Difficulty::Hard) return true;
     // Brutal honours an explicitly selected override. Override 0 is reported as
@@ -190,7 +192,24 @@ bool QuantBot::ignoresUnitCountLimit() const {
 }
 
 bool QuantBot::overridesMilitaryValueCap() const {
-    return difficulty == Difficulty::Brutal && hasExplicitUnitCountOverride();
+    return !switchedOff() && difficulty == Difficulty::Brutal && hasExplicitUnitCountOverride();
+}
+
+void QuantBot::setRole(AIRole newRole) {
+    if (newRole == role) return;
+    const bool wasFighting = role == AIRole::Both || role == AIRole::Fighter;
+    role = newRole;
+    if (builderOnly() || switchedOff()) {
+        // As a Builder is constructed and loaded: it never launches a wave.
+        gameMode = GameMode::Custom;
+        attackTimer = std::numeric_limits<Sint32>::max();
+    } else if (!wasFighting) {
+        // Back to commanding the army: the timer a human-allied controller starts with.
+        attackTimer = isCampaignGameType(currentGame->gameType) ? 0
+            : SimpleArmyPolicy::attackDelay(MILLI2CYCLES(botConfig().attackTimerMs),
+                currentGame->getGameInitSettings().getRandomSeed(), getGameCycleCount(), getHouse()->getHouseID());
+    }
+    traceDecision("role_switched", AITelemetry::Record().set("role", aiRoleName(role)));
 }
 
 int QuantBot::configuredCustomHarvesterLimit() const {
@@ -245,7 +264,7 @@ int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int
 }
 
 bool QuantBot::permitsPoliceReinforcement(int unitValue) const {
-    if (difficulty != Difficulty::Brutal) return true;
+    if (switchedOff() || difficulty != Difficulty::Brutal) return true;
     if (!currentGame || militaryValueLimit <= 0) return false;
     int value = 0;
     // Match the production allocator's military valuation, including new batch members.
@@ -265,12 +284,8 @@ void QuantBot::update() {
 		return;
 	}
 
-	// Saves from before the role byte only recorded a builder in its class name.
-	if (role == AIRole::Both && getPlayerclass().rfind("qBotSupport", 0) == 0) {
-		role = AIRole::Builder;
-		gameMode = GameMode::Custom;
-		attackTimer = std::numeric_limits<Sint32>::max();
-	}
+	// Switched off by its human partner: no orders, no building, no planning.
+	if (switchedOff()) return;
 
     // Both co-controllers and separate human-allied houses develop an economy;
     // only opponents use the campaign enemy rebuild/pressure restrictions.
@@ -857,6 +872,8 @@ void QuantBot::onHostileStructureDestroyed(Uint32 itemID, Uint32 originalHouseID
 }
 
 void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID) {
+	// Switched off: no repairs, no defence response (both would be orders).
+	if (switchedOff()) return;
 	const ObjectBase* pDamager = getObject(damagerID);
 
 	if (pDamager == nullptr || pDamager->getOwner() == getHouse() || pObject->getItemID() == Unit_Sandworm || pObject->getItemID() == Unit_Saboteur) {

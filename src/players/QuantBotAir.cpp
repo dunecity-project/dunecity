@@ -663,7 +663,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
 
 bool QuantBot::managesAutonomousOrnithopter(const UnitBase* unit) const {
     return unit && unit->getOwner()==getHouse() && QuantBotInternal::ornithopterItem(unit->getItemID())
-        && !builderOnly() && unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
+        && !builderOnly() && !switchedOff() && unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
 }
 
 bool QuantBot::autonomousAircraftRaids() const {
