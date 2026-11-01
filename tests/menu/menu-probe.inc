@@ -1094,6 +1094,31 @@ int runMenuProbe() {
         menuRequire(menu.mainVBox.getMinimumSize().x<=menu.mainVBox.getSize().x,"Shared house controls exceed menu width");
         menu.update(); menuCapture(menu,"custom-shared");
     }
+    {
+        // AI support: one checkbox seats a Builder QuantBot in the player's house; off empties it.
+        auto supportSetup=setup;
+        supportSetup.online=false;
+        supportSetup.sharedHouse=false;
+        supportSetup.aiSupport=true;
+        supportSetup.players=ChangeEventList{};
+        GameInitSettings supportInit(getBasename(map,true),readCompleteFile(map),supportSetup.multiplePlayersPerHouse(),supportSetup.rules);
+        CustomGamePlayers menu(supportInit,true,false,&supportSetup);
+        const int partner=menu.localPartnerSlot();
+        menuRequire(partner>=0 && menu.getSeatPlayer(partner)==PlayerFactory::getIndexByPlayerClass("qBotSupportMedium"),
+                    "AI support did not seat a Builder QuantBot beside the player");
+        menuRequire(menu.setupAISupport.isChecked() && menu.mainVBox.getMinimumSize().x<=menu.mainVBox.getSize().x,
+                    "AI support control missing or too wide");
+        menu.update(); menuCapture(menu,"custom-ai-support");
+        menu.setupAISupport.handleMouseLeft(1,1,true);
+        menu.setupAISupport.handleMouseLeft(1,1,false);
+        menuRequire(!supportSetup.aiSupport && menu.isQuiting(), "Turning AI support off did not rebuild the setup");
+        bool partnerLeft=false;
+        for(const auto& e : supportSetup.players.changeEventList)
+            partnerLeft |= e.eventType==ChangeEventList::ChangeEvent::EventType::ChangePlayer && static_cast<int>(e.slot)==partner
+                && static_cast<int>(e.newValue)==PlayerFactory::getIndexByPlayerClass("qBotSupportMedium");
+        menuRequire(!partnerLeft, "Turning AI support off kept the supporting AI");
+        SDL_Log("MENU_PROBE: AI support seats qBotSupportMedium in slot %d and removes it when turned off", partner);
+    }
     for(const auto& candidate : setup.maps) {
         if(getBasename(candidate).find("6P - 64x64") == std::string::npos) continue;
         for(bool shared : {false, true}) {

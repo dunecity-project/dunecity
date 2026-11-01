@@ -18,6 +18,10 @@ struct CustomPlaySetup {
     bool publicGame = true;
     bool allowJoinAfterStart = true;
     bool sharedHouse = false;
+    // A Builder QuantBot shares the local player's house (its Player 2 seat). Needs two
+    // controllers per house, so the match is created as a shared-house match while it is on.
+    bool aiSupport = false;
+    bool multiplePlayersPerHouse() const { return sharedHouse || aiSupport; }
     // Offline only: leave every faction to an AI and watch. Survives the map/mod/rules
     // rebuilds because it lives here rather than in the rebuilt GameInitSettings, and is
     // cleared whenever `online` is chosen so a host can never become a local observer.

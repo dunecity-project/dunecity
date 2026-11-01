@@ -263,6 +263,22 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         setupShared.setEnabled(!spectating);
         setupShared.setOnClick([this]() { setup->sharedHouse = setupShared.isChecked(); rebuildSetup(true); });
         setupModeRow.addWidget(&setupShared, 1.0);
+        setupAISupport.setText(_("AI support"));
+        setupAISupport.setTooltipText(_("An AI shares your house and builds your base (Builder). "
+                                        "Change its AI, difficulty or role in your Player 2 seat."));
+        setupAISupport.setChecked(setup->aiSupport);
+        setupAISupport.setEnabled(!spectating);
+        setupAISupport.setOnClick([this]() {
+            setup->aiSupport = setupAISupport.isChecked();
+            // Turning it off empties the partner seat it filled; the seat stays with Shared house.
+            const int partner = localPartnerSlot();
+            if(!setup->aiSupport && partner >= 0 && getSeatPlayer(partner) > PLAYER_HUMAN
+               && !houseInfo[partner / 2].seats[partner % 2].fixed) {
+                houseInfo[partner / 2].seats[partner % 2].selector.selectSpecial(PLAYER_OPEN);
+            }
+            rebuildSetup(true);
+        });
+        setupModeRow.addWidget(&setupAISupport, 1.0);
         // Offline only. Online keeps the row free of a control that must never apply there.
         if(!setup->online) {
             setupSpectate.setText(_("Spectate"));
@@ -894,6 +910,15 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     if(setup && !setup->players.changeEventList.empty()) onReceiveChangeEventList(setup->players);
     if(initialPlayers) onReceiveChangeEventList(*initialPlayers);
     restoringSetup = false;
+
+    // AI support: an open partner seat beside the local player gets a Builder QuantBot.
+    if(setup && setup->aiSupport && !spectating) {
+        const int partner = localPartnerSlot();
+        if(partner >= 0 && getSeatPlayer(partner) == PLAYER_OPEN) {
+            selectSeatPlayer(partner, PlayerFactory::getIndexByPlayerClass("qBotSupportMedium"));
+            checkPlayerBoxes();
+        }
+    }
 
     if(pNetworkManager != nullptr) {
         pNetworkManager->setOnPeerDisconnected(std::bind(&CustomGamePlayers::onPeerDisconnected, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -3025,6 +3050,13 @@ std::string CustomGamePlayers::getSeatName(int slot) const {
     }
     const PlayerFactory::PlayerData* pPlayerData = PlayerFactory::getByIndex(getSeatPlayer(slot));
     return (pPlayerData != nullptr) ? pPlayerData->getName() : seat.selector.aiBox.getSelectedEntry();
+}
+
+int CustomGamePlayers::localPartnerSlot() const {
+    for(int slot = 0; slot < 2 * numHouses; ++slot) {
+        if(getSeatPlayer(slot) == PLAYER_HUMAN && getSeatName(slot) == settings.general.playerName) return slot ^ 1;
+    }
+    return -1;
 }
 
 void CustomGamePlayers::setSeatFixed(int slot, const std::string& text, int player) {

@@ -212,7 +212,7 @@ void playCustomGame(bool online) {
             }
         }
         const auto path = setup.maps[setup.map];
-        GameInitSettings init(getBasename(path, true), readCompleteFile(path), setup.sharedHouse, setup.rules);
+        GameInitSettings init(getBasename(path, true), readCompleteFile(path), setup.multiplePlayersPerHouse(), setup.rules);
         // A downloaded map's authored revision is reused when the selected mod is the one
         // it was authored with. With another mod chosen, or after the working map changed,
         // these bytes are captured as a new revision of the selected mod when the game starts.
@@ -228,7 +228,7 @@ void playCustomGame(bool online) {
         if(result == MENU_SETUP_CHANGED) continue;
         if(result == MENU_SETUP_MAP || result == MENU_QUIT_DEFAULT) { chooseMap = true; continue; }
         if(result != MENU_SETUP_HOST) return;
-        GameInitSettings networkInit(getBasename(path, true), readCompleteFile(path), settings.general.playerName + "'s custom game", setup.sharedHouse, setup.rules);
+        GameInitSettings networkInit(getBasename(path, true), readCompleteFile(path), settings.general.playerName + "'s custom game", setup.multiplePlayersPerHouse(), setup.rules);
         networkInit.setModRevision(init.getModRevisionHash(), init.getModRevisionVersion());
         networkInit.setMapRevision(init.getMapRevisionHash(), init.getMapRevisionVersion(), init.getMapRevisionManifest());
         if(CrossplayMenu(networkInit, setup.publicGame, setup.players, setup.allowJoinAfterStart).showMenu() == MENU_QUIT_GAME_FINISHED) return;
