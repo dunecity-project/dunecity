@@ -150,12 +150,23 @@ void loadSave() {
     auto game = sStart(GameInitSettings(path));
     const bool old = game->getLoadedSavegameVersion() < SAVEGAMEVERSION;
     expectNativeWorms(*game, sReport(*game, "loaded"), "loaded");
+    // Tax rates are per house from save 9880; an older save held one rate, which every house keeps.
+    auto* city = game->getCitySimulation();
+    if(old && city && city->isInitialized())
+        for(int h = 1; h < DuneCity::kMaxCityHouses; ++h)
+            sRequire(city->getCityTax(h) == city->getCityTax(0), "an older save's shared tax rate was not kept for every house");
     sRun(*game, 600);
     sRequire(!game->finishedLevel || sEnv("SAVE_PROBE_ALLOW_END") == "1", "the game ended within 600 cycles");
     const auto worms = sReport(*game, "after 600 cycles");
     expectNativeWorms(*game, worms, "after 600 cycles");
     const size_t units = unitList.size(), structures = structureList.size();
     const Uint32 cycle = game->getGameCycleCount();
+    std::vector<int16_t> taxRates;
+    if(city && city->isInitialized())
+        for(int h = 0; h < DuneCity::kMaxCityHouses; ++h) {
+            city->setCityTax(h, static_cast<int16_t>(3 + h % 15));
+            taxRates.push_back(city->getCityTax(h));
+        }
     sRequire(game->saveGame(resaved), "Could not re-save");
     sEnd(game);
     game = sStart(GameInitSettings(resaved));
@@ -163,6 +174,9 @@ void loadSave() {
     expectNativeWorms(*game, sReport(*game, "re-saved and loaded"), "re-saved and loaded");
     sRequire(unitList.size() == units && structureList.size() == structures && game->getGameCycleCount() == cycle,
              "the re-saved game differs from the game that was saved");
+    if(auto* reloaded = game->getCitySimulation(); !taxRates.empty())
+        for(int h = 0; h < DuneCity::kMaxCityHouses; ++h)
+            sRequire(reloaded && reloaded->getCityTax(h) == taxRates[h], "a house's tax rate did not survive the save");
     sRun(*game, 60);
     sEnd(game);
     SDL_Log("SAVE_PROBE: round trip of a %s save: ok", old ? "previous-version" : "current-version");

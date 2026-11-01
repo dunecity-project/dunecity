@@ -544,13 +544,19 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
         tile->setCityZoneType(DuneCity::ZoneType::None);
 
         if(auto* city = game.getCitySimulation(); city && city->isInitialized()) {
-            const auto taxBefore = city->getCityTax();
+            // Each house has its own rate (save 9880): the controller's command sets only its own.
+            const int ownHouse = owner->getHouse()->getHouseID();
+            const int otherHouse = ownHouse == 0 ? 1 : 0;
+            const auto taxBefore = city->getCityTax(ownHouse);
+            const auto otherBefore = city->getCityTax(otherHouse);
             const Uint32 otherTax = static_cast<Uint32>(taxBefore == 9 ? 8 : 9);
             runAs(Player::OBSERVER_PLAYER_ID, CMD_CITY_SET_TAX_RATE, {0u, otherTax});
-            require(city->getCityTax() == taxBefore, "An observer changed the city tax rate");
+            require(city->getCityTax(ownHouse) == taxBefore, "An observer changed the city tax rate");
             runAs(owner->getPlayerID(), CMD_CITY_SET_TAX_RATE, {0u, otherTax});
-            require(city->getCityTax() == static_cast<int16_t>(otherTax),
+            require(city->getCityTax(ownHouse) == static_cast<int16_t>(otherTax),
                     "A real controller's tax command stopped working");
+            require(city->getCityTax(otherHouse) == otherBefore,
+                    "A controller's tax command changed another house's tax rate");
             runAs(owner->getPlayerID(), CMD_CITY_SET_TAX_RATE, {0u, static_cast<Uint32>(taxBefore)});
         }
     }

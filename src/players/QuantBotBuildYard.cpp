@@ -139,7 +139,7 @@ void QuantBot::traceYardStatus(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             pass.itemCount[Structure_ZoneIndustrial], pass.strategicReserveItem, pass.strategicReserveCost);
         auto* balanceCity = currentGame ? currentGame->getCitySimulation() : nullptr;
         const int taxIncome = pass.citySimEnabled
-            ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths, balanceCity ? balanceCity->getCityTax() : 7, pass.ownAvgLandValue)) / 60 : 0;
+            ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths, balanceCity ? balanceCity->getCityTax(getHouse()->getHouseID()) : DuneCity::kDefaultCityTaxRate, pass.ownAvgLandValue)) / 60 : 0;
         int factoryTarget = QuantBotBuildPolicy::desiredHeavyFactories(pass.citySimEnabled, taxIncome, pass.money, getHouse()->getNumItems(Structure_HeavyFactory), pass.activeHeavyFactoryCount, recentFactoryLossCount());
         if (pass.vanillaEconomy) factoryTarget = DuneCity::vanillaFactoryTarget(factoryTarget, getAIHarvesterCount(), pass.money);
         const int tech = currentGame ? currentGame->techLevel : 8;
@@ -1700,7 +1700,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
         int creditsPerSec = 0;
         if (yardTurn.isCitySim) {
             auto* citySim = currentGame ? currentGame->getCitySimulation() : nullptr;
-            int tax = citySim ? citySim->getCityTax() : 7;
+            int tax = citySim ? citySim->getCityTax(getHouse()->getHouseID()) : DuneCity::kDefaultCityTaxRate;
             int32_t annual = DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths, tax, pass.ownAvgLandValue);
             creditsPerSec = DuneCity::annualPerMinute(annual) / 60;
         }

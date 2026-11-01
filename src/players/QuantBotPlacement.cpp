@@ -1844,7 +1844,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                 // Grow income before adding another station to an underfunded city.
                 if (gameMode==GameMode::Custom && !builderOnly() && stationCommitted
                     && hs.policeFundingPercent<100) continue;
-                const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,sim->getCityTax(),hs.avgLandValue));
+                const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,hs.taxRate,hs.avgLandValue));
                 const int annualPower=getHouse()->isPowerRequired() ? getHouse()->getPowerRequirement()/8 : 0;
                 int committedCost=hs.nominalPoliceCost;
                 for (const auto& plan:reservedStructures)
@@ -2092,16 +2092,16 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                     && (p.item == Structure_ZoneResidential || p.item == Structure_ZoneCommercial)
                     && p.pollution < 128 && gain > 0)
                     growthTax += DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(p.item,p.nextPopulation-p.population,0),
-                        sim->getCityTax(),std::max(1,state.avgLandValue)) * std::min(gain,64) / (4*64));
+                        state.taxRate,std::max(1,state.avgLandValue)) * std::min(gain,64) / (4*64));
                 if (powered && item == Structure_RocketTurret && distance <= data[item][house].weaponrange)
                     value.defense += p.threat;
             });
-            value.tax = DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(totalTaxBaseEighths,sim->getCityTax(),valueGainSum,sampleCount));
+            value.tax = DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(totalTaxBaseEighths,state.taxRate,valueGainSum,sampleCount));
             value.growthTax = growthTax;
             if (item == Structure_RocketTurret) {
                 if (value.crime <= 0) continue; // Civic turrets must reduce actual crime.
                 value.neighbourhoodTax = DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(
-                    totalTaxBaseEighths,sim->getCityTax(),neighbourhoodGainSum,sampleCount));
+                    totalTaxBaseEighths,state.taxRate,neighbourhoodGainSum,sampleCount));
             }
             for (unsigned resultMode=0;resultMode<results.size();++resultMode) {
                 if (!value.useful(resultMode == 1)) continue;

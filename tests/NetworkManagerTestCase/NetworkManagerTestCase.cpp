@@ -126,7 +126,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 108 integrates Tornie-family 1.0.546 objects, rules and cooperative campaigns (save 9878).
     // 109 appends MOD13's shared factory queue rule (save 9879); production differs from older peers.
     // 110 changes Hard's custom city ceiling (QuantBot HardCityMatch); city growth differs. It
-    // also appends CMD_AI_SUPPORT_ROLE, the in-game AI partner switch (save 9880).
+    // also appends CMD_AI_SUPPORT_ROLE, the in-game AI partner switch (save 9880), gives each
+    // house its own tax rate and appends MOD14's Micropolis land value rule.
     REQUIRE(NETWORK_PROTOCOL_VERSION == 110);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }

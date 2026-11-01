@@ -26,6 +26,10 @@ namespace DuneCity {
 /// none (and the 9818+ save layout of these slots is unchanged by it).
 static constexpr int kMaxCityHouses = NUM_PLAYER_HOUSES;
 
+/// Default tax rate at game start. 7% sits between SC Classic's suggested 6% and the punitive
+/// 10%+ band - keeps growth healthy while making the budget meaningful.
+static constexpr int16_t kDefaultCityTaxRate = 7;
+
 struct HouseCityState {
     int resPop = 0, comPop = 0, indPop = 0;
     uint8_t civicDemandBlocked = 0; // Derived from the latest demand calculation; not serialized.
@@ -37,6 +41,9 @@ struct HouseCityState {
     int hospitalCount = 0, churchCount = 0;
     bool hasStadium = false, hasPalace = false, hasAirport = false, hasStarport = false;
     int policeFundingPercent = 100;
+    /// This house's tax rate, set only by a human of the house through the budget window
+    /// (CMD_CITY_SET_TAX_RATE). Saved per house from 9880; older saves held one rate for all.
+    int16_t taxRate = kDefaultCityTaxRate;
     int32_t nominalPoliceCost = 0;
     int32_t lastPoliceExpense = 0;
     CityBudget budget;
@@ -105,11 +112,13 @@ public:
 
     int32_t getTotalFunds() const;
     void setTotalFunds(int32_t v) { totalFunds_ = v; }
-    int16_t getCityTax() const { return cityTax_; }
-    /// Set the tax rate (percentage of population paid annually). Clamped
-    /// to [kMinTaxRate, kMaxTaxRate] — outside that band the budget either
-    /// stops collecting (0%) or crushes growth (20%+).
-    void setCityTax(int16_t v);
+    /// A house's tax rate (percentage of population paid annually), 0-20.
+    int16_t getCityTax(int houseID) const {
+        return houseID >= 0 && houseID < kMaxCityHouses ? houseState_[houseID].taxRate : kDefaultCityTaxRate;
+    }
+    /// Set a house's tax rate. Clamped to [kMinTaxRate, kMaxTaxRate] - outside that band the
+    /// budget either stops collecting (0%) or crushes growth (20%+).
+    void setCityTax(int houseID, int16_t v);
     static constexpr int16_t kMinTaxRate = 0;
     static constexpr int16_t kMaxTaxRate = 20;
     int getCityYear() const { return cityYear_; }
@@ -229,12 +238,6 @@ private:
     int mapWidth_  = 0;
     int mapHeight_ = 0;
 
-    /// Default tax rate used at game start. 7% sits between SC Classic's
-    /// suggested 6% and the punitive 10%+ band — keeps growth healthy
-    /// while making the budget meaningful. Player can adjust at runtime
-    /// via setCityTax() / the budget window.
-    static constexpr int16_t kDefaultTaxRate = 7;
-
     /// Per-house city state (population, demand, economy, civic buildings).
     HouseCityState houseState_[kMaxCityHouses];
     CityEnvironmentStatus environmentStatus_[kMaxCityHouses];
@@ -242,7 +245,6 @@ private:
     CityDemandNoticePolicy civicDemandNotices_[kMaxCityHouses];
 
     int32_t totalFunds_ = 0;
-    int16_t cityTax_ = kDefaultTaxRate;
     int cityYear_ = 0;
 
     CityMapLayer<uint8_t> powerGridMap_;

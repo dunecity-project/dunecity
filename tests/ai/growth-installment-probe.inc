@@ -194,7 +194,7 @@ void runGrowthInstallmentProbe(Game& game) {
     // own tax tables. Every scenario below is deliberately outside it.
     auto fourMinuteForecast=[&]() {
         const auto& hs=sim->getHouseState(houseID);
-        const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,sim->getCityTax(),hs.avgLandValue));
+        const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,hs.taxRate,hs.avgLandValue));
         const int upkeep=house->getPowerRequirement()/8+DuneCity::annualPerMinute(hs.lastPoliceExpense);
         return (annualTax-upkeep)*QuantBotSpendingPolicy::horizonMinutes;
     };

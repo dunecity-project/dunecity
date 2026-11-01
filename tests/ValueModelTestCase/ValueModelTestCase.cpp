@@ -433,45 +433,40 @@ TEST_CASE("CityMapLayer: re-init wipes the grid",
 }
 
 // =============================================================================
-// TAX setter — DuneCity addition (SC had a slider; we mirror the API)
+// TAX setter — DuneCity addition (SC had a slider; we mirror the API). Each house has its own
+// rate (save 9880): one house's budget never changes another's.
 // =============================================================================
 
-TEST_CASE("Tax setter: default is the published kDefaultTaxRate (7%)",
+TEST_CASE("Tax setter: every house starts at the published default (7%)",
           "[tax][setter]") {
     CitySimulation sim;
-    REQUIRE(sim.getCityTax() == 7);
+    for (int h = 0; h < kMaxCityHouses; ++h) REQUIRE(sim.getCityTax(h) == kDefaultCityTaxRate);
+    REQUIRE(kDefaultCityTaxRate == 7);
 }
 
-TEST_CASE("Tax setter: in-band values pass through unchanged",
-          "[tax][setter]") {
+TEST_CASE("Tax setter: a house's rate is its own",
+          "[tax][setter][regression]") {
     CitySimulation sim;
-    sim.setCityTax(0);   REQUIRE(sim.getCityTax() == 0);
-    sim.setCityTax(5);   REQUIRE(sim.getCityTax() == 5);
-    sim.setCityTax(10);  REQUIRE(sim.getCityTax() == 10);
-    sim.setCityTax(20);  REQUIRE(sim.getCityTax() == 20);
+    sim.setCityTax(2, 12);
+    REQUIRE(sim.getCityTax(2) == 12);
+    for (int h = 0; h < kMaxCityHouses; ++h)
+        if (h != 2) REQUIRE(sim.getCityTax(h) == kDefaultCityTaxRate);
+    sim.setCityTax(-1, 3);
+    sim.setCityTax(kMaxCityHouses, 3);
+    for (int h = 0; h < kMaxCityHouses; ++h) REQUIRE(sim.getCityTax(h) != 3);
 }
 
 TEST_CASE("Tax setter: out-of-band values clamp to [kMinTaxRate, kMaxTaxRate]",
           "[tax][setter][regression]") {
     CitySimulation sim;
-    sim.setCityTax(-1);
-    REQUIRE(sim.getCityTax() == CitySimulation::kMinTaxRate);
-    sim.setCityTax(-100);
-    REQUIRE(sim.getCityTax() == CitySimulation::kMinTaxRate);
-    sim.setCityTax(21);
-    REQUIRE(sim.getCityTax() == CitySimulation::kMaxTaxRate);
-    sim.setCityTax(100);
-    REQUIRE(sim.getCityTax() == CitySimulation::kMaxTaxRate);
-}
-
-TEST_CASE("Tax setter feeds annual revenue computation",
-          "[tax][setter][integration]") {
-    CitySimulation sim;
-    sim.setCityTax(10);
-    //1000 tax-base eighths =125 Micropolis tax population at land value128.
-    REQUIRE(computeAnnualTaxRevenue(1000, sim.getCityTax()) == 1866);
-    sim.setCityTax(15);
-    REQUIRE(computeAnnualTaxRevenue(1000, sim.getCityTax()) == 2800);
+    sim.setCityTax(0, -1);
+    REQUIRE(sim.getCityTax(0) == CitySimulation::kMinTaxRate);
+    sim.setCityTax(0, -100);
+    REQUIRE(sim.getCityTax(0) == CitySimulation::kMinTaxRate);
+    sim.setCityTax(0, 21);
+    REQUIRE(sim.getCityTax(0) == CitySimulation::kMaxTaxRate);
+    sim.setCityTax(0, 100);
+    REQUIRE(sim.getCityTax(0) == CitySimulation::kMaxTaxRate);
 }
 
 // =============================================================================

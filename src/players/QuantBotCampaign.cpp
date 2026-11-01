@@ -159,7 +159,7 @@ int QuantBot::campaignIncomeForecastPerMinute() const {
     if (!campaignCityEconomy()) return 0;
     const auto* sim=currentGame->getCitySimulation();
     const auto& state=sim->getHouseState(getHouse()->getHouseID());
-    const int tax=sim->getCityTax(),land=state.avgLandValue>0 ? state.avgLandValue : 128;
+    const int tax=sim->getCityTax(getHouse()->getHouseID()),land=state.avgLandValue>0 ? state.avgLandValue : 128;
     int income=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(state.taxBaseEighths,tax,land));
     // Forecast committed/developing zones using the actual tax and population
     // functions, never a universal credits-per-zone constant.

@@ -292,7 +292,7 @@ public:
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
            immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true),
            continuousGroundSteps(false), retryPlannedPlacement(true), sharedYardQueue(true),
-           sharedFactoryQueue(true), slowCityYear(true)  {
+           sharedFactoryQueue(true), slowCityYear(true), micropolisLandValue(true)  {
         }
 
 
@@ -319,6 +319,7 @@ public:
                     && (sharedYardQueue == goc.sharedYardQueue)
                     && (sharedFactoryQueue == goc.sharedFactoryQueue)
                     && (slowCityYear == goc.slowCityYear)
+                    && (micropolisLandValue == goc.micropolisLandValue)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
                     && (easyMode == goc.easyMode)
@@ -358,6 +359,7 @@ public:
             optStr += "/sharedYardQueue=" + std::to_string(sharedYardQueue);
             optStr += "/sharedFactoryQueue=" + std::to_string(sharedFactoryQueue);
             optStr += "/slowCityYear=" + std::to_string(slowCityYear);
+            optStr += "/micropolisLandValue=" + std::to_string(micropolisLandValue);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
             optStr += "/easyMode=" + std::to_string(easyMode);
@@ -420,6 +422,11 @@ public:
         /// The city year (budget and zone growth) lasts 120 s instead of 60 s, so taxes, police
         /// costs and growth run at half the classic pace (DuneCity::cyclesPerCityYear).
         bool        slowCityYear;
+        /// City tax uses the Micropolis land value: the house's average over every developed
+        /// 2x2 block it owns (roads included, area-weighted), measured from the centre of its
+        /// buildings; off keeps the per-building-origin average measured from the centre of
+        /// every developed block (docs/city-economy-balance.md, "Land value for tax").
+        bool        micropolisLandValue;
 
         /// Tornie-family rules; ignored by other content families.
         bool        alliedControl = false;

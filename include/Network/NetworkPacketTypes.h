@@ -339,6 +339,8 @@
 //      rises to the largest other house's city, so a 109 peer grows a different city.
 //      CMD_AI_SUPPORT_ROLE: a human switches the house's AI partner (None/Build/Fight/Both)
 //      in game; a 109 peer cannot validate the new command id (save 9880).
+//      CMD_CITY_SET_TAX_RATE sets only the issuer's house (a 109 peer sets every house), and
+//      GameInitSettings MOD14 appends the Micropolis land value rule.
 #define NETWORK_PROTOCOL_VERSION            110
 
 // Mod transfer limits

@@ -34,6 +34,39 @@ The per-minute figures below are for the classic year; halve them with the rule.
 Simulation speed changes both taxes and harvesting; do not use wall-clock FPS to
 compare them.
 
+### Tax rate per house (save 9880, protocol 110)
+
+Each house has its own tax rate, 0-20%, default 7% (`HouseCityState::taxRate`). The budget
+window sends `CMD_CITY_SET_TAX_RATE`, which sets the rate of the issuer's house only, like police
+funding. Before 9880 there was one rate for the whole map, so one player's budget changed every
+house's tax and demand; such a save gives that rate to every house. QuantBot never sets a rate:
+it plans with its own house's rate. The rate also feeds that house's demand valves (Micropolis
+tax table), so it affects only its own growth.
+
+### Land value for tax (match rule `Micropolis Land Value`, default on; MOD14, protocol 110)
+
+Tax multiplies by a house's average land value, so how that average is taken decides who earns
+more from the same city. The rule follows Micropolis (`s_scan.c`, `s_sim.c` CollectTax):
+
+| | Rule on (Micropolis) | Rule off (before 110) |
+|---|---|---|
+| Developed 2x2 block | holds a road or a building | holds a road or any ground object, units included |
+| City centre (per connected city) | centre of mass of its buildings, each counted once at its centre; walls excluded | centroid of its developed blocks |
+| House average land value | mean over every developed block where the house owns a road tile or a building, by area, roads included | mean over one sample per building, at its top-left tile, roads excluded |
+
+Micropolis taxes one city with `TotalPop * LVAverage / 120 * CityTax * FLevels`, where
+`TotalPop = ResPop/8 + ComPop + IndPop` and `LVAverage` is the mean over every developed
+half-resolution block. DuneCity keeps that per house. Industrial is taxed like commercial in
+both. Under the old rule many small buildings (walls, turrets, windtraps) each counted as much
+as a zone, and parked units and roads pulled the centre away from the zones, so a large mixed
+base earned less per citizen than a compact AI city.
+
+The block land value itself is unchanged by the rule: `4*(34 - distance/2)` + terrain (open sand
+counts as water) - pollution, -20 above crime 190, clamped 1-250, then parks, Palace/Stadium,
+hostile units and damaged buildings. The census check is `custom-city-cap-probe.inc`
+(ctest `quantbot_custom_attack`): a parked unit changes neither a block nor the house average
+with the rule on, and still develops its block with it off.
+
 ## Income readout
 
 At 7% tax and house-average land value 128, gross credits per simulated minute:

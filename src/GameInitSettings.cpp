@@ -46,6 +46,7 @@ constexpr Uint32 GAMEINIT_MOD10_MARKER = 0x4D4F4441; // MODA: retry planned plac
 constexpr Uint32 GAMEINIT_MOD11_MARKER = 0x4D4F4442; // MODB: slow city year (MOD11)
 constexpr Uint32 GAMEINIT_MOD12_MARKER = 0x4D4F4443; // MODC: Tornie-family match rules
 constexpr Uint32 GAMEINIT_MOD13_MARKER = 0x4D4F4444; // MODD: shared factory queue
+constexpr Uint32 GAMEINIT_MOD14_MARKER = 0x4D4F4445; // MODE: Micropolis land value
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -57,7 +58,7 @@ constexpr bool isKnownModMarker(Uint32 marker) {
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
         || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD2 and later carry the per-house colour array.
@@ -72,7 +73,7 @@ constexpr bool markerHasGraphicsSkins(Uint32 marker) {
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
         || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD4 and later carry the immutable Workshop revision descriptors. A stream that announced
@@ -82,7 +83,7 @@ constexpr bool markerHasWorkshopRevisions(Uint32 marker) {
         || marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
         || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD5 and later carry the construction yard limit.
@@ -91,7 +92,7 @@ constexpr bool markerHasYardLimit(Uint32 marker) {
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
         || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD6 and later carry the original-unit-damage rule.
@@ -99,7 +100,7 @@ constexpr bool markerHasOriginalUnitDamage(Uint32 marker) {
     return marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
         || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD7 and later carry the per-house spice income multipliers.
@@ -107,7 +108,7 @@ constexpr bool markerHasSpiceIncome(Uint32 marker) {
     return marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
         || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD8 and later carry the plan-building-sites rule, after the spice income block. Older
@@ -115,7 +116,7 @@ constexpr bool markerHasSpiceIncome(Uint32 marker) {
 constexpr bool markerHasPlanBuildingSites(Uint32 marker) {
     return marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD9 and later carry the continuous-ground-steps rule, after the plan-building-sites byte.
@@ -123,13 +124,14 @@ constexpr bool markerHasPlanBuildingSites(Uint32 marker) {
 constexpr bool markerHasContinuousGroundSteps(Uint32 marker) {
     return marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD10 and later carry the planned-construction rules (retry, shared yard queue).
 constexpr bool markerHasPlannedConstruction(Uint32 marker) {
     return marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER
-        || marker == GAMEINIT_MOD12_MARKER || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD12_MARKER || marker == GAMEINIT_MOD13_MARKER
+        || marker == GAMEINIT_MOD14_MARKER;
 }
 }
 
@@ -245,6 +247,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.sharedYardQueue = false;
     gameOptions.sharedFactoryQueue = false;
     gameOptions.slowCityYear = false;
+    gameOptions.micropolisLandValue = false;
 
     // Read mod info (added in version with mod system)
     // Use marker to detect presence for backward compatibility
@@ -324,10 +327,11 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 gameOptions.sharedYardQueue = stream.readBool();
             }
             if(modMarker == GAMEINIT_MOD11_MARKER || modMarker == GAMEINIT_MOD12_MARKER
-               || modMarker == GAMEINIT_MOD13_MARKER) {
+               || modMarker == GAMEINIT_MOD13_MARKER || modMarker == GAMEINIT_MOD14_MARKER) {
                 gameOptions.slowCityYear = stream.readBool();
             }
-            if(modMarker == GAMEINIT_MOD12_MARKER || modMarker == GAMEINIT_MOD13_MARKER) {
+            if(modMarker == GAMEINIT_MOD12_MARKER || modMarker == GAMEINIT_MOD13_MARKER
+               || modMarker == GAMEINIT_MOD14_MARKER) {
                 gameOptions.alliedControl = stream.readBool();
                 gameOptions.alliedBuilding = stream.readBool();
                 gameOptions.easyMode = stream.readBool();
@@ -335,8 +339,11 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 gameOptions.sellingBuildings = stream.readBool();
                 chaosCampaignEligible = stream.readBool();
             }
-            if(modMarker == GAMEINIT_MOD13_MARKER) {
+            if(modMarker == GAMEINIT_MOD13_MARKER || modMarker == GAMEINIT_MOD14_MARKER) {
                 gameOptions.sharedFactoryQueue = stream.readBool();
+            }
+            if(modMarker == GAMEINIT_MOD14_MARKER) {
+                gameOptions.micropolisLandValue = stream.readBool();
             }
         }
     } catch (InputStream::eof&) {
@@ -464,7 +471,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD13_MARKER);
+    stream.writeUint32(GAMEINIT_MOD14_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -516,6 +523,8 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(chaosCampaignEligible);
     // MOD13: ordinary factories share waiting orders; all older streams keep it off.
     stream.writeBool(gameOptions.sharedFactoryQueue);
+    // MOD14: Micropolis land value; all older streams keep the legacy calculation.
+    stream.writeBool(gameOptions.micropolisLandValue);
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

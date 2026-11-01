@@ -324,10 +324,24 @@ void CitySimulation::runEffectsScans() {
     const int blocksW = (mapWidth_  + bs - 1) / bs;
     const int blocksH = (mapHeight_ + bs - 1) / bs;
 
+    // Micropolis land value (match rule, docs/city-economy-balance.md): a block is developed only by
+    // a road or a building, as Micropolis counts tiles from ROADBASE up; units do not develop
+    // land. Off keeps the earlier rule, where any ground object (a unit too) develops a block.
+    const bool micropolisLandValue = currentGame->getGameInitSettings().getGameOptions().micropolisLandValue;
+    static_assert(kMaxCityHouses <= 32, "block owner masks hold one bit per city house");
+    auto tileStructure = [](const Tile* t) -> const StructureBase* {
+        if (!t->hasANonInfantryGroundObject()) return nullptr;
+        const ObjectBase* object = t->getNonInfantryGroundObject();
+        return object && object->isAStructure() ? static_cast<const StructureBase*>(object) : nullptr;
+    };
+
     // Per-block terrain feature count (raw, pre-smooth).
     std::vector<int> terrainRaw(blocksW * blocksH, 0);
-    // Per-block "developed" flag — tile has a road or any ground object.
+    // Per-block "developed" flag (see micropolisLandValue above).
     std::vector<uint8_t> developed(blocksW * blocksH, 0);
+    // Micropolis land value: the city houses owning a developed tile of each block (a building's
+    // owner, or a road tile's owner). Each such block counts once in its owners' average.
+    std::vector<uint32_t> blockOwners(micropolisLandValue ? blocksW * blocksH : 0, 0);
 
     // Sub-phase timings inside terrain_value. Diagnostic only: they measure the
     // existing work, in the existing order, and feed no decision.
@@ -355,7 +369,15 @@ void CitySimulation::runEffectsScans() {
                 terrainRaw[idx] += kSandTerrainRawBonus;
                 openSand[static_cast<size_t>(wy) * mapWidth_ + wx] = 1;
             }
-            if (t->isRoad() || t->hasAGroundObject()) {
+            if (micropolisLandValue) {
+                const StructureBase* building = tileStructure(t);
+                if (t->isRoad() || building) {
+                    developed[idx] = 1;
+                    const int owner = building && building->getOwner()
+                        ? building->getOwner()->getHouseID() : t->getOwner();
+                    if (owner >= 0 && owner < kMaxCityHouses) blockOwners[idx] |= 1u << owner;
+                }
+            } else if (t->isRoad() || t->hasAGroundObject()) {
                 developed[idx] = 1;
             }
         }
@@ -436,6 +458,25 @@ void CitySimulation::runEffectsScans() {
     for (size_t c = 0; c < sumX.size(); ++c) {
         clusterCenterWx[c] = static_cast<int>(sumX[c] / count[c]);
         clusterCenterWy[c] = static_cast<int>(sumY[c] / count[c]);
+    }
+    if (micropolisLandValue) {
+        // Micropolis's city centre is the centre of mass of its zones, every building counted
+        // once at its centre; roads, walls and units do not move it. A cluster without such a
+        // building (roads only) keeps the centroid of its developed blocks.
+        std::vector<long long> zoneX(sumX.size(), 0), zoneY(sumX.size(), 0), zones(sumX.size(), 0);
+        forEachStructureOrigin(map, [&](int x, int y, const StructureBase* building) {
+            if (building->getItemID() == Structure_Wall) return;
+            const Coord size = building->getStructureSize();
+            const int cx = std::min(mapWidth_ - 1, x + size.x / 2), cy = std::min(mapHeight_ - 1, y + size.y / 2);
+            const int cid = clusterId[(cy / bs) * blocksW + cx / bs];
+            if (cid < 0) return;
+            zoneX[cid] += cx; zoneY[cid] += cy; ++zones[cid];
+        });
+        for (size_t c = 0; c < sumX.size(); ++c)
+            if (zones[c] > 0) {
+                clusterCenterWx[c] = static_cast<int>(zoneX[c] / zones[c]);
+                clusterCenterWy[c] = static_cast<int>(zoneY[c] / zones[c]);
+            }
     }
 
     // One raw terrain contribution per park-like structure origin. Smooth
@@ -791,11 +832,24 @@ void CitySimulation::runEffectsScans() {
                 sampleCount[hID]++;
             }
         });
+        if (micropolisLandValue) {
+            // Micropolis LVAverage: the mean over every developed block, by area, roads
+            // included - here per house, over the blocks where it owns a road or a building.
+            int blockTotal[kMaxCityHouses] = {}, blockCount[kMaxCityHouses] = {};
+            for (int i = 0; i < blocksW * blocksH; ++i) {
+                const int lv = landValueMap_.get(i % blocksW, i / blocksW);
+                if (lv <= 0 || !blockOwners[i]) continue;
+                for (int h = 0; h < kMaxCityHouses; ++h)
+                    if (blockOwners[i] & (1u << h)) { blockTotal[h] += lv; ++blockCount[h]; }
+            }
+            for (int h = 0; h < kMaxCityHouses; ++h)
+                houseState_[h].avgLandValue = blockCount[h] > 0 ? blockTotal[h] / blockCount[h] : 0;
+        }
         for (int h = 0; h < kMaxCityHouses; ++h) {
             const int count = sampleCount[h];
-            houseState_[h].avgLandValue = count > 0 ? lvTotal[h] / count : 0;
+            if (!micropolisLandValue) houseState_[h].avgLandValue = count > 0 ? lvTotal[h] / count : 0;
             environmentStatus_[h] = CityEnvironmentStatus{
-                count > 0 ? lvTotal[h] / count : 0,
+                houseState_[h].avgLandValue,
                 count > 0 ? pollutionTotal[h] / count : 0,
                 count > 0 ? crimeTotal[h] / count : 0,
                 count > 0 ? trafficTotal[h] / count : 0,
@@ -1037,7 +1091,7 @@ void CitySimulation::runZoneGrowth() {
         vi.resValve = hs.resValve;
         vi.comValve = hs.comValve;
         vi.indValve = hs.indValve;
-        vi.taxRate = cityTax_;
+        vi.taxRate = hs.taxRate;
         vi.hasStadium  = hs.hasStadium;
         vi.hasPalace   = hs.hasPalace;
         vi.hasAirport  = hs.hasAirport;
@@ -1664,7 +1718,7 @@ void CitySimulation::runDailyBudget() {
         const int hID = house->getHouseID();
         auto& hs = houseState_[hID >= 0 && hID < kMaxCityHouses ? hID : 0];
         hs.taxBaseEighths = hb.taxBaseEighths;
-        const int32_t annualRevenue = computeAnnualTaxRevenue(hb.taxBaseEighths, cityTax_, hs.avgLandValue);
+        const int32_t annualRevenue = computeAnnualTaxRevenue(hb.taxBaseEighths, hs.taxRate, hs.avgLandValue);
         const int fundingPct = hs.policeFundingPercent;
         const FixPoint annualPaid = (hb.policeCost * fundingPct) / 100;
 
@@ -1690,8 +1744,8 @@ void CitySimulation::runDailyBudget() {
 
         // Log once every 10 city years per house to keep logs manageable
         if (cityDay_ == 0 && (cityYear_ % 10 == 0)) {
-            SDL_Log("[CitySim] year=%d house=%d tax_base_eighths=%d rate=%d%% annual_revenue=%d annual_police=%.3f tick_net=%+d",
-                    cityYear_, house->getHouseID(), hb.taxBaseEighths, cityTax_,
+            SDL_Log("[CitySim] year=%d house=%d tax_base_eighths=%d rate=%d%% land_value=%d annual_revenue=%d annual_police=%.3f tick_net=%+d",
+                    cityYear_, house->getHouseID(), hb.taxBaseEighths, hs.taxRate, hs.avgLandValue,
                     annualRevenue, annualPaid.toDouble(), lround(net.toDouble()));
         }
     }

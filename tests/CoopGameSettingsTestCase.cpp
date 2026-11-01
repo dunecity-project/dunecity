@@ -13,7 +13,8 @@ namespace {
 std::string activeTestMod = "vanilla";
 constexpr std::size_t Mod12Bytes = 6;
 constexpr std::size_t Mod13Bytes = 1;
-constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes;
+constexpr std::size_t Mod14Bytes = 1;
+constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes;
 struct ActiveTestMod {
     explicit ActiveTestMod(const std::string& name) { ModManager::instance().setActiveMod(name); }
     ~ActiveTestMod() { ModManager::instance().setActiveMod("vanilla"); }
@@ -82,12 +83,12 @@ TEST_CASE("Original damage is a shared rule preserved by setup, saves and campai
 
     SECTION("MOD5 defaults the new rule off without consuming following save bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("EDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '5';
         // Everything MOD5 does not know about: the MOD6 rule byte, MOD7's count plus one
         // factor per house, MOD8's plan-sites byte, MOD9's ground-steps byte, MOD10's two
-        // planned-construction bytes, MOD11's city-year byte and the MOD12/MOD13 bytes.
+        // planned-construction bytes, MOD11's city-year byte and the MOD12..MOD14 bytes.
         // Removed so what follows is unmistakably not part of the block.
         bytes.resize(bytes.size() - (PostMod11Bytes + 1 + 4 + 4 * original.getHouseInfoList().size() + 1 + 1 + 2 + 1));
         bytes.append("tail");
@@ -118,10 +119,10 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
     SECTION("MOD7 and older default the rule on without consuming following bytes") {
         const char older = GENERATE('4', '5', '6', '7');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("EDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
-        std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1;                // MOD13 through MOD8
+        std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1;                // MOD14 through MOD8
         if(older < '7') trailing += 4 + 4 * original.getHouseInfoList().size(); // MOD7
         if(older < '6') trailing += 1;                                       // MOD6 rule byte
         if(older < '5') trailing += 4;                                       // MOD5 yard limit
@@ -135,7 +136,7 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
 
     SECTION("an announced MOD8 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - PostMod11Bytes - 5);   // MOD13 through the missing MOD8 byte
+        bytes.resize(bytes.size() - PostMod11Bytes - 5);   // MOD14 through the missing MOD8 byte
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -160,10 +161,10 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("MOD8 streams keep the rule off without consuming following bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("EDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '8';
-        bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD13 through MOD9, which MOD8 does not own
+        bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD14 through MOD9, which MOD8 does not own
         bytes.append("tail");
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
@@ -173,7 +174,7 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("an announced MOD9 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD13 through the missing MOD9 byte
+        bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD14 through the missing MOD9 byte
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -212,7 +213,7 @@ TEST_CASE("The planned-construction rules participate in match identity and save
         // A save or replay recorded before the rules existed must replay with the legacy behaviour.
         const char older = GENERATE('8', '9');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("EDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         bytes.resize(bytes.size() - PostMod11Bytes - (older == '8' ? 4 : 3));
@@ -226,10 +227,10 @@ TEST_CASE("The planned-construction rules participate in match identity and save
 
     SECTION("an announced MOD10 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("EDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
-        bytes.resize(bytes.size() - PostMod11Bytes - 2);   // MOD13, MOD12, MOD11 and the missing last MOD10 byte
+        bytes.resize(bytes.size() - PostMod11Bytes - 2);   // MOD14..MOD11 and the missing last MOD10 byte
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -262,7 +263,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
         mod10.setGameOptions(planned);
         OMemoryStream mod10Out; mod10Out.open(); mod10.save(mod10Out);
         std::string bytes(mod10Out.getData(), mod10Out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("EDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
         bytes.resize(bytes.size() - PostMod11Bytes);
@@ -277,7 +278,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
 
     SECTION("an announced MOD11 byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("EDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'B';
         bytes.resize(bytes.size() - PostMod11Bytes - 1);
@@ -336,11 +337,11 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("every marker before MOD7 means 1x and leaves the following bytes alone") {
         const char older = GENERATE('!', '2', '3', '4', '5', '6');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("EDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         // Strip what that older marker cannot account for, so the tail is unambiguous.
-        std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size(); // MOD13 through MOD7
+        std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size(); // MOD14 through MOD7
         if(older < '6') trailing += 1;                                   // MOD6 rule byte
         if(older < '5') trailing += 4;                                   // MOD5 yard limit
         bytes.resize(bytes.size() - trailing);
@@ -365,7 +366,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
 
     SECTION("an announced MOD7 block that is not there is a truncated stream, not an old one") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - PostMod11Bytes - 4 - 5);   // MOD13 through MOD8 and the last factor
+        bytes.resize(bytes.size() - PostMod11Bytes - 4 - 5);   // MOD14 through MOD8 and the last factor
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -374,7 +375,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
         const Uint32 bad = GENERATE(0u, SpiceIncome::kMax + 1, 0xFFFFFFFFu);
         std::string bytes(out.getData(), out.getDataLength());
         REQUIRE(bytes.size() > PostMod11Bytes + 9);
-        // The final row factor precedes the MOD8..MOD13 rule bytes.
+        // The final row factor precedes the MOD8..MOD14 rule bytes.
         for(int shift = 0; shift < 4; ++shift) {
             bytes[bytes.size() - PostMod11Bytes - 9 + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
         }
@@ -663,16 +664,16 @@ TEST_CASE("Workshop revisions survive game settings and checkpoint copies", "[wo
     REQUIRE(next.getModRevisionHash() == original.getModRevisionHash());
 }
 
-TEST_CASE("Legacy MOD3 remains readable and truncated MOD13 fails closed", "[workshop][save]") {
+TEST_CASE("Legacy MOD3 remains readable and truncated MOD14 fails closed", "[workshop][save]") {
     auto original = makeCoop(false, true);
     OMemoryStream out; out.open(); original.save(out);
     std::string bytes(reinterpret_cast<const char*>(out.getData()), out.getDataLength());
-    const auto marker = bytes.find("DDOM");
+    const auto marker = bytes.find("EDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("old graphics marker") {
         bytes[marker] = '3';
         // three strings, two revision integers, yard limit, original damage,
-        // then MOD7's factor count/array and the MOD8..MOD13 rule bytes.
+        // then MOD7's factor count/array and the MOD8..MOD14 rule bytes.
         bytes.resize(bytes.size() - 25 - (4 + 4 * original.getHouseInfoList().size()) - 1 - 1 - 2 - 1 - PostMod11Bytes);
         IMemoryStream in(bytes.data(), bytes.size());
         GameInitSettings restored(in);
@@ -791,10 +792,10 @@ TEST_CASE("MOD12 is append-only and every announced rule byte is required",
     const auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("DDOM");
+    const auto marker = encoded.rfind("EDOM");
     REQUIRE(marker != std::string::npos);
     encoded[marker] = 'C';
-    encoded.resize(encoded.size() - Mod13Bytes); // Exercise the actual released MOD12 layout.
+    encoded.resize(encoded.size() - Mod13Bytes - Mod14Bytes); // Exercise the actual released MOD12 layout.
     SECTION("a MOD11 stream consumes none of the six new fields") {
         auto bytes = encoded;
         REQUIRE(bytes[marker] == 'C');
@@ -830,9 +831,11 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
 
     auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
-    const std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("DDOM");
+    std::string encoded(out.getData(), out.getDataLength());
+    const auto marker = encoded.rfind("EDOM");
     REQUIRE(marker != std::string::npos);
+    encoded[marker] = 'D';
+    encoded.resize(encoded.size() - Mod14Bytes); // Exercise the actual released MOD13 layout.
 
     SECTION("both switch states round-trip without consuming following bytes") {
         const bool enabled = GENERATE(false, true);
@@ -855,6 +858,7 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
         GameInitSettings restored(input);
         auto expected = original.getGameOptions();
         expected.sharedFactoryQueue = false;
+        expected.micropolisLandValue = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE_FALSE(restored.getGameOptions().sharedFactoryQueue);
         REQUIRE(restored.isChaosCampaignEligible() == original.isChaosCampaignEligible());
@@ -863,6 +867,56 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
     SECTION("truncating the MOD13 byte is an error, not a legacy save") {
         auto bytes = encoded;
         bytes.resize(bytes.size() - Mod13Bytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when announced",
+          "[citybudget][network][save]") {
+    SettingsClass::GameOptionsClass current;
+    REQUIRE(current.micropolisLandValue);
+    auto classic = current;
+    classic.micropolisLandValue = false;
+    REQUIRE(classic != current);
+    REQUIRE(classic.getHash() != current.getHash());
+
+    auto original = makeSeparateFactionCoop(false);
+    OMemoryStream out; out.open(); original.save(out);
+    const std::string encoded(out.getData(), out.getDataLength());
+    const auto marker = encoded.rfind("EDOM");
+    REQUIRE(marker != std::string::npos);
+
+    SECTION("both switch states round-trip without consuming following bytes") {
+        const bool enabled = GENERATE(false, true);
+        auto options = original.getGameOptions();
+        options.micropolisLandValue = enabled;
+        original.setGameOptions(options);
+        OMemoryStream saved; saved.open(); original.save(saved); saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a released MOD13 stream keeps every old field and reads the new rule off") {
+        auto bytes = encoded;
+        bytes[marker] = 'D';
+        bytes.resize(bytes.size() - Mod14Bytes);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        auto expected = original.getGameOptions();
+        expected.micropolisLandValue = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(restored.getGameOptions().getHash() == expected.getHash());
+        REQUIRE_FALSE(restored.getGameOptions().micropolisLandValue);
+        REQUIRE(restored.isChaosCampaignEligible() == original.isChaosCampaignEligible());
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("truncating the MOD14 byte is an error, not a legacy save") {
+        auto bytes = encoded;
+        bytes.resize(bytes.size() - Mod14Bytes);
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }

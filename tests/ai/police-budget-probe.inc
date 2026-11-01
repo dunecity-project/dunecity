@@ -90,7 +90,7 @@ void runPoliceBudgetProbe(Game& game) {
     auto& state=sim->houseState_[HOUSE_HARKONNEN];
     state.policeFundingPercent=100;state.avgLandValue=100;
     state.resValve=0;state.comValve=0;state.indValve=0;
-    if(sim->getCityTax()<=0)sim->setCityTax(7);
+    if(state.taxRate<=0)sim->setCityTax(HOUSE_HARKONNEN,7);
     house->producedPower=10000;
 
     auto setCrime=[&](int level) {
@@ -156,7 +156,7 @@ void runPoliceBudgetProbe(Game& game) {
     // --- Recurring policing budget -------------------------------------------
     const int annualPower=house->isPowerRequired() ? house->getPowerRequirement()/8 : 0;
     auto annualTaxOf=[&](int eighths) {
-        return DuneCity::computeAnnualTaxRevenue(eighths,sim->getCityTax(),state.avgLandValue);
+        return DuneCity::computeAnnualTaxRevenue(eighths,state.taxRate,state.avgLandValue);
     };
     // Solve the tax base for a wanted annual yield instead of pinning a magic
     // number to the current tax rate and land value.

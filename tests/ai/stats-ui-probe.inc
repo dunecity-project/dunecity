@@ -568,14 +568,14 @@ void runStatsUiProbe(Game& game) {
         // the values from when this window opened.
         auto* sim=game.getCitySimulation();
         const int savedPolice=sim->getPoliceFundingPercent(budget->selectedHouseID);
-        const int savedTax=sim->getCityTax();
+        const int savedTax=sim->getCityTax(budget->selectedHouseID);
         sim->setPoliceFundingPercent(budget->selectedHouseID,35);
-        sim->setCityTax(9);
+        sim->setCityTax(budget->selectedHouseID,9);
         budget->draw(Point(0,0));
         require(budget->policeValueLabel.getText()=="35%" && budget->taxValueLabel.getText()=="9%",
                 "An open observer budget did not refresh the live policy");
         sim->setPoliceFundingPercent(budget->selectedHouseID,savedPolice);
-        sim->setCityTax(savedTax);
+        sim->setCityTax(budget->selectedHouseID,savedTax);
         require(budget->selectedHouseID==budgetVisited.front(),
                 "The budget window did not wrap back to the first house");
         require(commandCount()==commandsBeforeBudget,

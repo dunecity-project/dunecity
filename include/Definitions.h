@@ -202,8 +202,10 @@
 // 9878: Tornie 1.0.546 integration: production technology, slow effects, Doublefinery bays,
 //       family gameplay rules, research, campaign options and expanded cooperative state.
 // 9879: GameInitSettings MOD13 appends the hashed shared-factory-queue rule.
-// 9880: QuantBot's role byte may be 3 (Off): a human switched the house's AI partner off in
-//       game (CMD_AI_SUPPORT_ROLE, docs/ai-roles.md). Older saves read 0-2 as before.
+// 9880 (unreleased batch): QuantBot's role byte may be 3 (Off): a human switched the house's AI
+//       partner off in game (CMD_AI_SUPPORT_ROLE, docs/ai-roles.md). Every city house slot saves
+//       its own tax rate; the old shared rate is a retired slot (older saves apply it to every
+//       house). GameInitSettings MOD14 appends the Micropolis land value rule.
 #define SAVEGAMEVERSION     9880
 /// First save with the integrated Tornie 1.0.546 state (independent of upstream save versions).
 #define SAVEGAMEVERSION_TORNIE546 9878
@@ -215,6 +217,8 @@
 #define SAVEGAMEVERSION_AI_ROLE 9875
 /// First save whose QuantBot role byte may be AIRole::Off.
 #define SAVEGAMEVERSION_AI_ROLE_OFF 9880
+/// First save with a tax rate per city house instead of one shared rate.
+#define SAVEGAMEVERSION_HOUSE_TAX_RATE 9880
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

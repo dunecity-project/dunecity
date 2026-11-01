@@ -235,6 +235,42 @@ void runCustomCityCapProbe(Game& game) {
         require(bot->role==AIRole::Both,"The human could not switch the partner back to Both");
         clearQueues();
     }
+    // Micropolis land value (match rule, docs/city-economy-balance.md): only roads and buildings
+    // develop land, so units parked beside the city change neither a block's value nor the
+    // house's tax land value; with the rule off a unit still develops its block.
+    {
+        auto& rule=game.gameInitSettings.gameOptions.micropolisLandValue;
+        const bool keepRule=rule;
+        const Coord yardAt=yard->getLocation();
+        Coord block=Coord::Invalid();
+        for(int r=2;r<10 && !block.isValid();++r)
+            for(int dy=-r;dy<=r && !block.isValid();++dy)
+                for(int dx=-r;dx<=r && !block.isValid();++dx) {
+                    const int bx=(yardAt.x+dx)/2, by=(yardAt.y+dy)/2;
+                    bool free=bx>0 && by>0 && 2*bx+1<currentGameMap->getSizeX() && 2*by+1<currentGameMap->getSizeY();
+                    for(int ty=0;ty<2 && free;++ty)for(int tx=0;tx<2 && free;++tx) {
+                        const Tile* t=currentGameMap->getTile(2*bx+tx,2*by+ty);
+                        free=!t->hasAGroundObject() && !t->isRoad();
+                    }
+                    if(free)block=Coord(bx,by);
+                }
+        require(block.isValid(),"No empty block beside the yard for the land value check");
+        auto scan=[&](){sim->runEffectsScans();return sim->houseState_[house->getHouseID()].avgLandValue;};
+        rule=true;
+        const int before=scan();
+        require(before>0,"The house has no tax land value under the Micropolis rule");
+        auto* parked=house->createUnit(Unit_Trike,true);
+        require(parked,"No unit for the land value check");
+        parked->deploy(Coord(2*block.x,2*block.y));
+        require(scan()==before,"A parked unit changed the Micropolis tax land value");
+        require(sim->landValueMap_.get(block.x,block.y)==0,"A unit developed land under the Micropolis rule");
+        rule=false;
+        scan();
+        require(sim->landValueMap_.get(block.x,block.y)>0,"With the rule off a unit no longer develops its block");
+        parked->cancelDeployment();
+        rule=keepRule;
+        sim->runEffectsScans();
+    }
     bot->difficulty=QuantBot::Difficulty::Easy;
-    SDL_Log("CUSTOM_CITY_CAP_PROBE_PASS: capped helper refuses orders and growth, Hard grows to a bigger rival city, human placement and natural growth continue, Brutal grows, campaign excluded, human switches the AI partner None/Build/Fight/Both");
+    SDL_Log("CUSTOM_CITY_CAP_PROBE_PASS: capped helper refuses orders and growth, Hard grows to a bigger rival city, human placement and natural growth continue, Brutal grows, campaign excluded, human switches the AI partner None/Build/Fight/Both, units do not develop Micropolis land value");
 }

@@ -426,7 +426,7 @@ void QuantBot::planCityState(BuildPass& pass) {
         const int recentLosses = std::count_if(recentStructureLosses.begin(),recentStructureLosses.end(),[&](const auto& loss) {
             return getGameCycleCount()-loss.cycle < MILLI2CYCLES(180000);
         });
-        const int taxIncome = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,sim->getCityTax(),pass.ownAvgLandValue));
+        const int taxIncome = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,sim->getCityTax(getHouse()->getHouseID()),pass.ownAvgLandValue));
         const int powerCost = getHouse()->isPowerRequired() ? getHouse()->getPowerRequirement()/8 : 0;
         // Include queued services, so their completion cannot silently push
         // recurring costs above the limit between periodic city scans.
@@ -1186,7 +1186,7 @@ Uint32 QuantBot::chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, 
     const Uint32 zone = chooseCityZone(pass, builder, opening);
     const auto* sim = currentGame->getCitySimulation();
     if (!sim) return zone;
-    const int tax = sim->getCityTax();
+    const int tax = sim->getCityTax(getHouse()->getHouseID());
     const int land = pass.ownAvgLandValue>0 ? pass.ownAvgLandValue : 128;
     const int workers = pass.itemCount[Unit_Harvester], refs = pass.itemCount[Structure_Refinery];
     const bool expandingOpening = CityEconomyInvestmentPolicy::openingWorkersNeeded(workers,pass.fundedHarvesterTarget,pass.brutalCityEconomy)
@@ -1404,7 +1404,7 @@ void QuantBot::traceBuildState(BuildPass& pass) {
                 }
                 traffic += sim->getTrafficDensityMap().worldGet(p.x, p.y);
             }
-            cityHealth.set("unemployment", hs.unemploymentRate).set("tax_rate", sim->getCityTax())
+            cityHealth.set("unemployment", hs.unemploymentRate).set("tax_rate", sim->getCityTax(getHouse()->getHouseID()))
                 .set("last_tax_revenue", hs.budget.getLastTaxRevenue()).set("police_expense", hs.lastPoliceExpense)
                 .set("tax_base_eighths", hs.taxBaseEighths)
                 .set("road_expense", 0)
@@ -1781,7 +1781,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
                 || victim->getItemID()==Unit_RebelHarvester)) pass.defendingEconomy=true;
     }
     pass.forecastTax = pass.citySimEnabled ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,
-        currentGame->getCitySimulation()->getCityTax(),pass.ownAvgLandValue)) : 0;
+        currentGame->getCitySimulation()->getCityTax(getHouse()->getHouseID()),pass.ownAvgLandValue)) : 0;
     pass.forecastUpkeep = pass.citySimEnabled ? getHouse()->getPowerRequirement()/8
         + DuneCity::annualPerMinute(currentGame->getCitySimulation()->getHouseState(houseID).lastPoliceExpense) : 0;
     // Future workers/bays count toward targets and commitments, but their
