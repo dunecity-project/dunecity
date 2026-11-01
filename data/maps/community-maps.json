@@ -312,6 +312,26 @@
         "final_digest": "7fb644f51dd405ec",
         "runs_equal": true
       }
+    },
+    {
+      "name": "8P - 384x384 - Colonist",
+      "file": "8P - 384x384 - Colonist.ini",
+      "directory": "multiplayer",
+      "mod": "vanilla",
+      "players": 8,
+      "width": 384,
+      "height": 384,
+      "author": null,
+      "license": "CC-BY-SA",
+      "catalogue_name": "8P - 384x384 - Colonist",
+      "item_id": "7a8193602b35ff7ef6628a6fd8c123a0",
+      "version": 1,
+      "revision": "063edccb831b5699fb9ab5cf4f6d19d96c9321b148a5696e6246fd3bdb49ebb2",
+      "sha256": "01b51468426d0ad182e06d88b5e6d2d24218be842118220299d7fcece3a6ef46",
+      "catalogue_mod": "Dune City",
+      "catalogue_mod_revision": "3f407d436d685b1924587fddaf973c0c1a4825600f7395e10643545479e0ed57",
+      "catalogue_mod_note": "Published with a Dune City dependency, but the map declares Mod=vanilla and contains only standard MCV starts, without city structures. Bundled with current Vanilla, matching the catalogue building category; the historical mod snapshot is not imported.",
+      "retrieved": "2026-11-01"
     }
   ]
 }
