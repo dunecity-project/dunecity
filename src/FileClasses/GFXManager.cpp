@@ -57,6 +57,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <string_view>
 
 namespace {
 
@@ -809,12 +810,14 @@ GFXManager::GFXManager() {
         const bool tornieActive = ModManager::instance().isInitialized()
             && ModManager::instance().isTornieFamilyContentActive();
 
-        if(!tornieActive) {
-            return nullptr;
-        }
+        // Research Labs share this authored building/portrait in every content family.
+        const std::string_view asset(filename);
+        const bool researchArt = asset == "TechCenter.png" || asset == "TechCenterIcon.png"
+            || asset == "BUILDING_3x2_prebuild.png";
+        if(!tornieActive && !researchArt) return nullptr;
 
         if(pFileManager->exists(filename)) {
-            SDL_Log("GFXManager: %s asset '%s' loaded through active Tornie lookup", label, filename);
+            SDL_Log("GFXManager: %s asset '%s' loaded through content lookup", label, filename);
             return pFileManager->openFile(filename);
         }
 
