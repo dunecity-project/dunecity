@@ -278,6 +278,10 @@ struct QuantBotConfig {
     /// [General Behavior] StrategicSiteGuards: IX/Palace selections require a real site.
     /// Off reproduces the old overdue-order starvation for same-build comparisons. Hashed.
     bool strategicSiteGuards;
+    /// [Civ Wars] Strategy: research-aware economics and generated-map lane strategy.
+    /// Requires the Research Lab match rule; lane assumptions also require the map marker.
+    /// Hashed for multiplayer, and inert outside those rules.
+    bool civWarsStrategy;
     /// How a launched ground attack wave travels (docs/formations.md, QuantBot waves):
     /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, kWaveFormationBlob makes
     /// a Custom Hard/Brutal wave a hunt party that gathers, marches as one blob and releases into

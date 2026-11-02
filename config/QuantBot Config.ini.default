@@ -334,3 +334,8 @@ Troopers_Target=50
 AttackTimerMs=90000
 AttackThresholdPercent=0.40
 MinMoneyForProduction=500
+
+# Research-aware economy; generated Civilization Wars maps additionally use lane strategy.
+# Inert when the Research Lab match rule is disabled. Hashed for multiplayer.
+[Civ Wars]
+Strategy=true

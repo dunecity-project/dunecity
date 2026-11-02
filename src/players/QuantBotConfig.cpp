@@ -358,6 +358,7 @@ QuantBotConfig::QuantBotConfig() {
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
     minMoneyForProduction = 500;                // Minimum money to produce units
     strategicSiteGuards = true;
+    civWarsStrategy = true;
     // Attack waves hunt without a formation: in the formation research (docs/formations.md,
     // "Formation research") plain engine-Hunt waves beat every formation shape.
     waveFormation = kWaveFormationNone;
@@ -618,6 +619,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
         iniFile.setStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
         iniFile.setBoolValue("General Behavior", "StrategicSiteGuards", strategicSiteGuards);
+        iniFile.setBoolValue("Civ Wars", "Strategy", civWarsStrategy);
 
         // === FORCE CONCENTRATION ===
         iniFile.setBoolValue("Force Concentration", "FocusFire", force.focusFire);
@@ -772,6 +774,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.spreadVsDeathHand = iniFile.getBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
     force.defencePrerequisites = iniFile.getBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
     force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
+    civWarsStrategy = iniFile.getBoolValue("Civ Wars", "Strategy", civWarsStrategy);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1256,6 +1259,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("defencePrerequisites", force.defencePrerequisites);
     addNamed("hardCityMatch", force.hardCityMatch);
     configStr += "|/FORCE|";
+    addNamed("civWarsStrategy", civWarsStrategy);
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);
     addNamed("fixedMix", static_cast<int>(strategy.fixedMix));
