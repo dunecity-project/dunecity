@@ -16,6 +16,14 @@ void runNoSpiceCityProbe(Game& game) {
     auto require=[](bool ok,const char* why) {
         if(!ok) {SDL_Log("NO_SPICE_CITY_FAIL: %s",why);throw std::runtime_error(why);}
     };
+    auto cancelOrders=[&](BuilderBase* builder) {
+        // Starport batches do not expose their front through currentProducedItem.
+        while(builder->getProductionQueueSize()) {
+            const int before=builder->getProductionQueueSize();
+            builder->doCancelItem(builder->getProductionQueue().front().itemID);
+            require(builder->getProductionQueueSize()<before,"Fixture queue cancellation made no progress");
+        }
+    };
     auto* house=game.getHouse(HOUSE_HARKONNEN);
     QuantBot* bot=nullptr;
     for(const auto& p:house->getPlayerList())if(auto* q=dynamic_cast<QuantBot*>(p.get()))bot=q;
@@ -74,7 +82,7 @@ void runNoSpiceCityProbe(Game& game) {
     auto decide=[&](int credits,int power) {
         for(auto* structure:structureList)if(structure->getOwner()==house && structure->isABuilder()) {
             auto* builder=static_cast<BuilderBase*>(structure);
-            while(builder->getProductionQueueSize())builder->doCancelItem(builder->getCurrentProducedItem());
+            cancelOrders(builder);
             builder->upgrading=false;builder->setHealth(builder->getMaxHealth());
         }
         bot->builderPlaceLocations.clear();bot->reservedStructures.clear();bot->clearPlacementCache();
@@ -117,7 +125,7 @@ void runNoSpiceCityProbe(Game& game) {
         require(!ordered(pass,Unit_Carryall),"A spiceless empty fleet imported a transport");
         for(auto* structure:structureList)if(structure->getOwner()==house && structure->isABuilder()) {
             auto* builder=static_cast<BuilderBase*>(structure);
-            while(builder->getProductionQueueSize())builder->doCancelItem(builder->getCurrentProducedItem());
+            cancelOrders(builder);
         }
         port->destroy();
         state.resValve=2000;state.comValve=1500;state.indValve=1500;
@@ -223,7 +231,7 @@ void runNoSpiceCityProbe(Game& game) {
         restored.difficulty=QuantBot::Difficulty::Brutal;
         for(auto* structure:structureList)if(structure->getOwner()==house && structure->isABuilder()) {
             auto* builder=static_cast<BuilderBase*>(structure);
-            while(builder->getProductionQueueSize())builder->doCancelItem(builder->getCurrentProducedItem());
+            cancelOrders(builder);
             builder->upgrading=false;builder->setHealth(builder->getMaxHealth());
         }
         restored.builderPlaceLocations.clear();restored.reservedStructures.clear();
@@ -348,7 +356,7 @@ void runNoSpiceCityProbe(Game& game) {
         auto clearOrders=[&]() {
             for(auto* structure:structureList)if(structure->getOwner()==house && structure->isABuilder()) {
                 auto* builder=static_cast<BuilderBase*>(structure);
-                while(builder->getProductionQueueSize())builder->doCancelItem(builder->getCurrentProducedItem());
+                cancelOrders(builder);
                 builder->upgrading=false;
             }
             bot->builderPlaceLocations.clear();bot->reservedStructures.clear();bot->clearPlacementCache();

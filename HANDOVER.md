@@ -32,6 +32,10 @@
   checks for the final callsite alignment. Detector invariants and ordinary-game
   telemetry were exercised. Final same-build matrix A/B, long ladder, mandatory
   regression/perf receipts must not be inferred from the diagnostic baseline.
+  The820no-spicefixture's180s timeout followed a pending10-Quad Starport batch;
+  cleanup now cancels actual queue-front items (with a progress assertion), not
+  Starport's invalid ordinary production slot. Capacity rejection precedes the
+  optional reactor site sweep. No timeout/assertion relaxation.
   `dunecity-audit-control` disables all3 new fixes; `dunecity-audit-power-off`
   isolates this one. Definitions, receipts and traces: `docs/quantbot-dunecity-audit.md`.
   Evidence: `/Users/stefan/Documents/projects/outputs/dunecity-audit-20261103/`.

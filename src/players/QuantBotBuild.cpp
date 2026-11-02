@@ -825,7 +825,7 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
         && pass.itemCount[Structure_WindTrap] == getHouse()->getNumItems(Structure_WindTrap)
         && QuantBotBuildPolicy::planNuclearInvestment(getHouse()->getPowerRequirement(),
             getHouse()->getProducedPower(),pass.cityPowerReserve,std::max(1,-data[Structure_WindTrap][houseID].power))
-        && pass.nuclearBuildAvailable && findPlaceLocation(Structure_NuclearPlant).isValid();
+        && pass.nuclearBuildAvailable;
     if (pass.nuclearPlan && botConfig().force.cityPowerSizing) {
         // Positive income can finance installments, but it cannot justify
         // occupying the only yard with 2,000 power for a one-windtrap top-up.
@@ -841,6 +841,7 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
             data[Structure_WindTrap][houseID].price,data[Structure_NuclearPlant][houseID].price,
             sites,std::max(pass.money,data[Structure_NuclearPlant][houseID].price+reserve),reserve);
     }
+    if (pass.nuclearPlan) pass.nuclearPlan=findPlaceLocation(Structure_NuclearPlant).isValid();
     pass.cityYardTarget = pass.citySimEnabled ? QuantBotBuildPolicy::cityConstructionYardTarget(
         pass.money, pass.ownResValve, pass.ownComValve, pass.ownIndValve) : 0;
     // While new rock exists, production yards stop at the home formation's

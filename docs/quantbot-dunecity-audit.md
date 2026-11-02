@@ -178,6 +178,15 @@ build at `5d4d7c72` and the original seven-case sizing fixture passed
 (`quantbot_custom_attack` 6.64 s; `quantbot_no_spice_city` 27.56 s).
 
 The final planner/candidate-reservation cutover requires its own final-source fixture result.
+The `820bae19` local no-spice fixture timed out at 180 s after `CITY_GROWTH_POWER_PASS`.
+Its preceding market step left a ten-Quad Starport batch: using `currentProducedItem`
+to cancel that batch can make no progress, because Starport queue items are not its
+ordinary production slot. Fixture cleanup now cancels the real queue-front item and
+asserts progress at all four callsites. The pure nuclear-capacity rejection also runs
+before the optional reactor site search, avoiding an expensive sweep for a rejected plan.
+This correction does not waive any assertion or extend the timeout; its final-source
+fixture result remains required.
+
 Final same-build on/off detector and win-rate tables, 90-minute adjacent-difficulty ladder,
 all mandatory AI regressions and performance/FPS gates are **not yet established** by this
 diagnostic matrix. The exact isolated control is `dunecity-audit-power-off`; do not
