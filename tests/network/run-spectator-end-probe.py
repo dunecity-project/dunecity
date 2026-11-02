@@ -54,12 +54,22 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import runpy
 import sys
 import tempfile
 import time
 import uuid
+
+
+def terminate_probe(signum, _frame):
+    # CTest's deadline must unwind process/profile finally blocks, not leave
+    # active disposable-asset leases behind after the controller exits.
+    raise SystemExit(128 + signum)
+
+
+signal.signal(signal.SIGTERM, terminate_probe)
 
 RENDEZVOUS = ('room', 'init', 'running', 'Host-decided', 'Viewer-stall-start', 'Viewer-stall-end',
               'Host-verdict-armed', 'Host-verdict-event', 'Host-departed')

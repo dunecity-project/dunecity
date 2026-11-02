@@ -29,6 +29,10 @@ on the Mac mini (JSONL per run, his save, perf logs, samples).
 - `--source TREE --build-dir TREE/build` measures an older release: the script copies
   `game-perf.inc` into that (throwaway) worktree and patches its probe and runner.
 - `--summary R.jsonl` prints tables; `--check` is `perf_regression` (below).
+- `--csv FILE` keeps per-cycle wall/component/house timings and a final `cpu`
+  column with the same cycle's main-thread CPU milliseconds. Compare them when
+  a loaded host reports a single wall-clock house spike; `--results R.jsonl`
+  also retains aggregate AI-phase timing scopes. Neither option changes budgets.
 - **Unit motion trace**: `--motion-csv FILE` writes one row per unit whose position changed:
   cycle, cycles since the previous row, frame, id, item, house, `realX/realY` and the change,
   location/next tile, `moving`/`justStoppedMoving`, Dynasty route tick and step start/end, carryall
@@ -243,9 +247,9 @@ never independent of wall time; the stepped probe never adapts.
 
 **perf_regression** now also continues the save itself for 2 game minutes (`--eight-house 2`,
 `--scenario eight-house`): `tests/performance/data/eight-house-384` holds the save (gzip,
-419 KB), both Workshop manifests and the three files this tree lacks; the other 849 mod files
-are this tree's dunecity skins and `config/` ini files, found by SHA-256 (a changed skin fails
-by name). Budgets, multiples of the calibration loop: p99 simulation CPU per cycle 3.0, p99
+419 KB), both Workshop manifests, historical configuration and retired artwork.
+Unchanged mod graphics are reused from this tree only when their SHA-256 matches;
+missing or changed payloads fail by name. Budgets, multiples of the calibration loop: p99 simulation CPU per cycle 3.0, p99
 modelled 10-cycle frame (CPU) 9.0; then the same minutes through the headless main loop at 2 ms
 with pacing: its 750-cycle `PROBE_DIGEST`s must equal the stepped run's (up to any frame-rate
 path-budget change, which is reported), p99 frame wall time <= 8.0. Mini:

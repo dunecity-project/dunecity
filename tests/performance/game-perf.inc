@@ -379,13 +379,13 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
         std::ofstream csv(csvPath);
         csv << "cycle,sim,ai,city,units,structures,path,render,unit_count";
         for (int h : houses) csv << ",house" << h;
-        csv << '\n';
+        csv << ",cpu\n";
         for (size_t i = 0; i < samples.size(); ++i) {
             const Cycle& s = samples[i];
             csv << first + i << ',' << s.sim << ',' << s.ai << ',' << s.city << ',' << s.units << ','
                 << s.structures << ',' << s.path << ',' << s.render << ',' << s.unitCount;
             for (int h : houses) csv << ',' << s.house[h];
-            csv << '\n';
+            csv << ',' << s.cpu << '\n';
         }
     }
 }
