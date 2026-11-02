@@ -241,6 +241,7 @@ target_sources(dunecity
         Menu/SinglePlayerMenu.cpp
         Menu/SinglePlayerSkirmishMenu.cpp
         Menu/RandomSkirmishMenu.cpp
+        Menu/CivWarsMenu.cpp
         Menu/CustomGameMenu.cpp
         Menu/CustomGamePlayers.cpp
         Menu/CoopCampaignMenu.cpp
@@ -419,6 +420,7 @@ target_sources(dunecity
         MapEditor/MapMirror.cpp
         MapEditor/NewMapWindow.cpp
         MapEditor/SkirmishGenerator.cpp
+        MapEditor/CivWarsGenerator.cpp
         MapEditor/SkirmishCatalogue.cpp
         MapEditor/LoadMapWindow.cpp
         MapEditor/PlayerSettingsWindow.cpp
