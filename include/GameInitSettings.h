@@ -202,6 +202,7 @@ public:
         filedata = data;
         coopContextCached = false;
         coopHarvestCached = false;
+        civilizationWarsCached = false;
     }
     void setMapData(const std::string& data) { setScenarioData(data); }
     const std::optional<coop::Context>& getCoopCampaignContext() const;
@@ -211,6 +212,8 @@ public:
     };
     const CoopHarvestObjective& getCoopHarvestObjective() const;
     bool isTornieFamilyMatch() const;
+    /// Generated-map lane rules only; a mod name or arbitrary scenario never opts in.
+    bool isCivilizationWars() const;
     bool isEasyModeEnabled() const;
     bool isEasyModeHouse(int ownerHouse) const;
     int campaignPurchasePrice(int price, int ownerHouse) const;
@@ -336,6 +339,8 @@ private:
     mutable std::optional<coop::Context> coopContext;
     mutable bool    coopHarvestCached = false;
     mutable CoopHarvestObjective coopHarvestObjective;
+    mutable bool    civilizationWarsCached = false;
+    mutable bool    civilizationWars = false;
 
     /// Local-only; see isLocalSpectator(). Never serialized, never transmitted.
     bool            localSpectator = false;

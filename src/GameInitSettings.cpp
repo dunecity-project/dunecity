@@ -535,6 +535,23 @@ bool GameInitSettings::isTornieFamilyMatch() const {
     return tornieFamilyMatch;
 }
 
+bool GameInitSettings::isCivilizationWars() const {
+    // LoadMultiplayer.filedata holds a binary checkpoint until its saved map settings
+    // replace it. Never scan those bytes, a filename or a mod name for a marker.
+    if(gameType != GameType::CustomGame && gameType != GameType::CustomMultiplayer) return false;
+    if(!civilizationWarsCached) {
+        civilizationWars = false;
+        if(!filedata.empty()) {
+            auto source = sdl2::RWops_ptr{SDL_RWFromConstMem(filedata.data(), static_cast<int>(filedata.size()))};
+            INIFile map(source.get());
+            // getIntValue accepts numeric prefixes; only this complete version opts in.
+            civilizationWars = map.getStringValue("CIVILIZATIONWARS", "Version") == "1";
+        }
+        civilizationWarsCached = true;
+    }
+    return civilizationWars;
+}
+
 const std::optional<coop::Context>& GameInitSettings::getCoopCampaignContext() const {
     if(!coopContextCached) {
         coopContext.reset();
