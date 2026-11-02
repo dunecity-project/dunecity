@@ -143,6 +143,18 @@
   precedence, real Radar queue/site preservation, and first-supplier handoff after
   six standing guns. Raw final arms: `supplier-{off,on,fast-year-on}/`; numbers and
   purchase/loss times: `actual-save-comparison.json` beside the preserved probe.
+- Original27176982 priority-fixture failures exposed native-map raid inputs, not
+  peaceful overlap/carryall regressions. `city_growth` capital_plan52 observed800
+  ground value (goal4/local cover1) and chose6500-score `ground_threat`;
+  `starport_dunecity` plan93 observed2700 (goal8) and correctly funded a200-credit
+  defensive yard upgrade before saving640 for the first Carryall.
+- Fixture-only11a2f104 hides native hostile armed units only during the peaceful
+  planning calls, restores visibility on return/exception and invalidates tactical
+  caches both ways. Explicit peaceful-input guards were added; AI switches,
+  production priorities and every original assertion remain unchanged. These
+  corrections were not independently rerun before the combined final triage.
+  Original evidence: runner `w2/build/city-growth-probe/run-pyfva30e/` and
+  `starport-dunecity-probe/run-dy40wcjk/`, including decision JSONL.
 
 ## 2026-11-03 — QuantBot Civilization Wars experiments (default OFF, unreleased)
 
