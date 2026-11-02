@@ -256,9 +256,9 @@ struct QuantBotConfig {
         /// instead of turning every affordable windtrap into a 2,000-credit reactor.
         /// Funded installment projects and emergency recovery retain their existing priority.
         bool cityPowerSizing;
-        /// Keep optional yards and producer upgrades above the city's existing
-        /// four-minute working-capital forecast. Military production is unchanged;
-        /// live defence and required construction recovery retain their budgets.
+        /// Protect tax-dependent optional yards and producer upgrades with the
+        /// existing four-minute working-capital forecast. Viable spice economies
+        /// retain their normal budgets; military and required recovery are unchanged.
         bool cityOpeningCapital;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.

@@ -224,14 +224,28 @@ upgrades checked only cash. Evidence is in `271-opening-budget/`: original setup
 summary, run log, compressed decision stream and `trace-summary.json`.
 
 `[Force Concentration] CityOpeningCapital=1` is a separate default-on, loaded/saved/
-hashed switch. Optional extra MCVs and producer upgrades now share the existing
-research working-capital check: real spendable cash, the four-minute forecast,
-already ordered costs, operating reserve and the next protected purchase. The common
-funding helper does not depend on the Research Lab option. There is no second budget
-model, new saved state, RNG use, placement search or heap allocation.
+hashed switch. While the city has **no viable spice economy**, optional extra MCVs
+and producer upgrades share the existing financial working-capital check: real
+spendable cash, the four-minute forecast, already ordered costs, operating reserve
+and the next protected purchase. Productive spice-backed expansion keeps its normal
+capacity/technology budgets. Research readiness remains unchanged for research;
+fleet/crime readiness is not an additional condition on funded tax-city capital.
+There is no second budget model, new saved state, RNG use, placement search or allocation.
 Founding/lost-yard/actual-rock recovery and required yard upgrades keep their old
 budgets. Blackout recovery, CityGrowthPower, ThreatTurrets and Starport supply keep
 their existing precedence and cash protection.
+
+The `60bbe8eb` MCV/technology-only candidate still applied this guard to productive
+spice economies. A same-frozen-binary three-seed H/M ladder exposed the regression:
+OFF Hard7–Medium3+8 time limits, ON Hard6–Medium8+4 (18 games,45-minute cap).
+In128/Low/seed9101, Hard's first heavy-factory upgrade moved4.38→12.54min,
+three productive MCV orders disappeared, and Medium won23.31min rather than Hard
+winning40.29min despite11.3k→22.8k four-minute spice receipts. The tax-dependent
+scope restores the existing spice budgets instead of inventing a new economy model.
+The MCV deployment fixture also had30k bank/18.3k+ projected cash but negative net
+income; research readiness wrongly refused its funded colonist. Financial funding
+alone restores that case without changing its assertions.
+
 
 The initial `8ff2d79a` candidate also deferred discretionary military at negative
 projected cash. That version is **withdrawn**, not the final policy. In an ordinary
@@ -239,7 +253,7 @@ projected cash. That version is **withdrawn**, not the final policy. In an ordin
 threshold was already met by the initial 2,500-credit army: ON produced no combat
 units versus OFF's three Quads/two Trikes (900 credits). Saved funds did buy a Starport
 and real repair-demand Carryalls, but this did not justify suppressing reinforcements.
-The final switch therefore gates **only optional MCVs and producer technology**.
+The final switch therefore gates **only tax-dependent optional MCVs and producer technology**.
 Military eligibility, queue acceptance, saboteur orders, human leases and attack policy
 are unchanged. Obsolete broad-ON matrix/ladder jobs were cancelled; their partial
 detector/combat results must not be presented as final-policy A/B.

@@ -183,8 +183,10 @@ bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
 }
 
 bool QuantBot::cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 supplier) {
+    // Protect a tax-dependent opening, not productive spice-backed expansion.
+    // Financial runway must not inherit research's fleet/crime prerequisites.
     return !pass.citySimEnabled || !botConfig().force.cityOpeningCapital
-        || (economyReadyForCapital(pass) && canFundWorkingCapital(pass,cost,supplier));
+        || pass.spiceEconomyViable || canFundWorkingCapital(pass,cost,supplier);
 }
 
 bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* builder) {

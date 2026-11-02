@@ -472,6 +472,7 @@ void runNoSpiceCityProbe(Game& game) {
             // This controlled pass bypasses chooseCapitalPlan(), whose
             // no-selection sentinel must still precede real queue execution.
             pass.capitalChoice=-1;
+            pass.spiceEconomyViable=false;
             pass.money=3000;pass.citySimEnabled=true;pass.cityWorkingReserve=450;pass.cashBuffer=1000;
             pass.forecastTax=0;pass.forecastUpkeep=52;pass.forecastNetIncome=-208;
             pass.cityYards=house->getNumItems(Structure_ConstructionYard);
@@ -496,6 +497,14 @@ void runNoSpiceCityProbe(Game& game) {
                 "Opening-capital negative control did not pay for optional technology");
 
             config->force.cityOpeningCapital=true;
+            auto spice=budgetPass();spice.spiceEconomyViable=true;
+            require(order(spice,factory,Unit_MCV),
+                "Tax-opening protection constrained a working spice economy's MCV");
+            cancelOrders(factory);factory->upgrading=false;
+            QuantBot::BuilderTurn spiceUpgrade(spice.money);spiceUpgrade.pBuilder=factory;spiceUpgrade.pStructure=factory;
+            require(bot->upgradeWithLogging(spice,spiceUpgrade,__LINE__),
+                "Tax-opening protection constrained a working spice economy's technology");
+
             auto opening=budgetPass();
             require(!order(opening,factory,Unit_MCV),"An optional MCV spent a city's unfunded working capital");
             require(order(opening,light,Unit_Trike),"Optional-capital protection suppressed military reinforcements");
@@ -522,6 +531,10 @@ void runNoSpiceCityProbe(Game& game) {
             auto funded=budgetPass();
             funded.forecastTax=2000;funded.forecastUpkeep=100;funded.forecastNetIncome=5000;
             funded.cashFlow.projectedCash=5000;
+            funded.dangerousCrimeProperties=1;
+            require(bot->cityOpeningCapitalFunded(funded,900,factory->getObjectID()),
+                "Nonfinancial research readiness blocked funded tax-city capital");
+            funded.dangerousCrimeProperties=0;
             require(bot->cityOpeningCapitalFunded(funded,900,factory->getObjectID()),
                 "A funded city could not resume optional capital with research disabled");
             funded.money=1000;

@@ -354,8 +354,9 @@ ResearchLab=1
 CityGrowthPower=1
 # Size city reserve generation without consuming the seed town's working capital.
 CityPowerSizing=1
-# Preserve the seed town's existing four-minute working-capital forecast.
-# Only optional MCVs/producer upgrades are gated; military and required power/supply are unchanged.
+# Preserve a tax-dependent seed town's existing four-minute working capital.
+# Viable spice economies retain normal budgets; only optional MCVs/producer upgrades are gated.
+# Military production and required power/supply are unchanged.
 CityOpeningCapital=1
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
