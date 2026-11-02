@@ -109,6 +109,8 @@ repeat plots and unit spending, without waiting for two refineries and a
 completed production core. This finite goal and the house-wide cap bound the
 claim; the first useful Starport then owns its one-off funding. Prematurely
 yielding the budget after only two new guns loses both the supplier and the base.
+An import's high return score cannot replace either bounded claim with cheap
+zoning through the military/growth interleave while its price is accumulating.
 The peaceful 8–12 battery and growth interleave stay unchanged. Site search is
 bounded to the threatened asset's weapon-range window, first minimizes observed
 return fire while retaining a hostile target in range, then favours firing cover.

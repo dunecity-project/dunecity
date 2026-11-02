@@ -100,6 +100,13 @@ void runThreatTurretProbe(Game& game) {
             on.capitalCandidates.size(),on.capitalChoice);
         require(on.capitalChoice>=0 && on.capitalCandidates[on.capitalChoice].reason==std::string("ground_threat"),
             "Missing production core suppressed the active ground defence");
+        auto bargain=on.capitalCandidates[on.capitalChoice];
+        bargain.item=Unit_Quad;bargain.kind="military";bargain.reason="active_defence";
+        bargain.price=140;bargain.score=100000;
+        on.capitalCandidates.push_back(bargain);
+        bot->chooseCapitalPlan(on);
+        require(on.protectionCapital && on.capitalCandidates[on.capitalChoice].reason==std::string("ground_threat"),
+            "A high-return import diverted the active ground defence budget");
         const auto site=on.capitalCandidates[on.capitalChoice].site;
         require(site.isValid() && site.x>origin.x+12,"Rocket was not sited on the attacked side");
         bot->buildProducer(on,yard);
@@ -136,6 +143,7 @@ void runThreatTurretProbe(Game& game) {
         require(std::none_of(noSupply.capitalCandidates.begin(),noSupply.capitalCandidates.end(),
             [](const auto& c){return c.kind==std::string("city_supply");}),"Disabled supplier still claimed cash");
         auto saving=supply(true,300);
+        saving.capitalCandidates.push_back(bargain);bot->chooseCapitalPlan(saving);
         require(saving.protectionCapital && saving.capitalChoice>=0
             && saving.capitalCandidates[saving.capitalChoice].item==Structure_StarPort,
             "A solvent city's first useful Starport was absent from protected capital");
