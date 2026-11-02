@@ -1,0 +1,74 @@
+// Probe-only, read-only DuneCity Random Skirmish audit. Enabled by the matrix harness through
+// BALANCE_DUNECITY_AUDIT; no changes to the shipped game or to AI decisions.
+#include <dunecity/CitySimulation.h>
+#include <structures/BuilderBase.h>
+
+namespace DuneCityAudit {
+
+inline void sample(Game& game) {
+    if (!std::getenv("BALANCE_DUNECITY_AUDIT")) return;
+    const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
+    for (const House* house : EliminationMatch::playingHouses(game)) {
+        const QuantBot* bot = FfaArmy::quantBotOf(house);
+        if (!bot) continue;
+        const auto grid = FfaArmy::baseGrid(house);
+        int fighters = 0, moving = 0, targeting = 0, enemies = 0, enemyValue = 0;
+        for (const auto* unit : unitList) {
+            if (!FfaArmy::groundFighter(unit)) continue;
+            if (unit->getOwner() == house) {
+                ++fighters;
+                moving += int(unit->isMoving());
+                const auto* target = unit->getTarget();
+                if (target && target->getHealth() > 0 && target->getOwner()
+                    && target->getOwner()->getTeamID() != house->getTeamID()) ++targeting;
+            } else if (unit->getOwner()->getTeamID() != house->getTeamID()
+                       && grid.distance(unit->getLocation()) <= 10) {
+                ++enemies;
+                enemyValue += FfaArmy::price(unit);
+            }
+        }
+        int queue = 0, upgrading = 0, waiting = 0, structureHP = 0, structuresLost = 0;
+        int yardLevel = -1;
+        std::string fronts;
+        for (const auto* structure : structureList) {
+            if (structure->getOwner() != house || structure->getHealth() <= 0) continue;
+            structureHP += structure->getHealth().lround();
+            if (const auto* builder = dynamic_cast<const BuilderBase*>(structure)) {
+                queue += builder->getProductionQueueSize();
+                upgrading += int(builder->isUpgrading());
+                waiting += int(builder->isWaitingToPlace());
+                if (structure->getItemID() == Structure_ConstructionYard)
+                    yardLevel = std::max(yardLevel, builder->getCurrentUpgradeLevel());
+                if (builder->getProductionQueueSize() || builder->isUpgrading())
+                    fronts += (fronts.empty() ? "" : "/") + std::to_string(structure->getItemID()) + ":"
+                        + std::to_string(builder->getCurrentProducedItem()) + ":"
+                        + std::to_string(builder->getProductionQueueSize()) + ":"
+                        + std::to_string(int(builder->isOnHold()));
+            }
+        }
+        for (int item = Structure_FirstID; item <= Structure_LastID; ++item)
+            if (isStructure(item)) structuresLost += house->getNumLostItems(item);
+        int population = 0, tax = 0, demand = 0;
+        if (const auto* sim = game.getCitySimulation(); sim && sim->isInitialized()) {
+            const auto& city = sim->getHouseState(house->getHouseID());
+            population = city.getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier;
+            tax = city.budget.getLastTaxRevenue();
+            demand = std::max({int(city.resValve), int(city.comValve), int(city.indValve)});
+        }
+        SDL_Log("DUNECITY_AUDIT: minute=%d cycle=%u house=%d credits=%d power=%d need=%d population=%d tax=%d "
+                "demand=%d built=%d structures_lost=%d base_hp=%d yards=%d yard_level=%d queue=%d upgrading=%d "
+                "waiting=%d fronts=%s gun=%d rocket=%d radar=%d starport=%d heavy=%d ix=%d fighters=%d moving=%d "
+                "targeting=%d enemies=%d enemy_value=%d spice=%d",
+                minute, game.getGameCycleCount(), house->getHouseID(), house->getCredits(),
+                house->getProducedPower(), house->getPowerRequirement(), population, tax, demand,
+                house->getNumBuiltStructures(), structuresLost, structureHP,
+                house->getNumItems(Structure_ConstructionYard), yardLevel, queue, upgrading, waiting,
+                fronts.empty() ? "none" : fronts.c_str(), house->getNumItems(Structure_GunTurret),
+                house->getNumItems(Structure_RocketTurret), house->getNumItems(Structure_Radar),
+                house->getNumItems(Structure_StarPort), house->getNumItems(Structure_HeavyFactory),
+                house->getNumItems(Structure_IX), fighters, moving, targeting, enemies, enemyValue,
+                bot->lastCalculatedSpice);
+    }
+}
+
+} // namespace DuneCityAudit

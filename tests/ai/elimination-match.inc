@@ -70,6 +70,7 @@ inline CrushCount crushCount;
 } // namespace EliminationMatch
 
 #include "ffa-army.inc"
+#include "dunecity-audit.inc"
 
 namespace EliminationMatch {
 
@@ -138,6 +139,7 @@ inline void sample(Game& game, bool final = false) {
         if (final || (minute > 0 && minute % 10 == 0)) sampleMix(game, house, minute, final);
     }
     FfaArmy::sample(game);
+    DuneCityAudit::sample(game);
     if (final) crushCount.report();
 }
 
