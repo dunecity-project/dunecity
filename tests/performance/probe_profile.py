@@ -13,6 +13,8 @@ run in leased scratch (scratch_dir), delete each game's directory once its rows
 are written, and check free space before they start (require_free_space).
 """
 import configparser
+import gzip
+import hashlib
 from contextlib import contextmanager
 import importlib.util
 import os
@@ -234,6 +236,48 @@ def copy_revisions(source_profile, profile, saves=()):
     names = needed_revisions(store, source_profile, saves)
     for name in names:
         clone_tree(store / name, Path(profile) / 'workshop' / 'revisions' / name)
+    return names
+
+
+def restore_fixture_revisions(profile, saves):
+    """Restore the exact archived mod revisions the committed save fixtures name.
+
+    Historical configuration bytes live beside their original manifests. Unchanged
+    Dune City graphics come from the source tree; retired artwork is already kept
+    by the eight-house performance fixture. Every payload must match its original
+    SHA-256 and size. Embedded maps need no separate Workshop-store copy.
+    """
+    source_root = Path(__file__).resolve().parents[2]
+    store = source_root / 'tests/saves/data/workshop/revisions'
+    names = needed_revisions(store, saves=saves)
+    for name in names:
+        archived = store / name
+        manifest = (archived / 'manifest').read_bytes()
+        if hashlib.sha256(manifest).hexdigest() != name:
+            raise RuntimeError('Archived fixture manifest does not match revision ' + name)
+        target = Path(profile) / 'workshop/revisions' / name
+        for line in manifest.decode().splitlines():
+            if not line.startswith('file='):
+                continue
+            digest, size, encoded = line[5:].split(',', 2)
+            relative = bytes.fromhex(encoded).decode()
+            source = archived / 'files' / relative
+            if source.is_file():
+                data = source.read_bytes()
+            else:
+                current = source_root / 'mods/dunecity' / relative
+                data = current.read_bytes() if current.is_file() else b''
+                if hashlib.sha256(data).hexdigest() != digest:
+                    old_art = source_root / 'tests/performance/data/eight-house-384/files' / (digest + '.png.gz')
+                    if old_art.is_file():
+                        data = gzip.decompress(old_art.read_bytes())
+            if len(data) != int(size) or hashlib.sha256(data).hexdigest() != digest:
+                raise RuntimeError('Archived fixture bytes changed: ' + relative + ' for revision ' + name)
+            destination = target / 'files' / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
+        (target / 'manifest').write_bytes(manifest)
+        shutil.copyfile(archived / 'version', target / 'version')
     return names
 
 

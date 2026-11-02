@@ -16,7 +16,8 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/natives
              every unit ends nothing; a spectated free-for-all ends naming the last real team
   save9868   tests/natives/data/worms-9868.dls.gz (Gamma Sector, worms owned by a played house)
              loads with every worm the Natives' (on NATIVES_TEAM); re-saved as the current version
-             it stays so
+             it stays so. Its exact 1.0.850 Vanilla revision is restored from the shared
+             tests/saves/data/workshop store, independent of today's bundled rules.
   followup   (save 9873) a custom map's unlisted unit owner is an anonymous team-0 house that the
              Natives fight (NATIVES_TEAM), neither deciding the match; a worm a reinforcement brings
              for a house (Sandworm::spares) never targets or bites that house's side, also after a
@@ -48,9 +49,13 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import restore_fixture_revisions  # noqa: E402
+
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
@@ -120,6 +125,8 @@ summary, failed = [], []
 for case in args.cases.split(','):
     profile = work / ('profile-' + case)
     profile.mkdir()
+    if case == 'save9868':
+        restore_fixture_revisions(profile, [fixture])
     (profile / 'Dune City.ini').write_text(
         '[Video]\nPhysical Width = 1024\nPhysical Height = 768\nWidth = 1024\nHeight = 768\n'
         'Interface Height = 768\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Natives tester\n')

@@ -17,9 +17,9 @@ an earlier release: the probe main.cpp comes from that tree, the probe include f
                        from a copy of DIR instead (the same machine after an update). A revision the
                        profile lacks is reported instead of opening the Workshop download dialog.
 
-The fixtures pin the shipped Vanilla/Dune City revisions of their release. They load only while this
-release ships the same mod files (the Game Version stamp aside); after a mod content change, regenerate
-them from the earlier releases' builds or a player's store copy is needed, exactly as for players.
+The committed fixtures retain their exact shipped mod manifests and historical configuration
+bytes under data/workshop/revisions. Unchanged Dune City graphics are reconstructed from this
+tree only when their SHA-256 and size match the original manifest; no download/cache is needed.
 """
 import argparse
 import os
@@ -28,9 +28,12 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import restore_fixture_revisions  # noqa: E402
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('saves', nargs='*', type=Path, help='Savegames to round-trip')
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
@@ -132,6 +135,7 @@ else:
         profile = work / ('profile-' + label)
         if args.profile_template:
             shutil.copytree(args.profile_template, profile, symlinks=True)
+        restore_fixture_revisions(profile, [save])
         lines, ok = run(label, profile, 'load', {'SAVE_PROBE_SAVE': str(save.resolve())})
         summary += lines
         failed += [] if ok else [label]

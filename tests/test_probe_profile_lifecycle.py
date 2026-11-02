@@ -1,3 +1,5 @@
+import gzip
+import hashlib
 import importlib.util
 import json
 import os
@@ -154,6 +156,48 @@ class ProbeLifecycleTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in (profile/'workshop/revisions').iterdir()),sorted([mod,mapped,dep]))
         self.assertFalse((profile/'workshop/owner').exists())
         self.assertEqual(probe.copy_revisions(source,self.root/'empty'),[mod])
+
+    def test_restores_only_pinned_fixture_rules_and_retired_art(self):
+        config=b'historical rules\n';art=b'historical image bytes'
+        config_hash=hashlib.sha256(config).hexdigest();art_hash=hashlib.sha256(art).hexdigest()
+        manifest=('DUNEWORKSHOP1\nkind=mod\n'
+            +f'file={config_hash},{len(config)},{b"ObjectData.ini".hex()}\n'
+            +f'file={art_hash},{len(art)},{b"graphics_skins/old.png".hex()}\n').encode()
+        revision=hashlib.sha256(manifest).hexdigest()
+        archive=self.repo/'tests/saves/data/workshop/revisions'/revision
+        (archive/'files').mkdir(parents=True)
+        (archive/'manifest').write_bytes(manifest);(archive/'version').write_text('3')
+        (archive/'files/ObjectData.ini').write_bytes(config)
+        current=self.repo/'mods/dunecity/graphics_skins/old.png';current.parent.mkdir(parents=True)
+        current.write_bytes(b'changed current artwork')
+        old=self.repo/'tests/performance/data/eight-house-384/files'/(art_hash+'.png.gz')
+        old.parent.mkdir(parents=True);old.write_bytes(gzip.compress(art))
+        save=self.root/'game.dls';save.write_text(revision+'\n'+'f'*64)
+        profile=self.root/'profile'
+        with patch.object(probe,'__file__',str(self.repo/'tests/performance/probe_profile.py')):
+            self.assertEqual(probe.restore_fixture_revisions(profile,[save]),[revision])
+        restored=profile/'workshop/revisions'/revision
+        self.assertEqual((restored/'manifest').read_bytes(),manifest)
+        self.assertEqual((restored/'version').read_text(),'3')
+        self.assertEqual((restored/'files/ObjectData.ini').read_bytes(),config)
+        self.assertEqual((restored/'files/graphics_skins/old.png').read_bytes(),art)
+        self.assertEqual([p.name for p in (profile/'workshop/revisions').iterdir()],[revision])
+
+    def test_changed_archived_fixture_bytes_are_rejected(self):
+        payload=b'original rules'
+        manifest=('DUNEWORKSHOP1\nkind=mod\nfile='+hashlib.sha256(payload).hexdigest()
+            +f',{len(payload)},{b"ObjectData.ini".hex()}\n').encode()
+        revision=hashlib.sha256(manifest).hexdigest()
+        archive=self.repo/'tests/saves/data/workshop/revisions'/revision
+        (archive/'files').mkdir(parents=True)
+        (archive/'manifest').write_bytes(manifest);(archive/'version').write_text('1')
+        (archive/'files/ObjectData.ini').write_bytes(b'changed rules')
+        save=self.root/'game.dls';save.write_text(revision)
+        profile=self.root/'profile'
+        with patch.object(probe,'__file__',str(self.repo/'tests/performance/probe_profile.py')):
+            with self.assertRaisesRegex(RuntimeError,'Archived fixture bytes changed'):
+                probe.restore_fixture_revisions(profile,[save])
+        self.assertFalse((profile/'workshop/revisions'/revision/'manifest').exists())
 
 
 if __name__=='__main__':unittest.main()

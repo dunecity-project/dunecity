@@ -704,6 +704,10 @@ if args.preplace_probe:
     fixture = out/'preplace-9854.sav'
     fixture.write_bytes(gzip.decompress((root/'tests/ai/preplace-9854.sav.gz').read_bytes()))
     env['BALANCE_PREPLACE_9854_SAVE'] = str(fixture)
+    # This checksum-only save predates immutable pins. Its legacy subcase restores
+    # these exact historical rules, then reinstates today's fixture files.
+    env['BALANCE_PREPLACE_LEGACY_MOD'] = str(root / 'tests/saves/data/workshop/revisions' /
+        '778e1475a215b4a7c0d74695aca55e23b4d6a8f717199acdfaa200266d977c57/files')
 if args.sidebar_grid_probe: env['BALANCE_SIDEBAR_GRID_PROBE'] = '1'
 if args.ffa_screenshot:
     # A rendered game view (dummy video driver, software renderer) of one house's army at the

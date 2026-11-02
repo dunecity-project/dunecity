@@ -25,6 +25,8 @@
 #include <GUI/dune/ObservedHouseSelector.h>
 #include <GUI/ObjectInterfaces/DefaultObjectInterface.h>
 #include <Network/GameInitSettingsPolicy.h>
+#include <Network/WorkshopGameContent.h>
+#include <misc/IFileStream.h>
 #include <dunecity/CitySimulation.h>
 #include <units/AmbientAirplane.h>
 #endif
@@ -45,6 +47,20 @@ std::string nOut(const std::string& name) { return std::string(std::getenv("NATI
 std::string houseName(int h) { return getHouseNameByNumber(static_cast<HOUSETYPE>(h)); }
 
 std::unique_ptr<Game> nStart(const GameInitSettings& init) {
+#ifndef NATIVES_BASELINE
+    if(WorkshopGameContent::isSave(init)) {
+        // A missing exact revision must fail, not wait in an unattended download dialog.
+        IFileStream stream;
+        nRequire(stream.open(init.getFilename()), "Could not open save " + init.getFilename());
+        GameInitSettings::HouseInfoList houses;
+        auto saved = GameInitSettings::readSaveSetup(stream, houses);
+        try { WorkshopGameContent::resolveMod(saved, false); }
+        catch(const std::exception& e) {
+            nRequire(false, "Save needs unavailable mod revision " + saved.getModRevisionHash()
+                     + " of '" + saved.getModName() + "': " + e.what());
+        }
+    }
+#endif
     auto game = std::make_unique<Game>();
     currentGame = game.get();
     game->bReplay = true;   // no briefing / analytics at setup

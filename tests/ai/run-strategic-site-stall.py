@@ -16,6 +16,8 @@ import tempfile
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import restore_fixture_revisions  # noqa: E402
 
 
 def main():
@@ -30,12 +32,14 @@ def main():
         save = Path(fixture_dir) / 'city.dls'
         with gzip.open(root / 'tests/ai/ffa-9101-palace-stall.dls.gz', 'rb') as source, save.open('wb') as dest:
             shutil.copyfileobj(source, dest)
+        profile = Path(fixture_dir) / 'profile'
+        restore_fixture_revisions(profile, [save])
         for style in styles:
             continuation = args.output_dir / style / 'continuation'
             previous = set(continuation.glob('run-*'))
             command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'),
                        '--build-dir', str(args.build_dir), '--output-dir', str(continuation),
-                       '--repeatable', '--load-save', str(save), '--mod', 'dunecity',
+                       '--repeatable', '--load-save', str(save), '--save-profile', str(profile), '--mod', 'dunecity',
                        '--strategic-site-probe', '--minutes', '41', '--wall-timeout', '900',
                        '--path-workers', '1', '--no-ai-telemetry', '--scenario-style', style]
             result = subprocess.run(command, cwd=root, capture_output=True, text=True)

@@ -7,6 +7,8 @@
 #include <FileClasses/LoadSavePNG.h>
 #include <GUI/ObjectInterfaces/BuilderInterface.h>
 #include <misc/draw_util.h>
+#include <array>
+#include <filesystem>
 
 namespace PreplaceProbe {
 
@@ -902,7 +904,31 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     // ---- A 9854 save (no reservations) still loads and keeps the place-it-yourself flow. ----
     const char* oldSave = std::getenv("BALANCE_PREPLACE_9854_SAVE");
     require(oldSave != nullptr, "Missing 9854 fixture");
+    const char* legacyMod = std::getenv("BALANCE_PREPLACE_LEGACY_MOD");
+    require(legacyMod != nullptr, "Missing historical 9854 rules");
+    auto& mods = ModManager::instance();
+    const std::string originalMod = mods.getActiveModName();
+    const std::string legacyModPath = mods.getModPath("dunecity");
+    const std::array<const char*, 3> ruleFiles = {"ObjectData.ini", "QuantBot Config.ini", "GameOptions.ini"};
+    std::array<std::string, 3> currentRules;
+    for(size_t i = 0; i < ruleFiles.size(); ++i)
+        currentRules[i] = readCompleteFile(legacyModPath + "/" + ruleFiles[i]);
     game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+    // A pre-MOD4 save has only a checksum, not a revision hash. Restore its
+    // actual historical rules in this isolated profile; keep the real resolver
+    // check rather than altering the save header or suppressing a mismatch.
+    for(const auto* name : ruleFiles)
+        std::filesystem::copy_file(std::filesystem::path(legacyMod) / name,
+            std::filesystem::path(legacyModPath) / name, std::filesystem::copy_options::overwrite_existing);
+    require(mods.setActiveMod("dunecity"), "Could not activate historical 9854 rules");
+    const std::string oldBytes = readCompleteFile(oldSave);
+    IMemoryStream oldHeader(oldBytes.data(), oldBytes.size());
+    GameInitSettings::HouseInfoList oldHouses;
+    const auto oldSetup = GameInitSettings::readSaveSetup(oldHeader, oldHouses);
+    require(oldSetup.getModRevisionHash().empty()
+            && oldSetup.getModChecksum() == mods.getEffectiveChecksums().combined,
+        "Historical 9854 rules do not match the save's original checksum");
+    SDL_Log("PREPLACE_PROBE: archived rules match legacy checksum %s", oldSetup.getModChecksum().c_str());
     game = std::make_unique<Game>();
     currentGame = game.get();
     game->bReplay = true;
@@ -927,6 +953,12 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     // bookkeeping, not just its four builders. Run it in a fresh match after all yard/save
     // checks instead of trying to undo those effects (or rewinding the simulation clock).
     game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+    for(size_t i = 0; i < ruleFiles.size(); ++i) {
+        std::ofstream restored(legacyModPath + "/" + ruleFiles[i], std::ios::binary | std::ios::trunc);
+        restored.write(currentRules[i].data(), currentRules[i].size());
+        require(static_cast<bool>(restored), "Could not restore current fixture rules");
+    }
+    require(mods.setActiveMod(originalMod), "Could not reactivate current fixture rules");
     game = std::make_unique<Game>();
     currentGame = game.get();
     game->bReplay = true;
