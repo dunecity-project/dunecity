@@ -12,13 +12,17 @@ mod get research-aware economy but never generated-lane assumptions. Ordinary
 matches retain the existing decision path. ResearchLab owns protocol 111 for the
 combined release; there is no independent protocol or app-version bump here.
 
-The switch defaults **on only for 1v1**: activation requires exactly two occupied
-initial houses on different teams. Shared-house human/AI copilots do not add a
-house. All team formats use the switch-off policy, even after eliminations leave
-only two survivors. This restriction follows source `27176982`'s completed
-five-seed, both-orientation Hard direct matrix: strategy-on won/lost/tied
-**9/0/1 in 1v1 but 0/15/5 across 2v2 and 3v3**. The economic/research policy
-itself is unchanged; the integrator chose to retain only its supported duel use.
+The switch defaults **off**. Explicit opt-in is restricted to **1v1**: exactly
+two occupied initial houses on different teams. Shared-house human/AI copilots
+do not add a house. Team formats always use the switch-off policy, even after
+eliminations leave only two survivors. Source `27176982`'s five-seed,
+both-orientation Hard direct matrix was **9/0/1 W/L/T in 1v1 but 0/15/5 across
+2v2 and 3v3**. However, homogeneous mirrors finished only **9/45 with the
+experimental strategy versus 33/45 off**, including just 3/15 on in 1v1.
+The finishing acceptance criterion failed, so the integrator rejected default
+activation rather than equating a direct-match advantage with a finished AI.
+Research Lab's independent basic AI policy remains available while this strategy
+is off; disabling the experiment does not disable research or Civ Wars itself.
 
 The generated-map contract is three horizontal lanes, centred at
 `(2 * lane + 1) * height / 6`, rock ends of width `width / 4`, mirrored teams
@@ -453,4 +457,111 @@ For completeness, candidate 4's rejected nine-case table (all at 40 minutes):
 Candidate-5 code had passed a native build and 24 Python / 35 tagged native
 cases (6,577,325 assertions), taking 44.72s; that does not establish its
 simulation strength and does not replace checks on the converged source.
+
+
+## Final source-271 evaluation and release decision
+
+All matches in this section use immutable source
+`27176982874d87bc1466dd1499acec8eba429e00`, seeds
+**7101, 7202, 7303, 7404, 7505**, generated size0 (**129×96**),
+one respawning worm per lane, spice2, normal QuantBots and a **40-minute** cap.
+CityGrowthPower, CityPowerSizing, ThreatTurrets and CityStarportSupply are the
+same in both arms. Evidence is under
+`~/Documents/projects/dunecity-results/civwars-ai/acceptance-271/`.
+The queue jobs share prefix `20261103T050125-civwars-271-acceptance-72e544`:
+`-1` is mirrors, `-2` the side-swapped ladder, `-3` direct mixed-strategy games,
+and `-4` the corrected defence/isolation gates.
+
+The measured source fingerprints are `9089211897d1…` on Windows `stefPC` and
+`4932978d2b48…` on `claw.local`. They are distinct content cohorts; source/map/
+options matching is retained in the report, not weakened to pool incompatible
+paired comparisons. The aggregate tables below are descriptive counts over the
+fixed schedule. Direct contrasts put both policies in the **same actual game**.
+
+### Mirror finishing: 90 completed games
+
+Every cell contains five seeds. All 90 games have complete telemetry and exact
+worm-loss attribution, with no game errors. `D/T` means decisive/time-limit;
+all other outcomes were zero. Medians include time limits.
+
+| Format | Difficulty | Off D/T | Off median min | On D/T | On median min |
+|---|---|---:|---:|---:|---:|
+| 1v1 | Medium | 4/1 | 32.63 | 1/4 | 40.00 |
+| 1v1 | Hard | 2/3 | 40.00 | 1/4 | 40.00 |
+| 1v1 | Brutal | 3/2 | 39.48 | 1/4 | 40.00 |
+| 2v2 | Medium | 4/1 | 28.53 | 1/4 | 40.00 |
+| 2v2 | Hard | 5/0 | 29.21 | 1/4 | 40.00 |
+| 2v2 | Brutal | 5/0 | 35.08 | 1/4 | 40.00 |
+| 3v3 | Medium | 3/2 | 34.87 | 2/3 | 40.00 |
+| 3v3 | Hard | 3/2 | 30.79 | 0/5 | 40.00 |
+| 3v3 | Brutal | 4/1 | 32.78 | 1/4 | 40.00 |
+
+Aggregate off: **33/45 decisive (73.3%), 26.7% stalemates**, median32.78min.
+Experimental on: **9/45 decisive (20.0%), 80.0% stalemates**, median40min.
+No on game ended by30min; off had13/45 by30min. The historical source-23aa35a9
+baseline was12/45 decisive at a30-minute cap. Comparing33/45 at40min directly
+with12/45 at30min would conflate a longer observation window and intervening
+integration changes with this strategy; it is not a causal improvement claim.
+
+### Direct strength: 30 completed Hard-versus-Hard games
+
+Each format has five seeds with the strategy on each side once. Win rates use
+all ten games, including timeouts; no material-score victory is substituted.
+
+| Format | On W/L/T | On win rate | Stalemate rate | Median min | Mean on-minus-off placement |
+|---|---:|---:|---:|---:|---:|
+| 1v1 | 9/0/1 | 90% | 10% | 35.66 | +0.90 |
+| 2v2 | 0/8/2 | 0% | 20% | 31.14 | −0.80 |
+| 3v3 | 0/7/3 | 0% | 30% | 32.96 | −0.70 |
+
+Placement is1 for a win,0 for a loss and0.5 for a time limit. Exact enumeration
+of the five-seed block bootstrap (both orientations stay in one block) gives
+95% intervals of **[+0.70,+1.00]**, **[−1.00,−0.60]** and
+**[−1.00,−0.30]** for the three on-minus-off differences. These five training
+seeds are not an independent held-out generalisation test.
+
+The opening research improvement is real but insufficient. In the ten1v1
+direct games, on reached tech2 in10/10 houses at median3.89min and tech4 in10/10
+at10.39min; off reached each in just1/10 (23.92/31.22min among those reaching).
+On reached tech6 in10/10 at30.52min and tech9 in2/10 at37.43min. Unreached
+`-1` timings never enter timing medians.
+
+**[INFERENCE — not isolated by an ablation]** the worker cap and pre-wave
+city-land cap constrain team income/army throughput after the research opening.
+At minute20, live-house medians in the direct2v2 games were off/on
+13/5 harvesters and5775/2550 army value; in3v3 they were8/4 and3975/970.
+The on/off live denominators were19/20 in2v2 and29/30 in3v3. Earlier technology
+did not offset that deficit. This is the best evidence-based diagnosis, not a
+verified cause or a claim that another untested cap would solve finishing.
+
+Exact harvester worm deaths in direct1v1/2v2/3v3 were off14/24/15 versus
+on2/3/4. Fleet sizes and exposure differ, so lower counts do not establish a
+per-trip hazard reduction. Combat/support worm deaths remain separately
+available in the item ledger.
+
+### Corrected defence and isolation gates
+
+Source271 job `-4` completed **48/48 engine cases in12 queue units**, with no
+initial failures or retries. All **32/32 early-air cases** killed the real
+injected full-health Ornithopter using defender-attributed damage, preserved
+the original yard and lab, and retained registered human attack authority.
+Both defending sides, both core targets, both switch states, two seeds and two
+repeats were exercised. A real HumanPlayer copilot leases only the attacker's
+normal command; defender orders, resources, health and timers are unchanged.
+All **eight ordinary-map off/on pairs** (16 cases) had identical complete
+digest sequences and distinct config hashes, with matching source identity
+inside each pair.
+
+### Duel restriction verification before default-off cutover
+
+Commit `94cd2d4ca2abc8224146e60c0e735f2aa05922bf` adds only the immutable-roster
+duel gate to the AI policy; it also follows the unrelated lobby stack-allocation
+fix. Evidence is in `acceptance-94cd2d4c/`, jobs
+`20261103T055512-civwars-duel-gate-0e3990-1` and `-2`.
+Four off/on pairs (2v2/3v3 × seeds7101/7202,10min) match source fingerprint,
+map/options identities and rolling digest at cycle37500, despite distinct
+config hashes. Re-running all ten40-minute1v1 direct games preserved every
+source271 outcome, winning team, final cycle and rolling digest: **9/0/1**.
+Logged decimal seconds differed by at most0.001s across native hosts; cycle
+counts matched. This verifies the restriction, not acceptance of the strategy.
 

@@ -363,7 +363,7 @@ QuantBotConfig::QuantBotConfig() {
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
     minMoneyForProduction = 500;                // Minimum money to produce units
     strategicSiteGuards = true;
-    civWarsStrategy = true;
+    civWarsStrategy = false;                   // Experimental: mirrors did not meet the finishing gate.
     // Attack waves hunt without a formation: in the formation research (docs/formations.md,
     // "Formation research") plain engine-Hunt waves beat every formation shape.
     waveFormation = kWaveFormationNone;

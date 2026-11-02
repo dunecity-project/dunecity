@@ -156,14 +156,18 @@ TEST_CASE("Strategic site guards distinguish multiplayer configurations", "[ai][
     REQUIRE(guarded.getConfigHash() != legacy.getConfigHash());
 }
 
-TEST_CASE("Civ Wars strategy is optional, round-tripped and multiplayer hashed", "[ai][config][civ-wars]") {
+TEST_CASE("Civ Wars strategy defaults off, round-trips both states and is multiplayer hashed", "[ai][config][civ-wars]") {
     QuantBotConfig enabled, disabled;
-    REQUIRE(enabled.civWarsStrategy);
-    disabled.civWarsStrategy = false;
+    REQUIRE_FALSE(disabled.civWarsStrategy);
+    enabled.civWarsStrategy = true;
     REQUIRE(enabled.getConfigHash() != disabled.getConfigHash());
     const auto path = std::filesystem::temp_directory_path() / "quantbot-civ-wars-test.ini";
-    REQUIRE(disabled.save(path.string()));
+    REQUIRE(enabled.save(path.string()));
     QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.civWarsStrategy);
+    REQUIRE(restored.getConfigHash() == enabled.getConfigHash());
+    REQUIRE(disabled.save(path.string()));
     REQUIRE(restored.applyOverrides(path.string()));
     REQUIRE_FALSE(restored.civWarsStrategy);
     REQUIRE(restored.getConfigHash() == disabled.getConfigHash());

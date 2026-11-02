@@ -43,8 +43,8 @@ bool QuantBot::civWarsRules() const {
     const auto& init = currentGame->getGameInitSettings();
     if (!init.getGameOptions().researchLab
         || !(init.isCivilizationWars() || init.getModName() == "CivWars")) return false;
-    // Only duels improved in the fixed-seed matrix. Use the original roster:
-    // eliminating teammates must never turn the strategy on during a team game.
+    // Only duels beat switch-off opponents in direct tests. Use the original
+    // roster so eliminations never activate this strategy during a team game.
     const auto& houses = init.getHouseInfoList();
     return houses.size() == 2 && houses[0].team != houses[1].team
         && !houses[0].playerInfoList.empty() && !houses[1].playerInfoList.empty();

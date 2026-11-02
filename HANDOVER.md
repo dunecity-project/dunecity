@@ -122,32 +122,35 @@
   six standing guns. Raw final arms: `supplier-{off,on,fast-year-on}/`; numbers and
   purchase/loss times: `actual-save-comparison.json` beside the preserved probe.
 
-## 2026-11-02 — QuantBot Civilization Wars training (experimental, unreleased)
+## 2026-11-03 — QuantBot Civilization Wars experiments (default OFF, unreleased)
 
-- Branch `feat/civ-wars-ai` contains a real generated-match matrix/probe and a hashed
-  `[Civ Wars] Strategy` switch (default on as requested). Research Lab plus the canonical
-  generated marker, or the `CivWars` mod, gates the new policies; ordinary Research Lab
-  games retain their original policy. No separate protocol bump: shared release protocol111.
-- Candidate policies stage the opening worker fleet/research, reserve a funded research
-  payment and operating runway, field a ground wave before research beyond tech4, and limit
-  optional city land investment. Visible active worms warn at8tiles without revealing
-  sleeping/hidden worms; generated-only spice corridors avoid mountain ridges. The existing
-  MCV/escort planner can admit small midpoint islands, respecting allied claims and losses.
-  Army Hunt orders, human-order authority and saboteurs are unchanged.
-- Measured: **45/45** baseline games (3team sizes ×3mirror difficulties ×5fixed seeds),
-  plus **21** candidate/control pilot games; complete telemetry and actual AI CPU retained.
-  Native focused CivWars-tagged tests passed **34cases /6,577,297assertions**. Native
-  candidate builds passed through shared ccache at nice10/-j4.
-- **Not acceptance-complete / not release-ready:** early research and harvester safety
-  improved, but all nine candidate2 cross-format/difficulty pilots timed out at30min.
-  At40min only the right-only seed7101 pilot beat its control (32.62min); both-on still
-  timed out. The four-worker pre-wave cap constrains income/army throughput. A subsequent
-  unlimited-population/finite-land admission correction is not simulation-measured.
-- Final ≥5-seed off/on and side-swapped difficulty-ladder evidence, mandatory AI regressions,
-  full cluster CTest, performance/FPS acceptance, paired non-Civ-Wars digests and a specific
-  early-ornithopter defence simulation are **unverified**. Do not infer strength acceptance
-  from the default-on setting. All parameters, experiment tables, source/job IDs and data
-  locations are in `docs/civilization-wars-ai.md`; no origin push.
+- `[Civ Wars] Strategy` remains multiplayer-hashed but **defaults OFF**: the final
+  finishing criterion failed. Explicit opt-in additionally requires exactly two occupied
+  opposing initial houses plus Research Lab and generated CivWars/mod identity. Shared-house
+  copilots count as one house; team elimination cannot activate the experiment later.
+  Team formats retain the ordinary/basic Research Lab policy. Shared protocol111 is unchanged.
+- The retained experimental parameters are two workers through tech3; pre-wave Medium/Hard/
+  Brutal caps6/8/10 and post-wave8/12/16; real research payment plus operating reserve;
+  tech4 then a real wave before further research; city-zone caps24 then36/48/60;
+  visible active worm warning8tiles; generated-only mountain-safe spice corridors and
+  24-free-tile island admission with the existing MCV escort/loss/allied-claim gates.
+  No lane-order override, formation, saboteur or human-authority change is retained.
+- Final source271 mirrors: **90 games**, five seeds × three formats × three difficulties
+  × off/on,40min. Off33/45 decisive, on9/45; stalemates26.7% versus80%.
+  Even1v1 on mirrors finished only3/15. The historical12/45 control had a30min cap;
+  do not misattribute the longer40min control's33/45 to the experiment.
+- Final Hard direct matrix: **30 games**, five seeds × three formats × both orientations.
+  On W/L/T is **9/0/1 in1v1,0/8/2 in2v2,0/7/3 in3v3**: team total **0/15/5**.
+  [INFERENCE, unverified cause] worker/pre-wave land caps likely starve team income:
+  minute20 off/on median harvesters13/5 in2v2 and8/4 in3v3, with lower on army value.
+- Corrected source271 gates: **32/32 real early-Ornithopter strikes** killed by the defender
+  with yard/lab intact, both sides/targets and repeats; **eight ordinary-map off/on pairs**
+  have identical complete digest sequences with distinct config hashes (16 cases).
+- Duel-gate source94cd2d4c: all four2v2/3v3 off/on pairs match rolling digests through10min;
+  all ten1v1 direct reruns preserve source271 final cycles, digests and9/0/1 results.
+  Full experiment parameters, result tables, source/job identities and verification receipts
+  are in `docs/civilization-wars-ai.md`; raw evidence is in `dunecity-results/civwars-ai/`.
+  Headless cycles/s is not rendered FPS; no rendered-FPS acceptance is claimed. No origin push.
 
 ## 2026-11-03 — Power-starved Harkonnen city (OMP IdleAISave, unreleased)
 
