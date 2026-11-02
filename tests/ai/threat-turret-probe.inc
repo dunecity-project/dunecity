@@ -163,6 +163,19 @@ void runThreatTurretProbe(Game& game) {
         bool port=false;
         for (const auto& order:yard->getProductionQueue()) if (order.itemID==Structure_StarPort) port=true;
         require(port,"Funded city Starport did not reach real production");
+        auto repair=supply(false,600);
+        auto prerequisite=saving.capitalCandidates[saving.capitalChoice];
+        prerequisite.item=Structure_Radar;prerequisite.kind="defence_prerequisite";
+        prerequisite.reason="ground_threat";prerequisite.urgent=true;prerequisite.score=6500;
+        prerequisite.price=game.objectData.data[Structure_Radar][house->getHouseID()].price;
+        prerequisite.cost=prerequisite.price;prerequisite.foundationCost=0;
+        prerequisite.site=bot->findCoveredDefencePlaceLocation(Structure_Radar,yard->getLocation());
+        repair.capitalCandidates={prerequisite};bot->chooseCapitalPlan(repair);
+        bot->buildProducer(repair,yard);
+        require(yard->getCurrentProducedItem()==Structure_Radar
+            && !bot->builderPlaceLocations[yard->getObjectID()].empty()
+            && bot->builderPlaceLocations[yard->getObjectID()].back()==prerequisite.site,
+            "Final yard vetting discarded the protected prerequisite's selected site");
         SDL_Log("THREAT_TURRET_PASS: observed=8 goal=%d local=%d site=%d,%d hidden=ignored cap=12 starport=saved_and_queued",
             on.groundTurretGoal,on.groundTurretCover,site.x,site.y);
         clear();

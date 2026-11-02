@@ -2145,7 +2145,14 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     if (pass.emitStatsLog) logDebug("BUILD-CHOICE: CY=%u item=%u credits=%d skip=%d",
         turn.pBuilder->getObjectID(), yardTurn.itemID, pass.money, yardTurn.skipRemainingStructureLogic);
     // A later power/tech override cannot reuse a service's 1x1 site.
-    if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation)
+    const auto* protectedProject=pass.protectionCapital && capitalPending(pass)
+        ? &pass.capitalCandidates[pass.capitalChoice] : nullptr;
+    const bool protectedSite=protectedProject
+        && protectedProject->builder==turn.pBuilder->getObjectID()
+        && protectedProject->item==yardTurn.itemID
+        && (std::string_view(protectedProject->reason)=="ground_threat"
+            || std::string_view(protectedProject->kind)=="city_supply");
+    if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite)
         yardTurn.crimeServiceSite = Coord::Invalid();
 }
 
