@@ -207,6 +207,7 @@ void playCustomGame(bool online, bool publicGame, bool randomMap, bool civilizat
             RandomSkirmishMenu generator(ModManager::instance().getActiveModName());
             generator.showMenu();
             path = generator.getCreatedMap();
+            setup.rules.researchLab = generator.getCreatedResearchLab();
         }
         if(path.empty()) return;
         const auto found = std::find(setup.maps.begin(), setup.maps.end(), path);

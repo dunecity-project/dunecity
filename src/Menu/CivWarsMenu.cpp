@@ -289,7 +289,8 @@ void CivWarsMenu::onGameRules() {
         }
         rules = effectiveGameOptions;
     }
-    openWindow(GameOptionsWindow::create(CivWars::matchRules(rules)));
+    rules = CivWars::matchRules(rules);
+    openWindow(GameOptionsWindow::create(rules));
 }
 
 void CivWarsMenu::onChildWindowClose(Window* child) {

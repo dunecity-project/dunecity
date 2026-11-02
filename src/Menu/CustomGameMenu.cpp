@@ -465,8 +465,10 @@ void CustomGameMenu::onRandomMap()
         CivWarsMenu generator(true);
         generator.showMenu();
         path = generator.getCreatedMap();
-        currentGameOptions = CivWars::matchRules(currentGameOptions);
-        if(setup) setup->rules = currentGameOptions;
+        if(!path.empty()) {
+            currentGameOptions = generator.getMatchRules();
+            if(setup) setup->rules = currentGameOptions;
+        }
     } else {
         RandomSkirmishMenu generator(mod);
         generator.showMenu();

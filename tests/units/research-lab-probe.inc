@@ -91,7 +91,7 @@ BuilderBase* researchYard(House* owner) {
     return nullptr;
 }
 
-Uint64 researchLegacyHouseDigest(const Game& game) {
+Uint64 researchLegacyHouseDigest(Game& game) {
     GameStateDigest::Hasher houses;
     for(int id = 0; id < NUM_HOUSES; ++id) {
         const auto* owner = game.getHouse(id);
