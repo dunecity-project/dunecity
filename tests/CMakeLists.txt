@@ -644,7 +644,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/network/run-spectator-end-probe.py
             --cases end,decision,lag-end,lag-decision,slow,natives
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-online-end-probe)
-        set_tests_properties(spectator_online_end_probe PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        # Give the controller's finally blocks time to stop peers/PHP and finish
+        # failed profile leases; the gameplay deadline remains 1200 seconds.
+        set_tests_properties(spectator_online_end_probe PROPERTIES TIMEOUT 1200
+            TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 10
+            RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         # Stefan: "make any spawned troopers due to crime and make all worms belong to 'natives' house".
         # Worms on bundled maps, a Random Skirmish, a campaign mission and a 9868 save are the
         # Natives'; crime troopers are, and QuantBot's threat estimate ignores them; Natives is in
