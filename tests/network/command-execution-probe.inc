@@ -762,7 +762,10 @@ int runOwnershipProbe() {
         if(!menuTarget || SDL_SetRenderTarget(renderer, menuTarget.get()) != 0) throw std::runtime_error("menu render target failed");
         SDL_RenderSetLogicalSize(renderer, 640, 480);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); SDL_RenderClear(renderer);
-        HouseChoiceMenu menu;
+        // Offline partner controls must not depend on a temporary mod's online approval.
+        HouseChoiceMenu menu(false);
+        if(HouseChoiceMenu::isOnline() || !menu.partnerSelector.aiBox.isEnabled())
+            throw std::runtime_error("AI partner fixture requires the enabled offline selector");
         // Partner AI box (336,313 256x22): None -> QuantBot.
         menu.handleMouseLeft(400, 320, true); menu.handleMouseLeft(400, 320, false);
         SDL_KeyboardEvent key{}; key.keysym.sym = SDLK_DOWN;
