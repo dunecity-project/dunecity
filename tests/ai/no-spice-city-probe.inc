@@ -281,7 +281,9 @@ void runNoSpiceCityProbe(Game& game) {
         auto marketDecide=[&](int credits,int power) {
             port->informFrigateDestroyed(); // Reset this fixture's preceding shipment.
             port->updateBuildList();
-            for(auto& offer:port->buildList)if(offer.itemID==Unit_Quad)offer.price=80;
+            // This controlled bargain outranks routine core cover, as the
+            // selected imports did in the save; isolate its power-budget claim.
+            for(auto& offer:port->buildList)if(offer.itemID==Unit_Quad)offer.price=70;
             for(auto& offer:house->getChoam().availableItems)offer.num=offer.itemID==Unit_Quad ? 10 : 0;
             return decide(credits,power);
         };
