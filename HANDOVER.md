@@ -1,3 +1,54 @@
+## 2026-11-03 — CTest historical-content and fixture repairs (OMP CtestTriage, unreleased)
+
+- Original cluster `20261103T045258-release-integration-760977`, source27176982:
+  115 passed,16 failed/timeouts,2 not executed (Atreides/scenario matrix), not18
+  independently failing tests. The balance-probe wrappers hid normal exit1
+  exceptions, not one shared native crash. Actual messages distinguish legacy
+  House alignment, campaign opening, peaceful overlap, reactor affordability,
+  first-carryall savings and the9854 legacy checksum.
+- `5d56bb9e` updates stale test serialization assumptions introduced by Research
+  Lab `b3ad447b`: the9840 House fixture removes the9881 technology tail as well
+  as the earlier tails; the yard-cap fixture downgrades the actualMOD15 stream;
+  Tornie546 isolation ends at its real last ID, not the later all-family Research
+  Lab. Campaign pressure keeps its initialized mod family rather than changing
+  only a setup name (content-family cutover `6334f038`); both registered real
+  Vanilla/Dune City cases retain their4–6-minute assertions.
+- Research Lab content `34841947` broke the earlier shipped-byte equivalence.
+  Restore exact fixture revisions for842/847/850/851pub saves, Natives9868 and
+  the852 Palace-stall continuation from committed manifests/versions/historical
+  INIs. Sources are the retained `dunecity-results/regression-852/savecompat/`
+  producer profiles. Reuse unchanged source graphics and the already archived
+  eight-house retired artwork only after SHA256/size checks; manifest hashes
+  must match revision IDs. No current-rule substitution, download or user cache.
+  Natives save preflight is noninteractive. Original saves are unchanged.
+- The9854 preplace save has no immutable pin. Its isolated legacy subcase
+  temporarily restores the850 archived rules: the producer log records the same
+  original checksum `6feab22edf365c95`. The real checksum resolver remains
+  enforced, and current rules are restored before the factory-queue subcase.
+- Eight-house performance now retains exact1.0.849 `4018fe36` ObjectData
+  (a9446d14…,20149B) and QuantBot config (4a4a503d…,11507B). Save, manifests and
+  every timing budget are unchanged. This missing-content failure is NOT
+  pre-existing on1.0.864: both bytes exist in897249cf, and release job
+  `20261101T135451-release-1.0.864-eaff32/perf_regression@pro.log` passed206.53s.
+  That release's Natives retry passed save9868, then failed the separate airplane
+  assertion already fixed by6b11e1a2; it did not have today's content-modal hang.
+- Spectator failure is a mini network-environment limitation, not attributed to
+  a feature without evidence: both native ICE production files are unchanged
+  from897249cf. The same six-case mini probe passed582.97s in
+  `20261101T231611-ctest-365281`. Today's plain Vanilla control also exchanges
+  host candidates but selects no pair/ICE fails40896ms; current integration
+  attempts time out before gameplay. Evidence:
+  `outputs/civ-wars-final/plain-loopback-control/`. Read-only inspection found
+  firewallState1, defaulten1 and Tailscaleutun1; the exact changed setting/time
+  is unproven. No firewall change, TURN, relay or relaxed network assertion.
+- Required current-HEAD cluster rerun `20261103T071210-ctest-triage-initial-3ae4bd`
+  (36dbc683) reproduced save/Natives/Palace/spectator failures;14 others were
+  cancelled without execution. Pro authentication failure and battery-paused
+  Air prevent failed-mini retries from settling. Main explicitly authorized the
+  documented local fallback, `nice -n 10 ctest --test-dir build-int -j3`, through
+  the shared coordinator after the combined fixes. Passing final receipts are
+  not established by the original or cancelled initial job.
+
 ## 2026-11-03 — Windows online host roster stack use (OMP CivWars, unreleased)
 
 - The real Windows Civ Wars **Host Online** diagnostic terminated before admission with
