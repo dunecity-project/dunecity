@@ -12,6 +12,14 @@ mod get research-aware economy but never generated-lane assumptions. Ordinary
 matches retain the existing decision path. ResearchLab owns protocol 111 for the
 combined release; there is no independent protocol or app-version bump here.
 
+The switch defaults **on only for 1v1**: activation requires exactly two occupied
+initial houses on different teams. Shared-house human/AI copilots do not add a
+house. All team formats use the switch-off policy, even after eliminations leave
+only two survivors. This restriction follows source `27176982`'s completed
+five-seed, both-orientation Hard direct matrix: strategy-on won/lost/tied
+**9/0/1 in 1v1 but 0/15/5 across 2v2 and 3v3**. The economic/research policy
+itself is unchanged; the integrator chose to retain only its supported duel use.
+
 The generated-map contract is three horizontal lanes, centred at
 `(2 * lane + 1) * height / 6`, rock ends of width `width / 4`, mirrored teams
 (left team 1, right team 2), and one midpoint rock island per lane. Vehicles stay

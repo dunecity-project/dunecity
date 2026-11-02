@@ -179,7 +179,8 @@ public:
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
-    /// CivWars mod rules on any map; ordinary Research Lab matches remain unchanged.
+    /// CivWars rules only for two occupied opposing initial houses, never team games.
+    /// Ordinary Research Lab matches remain unchanged; shared-house copilots do not add houses.
     bool civWarsRules() const;
     /// Lane geometry is authorised only by the generated map's canonical marker.
     bool isCivWarsMatch() const;
