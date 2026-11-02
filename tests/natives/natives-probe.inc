@@ -935,28 +935,13 @@ void runLockstepInteractions() {
         const auto troops = game->getCitySimulation()->raiseCrimeTroopers(baseOf(ai[0]), 3);
         nRequire(!troops.units.empty() && troops.natives == nativesHouse, peer.name + ": crime raised no Natives troopers");
         AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(HOUSE_ORDOS), baseOf(ai[1])->getLocation() + Coord(1, 1));
+        // As in the campaign crash fixture, two rockets finish an already damaged plane.
+        // This checks shooting/crash lockstep, not whether two troopers survive a defended
+        // base long enough to remove all 100 HP (they can die after dealing only 90).
+        plane->setHealth(10);
         const Uint32 planeID = plane->getObjectID();
-        const auto shooters = nativesAttack(*game, plane, 2, baseOf(ai[1])->getLocation() + Coord(4, 2));
-        SDL_Log("NATIVES_PROBE: lockstep plane %u at %d,%d health %.1f", planeID, plane->getX(), plane->getY(),
-                plane->getHealth().toDouble());
-        for(Uint32 id : shooters) {
-            const auto* trooper = static_cast<const UnitBase*>(game->getObjectManager().getObject(id));
-            SDL_Log("NATIVES_PROBE: lockstep shooter %u at %d,%d health %.1f range %d target %u", id,
-                    trooper->getX(), trooper->getY(), trooper->getHealth().toDouble(), trooper->getWeaponRange(),
-                    trooper->getTarget() ? trooper->getTarget()->getObjectID() : NONE_ID);
-        }
+        nativesAttack(*game, plane, 2, baseOf(ai[1])->getLocation() + Coord(4, 2));
         for(int i = 0; i < 6000 && game->getObjectManager().getObject(planeID); ++i) step(1);
-        if(game->getObjectManager().getObject(planeID)) {
-            SDL_Log("NATIVES_PROBE: lockstep surviving plane health %.1f", plane->getHealth().toDouble());
-            for(Uint32 id : shooters) {
-                const auto* trooper = static_cast<const UnitBase*>(game->getObjectManager().getObject(id));
-                if(trooper) {
-                    SDL_Log("NATIVES_PROBE: lockstep surviving shooter %u at %d,%d health %.1f range %d target %u", id,
-                            trooper->getX(), trooper->getY(), trooper->getHealth().toDouble(), trooper->getWeaponRange(),
-                            trooper->getTarget() ? trooper->getTarget()->getObjectID() : NONE_ID);
-                } else SDL_Log("NATIVES_PROBE: lockstep shooter %u died", id);
-            }
-        }
         nRequire(game->getObjectManager().getObject(planeID) == nullptr, peer.name + ": the plane was not shot down");
         step(MILLI2CYCLES(120 * 1000));
         eliminate(*game, ai[0]);

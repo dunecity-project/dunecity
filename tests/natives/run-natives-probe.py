@@ -33,8 +33,10 @@ Release 1.0.852 interactions with the spectated game end and the city airplane's
              is credited to the Natives, decides nothing and does not provoke the campaign AI; a
              crash on the last building wins or loses the mission as any other kill would
   lockstep-interactions   host, guest and spectator of one DuneCity simulation with worms, crime
-             troopers and a plane the Natives shoot down agree at every 750-cycle checkpoint, and
-             the spectator's game ends at the guest's winning cycle
+             troopers and a damaged plane the Natives shoot down agree at every 750-cycle checkpoint,
+             and the spectator's game ends at the guest's winning cycle. As in the campaign fixture,
+             two rockets finish the plane: this tests crash determinism, not trooper survival against
+             the AI base's defence.
 
 --baseline links against a tree without the Natives house (e.g. a worktree at afb2315c) and runs
 the case that writes the 9868 fixture: make-save.
