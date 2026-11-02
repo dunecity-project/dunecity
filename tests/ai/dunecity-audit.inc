@@ -57,16 +57,19 @@ inline void sample(Game& game) {
         }
         SDL_Log("DUNECITY_AUDIT: minute=%d cycle=%u house=%d credits=%d power=%d need=%d population=%d tax=%d "
                 "demand=%d built=%d structures_lost=%d base_hp=%d yards=%d yard_level=%d queue=%d upgrading=%d "
-                "waiting=%d fronts=%s gun=%d rocket=%d radar=%d starport=%d heavy=%d ix=%d fighters=%d moving=%d "
-                "targeting=%d enemies=%d enemy_value=%d spice=%d",
+                "waiting=%d fronts=%s gun=%d rocket=%d radar=%d radar_built=%d starport=%d starport_built=%d "
+                "heavy=%d heavy_built=%d ix=%d ix_built=%d fighters=%d moving=%d targeting=%d enemies=%d "
+                "enemy_value=%d spice=%d",
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getCredits(),
                 house->getProducedPower(), house->getPowerRequirement(), population, tax, demand,
                 house->getNumBuiltStructures(), structuresLost, structureHP,
                 house->getNumItems(Structure_ConstructionYard), yardLevel, queue, upgrading, waiting,
                 fronts.empty() ? "none" : fronts.c_str(), house->getNumItems(Structure_GunTurret),
                 house->getNumItems(Structure_RocketTurret), house->getNumItems(Structure_Radar),
-                house->getNumItems(Structure_StarPort), house->getNumItems(Structure_HeavyFactory),
-                house->getNumItems(Structure_IX), fighters, moving, targeting, enemies, enemyValue,
+                house->getNumBuiltItems(Structure_Radar), house->getNumItems(Structure_StarPort),
+                house->getNumBuiltItems(Structure_StarPort), house->getNumItems(Structure_HeavyFactory),
+                house->getNumBuiltItems(Structure_HeavyFactory), house->getNumItems(Structure_IX),
+                house->getNumBuiltItems(Structure_IX), fighters, moving, targeting, enemies, enemyValue,
                 bot->lastCalculatedSpice);
     }
 }
