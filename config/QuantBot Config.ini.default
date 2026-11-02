@@ -335,10 +335,11 @@ AttackTimerMs=90000
 AttackThresholdPercent=0.40
 MinMoneyForProduction=500
 
-# Research-aware economy; generated Civilization Wars maps additionally use lane strategy.
-# Inert when the Research Lab match rule is disabled. Hashed for multiplayer.
+# Experimental research-aware economy/logistics; off by default (mirror stalemates).
+# Opt-in is 1v1 only (two occupied opposing initial houses) and requires Research Lab.
+# Generated lane assumptions additionally require the CivWars map marker. Multiplayer-hashed.
 [Civ Wars]
-Strategy=true
+Strategy=false
 
 # ============================================================================
 # OPTIONAL MATCH TECHNOLOGY
