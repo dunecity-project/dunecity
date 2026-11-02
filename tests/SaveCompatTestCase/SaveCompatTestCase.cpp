@@ -46,7 +46,8 @@ TEST_CASE("Save compat: Tornie 546 IDs append without replacing city or legacy o
         Unit_CapacityHarvester, Unit_FastHarvester, Unit_TameSandworm};
     for(int index = 0; index < 14; ++index) REQUIRE(appended[index] == 74 + index);
     REQUIRE(Structure_Chemipost == 73);
-    REQUIRE(Num_ItemID == 88);
+    REQUIRE(Structure_ResearchLab == 88);
+    REQUIRE(Num_ItemID == 89);
     REQUIRE(isStructure(Structure_Doublefinery));
     REQUIRE(isStructure(Structure_Slowpost));
     REQUIRE_FALSE(isUnit(Structure_Slowpost));
@@ -87,7 +88,9 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9879 adds the MOD13 shared factory queue rule without new per-builder state.
     // 9880 lets the QuantBot role byte hold Off (an AI partner switched off in game) and saves a
     // tax rate per city house.
-    REQUIRE(SAVEGAMEVERSION == 9880);
+    // 9881 appends Research Lab house state and MOD15 research/trooper-AA rules.
+    REQUIRE(SAVEGAMEVERSION == 9881);
+    REQUIRE(SAVEGAMEVERSION_RESEARCH_LAB == 9881);
     REQUIRE(SAVEGAMEVERSION_TORNIE546 == 9878);
     REQUIRE(SAVEGAMEVERSION_AI_ROLE == 9875);
     REQUIRE(SAVEGAMEVERSION_AI_ROLE_OFF == 9880);
