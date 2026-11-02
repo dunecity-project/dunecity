@@ -475,7 +475,7 @@ void runNoSpiceCityProbe(Game& game) {
             pass.cityZonesIncludingQueued=pass.itemCount[Structure_ZoneResidential]
                 +pass.itemCount[Structure_ZoneCommercial]+pass.itemCount[Structure_ZoneIndustrial];
             pass.cityStorageCapacityIncludingQueued=house->getCapacity();
-            pass.cashFlow.projectedCash=-6070;pass.militaryValue=bot->minWaveValue();
+            pass.cashFlow.projectedCash=-6070;pass.militaryValue=bot->minWaveValue()+1;
             return pass;
         };
         auto order=[&](QuantBot::BuildPass& pass,BuilderBase* builder,Uint32 item) {
@@ -495,23 +495,18 @@ void runNoSpiceCityProbe(Game& game) {
             config->force.cityOpeningCapital=true;
             auto opening=budgetPass();
             require(!order(opening,factory,Unit_MCV),"An optional MCV spent a city's unfunded working capital");
-            require(!order(opening,light,Unit_Trike),"Discretionary light production consumed negative runway");
+            require(order(opening,light,Unit_Trike),"Optional-capital protection suppressed military reinforcements");
             QuantBot::BuilderTurn upgrade(opening.money);upgrade.pBuilder=factory;upgrade.pStructure=factory;
             require(!bot->upgradeWithLogging(opening,upgrade,__LINE__),
                 "Optional producer technology consumed the seed town's cash");
-            require(factory->getProductionQueueSize()==0 && light->getProductionQueueSize()==0
-                && !factory->isUpgrading(),"A refused opening purchase changed an engine queue");
+            require(factory->getProductionQueueSize()==0 && light->getProductionQueueSize()==1
+                && !factory->isUpgrading(),"Optional capital changed a queue or military reinforcements were lost");
+            cancelOrders(light);
 
-            opening.militaryValue=std::max(0,bot->minWaveValue()-1);
-            require(order(opening,light,Unit_Trike),"Negative runway prevented the minimum standing wave");
-            cancelOrders(light);opening.militaryValue=bot->minWaveValue();
-            opening.cashFlow.projectedCash=0;
-            require(bot->cityMilitarySpendingAllowed(opening),"Military production stayed gated at non-negative runway");
-            opening.cashFlow.projectedCash=-6070;opening.defendingEconomy=true;
-            require(bot->cityMilitarySpendingAllowed(opening)
-                && bot->canFundProductionUpgrade(opening,factory),"Live defence lost its military/technology exemption");
+            opening.defendingEconomy=true;
+            require(bot->canFundProductionUpgrade(opening,factory),"Live defence lost its technology exemption");
             opening.defendingEconomy=false;opening.airEngaged=true;
-            require(bot->cityMilitarySpendingAllowed(opening),"A live air threat lost its military exemption");
+            require(bot->canFundProductionUpgrade(opening,factory),"A live air threat lost its technology exemption");
             opening.airEngaged=false;opening.colonisationNeeded=true;
             require(bot->canFundCapacityMcv(opening,900,factory->getObjectID()),
                 "Actual rock recovery was treated as optional yard capacity");
@@ -546,7 +541,7 @@ void runNoSpiceCityProbe(Game& game) {
                 "An optional MCV consumed the selected Starport's protected purchase");
             funded.capitalCandidates.clear();funded.capitalChoice=-1;funded.money=3000;
             require(order(funded,factory,Unit_MCV),"A funded city never resumed optional yard construction");
-            SDL_Log("CITY_OPENING_CAPITAL_PASS: negative runway preserves seed cash; standing waves, threats and recovery remain live");
+            SDL_Log("CITY_OPENING_CAPITAL_PASS: optional MCV/technology preserve seed cash; military, threats and recovery remain live");
         } catch (...) {
             bot->configOverride=savedConfig;
             house->producedPower=savedProduced;house->powerRequirement=savedRequired;throw;

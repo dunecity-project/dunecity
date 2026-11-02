@@ -355,7 +355,7 @@ CityGrowthPower=1
 # Size city reserve generation without consuming the seed town's working capital.
 CityPowerSizing=1
 # Preserve the seed town's existing four-minute working-capital forecast.
-# Standing waves and live defence keep fighting; required power/supply keep priority.
+# Only optional MCVs/producer upgrades are gated; military and required power/supply are unchanged.
 CityOpeningCapital=1
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1

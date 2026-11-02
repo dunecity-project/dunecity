@@ -141,10 +141,12 @@ The integrated `growth_installments` regression exposed a legality error in this
 comparison: its real controlled case disables Windtraps, but admission still priced
 the hypothetical cheap alternative and rejected the only legal reactor at1,200 cash/
 368 forecast. Inventory now caches actual Windtrap buildability alongside Nuclear;
-sizing compares alternatives only while wind can be built. The existing installment/
+sizing compares alternatives only while wind can be built. The fixture itself also
+had a stale third, native-map yard: its ObjectData mutation refreshed only its two
+new yards, so the native one still advertised disabled wind. The helper now refreshes
+every owned producer and asserts the disabled item is absent. The existing installment/
 foundation/blackout assertions are retained, and the sizing boundary adds this case.
-Normal DuneCity Wind-enabled matrix games retain the same comparison. The correction
-adds no placement search and remains behind CityPowerSizing.
+Normal Wind-enabled games retain the same comparison; no placement search is added.
 
 The no-spice engine fixture exercises the real final yard vetter with legal live sites:
 off reproduces the oversized first reactor; on selects wind for the 40-power top-up,
@@ -226,18 +228,22 @@ Founding/lost-yard/actual-rock recovery and required yard upgrades keep their ol
 budgets. Blackout recovery, CityGrowthPower, ThreatTurrets and Starport supply keep
 their existing precedence and cash protection.
 
-Discretionary military orders are deferred **only while projected cash is negative**.
-The gate lifts at zero, always allows the existing `minWaveValue()` standing force
-(default3,000 credits), and is bypassed by live ground/air defence. Eligibility and
-queue acceptance use the same rule, so a refused military offer cannot reserve cash
-forever. Producer branches can fall through from an unfunded optional upgrade to
-funding that standing wave. No saboteur orders, human-order leases or attack policy
-are changed.
+The initial `8ff2d79a` candidate also deferred discretionary military at negative
+projected cash. That version is **withdrawn**, not the final policy. In an ordinary
+15-minute 96/None/1v1/Hard game, seed9101, its picked tempo's 2,000-credit standing
+threshold was already met by the initial 2,500-credit army: ON produced no combat
+units versus OFF's three Quads/two Trikes (900 credits). Saved funds did buy a Starport
+and real repair-demand Carryalls, but this did not justify suppressing reinforcements.
+The final switch therefore gates **only optional MCVs and producer technology**.
+Military eligibility, queue acceptance, saboteur orders, human leases and attack policy
+are unchanged. Obsolete broad-ON matrix/ladder jobs were cancelled; their partial
+detector/combat results must not be presented as final-policy A/B.
 
-The no-spice fixture adds real queue/upgrade negative controls, funded resumption
-with research disabled, standing-force/nonnegative-runway boundaries, live defence,
-lost-yard/rock recovery and required-yard exceptions. Its outcomes and this switch's
-detector/combat effects are unverified until the new committed-source runs finish.
+The no-spice fixture retains real queue/upgrade negative controls, funded resumption
+with research disabled, live defence, lost-yard/rock recovery and required-yard exceptions.
+It additionally asserts that reinforcements above the standing-wave threshold still
+queue with negative projected cash. Final detector/combat effects remain unverified
+until the new committed-source ON run finishes against the retained OFF seed set.
 
 ## Verification boundary
 

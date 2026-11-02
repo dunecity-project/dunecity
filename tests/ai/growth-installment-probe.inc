@@ -246,7 +246,16 @@ void runGrowthInstallmentProbe(Game& game) {
     };
     auto setItemEnabled=[&](Uint32 item,bool on) {
         game.objectData.data[item][houseID].enabled=on;
-        for(auto* builder:{yard,secondYard})builder->updateBuildList();
+        // The map's original yard also participates in the inventory scan.
+        // Refresh every owned producer after mutating shared ObjectData, not
+        // just the two yards placed by this fixture.
+        for(auto* structure:structureList) {
+            if(structure->getOwner()!=house || !structure->isABuilder())continue;
+            auto* builder=static_cast<BuilderBase*>(structure);
+            builder->updateBuildList();
+            require(on || !builder->isAvailableToBuild(item),
+                "A disabled fixture item survived in an owned producer's build list");
+        }
     };
     // Highest crime on any of this house's own city-role buildings. The service
     // evaluation calls >=192 dangerous and >=128 moderate, so this is how the

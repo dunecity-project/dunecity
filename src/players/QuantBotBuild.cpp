@@ -187,14 +187,6 @@ bool QuantBot::cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 suppli
         || (economyReadyForCapital(pass) && canFundWorkingCapital(pass,cost,supplier));
 }
 
-bool QuantBot::cityMilitarySpendingAllowed(const BuildPass& pass) const {
-    // A deficit defers discretionary production, not a viable standing wave.
-    // Lift this gate at zero projected cash, without waiting for capital reserves.
-    return !pass.citySimEnabled || !botConfig().force.cityOpeningCapital
-        || pass.cashFlow.projectedCash>=0 || pass.defendingEconomy || pass.airEngaged
-        || pass.militaryValue<minWaveValue();
-}
-
 bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* builder) {
     // Yard upgrades unlock concrete, power, civics and reactive turrets. They
     // keep their existing prerequisite budgets; only producer tech is optional.
@@ -3008,7 +3000,6 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             else if (cityInfantryItem(pass, item) && !infantryQuotaAdmits(pass, value)) reason="infantry_quota_satisfied";
             else if (item==Unit_Ornithopter && int64_t(pass.itemCount[item]+1)*value*10000
                 > int64_t(pass.militaryValue+value)*2000) reason="air_composition_cap";
-            else if (!cityMilitarySpendingAllowed(pass)) reason="city_working_capital";
             else if (score<=0) reason="military_limit";
             if (std::string(reason)!="eligible") score=0;
             if (AITelemetry::log().enabled()) unitOptions.set(std::to_string(item),AITelemetry::Record()

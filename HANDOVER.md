@@ -92,9 +92,9 @@
   OFF reproduces the former choice. The unreleased protocol111 already covers it.
 - Integrated growth_installments exposed sizing against a disabled Windtrap:
   the only legal reactor was refused at1200 cash/368 forecast. Cache live wind
-  buildability in the existing inventory scan and compare prices only when wind
-  is available. Existing installment/foundation/blackout assertions remain intact;
-  added the unavailable-alternative sizing boundary. No new placement search.
+  buildability and compare prices only with a legal alternative. Its ObjectData
+  mutation also left the native third yard advertising disabled wind: refresh
+  all owned producers and assert cache consistency. Keep installment assertions.
 - Frozen271 integrated A/B exposed a second cause on the same seed: cheap wind
   releases1700 credits, but an optional MCV900 + three producer upgrades300 each
   + Trike150 consume1950 before tax covers upkeep. Population5400/built8 then
@@ -103,9 +103,9 @@
   working-capital/forecast/reserve policy for optional extra yards and producer
   upgrades, without depending on Research Lab being enabled. Lost-yard/actual-rock
   recovery, required yard technology, blackout recovery, growth power, reactive
-  turrets and Starport supply retain precedence. Discretionary military is gated
-  only at negative projected cash; minWaveValue standing forces and live ground/
-  air defence remain exempt. Candidate and acceptance gates match.
+  turrets and Starport supply retain precedence. The broad8ff military gate was
+  withdrawn after seed9101 produced zero combat units in15min (OFF:5/900 credits).
+  Final scope is extra MCV/producer upgrades only; military production is unchanged.
 - Added real queue/upgrade financial-boundary cases and isolated
   `dunecity-audit-opening-capital-off`. Audit `--attack-events` retains exact
   existing ground_hunt dispatches and reports first attack, attacks/10 alive-min,

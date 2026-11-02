@@ -257,8 +257,8 @@ struct QuantBotConfig {
         /// Funded installment projects and emergency recovery retain their existing priority.
         bool cityPowerSizing;
         /// Keep optional yards and producer upgrades above the city's existing
-        /// four-minute working-capital forecast. Negative runway also defers
-        /// discretionary military orders, never the standing wave or live defence.
+        /// four-minute working-capital forecast. Military production is unchanged;
+        /// live defence and required construction recovery retain their budgets.
         bool cityOpeningCapital;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.

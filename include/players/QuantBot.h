@@ -1719,7 +1719,6 @@ private:
     bool economyReadyForCapital(BuildPass& pass);
     bool canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier);
     bool cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 supplier);
-    bool cityMilitarySpendingAllowed(const BuildPass& pass) const;
     bool canFundProductionUpgrade(BuildPass& pass, const BuilderBase* builder);
     /// Research is required progression in Civ Wars; reserve it before repeatable orders.
     void planCivWarsResearch(BuildPass& pass);

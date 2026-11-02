@@ -154,14 +154,6 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     if(itemID == Unit_MCV && pass.yardLimit > 0
         && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] >= pass.yardLimit) return false;
     const int quotedPrice=purchasePrice(turn.pBuilder,itemID);
-    if (QuantBotBuildPolicy::militaryItem(itemID) && !cityMilitarySpendingAllowed(pass)) {
-        traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",pass.capitalDecision)
-            .set("builder",turn.pBuilder->getObjectID()).set("item",itemID).set("rule",rule)
-            .set("price",quotedPrice).set("projected_cash",pass.cashFlow.projectedCash)
-            .set("military_value",pass.militaryValue).set("standing_wave_value",minWaveValue())
-            .set("reason","city_working_capital"));
-        return false;
-    }
     if (itemID==Unit_MCV && !canFundCapacityMcv(pass,quotedPrice,turn.pBuilder->getObjectID())) {
         traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",pass.capitalDecision)
             .set("builder",turn.pBuilder->getObjectID()).set("item",itemID).set("rule",rule)
