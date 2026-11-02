@@ -1840,9 +1840,11 @@ TEST_CASE("Observed ground raids get a bounded local rocket goal", "[quantbot][d
     using RocketTurretPolicy::groundThreatGoal;
     CHECK(groundThreatGoal(0)==0);
     CHECK(groundThreatGoal(200)==2);
-    CHECK(groundThreatGoal(800)==2);
-    CHECK(groundThreatGoal(801)==3);
-    CHECK(groundThreatGoal(2000)==5);
+    CHECK(groundThreatGoal(400)==2);
+    CHECK(groundThreatGoal(401)==3);
+    CHECK(groundThreatGoal(800)==4);
+    CHECK(groundThreatGoal(801)==5);
+    CHECK(groundThreatGoal(2000)==8);
     CHECK(groundThreatGoal(100000)==8);
     CHECK(RocketTurretPolicy::threatTurretTotalCap==12);
 }

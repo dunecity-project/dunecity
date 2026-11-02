@@ -101,7 +101,7 @@ buy local rocket cover against **visible armed ground units near the production,
 income and power core (including Radar)**, rather than chasing every outlying plot.
 The build's existing visible-unit survey supplies contacts; hidden armies, aircraft,
 workers and saboteurs do not increase this goal. Contacts are transient per-pass
-scratch (no unsaved two-second decision cache). One rocket per 400 credits of
+scratch (no unsaved two-second decision cache). One rocket per 200 credits of
 nearby observed fighters, rounded up, demands 2–8 local firing covers, with a
 12-rocket house-wide ceiling. Existing and reserved local emplacements count.
 An active core raid protects the next turret or power/tech prerequisite ahead of

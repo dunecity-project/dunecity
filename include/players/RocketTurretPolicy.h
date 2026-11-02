@@ -69,7 +69,7 @@ inline int coverageTurretCap(int coverageDemand) {
 // vehicles, not the whole enemy army; never restore the old unbounded battery.
 constexpr int threatTurretTotalCap = 12;
 inline int groundThreatGoal(int visibleGroundValue) {
-    return visibleGroundValue <= 0 ? 0 : std::clamp((visibleGroundValue + 399) / 400, 2, 8);
+    return visibleGroundValue <= 0 ? 0 : std::clamp(1 + (visibleGroundValue - 1) / 200, 2, 8);
 }
 // How much construction the city does between two peaceful emplacements.
 constexpr unsigned growthOrdersPerProactiveTurret = 3;

@@ -172,7 +172,9 @@ void runThreatTurretProbe(Game& game) {
         prerequisite.site=bot->findCoveredDefencePlaceLocation(Structure_Radar,yard->getLocation());
         repair.capitalCandidates={prerequisite};bot->chooseCapitalPlan(repair);
         bot->buildProducer(repair,yard);
-        require(yard->getCurrentProducedItem()==Structure_Radar
+        bool radar=false;
+        for (const auto& order:yard->getProductionQueue()) if (order.itemID==Structure_Radar) radar=true;
+        require(radar
             && !bot->builderPlaceLocations[yard->getObjectID()].empty()
             && bot->builderPlaceLocations[yard->getObjectID()].back()==prerequisite.site,
             "Final yard vetting discarded the protected prerequisite's selected site");
