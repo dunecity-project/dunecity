@@ -2125,7 +2125,9 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         yardTurn.itemID=NONE_ID;
         yardTurn.skipRemainingStructureLogic=true;
     }
-    if (yardTurn.itemID==Structure_RocketTurret && !pass.routineRocketsAllowed && yardTurn.structureRule!=std::string("perimeter_battery")) {
+    if (yardTurn.itemID==Structure_RocketTurret && !pass.routineRocketsAllowed
+        && std::string_view(yardTurn.structureRule)!="perimeter_battery"
+        && std::string_view(yardTurn.structureRule)!="ground_threat") {
         yardTurn.itemID=NONE_ID;
         yardTurn.crimeServiceSite=Coord::Invalid();
         yardTurn.structureRule="core_infrastructure_before_more_rockets";
