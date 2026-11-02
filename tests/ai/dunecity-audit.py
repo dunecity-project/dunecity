@@ -42,7 +42,7 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'structures', 'factories', 'kill_value', 'loss_value', 'power', 'need', 'population', 'tax', 'demand',
                  'built', 'structures_lost', 'base_hp', 'yards', 'yard_level', 'queue', 'upgrading', 'waiting', 'fronts',
                  'gun', 'rocket', 'radar', 'radar_built', 'starport', 'starport_built', 'heavy', 'heavy_built', 'ix',
-                 'ix_built', 'fighters', 'moving', 'targeting', 'enemies', 'enemy_value', 'spice')
+                 'ix_built', 'fighters', 'moving', 'targeting', 'enemies', 'enemy_value', 'covered_enemies', 'spice')
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags',)
 lock = threading.Lock()
 
@@ -124,7 +124,7 @@ def detect(samples):
         predicates = {
             'economy_stall': (city and s['credits'] < 1000 and not growth, 4, city and minute >= 4),
             'power_deficit': (city and s['power'] < s['need'], 4, city and minute >= 4),
-            'no_ground_defence': (city and minute >= 5 and s['enemies'] >= 3 and s['gun'] + s['rocket'] == 0,
+            'no_ground_defence': (city and minute >= 5 and s['enemies'] >= 3 and s['covered_enemies'] == 0,
                                   2, city and minute >= 5 and s['enemies'] >= 3),
             'idle_under_attack': (alive and under_attack and s['fighters'] >= 3 and s['moving'] == 0
                                   and s['targeting'] == 0, 2, alive and under_attack and s['fighters'] >= 3),
