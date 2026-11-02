@@ -132,7 +132,9 @@ Result encounter(const std::string& mod, const std::string& mapData,
             "The fixture requires the unchanged stock 25-HP Ornithopter");
 
     const Coord site(32, 16);
-    const Coord start = site + Coord(direction * (outbound ? 3 : -5), 0);
+    // Start inside range for both infantry tiles; an out-of-range HOLD order is
+    // discarded by the engine, so five tiles would silently exclude the rear three.
+    const Coord start = site + Coord(direction * (outbound ? 3 : -4), 0);
     auto* aircraft = dynamic_cast<Ornithopter*>(enemy->createUnit(Unit_Ornithopter, true));
     require(aircraft != nullptr, "Could not create the real Ornithopter");
     aircraft->deploy(start);
