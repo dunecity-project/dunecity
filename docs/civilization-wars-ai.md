@@ -371,3 +371,36 @@ continues. No formation shape, forced target, combat retreat, human lease,
 saboteur order or non-generated-map order is changed. Explicit formation/
 party/split/finish controllers retain their own destinations.
 
+
+### Candidate 4 measured result and candidate 5 adjustment
+
+Source `9945bc55`, job `20261102T235633-civwars-candidate4-formats-8225c0`,
+the same nine seed-7101 format/pair cases as candidate 3, all strategy on:
+**0/9 decisive games; all reached 40 minutes**. The Hard mirrors launched
+3/7/6 attacks and reached the opposite end with 27/28/25 distinct ground
+combat units in 1v1/2v2/3v3. Brutal:Hard reached it with only 3/2/14.
+This is worse than candidate 3's two decisive Brutal wins and is not retained
+as a strength improvement.
+
+Candidate 5 moves that attack-move objective **inside** the opposite rock end
+(`x = width−1−width/8` or `width/8`, `y = height/2`) instead of stopping on
+sand outside it. Hypothesis: the outside waypoint ended the directed walk
+before the wave actually entered the base. The rule still consults known
+generated terrain, not unseen enemy objects, and retains normal combat.
+
+The first defence/isolation gate run, source `737074c4`, completed all
+**16 ordinary-map cases with identical off/on digest sequences and distinct
+config hashes**, plus all 16 left-defender air cases. Right-defender cases
+failed: their attacking QuantBot retreated/reassigned the single scripted
+order, giving zero observed enemy projectile cycles, no aircraft damage and
+no kill despite actual defensive fire. The whole gate job was cancelled
+instead of accepting those invalid strike fixtures. The corrected fixture
+must use real human command authority on the attacking house; defender
+orders, money, health, timers and policy remain untouched.
+
+Native candidate-4 build plus focused checks passed: **24 Python tests**
+(0.851s), **35 tagged native cases / 6,577,325 assertions**; the complete
+build/check chain took **18.73s**. The integrator explicitly owns the final
+full cluster CTest/regression/performance run after merging this branch; its
+earlier shared-mutex full-suite attempt was cancelled at 22/133, not passed.
+

@@ -15,10 +15,10 @@ inline int attackDelay(int baseCycles,uint32_t seed,uint32_t cycle,uint32_t hous
     const int percent=75+int(hash%51);
     return int(std::clamp<int64_t>(int64_t(baseCycles)*percent/100,1,INT32_MAX));
 }
-// Version-1 generated Civ Wars ends are the outer quarters. A shared centre-lane
-// sand waypoint concentrates an alliance without selecting an unseen enemy.
-inline std::pair<int,int> civWarsLaneFront(int width,int height,bool onLeft) {
-    return {onLeft ? width-width/4-2 : width/4+1,height/2};
+// Version-1 generated Civ Wars ends are the outer quarters. A shared objective
+// inside the opposite end keeps the attack-move advancing without unseen targets.
+inline std::pair<int,int> civWarsLaneObjective(int width,int height,bool onLeft) {
+    return {onLeft ? width-1-width/8 : width/8,height/2};
 }
 struct Responder { uint32_t id; int value; int distance; };
 inline int attackBudget(int armyValue, int percent) {

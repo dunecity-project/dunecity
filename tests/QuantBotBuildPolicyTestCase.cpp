@@ -1150,18 +1150,18 @@ TEST_CASE("A house that cannot grow its army to its attack threshold attacks wit
     REQUIRE(reachableReadiness(20000,-5,-100,-100)==0);
     REQUIRE(reachableReadiness(INT32_MAX,0,INT32_MAX,INT32_MAX)==INT32_MAX);
 }
-TEST_CASE("Generated Civ Wars alliances share a mirrored centre-lane sand front",
+TEST_CASE("Generated Civ Wars alliances share mirrored objectives inside the opposite rock end",
           "[quantbot][civ-wars][combat]") {
-    for (const auto [width,height] : {std::pair{129,96},std::pair{161,112},
+    for (const auto& [width,height] : {std::pair{129,96},std::pair{161,112},
                                      std::pair{193,128},std::pair{255,160}}) {
-        const auto left=SimpleArmyPolicy::civWarsLaneFront(width,height,true);
-        const auto right=SimpleArmyPolicy::civWarsLaneFront(width,height,false);
+        const auto left=SimpleArmyPolicy::civWarsLaneObjective(width,height,true);
+        const auto right=SimpleArmyPolicy::civWarsLaneObjective(width,height,false);
         CHECK(left.first+right.first==width-1);
         CHECK(left.second==height/2);
         CHECK(right.second==height/2);
-        CHECK(left.first<width-width/4);
+        CHECK(left.first>=width-width/4);
         CHECK(left.first>width/2);
-        CHECK(right.first>=width/4);
+        CHECK(right.first<width/4);
         CHECK(right.first<width/2);
     }
 }

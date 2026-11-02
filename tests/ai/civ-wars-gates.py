@@ -9,9 +9,12 @@ Each queue unit contains BOTH hashed off/on arms and ALL repeats, so a unit cann
 pass before its own comparisons execute. Defaults cover lab/yard on both generated
 sides, plus ordinary Random Skirmish with Research Lab disabled and enabled. Air
 units use canonical starts, a single full-health enemy aircraft at 30 seconds and
-unmodified QuantBot updates. The single-aircraft strength requires at least two
-original starter turrets covering the target and approach. No defended orders,
-boosts, damage injection, invulnerability, forced production or replenishment.
+unmodified QuantBot updates. A genuinely registered attacking HumanPlayer issues
+the one aircraft order through normal Command authority; its existing shared-house
+lease prevents the enemy bot from cancelling that strike. The single-aircraft
+strength requires two original starter turrets covering the target and approach.
+No defended orders, boosts, damage injection, invulnerability, forced production
+or replenishment.
 
 Air pass requires a real defender projectile targeting that aircraft, complete
 engine lethal-damage attribution to its defending team, and survival of BOTH
@@ -50,7 +53,7 @@ root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
 
-VERSION = 'civ-gates-1'
+VERSION = 'civ-gates-2'
 ARMS = ('off', 'on')
 RECORD = re.compile(r'\b(PROBE_CONFIG|PROBE_DIGEST|PROBE_TIMING|CAMPAIGN_BALANCE_RESULT|CIV_[A-Z_]+|SCENARIO_[A-Z_]+):\s*(.*)')
 IDENTITY = ('gate_id', 'attempt', 'kind', 'seed', 'team_size', 'defender_team', 'target', 'difficulty', 'research', 'minutes', 'repeats')
@@ -303,7 +306,7 @@ def run_case(args, scratch, binary, game, base, strategy, repeat):
         if (len(roster) != 2 * game['team_size'] or len(houses) != len(roster)
                 or Counter(data.get('team') for data in roster) != {'1': game['team_size'], '2': game['team_size']}):
             errors.append('incorrect_engine_roster')
-        air_setup, air_result, strike = {}, {}, {}
+        air_setup, air_result, strike, pilot = {}, {}, {}, {}
         if game['kind'] == 'air':
             exactly(found, 'CIV_WARS_RESULT', errors)
             exactly(found, 'CIV_WARS_PERF', errors)
@@ -313,6 +316,7 @@ def run_case(args, scratch, binary, game, base, strategy, repeat):
                 errors.append('missing_actual_quantbot_updates')
             air_setup = exactly(found, 'CIV_AIR_SETUP', errors)
             air_result = exactly(found, 'CIV_AIR_RESULT', errors)
+            pilot = exactly(found, 'CIV_AIR_PILOT', errors)
             strike = exactly(found, 'CIV_AIR_STRIKE', errors)
             defeated = exactly(found, 'CIV_AIR_DEFEATED', errors)
             if (air_setup.get('target_kind') != game['target']
@@ -324,6 +328,14 @@ def run_case(args, scratch, binary, game, base, strategy, repeat):
                     or defeated.get('object') != strike.get('object')
                     or defeated.get('cycle') != air_result.get('defeated_cycle')):
                 errors.append('incorrect_or_missing_strike')
+            if (air_setup.get('strike_authority') != 'registered_human_command'
+                    or pilot.get('class') != 'HumanPlayer' or pilot.get('registered') != '1'
+                    or pilot.get('house') != air_setup.get('attacker')
+                    or pilot.get('player') != strike.get('issuer') or pilot.get('cycle') != strike.get('cycle')
+                    or pilot.get('attacker_players') != '2' or pilot.get('defender_players') != '1'
+                    or strike.get('issuer_class') != 'HumanPlayer' or strike.get('human_lease') != '1'
+                    or air_result.get('human_authority_held') != '1'):
+                errors.append('missing_real_human_strike_authority')
             if (any(air_result.get(field) != '1' for field in
                     ('pass', 'injected', 'strike_count', 'defeated', 'core_survives', 'yard_survives', 'lab_survives'))
                     or air_result.get('end_cycle') != final.get('cycle')
@@ -398,7 +410,7 @@ def run_case(args, scratch, binary, game, base, strategy, repeat):
         if options.is_file():
             artifacts.append(retain_file(options, results / (tag + '.options.ini')))
         deterministic = {'digests': digest_sequence, 'setup': setup, 'air_setup': air_setup, 'strike': strike,
-                         'air_result': air_result, 'kills': kills,
+                         'air_result': air_result, 'pilot': pilot, 'kills': kills,
                          'houses': final_houses, 'source_fingerprint': summary.get('sourceFingerprint')}
         row.update(config_hash=config.get('config_hash', ''), options_hash=setup.get('options_hash', ''),
                    map_hash=setup.get('map_hash', ''), digest=final.get('digest', ''), cycle=final.get('cycle', ''),
@@ -583,7 +595,7 @@ parser.add_argument('--build-dir', default=str(root / 'build'))
 parser.add_argument('--seeds', nargs='+', type=seed_value, default=[7101, 7202])
 parser.add_argument('--team-sizes', nargs='+', type=int, choices=(1, 2, 3), default=[1])
 parser.add_argument('--difficulties', nargs='+', choices=('easy', 'medium', 'hard', 'brutal'), default=['hard'],
-                    help='Defending difficulty; the injected aircraft owner remains a real Hard QuantBot')
+                    help='Defending difficulty; a real Hard QuantBot shares only the attacking house with the strike pilot')
 parser.add_argument('--repeats', type=repeats_value, default=2)
 parser.add_argument('--minutes', type=int, choices=range(2, 11), default=3, help='Completed horizon, including the 30-second strike')
 parser.add_argument('--jobs', type=positive, default=1)

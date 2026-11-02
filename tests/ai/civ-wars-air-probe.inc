@@ -2,6 +2,8 @@
 #include <Bullet.h>
 #include <Command.h>
 #include <DynastyProjectile.h>
+#include <players/HumanPlayer.h>
+#include <players/PlayerFactory.h>
 #include <units/Ornithopter.h>
 
 #include <array>
@@ -39,13 +41,17 @@ class EarlyAirStrike {
     Game& game;
     House* defender = nullptr;
     House* attacker = nullptr;
+    const QuantBot* attackerBot = nullptr;
+    HumanPlayer* pilot = nullptr; // Owned and normally registered by the attacking House.
     std::array<Core, 2> core{}; // Preserve the ORIGINAL yard and lab, not replacements.
     Uint32 targetID = NONE_ID, aircraftID = NONE_ID;
     Uint32 strikeCycle = 0, endCycle = 0, defeatedCycle = UINT32_MAX;
     int starterCover = 0, projectileTargetCycles = 0, strikeProjectileCycles = 0;
+    int humanAuthorityCycles = 0;
     int turretFires = 0, turretHits = 0, turretKills = 0;
     int launcherFires = 0, launcherHits = 0, launcherKills = 0;
     bool injected = false, lostCore = false, aircraftDamaged = false;
+    bool humanAuthorityHeld = false;
     long long aircraftInitial = 0;
     std::vector<Uint32> starterTurrets;
 
@@ -84,9 +90,10 @@ public:
             throw std::runtime_error("Early air probe needs the canonical generated opposing teams");
         if (attacker->getPlayerList().size() != 1)
             throw std::runtime_error("Early air probe needs one real enemy controller");
-        // Hard/Brutal authorize real offensive hull orders. Never relax the aircraft policy.
-        const auto* bot = dynamic_cast<const QuantBot*>(attacker->getPlayerList().front().get());
-        if (!bot || !bot->autonomousAircraftRaids())
+        // Keep the original enemy QuantBot running. Only the injected aircraft receives
+        // a genuine shared-house human order, not an AI order its planner may cancel.
+        attackerBot = dynamic_cast<const QuantBot*>(attacker->getPlayerList().front().get());
+        if (!attackerBot || !attackerBot->autonomousAircraftRaids())
             throw std::runtime_error("Early air probe attacker must be Hard or Brutal");
         starterTurrets.reserve(8);
         for (const auto* structure : structureList) {
@@ -119,7 +126,8 @@ public:
         SDL_Log("CIV_AIR_SETUP: seed=%u defender=%d defender_team=%d attacker=%d target=%u target_kind=%s "
                 "yard=%u lab=%u strike_cycle=%u end_cycle=%u starter_cover=%d strike_count=1 "
                 "strength_policy=one_aircraft_for_two_starter_turrets health_policy=engine_default "
-                "defender_orders=unmodified defender_updates=real",
+                "defender_orders=unmodified defender_updates=real strike_authority=registered_human_command "
+                "attacker_quantbot=unmodified",
             game.getGameInitSettings().getRandomSeed(), defender->getHouseID(), team, attacker->getHouseID(), targetID,
             lab ? "lab" : "yard", core[0].id, core[1].id, strikeCycle, endCycle, starterCover);
     }
@@ -137,6 +145,23 @@ public:
         const Coord spawn = centre + Coord(defender->getTeamID() == 1 ? 8 : -8, 0);
         if (!currentGameMap->tileExists(spawn) || coverage(spawn, false) < 2)
             throw std::runtime_error("Early air approach is not covered by two original starter turrets");
+        // House::addPlayer is the normal attachment/registration API. Adding a copilot
+        // after setup preserves the canonical map, observer, initial bot roster and
+        // BOTH original QuantBots; no defended controller, policy or timer changes.
+        const auto* factory = PlayerFactory::getByPlayerClass(HUMANPLAYERCLASS);
+        if (!factory) throw std::runtime_error("Early air probe cannot find the normal HumanPlayer factory");
+        auto human = factory->create(attacker, "Civ Wars strike pilot");
+        pilot = dynamic_cast<HumanPlayer*>(human.get());
+        if (!pilot || pilot->getPlayerclass() != HUMANPLAYERCLASS)
+            throw std::runtime_error("Early air probe factory did not create a genuine HumanPlayer");
+        attacker->addPlayer(std::move(human));
+        if (game.getPlayerByID(pilot->getPlayerID()) != pilot || !game.isObserving()
+            || defender->getPlayerList().size() != 1 || attacker->getPlayerList().size() != 2)
+            throw std::runtime_error("Early air probe did not register its genuine attacking human copilot");
+        SDL_Log("CIV_AIR_PILOT: cycle=%u house=%d player=%u class=%s registered=1 "
+                "attachment=House.addPlayer attacker_players=%zu defender_players=%zu attacker_quantbot_player=%u",
+            game.getGameCycleCount(), attacker->getHouseID(), pilot->getPlayerID(), pilot->getPlayerclass().c_str(),
+            attacker->getPlayerList().size(), defender->getPlayerList().size(), attackerBot->getPlayerID());
         auto* aircraft = attacker->createUnit(Unit_Ornithopter);
         if (!aircraft) throw std::runtime_error("Cannot create the real strike ornithopter");
         aircraft->deploy(spawn);
@@ -151,16 +176,18 @@ public:
         launcherFires = stats.launcherFiresOnOrni;
         launcherHits = stats.launcherRocketsHitOrni;
         launcherKills = stats.launcherRocketsKillOrni;
-        // A normal accepted enemy order, once. The defending AI receives no probe orders.
-        Command(attacker->getPlayerList().front()->getPlayerID(), CMD_UNIT_ATTACKOBJECT,
-                aircraftID, targetID).executeCommand();
-        if (aircraft->getTarget() != target)
-            throw std::runtime_error("Real enemy ornithopter attack command was not accepted");
+        // Once through the real human command path: Command::executeCommand itself
+        // grants the existing shared-house lease. Never edit or refresh that ledger.
+        Command(pilot->getPlayerID(), CMD_UNIT_ATTACKOBJECT, aircraftID, targetID).executeCommand();
+        humanAuthorityHeld = attackerBot->humanControls(aircraft);
+        if (aircraft->getTarget() != target || !humanAuthorityHeld)
+            throw std::runtime_error("Real human ornithopter attack command or its ordinary lease was not accepted");
         injected = true;
         SDL_Log("CIV_AIR_STRIKE: cycle=%u object=%u owner=%d target=%u x=%d y=%d health_raw=%lld "
-                "max_health=%d command=CMD_UNIT_ATTACKOBJECT accepted=1 count=1",
+                "max_health=%d command=CMD_UNIT_ATTACKOBJECT accepted=1 count=1 "
+                "issuer=%u issuer_class=HumanPlayer human_lease=1",
             game.getGameCycleCount(), aircraftID, attacker->getHouseID(), targetID, spawn.x, spawn.y,
-            aircraftInitial, aircraft->getMaxHealth());
+            aircraftInitial, aircraft->getMaxHealth(), pilot->getPlayerID());
     }
 
     void observe() {
@@ -170,6 +197,11 @@ public:
         }
         if (!injected) return;
         const auto* aircraft = object(aircraftID);
+        if (aircraft && aircraft->getHealth() > 0) {
+            ++humanAuthorityCycles;
+            humanAuthorityHeld = humanAuthorityHeld
+                && attackerBot->humanControls(static_cast<const UnitBase*>(aircraft));
+        }
         if (aircraft && aircraft->getHealth().getRawValue() < aircraftInitial) aircraftDamaged = true;
         if ((!aircraft || aircraft->getHealth() <= 0) && defeatedCycle == UINT32_MAX) {
             defeatedCycle = game.getGameCycleCount();
@@ -192,13 +224,14 @@ public:
         const auto& stats = game.combatStats;
         const bool survived = !lostCore && survives(core[0]) && survives(core[1]) && defender->isAlive();
         const bool pass = injected && defeatedCycle != UINT32_MAX && survived && projectileTargetCycles > 0
-            && game.getGameCycleCount() == endCycle;
+            && humanAuthorityHeld && game.getGameCycleCount() == endCycle;
         SDL_Log("CIV_AIR_RESULT: pass=%d cycle=%u end_cycle=%u injected=%d strike_count=%d defeated=%d "
                 "defeated_cycle=%u core_survives=%d yard_survives=%d lab_survives=%d "
                 "yard_initial_raw=%lld yard_min_raw=%lld lab_initial_raw=%lld lab_min_raw=%lld "
                 "defence_projectile_target_cycles=%d strike_projectile_cycles=%d aircraft_damage_observed=%d "
                 "turret_fires_global=%d turret_hits_global=%d turret_kills_global=%d "
                 "launcher_fires_global=%d launcher_hits_global=%d launcher_kills_global=%d "
+                "human_authority_held=%d human_authority_cycles=%d "
                 "kill_attribution=requires_complete_lethal_damage_telemetry",
             int(pass), game.getGameCycleCount(), endCycle, int(injected), int(injected), int(defeatedCycle != UINT32_MAX),
             defeatedCycle, int(survived), int(survives(core[0])), int(survives(core[1])),
@@ -206,7 +239,8 @@ public:
             projectileTargetCycles, strikeProjectileCycles, int(aircraftDamaged),
             stats.rocketTurretFiresOnOrni - turretFires, stats.turretRocketsHitOrni - turretHits,
             stats.turretRocketsKillOrni - turretKills, stats.launcherFiresOnOrni - launcherFires,
-            stats.launcherRocketsHitOrni - launcherHits, stats.launcherRocketsKillOrni - launcherKills);
+            stats.launcherRocketsHitOrni - launcherHits, stats.launcherRocketsKillOrni - launcherKills,
+            int(humanAuthorityHeld), humanAuthorityCycles);
     }
 };
 

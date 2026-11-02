@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run real campaign AI with a fixed seed, isolated profile and no human commands.
+"""Run real campaign AI with a fixed seed, isolated profile and no human commands by default.
 
 Uses the existing Ninja build (macOS: clang; Windows: MSVC objects, with the probe's
 main compiled by clang-cl). Access-control relaxation is restricted to
@@ -16,7 +16,8 @@ comparison, not a substitute for the browser playtest or human playtesting.
 defaults off; explicit --civ-strategy off/on also supplies ordinary-game digest controls.
 
 --civ-air-probe lab/yard injects one real early enemy aircraft into a canonical start,
-bounded by two covering starter rocket turrets; the defended bot remains unmodified.
+bounded by two covering starter rocket turrets. A registered enemy HumanPlayer
+issues its attack via normal shared-house authority; the defended bot is unmodified.
 tests/ai/civ-wars-gates.py schedules repeat/off-on air and ordinary digest controls.
 """
 import argparse
@@ -173,7 +174,7 @@ parser.add_argument('--civ-strategy', choices=('off', 'on', 'left', 'right'),
                     help='Civ Wars strategy (default off for --civ-wars); off/on is a hashed global switch '
                          'before game init, also on ordinary games; left/right is a test-only unhashed team override')
 parser.add_argument('--civ-air-probe', choices=('lab', 'yard'),
-                    help='Canonical Civ Wars only: real single-ornithopter strike at 30 seconds against this core')
+                    help='Canonical Civ Wars: single ornithopter, real human attack authority, 30-second core strike')
 parser.add_argument('--civ-air-team', type=int, choices=(1, 2), default=1,
                     help='--civ-air-probe: defended generated team (default 1); the attacker must be Hard/Brutal')
 parser.add_argument('--civ-ordinary-gate', choices=('no-research', 'research'),
