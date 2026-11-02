@@ -16,7 +16,7 @@ class ImportTest(unittest.TestCase):
                 ai.insert(db,dict(schema_version=1,session=session,seq=seq,cycle=100,
                                  house=0,player=2,event=kind,data=data),'fixture')
             for session in ('city', 'vanilla'):
-                add(session,1,'capital_plan',dict(mode=session,spendable=1000,selected=0,candidates={
+                add(session,1,'capital_plan',dict(mode=session,spendable=2000,selected=0,candidates={
                     '0':dict(builder=10,item=31,kind='economy',price=300,foundation_cost=0,
                              total_cost_with_power=300,score=2000,reason='marginal_income',affordable=1),
                     '1':dict(builder=11,item=33,kind='military',price=450,score=800,reason='military_shortfall')}))
@@ -26,12 +26,42 @@ class ImportTest(unittest.TestCase):
                     quoted_price=450,accepted=0,rule='unit_mix'))
                 add(session,4,'capital_upgrade',dict(capital_plan=1,builder=11,price=200,accepted=1,reason='technology_unlock'))
                 add(session,5,'capital_road_batch',dict(capital_plan=1,builder=12,cost=20,count=2,price=10))
-                add(session,6,'capital_outcome',dict(plan=1,ordered_cost=520,remaining_planning_cash=480))
+                add(session,6,'tech_research_started',dict(lab=13,cost=600,to=2))
+                add(session,7,'research_started',dict(capital_plan=1,lab=13,cost=600,to=2))
+                add(session,8,'capital_outcome',dict(plan=1,ordered_cost=1120,remaining_planning_cash=880))
             self.assertEqual(db.execute('select count(*) from capital_candidates where selected=1').fetchone(),(2,))
             self.assertEqual(db.execute('select session,sum(cost) from capital_orders group by session').fetchall(),
-                             [('city',520),('vanilla',520)])
+                             [('city',1120),('vanilla',1120)])
             self.assertEqual(db.execute('select count(*) from capital_plans p join capital_outcomes o '
                                         'using(session,plan) where p.spendable=o.ordered_cost+o.remaining_cash').fetchone(),(2,))
+            self.assertEqual(db.execute("select session,builder,item,cost from capital_orders "
+                                        "where kind='research' order by session").fetchall(),
+                             [('city',13,88,600),('vanilla',13,88,600)])
+
+    def test_spending_audit_counts_ai_research_once_without_house_event_duplication(self):
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as tmp:
+            events = Path(tmp) / 'research.jsonl'
+            result = Path(tmp) / 'research-report.json'
+            plan = dict(mode='city',spendable=2000,forecast_net_income=4000,forecast_funding=6000,
+                        military_value=3000,military_target=10000,workers=4,worker_target=4,
+                        spice_share=20000,selected=-1,candidates={})
+            rows = [('capital_plan',plan),
+                    ('tech_research_started',dict(lab=13,cost=600,to=2)),
+                    ('research_started',dict(capital_plan=1,lab=13,cost=600,to=2)),
+                    ('capital_outcome',dict(plan=1,ordered_cost=600,remaining_planning_cash=1400)),
+                    ('session_end',{})]
+            events.write_text(''.join(json.dumps(dict(schema_version=1,session='research',
+                seq=seq,cycle=100,house=0,player=2,event=kind,data=data))+'\n'
+                for seq,(kind,data) in enumerate(rows,1)))
+            audit = subprocess.run([sys.executable,str(Path(__file__).parent / 'ai/report-spending.py'),
+                                    str(events),'--output',str(result),'--check'],
+                                   capture_output=True,text=True)
+            self.assertEqual(audit.returncode,0,audit.stderr or audit.stdout)
+            report = json.loads(result.read_text())
+            self.assertEqual(report['violations'],[])
+            self.assertEqual(report['houses']['0']['spending']['Tech research'],600)
 
     def test_combat_rewards_and_allocation_are_queryable_without_summing_snapshots(self):
         reward = dict(item_name='Tank',damage_value_milli=40000,kill_bonus_milli=120000,

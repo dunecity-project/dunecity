@@ -203,6 +203,19 @@ inline int spendableCredits(int credits, int strategicCost) {
     return std::max(0, credits - std::max(0, strategicCost));
 }
 
+// Research is optional capital: neither expected income nor cash already
+// committed to another queue is permission to spend the working reserve.
+struct TechInvestment {
+    bool enabled = false, economyReady = false, powerReady = false, emergency = false;
+    int cash = 0, cost = 0;
+    int64_t projectedCash = 0, orderedCost = 0, reserve = 0;
+};
+inline bool canFundTechInvestment(const TechInvestment& state) {
+    return state.enabled && state.economyReady && state.powerReady && !state.emergency
+        && state.cost > 0 && int64_t(state.cash) - state.cost >= state.reserve
+        && state.projectedCash - state.orderedCost - state.cost >= state.reserve;
+}
+
 // Keep city construction first; then fund air before ground factories can
 // repeatedly consume its allocation. Light factories still precede heavy ones.
 inline int productionPlanningPriority(bool city, Uint32 item, bool waitingToPlace, bool firstTransport = false) {

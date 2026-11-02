@@ -23,7 +23,7 @@ bool House::canStartRadarResearch(int kind) const {
     return radar::valid(kind) && currentGame && !isNatives()
         && ModManager::instance().isTornieFamilyContentActive() && hasRadarOn()
         && radarResearch.active < 0 && !hasRadarResearch(kind)
-        && currentGame->techLevel >= radar::level(kind)
+        && getTechLevel() >= radar::level(kind)
         && (kind != radar::Specialization || hasIX()) && getCredits() >= radar::cost(kind);
 }
 

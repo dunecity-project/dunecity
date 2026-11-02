@@ -352,6 +352,7 @@ QuantBotConfig::QuantBotConfig() {
     force.defencePrerequisites = true;
     // Stefan, 2026-11-01: Hard's city 20k/40k/60k/90k, growing to the largest other city.
     force.hardCityMatch = true;
+    force.researchLab = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -650,6 +651,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
         iniFile.setBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
         iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
+        iniFile.setBoolValue("Force Concentration", "ResearchLab", force.researchLab);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -775,6 +777,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.defencePrerequisites = iniFile.getBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
     force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
     civWarsStrategy = iniFile.getBoolValue("Civ Wars", "Strategy", civWarsStrategy);
+    force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1258,6 +1261,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("spreadVsDeathHand", force.spreadVsDeathHand);
     addNamed("defencePrerequisites", force.defencePrerequisites);
     addNamed("hardCityMatch", force.hardCityMatch);
+    addNamed("researchLab", force.researchLab);
     configStr += "|/FORCE|";
     addNamed("civWarsStrategy", civWarsStrategy);
     configStr += "|STRATEGY";

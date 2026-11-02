@@ -359,7 +359,7 @@ bool QuantBot::upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn) {
     // keeps founding with single slabs.
     const bool bulkSlabReachable =
         data[Structure_Slab4][houseID].enabled
-        && data[Structure_Slab4][houseID].techLevel <= currentGame->techLevel
+        && data[Structure_Slab4][houseID].techLevel <= getHouse()->getTechLevel()
         && data[Structure_Slab4][houseID].builder == int(Structure_ConstructionYard)
         && campaignPermitsStructure(Structure_Slab4);
     auto upgradeForConcrete = [&]() {
@@ -449,7 +449,7 @@ Uint32 QuantBot::economicGenerator(BuildPass& pass, BuilderTurn& turn) {
     // offers come first; absent technology is not a blocker.
     auto coreEstablished=[&](Uint32 item) {
         return !data[item][houseID].enabled
-            || data[item][houseID].techLevel>currentGame->techLevel
+            || data[item][houseID].techLevel>getHouse()->getTechLevel()
             || getHouse()->getNumItems(item)>0;
     };
     if (getAIRefineryBays()==0 || getAIHarvesterCount()==0
@@ -597,7 +597,7 @@ bool QuantBot::buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn) {
         && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal
             || (difficulty==Difficulty::Medium && initialItemCount[Structure_RepairYard]>0))
         && data[Structure_RepairYard][houseID].enabled
-        && currentGame->techLevel>=data[Structure_RepairYard][houseID].techLevel
+        && getHouse()->getTechLevel()>=data[Structure_RepairYard][houseID].techLevel
         && turn.pBuilder->getItemID()==Structure_ConstructionYard
         && !turn.pBuilder->isUpgrading() && turn.pBuilder->getProductionQueueSize()==0
         && pass.itemCount[Structure_RepairYard]==0
@@ -605,7 +605,7 @@ bool QuantBot::buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn) {
         && getAIHarvesterCount()>0
         && ((gameMode == GameMode::Campaign && !pass.citySimEnabled && difficulty != Difficulty::Brutal)
             || !pass.starportMarketAvailable || !data[Structure_StarPort][houseID].enabled
-            || currentGame->techLevel < data[Structure_StarPort][houseID].techLevel
+            || getHouse()->getTechLevel() < data[Structure_StarPort][houseID].techLevel
             || getHouse()->getNumItems(Structure_StarPort)>0)
         && (getHouse()->hasHeavyFactory() || getHouse()->getNumItems(Structure_StarPort)>0)) {
         Uint32 repairStep=Structure_RepairYard;

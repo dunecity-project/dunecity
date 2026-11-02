@@ -63,6 +63,55 @@ TEST_CASE("QuantBot strategic savings leave excess funds available for tanks", "
     REQUIRE(spendableCredits(-100, 2000) == 0);
 }
 
+TEST_CASE("Research keeps current and forecast economy and defence reserves",
+          "[quantbot][research][production]") {
+    TechInvestment state;
+    state.enabled = state.economyReady = state.powerReady = true;
+    state.cost = 600;
+    state.reserve = 1500;
+    state.cash = 2100;
+    state.projectedCash = 2800;
+    state.orderedCost = 700;
+    REQUIRE(canFundTechInvestment(state));
+    --state.cash;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    ++state.cash;
+    --state.projectedCash;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    ++state.projectedCash;
+    ++state.orderedCost;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    --state.orderedCost;
+    state.emergency = true;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+}
+
+TEST_CASE("Research never replaces income bootstrap power recovery or the off policy",
+          "[quantbot][research][production]") {
+    TechInvestment state;
+    state.enabled = state.economyReady = state.powerReady = true;
+    state.cost = 2700;
+    state.cash = 10000;
+    state.projectedCash = 10000;
+    state.reserve = 1000;
+    REQUIRE(canFundTechInvestment(state));
+    state.enabled = false;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    state.enabled = true;
+    state.economyReady = false;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    state.economyReady = true;
+    state.powerReady = false;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    state.powerReady = true;
+    state.cost = 0;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    state.cost = std::numeric_limits<int>::max();
+    state.cash = std::numeric_limits<int>::max();
+    state.projectedCash = std::numeric_limits<int>::max();
+    REQUIRE_FALSE(canFundTechInvestment(state));
+}
+
 TEST_CASE("QuantBot repairs an over-residential economy even at saturated demand", "[quantbot][city]") {
     const auto zones = rankZones(60, 4, 9, 2000, 1500, 1500, false);
     REQUIRE(zones[0] == Structure_ZoneCommercial);

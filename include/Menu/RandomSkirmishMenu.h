@@ -74,6 +74,7 @@ public:
 
     /// Multiplayer mode: path of the map Next saved, "" while none was created.
     const std::string& getCreatedMap() const { return createdMap; }
+    bool getCreatedResearchLab() const { return createdResearchLab; }
 
 private:
     RandomSkirmishMenu(bool multiplayer, const std::string& hostMod);
@@ -114,12 +115,13 @@ private:
     bool multiplayer = false;
     std::string hostMod;                     ///< multiplayer: the mod the hosted game plays
     std::string createdMap;
+    bool createdResearchLab = false;
     SkirmishGenerator::Params loaded;        ///< last-used choices; readParams() keeps the ones not shown
 
     StaticContainer windowWidget;
     Label title;
     Label statusLabel;
-    std::array<Label, 32> captions;
+    std::array<Label, 36> captions;
     int usedCaptions = 0;
     int rowPitch = 25;                       ///< row height + gap; shrinks on short screens
     Label* allyCityCaption = nullptr;
@@ -140,6 +142,7 @@ private:
     Label hostModLabel;                      ///< multiplayer: the host's mod, chosen in the map list
     Label lobbyNote;                         ///< multiplayer: where players, AI and teams are chosen
     Slider creditsBox, techBox;
+    Checkbox researchLabBox;
     std::vector<ModInfo> availableMods;      ///< Mod box entries; entry data is the index
     Slider alliesBox, enemiesBox;
     Checkbox enemiesAlliedBox;

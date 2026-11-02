@@ -63,6 +63,14 @@ for line_number, line in enumerate(args.events.open(), 1):
             violations.append(f'Auxiliary order {row["seq"]} lacks a matching house/plan')
         elif event == 'capital_road_batch' or data['accepted']:
             plan['spent'] += data['cost'] if event == 'capital_road_batch' else data['price']
+    elif event == 'research_started' and data.get('capital_plan'):
+        plan = plans.get(data['capital_plan'])
+        if not plan or plan['house'] != row['house']:
+            violations.append(f'Research {row["seq"]} lacks a matching house/plan')
+        else:
+            plan['spent'] += data['cost']
+            houses[row['house']]['orders']['Tech research'] += 1
+            houses[row['house']]['spending']['Tech research'] += data['cost']
     elif event == 'capital_outcome' and data.get('plan'):
         plan = plans.get(data['plan'])
         if plan and data['ordered_cost'] != plan['spent']:

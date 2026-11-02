@@ -313,8 +313,8 @@ void ObjectData::loadFromINIFile(const std::string& filename, bool preferUserCon
         }
     } else {
         // Old/default object tables can enable unspecified sections by default.
-        // New IDs must never become products in unrelated mods.
-        for(int item = Unit_Troopers5; item < Num_ItemID; ++item)
+        // Tornie 1.0.546 IDs must never become products in unrelated mods.
+        for(int item = Unit_Troopers5; item <= Unit_TameSandworm; ++item)
             for(auto& object : data[item]) object.enabled = false;
     }
     if(applyContentPolicy && tornieFamily
@@ -528,9 +528,9 @@ std::string ObjectData::getEffectiveHash() const {
     
     // Hash all unit/structure data for all houses
     // New Tornie-only rows do not change any unrelated mod's capability hash.
-    const int itemCount = ModManager::instance().isTornieFamilyContentActive()
-        ? static_cast<int>(Num_ItemID) : static_cast<int>(Unit_Troopers5);
-    for (int itemID = 0; itemID < itemCount; itemID++) {
+    const bool tornieFamily = ModManager::instance().isTornieFamilyContentActive();
+    for (int itemID = 0; itemID < Num_ItemID; itemID++) {
+        if(!tornieFamily && itemID >= Unit_Troopers5 && itemID <= Unit_TameSandworm) continue;
         for (int houseID = 0; houseID < NUM_HOUSES; houseID++) {
             const ObjectDataStruct& obj = data[itemID][houseID];
             

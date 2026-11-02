@@ -56,6 +56,94 @@ the configured ground WeaponRange; other aircraft retain normal targeting range.
 Turret body rotation, reload and general target-selection scheduling remain the
 host game's, so these are not claims of identical complete combat AI.
 
+## DuneCity Trooper Anti-Air
+
+The shared **Trooper Anti-Air** option (`GameOptionsClass::trooperAntiAir`,
+default **on**) enables tracking for infantry-fired `Bullet_SmallRocket` shots
+against flying targets **only for DuneCity content**. The gate uses the content
+base, not the selected mod's folder name: Civilization Wars (`CivWars`, base
+`dunecity`) and DuneCity-derived content receive the same rule. Vanilla, Dune2R
+and Tornie-family content ignore the switch.
+
+The firing-time source record identifies Troopers, including house-specific
+Troopers and the individual Troopers deployed by squad orders. The source check
+also covers the Trooper squad and Flame Trooper item identities when they fire a
+small rocket; it never changes a flame projectile. Ornithopter and vehicle
+mini-rockets do not gain this guidance. The recorded identity survives the
+shooter's destruction or ownership change; old shots without that record can
+still use a live shooter.
+
+An enabled rocket keeps its live aircraft destination and steering after its
+detonation/arming counter reaches zero. It does not detonate merely because it
+has passed the aircraft's **old** position. It reuses the existing turret/gas
+rocket's **one-eighth-tile swept relative-motion intercept**, including normal
+direct-hit damage at a confirmed contact. Missile movement, turn rate, rational
+clocks and collision arithmetic remain integer/fixed-point, with no new RNG
+draws. Losing the target falls back to the last stored destination. Existing
+projectile save fields already retain the destination, steering, counter,
+previous aircraft position and firing-time source; no extra projectile record is
+needed.
+
+This is a hit-delivery change, **not a stat increase**: the stock anti-air Trooper
+payload remains **5**, and the stock Ornithopter remains **25 HP**. Ground fire,
+other shooters, the disabled option and unrelated content keep their old rules.
+
+### Real-engine one-pass consumer fixture
+
+After the integrator's combined native build, run through the managed probe
+queue (the runner reuses that build's objects, never another CMake tree):
+
+```sh
+python3 tests/units/run-trooper-aa-probe.py \
+  --build-dir build-int --output-dir ../outputs/trooper-aa
+```
+
+The macOS Ninja consumer injects `runTrooperAntiAirProbe()` into a private
+diagnostic main, using production `Game::updateGameState`, `UnitBase::attack`,
+`AirUnit` movement and `Map::damage`. On a plain rock map, **3, 5 and 8** ready
+Troopers hold position while one Ornithopter flies straight overhead in either
+direction. Shots, reloads, infantry tile offsets, aircraft speed and health are
+not replaced. The encounter ends at a real exit-plane crossing or death, before
+a second volley is possible. An additional outbound single-shot case naturally
+outlives the arming counter and must still steer and deliver its unchanged
+payload after the counter reaches zero; the fixture never forces a fuse value.
+
+Defaults are seeds `11,22,33`, mods `dunecity,CivWars,vanilla,Dune2R`, and both
+switch states. `--mods` and `--seeds` select a subset. Every encounter is repeated
+with the same inputs, comparing actual serialized object/projectile records,
+house/object digests and RNG byte for byte (match options themselves are
+intentionally excluded). Non-DuneCity content must also match across switch
+states. Squad orders deploy ordinary individual Troopers, so the counted groups
+exercise the same firing path as trained squads.
+
+**Acceptance targets, not measured results:** three enabled Troopers damage but
+do not kill the aircraft in their single volley; five and eight kill it during
+the pass. The runner asserts these targets and retains the real numbers rather
+than substituting estimated hit rates. No fixture or build was run while this
+change was being edited.
+
+Each mod writes `encounters.csv`, `frames.csv`, `projectiles.csv` and `run.log`;
+the output root merges encounters and writes `summary.csv` (excluding duplicate
+replays from aggregates). Important fields are `trooper_anti_air`,
+`dunecity_content`, `scenario`, `seed`, `heading`, `troopers`, `repeat`,
+`start_hp`, `end_hp`, `health_loss_capped`, `killed`, `shots`,
+`rockets_observed`, `first_shot_tick`, `first_damage_tick`, `goal_updates`,
+`armed_goal_updates`, `armed_heading_changes`, `path_world`,
+`crossed_trooper_line`, `exit_crossed`, `ticks`, `final_rng`, `trace_hash` and
+`outcome`. Projectile rows expose the actual payload, counter, heading, aim,
+turn, position and moving destination. The sole completion marker per mod is
+`TROOPER_AA_PROBE_PASS`, never the menu runner's completion marker.
+
+### QuantBot avoidance boundary
+
+No aircraft avoidance policy changes here. Easy/Medium's strict coverage already
+includes Troopers and Trooper squads (`AirStrikePolicy::strictAntiAir`).
+Hard/Brutal's ordinary offensive raid coverage still omits them
+(`AirStrikePolicy::antiAir`); the stronger real interception warrants a separate
+troop-cluster avoidance evaluation with aircraft outcomes. This human-order
+fixture measures projectile delivery, not QuantBot's choice to enter that cover,
+and does not claim that follow-up has been implemented or validated.
+
 ## Explosion and weapon corrections
 
 - Standard missile blasts affect both ground and air. Radius is strictly below

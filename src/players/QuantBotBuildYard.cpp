@@ -33,7 +33,7 @@ bool prerequisiteBlocksBuild(const BuilderBase* builder, Uint32 goal, Uint32 pre
     const auto& data = currentGame->objectData.data[goal][technology];
     if (prerequisite >= data.prerequisiteStructuresSet.size()
         || !data.enabled || data.builder != static_cast<int>(builder->getItemID())
-        || data.techLevel > currentGame->techLevel
+        || data.techLevel > builder->getOwner()->getTechLevel()
         || data.upgradeLevel > builder->getCurrentUpgradeLevel()
         || !data.prerequisiteStructuresSet[prerequisite]
         || builder->getOwner()->getNumItems(prerequisite) > 0) return false;
@@ -142,7 +142,7 @@ void QuantBot::traceYardStatus(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths, balanceCity ? balanceCity->getCityTax(getHouse()->getHouseID()) : DuneCity::kDefaultCityTaxRate, pass.ownAvgLandValue)) / 60 : 0;
         int factoryTarget = QuantBotBuildPolicy::desiredHeavyFactories(pass.citySimEnabled, taxIncome, pass.money, getHouse()->getNumItems(Structure_HeavyFactory), pass.activeHeavyFactoryCount, recentFactoryLossCount());
         if (pass.vanillaEconomy) factoryTarget = DuneCity::vanillaFactoryTarget(factoryTarget, getAIHarvesterCount(), pass.money);
-        const int tech = currentGame ? currentGame->techLevel : 8;
+        const int tech = currentGame ? getHouse()->getTechLevel() : 8;
         const bool policyPrerequisites = pass.citySimEnabled || pass.vanillaEconomy || tech <= 4
             || (pass.itemCount[Structure_RepairYard] > 0 && (tech <= 6 || pass.itemCount[Structure_IX] > 0));
         const char* factoryReason = !campaignAvailableToBuild(turn.pBuilder,Structure_HeavyFactory) ? "unavailable"
@@ -195,6 +195,9 @@ bool QuantBot::buildCampaignYard(BuildPass& pass, BuilderTurn& turn, YardTurn& y
 
     const int lastStructure = ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID;
     for (int i = Structure_FirstID; i <= lastStructure; i++) {
+        // The option's lab policy owns its reserve and rebuilding, not the
+        // authored-structure loop (which would bypass the hashed switch).
+        if (i == Structure_ResearchLab) continue;
         const Uint32 rebuildItem = i == Structure_Slowpost ? Uint32(Structure_Scoutpost) : Uint32(i);
         if (isStructure(i) && pass.itemCount[i] < initialItemCount[i]
             && (i != Structure_Slowpost || pass.itemCount[Structure_Scoutpost] == 0)
@@ -212,6 +215,8 @@ bool QuantBot::buildCampaignYard(BuildPass& pass, BuilderTurn& turn, YardTurn& y
             }
         }
     }
+
+    if (buildResearchLab(pass,turn)) return true;
 
     // If Campaign AI can't build military, let it build up its cash reserves and defenses
 
@@ -295,6 +300,8 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     chooseYardServicesAndRefineries(pass, turn, yardTurn);
     chooseYardProductionLanes(pass, turn, yardTurn);
     chooseYardMilitaryInfrastructure(pass, turn, yardTurn);
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && buildResearchLab(pass,turn)) return true;
     chooseYardTechAndExpansion(pass, turn, yardTurn);
     chooseYardCivicAndDefence(pass, turn, yardTurn);
     vetYardChoice(pass, turn, yardTurn);
@@ -401,9 +408,9 @@ void QuantBot::chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn
         pass.itemCount[Structure_RepairYard]);
     const int requiredTurrets = std::max(yardTurn.counterAirTurrets, yardTurn.batteryTurrets);
     const bool ixExpected = data[Structure_IX][houseID].enabled
-        && data[Structure_IX][houseID].techLevel <= currentGame->techLevel;
+        && data[Structure_IX][houseID].techLevel <= getHouse()->getTechLevel();
     const bool palaceExpected = data[Structure_Palace][houseID].enabled
-        && data[Structure_Palace][houseID].techLevel <= currentGame->techLevel;
+        && data[Structure_Palace][houseID].techLevel <= getHouse()->getTechLevel();
     const bool strategicInfrastructureIncomplete = pass.customStrategicPlanning
         && ((ixExpected && pass.itemCount[Structure_IX] == 0)
             || (palaceExpected && pass.itemCount[Structure_Palace] == 0));
@@ -747,7 +754,7 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             || ((pass.itemCount[Structure_Refinery] >= 3 || pass.airEngaged)
                 && proactiveCoverageShortfall(pass) > 0
                 && data[Structure_RocketTurret][houseID].enabled
-                && data[Structure_RocketTurret][houseID].techLevel <= currentGame->techLevel))) {
+                && data[Structure_RocketTurret][houseID].techLevel <= getHouse()->getTechLevel()))) {
         // Once basic defence exists, unlock the producer that can
         // fill the opening fleet. Starport upgrades otherwise wait
         // behind cheap lots even on a rich spice field.
@@ -760,7 +767,7 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         if (completingCore && data[step][houseID].power>
             getHouse()->getProducedPower()-getHouse()->getPowerRequirement()) step=Structure_WindTrap;
         for (int depth=0; depth<Structure_LastID && step!=NONE_ID; ++depth) {
-            if (!data[step][houseID].enabled || data[step][houseID].techLevel>currentGame->techLevel) break;
+            if (!data[step][houseID].enabled || data[step][houseID].techLevel>getHouse()->getTechLevel()) break;
             if (step!=Structure_RocketTurret && pass.itemCount[step]>getHouse()->getNumItems(step)) break;
             if (campaignAvailableToBuild(turn.pBuilder,step)) {
                 int coverage=0;
@@ -878,7 +885,7 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         && pass.itemCount[Structure_HeavyFactory] == 0
         && getHouse()->getNumLostItems(Structure_HeavyFactory) > 0
         && data[Structure_HeavyFactory][houseID].enabled
-        && data[Structure_HeavyFactory][houseID].techLevel <= currentGame->techLevel) {
+        && data[Structure_HeavyFactory][houseID].techLevel <= getHouse()->getTechLevel()) {
         Uint32 step = Structure_HeavyFactory;
         for (int depth = 0; step != NONE_ID && depth < Structure_LastID; ++depth) {
             if (pass.itemCount[step] > 0) {
@@ -942,7 +949,7 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         && !cityBootstrapNeeded(pass)
         && pass.starportMarketAvailable && !pass.fundedFactoryOpening
         && data[Structure_StarPort][houseID].enabled
-        && currentGame->techLevel >= data[Structure_StarPort][houseID].techLevel) {
+        && getHouse()->getTechLevel() >= data[Structure_StarPort][houseID].techLevel) {
         Uint32 step = NONE_ID;
         if (getHouse()->getNumItems(Structure_StarPort) == 0) {
             const int refineryGoal = std::min(4, pass.mapSpiceHarvesterTarget);
@@ -951,12 +958,12 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         } else if (getHouse()->getNumItems(Structure_RepairYard) == 0
             && canAddRepairYard(pass.itemCount[Structure_RepairYard])
             && data[Structure_RepairYard][houseID].enabled
-            && currentGame->techLevel >= data[Structure_RepairYard][houseID].techLevel) {
+            && getHouse()->getTechLevel() >= data[Structure_RepairYard][houseID].techLevel) {
             step = Structure_RepairYard;
         } else if (!canAddRepairYard(pass.itemCount[Structure_RepairYard])
             && pass.itemCount[Structure_HeavyFactory] == 0
             && data[Structure_HeavyFactory][houseID].enabled
-            && currentGame->techLevel >= data[Structure_HeavyFactory][houseID].techLevel) {
+            && getHouse()->getTechLevel() >= data[Structure_HeavyFactory][houseID].techLevel) {
             // Medium builds no repair yard of its own, but the yard was also this
             // ladder's only way to the light factory and so to vehicle production:
             // walk to the heavy factory instead (7P FFA: Medium idle with 17
@@ -1246,7 +1253,7 @@ void QuantBot::chooseYardServicesAndRefineries(BuildPass& pass, BuilderTurn& tur
                 + style().extraRefineries
             : pass.itemCount[Unit_Harvester] / 3)
         && campaignAvailableToBuild(turn.pBuilder,Structure_Refinery)
-        && !(gameMode == GameMode::Campaign && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && pass.itemCount[Structure_Refinery] >= 2 && pass.itemCount[Structure_RepairYard] == 0 && currentGame && currentGame->techLevel >= 5)) {
+        && !(gameMode == GameMode::Campaign && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && pass.itemCount[Structure_Refinery] >= 2 && pass.itemCount[Structure_RepairYard] == 0 && currentGame && getHouse()->getTechLevel() >= 5)) {
         yardTurn.itemID = Structure_Refinery; yardTurn.structureRule = "refinery_economy";
     }
     // 4. Refinery (< 4, money < 2000) — non-city-sim only.
@@ -1359,7 +1366,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
             || (!openingWorkersNeeded(pass) && pass.itemCount[Structure_HeavyFactory]>0
                 && pass.itemCount[Structure_RocketTurret]<2))
         && data[Structure_RocketTurret][houseID].enabled
-        && data[Structure_RocketTurret][houseID].techLevel<=currentGame->techLevel
+        && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()
         && turn.pBuilder->getCurrentUpgradeLevel()<rocketUpgrade
         && turn.pBuilder->getMaxUpgradeLevel()>=rocketUpgrade
         && pass.money>=turn.pBuilder->getUpgradeCost()+data[Structure_ZoneResidential][houseID].price
@@ -1386,7 +1393,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         if (pass.money<wanted && pass.cashFlow.projectedCash>=wanted
             && proactiveSavingHold(pass, wanted)
             && data[Structure_RocketTurret][houseID].enabled
-            && data[Structure_RocketTurret][houseID].techLevel<=currentGame->techLevel)
+            && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel())
             yardTurn.serviceSavingHold=true;
     }
     if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.sharedSpending && !pass.fundedCityProduction) {
@@ -1439,7 +1446,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && yardTurn.lightBacklog
         && (pass.itemCount[Structure_HeavyFactory] > 0
             || !data[Structure_HeavyFactory][houseID].enabled
-            || data[Structure_HeavyFactory][houseID].techLevel > currentGame->techLevel)
+            || data[Structure_HeavyFactory][houseID].techLevel > getHouse()->getTechLevel())
         && campaignAvailableToBuild(turn.pBuilder,Structure_LightFactory)
         && findPlaceLocation(Structure_LightFactory).isValid()) {
         yardTurn.itemID = Structure_LightFactory; yardTurn.structureRule = "light_unit_backlog";
@@ -1645,6 +1652,44 @@ void QuantBot::chooseYardMilitaryInfrastructure(BuildPass& pass, BuilderTurn& tu
     }
 }
 
+bool QuantBot::buildResearchLab(BuildPass& pass, BuilderTurn& turn) {
+    if (!researchLabPolicyActive() || getHouse()->isTechResearchActive()
+        || pass.itemCount[Structure_ResearchLab] > 0
+        || turn.pBuilder->getProductionQueueSize() > 0 || turn.pBuilder->isUpgrading()
+        || turn.pBuilder->isOnHold()
+        || !campaignAvailableToBuild(turn.pBuilder,Structure_ResearchLab)) return false;
+    const int labCapital = buildingCapitalCost(pass,Structure_ResearchLab);
+    if (!canFundTechInvestment(pass,labCapital)
+        || !findPlaceLocation(Structure_ResearchLab).isValid()) return false;
+    Uint32 item = Structure_ResearchLab;
+    const char* rule = "research_lab";
+    const auto& data = currentGame->objectData.data;
+    const int house = getHouse()->getHouseID();
+    const int labPower = std::max(0,data[Structure_ResearchLab][house].power);
+    if ((pass.citySimEnabled || pass.powerRules) && getHouse()->getProducedPower()
+        < getHouse()->getPowerRequirement() + pass.committedPowerDemand + labPower) {
+        if (powerGenerationPending(pass)) return false;
+        item = NONE_ID;
+        int bestCost = INT_MAX;
+        for (Uint32 generator : {Structure_WindTrap,Structure_NuclearPlant}) {
+            if (data[generator][house].power >= 0 || !campaignAvailableToBuild(turn.pBuilder,generator)) continue;
+            const int cost = buildingCapitalCost(pass,generator);
+            if (cost >= bestCost || !canFundTechInvestment(pass,labCapital+cost)
+                || !findPlaceLocation(generator).isValid()) continue;
+            item = generator;
+            bestCost = cost;
+        }
+        if (item == NONE_ID) return false;
+        rule = "research_lab_power";
+    }
+    // Reuse the real placement, foundation and shared queue-acceptance path.
+    // Its queue-inclusive count makes another yard wait, including after a loss.
+    if (!queueFoundedStructure(pass,turn,item,__LINE__,rule)) return false;
+    ++pass.itemCount[item];
+    pass.orderedThisTick.insert(item);
+    return true;
+}
+
 void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
@@ -1711,7 +1756,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
             && pass.militaryValue < pass.militaryBudget && !getHouse()->isGroundUnitLimitReached();
 
         if (needMore) {
-            int techLevel = currentGame ? currentGame->techLevel : 8;
+            int techLevel = currentGame ? getHouse()->getTechLevel() : 8;
             bool prerequisitesMet = false;
 
             if (yardTurn.isCitySim || pass.vanillaEconomy || techLevel <= 4) {
@@ -1738,9 +1783,9 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && !yardTurn.isCitySim
             && !yardTurn.lowSpiceEconomy
             && ((pass.itemCount[Structure_Refinery] * 3.5_fix < pass.itemCount[Unit_Harvester])
-        || (currentGame && currentGame->techLevel < 4))
+        || (currentGame && getHouse()->getTechLevel() < 4))
             && campaignAvailableToBuild(turn.pBuilder,Structure_Refinery)
-            && !(gameMode == GameMode::Campaign && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && pass.itemCount[Structure_Refinery] >= 2 && pass.itemCount[Structure_RepairYard] == 0 && currentGame && currentGame->techLevel >= 5)) {
+            && !(gameMode == GameMode::Campaign && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && pass.itemCount[Structure_Refinery] >= 2 && pass.itemCount[Structure_RepairYard] == 0 && currentGame && getHouse()->getTechLevel() >= 5)) {
         yardTurn.itemID = Structure_Refinery; yardTurn.structureRule = "refinery_economy";
     }
     // 14. Expand repair only when existing capacity is busy and production supports it.
@@ -1821,7 +1866,7 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
             + pass.itemCount[Structure_HeavyFactory] + pass.itemCount[Structure_Barracks]
             + pass.itemCount[Structure_WOR];
         const bool rocketTech = data[Structure_RocketTurret][houseID].enabled
-            && data[Structure_RocketTurret][houseID].techLevel <= currentGame->techLevel;
+            && data[Structure_RocketTurret][houseID].techLevel <= getHouse()->getTechLevel();
         const Uint32 defenceTurret = rocketTech ? Structure_RocketTurret : Structure_GunTurret;
         const int desiredDefenceTurrets = 1 + productionBuildings / 3;
         // Short wall lines for the turrets this rule builds, not one pair per

@@ -547,7 +547,7 @@ void QuantBot::attack(int militaryValue) {
 	// Campaign attacks must remain possible after losing a repair yard, or on
     // scenarios where it cannot be built. Repair remains useful, not mandatory.
     // A Fighter cannot build one, so it never waits for one either.
-	if (!campaign && !fighterOnly() && !lightFirstOpening() && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && getHouse()->getNumItems(Structure_RepairYard) == 0 && currentGame->techLevel > 4) {
+	if (!campaign && !fighterOnly() && !lightFirstOpening() && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && getHouse()->getNumItems(Structure_RepairYard) == 0 && getHouse()->getTechLevel() > 4) {
 		traceDecision("attack_deferred", AITelemetry::Record().set("reason", "repair_prerequisite"));
 		logDebug("Don't attack. Wait until you have a repair yard.");
 		return;
@@ -765,7 +765,7 @@ void QuantBot::launchGroundHunt() {
     const bool custom = !isCampaignGameType(currentGame->gameType);
     if (limited && !campaignCanLaunch()) return;
     const auto profile = limited ? campaignProfile()
-        : CampaignDifficultyPolicy::profile(static_cast<int>(difficulty),currentGame->techLevel);
+        : CampaignDifficultyPolicy::profile(static_cast<int>(difficulty),getHouse()->getTechLevel());
     // Caps apply to this dispatch. The roster separately tracks all survivors.
     CampaignDifficultyPolicy::Pressure pressure;
     const float ratio = botConfig().getSettings(static_cast<int>(difficulty)).attackForceMilitaryValueRatio;

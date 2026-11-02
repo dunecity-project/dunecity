@@ -339,3 +339,12 @@ MinMoneyForProduction=500
 # Inert when the Research Lab match rule is disabled. Hashed for multiplayer.
 [Civ Wars]
 Strategy=true
+
+# ============================================================================
+# OPTIONAL MATCH TECHNOLOGY
+# ============================================================================
+# ResearchLab is hashed for multiplayer and defaults on even when this key is
+# absent. It only acts when the match's Research Lab game option is enabled.
+# Basic income, power, defence and existing production keep their funding first.
+[Force Concentration]
+ResearchLab=1

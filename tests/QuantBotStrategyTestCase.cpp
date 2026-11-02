@@ -170,6 +170,27 @@ TEST_CASE("Civ Wars strategy is optional, round-tripped and multiplayer hashed",
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Research Lab policy defaults on and is loaded saved and hashed",
+          "[ai][research][config]") {
+    QuantBotConfig config;
+    REQUIRE(config.force.researchLab);
+    const auto enabledHash = config.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-research-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nResearchLab=false\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE_FALSE(config.force.researchLab);
+    REQUIRE(config.getConfigHash() != enabledHash);
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE_FALSE(restored.force.researchLab);
+    REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Strategy: the [Strategy] keys are read and every one is hashed", "[ai][strategy][config]") {
     const QuantBotConfig baseline;
     const std::string base = baseline.getConfigHash();

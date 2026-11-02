@@ -92,6 +92,48 @@ loaded house. QuantBot still chooses economic targets from remaining spice and
 income/capacity, and campaign enemy/late-mission helper policies still shape its
 own fleet; those decisions no longer impose an engine cap on a shared human house.
 
+## Optional Research Lab policy
+
+`[Force Concentration] ResearchLab=1` is a multiplayer-hashed QuantBot setting,
+on by default even in older configuration files without the key. It acts only
+when the match enables the separate **Research Lab** game option. With that
+option off, no lab planning, research payment or extra random draw is performed;
+the original match technology still supplies the house's build gates.
+
+The normal yard order builds one lab after essential income, power, services,
+basic production and defence, before optional advanced technology and production
+expansion. Campaign reconstruction keeps its authored essentials first. The
+lab uses the same legal-site search, complete foundations, queue acceptance and
+shared cash ledger as other buildings. Pending labs count across every yard.
+If its extra power is not funded by standing generation, a legal generator is
+bought first, retaining funding for both purchases. A destroyed lab is rebuilt
+on the same terms, including at tech 9; research itself stops at level 9.
+Fighter-only and switched-off partners do not spend on either.
+
+Both lab construction and research require delivered spice income or an
+established, bankable tax base, a positive net-income forecast, a funded opening
+fleet, and completed income bootstrap. Neither runs during a visible attack on
+our structures/workers, an engaged air attack, dangerous developed-district
+crime, or a power shortage. Keep at least 1,000 credits of working capital
+(or the larger existing economy/unit buffer), **plus** the largest currently
+protected civic, strategic, worker or capital purchase. Current uncommitted cash
+and the four-minute production forecast, after this pass's accepted spending,
+must both retain that reserve. Forecast receipts never pay an immediate bill.
+
+After ordinary producers have taken their turn, the lowest-object-ID live owned
+lab starts the next level through the House research API. The full price is
+`300 × target tech`; duration is `30 + 10 × target tech` simulated seconds.
+Accepted research charges this pass's shared ledger once. The AI emits
+`research_started` with `from`, `to`, `cost`, `cycles` and `lab`; House events
+record completion or cancellation. Lab destruction cancels its active work
+without a refund, not the levels already completed.
+
+Production gates, prospective unit-mix slots and strategy tech bands use the
+house's researched level. The runtime slot cache and strategy expansion refresh
+when that level changes without drawing a new saved strategy or tempo.
+Campaign mission-stage difficulty and opening timing still use the match's
+authored level, not research progress.
+
 ## Comparison
 
 | Investment | Forecast and priority |
@@ -224,8 +266,13 @@ now emits an explicit marker while retaining room for terminal summaries.
 The engine probe exercises exact worker savings, simultaneous construction,
 depleted spice, cash-starved factories and funded production expansion in both
 mods. It also checks factory upgrades, MCV savings, multiple yards, defensive
-yard unlocks and additional transport. The Starport probe also covers stale market/display quotes and legacy
-campaign/custom bulk-import rules. Tests run against an isolated profile.
+yard unlocks and additional transport. Its Research Lab cases cover the hashed
+policy/match off switches, reserve protection, one real lab order across yards,
+research payment/completion, refreshed factory offers and cached strategy slots,
+cancellation and rebuilding. SQLite and spending-audit tests count the AI
+research charge once, not again from the House lifecycle event. The Starport
+probe also covers stale market/display quotes and legacy campaign/custom
+bulk-import rules. Tests run against an isolated profile.
 
 ```sh
 python3 tests/ai/run-campaign-balance.py --build-dir build-705 \

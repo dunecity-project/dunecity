@@ -44,6 +44,7 @@
 #include <structures/TurretBase.h>
 #include <structures/Palace.h>
 #include <structures/TechCenter.h>
+#include <structures/ResearchLab.h>
 #include <structures/Scoutpost.h>
 #include <structures/StarPort.h>
 #include <structures/ConstructionYard.h>
@@ -436,6 +437,13 @@ case CMD_INFANTRY_CAPTURE: {
             auto* building = dynamic_cast<Radar*>(currentGame->getObjectManager().getObject(parameter[0]));
             if(!mayActOnObject(playerID, commandID, parameter[0], building)) return;
             building->getOwner()->startRadarResearch(static_cast<int>(parameter[1]));
+        } break;
+
+        case CMD_RESEARCH_TECH_LEVEL: {
+            if(parameter.size() != 1) return;
+            auto* lab = dynamic_cast<ResearchLab*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], lab)) return;
+            lab->getOwner()->startTechResearch(lab->getObjectID());
         } break;
 
         case CMD_BUILDER_UPGRADE: {
