@@ -206,7 +206,7 @@
 //       partner off in game (CMD_AI_SUPPORT_ROLE, docs/ai-roles.md). Every city house slot saves
 //       its own tax rate; the old shared rate is a retired slot (older saves apply it to every
 //       house). GameInitSettings MOD14 appends the Micropolis land value rule.
-#define SAVEGAMEVERSION     9880
+#define SAVEGAMEVERSION     9881
 /// First save with the integrated Tornie 1.0.546 state (independent of upstream save versions).
 #define SAVEGAMEVERSION_TORNIE546 9878
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
@@ -219,6 +219,8 @@
 #define SAVEGAMEVERSION_AI_ROLE_OFF 9880
 /// First save with a tax rate per city house instead of one shared rate.
 #define SAVEGAMEVERSION_HOUSE_TAX_RATE 9880
+/// First save with per-house research state and Research Lab / Trooper Anti-Air rules.
+#define SAVEGAMEVERSION_RESEARCH_LAB 9881
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

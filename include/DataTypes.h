@@ -292,7 +292,8 @@ public:
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
            immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true),
            continuousGroundSteps(false), retryPlannedPlacement(true), sharedYardQueue(true),
-           sharedFactoryQueue(true), slowCityYear(true), micropolisLandValue(true)  {
+           sharedFactoryQueue(true), slowCityYear(true), micropolisLandValue(true),
+           researchLab(false), trooperAntiAir(true) {
         }
 
 
@@ -320,6 +321,8 @@ public:
                     && (sharedFactoryQueue == goc.sharedFactoryQueue)
                     && (slowCityYear == goc.slowCityYear)
                     && (micropolisLandValue == goc.micropolisLandValue)
+                    && (researchLab == goc.researchLab)
+                    && (trooperAntiAir == goc.trooperAntiAir)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
                     && (easyMode == goc.easyMode)
@@ -360,6 +363,8 @@ public:
             optStr += "/sharedFactoryQueue=" + std::to_string(sharedFactoryQueue);
             optStr += "/slowCityYear=" + std::to_string(slowCityYear);
             optStr += "/micropolisLandValue=" + std::to_string(micropolisLandValue);
+            optStr += "/researchLab=" + std::to_string(researchLab);
+            optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
             optStr += "/easyMode=" + std::to_string(easyMode);
@@ -427,6 +432,10 @@ public:
         /// buildings; off keeps the per-building-origin average measured from the centre of
         /// every developed block (docs/city-economy-balance.md, "Land value for tax").
         bool        micropolisLandValue;
+        /// Optional Research Lab and per-house technology progression (levels 1-9).
+        bool        researchLab;
+        /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
+        bool        trooperAntiAir;
 
         /// Tornie-family rules; ignored by other content families.
         bool        alliedControl = false;

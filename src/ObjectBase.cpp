@@ -60,6 +60,7 @@
 #include <structures/AdvancedWindTrap.h>
 #include <structures/Worfinery.h>
 #include <structures/TechCenter.h>
+#include <structures/ResearchLab.h>
 #include <structures/Scoutpost.h>
 #include <structures/LoveFactory.h>
 #include <structures/ChaosFactory.h>
@@ -1061,6 +1062,7 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario, 
         case Structure_AdvancedWindTrapMK3: newObject = new AdvancedWindTrap(Owner, Structure_AdvancedWindTrapMK3); break;
         case Structure_Worfinery:           newObject = new Worfinery(Owner); break;
         case Structure_TechCenter:          newObject = new TechCenter(Owner); break;
+        case Structure_ResearchLab:         newObject = new ResearchLab(Owner); break;
         case Structure_Scoutpost:           newObject = new Scoutpost(Owner); break;
         case Structure_Flamepost:           newObject = new Scoutpost(Owner, Structure_Flamepost); break;
         case Structure_Chemipost:           newObject = new Scoutpost(Owner, Structure_Chemipost); break;
@@ -1212,6 +1214,7 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
         case Structure_AdvancedWindTrapMK3: newObject = new AdvancedWindTrap(stream, Structure_AdvancedWindTrapMK3); break;
         case Structure_Worfinery:           newObject = new Worfinery(stream); break;
         case Structure_TechCenter:          newObject = new TechCenter(stream); break;
+        case Structure_ResearchLab:         newObject = new ResearchLab(stream); break;
         case Structure_Scoutpost:           newObject = new Scoutpost(stream); break;
         case Structure_Flamepost:           newObject = new Scoutpost(stream, Structure_Flamepost); break;
         case Structure_Chemipost:           newObject = new Scoutpost(stream, Structure_Chemipost); break;

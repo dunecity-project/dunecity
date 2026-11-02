@@ -108,6 +108,8 @@ private:
     DigitsTextBox   maxConstructionYardsOverrideTextBox;   ///< The maximum number of construction yards
     Checkbox        planBuildingSitesCheckbox;      ///< Match rule: Construction Yard orders pick their plot first (pre-placement queue)
     Checkbox rememberDefaults;
+    Checkbox researchLabCheckbox;
+    Checkbox trooperAntiAirCheckbox;
     Checkbox alliedControlCheckbox;
     Checkbox alliedBuildingCheckbox;
     Checkbox easyModeCheckbox;

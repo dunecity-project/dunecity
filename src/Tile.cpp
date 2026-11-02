@@ -132,6 +132,7 @@ bool shouldDrawTerrainBelowStructure(int itemID) noexcept {
         case Structure_AdvancedWindTrapMK3:
         case Structure_Worfinery:
         case Structure_TechCenter:
+        case Structure_ResearchLab:
         case Structure_Scoutpost:
         case Structure_Flamepost:
         case Structure_Chemipost:

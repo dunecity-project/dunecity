@@ -272,6 +272,7 @@ bool getTornieStructurePlacementPreview(int itemID, StructurePlacementPreview& p
             return true;
 
         case Structure_TechCenter:
+        case Structure_ResearchLab:
             preview = { ObjPic_TechCenter, 4, 1, TornieStructureFrame_BuildSite, -1 };
             return true;
 

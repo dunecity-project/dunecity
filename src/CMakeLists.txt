@@ -344,6 +344,7 @@ target_sources(dunecity
         structures/AdvancedWindTrap.cpp
         structures/Worfinery.cpp
         structures/TechCenter.cpp
+        structures/ResearchLab.cpp
         structures/Scoutpost.cpp
         structures/LoveFactory.cpp
         structures/ChaosFactory.cpp

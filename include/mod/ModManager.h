@@ -80,6 +80,9 @@ public:
     bool isTornieContentActive() const {
         return activeContentBase == "Tornie";
     }
+    bool isDuneCityContentActive() const {
+        return initialized && activeContentBase == "dunecity";
+    }
     // Includes immutable/derived Workshop copies through their declared content base.
     bool isTornieFamilyContent(const std::string& name) const;
     bool isTornieFamilyContentActive() const { return activeTornieFamily; }
