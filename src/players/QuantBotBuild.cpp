@@ -2264,7 +2264,8 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
         int bestMissing=0;
         for (const auto* asset:getStructureList()) {
             if (asset->getOwner()!=getHouse() || asset->getHealth()<=0
-                || RocketTurretPolicy::defenseWeight(asset->getItemID())==0) continue;
+                || (!RocketTurretPolicy::coreAsset(asset->getItemID())
+                    && asset->getItemID()!=Structure_Radar && asset->getItemID()!=Structure_WindTrap)) continue;
             int value=0;
             int64_t x=0,y=0;
             for (const auto& contact:visibleGroundTurretThreats) {
@@ -2536,7 +2537,12 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 && campaignAvailableToBuild(builder,Structure_RocketTurret)) {
                 CapitalCandidate defence;
                 defence.builder=builder->getObjectID();defence.item=Structure_RocketTurret;
-                defence.kind="ground_defence";defence.reason="ground_threat";defence.score=6500;defence.urgent=true;
+                defence.kind="ground_defence";defence.reason="ground_threat";
+                // First firing cover is survival. Deeper overlap shares the
+                // budget with the army and the first useful Starport; otherwise
+                // an endless raid can keep a solvent city supplier-less forever.
+                defence.urgent=pass.groundTurretCover<2;
+                defence.score=defence.urgent ? 6500 : 4500;
                 if (pass.turretPowerRequired && !hasPowerBufferForTurret(pass)) {
                     defence.item=powerGenerationPending(pass) ? Uint32(NONE_ID) : Uint32(Structure_WindTrap);
                 }

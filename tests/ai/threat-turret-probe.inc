@@ -60,6 +60,7 @@ void runThreatTurretProbe(Game& game) {
         auto* yard=static_cast<BuilderBase*>(put(Structure_ConstructionYard,12,12));
         put(Structure_Refinery,12,6);put(Structure_Radar,16,9);
         put(Structure_RocketTurret,6,10);put(Structure_RocketTurret,6,13);
+        put(Structure_WindTrap,3,3);put(Structure_WindTrap,3,6);put(Structure_WindTrap,3,9);
         yard->curUpgradeLev=yard->getMaxUpgradeLevel();yard->updateBuildList();
         for (int n=0;n<8;++n) {
             auto* unit=hostile->createUnit(Unit_Quad);require(unit,"Quad creation failed");
