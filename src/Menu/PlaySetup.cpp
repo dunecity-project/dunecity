@@ -22,6 +22,7 @@
 #include <main.h>
 #include <sand.h>
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace {
@@ -255,8 +256,9 @@ void playCustomGame(bool online, bool publicGame, bool randomMap, bool civilizat
         }
         int result;
         {
-            CustomGamePlayers menu(init, true, false, &setup);
-            result = menu.showMenu();
+            // The online waiting lobby opens before this function returns; keep its large roster off the stack.
+            auto menu = std::make_unique<CustomGamePlayers>(init, true, false, &setup);
+            result = menu->showMenu();
         }
         if(result == MENU_SETUP_CHANGED) continue;
         if(result == MENU_SETUP_MAP || result == MENU_QUIT_DEFAULT) { chooseMap = true; continue; }

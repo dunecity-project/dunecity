@@ -773,7 +773,11 @@ void CrossplayMenu::update() {
     if(autoHostRequested) { autoHostRequested = false; beginAdmission(true); }
     if(preparedGame && stage == Stage::HostReady) {
         int result;
-        { CustomGamePlayers lobby(*preparedGame, true, false, nullptr, &preparedPlayers, startImmediately); result = lobby.showMenu(); }
+        {
+            // Match the guest path: this large roster must not consume the nested host stack.
+            auto lobby = std::make_unique<CustomGamePlayers>(*preparedGame, true, false, nullptr, &preparedPlayers, startImmediately);
+            result = lobby->showMenu();
+        }
         teardownSession({});
         quit(result);
         return;

@@ -1,3 +1,15 @@
+## 2026-11-03 — Windows online host roster stack use (OMP CivWars, unreleased)
+
+- The real Windows Civ Wars **Host Online** diagnostic terminated before admission with
+  `0xC00000FD` (stack overflow). Production and diagnostic executables both reserve 1 MiB.
+  Native unwind records measured `playCustomGame` at 495,200 B and `CrossplayMenu::update`
+  at 437,904 B before their callers; `CustomGamePlayers` itself is 436,520 B.
+- Heap-own the pregame player setup and prepared host roster, following the existing guest
+  lobby pattern. Destruct each roster before its setup/session teardown; no global stack
+  increase, gameplay-rule change, save change or protocol bump.
+- Static records and the original Windows termination are retained under
+  `/Users/stefan/Documents/projects/outputs/civ-wars-final/online-windows/host-stack-investigation/`.
+
 ## 2026-11-03 — DuneCity QuantBot audit and right-sized reserve power (OMP DuneCityAIAudit, unreleased)
 
 - Added `tests/ai/dunecity-audit.py`: reproducible all-QuantBot Random Skirmish

@@ -91,6 +91,10 @@ or use Play Online's **Create Random Skirmish** while CivWars is active. Both op
 Civilization Wars generator. **Save Map** writes an open-start scenario to MP User Maps for
 later use. Generated maps classify as DuneCity because they contain city buildings.
 
+The pregame player setup and prepared host roster are heap-owned, like the guest roster.
+This avoids overflowing Windows' default 1 MiB thread stack when **Host Online** nests the
+large player menus; their destruction order, match rules and network protocol are unchanged.
+
 ## Use the rules on your own scenarios
 
 The installed, selectable mod folder is `mods/CivWars`; its displayed name is **Civilization
