@@ -404,3 +404,45 @@ build/check chain took **18.73s**. The integrator explicitly owns the final
 full cluster CTest/regression/performance run after merging this branch; its
 earlier shared-mutex full-suite attempt was cancelled at 22/133, not passed.
 
+
+### Converged selection and required staging integration
+
+The integrator requested convergence and required staging's
+`93d96ea3` **CityGrowthPower** correction before the authoritative matrix.
+It was merged as `71560cee`; only the additive HANDOVER headings conflicted
+and both were preserved. No native-code conflict occurred.
+
+Select **candidate 3's measured economic/research/worm/island policy** as the
+best completed pilot: two decisive wins versus zero for candidate 4 on the
+same nine seed-7101 cases. Remove the experimental lane-directed commands,
+waypoint helper and its test rather than ship an unproved tactical change.
+Candidate 5's speculative inward waypoint was never accepted; its 240-game
+batch and gate snapshot were cancelled when the staging prerequisite landed.
+Any partial rows in `candidate5/` are excluded from final acceptance.
+
+The authoritative comparison now holds CityGrowthPower **on in both arms**,
+and compares only the Civ Wars strategy switch. It uses five fixed seeds,
+all three team sizes, same-tier mirrors, both difficulty-ladder orientations
+and direct strategy-versus-control games. A separate corrected real-human-
+authority strike/isolation gate uses the same merged source. This is the
+existing best policy with a required integration fix, not another speculative
+strategy round.
+
+For completeness, candidate 4's rejected nine-case table (all at 40 minutes):
+
+| Format | Pair | Decisive | Ground attacks | Enemy-end ground units | Island yards |
+|---|---|---:|---:|---:|---:|
+| 1v1 | Hard:Hard | 0 | 3 | 27 | 2 |
+| 1v1 | Hard:Medium | 0 | 3 | 68 | 2 |
+| 1v1 | Brutal:Hard | 0 | 4 | 3 | 2 |
+| 2v2 | Hard:Hard | 0 | 7 | 28 | 2 |
+| 2v2 | Hard:Medium | 0 | 8 | 113 | 2 |
+| 2v2 | Brutal:Hard | 0 | 10 | 2 | 2 |
+| 3v3 | Hard:Hard | 0 | 6 | 25 | 2 |
+| 3v3 | Hard:Medium | 0 | 7 | 65 | 3 |
+| 3v3 | Brutal:Hard | 0 | 7 | 14 | 1 |
+
+Candidate-5 code had passed a native build and 24 Python / 35 tagged native
+cases (6,577,325 assertions), taking 44.72s; that does not establish its
+simulation strength and does not replace checks on the converged source.
+

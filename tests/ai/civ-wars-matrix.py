@@ -253,7 +253,7 @@ def telemetry(out, final_cycle, houses, worm_ids):
                     waves.append({**common, **data, 'source': 'telemetry', 'event': name,
                                   'data_json': encoded(data)})
                 elif name in ('attack_deferred', 'state_snapshot', 'research_started',
-                              'rock_expansion_site', 'mcv_deployment', 'colonist_escort', 'civ_wars_lane_attack'):
+                              'rock_expansion_site', 'mcv_deployment', 'colonist_escort'):
                     decisions.append({**common, 'event': name, 'data_json': encoded(data)})
                 elif name == 'lethal_damage' and str(data.get('attacker')) in worm_ids:
                     victim = (house, str(data.get('object')))

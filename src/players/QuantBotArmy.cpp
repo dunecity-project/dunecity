@@ -1160,12 +1160,6 @@ void QuantBot::launchGroundHunt() {
     std::map<Uint32,std::vector<const UnitBase*>> assaults;    // campaign objective -> its attackers
     std::map<Uint32,std::vector<const UnitBase*>> flankers;    // campaign objective -> its flankers
     const ObjectBase* front=nullptr;
-    Coord civWarsObjective=Coord::Invalid();
-    if (!limited && !formationWave && !partyWave && !splitWave && !finishWave && isCivWarsMatch()) {
-        const auto [x,y]=SimpleArmyPolicy::civWarsLaneObjective(getMap().getSizeX(),getMap().getSizeY(),
-            getHouse()->getTeamID()==1);
-        civWarsObjective=Coord(x,y);
-    }
     for (auto id : selected) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
@@ -1191,7 +1185,6 @@ void QuantBot::launchGroundHunt() {
             else if (partyWave) partyUnits.push_back(unit);
             else if (splitWave) splitUnits.push_back(unit);
             else if (finishWave) finishers.push_back(unit);
-            else if (civWarsObjective.isValid()) doHuntToward(unit,civWarsObjective.x,civWarsObjective.y);
             else doSetAttackMode(unit,HUNT);
         }
         if (launcherItem(unit)) ++launcherDispatched;
@@ -1286,9 +1279,6 @@ void QuantBot::launchGroundHunt() {
     if (!splitUnits.empty() && !startSplit(splitUnits,observedFront))
         for (const auto* unit : splitUnits) doSetAttackMode(unit,HUNT);
     if (count==0) return; // An empty house checking readiness is not an attack.
-    if (civWarsObjective.isValid())
-        traceDecision("civ_wars_lane_attack",AITelemetry::Record().set("members",count).set("value",value)
-            .set("goal_x",civWarsObjective.x).set("goal_y",civWarsObjective.y).set("forced",false));
     if (limited && profile.limitedWave) {
         attackTimer=MILLI2CYCLES(CampaignDifficultyPolicy::repeatDelayMs(
             static_cast<int>(difficulty),
