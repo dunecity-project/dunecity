@@ -173,8 +173,14 @@ bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
 void QuantBot::planCivWarsResearch(BuildPass& pass) {
     if (!civWarsRules() || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9
         || getHouse()->getNumItems(Structure_ResearchLab) == 0 || !techInvestmentReady(pass)) return;
-    // Tech 4 must become real production before another research payment.
-    if (getHouse()->getTechLevel() >= 4 && getHouse()->getNumItems(Structure_HeavyFactory) == 0) return;
+    // Unlock tanks first, then field a real wave before buying more technology.
+    // Once repairs unlock, establish the yard before unlocking still more tech.
+    const int tech = getHouse()->getTechLevel();
+    if ((tech >= 4 && getHouse()->getNumItems(Structure_HeavyFactory) == 0)
+        || (tech >= 5 && getHouse()->getNumItems(Structure_RepairYard) == 0)) return;
+    const bool firstWave = customWave.launched != 0;
+    const int groundValue = tech >= 4 && firstWave ? ownGroundArmyValue() : 0;
+    if (!QuantBotBuildPolicy::civWarsResearchPacing(tech,firstWave,groundValue,minWaveValue())) return;
     startTechResearch(pass);
     if (!getHouse()->isTechResearchActive())
         pass.civWarsResearchReserve = QuantBotBuildPolicy::civWarsResearchSaving(
@@ -917,6 +923,11 @@ void QuantBot::planCityPopulation(BuildPass& pass) {
     pass.cityGrowthLimits = pass.populationCeiling > 0
         ? QuantBotCityPolicy::limits(pass.populationCeiling)
         : QuantBotCityPolicy::Limits{};
+    if (civWarsRules()) {
+        const int target = QuantBotBuildPolicy::civWarsZoneTarget(customWave.launched != 0,static_cast<int>(difficulty));
+        auto& cap = pass.cityGrowthLimits.sharedZoneCap;
+        cap = cap == QuantBotCityPolicy::kUnlimited ? target : std::min(cap,target);
+    }
     pass.cityZonesIncludingQueued = pass.itemCount[Structure_ZoneResidential]
         + pass.itemCount[Structure_ZoneCommercial] + pass.itemCount[Structure_ZoneIndustrial];
     int cityPendingPopulation = 0;

@@ -140,6 +140,25 @@ TEST_CASE("Civ Wars research saving leaves a tiny tax city able to compound",
                                   std::numeric_limits<int>::max()) == 0);
 }
 
+TEST_CASE("Civ Wars technology leaves room for the first wave and reinforcements",
+          "[quantbot][civ-wars][research]") {
+    CHECK(civWarsResearchPacing(1, false, 0, 3000));
+    CHECK(civWarsResearchPacing(3, false, 0, 3000));
+    CHECK_FALSE(civWarsResearchPacing(4, false, 7500, 3000));
+    CHECK_FALSE(civWarsResearchPacing(4, true, 2999, 3000));
+    CHECK(civWarsResearchPacing(4, true, 3000, 3000));
+    CHECK_FALSE(civWarsResearchPacing(8, true, 0, 3000));
+}
+
+TEST_CASE("Civ Wars city expansion grows after its first field army",
+          "[quantbot][civ-wars][city]") {
+    for (int difficulty = 1; difficulty <= 3; ++difficulty)
+        CHECK(civWarsZoneTarget(false, difficulty) == 24);
+    CHECK(civWarsZoneTarget(true, 1) == 36);
+    CHECK(civWarsZoneTarget(true, 2) == 48);
+    CHECK(civWarsZoneTarget(true, 3) == 60);
+}
+
 TEST_CASE("QuantBot repairs an over-residential economy even at saturated demand", "[quantbot][city]") {
     const auto zones = rankZones(60, 4, 9, 2000, 1500, 1500, false);
     REQUIRE(zones[0] == Structure_ZoneCommercial);

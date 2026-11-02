@@ -232,6 +232,14 @@ inline int civWarsResearchSaving(int cost, int workingReserve, int forecastFundi
     return cost > 0 && needed <= forecastFunding ? static_cast<int>(needed) : 0;
 }
 
+inline bool civWarsResearchPacing(int tech, bool firstWave, int groundValue, int minimumGround) {
+    return tech < 4 || (firstWave && groundValue >= minimumGround);
+}
+
+inline int civWarsZoneTarget(bool firstWave, int difficulty) {
+    return !firstWave ? 24 : difficulty >= 3 ? 60 : difficulty >= 2 ? 48 : 36;
+}
+
 // Keep city construction first; then fund air before ground factories can
 // repeatedly consume its allocation. Light factories still precede heavy ones.
 inline int productionPlanningPriority(bool city, Uint32 item, bool waitingToPlace, bool firstTransport = false) {

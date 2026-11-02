@@ -208,23 +208,56 @@ one worm per lane, spice level 2, a 30-game-minute cap, strategy off. Every
 telemetry stream was complete. Local and Windows Hard/7101 controls had the
 same end digest `1461d4bb945ce2bd`.
 
-| Format | Mirror difficulty | Decisive / 5 | Time limits / 5 | Median length, min | Median tech 2 completion, min | Worm unit deaths | Attacks launched |
-|---|---|---:|---:|---:|---:|---:|---:|
-| 1v1 | Medium | 2 | 3 | 30.00 | 7.51 | 47 | 9 |
-| 1v1 | Hard | 0 | 5 | 30.00 | 22.77 | 59 | 6 |
-| 1v1 | Brutal | 0 | 5 | 30.00 | 22.54 | 49 | 8 |
-| 2v2 | Medium | 4 | 1 | 28.27 | 11.44 | 70 | 22 |
-| 2v2 | Hard | 2 | 3 | 30.00 | 12.20 | 78 | 33 |
-| 2v2 | Brutal | 1 | 4 | 30.00 | 12.54 | 101 | 29 |
-| 3v3 | Medium | 0 | 5 | 30.00 | 12.00 | 107 | 31 |
-| 3v3 | Hard | 2 | 3 | 30.00 | 11.33 | 92 | 32 |
-| 3v3 | Brutal | 1 | 4 | 30.00 | 10.40 | 89 | 36 |
+| Format | Mirror difficulty | Decisive / 5 | Time limits / 5 | Median length, min | Tech 2 reached | Median tech 2 completion, min | Worm unit deaths | Attacks launched |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 1v1 | Medium | 2 | 3 | 30.00 | 5/10 | 15.46 | 47 | 9 |
+| 1v1 | Hard | 0 | 5 | 30.00 | 8/10 | 23.14 | 59 | 6 |
+| 1v1 | Brutal | 0 | 5 | 30.00 | 10/10 | 22.54 | 49 | 8 |
+| 2v2 | Medium | 4 | 1 | 28.27 | 15/20 | 12.21 | 70 | 22 |
+| 2v2 | Hard | 2 | 3 | 30.00 | 15/20 | 12.71 | 78 | 33 |
+| 2v2 | Brutal | 1 | 4 | 30.00 | 17/20 | 12.92 | 101 | 29 |
+| 3v3 | Medium | 0 | 5 | 30.00 | 22/30 | 13.14 | 107 | 31 |
+| 3v3 | Hard | 2 | 3 | 30.00 | 21/30 | 12.87 | 92 | 32 |
+| 3v3 | Brutal | 1 | 4 | 30.00 | 20/30 | 11.73 | 89 | 36 |
 
-Tech timing above is the median over houses that reached that level (all
-180 houses reached tech 2 before elimination/end), not a claim that eliminated
-houses retain their technology. Decisive games are actual surviving-team wins;
+Tech timing above is the median over houses that reached that level
+(**133/180** reached tech 2); the `-1` unreached sentinel is excluded. This is
+not a claim that eliminated houses retain their technology. Decisive games are
+actual surviving-team wins;
 time limits are not awarded by army value or credits. Attacks are complete
 `attack_launched` decision events; worm deaths join complete lethal-damage
 attacker IDs to the engine-observed worm set. These historical controls are
 diagnostic; the final off/on comparison must use the same final binary.
+
+
+### Candidate 1 pilot: faster technology is not sufficient
+
+Commit `37a15d23`, job `20261102T224344-civwars-candidate1-pilot-93a0d7`,
+Hard 1v1, seed 7101, 30 minutes, the same map parameters as the control.
+All four arms timed out; none launched a normal ground wave.
+
+| Strategy enabled for | Tech 2 completion, left / right min | Final tech, left / right | Harvester worm deaths | All-unit worm deaths | Enemy-end ground units reached |
+|---|---:|---:|---:|---:|---:|
+| Neither (off) | 24.99 / 24.15 | 2 / 4 | 10 | 12 | 0 |
+| Both (on) | 3.76 / 3.80 | 7 / 8 | 0 | 17 | 14 |
+| Left only | 3.76 / 25.35 | 8 / 3 | 3 | 9 | 0 |
+| Right only | 27.84 / 3.80 | 2 / 7 | 3 | 16 | 1 |
+
+The off digest still exactly matched `1461d4bb945ce2bd`. The both-on arm
+had no economic vehicles eaten, but more combat-unit exposure, and spent on
+59/79 city zones plus technology before accumulating the 7,500-value ground
+dispatch threshold. Late `attack_deferred` events were army-threshold and
+missing-repair-yard holds. This candidate is **not** accepted as a win-rate
+improvement.
+
+### Candidate 2 parameters
+
+Retain candidate 1's measured early-economy/harvester changes, but stop
+researching at tech **4** until an actual ground wave has launched. Later
+research requires at least `minWaveValue()` of active ground force; tech **5**
+must become an actual Repair Yard before researching tech 6. City land
+investment is capped at **24** R+C+I lots before the first wave, then
+**36 Medium / 48 Hard / 60 Brutal**, never raising an existing lower city cap.
+These are AI construction ceilings, not caps on human population, city
+maturation, services or power. No attack orders or wave thresholds are changed.
 
