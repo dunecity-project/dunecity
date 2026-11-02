@@ -1207,6 +1207,10 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
                     row << ",\"ai_difficulty\":" << AITelemetry::Record::quote(aiDifficulty);
             }
             if (qbot) row << ",\"qbot_difficulty\":" << AITelemetry::Record::quote(aiDifficulty);
+            if(gameInitSettings.getGameOptions().researchLab)
+                row << ",\"tech_level\":" << currentHouse->getTechLevel()
+                    << ",\"research_target\":" << currentHouse->getTechResearchTarget()
+                    << ",\"research_remaining\":" << currentHouse->getTechResearchRemaining();
 
             if (finishedMatch) {
                 row << ",\"result\":\"" << (winningTeam >= 0 && currentHouse->getTeamID() == winningTeam ? "winner" : currentHouse->isAlive() ? "alive" : "defeated") << '"'
@@ -8294,6 +8298,12 @@ GameStateDigest::Digest Game::computeStateDigest() const {
         // disagree about a house's delivery rate must be told so at the next digest, rather
         // than at whatever later cycle the difference first reaches a refinery.
         houses.mixUint32(pHouse->getSpiceIncomeMultiplier());
+        if(gameInitSettings.getGameOptions().researchLab) {
+            houses.mixInt32(pHouse->getTechLevel());
+            houses.mixInt32(pHouse->getTechResearchTarget());
+            houses.mixInt32(pHouse->getTechResearchRemaining());
+            houses.mixUint32(pHouse->getTechResearchLabID());
+        }
     }
     digest.houseHash = houses.value();
 

@@ -44,6 +44,7 @@
 #include <structures/Refinery.h>
 #include <structures/HarvesterDropoff.h>
 #include <structures/ConstructionYard.h>
+#include <structures/ResearchLab.h>
 #include <units/Carryall.h>
 
 #include <limits>
@@ -210,6 +211,21 @@ House::House(InputStream& stream) : choam(this) {
         saleCredits = stream.readUint32();
         loadRadarResearch(stream);
     }
+    if(currentGame && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_RESEARCH_LAB) {
+        researchedTechLevel = stream.readSint32();
+        techResearchTarget = stream.readSint32();
+        techResearchRemaining = stream.readSint32();
+        techResearchLabID = stream.readUint32();
+        if(researchedTechLevel < 1 || researchedTechLevel > 9
+           || techResearchTarget < 0 || techResearchTarget > 9
+           || techResearchRemaining < 0
+           || (techResearchTarget == 0 && (techResearchRemaining != 0 || techResearchLabID != NONE_ID))
+           || (techResearchTarget != 0
+               && (techResearchTarget != researchedTechLevel + 1 || techResearchLabID == NONE_ID
+                   || techResearchRemaining == 0 || techResearchRemaining > techResearchCycles(techResearchTarget)))) {
+            THROW(std::runtime_error, "Invalid house technology research state");
+        }
+    }
 }
 
 
@@ -217,6 +233,10 @@ House::House(InputStream& stream) : choam(this) {
 
 void House::init() {
     ai = true;
+    researchedTechLevel = std::clamp(currentGame ? currentGame->techLevel : 1, 1, 9);
+    techResearchTarget = 0;
+    techResearchRemaining = 0;
+    techResearchLabID = NONE_ID;
 
     numUnits = 0;
     numStructures = 0;
@@ -300,6 +320,10 @@ void House::save(OutputStream& stream) const {
     stream.writeUint32(structuresSold);
     stream.writeUint32(saleCredits);
     saveRadarResearch(stream);
+    stream.writeSint32(researchedTechLevel);
+    stream.writeSint32(techResearchTarget);
+    stream.writeSint32(techResearchRemaining);
+    stream.writeUint32(techResearchLabID);
 }
 
 
@@ -749,6 +773,63 @@ void House::printStat() const {
 
 
 
+int House::getTechLevel() const {
+    return currentGame && currentGame->getGameInitSettings().getGameOptions().researchLab
+        ? researchedTechLevel : currentGame ? currentGame->techLevel : researchedTechLevel;
+}
+
+bool House::canStartTechResearch(Uint32 labObjectID) const {
+    if(!currentGame || !currentGame->getGameInitSettings().getGameOptions().researchLab
+       || isNatives() || isTechResearchActive() || getTechLevel() >= 9
+       || storedCredits + startingCredits + cityCredits < FixPoint(getTechResearchCost())) return false;
+    const auto* lab = dynamic_cast<const ResearchLab*>(currentGame->getObjectManager().getObject(labObjectID));
+    return lab && lab->getOwner() == this && lab->isActive() && lab->getHealth() > 0;
+}
+
+bool House::startTechResearch(Uint32 labObjectID) {
+    if(!canStartTechResearch(labObjectID)) return false;
+    const int cost = getTechResearchCost();
+    takeCredits(cost);
+    techResearchTarget = researchedTechLevel + 1;
+    techResearchRemaining = techResearchCycles(techResearchTarget);
+    techResearchLabID = labObjectID;
+    if(AITelemetry::log().enabled())
+        AITelemetry::log().write(currentGame->getGameCycleCount(), houseID, -1, "tech_research_started",
+            AITelemetry::Record().set("from", researchedTechLevel).set("to", techResearchTarget)
+                .set("cost", cost).set("cycles", techResearchRemaining).set("lab", labObjectID));
+    return true;
+}
+
+void House::cancelTechResearch(Uint32 labObjectID) {
+    if(!isTechResearchActive() || techResearchLabID != labObjectID) return;
+    if(currentGame && AITelemetry::log().enabled())
+        AITelemetry::log().write(currentGame->getGameCycleCount(), houseID, -1, "tech_research_cancelled",
+            AITelemetry::Record().set("target", techResearchTarget).set("remaining", techResearchRemaining)
+                .set("lab", labObjectID));
+    techResearchTarget = 0;
+    techResearchRemaining = 0;
+    techResearchLabID = NONE_ID;
+}
+
+void House::updateTechResearch() {
+    if(!currentGame->getGameInitSettings().getGameOptions().researchLab || !isTechResearchActive()) return;
+    const auto* lab = dynamic_cast<const ResearchLab*>(currentGame->getObjectManager().getObject(techResearchLabID));
+    if(!lab || lab->getOwner() != this || !lab->isActive() || lab->getHealth() <= 0) {
+        cancelTechResearch(techResearchLabID);
+        return;
+    }
+    if(--techResearchRemaining > 0) return;
+    researchedTechLevel = techResearchTarget;
+    techResearchTarget = 0;
+    techResearchRemaining = 0;
+    techResearchLabID = NONE_ID;
+    updateBuildLists();
+    if(AITelemetry::log().enabled())
+        AITelemetry::log().write(currentGame->getGameCycleCount(), houseID, -1, "tech_research_completed",
+            AITelemetry::Record().set("tech_level", researchedTechLevel));
+    if(this == pLocalHouse) currentGame->addToNewsTicker(_("Technology level ") + std::to_string(researchedTechLevel));
+}
+
 void House::updateBuildLists() {
     for(StructureBase* pStructure : structureList) {
         if(pStructure->isABuilder() && (pStructure->getOwner() == this)) {
@@ -762,6 +843,7 @@ void House::updateBuildLists() {
 
 void House::update() {
     enforceCreditCapacity();
+    updateTechResearch();
     updateRadarResearch();
     if(ModManager::instance().isTornieFamilyContentActive() && !isNatives()
        && isAI() && radarResearch.active < 0 && getCredits() >= 2000) {

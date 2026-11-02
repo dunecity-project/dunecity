@@ -137,6 +137,7 @@ struct Params {
     Mode mode = Mode::Vanilla;      ///< DuneCity when the chosen mod runs the city sim
     std::string mod = "vanilla";    ///< menu only: the mod the match is played with
     int techLevel = 9;              ///< everything unlocked by default
+    bool researchLab = false;       ///< below tech 9: buildable labs, no free starting lab
     /// Menu only, single player: watch the match. @a spectateClass plays the player's house
     /// (with its AI partner, base, army and city as configured), every house is AI, and the
     /// local player observes as Custom Game's Spectate does. The generated map is unchanged.

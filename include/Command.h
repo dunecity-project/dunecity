@@ -89,6 +89,7 @@ typedef enum {
     CMD_RADAR_RESEARCH,               ///< RADAR_RESEARCH(OBJECT_ID, RESEARCH_KIND)
 
     CMD_AI_SUPPORT_ROLE,              ///< AI_SUPPORT_ROLE(ROLE): AIRole for the QuantBot partner in the issuing human's house
+    CMD_RESEARCH_TECH_LEVEL,          ///< RESEARCH_TECH_LEVEL(LAB_OBJECT_ID), next level for its owner
 
     CMD_MAX
 } CMDTYPE;

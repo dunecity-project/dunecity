@@ -1813,7 +1813,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
     bool coreReady=true;
     if (gameMode==GameMode::Custom && !builderOnly())
     for (Uint32 item:{Structure_HeavyFactory,Structure_HighTechFactory,Structure_RepairYard})
-        if (prices[item][house].enabled && prices[item][house].techLevel<=currentGame->techLevel
+        if (prices[item][house].enabled && prices[item][house].techLevel<=getHouse()->getTechLevel()
             && getHouse()->getNumItems(item)==0) coreReady=false;
     const bool rocketOpeningReady=coreReady || getHouse()->getNumItems(Structure_RocketTurret)<2;
     for (unsigned i=0;i<serviceItems.size();++i)
@@ -2010,7 +2010,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
         // upgrades/reserve. Each caller applies its own affordability and tech
         // checks when selecting. Otherwise an early low-tech yard can starve
         // every later upgraded yard's rocket search.
-        if (!data[item][house].enabled || data[item][house].techLevel > currentGame->techLevel) continue;
+        if (!data[item][house].enabled || data[item][house].techLevel > getHouse()->getTechLevel()) continue;
         Value itemBest;
         Coord itemSite = Coord::Invalid();
         const Coord size = getStructureSize(item);

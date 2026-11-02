@@ -234,7 +234,7 @@ bool QuantBot::openingCombatBudgetActive() const {
         || initialItemCount[Structure_HeavyFactory] > 0 || customWave.launched != 0
         || currentGameMap->getSizeX() * currentGameMap->getSizeY() <= 4096) return false;
     const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
-    return factory.enabled && factory.techLevel <= currentGame->techLevel;
+    return factory.enabled && factory.techLevel <= getHouse()->getTechLevel();
 }
 
 bool QuantBot::campaignCombatBudgetActive() const {
@@ -243,7 +243,7 @@ bool QuantBot::campaignCombatBudgetActive() const {
         || initialMilitaryValue < 0 || initialItemCount[Structure_HeavyFactory] > 0
         || campaignWave.launched != 0) return false;
     const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
-    return factory.enabled && factory.techLevel <= currentGame->techLevel;
+    return factory.enabled && factory.techLevel <= getHouse()->getTechLevel();
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
@@ -326,7 +326,7 @@ void QuantBot::update() {
 		// Allow campaign controllers a repair-yard target, except Medium:
         // Medium preserves only the count actually present at mission start.
 		// Note: supportMode sets gameMode to Custom, so check currentGame->gameType instead
-		if (difficulty!=Difficulty::Medium && (initialItemCount[Structure_RepairYard] == 0) && currentGame && isCampaignGameType(currentGame->gameType) && currentGame->techLevel > 4) {
+		if (difficulty!=Difficulty::Medium && (initialItemCount[Structure_RepairYard] == 0) && currentGame && isCampaignGameType(currentGame->gameType) && getHouse()->getTechLevel() > 4) {
 			initialItemCount[Structure_RepairYard] = 1;
 			if (initialItemCount[Structure_Radar] == 0) {
 				initialItemCount[Structure_Radar] = 1;

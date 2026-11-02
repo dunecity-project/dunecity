@@ -1197,6 +1197,7 @@ void Params::load(const INIFile& config) {
         spectateClass = config.getStringValue(kSection, "Spectate AI", spectateClass);
     }
     techLevel = config.getIntValue(kSection, "Tech Level", techLevel);
+    researchLab = config.getBoolValue(kSection, "Research Lab", researchLab);
     for(auto [side, prefix] : {std::pair<Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {
         side->playerClass = config.getStringValue(kSection, prefix + "AI", side->playerClass);
         side->base = static_cast<BaseSize>(config.getIntValue(kSection, prefix + "Base", indexOf(side->base)));
@@ -1229,6 +1230,7 @@ void Params::save(INIFile& config) const {
         config.setStringValue(kSection, "Spectate AI", spectateClass);
     }
     config.setIntValue(kSection, "Tech Level", techLevel);
+    config.setBoolValue(kSection, "Research Lab", researchLab);
     for(auto [side, prefix] : {std::pair<const Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {
         config.setStringValue(kSection, prefix + "AI", side->playerClass);
         config.setIntValue(kSection, prefix + "Base", indexOf(side->base));

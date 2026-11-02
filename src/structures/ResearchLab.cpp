@@ -2,6 +2,9 @@
 
 #include <globals.h>
 #include <House.h>
+#include <Game.h>
+#include <Command.h>
+#include <GUI/ObjectInterfaces/ResearchLabInterface.h>
 #include <FileClasses/GFXManager.h>
 #include <GUI/ObjectInterfaces/DefaultObjectInterface.h>
 
@@ -12,6 +15,16 @@ ResearchLab::ResearchLab(House* newOwner) : StructureBase(newOwner) {
 
 ResearchLab::ResearchLab(InputStream& stream) : StructureBase(stream) {
     init();
+}
+
+ResearchLab::~ResearchLab() {
+    owner->cancelTechResearch(objectID);
+}
+
+void ResearchLab::handleResearchClick() {
+    if(currentGame && pLocalPlayer && currentGame->canControlHouse(owner))
+        currentGame->getCommandManager().addCommand(
+            Command(pLocalPlayer->getPlayerID(), CMD_RESEARCH_TECH_LEVEL, objectID));
 }
 
 void ResearchLab::init() {
@@ -29,5 +42,6 @@ void ResearchLab::init() {
 }
 
 ObjectInterface* ResearchLab::getInterfaceContainer() {
-    return DefaultObjectInterface::create(objectID);
+    return mayShowOwnerInterface() ? ResearchLabInterface::create(objectID)
+        : DefaultObjectInterface::create(objectID);
 }

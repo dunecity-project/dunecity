@@ -58,6 +58,18 @@ public:
     void configureCampaignCoopPlayers(const std::vector<std::pair<std::string, std::string>>& desired);
 
     inline int getHouseID() const { return houseID; }
+    /// The match technology when Research Lab is off; otherwise this house's researched level.
+    int getTechLevel() const;
+    bool isTechResearchActive() const { return techResearchTarget != 0; }
+    int getTechResearchTarget() const { return techResearchTarget; }
+    int getTechResearchRemaining() const { return techResearchRemaining; }
+    Uint32 getTechResearchLabID() const { return techResearchLabID; }
+    int getTechResearchCost() const { return getTechLevel() < 9 ? 300 * (getTechLevel() + 1) : 0; }
+    static int techResearchCycles(int target) { return MILLI2CYCLES((30 + 10 * target) * 1000); }
+    bool canStartTechResearch(Uint32 labObjectID) const;
+    bool startTechResearch(Uint32 labObjectID);
+    /// Losing the particular lab doing the work cancels it without a refund.
+    void cancelTechResearch(Uint32 labObjectID);
     /// Ownership stays on the runtime house; co-op duplicates retain their chosen faction rules.
     int getFactionID() const;
     static int factionForRuntimeHouse(int runtimeHouse);
@@ -337,6 +349,7 @@ protected:
     */
     FixPoint acceptEarnedCredits(FixPoint amount, bool cityTax = false);
     void enforceCreditCeiling();
+    void updateTechResearch();
 
     /// Tells the local player that storage is full, at most once every 5 seconds.
     /// \a cityTax names city tax income as what is lost instead of spice.
@@ -359,6 +372,10 @@ protected:
     Sint32 numItemDamageInflicted[Num_ItemID]; /// Amount of damage inflicted by a specific unit type owned by the player
     DeviationReward::HouseCounters deviationCounters; ///< measured Deviator contribution (SAVEGAMEVERSION 9849)
     radar::State radarResearch;
+    int researchedTechLevel = 1;
+    int techResearchTarget = 0;
+    int techResearchRemaining = 0;
+    Uint32 techResearchLabID = NONE_ID;
     Uint32 structuresSold = 0;
     Uint32 saleCredits = 0;
 

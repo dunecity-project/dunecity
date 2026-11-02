@@ -63,11 +63,12 @@ const QuantBot::PlayStyle& QuantBot::style() const {
 }
 
 UnitMixPolicy::Slots QuantBot::fieldableMixSlots(int tech) const {
-    // ObjectData and the game's tech level do not change during a game: computed once.
-    if (tech < 0 && fieldableSlotsCached) return fieldableSlots;
-    const bool gameTech = tech < 0;
+    const bool houseTech = tech < 0;
+    if (houseTech) {
+        tech = getHouse()->getTechLevel();
+        if (fieldableSlotsCached && fieldableSlotsTech == tech) return fieldableSlots;
+    }
     const int houseID = getHouse()->getHouseID();
-    if (tech < 0) tech = currentGame->techLevel;
     const auto& data = currentGame->objectData.data;
     // A structure can be obtained at `tech` when it is enabled, priced, built somewhere obtainable
     // and its own prerequisites can be obtained too; the Construction Yard is where a game starts.
@@ -94,24 +95,34 @@ UnitMixPolicy::Slots QuantBot::fieldableMixSlots(int tech) const {
     };
     UnitMixPolicy::Slots slots{};
     for (size_t i = 0; i < slots.size(); ++i) slots[i] = buildable(kMixItems[i]);
-    if (gameTech) { fieldableSlots = slots; fieldableSlotsCached = true; }
+    if (houseTech) {
+        fieldableSlots = slots;
+        fieldableSlotsTech = tech;
+        fieldableSlotsCached = true;
+    }
     return slots;
 }
 
 int QuantBot::techBand() const {
     const auto slots = fieldableMixSlots();
-    int band = currentGame->techLevel;
+    int band = getHouse()->getTechLevel();
     while (band > 1 && fieldableMixSlots(band - 1) == slots) --band;
     return band;
 }
 
 void QuantBot::pickStrategy() {
-    if (strategyPicked || currentGame == nullptr || getHouse() == nullptr) return;
+    if (currentGame == nullptr || getHouse() == nullptr) return;
+    if (strategyPicked) {
+        // Research unlocks new slots without rerolling the saved mix or tempo.
+        if (currentGame->getGameInitSettings().getGameOptions().researchLab
+            && strategyTechLevel != getHouse()->getTechLevel()) resolveStrategyProfile();
+        return;
+    }
     const int houseID = getHouse()->getHouseID();
     auto buildable = [&](Uint32 item) {
         const auto& spec = currentGame->objectData.data[item][houseID];
         return spec.enabled && spec.price > 0 && spec.builder != ItemID_Invalid
-            && spec.techLevel <= currentGame->techLevel;
+            && spec.techLevel <= getHouse()->getTechLevel();
     };
     const UnitMixPolicy::Slots slots = fieldableMixSlots();
     const bool infantry = buildable(Unit_Soldier) || buildable(Unit_Infantry)
@@ -148,6 +159,7 @@ void QuantBot::pickStrategy() {
 }
 
 void QuantBot::resolveStrategyProfile() {
+    strategyTechLevel = getHouse()->getTechLevel();
     strategyProfile = QuantBotStrategy::profile(strategy.mix);
     strategyStart = UnitMixPolicy::expandGroups(strategyProfile.prior, fieldableMixSlots());
     if (strategy.mix != QuantBotStrategy::Mix::Tuned && strategy.mix != QuantBotStrategy::Mix::Bounded) return;
@@ -175,7 +187,7 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const UnitMixPolicy::Slots& avail
     const auto configured = UnitMixPolicy::expandGroups(group, slots);
     // Without the bounds (test style): the 1.0.847 opening over this pass's producible slots.
     if (!style().startBounds) {
-        const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, available);
+        const auto opening = UnitMixPolicy::openingMix(getHouse()->getTechLevel(), configured, available);
         UnitMixPolicy::Weights prior{};
         for (size_t i = 0; i < prior.size(); ++i) prior[i] = opening[i];
         if (const auto* mix = strategyMix())
@@ -186,7 +198,7 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const UnitMixPolicy::Slots& avail
     // tech level; plus anything producible now) and bounded there: every such slot 2%-50%
     // (docs/ai-play-styles.md, section 8). A pass then plays it over the slots producible at that
     // pass, renormalised - the factories not yet standing do not re-shape it.
-    const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, slots);
+    const auto opening = UnitMixPolicy::openingMix(getHouse()->getTechLevel(), configured, slots);
     UnitMixPolicy::Weights prior{};
     for (size_t i = 0; i < prior.size(); ++i) prior[i] = opening[i];
     // A mix strategy replaces this prior with its own starting ratios (or, Counter, with the counter

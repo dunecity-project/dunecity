@@ -108,10 +108,67 @@ void QuantBot::build(int militaryValue) {
             if (pStructure->isABuilder()) buildProducer(pass, pStructure);
         }
     }
+    startTechResearch(pass);
 
     traceCapitalOutcome(pass);
     // MULTIPLAYER FIX: Use deterministic timer instead of random
     buildTimer = 5 + (getHouse()->getHouseID() % 10);  // 5-14 cycles
+}
+
+bool QuantBot::researchLabPolicyActive() const {
+    return currentGame && currentGame->getGameInitSettings().getGameOptions().researchLab
+        && botConfig().force.researchLab && !switchedOff() && !fighterOnly();
+}
+
+bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
+    if (!researchLabPolicyActive()) return false;
+    QuantBotBuildPolicy::TechInvestment investment;
+    investment.enabled = true;
+    const bool spiceIncome = pass.spiceEconomyViable && getAIRefineryBays() > 0
+        && pass.actualHarvesters >= std::max(1,std::min(2,pass.mapSpiceHarvesterTarget));
+    const bool taxIncome = pass.citySimEnabled && getHouse()->getCapacity() > 0
+        && pass.forecastTax > pass.forecastUpkeep;
+    investment.economyReady = (spiceIncome || taxIncome) && pass.forecastNetIncome > 0
+        && !cityBootstrapNeeded(pass) && !openingFleetIncomplete(pass);
+    investment.powerReady = getHouse()->hasPower()
+        && (!(pass.citySimEnabled || pass.powerRules)
+            || getHouse()->getProducedPower() >= getHouse()->getPowerRequirement());
+    investment.emergency = pass.defendingEconomy || pass.airEngaged || pass.dangerousCrimeProperties > 0;
+    investment.cash = std::min(pass.money,getHouse()->getCredits());
+    investment.cost = cost;
+    investment.projectedCash = pass.cashFlow.projectedCash;
+    investment.orderedCost = pass.capitalOrderedCost;
+    // Working capital and the next protected purchase are separate obligations.
+    // Queue remainders are already deducted from pass.money; never charge them twice.
+    investment.reserve = int64_t(std::max({1000,pass.cashBuffer,pass.economyReserve,pass.cityWorkingReserve}))
+        + std::max({pass.strategicReserveCost,pass.civicReserveCost,cityBootstrapReserve(pass),
+            harvesterInvestmentReserve(pass),capitalReserve(pass,NONE_ID)});
+    return QuantBotBuildPolicy::canFundTechInvestment(investment);
+}
+
+void QuantBot::startTechResearch(BuildPass& pass) {
+    if (!researchLabPolicyActive() || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9) return;
+    const int cost = getHouse()->getTechResearchCost();
+    if (!canFundTechInvestment(pass,cost)) return;
+    const StructureBase* lab = nullptr;
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getItemID() == Structure_ResearchLab
+            && structure->getHealth() > 0
+            && (!lab || structure->getObjectID() < lab->getObjectID())) lab = structure;
+    if (!lab) return;
+    const int from = getHouse()->getTechLevel();
+    if (!const_cast<House*>(getHouse())->startTechResearch(lab->getObjectID())) return;
+    pass.money -= cost;
+    pass.capitalOrderedCost += cost;
+    if (AITelemetry::log().enabled()) {
+        pass.capitalOrders.set(std::to_string(lab->getObjectID())+":research",
+            AITelemetry::Record().set("item",Structure_ResearchLab).set("price",cost).set("rule","tech_research"));
+        traceDecision("research_started",AITelemetry::Record().set("capital_plan",pass.capitalDecision)
+            .set("lab",lab->getObjectID())
+            .set("from",from).set("to",from+1).set("cost",cost)
+            .set("cycles",House::techResearchCycles(from+1))
+            .set("spendable_after",pass.money).set("state",decisionState(pass)));
+    }
 }
 
 void QuantBot::resetBuildPass() {
@@ -304,7 +361,7 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     if (pass.citySimEnabled && cityFundsProduction && pass.itemCount[Structure_ConstructionYard]>0) {
         planningCityProductionPlots=true;
         for (Uint32 item:{Structure_HeavyFactory,Structure_RepairYard}) {
-            if (!data[item][houseID].enabled || data[item][houseID].techLevel>currentGame->techLevel) continue;
+            if (!data[item][houseID].enabled || data[item][houseID].techLevel>getHouse()->getTechLevel()) continue;
             clearPlacementCache(false);
             const Coord site=findPlaceLocation(item);
             if (site.isValid()) cityProductionPlots.push_back({item,site});
@@ -657,8 +714,8 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
     pass.orderedSpiceHarvester = false;
     pass.transportTechAvailable = gameMode == GameMode::Custom && lastCalculatedSpice > 0
         && data[Unit_Carryall][houseID].enabled && data[Structure_HighTechFactory][houseID].enabled
-        && currentGame->techLevel >= data[Unit_Carryall][houseID].techLevel
-        && currentGame->techLevel >= data[Structure_HighTechFactory][houseID].techLevel
+        && getHouse()->getTechLevel() >= data[Unit_Carryall][houseID].techLevel
+        && getHouse()->getTechLevel() >= data[Structure_HighTechFactory][houseID].techLevel
         && !getHouse()->isAirUnitLimitReached();
     // Brutal's economy step (docs/ai-scenario-matrix.md, "Difficulty separation"): it keeps an 8-12
     // worker opening floor and equal (not double) army capital per worker while it grows its fleet up
@@ -753,6 +810,10 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
     if (pass.citySimEnabled) for (Uint32 item=Structure_FirstID; item<=(ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID); ++item)
         if (isStructure(item)) pass.committedPowerDemand += std::max(0,rawPlannedItemCount(pass,item)-getHouse()->getNumItems(item))
             * (DuneCity::isCityZoneStructure(item) ? DuneCity::getZonePower(item,3) : std::max(0,data[item][houseID].power));
+    if (currentGame->getGameInitSettings().getGameOptions().researchLab
+        && (!pass.citySimEnabled || !ModManager::instance().isTornieFamilyContentActive()))
+        pass.committedPowerDemand += std::max(0,pass.itemCount[Structure_ResearchLab]
+            - getHouse()->getNumItems(Structure_ResearchLab)) * std::max(0,data[Structure_ResearchLab][houseID].power);
     pass.zoneGrowthHeadroom = QuantBotBuildPolicy::cityGrowthPowerHeadroom(
         pass.currentZonePower,pass.matureZonePower,projectedPowerDemandGrowth,pass.committedPowerDemand);
     pass.cityPowerReserve = pass.citySimEnabled ? QuantBotBuildPolicy::cityPowerReserve(
@@ -1061,7 +1122,7 @@ QuantBot::CivicPlan QuantBot::planCivicForYard(BuildPass& pass, const BuilderBas
         // A mod that disables the civic, or a tech level that has not
         // reached it, is not a cap this house can lift.
         if (!data[candidate][houseID].enabled
-            || data[candidate][houseID].techLevel > currentGame->techLevel) {
+            || data[candidate][houseID].techLevel > getHouse()->getTechLevel()) {
             plan.reason = "civic_not_in_mod_or_tech";
             continue;
         }
@@ -1072,7 +1133,7 @@ QuantBot::CivicPlan QuantBot::planCivicForYard(BuildPass& pass, const BuilderBas
     plan.reason = "chain_exhausted";
     Uint32 step = plan.civic;
     for (int depth = 0; depth < Structure_LastID && step != NONE_ID; ++depth) {
-        if (!data[step][houseID].enabled || data[step][houseID].techLevel > currentGame->techLevel) {
+        if (!data[step][houseID].enabled || data[step][houseID].techLevel > getHouse()->getTechLevel()) {
             plan.reason = "prerequisite_not_in_mod_or_tech";
             return plan;
         }
@@ -1557,7 +1618,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     if (getHouse()->getNumLostItems(Structure_HeavyFactory) > 0) {
         auto recoverableHeavyUnit = [&](Uint32 unit) {
             const auto& spec = data[unit][houseID];
-            if (!spec.enabled || spec.price <= 0 || spec.techLevel > currentGame->techLevel
+            if (!spec.enabled || spec.price <= 0 || spec.techLevel > getHouse()->getTechLevel()
                 || spec.builder != Structure_HeavyFactory) return false;
             for (int prerequisite = Structure_FirstID; prerequisite <= Structure_LastID; ++prerequisite)
                 if (spec.prerequisiteStructuresSet[prerequisite]
@@ -1583,7 +1644,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         killBonusMilli[i] = getHouse()->getCombatReward(item).killBonusMilli;
         lostValue[i] = int64_t(getHouse()->getNumLostItems(item)) * data[item][houseID].price;
         const bool enabled = data[item][houseID].enabled && data[item][houseID].price > 0
-            && data[item][houseID].techLevel <= currentGame->techLevel;
+            && data[item][houseID].techLevel <= getHouse()->getTechLevel();
         totalDamage += damage[i];
         totalRewardMilli += rewardMilli[i];
         totalLostValue += lostValue[i];
@@ -1690,7 +1751,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             .set("ornithopter_bps", (pass.ornithopterPercent * 10000).lround()).set("raw_ornithopter_bps", rawOrnithopterBps)
             .set("light_vehicle_percent", lightVehiclePercent).set("light_vehicle_bps", pass.lightVehicleBps)
             .set("trike_bps", pass.unitMix[7]).set("raider_trike_bps", pass.unitMix[8]).set("quad_bps", pass.unitMix[9])
-            .set("allocation_types", int(kSlots)).set("tech_level", currentGame->techLevel)
+            .set("allocation_types", int(kSlots)).set("tech_level", getHouse()->getTechLevel())
             .set("opening_light_bps", defaults[7]+defaults[8]+defaults[9]).set("total_damage", totalDamage)
             .set("total_reward_milli", totalRewardMilli).set("total_lost_value", totalLostValue)
             .set("launcher_floor_bps", launcherFloorBps)
@@ -1755,7 +1816,7 @@ bool QuantBot::cityTroopContentExists(BuildPass& pass) {
     auto& data = currentGame->objectData.data;
     for (const Uint32 troop : {Unit_Trooper, Unit_Troopers}) {
         const auto& spec = data[troop][houseID];
-        if (!spec.enabled || spec.price <= 0 || spec.techLevel > currentGame->techLevel
+        if (!spec.enabled || spec.price <= 0 || spec.techLevel > getHouse()->getTechLevel()
             || spec.builder != Structure_WOR || !infantryQuotaAdmits(pass, spec.price)) continue;
         bool prerequisites = true;
         for (int item = Structure_FirstID; item <= Structure_LastID; ++item)
@@ -2110,14 +2171,14 @@ void QuantBot::planOpeningProduction(BuildPass& pass) {
     while (!factorySteps.empty()) {
         const auto item=factorySteps.back();factorySteps.pop_back();
         if (!firstFactoryPrerequisites.insert(item).second || pass.itemCount[item]>0) continue;
-        firstFactoryLegal &= data[item][houseID].enabled && data[item][houseID].techLevel<=currentGame->techLevel;
+        firstFactoryLegal &= data[item][houseID].enabled && data[item][houseID].techLevel<=getHouse()->getTechLevel();
         pass.firstFactoryCapital+=buildingCapitalCost(pass, item);
         for (int prerequisite=Structure_FirstID;prerequisite<=Structure_LastID;++prerequisite)
             if (data[item][houseID].prerequisiteStructuresSet[prerequisite]) factorySteps.push_back(prerequisite);
     }
     for (int item=Unit_FirstID;item<=(ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Unit_LastID);++item) {
         const auto& info=data[item][houseID];
-        if (!isUnit(item) || !info.enabled || info.builder!=Structure_HeavyFactory || info.techLevel>currentGame->techLevel
+        if (!isUnit(item) || !info.enabled || info.builder!=Structure_HeavyFactory || info.techLevel>getHouse()->getTechLevel()
             || info.upgradeLevel>0 || info.buildtime<=0 || item==Unit_MCV) continue;
         const int time=pass.citySimEnabled ? DuneCity::getCityBuildTime(item,info.buildtime) : info.buildtime;
         pass.firstFactoryProduction=std::max(pass.firstFactoryProduction,
@@ -2204,7 +2265,7 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
     pass.coreInfrastructureReady = true;
     if (gameMode==GameMode::Custom && !builderOnly())
         for (Uint32 item:{Structure_HeavyFactory,Structure_HighTechFactory,Structure_RepairYard}) {
-            if (!data[item][houseID].enabled || data[item][houseID].techLevel>currentGame->techLevel) continue;
+            if (!data[item][houseID].enabled || data[item][houseID].techLevel>getHouse()->getTechLevel()) continue;
             if (getHouse()->getNumItems(item)==0) pass.coreInfrastructureReady=false;
             if (pass.missingCoreInfrastructure==NONE_ID && pass.itemCount[item]==0) pass.missingCoreInfrastructure=item;
         }
@@ -2306,7 +2367,7 @@ bool QuantBot::storageExpansionNeeded(BuildPass& pass) {
     // Where the tech level has no heavy factory yet (DuneCity campaign levels 1-3), storage
     // is not deferred for one: taxes fill the store and the spice quota waits on it.
     return (getHouse()->getNumItems(Structure_HeavyFactory)>0
-            || data[Structure_HeavyFactory][houseID].techLevel>currentGame->techLevel)
+            || data[Structure_HeavyFactory][houseID].techLevel>getHouse()->getTechLevel())
         && pass.cityCoreInfrastructureReady
         && capacity > 0 && projectedCapacity < 999999
         && getHouse()->getEarnedCredits() >= projectedCapacity * 0.80_fix
@@ -2355,7 +2416,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // continue growing the economy alongside it.
             if (pass.citySimEnabled && pass.coreInfrastructureReady && expansionTurretsMissing(builder)>0
                 && data[Structure_RocketTurret][houseID].enabled
-                && data[Structure_RocketTurret][houseID].techLevel<=currentGame->techLevel) {
+                && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()) {
                 CapitalCandidate defence;
                 defence.builder=builder->getObjectID();defence.item=Structure_RocketTurret;
                 defence.kind="expansion_defence";defence.reason="secure_expansion";defence.score=5500;
@@ -2462,7 +2523,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             if (botConfig().force.defencePrerequisites && pass.citySimEnabled && getHouse()->hasPower()
                 && (pass.airEngaged || (pass.uncoveredCoreAssets>0 && cityZones>=4)) && pass.routineRocketsAllowed
                 && data[Structure_RocketTurret][houseID].enabled
-                && data[Structure_RocketTurret][houseID].techLevel<=currentGame->techLevel
+                && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()
                 && !campaignAvailableToBuild(builder,Structure_RocketTurret)) {
                 int uncovered=0;
                 if (findCityTurretPlaceLocation(Structure_RocketTurret,&uncovered).isValid() && uncovered>0) {

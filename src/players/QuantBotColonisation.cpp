@@ -804,7 +804,7 @@ bool QuantBot::expansionDefenceReady(bool needsLocalSpace) const {
     // leaves the rock free for the next one. Recovery of the only yard is exempt.
     if (!builtOut)
         for (Uint32 item : {Structure_HeavyFactory, Structure_HighTechFactory, Structure_RepairYard})
-            if (data[item][house].enabled && data[item][house].techLevel <= currentGame->techLevel
+            if (data[item][house].enabled && data[item][house].techLevel <= getHouse()->getTechLevel()
                 && getHouse()->getNumItems(item) == 0) return false;
     return true;
 }

@@ -128,7 +128,7 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 110 changes Hard's custom city ceiling (QuantBot HardCityMatch); city growth differs. It
     // also appends CMD_AI_SUPPORT_ROLE, the in-game AI partner switch (save 9880), gives each
     // house its own tax rate and appends MOD14's Micropolis land value rule.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 110);
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 111);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 
