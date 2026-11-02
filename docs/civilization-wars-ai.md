@@ -70,6 +70,13 @@ safe, reachable island and retain existing recent-loss, destination reservation,
 escort and MCV footprint protection. Do not create yards without an economic or
 lane-control purpose.
 
+Code inspection found two concrete control limitations: `RockExpansionPolicy`
+requires 48 free tiles in both the formation and local window, whereas a generated
+island guarantees only a 5×5 core; the smallest `(rx=5, ry=3)` bounds contain at most
+37 rock tiles. New-colonist demand also waits for the home base to be built out.
+Changing island ranking alone cannot overcome either gate. Teammates' existing
+buildings and assigned MCV destinations must count when avoiding duplicate colonies.
+
 Harvester safety already reacts to visible/remembered threats; inspect its worm
 handling and measure worm-attributed worker deaths. Respawning worms mean a
 cleared lane is not permanently safe. Prefer nearby protected spice/short sand
@@ -79,6 +86,20 @@ objectives and staging points must be reachable through a lane, not over a ridge
 Infantry can use its ordinary cross-ridge paths without a separate formation
 system. City growth stays on buildable rock with existing R/C/I demand, road
 access, services and difficulty ceilings.
+
+The control's visible-worm Harvester danger radius is one tile (zero weapon range
+is clamped to one); its two-second danger refresh can therefore warn too late.
+The existing two-minute unsafe-field memory can be reused rather than creating
+omniscient permanent worm exclusion. Its route estimate checks danger along a
+straight line, not terrain reachability; vehicles can otherwise choose spice
+across a Mountain ridge and detour. The three lanes connect around the rock ends,
+so whole-map vehicle-region IDs are not lane IDs.
+
+Ordinary ground waves with no formation use engine Hunt. The existing
+`customWaveObjective()` is mainly a front-strength observation anchor, not a
+movement order. If simulations show that waves never cross a contested lane,
+the minimal extension is an unforced, contact-responsive `doHuntToward()` on
+already-eligible dispatched members, not periodic forced attack orders.
 
 ## Experiment contract
 
