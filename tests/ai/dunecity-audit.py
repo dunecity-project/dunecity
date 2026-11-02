@@ -32,7 +32,7 @@ SPICE = {'none': 0, 'low': 1, 'medium': 2}
 DETECTORS = ('economy_stall', 'power_deficit', 'no_ground_defence', 'missing_starport', 'missing_radar',
              'missing_heavy_factory', 'missing_ix', 'idle_under_attack', 'unused_credits',
              'bankrupt_queue_empty', 'early_no_fight', 'zero_harvesters')
-META = ('id', 'seed', 'size', 'spice_level', 'format', 'difficulty', 'variant', 'base', 'army', 'city', 'limit')
+META = ('id', 'seed', 'size', 'spice_level', 'format', 'difficulty', 'variant', 'base', 'army', 'city', 'limit', 'style')
 GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes', 'loop_ms', 'wall_s', 'digest', 'error')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'score', 'drawn', 'won', 'flags') + tuple(
@@ -47,7 +47,7 @@ SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags',)
 lock = threading.Lock()
 
 
-def read_rows(path):
+def read(path):
     if not path.exists():
         return []
     with path.open(newline='') as handle:
@@ -99,7 +99,7 @@ def schedule(args):
                                 cell += '/swap'
                             games.append(dict(id=cell, seed=seed, size=size, spice_level=spice, format=fmt,
                                               difficulty=difficulty, variant=args.variant, sides=sides, base=args.base, army=args.army,
-                                              city=args.city, limit=args.minutes,
+                                              city=args.city, limit=args.minutes, style=args.style or 'default',
                                               minutes=args.minutes, skirmish=f'size={size},base={args.base},army={args.army},'
                                               f'city={args.city},spice={SPICE[spice]},rock=2,tech=9,credits=3000,seed={seed}'))
     return games
@@ -167,6 +167,8 @@ def command(args, binary, game, out):
     cmd += ['--no-ai-telemetry']
     if args.game_options:
         cmd += ['--game-options', str(args.game_options)]
+    if args.style:
+        cmd += ['--scenario-style', args.style]
     return cmd
 
 
@@ -242,7 +244,7 @@ def build_probe(args, scratch):
 def run(args):
     results = Path(args.results)
     results.mkdir(parents=True, exist_ok=True)
-    done = {r['id'] for r in read_rows(results / 'games.csv') if not r['error']}
+    done = {r['id'] for r in read(results / 'games.csv') if not r['error']}
     todo = [game for game in schedule(args) if game['id'] not in done]
     print(f'{len(todo)} games to play ({len(done)} complete)', flush=True)
     if todo:
@@ -260,7 +262,7 @@ def run(args):
 def load(directories, name, keys):
     rows = {}
     for directory in directories:
-        for row in read_rows(Path(directory) / name):
+        for row in read(Path(directory) / name):
             rows[tuple(row[key] for key in keys)] = row
     return list(rows.values())
 
@@ -357,6 +359,7 @@ parser.add_argument('--city', type=int, choices=range(6), default=0)
 parser.add_argument('--mode', choices=('matrix', 'ladder'), default='matrix')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
+parser.add_argument('--style', help='QuantBot switch overlay from tests/ai/play-styles/ (same-build A/B)')
 parser.add_argument('--list', action='store_true')
 parser.add_argument('--report', nargs='+', type=Path, dest='report_dirs')
 parser.add_argument('--compare', nargs=2, type=Path, metavar=('CONTROL', 'CANDIDATE'))
