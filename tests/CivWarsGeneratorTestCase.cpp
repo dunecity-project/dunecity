@@ -757,7 +757,7 @@ TEST_CASE("Civilization Wars: power planning uses the worst faction without brea
 
 TEST_CASE("Civilization Wars: parameter persistence is isolated and preserves the full uint32 seed", "[civwars][generator][config]") {
     for(uint32_t seed : {0u, 1u, 0xFFFFFFFFu}) for(bool multiplayer : {false, true}) {
-        INIFile config(false, "");
+        INIFile config(false, std::string{});
         config.setIntValue("Random Skirmish", "Credits", 7500);
         CivParams p;
         p.teamSize = 3; p.size = 3; p.wormsPerLane = 4; p.spice = Spice::VeryHigh;
@@ -782,7 +782,7 @@ TEST_CASE("Civilization Wars: parameter persistence is isolated and preserves th
         REQUIRE(loaded.spectateClass == p.spectateClass);
         REQUIRE(loaded.multiplayer == p.multiplayer);
     }
-    INIFile invalid(false, "");
+    INIFile invalid(false, std::string{});
     for(const char* text : {"", "-1", "+1", "4294967296", "999999999999999999999", "0x10", "1x", " 3", "3 "}) {
         invalid.setStringValue("Civilization Wars", "Seed", text);
         CivParams p;
