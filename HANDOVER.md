@@ -21,9 +21,30 @@
   preference. Pending generation prevents duplicate projects. Existing threat/civic
   priority and surplus military spending remain; switch off keeps the prior path.
   No saved AI state change; shared unreleased protocol111 already covers the release.
-- Added an off/on cheap-import/power-headroom fixture to `quantbot_no_spice_city`
-  and config load/save/hash coverage. Evidence:
-  `/Users/stefan/Documents/projects/outputs/harkonnen-idle-20261103/`.
+- With the switch ON in the actual save, Harkonnen orders its next Windtrap at
+  cycle75125 (+103.904s), completes it at75925 (+116.704s), and completes the first
+  new Commercial zone at81925 (+212.704s). At +6min: **16 structures, population3740,
+  81 credits, power300/223**, versus OFF **11/2760/136/200:190**. Mercenary reaches
+  **43/11740/3/700:589** with ON versus **43/11620/328/700:592** with OFF.
+- Original Slow City Year remains7500 cycles. The forecast correctly converts annual
+  tax496 to248/min and police100 to50/min, adds23/min power, and predicts700 net over
+  four minutes. Slow taxes aggravate the saving deadlock; the year conversion is not
+  the bug, and no tax/year rule changed.
+- Verified native build and config unit suite; the new off/on cheap-import/power-headroom
+  fixture passes, as do `quantbot_custom_attack` and `quantbot_army_recovery`. The
+  shared-spending DuneCity gate fails its Research Lab check, **"Destroyed research lab
+  was not rebuilt"**, after `CITY_CAPACITY_PASS`; this is not claimed as passing.
+- Normal-spice seed448824951, Hard Harkonnen v Hard Atreides, CY-only/army0: at20min
+  Harkonnen has93 structures,46 army units/value12250,1374 credits and38942 spice refined,
+  with heavy/light/high-tech factories. Growth-power savings did not starve military.
+- Remaining economy, scenario, All-against-Atreides, FFA and performance gates are
+  snapshotted at2ccb2894 as queue job `20261103T014206-city-growth-final-7e52a4`;
+  pending is not a pass. Earlier snapshot93d96ea3 was cancelled after a fixture-only
+  RobustList compile error; 886b75bc/f2d20e08 correct it, and2ccb2894 isolates the
+  fixture bargain from unrelated routine turret scoring.
+- Evidence: `/Users/stefan/Documents/projects/outputs/harkonnen-idle-20261103/`,
+  especially `continuation-comparison.json`, `fix-{off,on}/`, `fixture-pass/`,
+  `normal-spice/` and `slow-city-year-accounting.json`.
 
 ## 2026-11-02 — Civilization Wars (OMP CivWars, unreleased)
 
