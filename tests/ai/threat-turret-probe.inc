@@ -93,6 +93,10 @@ void runThreatTurretProbe(Game& game) {
         auto on=plan(true);
         require(on.groundTurretGoal>=4 && on.groundTurretCover<on.groundTurretGoal,
             "Vehicle raid did not increase local rocket demand beyond the rear pair");
+        SDL_Log("THREAT_TURRET_STATE: goal=%d cover=%d available=%d upgrade=%d/%d builder=%u choices=%zu selected=%d",
+            on.groundTurretGoal,on.groundTurretCover,bot->campaignAvailableToBuild(yard,Structure_RocketTurret),
+            yard->getCurrentUpgradeLevel(),yard->getMaxUpgradeLevel(),yard->getObjectID(),
+            on.capitalCandidates.size(),on.capitalChoice);
         require(on.capitalChoice>=0 && on.capitalCandidates[on.capitalChoice].reason==std::string("ground_threat"),
             "Missing production core suppressed the active ground defence");
         const auto site=on.capitalCandidates[on.capitalChoice].site;

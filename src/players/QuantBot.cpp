@@ -1093,7 +1093,7 @@ void QuantBot::refreshTacticalDanger() {
                 unit && !unit->isAFlyingUnit() && unit->getItemID() != Unit_Saboteur
                 && QuantBotBuildPolicy::militaryItem(unit->getItemID())) {
                 const int value = currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price;
-                visibleGroundTurretThreats.push_back({p, std::max(100, value)});
+                visibleGroundTurretThreats.push_back({p, std::max(100, value), std::max(1,unit->getWeaponRange())});
             }
         }
         stamp(tacticalDanger, p, radius, 100);

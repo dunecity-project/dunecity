@@ -1545,7 +1545,8 @@ Coord QuantBot::findThreatTurretPlaceLocation(Coord asset, Coord approach) {
     const int range=std::max(1,currentGame->objectData.data[item][getHouse()->getHouseID()].weaponrange-1);
     const auto geometry=batteryGeometry(asset,approach-asset);
     Coord best=Coord::Invalid();
-    int64_t bestScore=std::numeric_limits<int64_t>::min();
+    using Rank=std::tuple<int64_t,int64_t,int,int>;
+    Rank bestRank{};
     // Only sites that can fire across this threatened asset. A new reaction
     // does not trigger another whole-map placement sweep for every builder.
     for (int y=std::max(0,asset.y-range);y<=std::min(getMap().getSizeY()-1,asset.y+range);++y)
@@ -1573,15 +1574,20 @@ Coord QuantBot::findThreatTurretPlaceLocation(Coord asset, Coord approach) {
                 if (!tile->isMountain() && !tile->hasAStructure()) ++exits;
             }
             if (!FrontBatteryPolicy::keepsCorridor(exits)) continue;
-            int64_t firingValue=0;
-            for (const auto& contact:visibleGroundTurretThreats)
-                if (blockDistance(at,contact.at)<=range) firingValue+=contact.value;
-            // Answer the observed approach, not a distant enemy base or the
-            // peaceful amenity scorer. Keep a few tiles of stand-off from quads.
+            int64_t firingValue=0,exposure=0;
+            for (const auto& contact:visibleGroundTurretThreats) {
+                const FixPoint distance=blockDistance(at,contact.at);
+                if (distance<=range) firingValue+=contact.value;
+                if (distance<=contact.weaponRange+1) exposure+=contact.value;
+            }
+            if (firingValue<=0) continue;
+            // Buying the spot that hits the whole horde put each new turret
+            // inside the quads' guns, where it died before the next one stood.
+            // First minimize observed return fire, then maximize our firing
+            // cover. This permits a supporting stand-off line behind the raid.
             const int approachDistance=blockDistance(at,approach).lround();
-            const int64_t score=firingValue*100-std::abs(approachDistance-5)*30
-                -blockDistance(at,asset).lround()*4;
-            if (score>bestScore) { bestScore=score;best=at; }
+            const Rank rank{-exposure,firingValue,-std::abs(approachDistance-5),-blockDistance(at,asset).lround()};
+            if (best.isInvalid() || rank>bestRank) { bestRank=rank;best=at; }
         }
     return best;
 }

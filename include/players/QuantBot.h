@@ -684,7 +684,7 @@ private:
     const std::vector<int>& factoryClearance() const;
     std::vector<Coord> visibleEnemyBases;
     std::vector<Uint32> visibleHarvestLaunchers;
-    struct GroundTurretContact { Coord at; int value; };
+    struct GroundTurretContact { Coord at; int value; int weaponRange; };
     // Same visible-only two-second survey as tacticalDanger; derived, never saved.
     std::vector<GroundTurretContact> visibleGroundTurretThreats;
     Uint32 dangerUpdated = std::numeric_limits<Uint32>::max();
