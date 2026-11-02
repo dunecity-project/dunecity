@@ -1348,6 +1348,8 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.sharedFactoryQueue = myINIFile.getBoolValue("Game Options", "Shared Factory Queue", true);
             settings.gameOptions.slowCityYear = myINIFile.getBoolValue("Game Options", "Slow City Year", true);
             settings.gameOptions.micropolisLandValue = myINIFile.getBoolValue("Game Options", "Micropolis Land Value", true);
+            settings.gameOptions.researchLab = myINIFile.getBoolValue("Game Options", "Research Lab", false);
+            settings.gameOptions.trooperAntiAir = myINIFile.getBoolValue("Game Options", "Trooper Anti-Air", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
             settings.gameOptions.alliedBuilding = myINIFile.getBoolValue("Game Options", "Allied Building", false);
             settings.gameOptions.easyMode = myINIFile.getBoolValue("Game Options", "Easy Mode", false);

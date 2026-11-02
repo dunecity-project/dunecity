@@ -164,6 +164,8 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Shared Factory Queue", options.sharedFactoryQueue);
     config.setBoolValue(section, "Slow City Year", options.slowCityYear);
     config.setBoolValue(section, "Micropolis Land Value", options.micropolisLandValue);
+    config.setBoolValue(section, "Research Lab", options.researchLab);
+    config.setBoolValue(section, "Trooper Anti-Air", options.trooperAntiAir);
     config.setBoolValue(section, "Allied Control", options.alliedControl);
     config.setBoolValue(section, "Allied Building", options.alliedBuilding);
     config.setBoolValue(section, "Easy Mode", options.easyMode);
@@ -204,6 +206,8 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Shared Factory Queue", options.sharedFactoryQueue);
     readBool("Slow City Year", options.slowCityYear);
     readBool("Micropolis Land Value", options.micropolisLandValue);
+    readBool("Research Lab", options.researchLab);
+    readBool("Trooper Anti-Air", options.trooperAntiAir);
     readBool("Allied Control", options.alliedControl);
     readBool("Allied Building", options.alliedBuilding);
     readBool("Easy Mode", options.easyMode);

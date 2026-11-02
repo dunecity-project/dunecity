@@ -47,6 +47,7 @@ constexpr Uint32 GAMEINIT_MOD11_MARKER = 0x4D4F4442; // MODB: slow city year (MO
 constexpr Uint32 GAMEINIT_MOD12_MARKER = 0x4D4F4443; // MODC: Tornie-family match rules
 constexpr Uint32 GAMEINIT_MOD13_MARKER = 0x4D4F4444; // MODD: shared factory queue
 constexpr Uint32 GAMEINIT_MOD14_MARKER = 0x4D4F4445; // MODE: Micropolis land value
+constexpr Uint32 GAMEINIT_MOD15_MARKER = 0x4D4F4446; // MODF: per-house research and trooper anti-air
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -248,12 +249,17 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.sharedFactoryQueue = false;
     gameOptions.slowCityYear = false;
     gameOptions.micropolisLandValue = false;
+    gameOptions.researchLab = false;
+    gameOptions.trooperAntiAir = false;
 
     // Read mod info (added in version with mod system)
     // Use marker to detect presence for backward compatibility
     Uint32 modMarker = 0;
     try {
         modMarker = stream.readUint32();
+        const bool hasResearchOptions = modMarker == GAMEINIT_MOD15_MARKER;
+        // MOD15 appends two rules to the complete MOD14 prefix.
+        if(hasResearchOptions) modMarker = GAMEINIT_MOD14_MARKER;
         if (isKnownModMarker(modMarker)) {
             modName = stream.readString();
             modChecksum = stream.readString();
@@ -344,6 +350,10 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             }
             if(modMarker == GAMEINIT_MOD14_MARKER) {
                 gameOptions.micropolisLandValue = stream.readBool();
+            }
+            if(hasResearchOptions) {
+                gameOptions.researchLab = stream.readBool();
+                gameOptions.trooperAntiAir = stream.readBool();
             }
         }
     } catch (InputStream::eof&) {
@@ -471,7 +481,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD14_MARKER);
+    stream.writeUint32(GAMEINIT_MOD15_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -525,6 +535,9 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.sharedFactoryQueue);
     // MOD14: Micropolis land value; all older streams keep the legacy calculation.
     stream.writeBool(gameOptions.micropolisLandValue);
+    // MOD15: old saves keep both mechanics off.
+    stream.writeBool(gameOptions.researchLab);
+    stream.writeBool(gameOptions.trooperAntiAir);
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

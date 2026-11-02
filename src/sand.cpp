@@ -87,6 +87,7 @@ SDL_Texture* resolveItemPicture(int itemID, HOUSETYPE house) {
         case Structure_AdvancedWindTrapMK3:newPicID = Picture_AdvancedWindTrap;    break;
         case Structure_Worfinery:          newPicID = Picture_Worfinery;           break;
         case Structure_TechCenter:         newPicID = Picture_TechCenter;          break;
+        case Structure_ResearchLab:        newPicID = Picture_TechCenter;          break;
         case Structure_Scoutpost:          newPicID = Picture_Scoutpost;           break;
         case Structure_Flamepost:          newPicID = Picture_Flamepost;           break;
         case Structure_Chemipost:          newPicID = Picture_Chemipost;           break;
@@ -269,6 +270,7 @@ Coord getStructureSize(int itemID) {
         case Structure_AdvancedWindTrapMK3: return Coord(3,2); break;
         case Structure_Worfinery:           return Coord(3,2); break;
         case Structure_TechCenter:          return Coord(3,2); break;
+        case Structure_ResearchLab:         return Coord(3,2);
         case Structure_Scoutpost:           return Coord(1,1); break;
         case Structure_Flamepost:           return Coord(1,1); break;
         case Structure_Slowpost:            return Coord(1,1); break;
@@ -322,6 +324,7 @@ Uint32  getItemIDByName(const std::string& name) {
     else if((lowerName == "advanced windtrap mk3") || (lowerName == "advanced wind trap mk3") || (lowerName == "advanced windtrap 3x2") || (lowerName == "advanced wind trap 3x2")) return Structure_AdvancedWindTrapMK3;
     else if(lowerName == "worfinery")                                             return Structure_Worfinery;
     else if((lowerName == "tech center") || (lowerName == "techcenter"))          return Structure_TechCenter;
+    else if(lowerName == "research lab")                                       return Structure_ResearchLab;
     else if((lowerName == "scoutpost") || (lowerName == "scout post") || (lowerName == "green post") || (lowerName == "sentinel post") || (lowerName == "avant-poste") || (lowerName == "avant poste")) return Structure_Scoutpost;
     else if((lowerName == "flamepost") || (lowerName == "flame post"))              return Structure_Flamepost;
     else if(lowerName == "slowpost")                                            return Structure_Slowpost;
@@ -422,6 +425,7 @@ std::string getItemNameByID(Uint32 itemID) {
         case Structure_AdvancedWindTrapMK3: return "Advanced Windtrap 3x2"; break;
         case Structure_Worfinery:           return "Worfinery";         break;
         case Structure_TechCenter:          return "Tech Center";       break;
+        case Structure_ResearchLab:         return "Research Lab";
         case Structure_Scoutpost:           return "Scoutpost";         break;
         case Structure_Flamepost:           return "Flamepost";         break;
         case Structure_Slowpost:            return "Slowpost";          break;
@@ -525,6 +529,7 @@ std::string resolveItemName(int itemID) {
         case Structure_Worfinery:           return _("Worfinery");                         break;
         case Structure_Doublefinery:        return _("Doublefinery");                       break;
         case Structure_TechCenter:          return _("Tech Center");                       break;
+        case Structure_ResearchLab:         return _("Research Lab");
         case Structure_Scoutpost:           return _("Scoutpost");                         break;
         case Structure_Flamepost:           return _("Flamepost");                         break;
         case Structure_Slowpost:            return settings.general.language == "fr" ? "Poste ralentisseur" : "Slowpost";

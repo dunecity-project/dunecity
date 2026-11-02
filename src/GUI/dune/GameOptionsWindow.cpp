@@ -77,7 +77,7 @@ void DamageRulesCheckbox::drawOverlay(Point) {
 
 
 GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGameOptions)
- : Window(50, 50, 626, ModManager::instance().isTornieFamilyContentActive() ? 444 : 370), gameOptions(initialGameOptions) {
+ : Window(50, 50, 626, ModManager::instance().isTornieFamilyContentActive() ? 464 : 410), gameOptions(initialGameOptions) {
 
     setWindowWidget(&vbox);
     vbox.addWidget(VSpacer::create(6));
@@ -168,6 +168,12 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(&planBuildingSitesCheckbox);
     vboxLeft.addWidget(VSpacer::create(6));
 
+    researchLabCheckbox.setText(_("Research Lab"));
+    researchLabCheckbox.setTooltipText(_("Enable buildable Research Labs and independent house technology, starting at the match's tech level."));
+    researchLabCheckbox.setChecked(gameOptions.researchLab);
+    vboxLeft.addWidget(&researchLabCheckbox);
+    vboxLeft.addWidget(VSpacer::create(6));
+
     if(ModManager::instance().isTornieFamilyContentActive()) {
         alliedControlCheckbox.setText(_("Allied control"));
         alliedControlCheckbox.setTooltipText(_("Allies may command each other's units and buildings. Ownership and credits remain separate."));
@@ -220,6 +226,12 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     originalUnitDamageCheckbox.setExplanation(_("Original Dune II damage and splash"),
         _("Use original Dune II damage against ground units, as reproduced by Dune Dynasty classic. Tank hits rise from 12 to 25; Launcher rockets from 37 to 75. Splash halves every quarter tile and stops at one tile. Unchecked keeps DuneCity balance. Building damage, aircraft hits and special weapons keep their existing rules."));
     vboxRight.addWidget(&originalUnitDamageCheckbox);
+    vboxRight.addWidget(VSpacer::create(6));
+
+    trooperAntiAirCheckbox.setText(_("Trooper Anti-Air"));
+    trooperAntiAirCheckbox.setTooltipText(_("DuneCity content: trooper small rockets track aircraft. Other content keeps its original combat."));
+    trooperAntiAirCheckbox.setChecked(gameOptions.trooperAntiAir);
+    vboxRight.addWidget(&trooperAntiAirCheckbox);
     vboxRight.addWidget(VSpacer::create(6));
 
     if(ModManager::instance().isTornieFamilyContentActive()) {
@@ -288,6 +300,8 @@ void GameOptionsWindow::onOK() {
     gameOptions.onlyOnePalace = onlyOnePalaceCheckbox.isChecked();
     gameOptions.originalUnitDamage = originalUnitDamageCheckbox.isChecked();
     gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
+    gameOptions.researchLab = researchLabCheckbox.isChecked();
+    gameOptions.trooperAntiAir = trooperAntiAirCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();
     gameOptions.sandwormsRespawn = sandwormsRespawnCheckbox.isChecked();
     gameOptions.killedSandwormsDropSpice = killedSandwormsDropSpiceCheckbox.isChecked();

@@ -341,7 +341,8 @@
 //      in game; a 109 peer cannot validate the new command id (save 9880).
 //      CMD_CITY_SET_TAX_RATE sets only the issuer's house (a 109 peer sets every house), and
 //      GameInitSettings MOD14 appends the Micropolis land value rule.
-#define NETWORK_PROTOCOL_VERSION            110
+// 111: Research Lab command, per-house technology and MOD15 research/trooper-AA rules.
+#define NETWORK_PROTOCOL_VERSION            111
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

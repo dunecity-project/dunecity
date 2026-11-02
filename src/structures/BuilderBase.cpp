@@ -46,6 +46,7 @@ const int BuilderBase::itemOrder[] = {    Unit_Troopers5, Unit_Infantry5, Unit_C
                                            Structure_HighTechFactory, Structure_HeavyFactory, Structure_RocketTurret,
                                            Structure_Scoutpost, Structure_Flamepost, Structure_Chemipost, Structure_LoveFactory, Structure_ChaosFactory,
                                            Structure_RepairYard, Structure_GunTurret, Structure_TechCenter, Structure_WOR,
+                                           Structure_ResearchLab,
                                            Structure_Worfinery, Structure_Slowpost, Structure_Doublefinery,
                                            Structure_Barracks, Structure_Wall, Structure_LightFactory,
                                            Structure_Silo, Structure_Radar, Structure_Refinery, Structure_WindTrap,
@@ -630,6 +631,11 @@ void BuilderBase::updateBuildList()
         }
 
         const bool itemEnabled = objData.enabled || specialChemicalCarryall;
+        if(itemID2Add == Structure_ResearchLab
+           && !currentGame->getGameInitSettings().getGameOptions().researchLab) {
+            removeItem(buildList, iter, itemID2Add);
+            continue;
+        }
         const bool wildspadeChemical = specialChemicalCarryall
             && isHouseFaction(static_cast<HOUSETYPE>(technology), HOUSE_WILDSPADE)
             && (objData.techLevel == 5 || objData.techLevel == 6);
