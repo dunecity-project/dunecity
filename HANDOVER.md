@@ -39,6 +39,23 @@
   projects retain nuclear. Existing queued reactors remain untouched. Uses cached
   footprint capacity, with no new allocation/search or save fields. Vanilla is unchanged;
   OFF reproduces the former choice. The unreleased protocol111 already covers it.
+- Frozen271 integrated A/B exposed a second cause on the same seed: cheap wind
+  releases1700 credits, but an optional MCV900 + three producer upgrades300 each
+  + Trike150 consume1950 before tax covers upkeep. Population5400/built8 then
+  stay flat5–20min. The existing four-minute forecast was already-6070 cash.
+- New hashed/default-on `CityOpeningCapital` reuses the existing research
+  working-capital/forecast/reserve policy for optional extra yards and producer
+  upgrades, without depending on Research Lab being enabled. Lost-yard/actual-rock
+  recovery, required yard technology, blackout recovery, growth power, reactive
+  turrets and Starport supply retain precedence. Discretionary military is gated
+  only at negative projected cash; minWaveValue standing forces and live ground/
+  air defence remain exempt. Candidate and acceptance gates match.
+- Added real queue/upgrade financial-boundary cases and isolated
+  `dunecity-audit-opening-capital-off`. Audit `--attack-events` retains exact
+  existing ground_hunt dispatches and reports first attack, attacks/10 alive-min,
+  army10/20 and kill value; older telemetry-disabled attack timings are unmeasured.
+  New-switch fixture/regression, detector, combat, ladder and performance results
+  are not established by the earlier power-sizing receipts below.
 - Added default/load/save/hash coverage and seven real final-yard-vetting cases;
   these passed in combined5d4d7c72. Added planner/selected-candidate/full-reservation
   checks for the final callsite alignment. Detector invariants and ordinary-game

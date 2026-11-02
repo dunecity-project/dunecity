@@ -32,6 +32,14 @@ Use a separate results directory for every config arm:
 - `--style dunecity-audit-power-off` disables **only CityPowerSizing**, retaining the other
   completed fixes. Compare this against no style to isolate the power fix in one native build.
 - `--game-options FILE` changes game rules, not QuantBot policy switches.
+- `--style dunecity-audit-opening-capital-off` disables **only CityOpeningCapital**.
+- `--attack-events` enables the runner's existing AI telemetry and retains nonempty
+  `ground_hunt` dispatches in `waves.csv`. Reports include first dispatch time among
+  attackers, attacking/measured houses, dispatches per ten alive-house minutes,
+  army value at minutes10/20 and final kill value. A readiness check is not an attack.
+  Old telemetry-disabled rows report dispatch timing/frequency as unmeasured, never zero.
+  Army checkpoints include eliminated houses as zero; living winners whose game ended
+  before a checkpoint are censored. `sortie_minutes` is duration, not an attack timestamp.
 
 Styles use the existing per-bot test overrides of normal hashed switches. Source identity
 and machine receipts are in the queue job.
@@ -169,6 +177,47 @@ Starport/IX delays overlap the supplier/ground-cover work owned by RocketTurrets
 than warranting a second competing spending patch. `diagnostic-summary.json` preserves
 every detector's grouped numerator/denominator and example game ids.
 
+## Root cause exposed by integrated A/B: optional capital spends the power savings
+
+On frozen combined source `27176982874d`, ordinary 96/None/1v1/Medium seed9101 now
+correctly buys a300-credit Windtrap. But Harkonnen commits another1,950 credits during
+the first minute to an MCV900, three factory upgrades300 each, and a Trike150.
+The first upgrade is cycle25, the MCV625, further upgrades1925/2525; all three upgrades
+are builder37's ordinary HeavyFactory technology path (`QuantBotBuildProducers.cpp:1107`
+in that frozen source). This is not a reactor-sizing failure or a population cap.
+Population5400 and built8 stay flat from minutes5–20; around minute8 the next selected
+purchase is an unaffordable500-credit crime-prevention station. The old reactor made
+the optional purchases unaffordable; fixing one priority merely exposed the next.
+
+At cycle25 the existing four-minute forecast already reports tax0/min, upkeep52/min,
+net income-208, projected cash-6070 and a1,000-credit working reserve. The optional
+MCV path used cash plus net income, not the existing production runway; producer
+upgrades checked only cash. Evidence is in `271-opening-budget/`: original setup,
+summary, run log, compressed decision stream and `trace-summary.json`.
+
+`[Force Concentration] CityOpeningCapital=1` is a separate default-on, loaded/saved/
+hashed switch. Optional extra MCVs and producer upgrades now share the existing
+research working-capital check: real spendable cash, the four-minute forecast,
+already ordered costs, operating reserve and the next protected purchase. The common
+funding helper does not depend on the Research Lab option. There is no second budget
+model, new saved state, RNG use, placement search or heap allocation.
+Founding/lost-yard/actual-rock recovery and required yard upgrades keep their old
+budgets. Blackout recovery, CityGrowthPower, ThreatTurrets and Starport supply keep
+their existing precedence and cash protection.
+
+Discretionary military orders are deferred **only while projected cash is negative**.
+The gate lifts at zero, always allows the existing `minWaveValue()` standing force
+(default3,000 credits), and is bypassed by live ground/air defence. Eligibility and
+queue acceptance use the same rule, so a refused military offer cannot reserve cash
+forever. Producer branches can fall through from an unfunded optional upgrade to
+funding that standing wave. No saboteur orders, human-order leases or attack policy
+are changed.
+
+The no-spice fixture adds real queue/upgrade negative controls, funded resumption
+with research disabled, standing-force/nonnegative-runway boundaries, live defence,
+lost-yard/rock recovery and required-yard exceptions. Its outcomes and this switch's
+detector/combat effects are unverified until the new committed-source runs finish.
+
 ## Verification boundary
 
 The completed diagnostic matrix and separate ordinary-game generator telemetry are measured.
@@ -200,9 +249,10 @@ all mandatory AI regressions and performance/FPS gates are **not yet established
 diagnostic matrix. The exact isolated control is `dunecity-audit-power-off`; do not
 present the 30-minute mirror time limits as ladder or performance evidence.
 
-The final eight-gate job is `20261103T034510-rocket-turrets-final-ad0693` (RocketTurrets).
-The three earlier `820bae19` comparison matrix jobs were explicitly cancelled when
-that candidate was withdrawn; they are not final effect estimates. Main owns relaunching
-the same-source combined control/default/isolated-power-off arms from the qualified final
-source and recording the long ladder and remaining gate outcomes.
+The old eight-gate job `20261103T034510-rocket-turrets-final-ad0693` was superseded by
+Main's combined integration run. The earlier `820bae19` comparison jobs were also
+cancelled, and are not final effect estimates.
+Frozen `27176982874d` has three162-game arms (all3OFF/default/PowerSizing-onlyOFF)
+and two144-game adjacent-ladder arms queued; their receipts are `271-jobs.json`.
+These immutable games remain the before data for the opening-capital correction.
 

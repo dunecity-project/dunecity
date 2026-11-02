@@ -8,6 +8,7 @@ Use dunecity-queue submit for games; --report and --compare only read captured C
 import argparse
 import csv
 import hashlib
+import json
 import os
 import shutil
 import statistics
@@ -33,9 +34,11 @@ DETECTORS = ('economy_stall', 'power_deficit', 'no_ground_defence', 'missing_sta
              'missing_heavy_factory', 'missing_ix', 'idle_under_attack', 'unused_credits',
              'bankrupt_queue_empty', 'early_no_fight', 'zero_harvesters')
 META = ('id', 'seed', 'size', 'spice_level', 'format', 'difficulty', 'variant', 'base', 'army', 'city', 'limit', 'style')
-GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes', 'loop_ms', 'wall_s', 'digest', 'error')
+GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes',
+                      'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
-                       'army_value', 'army_units', 'sortie_minutes', 'score', 'drawn', 'won', 'flags') + tuple(
+                       'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
+                       'first_attack_minute', 'score', 'drawn', 'won', 'flags') + tuple(
     field for detector in DETECTORS for field in (detector, 'eligible_' + detector, 'first_' + detector))
 CYCLES_PER_MINUTE = 3750  # The engine's 16 ms fixed simulation tick.
 SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_value', 'army_units', 'harvesters',
@@ -44,6 +47,7 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'gun', 'rocket', 'radar', 'radar_built', 'starport', 'starport_built', 'heavy', 'heavy_built', 'ix',
                  'ix_built', 'fighters', 'moving', 'targeting', 'enemies', 'enemy_value', 'covered_enemies', 'spice')
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags',)
+ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 lock = threading.Lock()
 
 
@@ -164,7 +168,8 @@ def command(args, binary, game, out):
            '--seed', str(game['seed']), '--minutes', str(game['minutes']), '--capture-mib', '256',
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--house', game['sides'][0][0],
            '--scenario-sides', sides, '--local-spectator', '--skirmish', game['skirmish']]
-    cmd += ['--no-ai-telemetry']
+    if not args.attack_events:
+        cmd += ['--no-ai-telemetry']
     if args.game_options:
         cmd += ['--game-options', str(args.game_options)]
     if args.style:
@@ -198,7 +203,7 @@ def play(args, scratch, binary, game):
                map_seed=generated.get('map_seed', ''), terrain_attempts=generated.get('attempts', ''),
                skipped=generated.get('skipped', ''), outcome=result.get('outcome', ''), winner_team=result.get('winner_team', ''),
                minutes=result.get('minutes', ''), loop_ms=timing.get('loop_ms', ''),
-               wall_s=round(time.monotonic() - started, 3), digest=digest, error=error)
+               wall_s=round(time.monotonic() - started, 3), digest=digest, attack_telemetry=int(args.attack_events), error=error)
     results = Path(args.results)
     if error:
         (results / f'failed-{out.name}.txt').write_text(game['id'] + '\n' + process.stdout[-4000:] + '\n'
@@ -213,6 +218,17 @@ def play(args, scratch, binary, game):
         scores = match_score.score_game(ids, eliminated, teams=teams)
         house_rows = []
         difficulty_of = {HOUSE_IDS[h]: d for h, _, d in game['sides']}
+        attacks = defaultdict(list)
+        attack_rows = []
+        if args.attack_events:
+            for event in json.loads((out / 'summary.json').read_text())['attacks']:
+                if int(event['data']['members']) <= 0:
+                    continue
+                house = int(event['house'])
+                cycle = int(event['cycle'])
+                attacks[house].append(cycle / CYCLES_PER_MINUTE)
+                attack_rows.append(dict(metadata(game), house=house, cycle=cycle,
+                                        members=event['data']['members'], value=event['data']['value']))
         for house in final:
             number = int(house['house'])
             detectors = detect(groups[number])
@@ -221,9 +237,14 @@ def play(args, scratch, binary, game):
                 'army_value', 'army_units', 'sortie_minutes')}, **detectors,
                 score=round(scores[number].score, 4), drawn=int(scores[number].drawn),
                 won=int(house['team'] == result.get('winner_team')), difficulty=difficulty_of[number],
+                attack_telemetry=int(args.attack_events),
+                attack_count=len(attacks[number]) if args.attack_events else '',
+                first_attack_minute=min(attacks[number]) if attacks[number] else '',
                 flags='/'.join(d for d in DETECTORS if detectors[d])))
         append(results / 'samples.csv', SAMPLE_FIELDS, samples)
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
+        if args.attack_events:
+            append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, bool(error))
     return row
@@ -244,7 +265,8 @@ def build_probe(args, scratch):
 def run(args):
     results = Path(args.results)
     results.mkdir(parents=True, exist_ok=True)
-    done = {r['id'] for r in read(results / 'games.csv') if not r['error']}
+    done = {r['id'] for r in read(results / 'games.csv') if not r['error']
+            and (not args.attack_events or r.get('attack_telemetry') == '1')}
     todo = [game for game in schedule(args) if game['id'] not in done]
     print(f'{len(todo)} games to play ({len(done)} complete)', flush=True)
     if todo:
@@ -299,6 +321,45 @@ def report(directories):
         print(f'Ladder {pair}: stronger wins {sum(row["winner_team"] == "1" for row in rows)}/{len(rows)}, '
               f'weaker {sum(row["winner_team"] == "2" for row in rows)}, '
               f'time limit {sum(row["winner_team"] == "0" for row in rows)}')
+    combat_report(directories)
+
+
+def combat_report(directories, allowed=None, label='Combat'):
+    """Exact ground dispatches when enabled; checkpoints include defeated houses as zero."""
+    games = {r['id']: r for r in load(directories, 'games.csv', ('id',)) if not r['error']}
+    houses = [r for r in load(directories, 'houses.csv', ('id', 'house'))
+              if r['id'] in games and (allowed is None or (r['id'], r['house']) in allowed)]
+    samples = defaultdict(dict)
+    for sample in load(directories, 'samples.csv', ('id', 'house', 'cycle')):
+        samples[(sample['id'], sample['house'])][int(sample['cycle'])] = sample
+    groups = defaultdict(list)
+    for house in houses:
+        groups[(house['difficulty'], house['spice_level'])].append(house)
+    groups[('all', 'all')] = houses
+    print(f'{label}: first attack is a nonempty ground_hunt dispatch, not a readiness check or sortie duration.')
+    print('| Difficulty | Spice | Attacking/measured | First attack mean min (attackers) | Attacks/10 alive-min | Army10 mean (n) | Army20 mean (n) | Kill-value mean |')
+    print('|---|---|---|---|---|---|---|---|')
+    for (difficulty, spice), rows in sorted(groups.items()):
+        measured = [r for r in rows if r.get('attack_telemetry') == '1']
+        first = [float(r['first_attack_minute']) for r in measured if r.get('first_attack_minute', '') != '']
+        minutes = sum(min(float(games[r['id']]['minutes']), float(r['eliminated_s']) / 60)
+                      if r['alive'] == '0' else float(games[r['id']]['minutes']) for r in measured)
+        frequency = sum(int(r['attack_count']) for r in measured) * 10 / minutes if minutes else None
+        checkpoints = []
+        for minute in (10, 20):
+            values = []
+            for house in rows:
+                point = samples[(house['id'], house['house'])].get(minute * CYCLES_PER_MINUTE)
+                if point:
+                    values.append(int(point['army_value']))
+                elif house['alive'] == '0' and float(house['eliminated_s']) <= minute * 60:
+                    values.append(0)
+            checkpoints.append(f'{statistics.mean(values):.1f} ({len(values)})' if values else 'unmeasured')
+        first_mean = f'{statistics.mean(first):.2f}' if first else 'unmeasured'
+        rate = f'{frequency:.3f}' if frequency is not None else 'unmeasured'
+        kills = f'{statistics.mean(int(r["kill_value"]) for r in rows):.1f}' if rows else 'unmeasured'
+        print(f'| {difficulty} | {spice} | {len(first)}/{len(measured)} | {first_mean} | {rate} | '
+              + ' | '.join(checkpoints) + f' | {kills} |')
 
 
 def compare(control, candidate):
@@ -339,6 +400,8 @@ def compare(control, candidate):
             print(f'{label}: mean game {statistics.mean(float(source[k]["minutes"]) for k in keys):.2f} min; '
                   f'mean loop {statistics.mean(float(source[k]["loop_ms"]) for k in keys):.1f} ms '
                   '(diagnostic only: mixed host/load, not a performance gate)')
+    combat_report([control], set(common), 'Control combat')
+    combat_report([candidate], set(common), 'Candidate combat')
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -360,6 +423,8 @@ parser.add_argument('--mode', choices=('matrix', 'ladder'), default='matrix')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
 parser.add_argument('--style', help='QuantBot switch overlay from tests/ai/play-styles/ (same-build A/B)')
+parser.add_argument('--attack-events', action='store_true',
+                    help='Enable existing AI telemetry, retain exact ground dispatches in waves.csv, and report passivity metrics')
 parser.add_argument('--list', action='store_true')
 parser.add_argument('--report', nargs='+', type=Path, dest='report_dirs')
 parser.add_argument('--compare', nargs=2, type=Path, metavar=('CONTROL', 'CANDIDATE'))

@@ -235,6 +235,26 @@ TEST_CASE("City power sizing defaults on and is loaded saved and hashed", "[ai][
     std::filesystem::remove(path);
 }
 
+TEST_CASE("City opening capital defaults on and is loaded saved and hashed", "[ai][city][config]") {
+    QuantBotConfig config;
+    REQUIRE(config.force.cityOpeningCapital);
+    const auto enabledHash = config.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-opening-capital-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCityOpeningCapital=false\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE_FALSE(config.force.cityOpeningCapital);
+    REQUIRE(config.getConfigHash() != enabledHash);
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE_FALSE(restored.force.cityOpeningCapital);
+    REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Ground threat and city supplier switches default on and are loaded saved and hashed", "[ai][defence][config]") {
     const QuantBotConfig baseline;
     REQUIRE(baseline.force.threatTurrets);

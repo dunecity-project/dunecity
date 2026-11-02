@@ -274,6 +274,7 @@ void runNoSpiceCityProbe(Game& game) {
         const auto savedStructures=structureList;
         const auto savedConfig=bot->configOverride;
         auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        config->force.cityOpeningCapital=false; // Isolate the saved growth-power regression.
         bot->configOverride=config;
         bot->difficulty=QuantBot::Difficulty::Hard;bot->militaryValueLimit=70000;
         // One actual planning yard, as in the save; retain the fixture's real
@@ -333,6 +334,7 @@ void runNoSpiceCityProbe(Game& game) {
         const auto savedStructures=structureList;
         const int savedGrowth=bot->projectedPowerDemandGrowth;
         auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        config->force.cityOpeningCapital=false; // Keep the original competing military quote.
         bot->configOverride=config;bot->availableBaseFootprints=4;
         bot->clearPlacementCache();
         require(bot->findPlaceLocation(Structure_WindTrap).isValid()
@@ -442,6 +444,112 @@ void runNoSpiceCityProbe(Game& game) {
         }
         bot->configOverride=savedConfig;bot->availableBaseFootprints=savedFootprints;
         structureList=savedStructures;bot->projectedPowerDemandGrowth=savedGrowth;
+        house->producedPower=savedProduced;house->powerRequirement=savedRequired;
+    }
+
+    // The right-sized generator alone was insufficient in Random Skirmish
+    // 96/None/T9 seed 9101: 900 went to an optional MCV and another 900 to
+    // factory upgrades before tax covered upkeep. Exercise the actual queue
+    // and upgrade boundaries, with the captured negative four-minute forecast.
+    {
+        auto* factory=static_cast<BuilderBase*>(put(Structure_HeavyFactory,2,2));
+        auto* light=static_cast<BuilderBase*>(put(Structure_LightFactory,2,10));
+        factory->curUpgradeLev=1;factory->updateBuildList();
+        light->curUpgradeLev=0;light->updateBuildList();
+        const auto savedConfig=bot->configOverride;
+        const int savedProduced=house->producedPower,savedRequired=house->powerRequirement;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        config->force.researchLab=false; // The shared budget must not require the research option.
+        bot->configOverride=config;
+        auto budgetPass=[&]() {
+            cancelOrders(factory);cancelOrders(light);factory->upgrading=false;light->upgrading=false;
+            house->storedCredits=0;house->cityCredits=0;house->startingCredits=3000;
+            house->producedPower=10000;house->powerRequirement=100;
+            QuantBot::BuildPass pass(0);
+            bot->planBuildInventory(pass);
+            pass.money=3000;pass.citySimEnabled=true;pass.cityWorkingReserve=450;pass.cashBuffer=1000;
+            pass.forecastTax=0;pass.forecastUpkeep=52;pass.forecastNetIncome=-208;
+            pass.cityYards=house->getNumItems(Structure_ConstructionYard);
+            pass.cityZonesIncludingQueued=pass.itemCount[Structure_ZoneResidential]
+                +pass.itemCount[Structure_ZoneCommercial]+pass.itemCount[Structure_ZoneIndustrial];
+            pass.cityStorageCapacityIncludingQueued=house->getCapacity();
+            pass.cashFlow.projectedCash=-6070;pass.militaryValue=bot->minWaveValue();
+            return pass;
+        };
+        auto order=[&](QuantBot::BuildPass& pass,BuilderBase* builder,Uint32 item) {
+            QuantBot::BuilderTurn turn(pass.money);turn.pBuilder=builder;turn.pStructure=builder;
+            return bot->produceItemWithLogging(pass,turn,item,__LINE__,"opening_capital_fixture");
+        };
+        try {
+            config->force.cityOpeningCapital=false;
+            auto legacy=budgetPass();
+            require(order(legacy,factory,Unit_MCV),"Opening-capital negative control did not buy the optional MCV");
+            require(order(legacy,light,Unit_Trike),"Opening-capital negative control did not buy the early light unit");
+            cancelOrders(factory);factory->upgrading=false;
+            QuantBot::BuilderTurn oldUpgrade(legacy.money);oldUpgrade.pBuilder=factory;oldUpgrade.pStructure=factory;
+            require(bot->upgradeWithLogging(legacy,oldUpgrade,__LINE__),
+                "Opening-capital negative control did not pay for optional technology");
+
+            config->force.cityOpeningCapital=true;
+            auto opening=budgetPass();
+            require(!order(opening,factory,Unit_MCV),"An optional MCV spent a city's unfunded working capital");
+            require(!order(opening,light,Unit_Trike),"Discretionary light production consumed negative runway");
+            QuantBot::BuilderTurn upgrade(opening.money);upgrade.pBuilder=factory;upgrade.pStructure=factory;
+            require(!bot->upgradeWithLogging(opening,upgrade,__LINE__),
+                "Optional producer technology consumed the seed town's cash");
+            require(factory->getProductionQueueSize()==0 && light->getProductionQueueSize()==0
+                && !factory->isUpgrading(),"A refused opening purchase changed an engine queue");
+
+            opening.militaryValue=std::max(0,bot->minWaveValue()-1);
+            require(order(opening,light,Unit_Trike),"Negative runway prevented the minimum standing wave");
+            cancelOrders(light);opening.militaryValue=bot->minWaveValue();
+            opening.cashFlow.projectedCash=0;
+            require(bot->cityMilitarySpendingAllowed(opening),"Military production stayed gated at non-negative runway");
+            opening.cashFlow.projectedCash=-6070;opening.defendingEconomy=true;
+            require(bot->cityMilitarySpendingAllowed(opening)
+                && bot->canFundProductionUpgrade(opening,factory),"Live defence lost its military/technology exemption");
+            opening.defendingEconomy=false;opening.airEngaged=true;
+            require(bot->cityMilitarySpendingAllowed(opening),"A live air threat lost its military exemption");
+            opening.airEngaged=false;opening.colonisationNeeded=true;
+            require(bot->canFundCapacityMcv(opening,900,factory->getObjectID()),
+                "Actual rock recovery was treated as optional yard capacity");
+            opening.colonisationNeeded=false;opening.itemCount[Structure_ConstructionYard]=0;
+            require(bot->canFundCapacityMcv(opening,900,factory->getObjectID()),
+                "Lost-yard recovery waited for a tax base it cannot rebuild");
+            require(bot->canFundProductionUpgrade(opening,yard),
+                "Required yard technology was blocked with optional producer upgrades");
+
+            auto funded=budgetPass();
+            funded.forecastTax=2000;funded.forecastUpkeep=100;funded.forecastNetIncome=5000;
+            funded.cashFlow.projectedCash=5000;
+            require(bot->cityOpeningCapitalFunded(funded,900,factory->getObjectID()),
+                "A funded city could not resume optional capital with research disabled");
+            funded.money=1000;
+            require(!bot->cityOpeningCapitalFunded(funded,900,factory->getObjectID()),
+                "Forecast receipts were spent before the real working reserve was protected");
+            QuantBot::CapitalCandidate claim;
+            claim.builder=factory->getObjectID();claim.item=Unit_MCV;claim.price=900;claim.cost=900;claim.score=5000;
+            funded.capitalCandidates.push_back(claim);funded.capitalChoice=0;
+            funded.capitalInitialCount=funded.itemCount[Unit_MCV];funded.money=1900;
+            require(bot->cityOpeningCapitalFunded(funded,900,factory->getObjectID()),
+                "A capital supplier charged its own selected purchase twice");
+            auto& supply=funded.capitalCandidates.front();
+            supply.builder=yard->getObjectID();supply.item=Structure_StarPort;
+            supply.price=bot->purchasePrice(yard,Structure_StarPort);
+            supply.cost=bot->buildingCapitalCost(funded,Structure_StarPort);
+            supply.foundationCost=supply.cost-supply.price;
+            funded.capitalInitialCount=funded.itemCount[Structure_StarPort];
+            funded.money=900+1000+supply.cost-1;
+            require(!bot->cityOpeningCapitalFunded(funded,900,factory->getObjectID()),
+                "An optional MCV consumed the selected Starport's protected purchase");
+            funded.capitalCandidates.clear();funded.capitalChoice=-1;funded.money=3000;
+            require(order(funded,factory,Unit_MCV),"A funded city never resumed optional yard construction");
+            SDL_Log("CITY_OPENING_CAPITAL_PASS: negative runway preserves seed cash; standing waves, threats and recovery remain live");
+        } catch (...) {
+            bot->configOverride=savedConfig;
+            house->producedPower=savedProduced;house->powerRequirement=savedRequired;throw;
+        }
+        bot->configOverride=savedConfig;
         house->producedPower=savedProduced;house->powerRequirement=savedRequired;
     }
 

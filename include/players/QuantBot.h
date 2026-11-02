@@ -1716,6 +1716,11 @@ private:
     /// Match option and hashed policy switch; never consumes RNG or adds saved AI state.
     bool researchLabPolicyActive() const;
     bool techInvestmentReady(BuildPass& pass);
+    bool economyReadyForCapital(BuildPass& pass);
+    bool canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier);
+    bool cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 supplier);
+    bool cityMilitarySpendingAllowed(const BuildPass& pass) const;
+    bool canFundProductionUpgrade(BuildPass& pass, const BuilderBase* builder);
     /// Research is required progression in Civ Wars; reserve it before repeatable orders.
     void planCivWarsResearch(BuildPass& pass);
     /// Preserve working capital, protected purchases and existing production runway.
@@ -1747,7 +1752,7 @@ private:
     std::vector<QuantBotFoundationPolicy::SlabOrder> foundationOrders(const BuilderBase* builder, Uint32 item, Coord site);
     Sint32 repairPrice(const StructureBase* structure);
     bool repairPolicyMaintains(BuildPass& pass, const StructureBase* structure);
-    bool canFundCapacityMcv(BuildPass& pass, int price);
+    bool canFundCapacityMcv(BuildPass& pass, int price, Uint32 supplier);
     Uint32 affordableCityZone(BuildPass& pass, const BuilderBase* builder, int budget);
     int buildingCapitalCost(BuildPass& pass, Uint32 item);
     int cityBuildTicks(BuildPass& pass, Uint32 item);

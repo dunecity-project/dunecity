@@ -138,8 +138,7 @@ bool QuantBot::researchLabPolicyActive() const {
         && botConfig().force.researchLab && !switchedOff() && !fighterOnly();
 }
 
-bool QuantBot::techInvestmentReady(BuildPass& pass) {
-    if (!researchLabPolicyActive()) return false;
+bool QuantBot::economyReadyForCapital(BuildPass& pass) {
     const bool spiceIncome = pass.spiceEconomyViable && getAIRefineryBays() > 0
         && pass.actualHarvesters >= std::max(1,std::min(2,pass.mapSpiceHarvesterTarget));
     const bool taxIncome = pass.citySimEnabled && getHouse()->getCapacity() > 0
@@ -153,8 +152,11 @@ bool QuantBot::techInvestmentReady(BuildPass& pass) {
         && (civWarsRules() || pass.dangerousCrimeProperties <= 0);
 }
 
-bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
-    if (!techInvestmentReady(pass)) return false;
+bool QuantBot::techInvestmentReady(BuildPass& pass) {
+    return researchLabPolicyActive() && economyReadyForCapital(pass);
+}
+
+bool QuantBot::canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier) {
     QuantBotBuildPolicy::TechInvestment investment;
     investment.enabled = investment.economyReady = investment.powerReady = true;
     investment.cash = std::min(pass.money,getHouse()->getCredits());
@@ -165,7 +167,7 @@ bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
     // Queue remainders are already deducted from pass.money; never charge them twice.
     investment.reserve = int64_t(std::max({1000,pass.cashBuffer,pass.economyReserve,pass.cityWorkingReserve}))
         + std::max({pass.strategicReserveCost,pass.civicReserveCost,cityBootstrapReserve(pass),
-            harvesterInvestmentReserve(pass),capitalReserve(pass,NONE_ID)});
+            harvesterInvestmentReserve(pass),capitalReserve(pass,supplier)});
     if (civWarsRules()) {
         // Existing queues are funded above. Unordered repeatable military/city
         // capacity is not a debt that may keep required technology locked.
@@ -174,6 +176,36 @@ bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
         investment.reserve = std::max(300,pass.cityWorkingReserve);
     }
     return QuantBotBuildPolicy::canFundTechInvestment(investment);
+}
+
+bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
+    return techInvestmentReady(pass) && canFundWorkingCapital(pass,cost,NONE_ID);
+}
+
+bool QuantBot::cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 supplier) {
+    return !pass.citySimEnabled || !botConfig().force.cityOpeningCapital
+        || (economyReadyForCapital(pass) && canFundWorkingCapital(pass,cost,supplier));
+}
+
+bool QuantBot::cityMilitarySpendingAllowed(const BuildPass& pass) const {
+    // A deficit defers discretionary production, not a viable standing wave.
+    // Lift this gate at zero projected cash, without waiting for capital reserves.
+    return !pass.citySimEnabled || !botConfig().force.cityOpeningCapital
+        || pass.cashFlow.projectedCash>=0 || pass.defendingEconomy || pass.airEngaged
+        || pass.militaryValue<minWaveValue();
+}
+
+bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* builder) {
+    // Yard upgrades unlock concrete, power, civics and reactive turrets. They
+    // keep their existing prerequisite budgets; only producer tech is optional.
+    if (!pass.citySimEnabled || !botConfig().force.cityOpeningCapital
+        || builder->getItemID()==Structure_ConstructionYard
+        || pass.defendingEconomy || pass.airEngaged) return true;
+    const bool constructionRecovery=builder->getItemID()==Structure_HeavyFactory
+        && !campaignAvailableToBuild(builder,Unit_MCV)
+        && (pass.itemCount[Structure_ConstructionYard]==0 || pass.rockExpansionNeeded || pass.colonisationNeeded);
+    return constructionRecovery
+        || cityOpeningCapitalFunded(pass,builder->getUpgradeCost(),builder->getObjectID());
 }
 
 void QuantBot::planCivWarsResearch(BuildPass& pass) {
@@ -2072,7 +2104,9 @@ bool QuantBot::repairPolicyMaintains(BuildPass& pass, const StructureBase* struc
         structure->getMaxHealth(),repairPrice(structure));
 }
 
-bool QuantBot::canFundCapacityMcv(BuildPass& pass, int price) {
+bool QuantBot::canFundCapacityMcv(BuildPass& pass, int price, Uint32 supplier) {
+    if (pass.itemCount[Structure_ConstructionYard]>0 && !pass.rockExpansionNeeded && !pass.colonisationNeeded
+        && !cityOpeningCapitalFunded(pass,price,supplier)) return false;
     return !pass.capacityMcvRunway || int64_t(pass.cashFlow.projectedCash)-pass.capacityMcvOrderedCost
         >= int64_t(price)+pass.cashBuffer;
 }
@@ -2927,7 +2961,9 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 pass.actualHarvesters,pass.itemCount[Structure_ConstructionYard],pass.itemCount[Unit_MCV],mcv.price);
             if (!(cityNeed || colonyNeed || vanillaNeed)) mcv.reason="construction_capacity_available";
             else if (pass.forecastFunding<mcv.cost+std::max(1000,pass.cityWorkingReserve)) mcv.reason="income_bottleneck";
-            else if (!canFundCapacityMcv(pass, mcv.price)) mcv.reason="existing_production_runway";
+            else if (!canFundCapacityMcv(pass,mcv.price,builder->getObjectID()))
+                mcv.reason=pass.citySimEnabled && botConfig().force.cityOpeningCapital
+                    ? "city_working_capital" : "existing_production_runway";
             else {
                 mcv.capacity=pass.capacityMcvRunway
                     ? std::max(0,pass.cashFlow.projectedCash-mcv.cost-pass.cashBuffer)
@@ -2969,6 +3005,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             else if (cityInfantryItem(pass, item) && !infantryQuotaAdmits(pass, value)) reason="infantry_quota_satisfied";
             else if (item==Unit_Ornithopter && int64_t(pass.itemCount[item]+1)*value*10000
                 > int64_t(pass.militaryValue+value)*2000) reason="air_composition_cap";
+            else if (!cityMilitarySpendingAllowed(pass)) reason="city_working_capital";
             else if (score<=0) reason="military_limit";
             if (std::string(reason)!="eligible") score=0;
             if (AITelemetry::log().enabled()) unitOptions.set(std::to_string(item),AITelemetry::Record()

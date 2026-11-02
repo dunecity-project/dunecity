@@ -154,12 +154,21 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     if(itemID == Unit_MCV && pass.yardLimit > 0
         && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] >= pass.yardLimit) return false;
     const int quotedPrice=purchasePrice(turn.pBuilder,itemID);
-    if (itemID==Unit_MCV && !canFundCapacityMcv(pass, quotedPrice)) {
+    if (QuantBotBuildPolicy::militaryItem(itemID) && !cityMilitarySpendingAllowed(pass)) {
+        traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",pass.capitalDecision)
+            .set("builder",turn.pBuilder->getObjectID()).set("item",itemID).set("rule",rule)
+            .set("price",quotedPrice).set("projected_cash",pass.cashFlow.projectedCash)
+            .set("military_value",pass.militaryValue).set("standing_wave_value",minWaveValue())
+            .set("reason","city_working_capital"));
+        return false;
+    }
+    if (itemID==Unit_MCV && !canFundCapacityMcv(pass,quotedPrice,turn.pBuilder->getObjectID())) {
         traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",pass.capitalDecision)
             .set("builder",turn.pBuilder->getObjectID()).set("item",itemID).set("rule",rule)
             .set("price",quotedPrice).set("projected_cash",pass.cashFlow.projectedCash)
             .set("capacity_mcv_ordered_cost",pass.capacityMcvOrderedCost).set("cash_buffer",pass.cashBuffer)
-            .set("reason","existing_production_runway"));
+            .set("reason",pass.citySimEnabled && botConfig().force.cityOpeningCapital
+                ? "city_working_capital" : "existing_production_runway"));
         return false;
     }
     // Enforce reactive infantry and its funded quota at queue acceptance,
@@ -288,11 +297,13 @@ bool QuantBot::recoverBuilderConstruction(BuildPass& pass, BuilderTurn& turn) {
 bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine) {
     const int price=turn.pBuilder->getUpgradeCost();
     const bool affordable=pass.money>=price;
-    const bool accepted=affordable && doUpgrade(turn.pBuilder);
+    const bool funded=canFundProductionUpgrade(pass,turn.pBuilder);
+    const bool accepted=affordable && funded && doUpgrade(turn.pBuilder);
     if (accepted) { pass.money-=price; pass.capitalOrderedCost+=price; }
     traceDecision("capital_upgrade",AITelemetry::Record().set("capital_plan",pass.capitalDecision)
         .set("builder",turn.pBuilder->getObjectID()).set("price",price).set("accepted",accepted)
-        .set("reason",!affordable ? "shared_cash_budget" : accepted ? "technology_unlock" : "unavailable")
+        .set("reason",!affordable ? "shared_cash_budget" : !funded ? "city_working_capital"
+            : accepted ? "technology_unlock" : "unavailable")
         .set("source_line",sourceLine));
     return accepted;
 }
@@ -778,7 +789,8 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
             || ((!pass.learningUnitMix && pass.lightVehicleCount < 2)
                 || int64_t(pass.lightVehicleValue) * 10000 < int64_t(pass.vehiclePlanValue) * pass.lightVehicleBps))) {
 
-        if (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel() && getHouse()->getCredits() > 1500) {
+        if (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel()
+            && getHouse()->getCredits() > 1500 && canFundProductionUpgrade(pass,turn.pBuilder)) {
             upgradeWithLogging(pass, turn, __LINE__);
         }
         else if (!getHouse()->isGroundUnitLimitReached()) {
@@ -986,6 +998,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
     const bool prioritizeCityMcv = !pass.postponeCapacityMcv && pass.citySimEnabled && gameMode == GameMode::Custom
         && (pass.fundedCityProduction || !openingWorkersNeeded(pass) || pass.rockExpansionNeeded)
         && !getHouse()->isGroundUnitLimitReached()
+        && canFundCapacityMcv(pass,data[Unit_MCV][houseID].price,turn.pBuilder->getObjectID())
         && (turn.expansionProducer || QuantBotBuildPolicy::canFundCityYard(cityMcvCash, data[Unit_MCV][houseID].price,
             pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV], pass.cityYardTarget, pass.cityWorkingReserve));
     // Test-only expansion style (docs/ai-play-styles.md): keep at least
@@ -1026,7 +1039,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             if (produceItemWithLogging(pass, turn, Unit_MCV, __LINE__)) pass.itemCount[Unit_MCV]++;
         }
         else if (prioritizeMcv && campaignAvailableToBuild(turn.pBuilder,Unit_MCV)
-            && (!pass.capacityMcvRunway || canFundCapacityMcv(pass, purchasePrice(turn.pBuilder,Unit_MCV)))) {
+            && canFundCapacityMcv(pass,purchasePrice(turn.pBuilder,Unit_MCV),turn.pBuilder->getObjectID())) {
             if (produceItemWithLogging(pass, turn, Unit_MCV, __LINE__,
                     pass.citySimEnabled ? "city_cash_construction_capacity" : "cash_construction_capacity")) {
                 ++pass.itemCount[Unit_MCV];
@@ -1065,7 +1078,9 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 pass.orderedSpiceHarvester = true;
             }
         }
-        else if ((pass.money > 10000) && (turn.pBuilder->isUpgrading() == false) && (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel())) {
+        else if ((pass.money > 10000) && (turn.pBuilder->isUpgrading() == false)
+            && (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel())
+            && canFundProductionUpgrade(pass,turn.pBuilder)) {
             if (turn.pBuilder->getHealth() >= turn.pBuilder->getMaxHealth()) {
                 upgradeWithLogging(pass, turn, __LINE__);
             }
@@ -1076,7 +1091,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
         else if (gameMode == GameMode::Custom && !pass.vanillaEconomy && !pass.citySimEnabled
             && campaignAvailableToBuild(turn.pBuilder,Unit_MCV)
             && !getHouse()->isGroundUnitLimitReached()
-            && (!pass.capacityMcvRunway || canFundCapacityMcv(pass, purchasePrice(turn.pBuilder,Unit_MCV)))
+            && canFundCapacityMcv(pass,purchasePrice(turn.pBuilder,Unit_MCV),turn.pBuilder->getObjectID())
             && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] < std::min(8, pass.money / 4000)) {
             if (produceItemWithLogging(pass, turn, Unit_MCV, __LINE__, "construction_capacity")) {
                 pass.itemCount[Unit_MCV]++;
@@ -1101,7 +1116,9 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             // Classic-mode recovery; city spice investment is handled above.
             if (produceItemWithLogging(pass, turn, Unit_Harvester, __LINE__)) pass.itemCount[Unit_Harvester]++;
         }
-        else if ((pass.money > 500) && (turn.pBuilder->isUpgrading() == false) && (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel())) {
+        else if ((pass.money > 500) && (turn.pBuilder->isUpgrading() == false)
+            && (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel())
+            && canFundProductionUpgrade(pass,turn.pBuilder)) {
             // Upgrade before military — unlocks MCV(1), Launcher(2), SiegeTank(3)
             if (turn.pBuilder->getHealth() >= turn.pBuilder->getMaxHealth()) {
                 upgradeWithLogging(pass, turn, __LINE__);
