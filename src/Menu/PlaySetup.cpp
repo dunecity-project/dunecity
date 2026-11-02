@@ -4,6 +4,7 @@
 #include <Menu/CrossplayMenu.h>
 #include <Menu/Dune2RReadinessMenu.h>
 #include <Menu/RandomSkirmishMenu.h>
+#include <Menu/CivWarsMenu.h>
 #include <Menu/MenuBase.h>
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/INIFile.h>
@@ -175,11 +176,17 @@ SettingsClass::GameOptionsClass initialCustomGameRules() {
     return effectiveGameOptions;
 }
 
-void playCustomGame(bool online, bool publicGame, bool randomMap) {
+void playCustomGame(bool online, bool publicGame, bool randomMap, bool civilizationWars) {
+    civilizationWars = civilizationWars || (randomMap && ModManager::instance().getActiveModName() == "CivWars");
+    if(civilizationWars && !RandomSkirmish::activateMod("CivWars")) {
+        PlayError(_("The Civilization Wars mod could not be activated.")).showMenu();
+        return;
+    }
     CustomPlaySetup setup;
-    setup.rules = randomMap
+    setup.rules = (randomMap || civilizationWars)
         ? effectiveGameOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions)
         : initialCustomGameRules();
+    if(civilizationWars) setup.rules = CivWars::matchRules(setup.rules);
     setup.maps = maps();
     setup.mods = ModManager::instance().listModChoices();
     setup.online = online;
@@ -189,10 +196,19 @@ void playCustomGame(bool online, bool publicGame, bool randomMap) {
     for(size_t i = 0; i < setup.mods.size(); ++i)
         if(setup.mods[i].matchesSelectionName(ModManager::instance().getActiveModName())) setup.mod = static_cast<int>(i);
     bool chooseMap = true;
-    if(randomMap) {
-        RandomSkirmishMenu generator(ModManager::instance().getActiveModName());
-        generator.showMenu();
-        const auto& path = generator.getCreatedMap();
+    if(randomMap || civilizationWars) {
+        std::string path;
+        if(civilizationWars) {
+            CivWarsMenu generator(true);
+            generator.showMenu();
+            setup.rules = generator.getMatchRules();
+            path = generator.getCreatedMap();
+        } else {
+            RandomSkirmishMenu generator(ModManager::instance().getActiveModName());
+            generator.showMenu();
+            path = generator.getCreatedMap();
+            setup.rules.researchLab = generator.getCreatedResearchLab();
+        }
         if(path.empty()) return;
         const auto found = std::find(setup.maps.begin(), setup.maps.end(), path);
         if(found == setup.maps.end()) {

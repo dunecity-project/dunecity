@@ -241,6 +241,7 @@ target_sources(dunecity
         Menu/SinglePlayerMenu.cpp
         Menu/SinglePlayerSkirmishMenu.cpp
         Menu/RandomSkirmishMenu.cpp
+        Menu/CivWarsMenu.cpp
         Menu/CustomGameMenu.cpp
         Menu/CustomGamePlayers.cpp
         Menu/CoopCampaignMenu.cpp
@@ -420,6 +421,7 @@ target_sources(dunecity
         MapEditor/MapMirror.cpp
         MapEditor/NewMapWindow.cpp
         MapEditor/SkirmishGenerator.cpp
+        MapEditor/CivWarsGenerator.cpp
         MapEditor/SkirmishCatalogue.cpp
         MapEditor/LoadMapWindow.cpp
         MapEditor/PlayerSettingsWindow.cpp
@@ -759,9 +761,10 @@ if(NOT EMSCRIPTEN)
         "${MODS_DIR}/*/ObjectData.ini" "${MODS_DIR}/*/checksums.sha256")
     file(GLOB_RECURSE COMMUNITY_MOD_FILES CONFIGURE_DEPENDS
         "${MODS_DIR}/community-*/*" "${MODS_DIR}/new/*")
+    file(GLOB CIVWARS_MOD_FILES CONFIGURE_DEPENDS "${MODS_DIR}/CivWars/*")
     set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS
         "${CMAKE_SOURCE_DIR}/config/Achievements.ini"
-        "${CMAKE_SOURCE_DIR}/config/ObjectData.ini.default" ${BUNDLED_OBJECT_DATA} ${COMMUNITY_MOD_FILES})
+        "${CMAKE_SOURCE_DIR}/config/ObjectData.ini.default" ${BUNDLED_OBJECT_DATA} ${COMMUNITY_MOD_FILES} ${CIVWARS_MOD_FILES})
 endif()
 
 function(add_copy_mods DEST_DIR)

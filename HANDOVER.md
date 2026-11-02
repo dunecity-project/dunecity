@@ -1,3 +1,49 @@
+## 2026-11-02 — Civilization Wars (OMP CivWars, unreleased)
+
+- New main-menu Civilization Wars screen: seeded mirrored three-lane maps, 1v1/2v2/3v3,
+  rectangular size, spice, equal worms per lane, house/AI choices, Spectate, Game Rules, saved
+  maps and the ordinary online host/lobby flow. See `docs/civilization-wars.md`.
+- Fixed zero-credit tech-1 starts include Yard, built Research Lab, Refinery, permanent
+  Carryall, mature small R/C/I city/police, lane-mouth rocket turrets plus two core turrets
+  covering Yard/Lab, and sufficient windtraps. The engine's existing first-Refinery grant
+  supplies a Harvester even at tech 1; the generator does not add one.
+- Selectable `CivWars` / Civilization Wars mod inherits DuneCity content, city economy and
+  approved-online policy. Research Lab, Sandworms Respawn and Trooper Anti-Air defaults are
+  on for any authored scenario; map/lobby tech and authored starting objects are unchanged.
+- Only version-marked generated maps retain each worm's mirrored permanent lane spawn slot
+  after defeat/eating/save-load; unmarked scenarios retain ordinary map-wide random respawn.
+  Wake events are asynchronous, not automatically spawned/synchronized unit waves.
+- ResearchLab prerequisite `34841947`, full mechanics `b3ad447b`, fixture corrections
+  `5c0936bc` / `dc3a27e0` and shared-art fix `8a3f3113` are merged. They own the shared save
+  9881/protocol 111 bump. App version remains 1.0.864 for the integrator.
+- Mini native Release `build-civwars` built at nice 10, `-j4`, through shared ccache. The staging
+  wrapper rejected a separate dirty-staging invocation; Main explicitly approved the direct build.
+  Pinned `platform/web` SDK installed with `npm ci --ignore-scripts`; no build-directory
+  disposable helper exists (the installed helper manages generated profile assets only).
+- Queued own-tree mini generator run: **12 test cases, 6,551,272 assertions passed**, including
+  the 720-case seed/size/team/worm matrix. Engine `engine-final`: **1v1, 2v2 and 3v3 each reached
+  cycle 11,564**, the three-game-minute target after initial city setup, with clean played logs.
+  Each fresh house was tech 1, credits 0, on positive power, with its normal free Harvester and
+  one owned Carryall. Worm defeat/eating, occupied-slot retry, sleeping save/load, the 9880
+  read gate and unmarked-map RNG continuation all passed.
+- Full-funding starting economy checked against every actual placed turret/police cost, not
+  the AI's current reduced funding: annual tax **399–403 vs 220** in 1v1, **360–384 vs
+  160/190** in 2v2, **352–364 vs 160** in 3v3. Initial power is 400/358 in 1v1,
+  400/308 or 300/258 in 2v2, and 300/258 per 3v3 seat. Medium AI had independently reduced
+  its paid police funding to zero; that was not used to claim that the kit covers full upkeep.
+- `menu_navigation_probe` at **640×480 passed**, including main-menu keyboard placement,
+  selectable CivWars activation/approval and online generator-to-player setup. Engine-menu
+  checks also passed at 640×480 and 1280×720, including left/right teams and exact guest setup
+  reserialization (the pre-existing non-wire `cityEffects` GUI default is mod-derived).
+- `ui_gallery_probe`: Modern and Classic **640×480 passed**, plus fresh/1.0.850 profile checks.
+  No Civilization Wars screen or corner-crest findings. The existing generic Custom Game map
+  dropdown clipping (2 Classic findings) and old-profile HD Skin-label clipping (4) are
+  recorded unchanged in `gallery640/issues.tsv`.
+- Evidence/screenshots: `/Users/stefan/Documents/projects/outputs/civ-wars/`. The initial
+  distributed acceptance snapshot was cancelled after remaining pending beyond 20 minutes:
+  Pro SSH auth offline, Air below the disk floor, mini memory guard, and a Windows fixture
+  overload ambiguity (fixed by `b849a943`). Own-tree fallback checks ran through the queue.
+
 ## 2026-11-02 — Research Lab and trooper anti-air (unreleased)
 
 - New optional `Research Lab` match rule (default off), item 88 (`Research Lab`, 3×2), reusing

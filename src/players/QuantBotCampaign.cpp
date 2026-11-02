@@ -16,6 +16,7 @@
 #include <FileClasses/INIFile.h>
 #include <FileClasses/FileManager.h>
 #include <dunecity/CityEffects.h>
+#include <mod/ModManager.h>
 #include <structures/BuilderBase.h>
 #include <structures/ZoneStructure.h>
 #include <dunecity/CityStructurePopulation.h>
@@ -54,7 +55,7 @@ bool QuantBot::isAlliedWithHuman() const {
 // Original permissions and budget are independent of later construction or spice loss.
 bool QuantBot::campaignCityEconomy() const {
     return isCampaignEnemy() && currentGame->isCitySimEnabled()
-        && currentGame->getGameInitSettings().getModName() == "dunecity"
+        && ModManager::instance().isDuneCityContentActive()
         && currentGame->getCitySimulation() && currentGame->getCitySimulation()->isInitialized();
 }
 
@@ -389,7 +390,7 @@ void QuantBot::updateCampaignWave() {
         // than adding free units. Easy/Medium then stagger within minutes 4–6.
         const auto& setup=getGameInitSettings();
         const bool earlyCoreMap=setup.getMission()>=1 && setup.getMission()<=4
-            && (setup.getModName()=="vanilla" || setup.getModName()=="dunecity");
+            && (setup.getModName()=="vanilla" || ModManager::instance().isDuneCityContentActive());
         const bool earlySignal=anchor==std::numeric_limits<Uint32>::max() && earlyCoreMap;
         if (earlySignal) anchor=MILLI2CYCLES(4*60000);
         // An unknown missing trigger must never authorize an immediate attack.

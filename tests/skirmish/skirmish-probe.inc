@@ -1,6 +1,9 @@
 // Included only by run-skirmish-probe.py, never by the shipped game. Drives the real Random
 // Skirmish screen and the real CustomGame start/load path with an isolated profile.
 #include <Menu/RandomSkirmishMenu.h>
+#include <Menu/CivWarsMenu.h>
+#include <units/Carryall.h>
+#include "../units/civ-wars-worm-respawn.inc"
 #include <Menu/CustomGameMenu.h>
 #include <Menu/PlaySetup.h>
 #include <Menu/CustomGamePlayers.h>
@@ -24,6 +27,7 @@
 #include <units/UnitBase.h>
 #include <dunecity/CitySimulation.h>
 #include <dunecity/CityConstants.h>
+#include <dunecity/CityEffects.h>
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
 #include <misc/IMemoryStream.h>
@@ -822,6 +826,8 @@ void runMultiplayerLobby() {
     skirmishRequire(digests[0] == digests[1], "Host and guest disagree about the game state");
 }
 
+#include "civ-wars-probe.inc"
+
 }
 
 int runSkirmishProbe() {
@@ -833,6 +839,8 @@ int runSkirmishProbe() {
     else if(kind == "legacy-map") runLegacyMap();
     else if(kind == "spectate") runSpectate();
     else if(kind == "render") runRender();
+    else if(kind == "civ-menu") runCivMenu();
+    else if(kind == "civ-1v1" || kind == "civ-2v2" || kind == "civ-3v3") runCivMatch(kind);
     else runMatch(kind, std::getenv("SKIRMISH_PROBE_SMOKE") != nullptr);
     SDL_Log("SKIRMISH_PROBE_PASS: %s", kind.c_str());
     return MENU_QUIT_DEFAULT;

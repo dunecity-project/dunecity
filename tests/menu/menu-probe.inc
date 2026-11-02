@@ -13,6 +13,7 @@
 #include <mod/Dune2RAssetManager.h>
 #include <Menu/CrossplayMenu.h>
 #include <Menu/RandomSkirmishMenu.h>
+#include <Menu/CivWarsMenu.h>
 #include <Menu/OptionsMenu.h>
 #include <Menu/AboutMenu.h>
 #include <Menu/HowToPlayMenu.h>
@@ -56,6 +57,7 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
 
 struct OnlineRandomProbeState {
     bool cancel = false;
+    bool civWars = false;
     bool publicGame = true;
     bool generated = false;
     bool playersShown = false;
@@ -68,6 +70,18 @@ OnlineRandomProbeState* onlineRandomProbe = nullptr;
 bool driveOnlineRandomSkirmishProbe(MenuBase& menu) {
     if(!onlineRandomProbe) return false;
     auto& state = *onlineRandomProbe;
+    if(auto* generator = dynamic_cast<CivWarsMenu*>(&menu)) {
+        menuRequire(state.civWars && generator->multiplayer,
+                    "CivWars online did not open its generic-start generator");
+        generator->seedBox.setText("20261102");
+        generator->fixedSeedBox.setChecked(true);
+        generator->onCreateMap();
+        state.path = generator->getCreatedMap();
+        menuRequire(generator->isQuiting() && !state.path.empty() && existsFile(state.path),
+                    "CivWars online generator did not save a map");
+        state.generated = true;
+        return true;
+    }
     if(auto* generator = dynamic_cast<RandomSkirmishMenu*>(&menu)) {
         menuRequire(generator->multiplayer && generator->hostMod == "vanilla",
                     "Online random skirmish did not open the active mod's multiplayer generator");
@@ -103,8 +117,19 @@ bool driveOnlineRandomSkirmishProbe(MenuBase& menu) {
         menuRequire(setup.publicGame==state.publicGame
                     && players->setupVisibility.getSelectedIndex()==(state.publicGame ? 1 : 0),
                     "Online random skirmish lost Play Online's public/private choice");
+        if(state.civWars) {
+            menuRequire(players->gameInitSettings.getModName() == "CivWars"
+                && players->gameInitSettings.isCivilizationWars()
+                && setup.rules.researchLab && setup.rules.sandwormsRespawn,
+                "CivWars online lost the mode/mod/rules in player setup");
+            for(int slot = 0; slot < players->numHouses; ++slot)
+                menuRequire(players->houseInfo[slot].teamDropDown.getSelectedEntryIntData()
+                    == (slot < players->numHouses / 2 ? 1 : 2),
+                    "CivWars online lost its left/right teams");
+        }
         state.playersShown = true;
-        menuCapture(*players,state.publicGame ? "online-random-public-players" : "online-random-private-players");
+        menuCapture(*players,state.civWars ? "online-civilization-wars-players"
+            : state.publicGame ? "online-random-public-players" : "online-random-private-players");
         players->quit(MENU_QUIT_GAME_FINISHED);
         return true;
     }
@@ -225,8 +250,22 @@ int runMenuProbe() {
         for(const auto& name : OnlineModPolicy::approvedMods()) {
             menuRequire(mods.setActiveMod(name), "Approved mod is not installed");
             const bool family = mods.isTornieFamilyContentActive();
-            menuRequire(family == (name != "vanilla" && name != "dunecity" && name != "Dune2R"),
+            menuRequire(family == (name != "vanilla" && name != "dunecity" && name != "Dune2R" && name != "CivWars"),
                         "Family capability leaked across mod activation");
+            if(name == "CivWars") {
+                const auto choices = mods.listModChoices();
+                menuRequire(std::any_of(choices.begin(), choices.end(), [](const auto& choice) {
+                    return choice.name == "CivWars" && choice.displayName == "Civilization Wars";
+                }), "Civilization Wars is missing from the mod selector");
+                const auto options = mods.loadEffectiveGameOptions(settings.gameOptions);
+                menuRequire(mods.getContentBase(name) == "dunecity" && mods.isCityModeActive()
+                    && mods.isDuneCityContentActive() && options.cityEffects
+                    && options.researchLab && options.trooperAntiAir && options.sandwormsRespawn,
+                    "CivWars did not inherit the DuneCity economy and required rules");
+                GameInitSettings own("Own scenario", "[BASIC]\nTechLevel=5\n[Atreides]\nCredits=123\n", false, options);
+                menuRequire(!own.isCivilizationWars() && own.getFiledata().find("TechLevel=5") != std::string::npos,
+                    "Rules-only CivWars changed an authored scenario or enabled generated lane respawns");
+            }
             if(family) {
                 const bool lite = name.size() >= 4 && name.compare(name.size() - 4, 4, "Lite") == 0;
                 const auto& roster = mods.getPlayableHouses();
@@ -254,7 +293,7 @@ int runMenuProbe() {
                                 "Edition metadata changed canonical DuneCity faction identities");
                 }
             }
-            if(name == "vanilla" || name == "dunecity" || name == "Dune2R") {
+            if(name == "vanilla" || name == "dunecity" || name == "Dune2R" || name == "CivWars") {
                 // Exercise the installed mod path and real fixed-point loader:
                 // Dune2R inherits Vanilla, while Dune City has a seeded copy.
                 ObjectData units;
@@ -594,7 +633,10 @@ int runMenuProbe() {
     {
         MainMenu menu;
         menuRequire(menu.campaignButton.isVisible() && menu.customButton.isVisible() && menu.randomSkirmishButton.isVisible()
-            && menu.onlineButton.isVisible(), "Home play actions missing");
+            && menu.civWarsButton.isVisible() && menu.onlineButton.isVisible(), "Home play actions missing");
+        menuRequire(menu.windowWidget.getWidgetPosition(&menu.civWarsButton).y
+            > menu.windowWidget.getWidgetPosition(&menu.randomSkirmishButton).y,
+            "Civilization Wars is not below Random Skirmish");
         menuRequire(!menu.displayButton.isVisible(),"Duplicate Display entry remains");
         menuRequire(menu.editorsButton.isVisible() && menu.editorsButton.getText()=="Editors"
             && menu.modesButton.getText()=="Extras", "Workshop and Extras destinations are not distinct");
@@ -604,7 +646,7 @@ int runMenuProbe() {
         menuCapture(menu,"home-continue");
         menu.canContinue=false; menu.refreshContextButtons();
         SDL_Event tab{}; tab.type=SDL_KEYDOWN; tab.key.keysym.sym=SDLK_TAB;
-        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.customButton,&menu.randomSkirmishButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
+        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.customButton,&menu.randomSkirmishButton,&menu.civWarsButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
 #if defined(DUNECITY_DESKTOP_UPDATER)
         tabOrder.push_back(&menu.updateButton);
 #endif
@@ -1566,6 +1608,21 @@ int runMenuProbe() {
             menuRequire(!menu.isQuiting() && !pNetworkManager,
                         "Online random skirmish cancel/setup opened a connection or left Play Online");
             if(!state.path.empty()) std::filesystem::remove(state.path);
+        }
+        {
+            OnlineRandomProbeState state;
+            state.civWars = true;
+            state.publicGame = false;
+            onlineRandomProbe = &state;
+            menuRequire(RandomSkirmish::activateMod("CivWars"), "Cannot activate CivWars for online hosting");
+            menu.visibilityChoice.setSelectedItem(0);
+            menu.hostRandomSkirmishButton.handleMouseLeft(10,10,true);
+            menu.hostRandomSkirmishButton.handleMouseLeft(10,10,false);
+            onlineRandomProbe = nullptr;
+            menuRequire(state.generated && state.playersShown && !pNetworkManager,
+                        "CivWars online flow did not reach preconnection player setup");
+            std::filesystem::remove(state.path);
+            RandomSkirmish::activateMod("vanilla");
         }
         settings.general.customGameMod = preferredMod;
         menu.stage = CrossplayMenu::Stage::Requesting; menu.refreshControls();

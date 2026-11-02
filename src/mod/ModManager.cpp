@@ -58,6 +58,7 @@ static const char* QUANTBOT_CONFIG_FILE = "QuantBot Config.ini";
 static const char* GAME_OPTIONS_FILE = "GameOptions.ini";
 static const char* VANILLA_MOD_NAME = "vanilla";
 static const char* DUNECITY_MOD_NAME = "dunecity";
+static const char* CIVWARS_MOD_NAME = "CivWars";
 static const char* TORNIE_MOD_NAME = "Tornie";
 static const char* DUNE2R_MOD_NAME = "Dune2R";
 static const char* MANAGED_MOD_STAMP = ".dunecity-managed";
@@ -335,7 +336,7 @@ ModManager::~ModManager() = default;
 
 std::string ModManager::installerContentHash(const std::string& name) const {
     namespace fs = std::filesystem;
-    if(name != VANILLA_MOD_NAME && name != DUNECITY_MOD_NAME
+    if(name != VANILLA_MOD_NAME && name != DUNECITY_MOD_NAME && name != CIVWARS_MOD_NAME
        && !isTornieFamilyBase(name) && name != DUNE2R_MOD_NAME) return {};
     try {
         // Cache individual file digests, not approval: every check enumerates the
@@ -461,6 +462,13 @@ void ModManager::initialize() {
         refreshBundledDunecityGraphicsSkins();
     }
 
+    // Rules-only DuneCity derivative: arbitrary scenarios retain their authored starts and tech.
+    const auto civWarsBundle = findBundledModPath(CIVWARS_MOD_NAME);
+    if(!modExists(CIVWARS_MOD_NAME)
+       || managedModNeedsRefresh(getModPath(CIVWARS_MOD_NAME), civWarsBundle)) {
+        refreshManagedMod(CIVWARS_MOD_NAME, getModPath(CIVWARS_MOD_NAME), civWarsBundle);
+    }
+
     for(const char* name : TORNIE_FAMILY_MOD_NAMES) {
         if(!modExists(name) || tornieFamilyNeedsReseed(name)) {
             seedTornieFamilyFromDefaults(name);
@@ -495,7 +503,9 @@ void ModManager::initialize() {
     // launch can refresh it successfully.
     const bool activeManagedModInvalid =
         (isTornieFamilyBase(activeMod) && tornieFamilyNeedsReseed(activeMod))
-        || (activeMod == DUNE2R_MOD_NAME && dune2rNeedsReseed());
+        || (activeMod == DUNE2R_MOD_NAME && dune2rNeedsReseed())
+        || (activeMod == CIVWARS_MOD_NAME
+            && managedModNeedsRefresh(getModPath(CIVWARS_MOD_NAME), civWarsBundle));
 
     // Verify the selected mod before any of its metadata or assets are read.
     if (!modExists(activeMod) || activeManagedModInvalid) {
@@ -802,7 +812,7 @@ std::vector<ModInfo> ModManager::listModChoices() const {
     // content-derived ID identifies them independently of the current build; an
     // authored mod has its own ID and must remain a separate choice.
     for(auto& owner : mods) {
-        if(owner.name != "vanilla" && owner.name != DUNECITY_MOD_NAME
+        if(owner.name != "vanilla" && owner.name != DUNECITY_MOD_NAME && owner.name != CIVWARS_MOD_NAME
            && owner.name != "Tornie" && owner.name != "Dune2R") continue;
         for(const auto& cached : mods) {
             if(!isWorkshopSnapshotMod(cached.name) || cached.revisionHash.empty()) continue;
