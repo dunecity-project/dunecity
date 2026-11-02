@@ -73,3 +73,8 @@ digest layout. It also runs a tech-1 DuneCity QuantBot custom game with no free 
 levels/cycles to CSV. Run through the shared cluster queue, not a second build tree. Command
 serialization and MOD15/old-marker compatibility are covered in `dunelegacy_tests`; the existing
 skirmish/menu/gallery probes cover the checkbox at 640×480.
+
+The shared-spending probe also checks lab rebuilding alongside demanded city growth. Its
+two-yard house keeps both live yards in the planner's structure list: one can retain the
+city-growth allocation while the other rebuilds exactly one lab. This is the same setup used
+for initial lab construction; a lab does not pre-empt a yard's protected economic work.

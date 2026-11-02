@@ -416,8 +416,18 @@ void runSharedSpendingProbe(Game& game) {
                 saved.remove(lab);lab->setVisible(VIS_ALL,false);lab->destroy();
                 require(!house->isTechResearchActive() && house->getTechLevel()==2,
                     "Lab loss did not cancel work while retaining completed technology");
-                reset(100000,1000000);bot->build(10000);
-                require(count(yard,Structure_ResearchLab)==1,"Destroyed research lab was not rebuilt");
+                // Keep both real yards visible, just as for the initial lab.
+                // City planning reserves one of a multi-yard house's builders
+                // for demanded zoning; rebuilding must coexist with that work.
+                reset(100000,1000000);structureList.push_back(secondYard);bot->build(10000);
+                require(count(yard,Structure_ResearchLab)+count(secondYard,Structure_ResearchLab)==1,
+                    "Destroyed research lab was not rebuilt");
+                if(game.isCitySimEnabled()) {
+                    bool growth=false;
+                    for(auto* builder:{yard,secondYard})for(const auto& order:builder->currentProductionQueue)
+                        growth|=DuneCity::isCityZoneStructure(order.itemID);
+                    require(growth,"Research lab rebuilding displaced protected city growth");
+                }
                 SDL_Log("RESEARCH_LAB_AI_PASS: hashed off/on policy, real lab queue, reserve, payment, completion, build gate, cache, cancellation, rebuilding");
             } catch (...) {restore();throw;}
             restore();
