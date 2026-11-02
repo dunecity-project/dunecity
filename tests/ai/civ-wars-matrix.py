@@ -11,6 +11,10 @@ An empty exact telemetry count means unavailable, never zero. Partial captures
 retain explicitly named observed lower bounds. Time limits are never adjudicated
 on material. Reports use match_score team placements and bootstrap paired seed
 means, not individual houses or the two orientations as independent trials.
+Worm item ledgers separate all four harvester families from combat and support.
+Tech timing -1 means observed unreached, not a timing; absent data stays unknown.
+Source/map/options-matched comparisons require a measured content fingerprint or
+a known clean commit; legacy unidentified dirty snapshots remain descriptive.
 """
 import argparse
 import csv
@@ -38,6 +42,11 @@ import match_score  # noqa: E402
 SEEDS = (7101, 7202, 7303, 7404, 7505)
 PAIRS = ('medium:medium', 'hard:hard', 'brutal:brutal', 'hard:medium', 'brutal:hard')
 ARMS = ('off', 'on', 'left', 'right')
+# ItemID_enum in include/data.h; HarvesterHelpers.h includes all four refinery families.
+HARVESTER_ITEMS = frozenset((31, 59, 85, 86))
+COMBAT_ITEMS = frozenset((28, 29, 32, 33, 35, 36, 37, 39, 40, 41, 42, 43, 44, 46, 47,
+                          52, 53, 54, 55, 63, 64, 74, 75, 77, 78, 79, 80, 81, 82, 83))
+LOSS_KINDS = ('harvester', 'combat', 'other')
 DIFFICULTIES = ('medium', 'hard', 'brutal')
 COMMON = ('id', 'attempt', 'pair_id', 'seed', 'format', 'team_size', 'pair', 'left', 'right',
           'swap', 'arm', 'strategy', 'size', 'worms', 'spice', 'minutes', 'options_input_sha256')
@@ -49,6 +58,7 @@ GAME_FIELDS = COMMON + (
     'outcome', 'winner_team', 'end_s', 'focal_team', 'left_score', 'right_score', 'left_drawn', 'right_drawn',
     'config_hash', 'options_hash', 'map_hash', 'global_strategy', 'strategy_override', 'observing',
     'digest', 'digest_cycle', 'source_commit', 'working_tree_modified', 'host', 'platform',
+    'source_fingerprint', 'source_fingerprint_error',
     'telemetry_status', 'telemetry_reasons', 'telemetry_files', 'telemetry_events', 'capture_limit',
     'telemetry_parse_errors', 'telemetry_seq_gaps', 'worm_ids_complete', 'worm_count',
     'worm_losses_complete', 'worm_losses', 'observed_worm_losses', 'attacks', 'observed_attacks', 'performance_complete',
@@ -156,17 +166,21 @@ def read(path):
 
 
 def append(path, fields, rows):
-    """Called under the game write lock; games.csv is the final completion marker."""
+    """Keep old and new columns aligned, preserving unknown legacy columns on migration."""
+    path = Path(path)
     new = not path.exists()
     if not new:
         with path.open(newline='', encoding='utf-8') as handle:
             header = next(csv.reader(handle), [])
+        fields = tuple(dict.fromkeys((*fields, *header)))
         if tuple(header) != tuple(fields):
             old = read(path)
-            with path.open('w', newline='', encoding='utf-8') as handle:
+            temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
+            with temporary.open('w', newline='', encoding='utf-8') as handle:
                 writer = csv.DictWriter(handle, fields, extrasaction='ignore')
                 writer.writeheader()
                 writer.writerows(old)
+            temporary.replace(path)
     with path.open('a', newline='', encoding='utf-8') as handle:
         writer = csv.DictWriter(handle, fields, extrasaction='ignore')
         if new:
@@ -410,7 +424,9 @@ def play(args, scratch, binary, game):
             try:
                 summary = json.loads(summary_path.read_text(encoding='utf-8'))
                 row.update(source_commit=summary.get('sourceCommit', ''),
-                           working_tree_modified=summary.get('workingTreeModified', ''))
+                           working_tree_modified=summary.get('workingTreeModified', ''),
+                           source_fingerprint=summary.get('sourceFingerprint') or '',
+                           source_fingerprint_error=summary.get('sourceFingerprintError') or '')
             except (ValueError, TypeError):
                 row['error'] += ';malformed_runner_summary'
         for team, side in (('1', 'left'), ('2', 'right')):
@@ -530,30 +546,130 @@ def side_score(game, team):
     return number(game.get('left_score' if str(team) == '1' else 'right_score'))
 
 
+def source_fingerprint_value(game):
+    value = game.get('source_fingerprint') or ''
+    return value if re.fullmatch(r'[0-9a-f]{64}', value) and not game.get('source_fingerprint_error') else None
+
+
+def source_identified(game):
+    if not game.get('source_commit') or game.get('source_fingerprint_error'):
+        return False
+    if game.get('source_fingerprint'):
+        return source_fingerprint_value(game) is not None
+    return str(game.get('working_tree_modified', '')).lower() in ('false', '0')
+
+
 def cohort(game):
-    return tuple(game.get(key, '') for key in ('format', 'pair', 'size', 'worms', 'spice', 'minutes',
-                                               'options_input_sha256', 'source_commit'))
+    settings = tuple(game.get(key, '') for key in ('format', 'pair', 'size', 'worms', 'spice', 'minutes',
+                                                  'options_input_sha256', 'source_commit', 'options_hash'))
+    modified = 'content-identified' if source_fingerprint_value(game) else game.get('working_tree_modified', '')
+    return settings + (modified, game.get('source_fingerprint') or '', game.get('source_fingerprint_error') or '')
 
 
 def focal_houses(game, houses):
-    return [house for house in houses.get(game['id'], []) if house.get('team') == str(game['focal_team'])]
+    key = game.get('_report_key', game['id'])
+    return [house for house in houses.get(key, []) if house.get('team') == str(game['focal_team'])]
+
+
+def load_report(directories):
+    """Join only the chosen completed attempt, without collapsing IDs across source cohorts."""
+    games, tables = {}, {name: {} for name, _ in CSV_FILES if name != 'games.csv'}
+    for directory in directories:
+        selected = {}
+        for game in read(Path(directory) / 'games.csv'):
+            key = (game['id'], cohort(game), game.get('map_hash', ''))
+            if key not in selected or not game.get('error') or selected[key].get('error'):
+                selected[key] = game
+        selected_rows = {name: defaultdict(list) for name in tables}
+        for name in tables:
+            for row in read(Path(directory) / name):
+                selected_rows[name][(row.get('id'), row.get('attempt', ''))].append(row)
+        for game in selected.values():
+            gid = game['id']
+            # Unknown provenance must not merge unrelated legacy directories.
+            provenance = '' if source_identified(game) else str(Path(directory).resolve())
+            key = (gid, cohort(game), game.get('map_hash', ''), provenance)
+            if key not in games or not game.get('error') or games[key].get('error'):
+                game['_report_key'] = key
+                game['_research_available'] = (Path(directory) / 'research.csv').is_file()
+                games[key] = game
+                for name in tables:
+                    joined = selected_rows[name][(gid, game.get('attempt', ''))]
+                    tables[name][key] = list({row['house']: row for row in joined}.values()
+                                            ) if name == 'houses.csv' else joined
+    return list(games.values()), tables
+
+
+def loss_kind(item):
+    item = integer(item)
+    return 'harvester' if item in HARVESTER_ITEMS else 'combat' if item in COMBAT_ITEMS else 'other'
+
+
+def worm_loss_counts(game, items):
+    """None exact counts are unavailable; observed counts remain explicitly lower bounds."""
+    losses = [row for row in items if row.get('event') == 'worm_loss']
+    observed = Counter({kind: 0 for kind in LOSS_KINDS})
+    seen = set()
+    for row in losses:
+        identity = (row.get('house'), row.get('object'))
+        if row.get('object') and identity in seen:
+            continue
+        seen.add(identity)
+        if row.get('team') == str(game['focal_team']):
+            observed[loss_kind(row.get('item'))] += integer(row.get('observed_count')) or 1
+    total = sum(integer(row.get('observed_count')) or 1 for row in losses)
+    complete = (str(game.get('worm_losses_complete')) == '1'
+                and number(game.get('observed_worm_losses')) == total
+                and all(row.get('team') in ('1', '2') and integer(row.get('item')) is not None
+                        and str(row.get('complete')) == '1' for row in losses))
+    return observed, dict(observed) if complete else None
+
+
+def tech_reach(games, houses, level):
+    """Reached median excludes -1; reach denominator excludes unavailable team observations."""
+    timings, observed = [], 0
+    for game in games:
+        hs = focal_houses(game, houses)
+        values = [number(house.get(f'tech{level}_s')) for house in hs]
+        reached = [value / 60 for value in values if value is not None and value >= 0]
+        if reached:
+            observed += 1
+            timings.append(min(reached))
+        elif len(hs) == integer(game.get('team_size')) and all(value == -1 for value in values):
+            observed += 1
+    return timings, observed
+
+
+def paired_scores(rows, arm):
+    """One trial per seed; only identical identified source, map, options and orientation."""
+    indexed = defaultdict(lambda: defaultdict(list))
+    for game in rows:
+        if game.get('arm') in ('off', arm):
+            key = (cohort(game), game.get('pair_id'), game.get('seed'), game.get('swap'))
+            indexed[key][game['arm']].append(game)
+    paired, matched = defaultdict(list), 0
+    for by_arm in indexed.values():
+        if len(by_arm['off']) != 1 or len(by_arm[arm]) != 1:
+            continue  # Ambiguous map/source variants cannot be pooled into a single seed.
+        control, game = by_arm['off'][0], by_arm[arm][0]
+        if not source_identified(game) or not source_identified(control):
+            continue
+        if any(not game.get(key) or game[key] != control.get(key) for key in ('map_hash', 'options_hash')):
+            continue
+        candidate = side_score(game, game['focal_team'])
+        baseline = side_score(control, game['focal_team'])
+        if candidate is not None and baseline is not None:
+            paired[str(game['seed'])].append((candidate, baseline))
+            matched += 1
+    return matched, {seed: (statistics.mean(pair[0] for pair in values),
+                            statistics.mean(pair[1] for pair in values)) for seed, values in sorted(paired.items())}
 
 
 def report(args):
     dirs = args.report or [args.results]
-    games, houses = {}, {}
-    for directory in dirs:
-        selected = completed(directory)
-        raw_houses = defaultdict(dict)
-        for house in read(Path(directory) / 'houses.csv'):
-            game = selected.get(house['id'])
-            if game and house.get('attempt') == game.get('attempt'):
-                raw_houses[house['id']][house['house']] = house
-        for gid, game in selected.items():
-            if gid not in games or not game.get('error') or games[gid].get('error'):
-                games[gid] = game
-                houses[gid] = list(raw_houses[gid].values())
-    good = [game for game in games.values() if not game.get('error')]
+    games, tables = load_report(dirs)
+    houses = tables['houses.csv']
+    good = [game for game in games if not game.get('error')]
     print(f'# Civilization Wars: {len(good)} complete games, {len(games) - len(good)} failed games\n')
     print(match_score.describe('placement', match_score.DRAW_SCORE, 0))
     print('\nFocus = first difficulty in the pair for off/on/left; second for right. Side swaps move '
@@ -568,9 +684,11 @@ def report(args):
     for game in good:
         grouped[cohort(game)].append(game)
     for settings, rows in sorted(grouped.items()):
-        fmt, pair, size, worms, spice, minutes, options, commit = settings
+        fmt, pair, size, worms, spice, minutes, options, commit, actual_options, modified, fingerprint, fingerprint_error = settings
         print(f'## {fmt} {pair}; size={size} worms={worms} spice={spice} cap={minutes}m '
-              f'options={options} source={commit or "unavailable"}\n')
+              f'options={options} actual_options={actual_options or "unavailable"} '
+              f'source={commit or "unavailable"} modified={modified or "unknown"} '
+              f'fingerprint={fingerprint or "unavailable"} fingerprint_error={fingerprint_error or "none"}\n')
         print('| Arm | Games (seeds) | Focus W-L-T-E | Win rate | Time-outs | Mean / max min | '
               'Islands proxy mean | Team tech mean | Attacks mean (available games) | '
               'Worm losses mean (available games) | Complete telemetry |')
@@ -593,13 +711,16 @@ def report(args):
                     if len(hs) == int(game['team_size']) and all(value is not None for value in observed):
                         values.append(reducer(observed))
             n = len(arm_rows)
+            max_length = f'{max(lengths):.1f}' if lengths else '-'
             print(f'| {arm} | {n} ({len({game["seed"] for game in arm_rows})}) | '
                   f'{wins}-{losses}-{timeouts}-{extinct} | {wins / n:.1%} | {timeouts / n:.1%} | '
-                  f'{mean_text(lengths)} / {max(lengths):.1f} | {mean_text(islands)} | {mean_text(tech)} | '
+                  f'{mean_text(lengths)} / {max_length} | {mean_text(islands)} | {mean_text(tech)} | '
                   f'{mean_text(attacks)} ({len(attacks)}) | {mean_text(worm_losses)} ({len(worm_losses)}) | '
                   f'{sum(game["telemetry_status"] == "complete" for game in arm_rows)}/{n} |')
         print('\nFirst house on the focus team to reach each REAL per-house tech level: median minutes '
-              'among games reaching it, with reached games / all games. No global tech proxy.\n')
+              'among reaching games only. -1 = observed unreached, never a negative timing. '
+              'Reach fractions use games with a reached house or all focus-house timings observed; '
+              'missing timings are excluded, known unreached games stay in the denominator.\n')
         print('| Arm | ' + ' | '.join(f'Tech {level}: min (games)' for level in range(2, 10)) + ' |')
         print('|---|' + '---|' * 8)
         for arm in ARMS:
@@ -608,48 +729,80 @@ def report(args):
                 continue
             cells = []
             for level in range(2, 10):
-                timings = []
-                for game in arm_rows:
-                    reached = [number(house.get(f'tech{level}_s')) for house in focal_houses(game, houses)]
-                    reached = [value / 60 for value in reached if value is not None and value >= 0]
-                    if reached:
-                        timings.append(min(reached))
-                cells.append(f'{statistics.median(timings):.1f} ({len(timings)}/{len(arm_rows)})' if timings
-                             else f'- (0/{len(arm_rows)})')
+                timings, observed = tech_reach(arm_rows, houses, level)
+                cells.append(f'{statistics.median(timings):.1f} ({len(timings)}/{observed})' if timings
+                             else f'- (0/{observed})')
             print(f'| {arm} | ' + ' | '.join(cells) + ' |')
-        print('\nPaired placement scores against off, matching seed + orientation + map/options hashes. '
-              'Intervals resample seed means (both orientations of one seed are ONE trial).\n')
+        print('\nFocus-team worm deaths by actual item IDs: harvesters=31/59/85/86; combat excludes '
+              'all harvester families, MCVs, transports, ambient units and worms. Other IDs stay separate. '
+              'Exact means require complete worm identity/capture and a fully joined item ledger. '
+              'Observed means are lower bounds even when some games have exact captures.\n')
+        print('| Arm | Category | Exact mean (games) | Observed lower-bound mean (joined games) |')
+        print('|---|---|---|---|')
+        for arm in ARMS:
+            loss_rows = [game for game in rows if game['arm'] == arm]
+            if not loss_rows:
+                continue
+            for kind in LOSS_KINDS:
+                exact_values, observed_values = [], []
+                for game in loss_rows:
+                    items = tables['items.csv'].get(game['_report_key'], [])
+                    observed, exact = worm_loss_counts(game, items)
+                    if items or number(game.get('observed_worm_losses')) == 0:
+                        observed_values.append(observed[kind])
+                    if exact is not None:
+                        exact_values.append(exact[kind])
+                print(f'| {arm} | {kind} | {mean_text(exact_values)} ({len(exact_values)}) | '
+                      f'{mean_text(observed_values)} ({len(observed_values)}) |')
+        print('\nActual research starts from research.csv event=start (not inferred tech changes), '
+              'median first focus-house start per target in minutes; games starting / available complete rosters.\n')
+        print('| Arm | ' + ' | '.join(f'Target {level}: min (games)' for level in range(2, 10)) + ' |')
+        print('|---|' + '---|' * 8)
+        for arm in ARMS:
+            arm_rows = [game for game in rows if game['arm'] == arm]
+            if not arm_rows:
+                continue
+            cells = []
+            for level in range(2, 10):
+                starts, available = [], 0
+                for game in arm_rows:
+                    if not game['_research_available'] or len(focal_houses(game, houses)) != integer(game.get('team_size')):
+                        continue
+                    available += 1
+                    cycles = [number(row.get('cycle')) for row in tables['research.csv'][game['_report_key']]
+                              if row.get('event') == 'start' and integer(row.get('target')) == level
+                              and row.get('team') == str(game['focal_team'])]
+                    cycles = [cycle for cycle in cycles if cycle is not None and cycle >= 0]
+                    if cycles:
+                        starts.append(min(cycles) * 0.016 / 60)  # GAMESPEED_DEFAULT = 16ms.
+                cells.append(f'{statistics.median(starts):.1f} ({len(starts)}/{available})' if starts
+                             else f'- (0/{available})')
+            print(f'| {arm} | ' + ' | '.join(cells) + ' |')
+        print('\nPaired placement scores against off, matching source commit, seed, orientation and map/options '
+              'hashes. Source identity requires matching measured fingerprints or known clean commits. '
+              'Legacy dirty/unknown snapshots are ineligible. Intervals resample seed means '
+              '(both orientations of one seed are ONE trial); fewer than five fixed seeds are insufficient.\n')
         print('| Arm vs off | Paired games / seeds | Candidate / off score | Delta [95% seed bootstrap] | Verdict |')
         print('|---|---|---|---|---|')
-        controls = {game['pair_id']: game for game in rows if game['arm'] == 'off'}
+        required_seeds = {str(seed) for seed in SEEDS}
         for arm in ARMS[1:]:
-            paired = defaultdict(list)
-            matched = 0
-            for game in rows:
-                control = controls.get(game['pair_id'])
-                if game['arm'] != arm or control is None:
-                    continue
-                if any(not game.get(key) or game[key] != control.get(key) for key in ('map_hash', 'options_hash')):
-                    continue
-                candidate = side_score(game, game['focal_team'])
-                baseline = side_score(control, game['focal_team'])
-                if candidate is not None and baseline is not None:
-                    paired[game['seed']].append((candidate, baseline))
-                    matched += 1
-            seed_pairs = [(statistics.mean(pair[0] for pair in values), statistics.mean(pair[1] for pair in values))
-                          for values in paired.values()]
+            matched, paired_seeds = paired_scores(rows, arm)
+            seed_pairs = list(paired_seeds.values())
             if not seed_pairs:
                 print(f'| {arm} | 0 / 0 | - | unavailable | - |')
                 continue
             deltas = [candidate - control for candidate, control in seed_pairs]
             low, high = match_score.bootstrap(deltas, int(hashlib.sha256(encoded((settings, arm)).encode()).hexdigest()[:8], 16))
-            verdict = 'beats off' if low > 0 else 'loses to off' if high < 0 else 'not distinguished'
+            matched_seeds = set(paired_seeds)
+            sufficient = len(seed_pairs) >= 5 and required_seeds <= matched_seeds
+            verdict = ('beats off' if low > 0 else 'loses to off' if high < 0 else 'not distinguished'
+                       ) if sufficient else 'insufficient fixed-seed coverage'
             print(f'| {arm} | {matched} / {len(seed_pairs)} | '
                   f'{statistics.mean(pair[0] for pair in seed_pairs):+.3f} / '
                   f'{statistics.mean(pair[1] for pair in seed_pairs):+.3f} | '
                   f'{statistics.mean(deltas):+.3f} [{low:+.3f}, {high:+.3f}] | {verdict} |')
         print()
-    for game in sorted(games.values(), key=lambda game: game['id']):
+    for game in sorted(games, key=lambda game: game['id']):
         if game.get('error'):
             print(f'FAILED {game["id"]}: {game["error"]}')
 

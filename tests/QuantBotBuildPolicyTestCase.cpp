@@ -117,15 +117,15 @@ TEST_CASE("Civ Wars funds a small tech-opening fleet before difficulty-scaled ex
     for (int difficulty : {1, 2, 3}) {
         REQUIRE(civWarsWorkerTarget(40, 1, false, difficulty) == 2);
         REQUIRE(civWarsWorkerTarget(40, 3, false, difficulty) == 2);
-        REQUIRE(civWarsWorkerTarget(40, 4, false, difficulty) == 4);
-        REQUIRE(civWarsWorkerTarget(40, 9, false, difficulty) == 4);
+        REQUIRE(civWarsWorkerTarget(40, 4, false, difficulty) == 4 + 2*difficulty);
+        REQUIRE(civWarsWorkerTarget(40, 9, false, difficulty) == 4 + 2*difficulty);
         REQUIRE(civWarsWorkerTarget(1, 1, false, difficulty) == 1);
         REQUIRE(civWarsWorkerTarget(0, 9, true, difficulty) == 0);
         REQUIRE(civWarsWorkerTarget(-1, 9, true, difficulty) == 0);
     }
-    REQUIRE(civWarsWorkerTarget(40, 5, true, 1) == 4);
-    REQUIRE(civWarsWorkerTarget(40, 5, true, 2) == 6);
-    REQUIRE(civWarsWorkerTarget(40, 5, true, 3) == 8);
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 1) == 8);
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 2) == 12);
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 3) == 16);
     REQUIRE(civWarsWorkerTarget(3, 5, true, 3) == 3);
 }
 

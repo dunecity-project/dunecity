@@ -225,7 +225,7 @@ Tech timing above is the median over houses that reached that level
 not a claim that eliminated houses retain their technology. Decisive games are
 actual surviving-team wins;
 time limits are not awarded by army value or credits. Attacks are complete
-`attack_launched` decision events; worm deaths join complete lethal-damage
+nonempty `ground_hunt` decision events; worm deaths join complete lethal-damage
 attacker IDs to the engine-observed worm set. These historical controls are
 diagnostic; the final off/on comparison must use the same final binary.
 
@@ -316,4 +316,22 @@ Data directories under
 unit, island, attack, worm-loss and actual AI CPU tables; later runs also retain
 selected decision JSON in `decisions.csv`. Headless cycles/second is not
 rendered FPS.
+
+
+### Candidate 3 parameters and evidence identity
+
+Keep the two-worker opening through tech 3, then permit **6 Medium / 8 Hard /
+10 Brutal** workers before the first wave and **8 / 12 / 16** afterwards,
+still clamped to the original sustainable/configured target. This directly
+addresses candidate 2's observed spice-income deficit while retaining its
+research staging, city-investment pacing and worm/route safety.
+
+Historical `workingTreeModified` flags include non-ignored build products, so
+those rows are descriptive, not automatically source-matched A/B proof. New
+runs additionally record an actual SHA256 `sourceFingerprint` over sorted
+tracked/non-ignored source-tree files, excluding the invocation's build/output
+trees and Python/npm caches. Missing inputs withhold identity. The queue's
+immutable snapshot keeps inputs fixed during a match. This identifies source
+inputs, not system toolchains or rendered-asset provenance; map/options/config
+identities and source commits remain separately recorded.
 

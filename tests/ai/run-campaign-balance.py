@@ -14,6 +14,10 @@ comparison, not a substitute for the browser playtest or human playtesting.
 --civ-wars uses the real Civilization Wars generator and spectator initialization;
 --partner-difficulty/--enemy-difficulty select its left/right QuantBots. Its strategy
 defaults off; explicit --civ-strategy off/on also supplies ordinary-game digest controls.
+
+--civ-air-probe lab/yard injects one real early enemy aircraft into a canonical start,
+bounded by two covering starter rocket turrets; the defended bot remains unmodified.
+tests/ai/civ-wars-gates.py schedules repeat/off-on air and ordinary digest controls.
 """
 import argparse
 import atexit
@@ -168,6 +172,12 @@ parser.add_argument('--civ-spice', type=int, choices=range(5), default=2, metava
 parser.add_argument('--civ-strategy', choices=('off', 'on', 'left', 'right'),
                     help='Civ Wars strategy (default off for --civ-wars); off/on is a hashed global switch '
                          'before game init, also on ordinary games; left/right is a test-only unhashed team override')
+parser.add_argument('--civ-air-probe', choices=('lab', 'yard'),
+                    help='Canonical Civ Wars only: real single-ornithopter strike at 30 seconds against this core')
+parser.add_argument('--civ-air-team', type=int, choices=(1, 2), default=1,
+                    help='--civ-air-probe: defended generated team (default 1); the attacker must be Hard/Brutal')
+parser.add_argument('--civ-ordinary-gate', choices=('no-research', 'research'),
+                    help='Observe an ordinary DuneCity scenario init for civ-wars-gates.py (requires off/on)')
 parser.add_argument('--shared-spending-probe', action='store_true')
 parser.add_argument('--controls-probe', action='store_true')
 parser.add_argument('--achievements-probe', action='store_true',
@@ -313,6 +323,15 @@ if args.civ_wars:
     args.civ_strategy = args.civ_strategy or 'off'
 if args.civ_strategy in ('left', 'right') and not args.civ_wars:
     parser.error('--civ-strategy left/right needs --civ-wars; ordinary games accept off/on.')
+if args.civ_air_probe:
+    attacker_difficulty = args.enemy_difficulty if args.civ_air_team == 1 else args.partner_difficulty
+    if not args.civ_wars or args.minutes < 2 or attacker_difficulty not in ('hard', 'brutal'):
+        parser.error('--civ-air-probe needs --civ-wars, at least two minutes and a Hard/Brutal attacker.')
+    if args.civ_strategy not in ('off', 'on'):
+        parser.error('--civ-air-probe requires the hashed --civ-strategy off/on comparison.')
+if args.civ_ordinary_gate and (args.civ_wars or args.mod != 'dunecity' or not args.scenario
+                              or not args.local_spectator or args.civ_strategy not in ('off', 'on')):
+    parser.error('--civ-ordinary-gate needs an ordinary --mod dunecity --scenario observer and --civ-strategy off/on.')
 if not 1 <= args.minutes <= 120 or not 0 <= args.seed <= 0xffffffff:
     parser.error('Use 1–120 minutes and a 32-bit unsigned seed.')
 if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
@@ -458,6 +477,12 @@ try:
                                                    stderr=subprocess.DEVNULL).strip())
 except subprocess.CalledProcessError:
     source_commit, source_modified = 'unavailable', None
+try:
+    from source_provenance import source_fingerprint
+    source_fingerprint_value = source_fingerprint(root, build, out)
+    source_fingerprint_error = ''
+except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+    source_fingerprint_value, source_fingerprint_error = None, str(error)
 if args.repeatable:
     out.mkdir(parents=True, exist_ok=True)
     # CTest reruns used to accumulate every run (~80 MB each) forever.
@@ -633,6 +658,11 @@ if args.civ_wars:
     env['BALANCE_CIV_SPICE'] = str(args.civ_spice)
 if args.civ_strategy is not None:
     env['BALANCE_CIV_STRATEGY'] = args.civ_strategy
+if args.civ_air_probe:
+    env['BALANCE_CIV_AIR_PROBE'] = args.civ_air_probe
+    env['BALANCE_CIV_AIR_TEAM'] = str(args.civ_air_team)
+if args.civ_ordinary_gate:
+    env['BALANCE_CIV_ORDINARY_GATE'] = args.civ_ordinary_gate
 if not args.real_video:
     env['SDL_VIDEODRIVER'] = 'dummy'
 env['BALANCE_CAPTURE_MIB'] = str(args.capture_mib)
@@ -793,10 +823,26 @@ for line in events.open() if events else ():
             raise RuntimeError('Automatic campaign force exceeded its wave budget')
 summary = {'result':results[0],'sourceCommit':source_commit,
            'workingTreeModified':source_modified,
+           'sourceFingerprint':source_fingerprint_value,
+           'sourceFingerprintError':source_fingerprint_error,
            'metadata':metadata,'attacks':attacks,'final':final,'resolved_roster':roster,'enemy_controller':args.enemy_ai,'harvester_limit':args.harvester_limit}
 (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(results[0])
 print('Telemetry:',events or 'off (--no-ai-telemetry)')
+if args.civ_air_probe:
+    air_results = [line for line in (out/'run.log').read_text(errors='replace').splitlines()
+                   if 'CIV_AIR_RESULT:' in line]
+    if len(air_results) != 1 or 'pass=1 ' not in air_results[0]:
+        raise RuntimeError('Early Civ Wars aircraft strike was not defeated with the original core surviving.')
+if args.civ_ordinary_gate:
+    ordinary_setups = [dict(part.split('=', 1) for part in line.split('CIV_ORDINARY_SETUP:', 1)[1].split()
+                           if '=' in part)
+                       for line in (out/'run.log').read_text(errors='replace').splitlines()
+                       if 'CIV_ORDINARY_SETUP:' in line]
+    if (len(ordinary_setups) != 1 or ordinary_setups[0].get('civ_wars') != '0'
+            or ordinary_setups[0].get('city_sim') != '1'
+            or ordinary_setups[0].get('research_lab') != str(int(args.civ_ordinary_gate == 'research'))):
+        raise RuntimeError('Ordinary DuneCity digest control did not execute its configured research option.')
 
 if args.strategy_probe:
     # Mix production (section 3) on further seeds: one 12-minute game per mix is one trajectory, so a

@@ -15,6 +15,8 @@
 #include <utility>
 #include <vector>
 
+#include "civ-wars-air-probe.inc"
+
 namespace CivWarsMatch {
 
 struct AiTiming {
@@ -81,6 +83,8 @@ public:
     MeasuredFactories& operator=(const MeasuredFactories&) = delete;
     ~MeasuredFactories() {
         for (auto& [entry, create] : original) entry->pCreate = std::move(create);
+        if (std::getenv("BALANCE_CIV_ORDINARY_GATE") && std::uncaught_exceptions() == 0 && currentGame)
+            CivWarsGate::reportOrdinarySetup(*currentGame);
     }
 };
 
@@ -357,13 +361,17 @@ inline std::string run(Game& game, Uint32 end) {
     Measurement measurement(game);
     measurement.sample(game);
     const Uint32 first = game.getGameCycleCount(), minute = MILLI2CYCLES(60000);
+    std::optional<CivWarsGate::EarlyAirStrike> strike;
+    if (std::getenv("BALANCE_CIV_AIR_PROBE")) strike.emplace(game, end);
     int winner = EliminationMatch::survivingTeam(game);
     const double aiWallBefore = game.frameTiming.aiMs;
     const auto loopStart = GamePerf::Clock::now();
     const double cpuStart = GamePerf::threadCpuMs();
     while (winner == 0 && game.getGameCycleCount() < end) {
         ProbeDigest::periodic(game);
+        if (strike) strike->beforeUpdate();
         game.updateGameState();
+        if (strike) strike->observe();
         // The shared scorer allocates its roster/set. Re-evaluate only when an observed
         // house dies, rather than rebuilding those containers on every simulation cycle.
         if (measurement.observe(game)) winner = EliminationMatch::survivingTeam(game);
@@ -373,6 +381,7 @@ inline std::string run(Game& game, Uint32 end) {
     const Uint32 cycles = game.getGameCycleCount() - first;
     measurement.sample(game, true);
     measurement.reportAi();
+    if (strike) strike->finish();
     const char* outcome = winner == 0 ? "time_limit" : winner == -1 ? "extinct" : "won";
     SDL_Log("CIV_WARS_RESULT: winner_team=%d outcome=%s cycle=%u end_s=%.3f worm_ids_complete=1 worm_count=%zu",
         winner, outcome, game.getGameCycleCount(), FormationWaveMeasure::seconds(game.getGameCycleCount()),

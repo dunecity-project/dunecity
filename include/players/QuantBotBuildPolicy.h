@@ -220,8 +220,9 @@ inline bool canFundTechInvestment(const TechInvestment& state) {
 // fund research; growing the whole map-share fleet first delays technology
 // behind dozens of bays. Expand again after heavy production and the first wave.
 inline int civWarsWorkerTarget(int sustainable, int tech, bool firstWave, int difficulty) {
-    const int target = tech < 4 ? 2 : !firstWave ? 4
-        : difficulty == 3 ? 8 : difficulty == 2 ? 6 : 4;
+    const int target = tech < 4 ? 2
+        : !firstWave ? (difficulty >= 3 ? 10 : difficulty >= 2 ? 8 : 6)
+        : difficulty >= 3 ? 16 : difficulty >= 2 ? 12 : 8;
     return std::clamp(sustainable, 0, target);
 }
 
