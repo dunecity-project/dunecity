@@ -27,6 +27,7 @@
 #include <units/UnitBase.h>
 #include <dunecity/CitySimulation.h>
 #include <dunecity/CityConstants.h>
+#include <dunecity/CityEffects.h>
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
 #include <misc/IMemoryStream.h>

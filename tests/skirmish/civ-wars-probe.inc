@@ -1,7 +1,7 @@
 // Included inside skirmish-probe.inc's fixture namespace; no production test hooks.
 void captureCivMap(const std::string& name) {
     const int scale = 4, width = currentGameMap->getSizeX(), height = currentGameMap->getSizeY();
-    auto image = sdl2::surface_ptr(SDL_CreateRGBSurfaceWithFormat(0, width * scale, height * scale, 32, SDL_PIXELFORMAT_ARGB8888));
+    auto image = sdl2::surface_ptr(SDL_CreateRGBSurfaceWithFormat(0, width * scale, height * scale, 32, SDL_PIXELFORMAT_RGBA32));
     skirmishRequire(image != nullptr, "Cannot create Civilization Wars overview");
     auto paint = [&](int x, int y, int w, int h, Uint32 colour) {
         SDL_Rect r{x * scale, y * scale, w * scale, h * scale};
@@ -65,9 +65,20 @@ void runCivMenu() {
     network.save(output);
     IMemoryStream input(output.getData(), output.getDataLength());
     GameInitSettings guest(input);
+    auto wireRules = network.getGameOptions();
+    // Legacy setup streams never carried cityEffects; the verified mod is authoritative
+    // for city simulation on both peers (Game::initGame/loadSaveGame), not this GUI default.
+    wireRules.cityEffects = false;
     skirmishRequire(guest.getFiledata() == network.getFiledata() && guest.getModName() == "CivWars"
-                    && guest.isCivilizationWars() && guest.getGameOptions() == network.getGameOptions(),
+                    && guest.isCivilizationWars() && guest.getGameOptions() == wireRules
+                    && ModManager::instance().isCityModeActive() && input.getRemainingLength() == 0,
                     "Civilization Wars host rules/map did not survive the guest wire format");
+    OMemoryStream repeated;
+    repeated.open();
+    guest.save(repeated);
+    skirmishRequire(std::string(output.getData(), output.getDataLength())
+                    == std::string(repeated.getData(), repeated.getDataLength()),
+                    "Civilization Wars guest did not preserve the exact transmitted setup bytes");
     std::filesystem::remove(path);
 }
 
@@ -92,8 +103,9 @@ void runCivMatch(const std::string& name) {
     skirmishRequire(worms == params.wormsPerLane * 3, "Generated per-lane worms did not load");
     for(const auto& setup : result.houses) {
         const auto* house = game->getHouse(setup.house);
-        skirmishRequire(house && house->getTeamID() == setup.team && house->getCredits() == 0,
-                        "Civilization Wars house/team/zero-credit setup differs");
+        skirmishRequire(house && house->getTeamID() == setup.team && house->getCredits() == 0
+                        && house->getTechLevel() == 1,
+                        "Civilization Wars house/team/tech-1/zero-credit setup differs");
         skirmishRequire(house->getProducedPower() > house->getPowerRequirement(), "Starting turrets/lab/city are not powered");
         std::map<int, int> expected, actual;
         for(const auto& placement : result.structures) if(placement.house == setup.house) ++expected[placement.item];
@@ -123,10 +135,14 @@ void runCivMatch(const std::string& name) {
     while(sim->lastProcessedDay_ < 2 || sim->pendingGrowthPhase_) game->updateGameState();
     for(const auto& setup : result.houses) {
         const auto& city = sim->getHouseState(setup.house);
-        SDL_Log("SKIRMISH_PROBE: civ initial-income house=%d population=%d annual-tax=%d annual-upkeep=%d land-value=%d",
+        FixPoint fullUpkeep = 0;
+        for(const auto* structure : structureList)
+            if(structure->getOwner()->getHouseID() == setup.house)
+                fullUpkeep += DuneCity::getPoliceAnnualCost(structure->getItemID());
+        SDL_Log("SKIRMISH_PROBE: civ initial-income house=%d population=%d annual-tax=%d annual-upkeep=%d paid-upkeep=%d land-value=%d",
             setup.house, city.getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier,
-            city.budget.getLastTaxRevenue(), city.lastPoliceExpense, city.avgLandValue);
-        skirmishRequire(city.budget.getLastTaxRevenue() > city.lastPoliceExpense,
+            city.budget.getLastTaxRevenue(), fullUpkeep.lround(), city.lastPoliceExpense, city.avgLandValue);
+        skirmishRequire(fullUpkeep > 0 && FixPoint(city.budget.getLastTaxRevenue()) > fullUpkeep,
                         "Civilization Wars starting city does not cover turret and police upkeep");
     }
     SDL_Log("SKIRMISH_SMOKE_BEGIN: Civilization Wars %dv%d three game minutes", params.teamSize, params.teamSize);
