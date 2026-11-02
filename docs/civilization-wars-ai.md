@@ -126,6 +126,65 @@ or use a partial fixture as evidence for full-game strength.
 
 ## Experiment results
 
-No simulations have been run for this initiative yet. The playable generator and
-house-research implementation are being integrated; the first measured baseline
-will use those exact committed implementations.
+Evidence root: `~/Documents/projects/dunecity-results/civwars-ai/`. The matrix
+harness writes raw games, houses, samples, research, items, waves, performance
+and worm-ID CSVs before deleting each managed game profile. Actual matches use
+a 1024 MiB diagnostic capture ceiling; capped captures never claim exact worm
+losses or attack totals. `CIV_WARS_AI_PERF` is measured thread CPU around the
+real `QuantBot::update()` using a private probe subclass, not inferred from
+wall-time scopes. Concurrent cluster timing is labelled by host; quiet-host
+performance regressions remain a separate gate.
+
+### Integration observations before the gameplay baseline
+
+| Source / job | Parameters | Observed result |
+|---|---|---|
+| `348e4a28`, cluster `20261102T215902-civwars-ai-baseline-016899` | 45 games; all three team sizes; Medium/Hard/Brutal mirror pairs; five fixed seeds; Strategy off; size 0, worms 1/lane, spice 2; 30 min | Cancelled before gameplay: PC could not compile two ambiguous `INIFile(bool, "")` fixture calls; other machines were offline/guarded. This is not a strength result. |
+| `348e4a28`, local queue `20261102T222028-civwars-baseline-pilot-572d46` | Hard/Hard, 1v1, seed 7101, Strategy off; same map/rule parameters; 30 min | Private probe compiled, but initialization rejected disabled Research Lab. `CivWars::makeInit()` passed default Random Skirmish parameters that overwrote the required research rule. No cycles were played. |
+| `23aa35a9`, cluster `20261102T222453-civwars-ai-baseline-fixed-b63cef` | Same 45-game baseline, with generator fix `b849a943` and Research Lab fixture correction `dc3a27e0` | Submitted with the canonical tech-1/research-enabled initialization and unambiguous Windows fixture constructors. Gameplay results are reported below when available. |
+
+The one-game local queue fallback runs at `nice -n 10`, one game at a time, under
+the integrator's explicit authorization while the cluster is blocked. It never
+changes cluster guest guards. Native `build-civwars-ai` uses the staging Release
+options, shared ccache, and `nice -n 10 -j4`; its initial 709-step build completed
+in 48.69 seconds and the dependency-record check passed. The playable-mode
+incremental correction built in 5.27 seconds.
+
+### First playable control: seed 7101, Hard 1v1
+
+Local queue `20261102T222512-civwars-baseline-pilot-fixed-f56fcc`, source
+`23aa35a9` with documentation-only working changes, size 0 (129×96), one worm
+per lane, medium spice, Strategy off, 30-minute limit. Both houses survived:
+**time limit, no attacks, no far-rock arrivals, no island yards**. Telemetry was
+complete (15,269 records); three worm IDs accounted for **12 unit deaths**
+(7 Atreides, 5 Sardaukar).
+
+| House | First research start | Tech 2 complete | Final tech | Final credits | Harvesters / Refineries | Ground attacks |
+|---|---:|---:|---:|---:|---:|---:|
+| Atreides | 24.15 min | 24.99 min | 2 | 34,133 | 16 / 29 | 0 |
+| Sardaukar | 23.32 min | 24.15 min | 4 | 28,161 | 19 / 29 | 0 |
+
+Research was delayed despite banked income: the basic helper treats it as
+optional capital behind the map-share opening fleet, projected repeatable
+production, and any dangerous-crime property. The control expanded bays for
+most of the game instead of unlocking the army. This motivates the first
+candidate; it does not establish a strength improvement by itself.
+
+### Candidate 1 parameters
+
+* Worker target: at most **2 before tech 4**, **4 until the first ground wave**,
+  then **4 Medium / 6 Hard / 8 Brutal**, still bounded by sustainable spice and
+  the existing engine/config limits. Refineries retain the real included-worker
+  and unloading-throughput rules.
+* Research runs before optional producer orders. Its up-front payment keeps
+  **max(300, city working reserve)** after existing queue obligations. While
+  saving, other producers preserve the next payment plus that runway. Live
+  economy attacks, engaged aircraft, blackout recovery, missing income and
+  insufficient opening workers still prevent the purchase. A crime statistic
+  alone is not a permanent technology veto.
+* Tech 4 must become an actual Heavy Factory before tech 5 is researched.
+  Storage expansion can spend research savings to avoid a storage-cap deadlock.
+  Ordinary Research Lab matches retain their original optional-capital path.
+* Worm warning and midpoint-colonisation candidates reuse the existing safety
+  fields and MCV/escort planner; their measured parameters/results are recorded
+  with the combined candidate run.

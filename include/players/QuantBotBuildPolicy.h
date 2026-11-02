@@ -216,6 +216,15 @@ inline bool canFundTechInvestment(const TechInvestment& state) {
         && state.projectedCash - state.orderedCost - state.cost >= state.reserve;
 }
 
+// A tech-1 lane start cannot field factory workers yet. Two Refinery gifts
+// fund research; growing the whole map-share fleet first delays technology
+// behind dozens of bays. Expand again after heavy production and the first wave.
+inline int civWarsWorkerTarget(int sustainable, int tech, bool firstWave, int difficulty) {
+    const int target = tech < 4 ? 2 : !firstWave ? 4
+        : difficulty == 3 ? 8 : difficulty == 2 ? 6 : 4;
+    return std::clamp(sustainable, 0, target);
+}
+
 // Keep city construction first; then fund air before ground factories can
 // repeatedly consume its allocation. Light factories still precede heavy ones.
 inline int productionPlanningPriority(bool city, Uint32 item, bool waitingToPlace, bool firstTransport = false) {

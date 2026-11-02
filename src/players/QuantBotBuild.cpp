@@ -103,6 +103,7 @@ void QuantBot::build(int militaryValue) {
     planDefenceCoverage(pass);
     planCapitalCandidates(pass);
     chooseCapitalPlan(pass);
+    planCivWarsResearch(pass);
 
     phaseScope.next("ai.build.orders");
     planBuildOrder(pass);
@@ -119,7 +120,7 @@ void QuantBot::build(int militaryValue) {
             if (pStructure->isABuilder()) buildProducer(pass, pStructure);
         }
     }
-    startTechResearch(pass);
+    if (!civWarsRules()) startTechResearch(pass);
 
     traceCapitalOutcome(pass);
     // MULTIPLAYER FIX: Use deterministic timer instead of random
@@ -131,20 +132,25 @@ bool QuantBot::researchLabPolicyActive() const {
         && botConfig().force.researchLab && !switchedOff() && !fighterOnly();
 }
 
-bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
+bool QuantBot::techInvestmentReady(BuildPass& pass) {
     if (!researchLabPolicyActive()) return false;
-    QuantBotBuildPolicy::TechInvestment investment;
-    investment.enabled = true;
     const bool spiceIncome = pass.spiceEconomyViable && getAIRefineryBays() > 0
         && pass.actualHarvesters >= std::max(1,std::min(2,pass.mapSpiceHarvesterTarget));
     const bool taxIncome = pass.citySimEnabled && getHouse()->getCapacity() > 0
         && pass.forecastTax > pass.forecastUpkeep;
-    investment.economyReady = (spiceIncome || taxIncome) && pass.forecastNetIncome > 0
-        && !cityBootstrapNeeded(pass) && !openingFleetIncomplete(pass);
-    investment.powerReady = getHouse()->hasPower()
+    return (spiceIncome || taxIncome) && pass.forecastNetIncome > 0
+        && !cityBootstrapNeeded(pass) && !openingFleetIncomplete(pass)
+        && getHouse()->hasPower()
         && (!(pass.citySimEnabled || pass.powerRules)
-            || getHouse()->getProducedPower() >= getHouse()->getPowerRequirement());
-    investment.emergency = pass.defendingEconomy || pass.airEngaged || pass.dangerousCrimeProperties > 0;
+            || getHouse()->getProducedPower() >= getHouse()->getPowerRequirement())
+        && !pass.defendingEconomy && !pass.airEngaged
+        && (civWarsRules() || pass.dangerousCrimeProperties <= 0);
+}
+
+bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
+    if (!techInvestmentReady(pass)) return false;
+    QuantBotBuildPolicy::TechInvestment investment;
+    investment.enabled = investment.economyReady = investment.powerReady = true;
     investment.cash = std::min(pass.money,getHouse()->getCredits());
     investment.cost = cost;
     investment.projectedCash = pass.cashFlow.projectedCash;
@@ -154,7 +160,24 @@ bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
     investment.reserve = int64_t(std::max({1000,pass.cashBuffer,pass.economyReserve,pass.cityWorkingReserve}))
         + std::max({pass.strategicReserveCost,pass.civicReserveCost,cityBootstrapReserve(pass),
             harvesterInvestmentReserve(pass),capitalReserve(pass,NONE_ID)});
+    if (civWarsRules()) {
+        // Existing queues are funded above. Unordered repeatable military/city
+        // capacity is not a debt that may keep required technology locked.
+        investment.projectedCash = investment.cash;
+        investment.orderedCost = 0;
+        investment.reserve = std::max(300,pass.cityWorkingReserve);
+    }
     return QuantBotBuildPolicy::canFundTechInvestment(investment);
+}
+
+void QuantBot::planCivWarsResearch(BuildPass& pass) {
+    if (!civWarsRules() || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9
+        || getHouse()->getNumItems(Structure_ResearchLab) == 0 || !techInvestmentReady(pass)) return;
+    // Tech 4 must become real production before another research payment.
+    if (getHouse()->getTechLevel() >= 4 && getHouse()->getNumItems(Structure_HeavyFactory) == 0) return;
+    startTechResearch(pass);
+    if (!getHouse()->isTechResearchActive())
+        pass.civWarsResearchReserve = getHouse()->getTechResearchCost() + std::max(300,pass.cityWorkingReserve);
 }
 
 void QuantBot::startTechResearch(BuildPass& pass) {
@@ -359,6 +382,10 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
         if (getHouse(h) && !getHouse(h)->isNatives() && getHouse(h)->getNumStructures() > 0) ++pass.spiceCompetitors;
     pass.citySpiceWorkerTarget = QuantBotBuildPolicy::desiredSpiceHarvesters(
         lastCalculatedSpice, pass.spiceCompetitors, harvesterLimit);
+    if (civWarsRules())
+        pass.citySpiceWorkerTarget = QuantBotBuildPolicy::civWarsWorkerTarget(
+            pass.citySpiceWorkerTarget, getHouse()->getTechLevel(), customWave.launched != 0,
+            static_cast<int>(difficulty));
     // Space is reserved on the same terms as cash. A house whose field supports
     // no worker and which has no tax base yet cannot pay for either footprint,
     // and on a cramped slot the two reserved areas plus their access margin are

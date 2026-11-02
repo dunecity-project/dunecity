@@ -117,6 +117,7 @@ struct QuantBot::BuildPass {
     bool campaignEconomyPush{};
     int clearanceCommitmentShortfall{};
     int economyReserve{};
+    int civWarsResearchReserve{};
 
     // planCityState()
     int ownResPop{};

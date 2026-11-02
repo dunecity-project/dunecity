@@ -673,6 +673,7 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
         protectedCash = std::max(protectedCash,cityBootstrapReserve(pass));
     // Saving for optional capital must not stop the yard from
     // relieving the storage ceiling that prevents further saving.
+    protectedCash = std::max(protectedCash,pass.civWarsResearchReserve);
     if (turn.pBuilder->getItemID()==Structure_ConstructionYard && storageExpansionNeeded(pass)
         && campaignAvailableToBuild(turn.pBuilder,Structure_Silo)) protectedCash=0;
     turn.reserve.reserved = pass.money - QuantBotBuildPolicy::spendableCredits(pass.money,protectedCash);

@@ -112,6 +112,23 @@ TEST_CASE("Research never replaces income bootstrap power recovery or the off po
     REQUIRE_FALSE(canFundTechInvestment(state));
 }
 
+TEST_CASE("Civ Wars funds a small tech-opening fleet before difficulty-scaled expansion",
+          "[quantbot][civ-wars][production]") {
+    for (int difficulty : {1, 2, 3}) {
+        REQUIRE(civWarsWorkerTarget(40, 1, false, difficulty) == 2);
+        REQUIRE(civWarsWorkerTarget(40, 3, false, difficulty) == 2);
+        REQUIRE(civWarsWorkerTarget(40, 4, false, difficulty) == 4);
+        REQUIRE(civWarsWorkerTarget(40, 9, false, difficulty) == 4);
+        REQUIRE(civWarsWorkerTarget(1, 1, false, difficulty) == 1);
+        REQUIRE(civWarsWorkerTarget(0, 9, true, difficulty) == 0);
+        REQUIRE(civWarsWorkerTarget(-1, 9, true, difficulty) == 0);
+    }
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 1) == 4);
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 2) == 6);
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 3) == 8);
+    REQUIRE(civWarsWorkerTarget(3, 5, true, 3) == 3);
+}
+
 TEST_CASE("QuantBot repairs an over-residential economy even at saturated demand", "[quantbot][city]") {
     const auto zones = rankZones(60, 4, 9, 2000, 1500, 1500, false);
     REQUIRE(zones[0] == Structure_ZoneCommercial);

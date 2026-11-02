@@ -1708,9 +1708,12 @@ private:
     void traceCapitalOutcome(BuildPass& pass);
     /// Match option and hashed policy switch; never consumes RNG or adds saved AI state.
     bool researchLabPolicyActive() const;
+    bool techInvestmentReady(BuildPass& pass);
+    /// Research is required progression in Civ Wars; reserve it before repeatable orders.
+    void planCivWarsResearch(BuildPass& pass);
     /// Preserve working capital, protected purchases and existing production runway.
     bool canFundTechInvestment(BuildPass& pass, int cost);
-    /// Runs after ordinary producers have charged the shared spending budget.
+    /// Ordinary matches run this after producers; Civ Wars runs its paced plan first.
     void startTechResearch(BuildPass& pass);
     // Planning helpers shared by the producers and yards (QuantBotBuild.cpp).
     bool openingFleetIncomplete(BuildPass& pass);
