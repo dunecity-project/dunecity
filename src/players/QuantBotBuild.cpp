@@ -2601,8 +2601,16 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 CapitalCandidate supplier;
                 supplier.builder=builder->getObjectID();supplier.item=Structure_StarPort;
                 supplier.kind="city_supply";supplier.reason="first_starport_supply";supplier.score=5500;
+                // Once a real battery stands, fund its mobile reinforcement
+                // source once; replacing outlying covers must not own all cash.
+                if (pass.groundThreatAsset.isValid()
+                    && getHouse()->getNumItems(Structure_RocketTurret)>=RocketTurretPolicy::threatTurretTotalCap/2
+                    && campaignAvailableToBuild(builder,Structure_RocketTurret)
+                    && getHouse()->getProducedPower()-getHouse()->getPowerRequirement()
+                        >=std::max(0,data[supplier.item][houseID].power)+24)
+                    supplier.score=7000;
                 supplier.price=data[supplier.item][houseID].price;supplier.cost=buildingCapitalCost(pass,supplier.item);
-                supplier.site=findPlaceLocation(supplier.item);
+                supplier.site=findCoveredDefencePlaceLocation(supplier.item,builder->getLocation());
                 if (supplier.site.isValid()) pass.capitalCandidates.push_back(supplier);
             }
             // Services must be allowed to save their price, not wait for money

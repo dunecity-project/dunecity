@@ -178,6 +178,24 @@ void runThreatTurretProbe(Game& game) {
             && !bot->builderPlaceLocations[yard->getObjectID()].empty()
             && bot->builderPlaceLocations[yard->getObjectID()].back()==prerequisite.site,
             "Final yard vetting discarded the protected prerequisite's selected site");
+        clear();
+        put(Structure_RocketTurret,10,22);put(Structure_RocketTurret,13,22);
+        put(Structure_RocketTurret,16,22);put(Structure_RocketTurret,19,22);
+        for (const Coord at:{Coord(3,20),Coord(3,23),Coord(3,26),Coord(23,23),Coord(26,23),Coord(26,26)}) {
+            if (house->getProducedPower()-house->getPowerRequirement()
+                >=std::max(0,game.objectData.data[Structure_StarPort][house->getHouseID()].power)+24) break;
+            put(Structure_WindTrap,at.x,at.y);
+        }
+        yard->updateBuildList();
+        auto established=supply(true,1000);
+        config->force.threatTurrets=true;
+        established.itemCount[Structure_RocketTurret]=house->getNumItems(Structure_RocketTurret);
+        bot->planDefenceCoverage(established);
+        established.capitalCandidates.clear();bot->planCapitalCandidates(established);bot->chooseCapitalPlan(established);
+        require(established.groundThreatAsset.isValid()
+            && established.capitalChoice>=0
+            && established.capitalCandidates[established.capitalChoice].kind==std::string("city_supply"),
+            "An established battery's remaining covers starved its first mobile supplier");
         SDL_Log("THREAT_TURRET_PASS: observed=8 goal=%d local=%d site=%d,%d hidden=ignored cap=12 starport=saved_and_queued",
             on.groundTurretGoal,on.groundTurretCover,site.x,site.y);
         clear();

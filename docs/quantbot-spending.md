@@ -107,8 +107,10 @@ nearby observed fighters, rounded up, demands 2–8 local firing covers, with a
 An active core raid protects the next turret or power/tech prerequisite ahead of
 repeat plots and unit spending, without waiting for two refineries and a
 completed production core. This finite goal and the house-wide cap bound the
-claim; the first useful Starport then owns its one-off funding. Prematurely
-yielding the budget after only two new guns loses both the supplier and the base.
+claim. After six real rockets stand with working tech and spare supplier power,
+the first Starport owns its one-off funding even while outlying cover is short.
+That prevents endless replacements starving mobile reinforcement; giving way
+after only two new guns instead lost both supplier and base in the save.
 An import's high return score cannot replace either bounded claim with cheap
 zoning through the military/growth interleave while its price is accumulating.
 The peaceful 8–12 battery and growth interleave stay unchanged. Site search is
@@ -116,7 +118,7 @@ bounded to the threatened asset's weapon-range window, first minimizes observed
 return fire while retaining a hostile target in range, then favours firing cover.
 It preserves spacing, roads and ground access. Once the local goal is met or
 contacts disappear, the claim ends.
-Ground-defence generation and tech rebuilds prefer legal sites inside the standing
+Generation, tech rebuilds and the first supplier prefer legal sites inside the standing
 rocket battery, minimizing observed return fire; a Radar rebuilt outside it can
 otherwise die again before its first replacement rocket finishes.
 Switches off preserve the old paths. No save-format or city-tax-rule change.
