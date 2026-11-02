@@ -74,6 +74,18 @@ power, cumulative building/loss counts, city tax and nearby enemy values accompa
 Use AI decision telemetry in a targeted `run-campaign-balance.py` rerun for a flagged seed to establish
 why a spending/ordering rule fired. The matrix disables full decision telemetry to keep capture bounded.
 
+The separate mandatory no-spice-income gate retains both tax>100 and four completed
+R/I-lot assertions for surviving construction/recovery-capable houses (CY, MCV,
+HeavyFactory or Starport), and requires at least one such survivor. The original
+passing pre-sizing source2ccb2894 (CityGrowthPower93d96ea3 plus fixture corrections)
+and integrated271 have **identical** Harkonnen early completions1825/3825/4825/5825/
+6825 and losses10478/11230/13682/15020: the yard falls at13682, after onlyR2/I1.
+Both bank117 tax and spend1619. The old game later eliminated the residual lots at
+54363/54967 and exempted that house; the new capture keeps its zones/harvester alive
+without a yard. Treating that residual survival as a capable economic opening was
+a test-precondition error, not evidence to change the refinery-first policy.
+Original passing/failing streams are retained in the audit's regression evidence.
+
 ## Comparison rules
 
 Same game/house ids are paired. Reports include each detector's rate, placement score/wins by
