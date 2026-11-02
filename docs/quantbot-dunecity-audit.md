@@ -21,12 +21,20 @@ python3 tests/ai/dunecity-audit.py --report /path/to/audit/baseline
 python3 tests/ai/dunecity-audit.py --compare /path/to/audit/control /path/to/audit/candidate
 ```
 
-For direct adjacent-difficulty matches use `--mode ladder --formats 1v1 --sizes 128 160
---minutes 90`. Each seed is played with both house assignments. The stronger controller remains
-team 1. A 30-minute mirror-game draw is not evidence that the difficulty ladder holds or fails.
-Use a separate results directory for every config arm; `--style dunecity-audit-control` disables CityPowerSizing/ThreatTurrets/CityStarportSupply while retaining
-CityGrowthPower; a run without a style uses the candidate defaults. These are the existing
-per-bot test overrides of the normal hashed switches. `--game-options FILE` is only for game rules. Source identity and machine receipts are in the queue job.
+For direct adjacent-difficulty matches use
+`--mode ladder --formats 1v1 --sizes 128 160 --minutes 90`. Each seed is played with
+both house assignments; the stronger controller remains team 1. A 30-minute mirror-game
+draw is not evidence that the difficulty ladder holds or fails.
+Use a separate results directory for every config arm:
+
+- `--style dunecity-audit-control` disables CityPowerSizing/ThreatTurrets/CityStarportSupply
+  while retaining CityGrowthPower (the combined diagnostic baseline).
+- `--style dunecity-audit-power-off` disables **only CityPowerSizing**, retaining the other
+  completed fixes. Compare this against no style to isolate the power fix in one native build.
+- `--game-options FILE` changes game rules, not QuantBot policy switches.
+
+Styles use the existing per-bot test overrides of normal hashed switches. Source identity
+and machine receipts are in the queue job.
 
 Every complete run writes `games.csv`, `houses.csv` and per-minute `samples.csv`; the game row is
 written last. Resume skips only complete game ids. Failure logs and failed leased scratch survive
@@ -99,20 +107,79 @@ comparison in the common final choice, with at least 1,000 credits (or the large
 city/seed reserve) protected when judging nuclear affordability. It uses the already
 cached 2×2 footprint survey; reaching its roomy cap is not misread as an exact limit of
 four generator sites. No new placement search, allocation or saved AI state is added.
-Useful large loads, genuinely cramped sites, prosperous cities, affordable blackout
-recovery and already funded installment reactors retain their nuclear paths. Vanilla
-selection is untouched. Switch OFF reproduces the prior choice for same-build A/B;
+New proactive reactor plans must also justify useful capacity before asking for installment
+funding; positive income alone does not justify a 2,000-power project for a one-windtrap gap.
+The demanded-growth candidate applies the same choice **before** quoting/reserving capital,
+so a selected Windtrap holds its own price plus foundation, not the reactor's budget.
+Existing queued/in-flight reactors are untouched. Useful large loads, genuinely cramped
+sites, prosperous cities, affordable blackout recovery and justified funded installment
+projects retain nuclear. Vanilla selection is untouched. Switch OFF reproduces the prior choice for same-build A/B;
 it is loaded, saved and included in the normal config hash. Shared unreleased protocol
 111 already covers deterministic AI changes in this release batch.
 
 The no-spice engine fixture exercises the real final yard vetter with legal live sites:
 off reproduces the oversized first reactor; on selects wind for the 40-power top-up,
 and preserves rich-city, seven-windtrap-cost, blackout, funded-installment and vanilla
-choices. The config test covers default/override/save/reload/hash. These fixture cases
-are separate from the unmodified ordinary-game evidence above.
+choices. Additional checks reject an oversized new installment plan and assert that
+`capitalCandidates[capitalChoice]` and `capitalReserve` contain the selected Windtrap's
+full capital cost, not just that the final queue happens to contain wind. The config test
+covers default/override/save/reload/hash. Fixtures are separate from the ordinary-game evidence.
 
 Evidence: `outputs/dunecity-audit-20261103/power-sizing-evidence/` contains the full
 compressed decision stream, original setup/summary/run log and selected event extract.
 The diagnostic matrix receipt is
 `20261103T020642-dunecity-audit-diagnostic-control-320e2b`; raw minute/house/game tables
 are under `outputs/dunecity-audit-20261103/diagnostic-control/`.
+
+## Completed diagnostic matrix
+
+Source `9db1c94e15e6`, both seeds, all 81 cells: **162/162 games, 540 house histories**.
+Mac mini ran 85 games; Windows PC ran 77. Pro was unavailable and Air on battery.
+There were 144 time limits and 18 decided games; mean duration 29.63 game minutes.
+This is the diagnostic pre-sizing/pre-turret/pre-supplier baseline, not a completed
+same-build effect estimate for the final combined release.
+
+Rates below are affected houses / exposed houses. Columns use the detector definitions above.
+
+| Difficulty | Spice | Economy stall | Power deficit | No ground cover | No Starport | No Radar | No Heavy | No IX | Idle defence | Hoarding | Bankrupt/empty | Early/no fight | No harvester |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Medium | None | 25/60 | 0/60 | 2/33 | 56/60 | 0/60 | 0/60 | 60/60 | 0/15 | 0/60 | 46/60 | 0/60 | 0/0 |
+| Medium | Low | 0/60 | 1/60 | 6/47 | 7/60 | 0/60 | 0/60 | 39/60 | 0/35 | 0/60 | 2/60 | 0/60 | 0/60 |
+| Medium | Medium | 0/60 | 0/60 | 4/56 | 5/60 | 0/60 | 0/60 | 30/60 | 0/46 | 0/60 | 0/60 | 0/60 | 0/60 |
+| Hard | None | 14/52 | 0/52 | 4/38 | 40/47 | 0/47 | 0/47 | 47/47 | 0/29 | 0/48 | 45/60 | 0/60 | 0/0 |
+| Hard | Low | 1/60 | 0/60 | 8/53 | 12/60 | 0/60 | 0/60 | 41/60 | 0/38 | 0/60 | 4/60 | 0/60 | 0/60 |
+| Hard | Medium | 0/60 | 0/60 | 8/57 | 3/60 | 0/60 | 0/60 | 32/60 | 0/49 | 0/60 | 0/60 | 0/60 | 0/60 |
+| Brutal | None | 14/52 | 0/52 | 4/38 | 40/47 | 0/47 | 0/47 | 47/47 | 0/29 | 0/48 | 45/60 | 0/60 | 0/0 |
+| Brutal | Low | 2/59 | 0/59 | 3/45 | 9/50 | 0/50 | 0/50 | 28/50 | 0/28 | 0/57 | 6/60 | 0/60 | 0/59 |
+| Brutal | Medium | 3/59 | 0/59 | 4/53 | 8/57 | 0/57 | 0/57 | 24/57 | 0/42 | 0/58 | 4/60 | 0/60 | 0/58 |
+| All | All | 59/522 | 1/522 | 43/420 | 180/501 | 0/501 | 0/501 | 348/501 | 0/311 | 0/511 | 152/540 | 0/540 | 0/357 |
+
+**Interpretation:** 53 of 59 economy flags are zero-spice houses. Most match the oversized
+early-capital pattern above. The few spice-map flags include legitimate harvester-fleet
+ramp-up (e.g. Brutal 128/Low/1v1, seed9101, 4→11 harvesters while population stays340)
+and combat collapse; these are not all 59 confirmed bugs. The single persistent power
+flag is Medium 128/Low/2v2, seed9101, Atreides: 108 structures already lost at minute24,
+all generation lost at25, 135 structures lost at26. It is not another peaceful growth-power
+deadlock. No blanket repair/harvester/idle-army policy change was made from these signals.
+
+Examples: the 96/None/1v1/Medium seed9101 economy stall starts at minutes10/9
+(Harkonnen/Atreides); Medium 96/None/2v2 seed148680876 Harkonnen has no local turret
+cover at25; Hard 96/None/FFA seed9101 Atreides has the same cover flag at14.
+Starport/IX delays overlap the supplier/ground-cover work owned by RocketTurrets, rather
+than warranting a second competing spending patch. `diagnostic-summary.json` preserves
+every detector's grouped numerator/denominator and example game ids.
+
+## Verification boundary
+
+The completed diagnostic matrix and separate ordinary-game generator telemetry are measured.
+Detector invariant checks cover persistence/reset, duplicate final samples, spice exclusion,
+built-tech history and local rather than house-wide turret coverage. The combined native
+build at `5d4d7c72` and the original seven-case sizing fixture passed
+(`quantbot_custom_attack` 6.64 s; `quantbot_no_spice_city` 27.56 s).
+
+The final planner/candidate-reservation cutover requires its own final-source fixture result.
+Final same-build on/off detector and win-rate tables, 90-minute adjacent-difficulty ladder,
+all mandatory AI regressions and performance/FPS gates are **not yet established** by this
+diagnostic matrix. The exact isolated control is `dunecity-audit-power-off`; do not
+present the 30-minute mirror time limits as ladder or performance evidence.
+

@@ -826,6 +826,21 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
         && QuantBotBuildPolicy::planNuclearInvestment(getHouse()->getPowerRequirement(),
             getHouse()->getProducedPower(),pass.cityPowerReserve,std::max(1,-data[Structure_WindTrap][houseID].power))
         && pass.nuclearBuildAvailable && findPlaceLocation(Structure_NuclearPlant).isValid();
+    if (pass.nuclearPlan && botConfig().force.cityPowerSizing) {
+        // Positive income can finance installments, but it cannot justify
+        // occupying the only yard with 2,000 power for a one-windtrap top-up.
+        const int windOutput=std::max(1,-data[Structure_WindTrap][houseID].power);
+        const int need=std::max(0,getHouse()->getPowerRequirement()+pass.cityPowerReserve
+            -getHouse()->getProducedPower());
+        const int windNeeded=(need+windOutput-1)/windOutput;
+        const int sites=availableBaseFootprints>=QuantBotColonisationPolicy::kCrampedFootprints
+            ? std::max(availableBaseFootprints,windNeeded) : availableBaseFootprints;
+        const int reserve=std::max(1000,pass.cityWorkingReserve);
+        // Funding is judged by installmentOrder later; test useful capacity here.
+        pass.nuclearPlan=QuantBotBuildPolicy::preferNuclearPower(need,windOutput,
+            data[Structure_WindTrap][houseID].price,data[Structure_NuclearPlant][houseID].price,
+            sites,std::max(pass.money,data[Structure_NuclearPlant][houseID].price+reserve),reserve);
+    }
     pass.cityYardTarget = pass.citySimEnabled ? QuantBotBuildPolicy::cityConstructionYardTarget(
         pass.money, pass.ownResValve, pass.ownComValve, pass.ownIndValve) : 0;
     // While new rock exists, production yards stop at the home formation's
@@ -2502,9 +2517,21 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                         if (!campaignAvailableToBuild(builder,item)) continue;
                         const Coord at=findPlaceLocation(item);
                         if (!at.isValid()) continue;
-                        // Keep the ordinary city preference: cheap wind while
-                        // saving, a reactor once its complete price is funded.
-                        if (generator!=NONE_ID && pass.money<buildingCapitalCost(pass,item)) continue;
+                        if (generator!=NONE_ID) {
+                            if (pass.money<buildingCapitalCost(pass,item)) continue;
+                            if (botConfig().force.cityPowerSizing) {
+                                const int windOutput=std::max(1,-data[Structure_WindTrap][houseID].power);
+                                const int need=std::max(1,getHouse()->getPowerRequirement()+pass.cityPowerReserve
+                                    -getHouse()->getProducedPower());
+                                const int windNeeded=(need+windOutput-1)/windOutput;
+                                const int sites=availableBaseFootprints>=QuantBotColonisationPolicy::kCrampedFootprints
+                                    ? std::max(availableBaseFootprints,windNeeded) : std::max(1,availableBaseFootprints);
+                                if (!QuantBotBuildPolicy::preferNuclearPower(need,windOutput,
+                                        data[Structure_WindTrap][houseID].price,data[Structure_NuclearPlant][houseID].price,
+                                        sites,pass.money,std::max({1000,pass.cityWorkingReserve,cityBootstrapReserve(pass)}),
+                                        !getHouse()->hasPower())) continue;
+                            }
+                        }
                         generator=item;site=at;
                     }
                     if (generator!=NONE_ID) {

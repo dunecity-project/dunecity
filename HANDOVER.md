@@ -7,6 +7,12 @@
   local powered turret cover, tech, idle defence, empty-queue poverty, hoarding,
   early no-fight defeats and missing harvesters. Adjacent-ladder and paired reports
   reuse the existing generator, runner, scoring and cluster/scratch contracts.
+- Diagnostic baseline completed 162/162: Mac mini85, Windows PC77; 540 houses,
+  144 time limits, mean29.63 game minutes. Economy flags59/522 exposed (53 on
+  zero-spice), missing local turret cover43/420, missing Starport180/501,
+  missing IX348/501, bankrupt/empty152/540. No idle-under-attack/hoarding/early-no-fight/
+  missing-harvester hits; the single sustained power case followed a base overrun.
+  Full difficulty×spice table and example seeds are in the audit doc.
 - First ordinary-game evidence exposed a distinct spending failure: seed9101,
   96/None/1v1/Medium, Harkonnen cycle25 needs40 reserve power, has2993 credits and
   a legal Windtrap site, but final vetting orders a2000-credit reactor. By minute1
@@ -15,14 +21,19 @@
   minute-one zero-spice samples showed the oversized first reactor.
 - `[Force Concentration] CityPowerSizing` (hashed/default ON) restores the existing
   cost/load/space/working-cash comparison in the common final city-generator
-  choice. Small top-ups keep cheap wind; rich/useful-load/cramped/affordable-blackout
-  choices and funded installment reactors retain nuclear. Uses cached footprint
-  capacity, with no new allocation/search or save fields. Vanilla is unchanged;
+  choice, planned-reactor admission and demanded-growth candidate quote. Small
+  top-ups keep cheap wind and reserve its full foundation capital, not Nuclear's;
+  rich/useful-load/cramped/affordable-blackout choices and justified installment
+  projects retain nuclear. Existing queued reactors remain untouched. Uses cached
+  footprint capacity, with no new allocation/search or save fields. Vanilla is unchanged;
   OFF reproduces the former choice. The unreleased protocol111 already covers it.
-- Added default/load/save/hash coverage and seven real final-yard-vetting fixture
-  cases. Detector invariant checks and the targeted ordinary-game telemetry
-  capture were exercised. Detector definitions, source/queue receipts and the
-  diagnosed capital-spending trace are in `docs/quantbot-dunecity-audit.md`.
+- Added default/load/save/hash coverage and seven real final-yard-vetting cases;
+  these passed in combined5d4d7c72. Added planner/selected-candidate/full-reservation
+  checks for the final callsite alignment. Detector invariants and ordinary-game
+  telemetry were exercised. Final same-build matrix A/B, long ladder, mandatory
+  regression/perf receipts must not be inferred from the diagnostic baseline.
+  `dunecity-audit-control` disables all3 new fixes; `dunecity-audit-power-off`
+  isolates this one. Definitions, receipts and traces: `docs/quantbot-dunecity-audit.md`.
   Evidence: `/Users/stefan/Documents/projects/outputs/dunecity-audit-20261103/`.
 
 ## 2026-11-03 — Quad-rush rocket cover and first city Starport (OMP RocketTurrets, unreleased)

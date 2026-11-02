@@ -1,6 +1,7 @@
 #include <structures/ZoneStructure.h>
 #include <players/CityEconomyInvestmentPolicy.h>
 #include <players/QuantBotBuildPass.h>
+#include <string_view>
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 
@@ -321,6 +322,8 @@ void runNoSpiceCityProbe(Game& game) {
         const auto savedConfig=bot->configOverride;
         const int savedProduced=house->producedPower, savedRequired=house->powerRequirement;
         const int savedFootprints=bot->availableBaseFootprints;
+        const auto savedStructures=structureList;
+        const int savedGrowth=bot->projectedPowerDemandGrowth;
         auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
         bot->configOverride=config;bot->availableBaseFootprints=4;
         bot->clearPlacementCache();
@@ -342,6 +345,34 @@ void runNoSpiceCityProbe(Game& game) {
             bot->vetYardChoice(pass,turn,selected);
             return selected.itemID;
         };
+        auto clearOrders=[&]() {
+            for(auto* structure:structureList)if(structure->getOwner()==house && structure->isABuilder()) {
+                auto* builder=static_cast<BuilderBase*>(structure);
+                while(builder->getProductionQueueSize())builder->doCancelItem(builder->getCurrentProducedItem());
+                builder->upgrading=false;
+            }
+            bot->builderPlaceLocations.clear();bot->reservedStructures.clear();bot->clearPlacementCache();
+        };
+        auto growthQuote=[&](bool enabled) {
+            clearOrders();config->force.cityPowerSizing=enabled;config->force.cityGrowthPower=true;
+            house->storedCredits=0;house->cityCredits=0;house->startingCredits=2993;
+            house->powerRequirement=240;house->producedPower=250;
+            QuantBot::BuildPass pass(0);
+            bot->resetBuildPass();bot->planBuildInventory(pass);bot->planBuildBudget(pass);
+            bot->planCityState(pass);bot->planStrategicReserve(pass);bot->planSpiceEconomy(pass);
+            bot->planPowerAndYards(pass);bot->planCityPopulation(pass);bot->planCivicNeedAndTrips(pass);
+            bot->planUnitMix(pass);bot->planCapitalForecast(pass);bot->planCityBootstrap(pass);
+            bot->planOpeningProduction(pass);bot->planDefenceCoverage(pass);
+            pass.capitalBuilders.clear();pass.capitalBuilders.push_back(yard);
+            bot->planCapitalCandidates(pass);bot->chooseCapitalPlan(pass);
+            require(pass.capitalChoice>=0,"Growth-power quote did not select a capital project");
+            const auto selected=pass.capitalCandidates[pass.capitalChoice];
+            require(std::string_view(selected.kind)=="city_growth_power",
+                "Growth-power quote fixture selected another capital project");
+            require(bot->capitalReserve(pass,NONE_ID)==selected.cost,
+                "Growth-power reservation does not match the selected generator's full capital");
+            return selected;
+        };
         try {
             require(choice(false,3000,300,240,100)==Structure_NuclearPlant,
                 "Generator-sizing negative control no longer reproduces the oversized reactor");
@@ -357,12 +388,43 @@ void runNoSpiceCityProbe(Game& game) {
                 "An already funded installment reactor was changed into another project");
             require(choice(true,3000,300,240,100,false,false)==Structure_WindTrap,
                 "City generator sizing changed the vanilla choice");
+            clearOrders();
+            // Isolate capacity planning from the fixture's deliberately
+            // overprovisioned latent zones, retaining real generator sites.
+            for(auto* structure:savedStructures)
+                if(structure->getOwner()==house && DuneCity::isCityZoneStructure(structure->getItemID()))
+                    structureList.remove(structure);
+            bot->projectedPowerDemandGrowth=0;
+            auto planned=[&](bool enabled) {
+                config->force.cityPowerSizing=enabled;
+                house->powerRequirement=330;house->producedPower=400;
+                QuantBot::BuildPass pass(0);
+                pass.citySimEnabled=true;pass.cityWorkingReserve=450;pass.nuclearBuildAvailable=true;
+                pass.itemCount[Structure_HeavyFactory]=1;
+                pass.itemCount[Structure_WindTrap]=house->getNumItems(Structure_WindTrap);
+                pass.itemCount[Structure_NuclearPlant]=house->getNumItems(Structure_NuclearPlant);
+                bot->planPowerAndYards(pass);
+                return pass.nuclearPlan;
+            };
+            require(planned(false),"Planned-reactor negative control no longer requests excess capacity");
+            require(!planned(true),"One-windtrap reserve entered the yard as an oversized installment reactor");
+            structureList=savedStructures;bot->projectedPowerDemandGrowth=savedGrowth;
+            const auto oldQuote=growthQuote(false);
+            const auto sizedQuote=growthQuote(true);
+            require(oldQuote.item==Structure_NuclearPlant,
+                "Growth-power quote negative control no longer reserves a reactor");
+            QuantBot::BuildPass quotePrice(0);
+            require(sizedQuote.item==Structure_WindTrap
+                && sizedQuote.cost==bot->buildingCapitalCost(quotePrice,Structure_WindTrap),
+                "Sized growth power retained the reactor's item or foundation budget");
             SDL_Log("CITY_POWER_SIZING_PASS: small reserves use wind; rich/load/blackout/installment choices retain nuclear");
         } catch (...) {
             bot->configOverride=savedConfig;bot->availableBaseFootprints=savedFootprints;
+            structureList=savedStructures;bot->projectedPowerDemandGrowth=savedGrowth;
             house->producedPower=savedProduced;house->powerRequirement=savedRequired;throw;
         }
         bot->configOverride=savedConfig;bot->availableBaseFootprints=savedFootprints;
+        structureList=savedStructures;bot->projectedPowerDemandGrowth=savedGrowth;
         house->producedPower=savedProduced;house->powerRequirement=savedRequired;
     }
 
