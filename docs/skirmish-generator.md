@@ -68,6 +68,11 @@ Mod, house, AI and AI partner stay drop-downs.
     Deviation: the engine has no existing credit presets, so this list is new. The default of 3,000
     is `DEFAULT_STARTINGCREDITS`.
   - Tech level 1–9, default 9 (everything unlocked), written to `[BASIC] TechLevel`.
+  - **Research Lab**, shown only below tech 9: enable buildable labs and independent per-house
+    research from the selected starting level to 9. Off by default; remembered as
+    `[Random Skirmish] Research Lab`. No free lab is added to a Random Skirmish start. The hosted
+    Random Map screen passes the same choice to Game Rules in its parent lobby. See
+    [Research Lab](research-lab.md) for prices, duration, AI policy and save compatibility.
   - The saved map's `[BASIC] Mod` is `dunecity` for a city mod, otherwise the chosen mod's content
     category (`tornie` or `vanilla`).
   - "Game rules..." (bottom row) opens the same Game Rules window as Custom Game (game speed,

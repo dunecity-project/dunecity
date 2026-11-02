@@ -140,8 +140,8 @@ struct QuantBotConfig {
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
-    /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch; optional keys, the code defaults
-    /// apply when absent. Hashed for multiplayer.
+    /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab; optional keys,
+    /// the code defaults apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -244,6 +244,10 @@ struct QuantBotConfig {
         /// city while that one is bigger. Off: the fixed 20,000 / 40,000 / 80,000 / 120,000.
         /// On by default (Stefan, 2026-11-01).
         bool hardCityMatch;
+        /// With the match's Research Lab option, build/rebuild one lab after essentials and
+        /// fund research only above the economy, defence and existing-production reserves.
+        /// On by default; inert when the match option is off.
+        bool researchLab;
     };
     ForceSettings force;
 

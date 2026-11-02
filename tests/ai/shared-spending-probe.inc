@@ -1,5 +1,6 @@
 #include <players/CityPlacementPolicy.h>
 #include <players/QuantBotBuildPolicy.h>
+#include <players/QuantBotBuildPass.h>
 
 // Real queues, market, placement, power and household accounting in both mods.
 void runSharedSpendingProbe(Game& game) {
@@ -335,6 +336,91 @@ void runSharedSpendingProbe(Game& game) {
             } catch (...) {house->numItem[Structure_HighTechFactory]=highTechCount;throw;}
             house->numItem[Structure_HighTechFactory]=highTechCount;
             SDL_Log("CITY_CAPACITY_PASS: upgrade, save MCV, parallel zoning, additional transport");
+        }
+        {
+            const auto savedConfig=bot->configOverride;
+            auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+            bot->configOverride=config;
+            const bool savedOption=game.gameInitSettings.gameOptions.researchLab;
+            const int savedTech=house->researchedTechLevel, savedTarget=house->techResearchTarget;
+            const int savedRemaining=house->techResearchRemaining, savedWorkerLimit=bot->harvesterLimit;
+            const Uint32 savedLab=house->techResearchLabID;
+            auto& tankData=game.objectData.data[Unit_Tank][HOUSE_HARKONNEN];
+            const int savedTankTech=tankData.techLevel;
+            auto restore=[&] {
+                game.gameInitSettings.gameOptions.researchLab=savedOption;
+                house->researchedTechLevel=savedTech;house->techResearchTarget=savedTarget;
+                house->techResearchRemaining=savedRemaining;house->techResearchLabID=savedLab;
+                tankData.techLevel=savedTankTech;bot->harvesterLimit=savedWorkerLimit;
+                bot->configOverride=savedConfig;bot->fieldableSlotsCached=false;
+                bot->resolveStrategyProfile();
+                for(auto* builder:{yard,heavy,secondYard})builder->updateBuildList();
+            };
+            try {
+                game.gameInitSettings.gameOptions.researchLab=true;
+                house->researchedTechLevel=1;house->techResearchTarget=0;
+                house->techResearchRemaining=0;house->techResearchLabID=NONE_ID;
+                bot->harvesterLimit=2;
+                config->force.researchLab=false;
+                for(auto* builder:{yard,heavy,secondYard})builder->updateBuildList();
+                reset(100000,1000000);bot->build(10000);
+                require(count(yard,Structure_ResearchLab)==0 && !house->isTechResearchActive(),
+                    "Disabled research policy constructed or researched a lab");
+                config->force.researchLab=true;
+                const int labPrice=game.objectData.data[Structure_ResearchLab][HOUSE_HARKONNEN].price;
+                reset(labPrice+999,1000000);bot->build(10000);
+                require(count(yard,Structure_ResearchLab)==0,"Lab construction consumed the working reserve");
+                reset(100000,1000000);structureList.push_back(secondYard);bot->build(10000);
+                require(count(yard,Structure_ResearchLab)+count(secondYard,Structure_ResearchLab)==1,
+                    "Funded parallel yards failed to queue exactly one lab");
+                reset(100000,1000000);
+                auto* lab=place(Structure_ResearchLab);
+                require(lab,"Research lab placement failed");
+                saved.push_back(lab);
+                reset(house->getTechResearchCost()+999,1000000);structureList.push_back(lab);bot->build(10000);
+                require(!house->isTechResearchActive(),"Research consumed the basic economy and defence reserve");
+
+                // Exercise real build-list refresh as well as the bot's cached
+                // prospective slots. The existing factory/requirements are real;
+                // only this offer's unlock level is pinned to the next step.
+                tankData.techLevel=2;heavy->updateBuildList();
+                require(!heavy->isAvailableToBuild(Unit_Tank),"Factory offer ignored the house's low tech");
+                bot->fieldableMixSlots();
+                reset(100000,1000000);structureList.push_back(lab);bot->build(10000);
+                require(house->isTechResearchActive() && house->getTechResearchTarget()==2,
+                    "Funded QuantBot did not start the next research level");
+                require(house->getTechResearchRemaining()==House::techResearchCycles(2),
+                    "Research duration differs from simulated House timing");
+                require(house->getCredits()>=1000,"Accepted research left no working reserve");
+                const int paidCredits=house->getCredits();
+                QuantBot::BuildPass duplicate(0);bot->startTechResearch(duplicate);
+                require(house->getCredits()==paidCredits,"Active research was charged twice");
+                house->techResearchRemaining=1;house->updateTechResearch();
+                require(house->getTechLevel()==2 && !house->isTechResearchActive(),
+                    "House research did not complete the next level");
+                require(heavy->isAvailableToBuild(Unit_Tank),"Research completion did not refresh the factory offer");
+                require(bot->fieldableMixSlots()==bot->fieldableMixSlots(2) && bot->fieldableSlotsTech==2,
+                    "QuantBot retained a pre-research prospective-slot cache");
+
+                config->force.researchLab=false;
+                reset(100000,1000000);structureList.push_back(lab);bot->build(10000);
+                require(!house->isTechResearchActive(),"Disabled research policy started another level");
+                config->force.researchLab=true;
+                game.gameInitSettings.gameOptions.researchLab=false;
+                reset(100000,1000000);structureList.push_back(lab);bot->build(10000);
+                require(!house->isTechResearchActive(),"Match research option off still spent on research");
+                game.gameInitSettings.gameOptions.researchLab=true;
+                reset(100000,1000000);structureList.push_back(lab);bot->build(10000);
+                require(house->isTechResearchActive() && house->getTechResearchTarget()==3,
+                    "Completed research did not permit the following level");
+                saved.remove(lab);lab->setVisible(VIS_ALL,false);lab->destroy();
+                require(!house->isTechResearchActive() && house->getTechLevel()==2,
+                    "Lab loss did not cancel work while retaining completed technology");
+                reset(100000,1000000);bot->build(10000);
+                require(count(yard,Structure_ResearchLab)==1,"Destroyed research lab was not rebuilt");
+                SDL_Log("RESEARCH_LAB_AI_PASS: hashed off/on policy, real lab queue, reserve, payment, completion, build gate, cache, cancellation, rebuilding");
+            } catch (...) {restore();throw;}
+            restore();
         }
         if (game.isCitySimEnabled()) {
             const auto savedConfig=bot->configOverride;

@@ -955,16 +955,17 @@ private:
     /// minutes), else null: the learned default and the configured readiness.
     const QuantBotStrategy::MixProfile* strategyMix() const;
     const QuantBotStrategy::TempoProfile* strategyTempo() const;
-    /// The mix slots this house can produce at \a tech (default: the game's tech level): the unit
+    /// The mix slots this house can produce at \a tech (default: its researched tech level): the unit
     /// is enabled, priced and has a builder, its tech level is at most \a tech, and its builder
     /// and every prerequisite structure can be obtained at \a tech (ObjectData, recursively).
     UnitMixPolicy::Slots fieldableMixSlots(int tech = -1) const;
-    /// The first tech level of the game's tech band for this house: the lowest level at which
-    /// the house fields the same slots as at the game's tech level (tests/ai/tech-bands.py).
+    /// The first tech level of the current house tech band: the lowest level at which the
+    /// house fields the same slots as now (tests/ai/tech-bands.py).
     int techBand() const;
-    /// fieldableMixSlots() of the game's tech level, computed once (runtime only, not saved).
+    /// fieldableMixSlots() cached per house tech level (runtime only, not saved).
     mutable UnitMixPolicy::Slots fieldableSlots{};
     mutable bool fieldableSlotsCached = false;
+    mutable int fieldableSlotsTech = -1;
     /// The starting mix over the \a available slots, before any combat evidence: the configured
     /// opening, the strategy's prior in its place, then the starting-mix bounds (unless a test
     /// style turns them off). The prior UnitMixPolicy::allocate blends the learning into.
@@ -991,6 +992,7 @@ private:
     /// The strategy's starting ratios over this house's mix slots: strategyPrior (Tuned,
     /// Bounded) or the preset's group form expanded over the house's specials.
     UnitMixPolicy::Weights strategyStart{};
+    int strategyTechLevel = -1; ///< Runtime expansion of the saved strategy, not a new draw.
     void resolveStrategyProfile();
     // ---- Blob waves (docs/formations.md, "Blob waves") ------------------------------------
     //
@@ -1700,6 +1702,12 @@ private:
     void planBuildOrder(BuildPass& pass);
     /// Records what the capital plan achieved.
     void traceCapitalOutcome(BuildPass& pass);
+    /// Match option and hashed policy switch; never consumes RNG or adds saved AI state.
+    bool researchLabPolicyActive() const;
+    /// Preserve working capital, protected purchases and existing production runway.
+    bool canFundTechInvestment(BuildPass& pass, int cost);
+    /// Runs after ordinary producers have charged the shared spending budget.
+    void startTechResearch(BuildPass& pass);
     // Planning helpers shared by the producers and yards (QuantBotBuild.cpp).
     bool openingFleetIncomplete(BuildPass& pass);
     bool openingWorkersNeeded(BuildPass& pass);
@@ -1800,6 +1808,8 @@ private:
     void chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Barracks, repair yard, yard upgrade, turrets and factories.
     void chooseYardMilitaryInfrastructure(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Queues one founded lab or its power supply, after essentials and before optional tech.
+    bool buildResearchLab(BuildPass& pass, BuilderTurn& turn);
     /// IX, heavy factory expansion, refineries and repair expansion.
     void chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Crime service, palace, vanilla defences, battery and zones.

@@ -45,6 +45,7 @@ const ItemSpec kItems[] = {
     {Structure_ZoneIndustrial, "Industrial Zone", "Industrial Zone", {2,2}}, {Structure_Road, "Road", "Road", {1,1}},
     {Structure_PoliceStation, "Police Station", "Police Station", {2,2}}, {Structure_Stadium, "Stadium", "Stadium", {3,3}},
     {Structure_Airport, "Airport", "Airport", {3,3}}, {Structure_NuclearPlant, "Nuclear Plant", "Nuclear", {3,3}},
+    {Structure_ResearchLab, "Research Lab", "Research Lab", {3,2}},
     {Unit_Soldier, "Soldier", "Soldier", {1,1}}, {Unit_Trooper, "Trooper", "Trooper", {1,1}}, {Unit_Trike, "Trike", "Trike", {1,1}},
     {Unit_RaiderTrike, "Raider Trike", "Raider Trike", {1,1}}, {Unit_Quad, "Quad", "Quad", {1,1}}, {Unit_Tank, "Tank", "Tank", {1,1}},
     {Unit_Launcher, "Launcher", "Launcher", {1,1}}, {Unit_SiegeTank, "Siege Tank", "Siege Tank", {1,1}},
@@ -1433,5 +1434,27 @@ TEST_CASE("Random skirmish: existing start counts keep their exact layout in fam
     for(int count : {2, 8}) {
         const auto requested = multiplayerParams(count, 192, Mode::Vanilla, BaseSize::Small, 0, 0, true, 9, 546);
         REQUIRE(generate(requested, family).ini == generate(requested, vanilla()).ini);
+    }
+}
+
+TEST_CASE("Random skirmish: Research Lab is a remembered rule with no free building",
+          "[skirmish][research]") {
+    Params options = params(64, 0, 1, Mode::DuneCity, 1, 20261102u);
+    REQUIRE_FALSE(options.researchLab);
+    const auto ordinary = generate(options, city());
+    options.researchLab = true;
+    INIFile config(false, std::string());
+    options.save(config);
+    Params restored;
+    restored.load(config);
+    REQUIRE(restored.researchLab);
+    REQUIRE(restored.techLevel == 1);
+    const auto research = generate(options, city());
+    REQUIRE(research.ini == ordinary.ini);
+    for(const auto& building : research.structures)
+        REQUIRE(building.item != Structure_ResearchLab);
+    for(int house : city().houses) {
+        REQUIRE(city().available(Structure_ResearchLab, house, 1));
+        REQUIRE(city().rule(Structure_ResearchLab, house).builder == Structure_ConstructionYard);
     }
 }

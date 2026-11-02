@@ -67,7 +67,9 @@ GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptions
     bool sharedHouse = false;
     for(const HouseSetup& house : result.houses)
         sharedHouse = sharedHouse || (house.role == Role::Human && PlayerFactory::getByPlayerClass(house.partnerClass) != nullptr);
-    GameInitSettings init(result.name, result.ini, sharedHouse, rules);
+    auto matchOptions = rules;
+    matchOptions.researchLab = params.techLevel < 9 && params.researchLab;
+    GameInitSettings init(result.name, result.ini, sharedHouse, matchOptions);
     // Custom Game's offline Spectate: the human seat goes to an AI and the local player only
     // watches. Local to this machine; never serialized or sent anywhere.
     init.setLocalSpectator(params.spectate);
@@ -113,8 +115,8 @@ std::string saveMap(const Result& result) {
 namespace {
 
 constexpr int kRowGap = 3;
-constexpr int kLeftColumnRows = 18;   ///< Map (8) + Game (6) + You start with (4)
-constexpr int kMultiplayerRows = 13;  ///< Map (8) + Game (4), and a row of slack
+constexpr int kLeftColumnRows = 19;   ///< Map (8) + Game (7) + You start with (4)
+constexpr int kMultiplayerRows = 14;  ///< Includes the Research Lab row and one row of slack.
 
 constexpr int kNoPartner = 0;         ///< the partner selector's "None" entry
 constexpr int kMaxContentWidth = 800;
@@ -212,6 +214,9 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     fixedSeedBox.setText(_("Keep this seed"));
     for(int credits : kCreditPresets) creditsBox.addEntry(withThousands(credits), credits);
     for(int level = 1; level <= 9; ++level) techBox.addEntry(std::to_string(level), level);
+    researchLabBox.setText(_("Research Lab"));
+    researchLabBox.setTooltipText(_("Build a Research Lab to research your house's next tech level. No lab is granted at the start."));
+    techBox.setOnSelectionChange([this](bool) { researchLabBox.setVisible(techBox.getSelectedEntryIntData() < 9); });
 
     int row = 0;
     addHeader(0, row++, _("Map"));
@@ -236,6 +241,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(0, row++, _("Mod"), &hostModLabel);
         addRow(0, row++, _("Credits"), &creditsBox);
         addRow(0, row++, _("Tech level"), &techBox);
+        addRow(0, row++, "", &researchLabBox);
 
         for(int starts = kMinStarts; starts <= std::max(kMinStarts, maxStarts(houseCount, tornieFamily)); ++starts)
             startsBox.addEntry(std::to_string(starts), starts);
@@ -294,6 +300,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(0, row++, _("Your house"), &houseBox);
         addRow(0, row++, _("Credits"), &creditsBox);
         addRow(0, row++, _("Tech level"), &techBox);
+        addRow(0, row++, "", &researchLabBox);
         addRow(0, row++, _("City skin"), &skinBox);
         skinCaption = &captions[usedCaptions - 1];
         addHeader(0, row++, _("You start with"));
@@ -447,6 +454,8 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(houseBox, params.house);
     selectData(creditsBox, params.credits);
     selectData(techBox, params.techLevel);
+    researchLabBox.setChecked(params.researchLab);
+    researchLabBox.setVisible(params.techLevel < 9);
     enemiesAlliedBox.setChecked(params.enemiesAllied);
     for(auto [side, ai, base, army, city] : {std::tuple{&params.allySide, &allyAI, &allyBaseBox, &allyArmyBox, &allyCityBox},
                                              std::tuple{&params.enemySide, &enemyAI, &enemyBaseBox, &enemyArmyBox, &enemyCityBox}}) {
@@ -602,6 +611,7 @@ Params RandomSkirmishMenu::readParams() const {
     params.mod = selectedMod();
     params.mode = RandomSkirmish::modeForMod(params.mod);
     params.techLevel = techBox.getSelectedEntryIntData();
+    params.researchLab = researchLabBox.isChecked();
     if(multiplayer) {
         params.starts = startsBox.getSelectedEntryIntData();
         params.startSide.base = static_cast<BaseSize>(startBaseBox.getSelectedEntryIntData());
@@ -729,6 +739,7 @@ void RandomSkirmishMenu::onCreateMap() {
         remember(params);
     }
     createdMap = path;
+    createdResearchLab = params.techLevel < 9 && params.researchLab;
     quit();
 }
 
@@ -750,6 +761,7 @@ void RandomSkirmishMenu::onGameRules() {
         }
         rules = effectiveGameOptions;
     }
+    rules.researchLab = researchLabBox.isChecked();
     openWindow(GameOptionsWindow::create(rules));
 }
 
@@ -757,5 +769,6 @@ void RandomSkirmishMenu::onChildWindowClose(Window* pChildWindow) {
     if(auto* pRulesWindow = dynamic_cast<GameOptionsWindow*>(pChildWindow)) {
         rules = pRulesWindow->getGameOptions();
         rulesChosen = true;
+        researchLabBox.setChecked(rules.researchLab);
     }
 }

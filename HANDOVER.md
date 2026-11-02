@@ -1,3 +1,22 @@
+## 2026-11-02 — Research Lab and trooper anti-air (unreleased)
+
+- New optional `Research Lab` match rule (default off), item 88 (`Research Lab`, 3×2), reusing
+  Tornie's Tech Center art without changing the Tornie building. Yard tech 1; default price500,
+  HP500, power30. Independent house technology to level9, one paid research at a time:
+  `300 * target` credits, `30 + 10 * target` game seconds. Losing the active lab cancels without
+  refund; completed levels persist and the lab is rebuildable. Details: `docs/research-lab.md`.
+- House-specific production/upgrade gates and QuantBot use researched technology; feature-off
+  gates and checkpoint digest fields/order stay on the old path. Synchronized owner-authorized
+  `CMD_RESEARCH_TECH_LEVEL`; active lab/target/remaining state saved. Save9881, protocol111,
+  GameInitSettings MOD15 (old streams load research and trooper-AA off). App version unchanged.
+- Random Skirmish's saved Research Lab checkbox is visible below tech9, grants no free lab,
+  and is handed to a hosted random map's lobby. QuantBot's hashed ResearchLab config switch is
+  default on and reserves economy/defence spending before construction/research.
+- `Trooper Anti-Air` match rule defaults on and only affects content based on `dunecity`,
+  including Civilization Wars. Trooper small rockets reuse moving-aircraft homing/proximity
+  interception; damage stays5. Off/other content keeps original projectile behavior.
+- Verification evidence is reported by the integration run; no results are claimed in this entry.
+
 ## 2026-11-02 — City tax per house, Micropolis land value (OMP integrator, unreleased)
 
 - Stefan: one tax rate for every house was wrong, and tax land value should follow Micropolis.

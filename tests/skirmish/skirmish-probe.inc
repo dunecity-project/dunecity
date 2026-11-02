@@ -453,6 +453,13 @@ void runMenu() {
                         "City rows hidden for the DuneCity mod");
         probeSelect(menu.enemyCityBox, 2);
         probeSelect(menu.techBox, 7);
+        skirmishRequire(menu.researchLabBox.isVisible(), "Research Lab is hidden below tech 9");
+        menu.researchLabBox.setChecked(true);
+        probeSelect(menu.techBox, 9);
+        skirmishRequire(!menu.researchLabBox.isVisible(), "Research Lab is visible at tech 9");
+        probeSelect(menu.techBox, 7);
+        skirmishRequire(menu.researchLabBox.isVisible() && menu.readParams().researchLab,
+                        "Research Lab choice did not survive a hidden level-9 row");
         menu.seedBox.setText("123456789");
         menu.fixedSeedBox.setChecked(true);
         skirmishCapture(menu, "random-skirmish");
@@ -475,7 +482,8 @@ void runMenu() {
         RandomSkirmishMenu again;
         const Params p = again.readParams();
         skirmishRequire(p.mapSize == 96 && p.allies == 1 && p.enemies == 3 && p.mod == "dunecity" && p.mode == Mode::DuneCity
-                        && p.enemySide.city == 2 && p.techLevel == 7 && p.seed == 123456789u && p.fixedSeed,
+                        && p.enemySide.city == 2 && p.techLevel == 7 && p.seed == 123456789u && p.fixedSeed
+                        && p.researchLab,
                         "Last-used parameters were not restored");
         skirmishCapture(again, "random-skirmish-restored");
     }

@@ -334,3 +334,12 @@ Troopers_Target=50
 AttackTimerMs=90000
 AttackThresholdPercent=0.40
 MinMoneyForProduction=500
+
+# ============================================================================
+# OPTIONAL MATCH TECHNOLOGY
+# ============================================================================
+# ResearchLab is hashed for multiplayer and defaults on even when this key is
+# absent. It only acts when the match's Research Lab game option is enabled.
+# Basic income, power, defence and existing production keep their funding first.
+[Force Concentration]
+ResearchLab=1

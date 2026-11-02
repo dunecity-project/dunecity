@@ -540,6 +540,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
         set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 RUN_SERIAL TRUE)
+        add_test(NAME research_lab_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-research-lab-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/research-lab-probe)
+        set_tests_properties(research_lab_probe PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
+        add_test(NAME trooper_anti_air_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-aa-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-aa-probe)
+        set_tests_properties(trooper_anti_air_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
         # UI skins on the real menus and a real DuneCity game (Modern and the default Classic
         # Desert at 640x480 and Stefan's 1440x900 Medium): every screen rendered and linted, the
         # spectated end plate fits the map in every house colour, chat clears the city readouts,

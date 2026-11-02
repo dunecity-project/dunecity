@@ -464,6 +464,7 @@ void CustomGameMenu::onRandomMap()
         RandomSkirmishMenu generator(mod);
         generator.showMenu();
         path = generator.getCreatedMap();
+        if(!path.empty()) currentGameOptions.researchLab = generator.getCreatedResearchLab();
     }
     if(path.empty()) return;
     if(!selectUserMap(path)) {

@@ -98,7 +98,7 @@ Uint32 Player::getGameCycleCount() const {
 }
 
 int Player::getTechLevel() const {
-    return currentGame->techLevel;
+    return getHouse()->getTechLevel();
 }
 
 const Map& Player::getMap() const {
@@ -251,7 +251,7 @@ bool Player::hasTornieProductionUpgradeGoal(const BuilderBase* pBuilder) const {
         if(!customContent && item != Unit_Troopers5 && item != Unit_Infantry5) continue;
         const auto& spec = currentGame->objectData.data[item][technology];
         if(!spec.enabled || spec.builder != static_cast<int>(pBuilder->getItemID())
-            || spec.techLevel > currentGame->techLevel
+            || spec.techLevel > getHouse()->getTechLevel()
             || spec.upgradeLevel <= currentUpgrade || spec.upgradeLevel > maxUpgrade) continue;
         bool prerequisites = true;
         for(int prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)

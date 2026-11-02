@@ -109,6 +109,8 @@ void QuantBot::noteCampaignOriginalState(bool legacySave) {
 
 bool QuantBot::campaignPermitsStructure(Uint32 item) const {
     if (!campaignCityEconomy() || !isStructure(item)) return true;
+    if (item == Structure_ResearchLab)
+        return currentGame->getGameInitSettings().getGameOptions().researchLab;
     // An RTS building's city employment role is NOT permission to introduce it.
     if (isZoneStructure(item) || item==Structure_PoliceStation || item==Structure_NuclearPlant
         || item==Structure_Stadium || item==Structure_Airport

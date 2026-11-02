@@ -7,6 +7,8 @@
 class ResearchLab final : public StructureBase {
 public:
     explicit ResearchLab(House* newOwner);
+    ~ResearchLab() override;
+    void handleResearchClick();
     explicit ResearchLab(InputStream& stream);
     ObjectInterface* getInterfaceContainer() override;
     bool canBeCaptured() const override { return false; }

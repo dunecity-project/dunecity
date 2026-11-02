@@ -428,9 +428,27 @@ void Bullet::blitToScreen() const
 void Bullet::updateDynastyProjectile()
 {
     const auto parameters = DynastyProjectile::parameters(bulletID);
+    bool trooperAntiAir = false;
+    if(bulletID == Bullet_SmallRocket && airAttack
+       && currentGame->getGameInitSettings().getGameOptions().trooperAntiAir
+       && ModManager::instance().isDuneCityContentActive()) {
+        // Firing-time attribution survives shooter death and ownership changes.
+        // Older shots can still identify their source while that object is alive.
+        Uint32 item = provenance.sourceItemID;
+        if(item == NONE_ID) {
+            const auto* shooter = currentGame->getObjectManager().getObject(shooterID);
+            if(shooter) item = shooter->getItemID();
+        }
+        trooperAntiAir = item == Unit_Trooper || item == Unit_Troopers
+            || item == Unit_Troopers5 || item == Unit_FlameTrooper;
+    }
     for(int elapsed=0; elapsed<48; ++elapsed) {
         if(projectileClock % 150 == 0) {
             const Coord previous(lround(realX*4), lround(realY*4));
+            const auto* liveTarget = trooperAntiAir ? target.getObjPointer() : nullptr;
+            const bool tracksTrooperTarget = liveTarget
+                && liveTarget->getHealth() > 0 && liveTarget->isAFlyingUnit();
+            if(tracksTrooperTarget) destination = liveTarget->getCenterPoint();
             const Coord goal = destination*4;
             const auto step = std::min(parameters.step, DynastyProjectile::distance(previous, goal)+16);
             const auto position = DynastyProjectile::move(previous, projectileHeading, step);
@@ -444,8 +462,8 @@ void Bullet::updateDynastyProjectile()
                 delete this;
                 return;
             }
-            const auto* liveTarget = target.getObjPointer();
-            if((bulletID == Bullet_TurretRocket || bulletID == Bullet_DRocket)
+            if(!trooperAntiAir) liveTarget = target.getObjPointer();
+            if((bulletID == Bullet_TurretRocket || bulletID == Bullet_DRocket || tracksTrooperTarget)
                && liveTarget && liveTarget->getHealth() > 0
                && liveTarget->isAFlyingUnit()) {
                 const Coord targetNow = liveTarget->getCenterPoint()*4;
@@ -472,7 +490,7 @@ void Bullet::updateDynastyProjectile()
                 }
             }
             const int distance = DynastyProjectile::distance(position, goal);
-            if((distance < 16 || distance > projectileDistance)
+            if(!tracksTrooperTarget && (distance < 16 || distance > projectileDistance)
                && (detonationTimer == 0 || bulletID == Bullet_TurretRocket)) {
                 if(bulletID == Bullet_TurretRocket && target.getObjPointer()
                    && isOrnithopterUnit(target.getObjPointer()->getItemID()))
@@ -482,7 +500,9 @@ void Bullet::updateDynastyProjectile()
                 return;
             }
             projectileDistance = distance;
-            if(detonationTimer > 0) {
+            // Precise/armed trooper rockets must keep steering after the old
+            // detonation counter reaches zero, rather than flying at a stale point.
+            if(detonationTimer > 0 || tracksTrooperTarget) {
                 Coord aim = goal;
                 const auto* object = target.getObjPointer();
                 if(object && object->getHealth() > 0 && object->isAFlyingUnit())
@@ -493,7 +513,7 @@ void Bullet::updateDynastyProjectile()
                 int difference = static_cast<Sint8>(projectileAim) - static_cast<Sint8>(projectileHeading);
                 projectileTurn = projectileAim == projectileHeading ? 0 :
                     (((difference > -128 && difference < 0) || difference > 128) ? -parameters.turn : parameters.turn);
-                --detonationTimer;
+                if(detonationTimer > 0) --detonationTimer;
             }
         }
         if(projectileClock % 200 == 0 && projectileTurn != 0) {
