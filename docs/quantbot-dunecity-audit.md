@@ -33,6 +33,11 @@ Use a separate results directory for every config arm:
   completed fixes. Compare this against no style to isolate the power fix in one native build.
 - `--game-options FILE` changes game rules, not QuantBot policy switches.
 - `--style dunecity-audit-opening-capital-off` disables **only CityOpeningCapital**.
+- `--prebuilt-probe FILE` uses an already-built, frozen probe without compiling.
+  For a bounded local fallback, copy the committed app/probe bundles outside `build-int`,
+  pass the frozen executable here and run at `nice -n 10 --jobs 2`; do not hold an
+  `agent-workspace --tests` lease for a long matrix. Keep the source hash/binary SHA256
+  receipt with the CSVs. Ordinary games never execute the controlled fixture branches.
 - `--attack-events` enables the runner's existing AI telemetry and retains nonempty
   `ground_hunt` dispatches in `waves.csv`. Reports include first dispatch time among
   attackers, attacking/measured houses, dispatches per ten alive-house minutes,
@@ -241,6 +246,9 @@ detector/combat results must not be presented as final-policy A/B.
 
 The no-spice fixture retains real queue/upgrade negative controls, funded resumption
 with research disabled, live defence, lost-yard/rock recovery and required-yard exceptions.
+The manually assembled budget pass explicitly uses the normal no-capital-selection
+sentinel (`-1`): inventory alone does not run `chooseCapitalPlan()`. This fixes the
+original fixture-only `capitalPending` null-vector SIGSEGV without weakening queue checks.
 It additionally asserts that reinforcements above the standing-wave threshold still
 queue with negative projected cash. Final detector/combat effects remain unverified
 until the new committed-source ON run finishes against the retained OFF seed set.

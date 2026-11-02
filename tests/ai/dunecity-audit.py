@@ -251,6 +251,8 @@ def play(args, scratch, binary, game):
 
 
 def build_probe(args, scratch):
+    if args.prebuilt_probe:
+        return args.prebuilt_probe
     out = scratch / 'probe'
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
                     '--output-dir', str(out), '--scenario', '--mod', 'dunecity', '--skirmish',
@@ -407,6 +409,7 @@ def compare(control, candidate):
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--results', type=Path)
 parser.add_argument('--build-dir', default=str(root / 'build-int'))
+parser.add_argument('--prebuilt-probe', type=Path, help='Use a frozen probe binary without building or leasing the checkout')
 parser.add_argument('--scratch')
 parser.add_argument('--jobs', type=int, default=2)
 parser.add_argument('--wall-timeout', type=int, default=1800)

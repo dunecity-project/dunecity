@@ -469,6 +469,9 @@ void runNoSpiceCityProbe(Game& game) {
             house->producedPower=10000;house->powerRequirement=100;
             QuantBot::BuildPass pass(0);
             bot->planBuildInventory(pass);
+            // This controlled pass bypasses chooseCapitalPlan(), whose
+            // no-selection sentinel must still precede real queue execution.
+            pass.capitalChoice=-1;
             pass.money=3000;pass.citySimEnabled=true;pass.cityWorkingReserve=450;pass.cashBuffer=1000;
             pass.forecastTax=0;pass.forecastUpkeep=52;pass.forecastNetIncome=-208;
             pass.cityYards=house->getNumItems(Structure_ConstructionYard);
