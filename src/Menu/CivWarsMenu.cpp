@@ -28,6 +28,8 @@ GameInitSettings makeInit(const SkirmishGenerator::Result& result,
                           const SettingsClass::GameOptionsClass& rules,
                           const CivWarsGenerator::Params& params) {
     SkirmishGenerator::Params roster;
+    roster.techLevel = 1;
+    roster.researchLab = true;
     roster.spectate = params.spectate;
     roster.spectateClass = params.spectateClass;
     auto init = RandomSkirmish::makeInit(result, matchRules(rules), roster,
