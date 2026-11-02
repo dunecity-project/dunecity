@@ -2583,7 +2583,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 if (defence.item!=NONE_ID && campaignAvailableToBuild(builder,defence.item)) {
                     defence.site=defence.item==Structure_RocketTurret
                         ? findThreatTurretPlaceLocation(pass.groundThreatAsset,pass.groundThreatApproach)
-                        : findPlaceLocation(defence.item);
+                        : findCoveredDefencePlaceLocation(defence.item,builder->getLocation());
                     defence.price=data[defence.item][houseID].price;defence.cost=buildingCapitalCost(pass,defence.item);
                     if (defence.site.isValid()) pass.capitalCandidates.push_back(defence);
                 }
@@ -2691,7 +2691,9 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                             if (missing==NONE_ID) break;
                             if (campaignAvailableToBuild(builder,missing)) {
                                 unlock.kind="defence_prerequisite";unlock.item=missing;
-                                unlock.site=findPlaceLocation(missing);
+                                unlock.site=groundDefenceDue
+                                    ? findCoveredDefencePlaceLocation(missing,builder->getLocation())
+                                    : findPlaceLocation(missing);
                                 unlock.price=data[missing][houseID].price;unlock.cost=buildingCapitalCost(pass, missing);
                                 break;
                             }
@@ -2939,15 +2941,16 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     if (pass.capitalChoice>=0
         && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)=="military") {
         int protectedChoice=-1;
+        bool boundedClaim=false;
         for (size_t i=0;i<pass.capitalCandidates.size();++i) {
             const auto& candidate=pass.capitalCandidates[i];
-            if (candidate.score>0
-                && (std::string_view(candidate.reason)=="ground_threat"
-                    || std::string_view(candidate.kind)=="city_supply")
-                && (protectedChoice<0 || candidate.score>pass.capitalCandidates[protectedChoice].score))
+            if (candidate.score<=0 || std::string_view(candidate.kind)=="military") continue;
+            boundedClaim |= std::string_view(candidate.reason)=="ground_threat"
+                || std::string_view(candidate.kind)=="city_supply";
+            if (protectedChoice<0 || candidate.score>pass.capitalCandidates[protectedChoice].score)
                 protectedChoice=int(i);
         }
-        if (protectedChoice>=0) pass.capitalChoice=protectedChoice;
+        if (boundedClaim) pass.capitalChoice=protectedChoice;
     }
     // Keep a demanded tax-producing lot funded alongside the army. Otherwise
     // saving for the next launcher repeatedly withholds even the last100 credits

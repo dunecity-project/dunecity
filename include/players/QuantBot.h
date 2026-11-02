@@ -531,6 +531,7 @@ private:
 
     Coord findEffectiveTurretPlaceLocation(Uint32 itemID);
     Coord findThreatTurretPlaceLocation(Coord asset, Coord approach);
+    Coord findCoveredDefencePlaceLocation(Uint32 item, Coord home);
     /// Site for an enemy-facing battery emplacement, in city mode as well as
     /// outside it. The ordinary city coverage planner keeps every other
     /// rocket-turret decision; see the definition for why the battery needs its

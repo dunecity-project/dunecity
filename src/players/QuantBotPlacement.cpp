@@ -19,6 +19,7 @@
 // turrets, batteries and battery clearance.
 
 #include "QuantBotInternal.h"
+#include <players/RocketTurretPolicy.h>
 
 using QuantBotInternal::rocketCoverageTier;
 using QuantBotInternal::cityRoadImpact;
@@ -1601,6 +1602,52 @@ Coord QuantBot::findThreatTurretPlaceLocation(Coord asset, Coord approach) {
             if (best.isInvalid() || rank>bestRank) { bestRank=rank;best=at; }
         }
     return best;
+}
+
+Coord QuantBot::findCoveredDefencePlaceLocation(Uint32 item, Coord home) {
+    AITelemetry::PerformanceScope perfScope("ai.findCoveredDefencePlaceLocation",getGameCycleCount(),getHouse()->getHouseID(),item);
+    const Coord size=getStructureSize(item);
+    const int range=std::max(0,currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].weaponrange
+        -size.x-size.y+1);
+    std::array<Coord,RocketTurretPolicy::threatTurretTotalCap> turrets;
+    size_t count=0;
+    for (const auto* structure:getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0
+            && structure->getItemID()==Structure_RocketTurret) {
+            turrets[count++]=structure->getLocation();
+            if (count==turrets.size()) break;
+        }
+    Coord best=Coord::Invalid();
+    using Rank=std::tuple<int64_t,int,int>;
+    Rank bestRank{};
+    // A Radar outside its own battery repeatedly died before the next rocket
+    // could finish. Search only small, overlapping windows beside real covers.
+    for (size_t i=0;i<count;++i)
+        for (int y=std::max(0,turrets[i].y-3);y<=std::min(getMap().getSizeY()-size.y,turrets[i].y+3);++y)
+            for (int x=std::max(0,turrets[i].x-3);x<=std::min(getMap().getSizeX()-size.x,turrets[i].x+3);++x) {
+                bool seen=false;
+                for (size_t j=0;j<i && !seen;++j)
+                    seen=std::abs(turrets[j].x-x)<=3 && std::abs(turrets[j].y-y)<=3;
+                if (seen) continue;
+                const Coord at(x,y);
+                if (!placeableAmongOwnUnits(x,y,size.x,size.y,item)
+                    || overlapsReservedStructure(x,y,size.x,size.y)
+                    || !preservesGroundAccess(item,at)
+                    || !cityRoadImpact(getMap(),x,y,size.x,size.y,item).preservesConnections
+                    || (currentGame->isCitySimEnabled()
+                        && wouldLandlockNeighbouringZone(getMap(),getHouse()->getHouseID(),x,y,size.x,size.y))) continue;
+                int cover=0;
+                for (size_t j=0;j<count;++j) cover+=blockDistance(at,turrets[j])<=range;
+                if (!cover) continue;
+                int64_t exposure=0;
+                for (const auto& contact:visibleGroundTurretThreats) {
+                    const Coord near(std::clamp(contact.at.x,x,x+size.x-1),std::clamp(contact.at.y,y,y+size.y-1));
+                    if (blockDistance(near,contact.at)<=contact.weaponRange+1) exposure+=contact.value;
+                }
+                const Rank rank{-exposure,cover,-blockDistance(at,home).lround()};
+                if (best.isInvalid() || rank>bestRank) { bestRank=rank;best=at; }
+            }
+    return best.isValid() ? best : findPlaceLocation(item);
 }
 
 Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {

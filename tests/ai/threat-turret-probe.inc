@@ -107,6 +107,15 @@ void runThreatTurretProbe(Game& game) {
         bot->chooseCapitalPlan(on);
         require(on.protectionCapital && on.capitalCandidates[on.capitalChoice].reason==std::string("ground_threat"),
             "A high-return import diverted the active ground defence budget");
+        auto blackout=bargain;blackout.item=Structure_WindTrap;blackout.kind="power";
+        blackout.reason="blackout";blackout.score=7500;
+        on.capitalCandidates.push_back(blackout);bot->chooseCapitalPlan(on);
+        require(on.capitalCandidates[on.capitalChoice].reason==std::string("blackout"),
+            "Bounded protection displaced a higher-priority non-military emergency");
+        on.capitalCandidates.pop_back();bot->chooseCapitalPlan(on);
+        const Coord radarSite=bot->findCoveredDefencePlaceLocation(Structure_Radar,yard->getLocation());
+        require(radarSite.isValid() && blockDistance(radarSite,origin+Coord(6,13))<=6,
+            "Rebuilt defensive Radar was not placed inside the standing battery");
         const auto site=on.capitalCandidates[on.capitalChoice].site;
         require(site.isValid() && site.x>origin.x+12,"Rocket was not sited on the attacked side");
         bot->buildProducer(on,yard);

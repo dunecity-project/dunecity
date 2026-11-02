@@ -116,6 +116,9 @@ bounded to the threatened asset's weapon-range window, first minimizes observed
 return fire while retaining a hostile target in range, then favours firing cover.
 It preserves spacing, roads and ground access. Once the local goal is met or
 contacts disappear, the claim ends.
+Ground-defence generation and tech rebuilds prefer legal sites inside the standing
+rocket battery, minimizing observed return fire; a Radar rebuilt outside it can
+otherwise die again before its first replacement rocket finishes.
 Switches off preserve the old paths. No save-format or city-tax-rule change.
 
 Funded Dune City custom games use the established parallel factory/repair build
