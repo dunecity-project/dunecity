@@ -37,6 +37,17 @@ bool QuantBot::canAddRepairYard(int includingQueued) const {
         || includingQueued < initialItemCount[Structure_RepairYard];
 }
 
+bool QuantBot::civWarsRules() const {
+    if (!currentGame || !botConfig().civWarsStrategy) return false;
+    const auto& init = currentGame->getGameInitSettings();
+    return init.getGameOptions().researchLab
+        && (init.isCivilizationWars() || init.getModName() == "CivWars");
+}
+
+bool QuantBot::isCivWarsMatch() const {
+    return civWarsRules() && currentGame->getGameInitSettings().isCivilizationWars();
+}
+
 void QuantBot::firePalaceWeapon(const Palace* pPalace) {
     if (!pPalace->isSpecialWeaponReady()) return;
     const int houseID = getHouse()->getHouseID();

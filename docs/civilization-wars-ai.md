@@ -3,7 +3,8 @@
 ## Scope and deterministic gate
 
 All strategy changes are controlled by a multiplayer-hashed `[Civ Wars] Strategy`
-switch. `civWarsRules()` means that switch and the Research Lab match rule are on;
+switch. `civWarsRules()` requires that switch, the Research Lab match rule, and
+either a generated Civilization Wars map or the `CivWars` mod identity.
 `isCivWarsMatch()` additionally requires the generator's canonical
 `[CIVILIZATIONWARS] Version=1` marker, exposed by the cached
 `GameInitSettings::isCivilizationWars()` accessor. Arbitrary maps using the CivWars

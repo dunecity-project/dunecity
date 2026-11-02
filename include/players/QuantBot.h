@@ -179,6 +179,10 @@ public:
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
+    /// CivWars mod rules on any map; ordinary Research Lab matches remain unchanged.
+    bool civWarsRules() const;
+    /// Lane geometry is authorised only by the generated map's canonical marker.
+    bool isCivWarsMatch() const;
     AIRole getRole() const { return role; }
     /// The Builder role (formerly "AI Support"): builds and runs the economy, never commands the army.
     bool builderOnly() const { return role == AIRole::Builder; }
