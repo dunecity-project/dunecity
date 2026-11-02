@@ -363,6 +363,15 @@ void runNoSpiceCityProbe(Game& game) {
         };
         auto growthQuote=[&](bool enabled) {
             clearOrders();config->force.cityPowerSizing=enabled;config->force.cityGrowthPower=true;
+            StarPort* market=nullptr;
+            for(auto* structure:structureList)
+                if(structure->getOwner()==house && structure->getItemID()==Structure_StarPort) {
+                    market=static_cast<StarPort*>(structure);break;
+                }
+            require(market!=nullptr,"Growth-power quote fixture lost its competing Starport");
+            market->informFrigateDestroyed();market->updateBuildList();
+            for(auto& offer:market->buildList)if(offer.itemID==Unit_Quad)offer.price=70;
+            for(auto& offer:house->getChoam().availableItems)offer.num=offer.itemID==Unit_Quad ? 10 : 0;
             house->storedCredits=0;house->cityCredits=0;house->startingCredits=2993;
             house->powerRequirement=240;house->producedPower=250;
             QuantBot::BuildPass pass(0);
@@ -371,7 +380,7 @@ void runNoSpiceCityProbe(Game& game) {
             bot->planPowerAndYards(pass);bot->planCityPopulation(pass);bot->planCivicNeedAndTrips(pass);
             bot->planUnitMix(pass);bot->planCapitalForecast(pass);bot->planCityBootstrap(pass);
             bot->planOpeningProduction(pass);bot->planDefenceCoverage(pass);
-            pass.capitalBuilders.clear();pass.capitalBuilders.push_back(yard);
+            pass.capitalBuilders.clear();pass.capitalBuilders.push_back(yard);pass.capitalBuilders.push_back(market);
             bot->planCapitalCandidates(pass);bot->chooseCapitalPlan(pass);
             require(pass.capitalChoice>=0,"Growth-power quote did not select a capital project");
             const auto selected=pass.capitalCandidates[pass.capitalChoice];

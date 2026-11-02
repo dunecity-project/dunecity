@@ -36,6 +36,10 @@
   cleanup now cancels actual queue-front items (with a progress assertion), not
   Starport's invalid ordinary production slot. Capacity rejection precedes the
   optional reactor site sweep. No timeout/assertion relaxation.
+  After cancellation correction the fixture terminated23s, then its new quote
+  assertion exposed an omitted Starport competitor in the test inputs. Restored
+  the actual reset market/cheap-Quad setup; selected-generator/full-reserve
+  assertions are unchanged. Final-source fixture result is still required.
   `dunecity-audit-control` disables all3 new fixes; `dunecity-audit-power-off`
   isolates this one. Definitions, receipts and traces: `docs/quantbot-dunecity-audit.md`.
   Evidence: `/Users/stefan/Documents/projects/outputs/dunecity-audit-20261103/`.

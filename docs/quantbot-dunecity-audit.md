@@ -184,7 +184,13 @@ to cancel that batch can make no progress, because Starport queue items are not 
 ordinary production slot. Fixture cleanup now cancels the real queue-front item and
 asserts progress at all four callsites. The pure nuclear-capacity rejection also runs
 before the optional reactor site search, avoiding an expensive sweep for a rejected plan.
-This correction does not waive any assertion or extend the timeout; its final-source
+At `4dc09268` the corrected fixture terminated in 23 s and then exposed an input error
+in the new quote test: its builder list omitted the real Starport bargain, so a legitimate
+routine core-cover candidate (score2600) beat the growth-power candidate (score16).
+The quote case now retains that real market, with the same reset shipment/70-credit Quad
+setup as the preceding growth-power fixture, so it exercises the actual military-to-growth
+allocation. Selected-generator and full-capital-reservation assertions remain unchanged.
+These corrections neither waive assertions nor extend the timeout; the final-source
 fixture result remains required.
 
 Final same-build on/off detector and win-rate tables, 90-minute adjacent-difficulty ladder,
