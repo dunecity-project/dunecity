@@ -1,3 +1,24 @@
+## 2026-11-02 — City tax per house, Micropolis land value (OMP integrator, unreleased)
+
+- Stefan: one tax rate for every house was wrong, and tax land value should follow Micropolis.
+- 231c7d4c: each city house has its own tax rate (`HouseCityState::taxRate`, save 9880);
+  `CMD_CITY_SET_TAX_RATE` sets the issuer's house only. Older saves give every house the old
+  shared rate. QuantBot and the budget window read their own house's rate.
+- 231c7d4c, a2e0404f: match rule `Micropolis Land Value` (GameInitSettings MOD14, default on):
+  only roads and buildings develop a block (units do not), each cluster's centre is the centre of
+  its buildings (walls excluded), and a house's tax land value is the area-weighted average of
+  every developed block where it owns a road tile or building. Buildings come from the structure
+  list, not a tile's object order. Off keeps the earlier per-building-origin average.
+- b76c68e9: observer checkpoints restore the live tax land value after the load-time city rescan
+  (`quantbot_army_recovery` caught a one-point land value drift).
+- R/C/I tax checked against Micropolis: per zone R pop/8 + C + I, ×2 zone weight, ×1.4 (easy);
+  `run-city-income.py --mix RICRIC`: tax base 160 eighths at land value 136 and 7% gives
+  222/yr, as `docs/city-economy-balance.md` says, and paid receipts average ~63/min, half the
+  yearly figure under Slow City Year.
+- Protocol 110 and save 9880 cover this too. Checked: `dunelegacy_tests`,
+  `quantbot_custom_attack`, `quantbot_army_recovery`, spectator probes, `save_roundtrip_probe`,
+  full cluster suite 128/129 (`natives_probe` failing before this work).
+
 ## 2026-11-01 — Hard city ceiling and in-game AI behaviour switch (OMP integrator, unreleased)
 
 - Stefan: Medium to Hard QuantBot was too big a jump. Cause (MBA game on 1.0.864, 160×160, three
