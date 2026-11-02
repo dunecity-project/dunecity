@@ -510,15 +510,18 @@ all ten games, including timeouts; no material-score victory is substituted.
 
 | Format | On W/L/T | On win rate | Stalemate rate | Median min | Mean on-minus-off placement |
 |---|---:|---:|---:|---:|---:|
-| 1v1 | 9/0/1 | 90% | 10% | 35.66 | +0.90 |
-| 2v2 | 0/8/2 | 0% | 20% | 31.14 | −0.80 |
-| 3v3 | 0/7/3 | 0% | 30% | 32.96 | −0.70 |
+| 1v1 | 9/0/1 | 90% | 10% | 35.66 | +1.80 |
+| 2v2 | 0/8/2 | 0% | 20% | 31.14 | −1.60 |
+| 3v3 | 0/7/3 | 0% | 30% | 32.96 | −1.40 |
 
-Placement is1 for a win,0 for a loss and0.5 for a time limit. Exact enumeration
-of the five-seed block bootstrap (both orientations stay in one block) gives
-95% intervals of **[+0.70,+1.00]**, **[−1.00,−0.60]** and
-**[−1.00,−0.30]** for the three on-minus-off differences. These five training
-seeds are not an independent held-out generalisation test.
+Canonical `match_score.py` placement is +1 for a win, −1 for a loss and −0.25
+for a two-team time limit; teams, not allied houses, are the entrants. The
+five-seed block bootstrap (both orientations stay in one block), using
+`match_score.bootstrap` with seed7101, gives 95% intervals of
+**[+1.40,+2.00]**, **[−2.00,−1.20]** and **[−2.00,−0.60]** for the
+three on-minus-off differences. These five training seeds are not an independent
+held-out generalisation test. These values replace the earlier mislabelled
+0-to-1 win-score scale; no game result or default decision changed.
 
 The opening research improvement is real but insufficient. In the ten1v1
 direct games, on reached tech2 in10/10 houses at median3.89min and tech4 in10/10
@@ -564,4 +567,124 @@ config hashes. Re-running all ten40-minute1v1 direct games preserved every
 source271 outcome, winning team, final cycle and rolling digest: **9/0/1**.
 Logged decimal seconds differed by at most0.001s across native hosts; cycle
 counts matched. This verifies the restriction, not acceptance of the strategy.
+
+### Difficulty ladder: 120 completed games
+
+Every arm/format/pair has five seeds in both side orientations (ten games).
+The higher difficulty's actual side is read from the roster; timeout material
+is never adjudicated. All120 attempts completed without errors, with complete
+telemetry and exact worm attribution.
+
+| Format | Higher:lower | Off higher W/L/T | Off win rate | Off median min | On higher W/L/T | On win rate | On median min |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 1v1 | Hard:Medium | 1/4/5 | 10% | 35.92 | 2/2/6 | 20% | 40.00 |
+| 1v1 | Brutal:Hard | 4/1/5 | 40% | 39.96 | 4/0/6 | 40% | 40.00 |
+| 2v2 | Hard:Medium | 2/5/3 | 20% | 32.89 | 1/2/7 | 10% | 40.00 |
+| 2v2 | Brutal:Hard | 5/3/2 | 50% | 33.00 | 1/0/9 | 10% | 40.00 |
+| 3v3 | Hard:Medium | 5/3/2 | 50% | 31.36 | 0/1/9 | 0% | 40.00 |
+| 3v3 | Brutal:Hard | 3/4/3 | 30% | 32.88 | 0/0/10 | 0% | 40.00 |
+
+Off finished40/60 (33.3% stalemates), median34.49min; experimental on
+finished13/60 (78.3% stalemates), median40min. **The required strict
+Brutal > Hard > Medium ladder is not established.** On Hard:Medium is tied
+in1v1 and inverted in both team formats; on3v3 Brutal:Hard is entirely drawn.
+Off also has inversions (Hard:Medium in1v1/2v2 and Brutal:Hard in3v3).
+Keeping the experiment off preserves the measured control, not a claim that
+the control already meets the Civ Wars difficulty-ladder goal.
+
+### Research, credit curves and logistics in the mirror matrix
+
+These are descriptive aggregates of the90 mirror games, pooling the three
+same-tier difficulties within each format. Each cell is median completion
+minutes **among reaching houses**, followed by reach/initial-house count.
+Higher-level medians may be earlier than lower-level medians because the
+reaching subsets differ; `−1` is known unreached, never a negative time.
+
+| Format/arm | Tech2 | Tech3 | Tech4 | Tech5 | Tech6 | Tech7 | Tech8 | Tech9 |
+|---|---|---|---|---|---|---|---|---|
+| 1v1 off | 20.37 (25/30) | 22.70 (20/30) | 22.89 (18/30) | 25.76 (18/30) | 26.10 (11/30) | 30.53 (6/30) | — (0/30) | — (0/30) |
+| 1v1 on | 3.89 (30/30) | 6.85 (30/30) | 10.41 (30/30) | 29.52 (24/30) | 34.24 (19/30) | 34.25 (12/30) | 36.44 (9/30) | 38.09 (3/30) |
+| 2v2 off | 12.58 (48/60) | 14.57 (40/60) | 16.14 (31/60) | 17.17 (19/60) | 18.77 (10/60) | — (0/60) | — (0/60) | — (0/60) |
+| 2v2 on | 3.93 (60/60) | 6.54 (60/60) | 10.31 (60/60) | 25.16 (51/60) | 32.99 (42/60) | 36.00 (25/60) | 36.49 (7/60) | — (0/60) |
+| 3v3 off | 12.70 (63/90) | 14.46 (52/90) | 15.66 (37/90) | 17.07 (20/90) | 20.34 (1/90) | — (0/90) | — (0/90) | — (0/90) |
+| 3v3 on | 4.00 (90/90) | 7.33 (90/90) | 11.05 (90/90) | 26.72 (70/90) | 33.03 (41/90) | 35.58 (20/90) | 34.99 (6/90) | 37.86 (2/90) |
+
+First **paid research starts**, from real `research.csv` start events, have
+off/on medians19.53/3.06min in1v1 (25/30 versus30/30 starting houses),
+11.75/3.10min in2v2 (48/60 versus60/60), and11.86/3.17min in3v3
+(63/90 versus90/90). The experiment fixes the opening research delay but
+does not establish effective research/army pacing after tech4.
+
+Median banked credits at5/10/20/30min follow. Parentheses are **live observed
+house counts**, not the initial roster; decisive games and eliminated houses
+leave the later-time sample, so the columns are not a fixed-cohort income rate.
+
+| Format/arm | 5min | 10min | 20min | 30min |
+|---|---:|---:|---:|---:|
+| 1v1 off | 334 (30) | 3183 (30) | 25462 (30) | 7650 (26) |
+| 1v1 on | 838 (30) | 708 (30) | 742 (30) | 770 (30) |
+| 2v2 off | 521 (60) | 3522 (60) | 5081 (58) | 708 (26) |
+| 2v2 on | 826 (60) | 637 (60) | 674 (60) | 764 (60) |
+| 3v3 off | 276 (90) | 3892 (90) | 1088 (90) | 602 (65) |
+| 3v3 on | 796 (90) | 712 (90) | 329 (90) | 482 (90) |
+
+Totals over15 games per format/arm follow. End inventories include eliminated
+houses as zero. Islands count **live central-rock yards**, not unique island
+ownership; reached counts distinct observed living ground-combat unit IDs on
+enemy-end rock, not confirmed wave arrivals. Produced is the probe's cumulative
+game-stat unit counter. Attacks are complete nonempty `ground_hunt` events.
+
+| Format/arm | End harvesters/refineries | Island-yard proxy | Produced | Attacks | Reached | Worm worker/combat deaths |
+|---|---:|---:|---:|---:|---:|---:|
+| 1v1 off | 300/445 | 15 | 4985 | 64 | 1440 | 61/178 |
+| 1v1 on | 279/129 | 32 | 4261 | 45 | 585 | 5/297 |
+| 2v2 off | 290/414 | 11 | 5206 | 95 | 3179 | 58/213 |
+| 2v2 on | 311/276 | 31 | 6411 | 89 | 657 | 10/404 |
+| 3v3 off | 274/459 | 14 | 5793 | 127 | 3541 | 47/328 |
+| 3v3 on | 283/400 | 32 | 6887 | 111 | 882 | 18/417 |
+
+### Measured simulation and AI CPU
+
+All90 mirror games have the private probe's actual loop thread-CPU and
+QuantBot-update timing. These host/arm aggregates have unequal format/tier
+mixes and run concurrently; they are **descriptive, not quiet-host paired
+performance acceptance**. Update averages include normal cheap/no-op calls.
+Sampled placement/wall scopes are complete in only40/90 games because the
+profiler reports dropped samples in the rest; missing scope totals are not zero.
+
+| Host | Arm | Games | Loop CPU ms/cycle | QuantBot CPU µs/update | Median headless cycles/s |
+|---|---|---:|---:|---:|---:|
+| claw.local | off | 20 | 0.12062 | 12.875 | 7795.1 |
+| claw.local | on | 21 | 0.17100 | 24.668 | 5724.1 |
+| stefPC | off | 25 | 0.68629 | 79.507 | 1589.8 |
+| stefPC | on | 24 | 0.78644 | 148.537 | 1589.2 |
+
+**Rendered FPS remains unmeasured.** Headless cycles/s is simulation throughput,
+not a renderer result. Windows and the mini ran the experiments; Pro was
+unreachable with its cluster SSH key and Air was offline/guarded. No host guard
+was bypassed.
+
+### Final default-OFF preservation
+
+The last CivWars AI code cutover is
+`353d52822685c1830715dad01de5bbd78fb90310`, following `313a06f5`.
+Both the C++ constructor and distributed `config/QuantBot Config.ini.default`
+default the hashed switch off; explicit opt-in still has the immutable-roster
+1v1 restriction. The config test covers the off default, on/off file round
+trips and distinct hashes.
+
+Job `20261103T061521-civwars-default-off-final-0156f9`, results
+`acceptance-353d5282/baseline-preservation/`, completed six40-minute
+Hard/Hard switch-off games (1v1/2v2/3v3 × seeds7101/7202), all with complete
+telemetry and no errors. **All six match source271's prior switch-off control
+in final cycle, rolling digest, outcome/winning team and config/map/options
+hashes.** The two1v1 checks also cross Windows-to-Mac hosts.
+This is preservation of the control, not positive strength acceptance.
+
+The complete240-game cohort report is reproduced with:
+
+```sh
+python3 tests/ai/civ-wars-matrix.py --report \
+  ../dunecity-results/civwars-ai/acceptance-271/{mirrors,ladder,direct}
+```
 

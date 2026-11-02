@@ -160,11 +160,19 @@
   On W/L/T is **9/0/1 in1v1,0/8/2 in2v2,0/7/3 in3v3**: team total **0/15/5**.
   [INFERENCE, unverified cause] worker/pre-wave land caps likely starve team income:
   minute20 off/on median harvesters13/5 in2v2 and8/4 in3v3, with lower on army value.
+- Side-swapped source271 ladder: **120 games**, five seeds × both orientations × three
+  formats × Hard:Medium/Brutal:Hard × off/on. Off40/60 decisive versus on13/60.
+  A strict Brutal>Hard>Medium ladder is **not established**: on Hard:Medium is tied
+  in1v1 and inverted in team games; control also has format-specific inversions.
 - Corrected source271 gates: **32/32 real early-Ornithopter strikes** killed by the defender
   with yard/lab intact, both sides/targets and repeats; **eight ordinary-map off/on pairs**
   have identical complete digest sequences with distinct config hashes (16 cases).
 - Duel-gate source94cd2d4c: all four2v2/3v3 off/on pairs match rolling digests through10min;
   all ten1v1 direct reruns preserve source271 final cycles, digests and9/0/1 results.
+- Final CivWars code353d5282 defaults OFF in both constructor and distributed INI; the
+  config fixture round-trips both states and checks different hashes. All six final
+  40min OFF games (three formats × seeds7101/7202) match source271 control final cycles,
+  rolling digests, outcomes and config/map/options hashes, including cross-host1v1.
   Full experiment parameters, result tables, source/job identities and verification receipts
   are in `docs/civilization-wars-ai.md`; raw evidence is in `dunecity-results/civwars-ai/`.
   Headless cycles/s is not rendered FPS; no rendered-FPS acceptance is claimed. No origin push.
