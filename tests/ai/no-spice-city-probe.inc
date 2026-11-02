@@ -268,10 +268,9 @@ void runNoSpiceCityProbe(Game& game) {
         bot->difficulty=QuantBot::Difficulty::Hard;bot->militaryValueLimit=70000;
         // One actual planning yard, as in the save; retain the fixture's real
         // generators, storage, zones and road-connected placement space.
-        structureList.remove_if([&](const auto* structure) {
-            return structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard
-                && structure!=yard;
-        });
+        for(const auto* structure:savedStructures)
+            if(structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard
+                && structure!=yard)structureList.remove(structure);
         state.resPop=120;state.comPop=3;state.indPop=15;state.taxBaseEighths=304;
         state.avgLandValue=160;state.civicDemandBlocked=0;
         state.resValve=2000;state.comValve=1500;state.indValve=717;
