@@ -140,8 +140,8 @@ struct QuantBotConfig {
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
-    /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower; optional keys,
-    /// the code defaults apply when absent. Hashed for multiplayer.
+    /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
+    /// CityPowerSizing, ThreatTurrets, CityStarportSupply; optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -252,6 +252,10 @@ struct QuantBotConfig {
         /// headroom, instead of allowing military savings and bargains to starve it.
         /// On by default; no effect outside city games or while generation is pending.
         bool cityGrowthPower;
+        /// Size reserve-power purchases against useful load and protected working cash
+        /// instead of turning every affordable windtrap into a 2,000-credit reactor.
+        /// Funded installment projects and emergency recovery retain their existing priority.
+        bool cityPowerSizing;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;

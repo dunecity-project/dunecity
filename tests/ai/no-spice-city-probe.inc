@@ -1,5 +1,6 @@
 #include <structures/ZoneStructure.h>
 #include <players/CityEconomyInvestmentPolicy.h>
+#include <players/QuantBotBuildPass.h>
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 
@@ -311,6 +312,58 @@ void runNoSpiceCityProbe(Game& game) {
             bot->configOverride=savedConfig;structureList=savedStructures;throw;
         }
         bot->configOverride=savedConfig;structureList=savedStructures;
+    }
+
+    // Random Skirmish 96/None/T9, seed 9101: the first reserve request
+    // needed only 40 power, but final vetting turned it into a 2,000-credit
+    // reactor and left a 3,000-credit start without useful working cash.
+    {
+        const auto savedConfig=bot->configOverride;
+        const int savedProduced=house->producedPower, savedRequired=house->powerRequirement;
+        const int savedFootprints=bot->availableBaseFootprints;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        bot->configOverride=config;bot->availableBaseFootprints=4;
+        bot->clearPlacementCache();
+        require(bot->findPlaceLocation(Structure_WindTrap).isValid()
+            && bot->findPlaceLocation(Structure_NuclearPlant).isValid(),
+            "Generator-sizing fixture needs legal wind and reactor sites");
+        auto choice=[&](bool enabled,int cash,int produced,int required,int reserve,
+                        bool installments=false,bool city=true) {
+            config->force.cityPowerSizing=enabled;
+            house->producedPower=produced;house->powerRequirement=required;
+            QuantBot::BuildPass pass(0);
+            pass.money=cash;pass.citySimEnabled=city;pass.spiceEconomyViable=true;
+            pass.cityWorkingReserve=450;pass.cityPowerReserve=reserve;
+            pass.itemCount[Structure_WindTrap]=3;
+            QuantBot::BuilderTurn turn(pass.money);turn.pBuilder=yard;
+            if(installments)turn.installmentProject=Structure_NuclearPlant;
+            QuantBot::YardTurn selected;
+            selected.isCitySim=city;selected.itemID=Structure_WindTrap;selected.structureRule="power";
+            bot->vetYardChoice(pass,turn,selected);
+            return selected.itemID;
+        };
+        try {
+            require(choice(false,3000,300,240,100)==Structure_NuclearPlant,
+                "Generator-sizing negative control no longer reproduces the oversized reactor");
+            require(choice(true,3000,300,240,100)==Structure_WindTrap,
+                "A small reserve request consumed the seed town's working capital");
+            require(choice(true,12000,300,240,100)==Structure_NuclearPlant,
+                "A prosperous city lost its affordable compact reserve");
+            require(choice(true,3000,300,800,200)==Structure_NuclearPlant,
+                "Seven windtraps were preferred to cheaper useful nuclear capacity");
+            require(choice(true,3000,200,240,100)==Structure_NuclearPlant,
+                "Affordable blackout recovery lost its existing nuclear preference");
+            require(choice(true,500,300,240,100,true)==Structure_NuclearPlant,
+                "An already funded installment reactor was changed into another project");
+            require(choice(true,3000,300,240,100,false,false)==Structure_WindTrap,
+                "City generator sizing changed the vanilla choice");
+            SDL_Log("CITY_POWER_SIZING_PASS: small reserves use wind; rich/load/blackout/installment choices retain nuclear");
+        } catch (...) {
+            bot->configOverride=savedConfig;bot->availableBaseFootprints=savedFootprints;
+            house->producedPower=savedProduced;house->powerRequirement=savedRequired;throw;
+        }
+        bot->configOverride=savedConfig;bot->availableBaseFootprints=savedFootprints;
+        house->producedPower=savedProduced;house->powerRequirement=savedRequired;
     }
 
     SDL_Log("NO_SPICE_CITY_OK");

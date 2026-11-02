@@ -354,6 +354,7 @@ QuantBotConfig::QuantBotConfig() {
     force.hardCityMatch = true;
     force.researchLab = true;
     force.cityGrowthPower = true;
+    force.cityPowerSizing = true;
     force.threatTurrets = true;
     force.cityStarportSupply = true;
 
@@ -654,6 +655,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
         iniFile.setBoolValue("Force Concentration", "ResearchLab", force.researchLab);
         iniFile.setBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
+        iniFile.setBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
         iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
         iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
 
@@ -782,6 +784,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
     force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);
     force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
+    force.cityPowerSizing = iniFile.getBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
     force.threatTurrets = iniFile.getBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
     force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
@@ -1269,6 +1272,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("hardCityMatch", force.hardCityMatch);
     addNamed("researchLab", force.researchLab);
     addNamed("cityGrowthPower", force.cityGrowthPower);
+    addNamed("cityPowerSizing", force.cityPowerSizing);
     addNamed("threatTurrets", force.threatTurrets);
     addNamed("cityStarportSupply", force.cityStarportSupply);
     configStr += "|/FORCE|";

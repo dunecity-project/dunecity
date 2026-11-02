@@ -2013,12 +2013,20 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         const int windOutput = std::max(1,-data[Structure_WindTrap][houseID].power);
         const int windNeeded = (need+windOutput-1)/windOutput;
         const int cash = std::max(0,pass.money);
-        // Once the first windtrap establishes power, prefer a reactor
-        // whenever its real footprint and price are feasible. Extra
-        // windtrap room is no longer a reason to choose less capacity.
+        // The footprint survey is capped once the base is roomy; its cap is
+        // not a claim that only four windtraps fit. A genuinely cramped base
+        // can still justify compact nuclear capacity.
+        const int windSites = !windSite.isValid() ? 0
+            : availableBaseFootprints >= QuantBotColonisationPolicy::kCrampedFootprints
+                ? std::max(availableBaseFootprints, windNeeded) : std::max(1, availableBaseFootprints);
+        const int protectedCash = std::max({1000, pass.cityWorkingReserve, cityBootstrapReserve(pass)});
         const bool nuclear = nuclearSite.isValid()
-            && (cash >= data[Structure_NuclearPlant][houseID].price
-                || onInstallments(turn, Structure_NuclearPlant));
+            && (onInstallments(turn, Structure_NuclearPlant)
+                || (botConfig().force.cityPowerSizing
+                    ? QuantBotBuildPolicy::preferNuclearPower(need, windOutput,
+                        data[Structure_WindTrap][houseID].price, data[Structure_NuclearPlant][houseID].price,
+                        windSites, cash, protectedCash, !getHouse()->hasPower())
+                    : cash >= data[Structure_NuclearPlant][houseID].price));
         yardTurn.itemID = nuclear ? Structure_NuclearPlant : windSite.isValid() ? Structure_WindTrap : NONE_ID;
         if (yardTurn.itemID == NONE_ID) yardTurn.skipRemainingStructureLogic = true;
         traceDecision("city_generator_choice", AITelemetry::Record().set("item",yardTurn.itemID)
@@ -2031,6 +2039,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
             .set("nuclear_site",nuclearSite.isValid()).set("nuclear_price",data[Structure_NuclearPlant][houseID].price)
             .set("wind_needed",windNeeded).set("wind_site",windSite.isValid()).set("nuclear",nuclear)
             .set("installments",nuclear && onInstallments(turn, Structure_NuclearPlant))
+            .set("sized_power",botConfig().force.cityPowerSizing).set("protected_cash",protectedCash)
+            .set("wind_sites",windSites)
             .set("industrial_demand",pass.ownIndValve));
     }
     if (yardTurn.itemID!=NONE_ID && yardTurn.itemID!=Structure_WindTrap

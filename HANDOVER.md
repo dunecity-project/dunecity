@@ -1,3 +1,30 @@
+## 2026-11-03 — DuneCity QuantBot audit and right-sized reserve power (OMP DuneCityAIAudit, unreleased)
+
+- Added `tests/ai/dunecity-audit.py`: reproducible all-QuantBot Random Skirmish
+  96/128/160 × None/Low/Medium spice × 1v1/2v2/4-house FFA × Medium/Hard/Brutal
+  × seeds9101/148680876, 30-game-minute caps: 162 games / 540 AI-house histories.
+  Probe-only minute samples and cycle-based detectors cover economy/power stalls,
+  local powered turret cover, tech, idle defence, empty-queue poverty, hoarding,
+  early no-fight defeats and missing harvesters. Adjacent-ladder and paired reports
+  reuse the existing generator, runner, scoring and cluster/scratch contracts.
+- First ordinary-game evidence exposed a distinct spending failure: seed9101,
+  96/None/1v1/Medium, Harkonnen cycle25 needs40 reserve power, has2993 credits and
+  a legal Windtrap site, but final vetting orders a2000-credit reactor. By minute1
+  it has2300/242 power; population4600 and built structures then stay flat for
+  minutes5–15 with empty queues/no attacks, earning44 credits/min. All32 initial
+  minute-one zero-spice samples showed the oversized first reactor.
+- `[Force Concentration] CityPowerSizing` (hashed/default ON) restores the existing
+  cost/load/space/working-cash comparison in the common final city-generator
+  choice. Small top-ups keep cheap wind; rich/useful-load/cramped/affordable-blackout
+  choices and funded installment reactors retain nuclear. Uses cached footprint
+  capacity, with no new allocation/search or save fields. Vanilla is unchanged;
+  OFF reproduces the former choice. The unreleased protocol111 already covers it.
+- Added default/load/save/hash coverage and seven real final-yard-vetting fixture
+  cases. Detector invariant checks and the targeted ordinary-game telemetry
+  capture were exercised. Detector definitions, source/queue receipts and the
+  diagnosed capital-spending trace are in `docs/quantbot-dunecity-audit.md`.
+  Evidence: `/Users/stefan/Documents/projects/outputs/dunecity-audit-20261103/`.
+
 ## 2026-11-03 — Quad-rush rocket cover and first city Starport (OMP RocketTurrets, unreleased)
 
 - Stefan's `ai dont build enough rocket turrets.dls` is a 1.0.864/9879,
