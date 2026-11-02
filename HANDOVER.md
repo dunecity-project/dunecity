@@ -35,7 +35,17 @@
 - `Trooper Anti-Air` match rule defaults on and only affects content based on `dunecity`,
   including Civilization Wars. Trooper small rockets reuse moving-aircraft homing/proximity
   interception; damage stays5. Off/other content keeps original projectile behavior.
-- Verification evidence is reported by the integration run; no results are claimed in this entry.
+- Measured core checks: native staging build; Windows cluster `dunelegacy_tests` (1,242 passed,
+  3 skipped, 13,322,892 assertions); 14 Python telemetry tests; Random Skirmish engine/menu
+  probe (640×480 included) and generator tests. Research fixture restored active target2 with
+  3,002 cycles left, matched every continuation digest, reached level9, and kept the off-state
+  digest layout. Its tech1 QuantBot built/researched at cycle16,380 and reached tech2 at19,505
+  (262.08s/312.08s). Lab artwork was found content-gated during this run and opened for all mods.
+- Trooper fixture: 3 seeds × 2 flight directions, repeated exactly, DuneCity on: 3 troops
+  0/6 kills with15damage, 5 and8 troops6/6 kills with25damage; off0/6 kills/0damage for every
+  group. Vanilla and Dune2R off/on serialized traces and RNG matched exactly. Results:
+  `outputs/research-trooper-aa-core-v2/summary.csv`, `outputs/research-lab-core/research.csv`.
+  CivWars-specific AA, final menu/gallery and full cluster suite remain integration checks.
 
 ## 2026-11-02 — City tax per house, Micropolis land value (OMP integrator, unreleased)
 
