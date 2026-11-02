@@ -1543,7 +1543,18 @@ Coord QuantBot::findThreatTurretPlaceLocation(Coord asset, Coord approach) {
     if (asset.isInvalid() || approach.isInvalid()) return Coord::Invalid();
     const Uint32 item=Structure_RocketTurret;
     const int range=std::max(1,currentGame->objectData.data[item][getHouse()->getHouseID()].weaponrange-1);
-    const auto geometry=batteryGeometry(asset,approach-asset);
+    const int clusterRadius=FrontBatteryPolicy::clusterRadius(range+1);
+    std::vector<Coord> turrets;
+    turrets.reserve(getHouse()->getNumItems(Structure_RocketTurret)
+        +getHouse()->getNumItems(Structure_GunTurret)+reservedStructures.size());
+    for (const auto* structure:getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0
+            && (structure->getItemID()==Structure_RocketTurret || structure->getItemID()==Structure_GunTurret))
+            turrets.push_back(structure->getLocation());
+    for (const auto& entry:reservedStructures)
+        if (entry.first!=planningBuilder
+            && (entry.second.item==Structure_RocketTurret || entry.second.item==Structure_GunTurret))
+            turrets.push_back(entry.second.location);
     Coord best=Coord::Invalid();
     using Rank=std::tuple<int64_t,int64_t,int,int>;
     Rank bestRank{};
@@ -1560,10 +1571,10 @@ Coord QuantBot::findThreatTurretPlaceLocation(Coord asset, Coord approach) {
                 || (currentGame->isCitySimEnabled()
                     && wouldLandlockNeighbouringZone(getMap(),getHouse()->getHouseID(),x,y,1,1))) continue;
             int nearest=-1,cluster=0;
-            for (const Coord turret:geometry.turrets) {
+            for (const Coord turret:turrets) {
                 const int d=std::max(std::abs(turret.x-x),std::abs(turret.y-y));
                 if (nearest<0 || d<nearest) nearest=d;
-                if (d<=geometry.clusterRadius) ++cluster;
+                if (d<=clusterRadius) ++cluster;
             }
             if (!FrontBatteryPolicy::spacedEnough(nearest)
                 || !FrontBatteryPolicy::withinClusterLimit(cluster)) continue;

@@ -2227,17 +2227,25 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
     // from the enemy's item list is a plan the base can prepare for between
     // other construction; aircraft over our own buildings are a present loss.
     pass.airEngaged = false;
-    for (const auto* aircraft:getUnitList()) {
-        if (pass.airEngaged) break;
-        if (!aircraft->isAFlyingUnit() || !aircraft->isActive() || aircraft->getHealth()<=0
-            || !aircraft->canAttack() || !aircraft->getOwner()
-            || aircraft->getOwner()->getTeamID()==getHouse()->getTeamID()
-            || !aircraft->isVisible(getHouse()->getTeamID())) continue;
-        const int reach=std::max(1,aircraft->getWeaponRange())+8;
+    visibleGroundTurretThreats.clear();
+    const bool collectGround=botConfig().force.threatTurrets && gameMode==GameMode::Custom
+        && difficulty>=Difficulty::Hard;
+    for (const auto* unit:getUnitList()) {
+        if (pass.airEngaged && !collectGround) break;
+        if (!unit->isActive() || unit->getHealth()<=0 || !unit->canAttack() || !unit->getOwner()
+            || unit->getOwner()->getTeamID()==getHouse()->getTeamID()
+            || !unit->isVisible(getHouse()->getTeamID())) continue;
+        if (collectGround && !unit->isAFlyingUnit() && unit->getItemID()!=Unit_Saboteur
+            && QuantBotBuildPolicy::militaryItem(unit->getItemID())) {
+            const int value=data[unit->getItemID()][unit->getProductionHouseID()].price;
+            visibleGroundTurretThreats.push_back({unit->getLocation(),std::max(100,value),std::max(1,unit->getWeaponRange())});
+        }
+        if (pass.airEngaged || !unit->isAFlyingUnit()) continue;
+        const int reach=std::max(1,unit->getWeaponRange())+8;
         for (const auto* structure:getStructureList())
             if (structure->getOwner()==getHouse() && structure->getHealth()>0
-                && blockDistance(aircraft->getLocation(),
-                    structure->getClosestPoint(aircraft->getLocation()))<=reach) { pass.airEngaged=true; break; }
+                && blockDistance(unit->getLocation(),
+                    structure->getClosestPoint(unit->getLocation()))<=reach) { pass.airEngaged=true; break; }
     }
     // Core assets that no turret covers at all, as opposed to those short of
     // the difficulty's overlap. First cover is defence; further overlap is a
@@ -2255,7 +2263,7 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
             pass.coverageDemand+=RocketTurretPolicy::desiredCoverage(structure->getItemID(),pass.coverageTier,
                 isExpansionYard(structure->getItemID(),structure->getObjectID(),anchorYard));
     // A visible ground raid needs local firing cover, not the peaceful battery's
-    // two-refinery/production-core opening. Reuse the two-second threat survey;
+    // two-refinery/production-core opening. Reuse this build's visible-unit survey;
     // never inspect an unseen army or search the map per hostile unit.
     if (botConfig().force.threatTurrets && gameMode==GameMode::Custom
         && difficulty>=Difficulty::Hard && !visibleGroundTurretThreats.empty()
@@ -2538,11 +2546,10 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 CapitalCandidate defence;
                 defence.builder=builder->getObjectID();defence.item=Structure_RocketTurret;
                 defence.kind="ground_defence";defence.reason="ground_threat";
-                // First firing cover is survival. Deeper overlap shares the
-                // budget with the army and the first useful Starport; otherwise
-                // an endless raid can keep a solvent city supplier-less forever.
-                defence.urgent=pass.groundTurretCover<2;
-                defence.score=defence.urgent ? 6500 : 4500;
+                // The finite core goal must stand before optional spending:
+                // a supplier built behind only a rear pair and two new guns
+                // was lost with the base. The house-wide cap bounds this claim.
+                defence.urgent=true;defence.score=6500;
                 if (pass.turretPowerRequired && !hasPowerBufferForTurret(pass)) {
                     defence.item=powerGenerationPending(pass) ? Uint32(NONE_ID) : Uint32(Structure_WindTrap);
                 }

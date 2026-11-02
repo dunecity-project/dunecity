@@ -1066,7 +1066,6 @@ void QuantBot::refreshTacticalDanger() {
     lossDanger.assign(w*h, 0);
     visibleEnemyBases.clear();
     visibleHarvestLaunchers.clear();
-    visibleGroundTurretThreats.clear();
     const bool emitSafety = AITelemetry::log().enabled()
         && (lastSafetyTrace == std::numeric_limits<Uint32>::max() || now-lastSafetyTrace >= MILLI2CYCLES(30000));
     AITelemetry::Record threats;
@@ -1087,15 +1086,6 @@ void QuantBot::refreshTacticalDanger() {
         if (const auto* structure = dynamic_cast<const StructureBase*>(object))
             p += Coord(structure->getStructureSizeX()/2, structure->getStructureSizeY()/2);
         const int radius = std::max(1, object->getWeaponRange()) + 2;
-        if (botConfig().force.threatTurrets && gameMode == GameMode::Custom
-            && difficulty >= Difficulty::Hard) {
-            if (const auto* unit = dynamic_cast<const UnitBase*>(object);
-                unit && !unit->isAFlyingUnit() && unit->getItemID() != Unit_Saboteur
-                && QuantBotBuildPolicy::militaryItem(unit->getItemID())) {
-                const int value = currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price;
-                visibleGroundTurretThreats.push_back({p, std::max(100, value), std::max(1,unit->getWeaponRange())});
-            }
-        }
         stamp(tacticalDanger, p, radius, 100);
         // Launchers get an early-warning margin: a harvester must turn before missiles arrive.
         // Tracked harvesters can crush foot troops; do not treat them like tanks.

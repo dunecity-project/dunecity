@@ -99,14 +99,16 @@ fallback is reached, even when a developed no-spice city earns enough to buy it.
 `ThreatTurrets=1` in the same section (hashed, default on) lets Custom Hard/Brutal
 buy local rocket cover against **visible armed ground units near the production,
 income and power core (including Radar)**, rather than chasing every outlying plot.
-The existing two-second safety survey supplies contacts; hidden armies, aircraft,
-workers and saboteurs do not increase this goal. One rocket per 400 credits of
+The build's existing visible-unit survey supplies contacts; hidden armies, aircraft,
+workers and saboteurs do not increase this goal. Contacts are transient per-pass
+scratch (no unsaved two-second decision cache). One rocket per 400 credits of
 nearby observed fighters, rounded up, demands 2–8 local firing covers, with a
 12-rocket house-wide ceiling. Existing and reserved local emplacements count.
-Fewer than two local covers protects the next turret or power/tech prerequisite
-ahead of repeat plots and unit spending, without waiting for two refineries and
-a completed production core. Deeper overlap shares capital with the army and the
-first useful Starport, so continuous raids cannot starve their funding forever.
+An active core raid protects the next turret or power/tech prerequisite ahead of
+repeat plots and unit spending, without waiting for two refineries and a
+completed production core. This finite goal and the house-wide cap bound the
+claim; the first useful Starport then owns its one-off funding. Prematurely
+yielding the budget after only two new guns loses both the supplier and the base.
 The peaceful 8–12 battery and growth interleave stay unchanged. Site search is
 bounded to the threatened asset's weapon-range window, first minimizes observed
 return fire while retaining a hostile target in range, then favours firing cover.

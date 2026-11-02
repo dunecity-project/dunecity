@@ -685,7 +685,8 @@ private:
     std::vector<Coord> visibleEnemyBases;
     std::vector<Uint32> visibleHarvestLaunchers;
     struct GroundTurretContact { Coord at; int value; int weaponRange; };
-    // Same visible-only two-second survey as tacticalDanger; derived, never saved.
+    // Refilled by the build's shared visible-unit survey before every use.
+    // Transient scratch, not an inter-pass cache or supplemental save field.
     std::vector<GroundTurretContact> visibleGroundTurretThreats;
     Uint32 dangerUpdated = std::numeric_limits<Uint32>::max();
     Uint32 lastSafetyTrace = std::numeric_limits<Uint32>::max();
