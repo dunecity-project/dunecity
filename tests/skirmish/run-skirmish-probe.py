@@ -28,6 +28,10 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/skirmis
                screenshots); the choice is remembered and Spectate off seats the human again
   render       whole-map pictures (4 px per tile) and terrain measurements of map-editor random
                maps and of generated maps; --render-save adds the map a saved match started from
+  civ-menu     Civilization Wars settings, remembered seed, generic multiplayer starts/lobby/wire rules
+  civ-1v1      fixed starting kit and positive city income, three game minutes with QuantBot on every seat
+  civ-2v2      the same four-house match and mirrored lane setup
+  civ-3v3      the same six-house match and one lane per player
 
 Every match case asserts houses/teams, players per house, structure and unit counts, army value
 and power against the generator's own plan, and draws the loaded (and played) map. A smoke run
@@ -41,8 +45,11 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import sys
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import managed_profile, require_free_space
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
@@ -54,6 +61,7 @@ parser.add_argument('--render-tag', default='current', help='render: file-name p
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
+require_free_space()
 subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 
 target = 'bin/dunecity.app/Contents/MacOS/dunecity'
@@ -94,8 +102,8 @@ link = link[:link.index('&&')]
 link[link.index('-o') + 1] = str(binary)
 link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
 with (work / 'build.log').open('w') as log:
-    subprocess.run(compile_command, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
-    subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+    subprocess.run(['nice', '-n', '10'] + compile_command, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+    subprocess.run(['nice', '-n', '10'] + link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 
 # Engine lines that mean a generated map or match is broken.
 problem = re.compile(r'invalid|occupied|error|exception|failed|cannot|unknown', re.IGNORECASE)
@@ -104,11 +112,11 @@ startup_noise = re.compile(r'Error loading|Warning: could not|libpng', re.IGNORE
 
 summary = []
 for case in args.cases.split(','):
-    sizes = ((640, 480), (1280, 720)) if case == 'menu' else ((1024, 768),)
+    sizes = ((640, 480), (1280, 720)) if case in ('menu', 'civ-menu') else ((1024, 768),)
     for width, height in sizes:
         label = case if len(sizes) == 1 else f'{case}-{width}'
-        profile = work / ('profile-' + label)
-        profile.mkdir()
+        profile = work / ('profile-' + label) / 'profile'
+        profile.mkdir(parents=True)
         (profile / 'Dune City.ini').write_text(
             f'[Video]\nPhysical Width = {width}\nPhysical Height = {height}\nWidth = {width}\nHeight = {height}\n'
             f'Interface Height = {height}\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Skirmish tester\n')
@@ -121,8 +129,8 @@ for case in args.cases.split(','):
             if args.render_save:
                 env['SKIRMISH_RENDER_SAVE'] = str(args.render_save.resolve())
         logpath = out / f'run-{label}.log'
-        with logpath.open('w') as log:
-            subprocess.run([str(binary), '--window', '--showlog'], cwd=work, env=env, stdout=log,
+        with managed_profile(profile), logpath.open('w') as log:
+            subprocess.run(['nice', '-n', '10', str(binary), '--window', '--showlog'], cwd=work, env=env, stdout=log,
                            stderr=subprocess.STDOUT, check=True, timeout=600)
         text = logpath.read_text(errors='replace')
         if text.count('SKIRMISH_PROBE_PASS:') != 1:
@@ -136,7 +144,7 @@ for case in args.cases.split(','):
         marker = {'mp-lobby': 'digest at cycle', 'spectate': 'spectated match loaded'}.get(case, 'SKIRMISH_PROBE:')
         loaded = text.split(marker, 1)[0] if marker in text else text
         map_warnings = [line for line in loaded.splitlines()
-                        if re.search(r'- Random (\d+v\d+|\d+ starts).*?\d+:|Invalid or occupied|Invalid (unit|building|house|position)|refused zone', line)]
+                        if re.search(r'- (Random|Civilization Wars).*?\d+:|Invalid or occupied|Invalid (unit|building|house|position)|refused zone', line)]
         if map_warnings:
             raise RuntimeError(f'{label}: map load warnings, first: {map_warnings[0]}')
         summary += [line[line.index('SKIRMISH_PROBE'):] for line in text.splitlines() if 'SKIRMISH_PROBE' in line]

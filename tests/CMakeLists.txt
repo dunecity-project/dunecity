@@ -18,6 +18,9 @@ target_sources(dunelegacy_tests
         # Random Skirmish generator: the pure generator over the real map generator/mirror.
         SkirmishGeneratorTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/MapEditor/SkirmishGenerator.cpp
+        CivWarsGeneratorTestCase.cpp
+        CivWarsWormPolicyTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/CivWarsGenerator.cpp
         ${CMAKE_SOURCE_DIR}/src/MapEditor/MapGenerator.cpp
         ${CMAKE_SOURCE_DIR}/src/MapEditor/MapMirror.cpp
         ${CMAKE_SOURCE_DIR}/src/mod/WorkshopStore.cpp
@@ -216,9 +219,9 @@ target_compile_options(dunelegacy_tests
 )
 
 # Add test
-# The dedicated skirmish_generator_tests below runs every [skirmish] case.
-# Exclude that group here to avoid repeating its expensive generator matrices.
-add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests "~[skirmish]")
+# The dedicated generator groups below run their matrices once.
+# Exclude both from the umbrella executable invocation.
+add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests "~[skirmish]~[civwars]")
 add_test(NAME pak_concurrent_read_tests COMMAND dunelegacy_tests "[pak][threading]")
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 # Local revision store: snapshots, pinning, verified imports and retired sharing-queue cleanup.
@@ -236,6 +239,7 @@ add_test(NAME classic_desert_ui_tests COMMAND dunelegacy_tests "[menu][ui-skin]"
 # Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
 add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
 add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]")
+add_test(NAME civilization_wars_tests COMMAND dunelegacy_tests "[civwars]")
 # Formation planner (docs/formations.md): determinism, layout, fallback, edges, catch-up.
 add_test(NAME formation_planner_tests COMMAND dunelegacy_tests "[formation]")
 
@@ -438,7 +442,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests sidebar_grid_tests classic_desert_ui_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests civilization_wars_tests sidebar_grid_tests classic_desert_ui_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
@@ -561,6 +565,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skirmish-probe)
         set_tests_properties(skirmish_generator_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        add_test(NAME civilization_wars_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/civ-wars-probe
+            --cases civ-menu,civ-1v1,civ-2v2,civ-3v3)
+        set_tests_properties(civilization_wars_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         add_test(NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)

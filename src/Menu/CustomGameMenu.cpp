@@ -20,6 +20,7 @@
 #include <Menu/Dune2RReadinessMenu.h>
 #include <Menu/PlaySetup.h>
 #include <Menu/RandomSkirmishMenu.h>
+#include <Menu/CivWarsMenu.h>
 
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
@@ -460,7 +461,13 @@ void CustomGameMenu::onRandomMap()
         return;
     }
     std::string path;
-    {
+    if(mod == "CivWars") {
+        CivWarsMenu generator(true);
+        generator.showMenu();
+        path = generator.getCreatedMap();
+        currentGameOptions = CivWars::matchRules(currentGameOptions);
+        if(setup) setup->rules = currentGameOptions;
+    } else {
         RandomSkirmishMenu generator(mod);
         generator.showMenu();
         path = generator.getCreatedMap();

@@ -65,7 +65,7 @@ std::string mapID(const std::string& name,const std::string& data) {
 bool bundledMod(const std::string& modName) {
     return modName=="vanilla"||modName=="dunecity"||modName=="Tornie"||modName=="Dune2R"
         ||modName=="TornieLite"||modName=="Jericho"||modName=="JerichoLite"
-        ||modName=="ArcaKev"||modName=="ArcaKevLite";
+        ||modName=="ArcaKev"||modName=="ArcaKevLite"||modName=="CivWars";
 }
 }
 Store& store() { static Store value(userPath("workshop")); return value; }

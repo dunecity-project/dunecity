@@ -4,16 +4,17 @@
 #include <mod/Workshop.h>
 #include <array>
 #include <string>
+#include <string_view>
 #include <stdexcept>
 
 namespace OnlineModPolicy {
 // These are the approved mods shipped with the game. Editable copies never
 // inherit approval from Base Mod; they must synchronize in a pregame lobby.
-inline const std::array<std::string, 9>& approvedMods() {
-    // Keep the original four token indices stable.
-    static const std::array<std::string, 9> names{{
+inline const std::array<std::string, 10>& approvedMods() {
+    // Keep existing token indices stable; each approved mod owns one hexadecimal slot.
+    static const std::array<std::string, 10> names{{
         "vanilla", "dunecity", "Tornie", "Dune2R",
-        "TornieLite", "Jericho", "JerichoLite", "ArcaKev", "ArcaKevLite"
+        "TornieLite", "Jericho", "JerichoLite", "ArcaKev", "ArcaKevLite", "CivWars"
     }};
     return names;
 }
@@ -25,9 +26,8 @@ inline bool approved() { return approved(ModManager::instance().getActiveModName
 inline std::string approvedName(const std::string& fingerprint) {
     if(fingerprint.size() != 64 || fingerprint.find_first_not_of("0123456789abcdef") != std::string::npos
        || fingerprint.compare(0, 15, "d00ec17a0000000") != 0) return {};
-    const int index = fingerprint[15] - '1';
-    return index >= 0 && static_cast<std::size_t>(index) < approvedMods().size()
-        ? approvedMods()[index] : std::string();
+    const auto index = std::string_view("123456789abcdef").find(fingerprint[15]);
+    return index < approvedMods().size() ? approvedMods()[index] : std::string();
 }
 inline std::string fingerprint() {
     auto& mods = ModManager::instance();
@@ -39,7 +39,7 @@ inline std::string fingerprint() {
             throw std::runtime_error("Could not verify the approved mod's rules.");
         // Domain-separated, self-identifying content token, not a Workshop revision.
         // Include the installer payload digest as well as the effective rules.
-        return "d00ec17a0000000" + std::to_string(i+1)
+        return std::string("d00ec17a0000000") + "123456789abcdef"[i]
             + Workshop::hashBytes("approved/" + name + "/" + checksum + "/" + mods.installerContentHash(name)).substr(0, 48);
     }
     return Workshop::saveMod(name).hash;
