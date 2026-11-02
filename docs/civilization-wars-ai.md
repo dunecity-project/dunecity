@@ -659,8 +659,8 @@ profiler reports dropped samples in the rest; missing scope totals are not zero.
 | stefPC | off | 25 | 0.68629 | 79.507 | 1589.8 |
 | stefPC | on | 24 | 0.78644 | 148.537 | 1589.2 |
 
-**Rendered FPS remains unmeasured.** Headless cycles/s is simulation throughput,
-not a renderer result. Windows and the mini ran the experiments; Pro was
+**Civ Wars rendered FPS remains unmeasured.** Headless cycles/s is simulation
+throughput, not a renderer result. Windows and the mini ran the experiments; Pro was
 unreachable with its cluster SSH key and Air was offline/guarded. No host guard
 was bypassed.
 
@@ -685,6 +685,59 @@ The complete240-game cohort report is reproduced with:
 
 ```sh
 python3 tests/ai/civ-wars-matrix.py --report \
-  ../dunecity-results/civwars-ai/acceptance-271/{mirrors,ladder,direct}
+  ../dunecity-results/civwars-ai/acceptance-271/mirrors \
+  ../dunecity-results/civwars-ai/acceptance-271/ladder \
+  ../dunecity-results/civwars-ai/acceptance-271/direct
 ```
+
+### Final CivWars-source regression receipts and integration limits
+
+The pinned source353 job
+`20261103T061521-civwars-final-regressions-3b830b` exercised the following
+checks on the mini. These are the last CivWars-code cutover's receipts,
+not results retroactively attributed to later integrated source revisions.
+
+| Check | Observed outcome | Time |
+|---|---|---:|
+| `dunelegacy_tests` | PASS:1251 cases passed,3 skipped;13,323,037 assertions passed | 3.20s |
+| `civilization_wars_tests` | PASS:29 cases,6,577,248 assertions | 1.19s |
+| `quantbot_custom_attack` | PASS, repeatable real-engine probe | 8.32s |
+| `quantbot_army_recovery` | PASS, repeatable real-engine probe | 18.18s |
+| `quantbot_strategy` | PASS, all reported lead-margin checks | 63.14s |
+| `quantbot_ffa_army_deploys` | PASS, deploy/idle-reserve/elimination checks | 80.53s |
+| `perf_regression` | FAIL: eight-house pinned-content fixture cannot be rebuilt | 62.12s |
+| `quantbot_all_against_atreides` | UNRUN; superseded job cancelled with integrator approval | — |
+| `quantbot_scenario_matrix` | UNRUN; superseded job cancelled with integrator approval | — |
+
+Thus the receipt is **six passed, one failed, two unrun**, not nine passed.
+The performance run completed its initial6-minute simulation and30-second
+menu-launched gameplay stages: CPU mean0.30ms/cycle; calibration-normalised
+CPU0.048/0.250, house-p99 0.223/1.000, house-max4.260/10.000, and
+menu-other0.003/0.300 all met their budgets. Its non-CivWars menu-launched
+gameplay measured **313.7fps** (3.19ms mean frame,2.94ms rendering).
+The full check nevertheless failed before the eight-house stage: neither
+`mods/dunecity/graphics_skins` nor `config` contained the exact pinned
+`ObjectData.ini` bytes with SHA256
+`a9446d1441d34be2dc0206eb90c0dde9e3a498bdaabb9bb983dde9454e96e87a`.
+The failed capture was retained; no assertion, content identity or timing
+budget was weakened, and no failed check was rerun merely to confirm it.
+
+The integrator's separate source271 full distributed job
+`20261103T045258-release-integration-760977` ended cancelled with
+**115/133 passed,16 failed/timeouts,2 unrun/cancelled** (Atreides and
+scenario matrix). Its performance check had the same pinned-content blocker.
+It is **not a full-suite pass**. Detailed failure logs remain under
+`~/.local/state/dunecity-queue/ctest/20261103T045258-release-integration-760977/`;
+the final source353 receipts are under the sibling directory named for its
+job above. Main assigned the integrated command/spectator/content-fixture
+failures and the subsequent frozen-source full-suite rerun to CtestTriage.
+Those newer-source results must be reported separately; they do not change
+these observed source271/353 outcomes.
+
+The experimental strategy therefore has **no general strength, finishing,
+difficulty-ladder or complete performance/regression acceptance**. It is off
+by default; only explicit1v1 opt-in retains the measured policy. Generated
+129×96 games on the five training seeds are the measured domain, not proof
+for arbitrary CivWars-mod maps, shared-house role combinations or held-out
+seeds. No further speculative candidate was shipped.
 

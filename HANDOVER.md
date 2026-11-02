@@ -241,6 +241,15 @@
   config fixture round-trips both states and checks different hashes. All six final
   40min OFF games (three formats × seeds7101/7202) match source271 control final cycles,
   rolling digests, outcomes and config/map/options hashes, including cross-host1v1.
+- Final353 mandatory-check receipt is **6 PASS /1 FAIL /2 UNRUN**: native umbrella
+  (1251passed/3skipped;13,323,037assertions), CivWars29cases/6,577,248assertions,
+  custom_attack, army_recovery, strategy and FFA pass. perf passes CPU/menu budgets
+  (0.30ms CPU/cycle;313.7fps on its non-CivWars menu-launched scene) but fails at
+  the missing eight-house pinned ObjectData bytes. Atreides/scenario did not run;
+  Main approved cancelling the superseded job and using CtestTriage's newer frozen suite.
+- The completed source271 full cluster receipt is115/133pass,16fail/timeouts,2cancelled,
+  **not a full-suite pass**. Main/CtestTriage own integrated fixture/command/spectator
+  fixes and the newer-source full rerun; no later result is backdated onto271/353.
   Full experiment parameters, result tables, source/job identities and verification receipts
   are in `docs/civilization-wars-ai.md`; raw evidence is in `dunecity-results/civwars-ai/`.
   Headless cycles/s is not rendered FPS; no rendered-FPS acceptance is claimed. No origin push.
