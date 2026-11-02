@@ -665,20 +665,22 @@ for case in cases:
             subprocess.run(['scp', '-q', host + ':' + rdir + '/*.png', str(case_out)], stderr=subprocess.DEVNULL)
         codes = {role: p.returncode for role, p in processes.items()}
     finally:
-        for p in processes.values():
-            if p.poll() is None: p.terminate()
-        for p in processes.values():
-            try: p.wait(timeout=5)
-            except subprocess.TimeoutExpired: p.kill()
-        for tunnel in tunnels:
-            tunnel.terminate()
-            try: tunnel.wait(timeout=5)
-            except subprocess.TimeoutExpired: tunnel.kill()
-        for log in logs: log.close()
-        service.stop()
-        if sys.exc_info()[0] is not None:
-            for context in reversed(profiles):
-                context.__exit__(*sys.exc_info())
+        try:
+            for p in processes.values():
+                if p.poll() is None: p.terminate()
+            for p in processes.values():
+                try: p.wait(timeout=5)
+                except subprocess.TimeoutExpired: p.kill()
+            for tunnel in tunnels:
+                tunnel.terminate()
+                try: tunnel.wait(timeout=5)
+                except subprocess.TimeoutExpired: tunnel.kill()
+            for log in logs: log.close()
+            service.stop()
+        finally:
+            if sys.exc_info()[0] is not None:
+                for context in reversed(profiles):
+                    context.__exit__(*sys.exc_info())
 
     def result(role):
         path = case_out / (role + '-result')

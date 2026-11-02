@@ -768,7 +768,10 @@ int runOwnershipProbe() {
         SDL_KeyboardEvent key{}; key.keysym.sym = SDLK_DOWN;
         menu.handleKeyPress(key);
         if(HouseChoiceMenu::getPartnerClass() != "qBotEasy")
-            throw std::runtime_error("AI partner QuantBot missing");
+            throw std::runtime_error("AI partner QuantBot missing: selected='" + HouseChoiceMenu::getPartnerClass()
+                + "' menu=" + std::to_string(menu.getPosition().x) + "," + std::to_string(menu.getPosition().y)
+                + " renderer=" + std::to_string(getRendererWidth()) + "x" + std::to_string(getRendererHeight())
+                + " entry=" + std::to_string(menu.partnerSelector.aiBox.getSelectedIndex()));
         key.keysym.sym = SDLK_SPACE; menu.handleKeyPress(key);
         // Difficulty box (336,337 124x22): every QuantBot difficulty.
         menu.handleMouseLeft(360, 345, true); menu.handleMouseLeft(360, 345, false);
