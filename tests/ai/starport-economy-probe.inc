@@ -3,6 +3,8 @@
 #include <structures/StarPort.h>
 #include <Choam.h>
 #include <Map.h>
+#include <units/UnitBase.h>
+#include <limits>
 #include <stdexcept>
 
 void runStarportEconomyProbe(Game& game) {
@@ -218,6 +220,29 @@ void runStarportEconomyProbe(Game& game) {
             openingYard=static_cast<BuilderBase*>(building);
     if(!openingYard) throw std::runtime_error("No yard for carryall priority fixture");
     openingYard->upgrading=false;openingYard->updateBuildList();
+    // The first transport's peaceful savings priority is distinct from an
+    // emergency defence upgrade against the native campaign's visible army.
+    const int team=house->getTeamID();
+    std::vector<UnitBase*> visibleHostiles;
+    for(auto* unit:unitList)
+        if(unit->getOwner() && unit->getOwner()->getTeamID()!=team
+            && unit->canAttack() && unit->isVisible(team)) visibleHostiles.push_back(unit);
+    auto restoreHostiles=[&] {
+        for(auto* unit:visibleHostiles)unit->setVisible(team,true);
+        bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+    };
+    auto buildOpeningTransport=[&] {
+        for(auto* unit:visibleHostiles)unit->setVisible(team,false);
+        bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+        try {
+            for(const auto* unit:unitList)
+                if(unit->getOwner() && unit->getOwner()->getTeamID()!=team
+                    && unit->canAttack() && unit->isVisible(team))
+                    throw std::runtime_error("Peaceful carryall reserve fixture still observes a hostile army");
+            bot->build(4000);
+        }catch(...){restoreHostiles();throw;}
+        restoreHostiles();
+    };
     for(const auto gameType:{GameType::CustomGame,GameType::Campaign}) {
         game.gameType=gameType;bot->gameMode=QuantBot::GameMode::Custom;
         auto* transportPort=dynamic_cast<StarPort*>(place(Structure_StarPort));
@@ -232,12 +257,12 @@ void runStarportEconomyProbe(Game& game) {
         savedStructures=structureList;structureList.clear();
         structureList.push_back(openingYard);structureList.push_back(transportPort);structureList.push_back(secondPort);
         try {
-            bot->build(4000);
+            buildOpeningTransport();
             if(transportPort->getProductionQueueSize() || secondPort->getProductionQueueSize()
                 || openingYard->getProductionQueueSize() || house->getCredits()!=639)
                 throw std::runtime_error("Cheap troops or construction consumed first carryall savings");
             house->addCredits(361);
-            bot->build(4000);
+            buildOpeningTransport();
         }catch(...){structureList=savedStructures;throw;}
         structureList=savedStructures;
         int firstTransports=0;

@@ -1,5 +1,6 @@
 #include <units/Harvester.h>
 #include <players/RocketTurretPolicy.h>
+#include <limits>
 // A funded single-yard city opening must keep developing R/C/I while proactive
 // rocket overlap and the opening worker supplier are still outstanding, and
 // must still refuse to spend an urgent crime reserve on a cheap plot.
@@ -73,6 +74,29 @@ void runCityGrowthProbe(Game& game) {
                 y/sim->crimeBeforePoliceMap_.getBlockSize(),level);
         }
     };
+    // This is a peaceful priority fixture. Native map armies must not turn
+    // its overlap or crime cases into a real reactive ground/air defence.
+    const int team=house->getTeamID();
+    std::vector<UnitBase*> visibleHostiles;
+    for(auto* unit:unitList)
+        if(unit->getOwner() && unit->getOwner()->getTeamID()!=team
+            && unit->canAttack() && unit->isVisible(team)) visibleHostiles.push_back(unit);
+    auto restoreHostiles=[&] {
+        for(auto* unit:visibleHostiles)unit->setVisible(team,true);
+        bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+    };
+    auto buildPeacefully=[&] {
+        for(auto* unit:visibleHostiles)unit->setVisible(team,false);
+        bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+        try {
+            for(const auto* unit:unitList)
+                require(!(unit->getOwner() && unit->getOwner()->getTeamID()!=team
+                    && unit->canAttack() && unit->isVisible(team)),
+                    "Peaceful city priority fixture still observes a hostile army");
+            bot->build(0);
+        }catch(...){restoreHostiles();throw;}
+        restoreHostiles();
+    };
     auto decide=[&](int credits) {
         for(auto* structure:structureList)if(structure->getOwner()==house && structure->isABuilder()) {
             auto* builder=static_cast<BuilderBase*>(structure);
@@ -83,7 +107,7 @@ void runCityGrowthProbe(Game& game) {
         // Starting funds bypass spice-storage limits, matching the funded opening.
         house->storedCredits=0;house->cityCredits=0;house->startingCredits=credits;
         house->producedPower=10000;bot->lastCalculatedSpice=1300000;
-        bot->build(0);
+        buildPeacefully();
         for(const auto& order:yard->currentProductionQueue)
             if(order.itemID!=Structure_Slab1 && order.itemID!=Structure_Slab4 && order.itemID!=Structure_Road)
                 return order.itemID;
