@@ -335,3 +335,39 @@ immutable snapshot keeps inputs fixed during a match. This identifies source
 inputs, not system toolchains or rendered-asset provenance; map/options/config
 identities and source commits remain separately recorded.
 
+
+### Candidate 3 cross-format pilot
+
+Source `737074c4`, job `20261102T233351-civwars-candidate3-formats-c8fd43`,
+seed 7101, strategy on, 40-minute cap. All nine streams were complete, with
+the same actual source-fingerprint prefix `14c5ce77f49b`:
+
+| Format | Pair | Outcome | End, min | Ground attacks | Island yards |
+|---|---|---|---:|---:|---:|
+| 1v1 | Hard:Hard | Time limit | 40.00 | 3 | 2 |
+| 1v1 | Hard:Medium | Time limit | 40.00 | 3 | 2 |
+| 1v1 | Brutal:Hard | Brutal won | 35.30 | 3 | 3 |
+| 2v2 | Hard:Hard | Time limit | 40.00 | 8 | 3 |
+| 2v2 | Hard:Medium | Time limit | 40.00 | 6 | 2 |
+| 2v2 | Brutal:Hard | Brutal won | 39.45 | 9 | 2 |
+| 3v3 | Hard:Hard | Time limit | 40.00 | 6 | 2 |
+| 3v3 | Hard:Medium | Time limit | 40.00 | 7 | 3 |
+| 3v3 | Brutal:Hard | Time limit | 40.00 | 7 | 1 |
+
+This is not yet the required five-seed, side-swapped ladder evidence. Higher
+worker throughput increased attacks and produced two decisive Brutal wins,
+but Hard mirrors and the largest team games still stalled.
+
+### Candidate 4: lane-directed attack move, not forced combat
+
+Hypothesis: independent map-wide Hunt sends a nominal wave toward different
+contacts instead of concentrating it at one lane's defences. The engine
+already has `doHuntToward`: normal attack-move combat stops for enemies met
+on the route rather than replacing the walk with a map-wide nearest target.
+Generated-map plain-Hunt waves now share the central-lane sand approach just
+before the opposite rock end. Alliance members use the same known terrain
+waypoint; no hidden enemy object is consulted. After arrival ordinary Hunt
+continues. No formation shape, forced target, combat retreat, human lease,
+saboteur order or non-generated-map order is changed. Explicit formation/
+party/split/finish controllers retain their own destinations.
+
