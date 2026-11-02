@@ -125,6 +125,15 @@ projects retain nuclear. Vanilla selection is untouched. Switch OFF reproduces t
 it is loaded, saved and included in the normal config hash. Shared unreleased protocol
 111 already covers deterministic AI changes in this release batch.
 
+The integrated `growth_installments` regression exposed a legality error in this
+comparison: its real controlled case disables Windtraps, but admission still priced
+the hypothetical cheap alternative and rejected the only legal reactor at1,200 cash/
+368 forecast. Inventory now caches actual Windtrap buildability alongside Nuclear;
+sizing compares alternatives only while wind can be built. The existing installment/
+foundation/blackout assertions are retained, and the sizing boundary adds this case.
+Normal DuneCity Wind-enabled matrix games retain the same comparison. The correction
+adds no placement search and remains behind CityPowerSizing.
+
 The no-spice engine fixture exercises the real final yard vetter with legal live sites:
 off reproduces the oversized first reactor; on selects wind for the 40-power top-up,
 and preserves rich-city, seven-windtrap-cost, blackout, funded-installment and vanilla

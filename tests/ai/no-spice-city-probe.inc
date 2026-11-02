@@ -414,11 +414,12 @@ void runNoSpiceCityProbe(Game& game) {
                 if(structure->getOwner()==house && DuneCity::isCityZoneStructure(structure->getItemID()))
                     structureList.remove(structure);
             bot->projectedPowerDemandGrowth=0;
-            auto planned=[&](bool enabled) {
+            auto planned=[&](bool enabled,bool windAvailable=true) {
                 config->force.cityPowerSizing=enabled;
                 house->powerRequirement=330;house->producedPower=400;
                 QuantBot::BuildPass pass(0);
                 pass.citySimEnabled=true;pass.cityWorkingReserve=450;pass.nuclearBuildAvailable=true;
+                pass.windBuildAvailable=windAvailable;
                 pass.itemCount[Structure_HeavyFactory]=1;
                 pass.itemCount[Structure_WindTrap]=house->getNumItems(Structure_WindTrap);
                 pass.itemCount[Structure_NuclearPlant]=house->getNumItems(Structure_NuclearPlant);
@@ -427,6 +428,7 @@ void runNoSpiceCityProbe(Game& game) {
             };
             require(planned(false),"Planned-reactor negative control no longer requests excess capacity");
             require(!planned(true),"One-windtrap reserve entered the yard as an oversized installment reactor");
+            require(planned(true,false),"An unavailable cheap generator rejected the only legal reactor");
             structureList=savedStructures;bot->projectedPowerDemandGrowth=savedGrowth;
             const auto oldQuote=growthQuote(false);
             const auto sizedQuote=growthQuote(true);

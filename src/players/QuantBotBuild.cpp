@@ -290,6 +290,7 @@ void QuantBot::planBuildInventory(BuildPass& pass) {
     pass.activeHeavyFactoryCount = 0;
     pass.carryallBuildAvailable = false;
     pass.mcvBuildAvailable = false;
+    pass.windBuildAvailable = false;
     pass.nuclearBuildAvailable = false;
     pass.activeLightFactoryCount = 0;
     pass.activeHighTechFactoryCount = 0;
@@ -314,8 +315,10 @@ void QuantBot::planBuildInventory(BuildPass& pass) {
         if (pStructure->getOwner() == getHouse()) {
             if (pStructure->isABuilder()) {
                 const BuilderBase* pBuilder = static_cast<const BuilderBase*>(pStructure);
-                if (pBuilder->getItemID() == Structure_ConstructionYard && pBuilder->getHealth() > 0
-                    && campaignAvailableToBuild(pBuilder,Structure_NuclearPlant)) pass.nuclearBuildAvailable = true;
+                if (pBuilder->getItemID() == Structure_ConstructionYard && pBuilder->getHealth() > 0) {
+                    if (campaignAvailableToBuild(pBuilder,Structure_WindTrap)) pass.windBuildAvailable = true;
+                    if (campaignAvailableToBuild(pBuilder,Structure_NuclearPlant)) pass.nuclearBuildAvailable = true;
+                }
                 if (pBuilder->getItemID() == Structure_HighTechFactory && pBuilder->getHealth() > 0
                     && campaignAvailableToBuild(pBuilder,Unit_Carryall)) pass.carryallBuildAvailable = true;
                 if (pBuilder->getItemID() == Structure_HighTechFactory && pBuilder->getHealth() > 0
@@ -908,7 +911,7 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
         && QuantBotBuildPolicy::planNuclearInvestment(getHouse()->getPowerRequirement(),
             getHouse()->getProducedPower(),pass.cityPowerReserve,std::max(1,-data[Structure_WindTrap][houseID].power))
         && pass.nuclearBuildAvailable;
-    if (pass.nuclearPlan && botConfig().force.cityPowerSizing) {
+    if (pass.nuclearPlan && botConfig().force.cityPowerSizing && pass.windBuildAvailable) {
         // Positive income can finance installments, but it cannot justify
         // occupying the only yard with 2,000 power for a one-windtrap top-up.
         const int windOutput=std::max(1,-data[Structure_WindTrap][houseID].power);

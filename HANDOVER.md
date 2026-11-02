@@ -39,6 +39,11 @@
   projects retain nuclear. Existing queued reactors remain untouched. Uses cached
   footprint capacity, with no new allocation/search or save fields. Vanilla is unchanged;
   OFF reproduces the former choice. The unreleased protocol111 already covers it.
+- Integrated growth_installments exposed sizing against a disabled Windtrap:
+  the only legal reactor was refused at1200 cash/368 forecast. Cache live wind
+  buildability in the existing inventory scan and compare prices only when wind
+  is available. Existing installment/foundation/blackout assertions remain intact;
+  added the unavailable-alternative sizing boundary. No new placement search.
 - Frozen271 integrated A/B exposed a second cause on the same seed: cheap wind
   releases1700 credits, but an optional MCV900 + three producer upgrades300 each
   + Trike150 consume1950 before tax covers upkeep. Population5400/built8 then

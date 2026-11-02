@@ -82,6 +82,7 @@ struct QuantBot::BuildPass {
     std::vector<const BuilderBase*> harvesterFactories{};
     bool carryallBuildAvailable{};
     bool mcvBuildAvailable{};
+    bool windBuildAvailable{};
     bool nuclearBuildAvailable{};
     int activeLightFactoryCount{};
     int activeHighTechFactoryCount{};
