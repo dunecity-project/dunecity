@@ -66,18 +66,47 @@
   cities keep one. The perimeter also wants a1000-credit unit reserve. First-heavy
   saving, repeat zoning/police and unit spending prevent the late Starport fallback
   from owning its price. Reactive ground cover had no protected capital candidate.
-- New hashed, default-on `[Force Concentration] ThreatTurrets` uses the existing
-  visible-only safety survey, a2–8 local goal (one rocket/400 hostile ground value)
-  and12-total ceiling. Local firing sites cover the attacked side; bounded search
-  preserves roads/access/spacing. The next turret or power/tech prerequisite owns
-  its cash; core/refinery opening gates do not postpone an actual visible raid.
-  `CityStarportSupply` protects a solvent, seeded city's first useful Starport,
-  ending its claim once standing or pending. Switches OFF retain the old paths.
+- New hashed, default-on `[Force Concentration] ThreatTurrets` uses a transient
+  per-build visible-only contact survey, a2–8 local goal (one rocket/200 hostile
+  ground value) and12-total ceiling. Custom Hard/Brutal protect production,
+  income/power and Radar core, not every outlying district. Bounded firing-site
+  search minimizes observed return fire and preserves roads/access/spacing.
+  The next turret or power/tech prerequisite owns its price without the peaceful
+  core/refinery gates postponing an actual visible raid.
+- `CityStarportSupply` protects a solvent, seeded city's first useful Starport.
+  After six real rockets stand with working tech and spare supplier power, it
+  owns its one-off price before further outlying replacements; a standing or
+  pending port ends that claim. Switches OFF retain the old paths.
+- Late-save evidence also found7140-score import bargains eclipsing6500 defensive
+  Radar savings: the military/growth interleave then spent371/385 credits on
+  plots/imports just before the400-credit prerequisite was affordable. Bounded
+  defence/supply claims now compare non-military priorities without that diversion;
+  higher-priority blackout and other infrastructure choices remain eligible.
+- Defensive tech/power and first supplier sites prefer standing rocket cover.
+  Final yard vetting preserves the selected project's real footprint/site rather
+  than discarding a Radar's protected site as though it were a stale1×1 service.
 - No saved AI fields or extra protocol bump: the shared unreleased protocol111
   already covers this batch. No saboteur orders or human-order leases changed.
 - Added a minimal eight-quad/rear-pair/one-refinery engine fixture to
   `quantbot_custom_attack`, plus bounded-goal and both switches' load/save/hash
   tests. Evidence: `/Users/stefan/Documents/projects/outputs/turrets-20261103/`.
+- Final combinedebd8ba42, exact original content, ten-minute paired continuation
+  (CityPowerSizing ON in both): switches OFF build0 new rockets/0 Starports,
+  lose the CY at+257.952s and are eliminated by+6min. ON build5 new rockets
+  (first+88.16s), order the Starport+299.36s/place+329.76s, and retain40 structures,
+  6 rockets,1 Starport and the CY at+6min. The continuing enemy wave destroys the
+  port+398.096s and CY+446.256s; elimination follows by+9min. This holds the
+  original rush for several more minutes, **not a permanent rescue/match win**.
+- Final fast-year diagnostic with the fixes ON earns2377 gross tax in minute1
+  versus1186 under Slow City Year (spice0 in both). Its Starport stands+115.36s;
+  at+6min it retains48 structures/7 rockets/1 port, but the CY still falls+445.936s.
+  Turning the rule off funds both sides faster; it is not an AI-only cash grant
+  and did not avert eventual defeat. No income rule or forecast formula changed.
+- Final native build, `quantbot_custom_attack` (6.68s) and `quantbot_no_spice_city`
+  (28.72s) pass. The custom fixture also checks import-score diversion, emergency
+  precedence, real Radar queue/site preservation, and first-supplier handoff after
+  six standing guns. Raw final arms: `supplier-{off,on,fast-year-on}/`; numbers and
+  purchase/loss times: `actual-save-comparison.json` beside the preserved probe.
 
 ## 2026-11-03 — Power-starved Harkonnen city (OMP IdleAISave, unreleased)
 
