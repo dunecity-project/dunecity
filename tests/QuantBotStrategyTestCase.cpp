@@ -191,6 +191,26 @@ TEST_CASE("Research Lab policy defaults on and is loaded saved and hashed",
     std::filesystem::remove(path);
 }
 
+TEST_CASE("City growth power defaults on and is loaded saved and hashed", "[ai][city][config]") {
+    QuantBotConfig config;
+    REQUIRE(config.force.cityGrowthPower);
+    const auto enabledHash = config.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-growth-power-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCityGrowthPower=false\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE_FALSE(config.force.cityGrowthPower);
+    REQUIRE(config.getConfigHash() != enabledHash);
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE_FALSE(restored.force.cityGrowthPower);
+    REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Strategy: the [Strategy] keys are read and every one is hashed", "[ai][strategy][config]") {
     const QuantBotConfig baseline;
     const std::string base = baseline.getConfigHash();

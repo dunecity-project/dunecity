@@ -25,6 +25,33 @@
   from the default-on setting. All parameters, experiment tables, source/job IDs and data
   locations are in `docs/civilization-wars-ai.md`; no origin push.
 
+## 2026-11-03 — Power-starved Harkonnen city (OMP IdleAISave, unreleased)
+
+- Stefan's `harkonan doing nothing.dls` is a 1.0.864/9879 Random Skirmish save,
+  160×160, seed448824951, no spice, tech9, four QuantBot Hard/Both controllers;
+  Sardaukar also has the human. This is not a Fighter/Off menu setting.
+- At cycle68631 Harkonnen has 3 credits, 11 structures, R/C/I=3/0/1, population2760,
+  power200/190, a Refinery, Radar and Starport. The yard is empty. The next demanded
+  plot needs24 spare power, but military savings/imports repeatedly spend the
+  Windtrap budget. At cycle74425 the yard has only3 spendable of273 credits and
+  rejects its Windtrap (`committed_cash`); the Starport then buys a270-credit Launcher.
+- Mercenary is cash-poor, not permanently idle: 93 credits, 25 structures,
+  R/C/I=8/3/3, population5960, power400/346, no factory/Starport. In six more game
+  minutes it reaches43 structures, population11620 and328 credits. Atreides goes
+  from60 to97 structures and16680 to30780 population; Harkonnen stays11/2760.
+- Both the released v1.0.864 build and staging9881 load the original save and
+  produce those continuation numbers. Research Lab/trooper-AA load off, all tax
+  rates remain7%, and HardCityMatch's90k ceiling is far above these cities.
+- New `[Force Concentration] CityGrowthPower` (hashed, default ON) makes demanded
+  growth's legal generator prerequisite a protected capital project, including its
+  concrete. Wind is the saving target; a fully affordable reactor retains its normal
+  preference. Pending generation prevents duplicate projects. Existing threat/civic
+  priority and surplus military spending remain; switch off keeps the prior path.
+  No saved AI state change; shared unreleased protocol111 already covers the release.
+- Added an off/on cheap-import/power-headroom fixture to `quantbot_no_spice_city`
+  and config load/save/hash coverage. Evidence:
+  `/Users/stefan/Documents/projects/outputs/harkonnen-idle-20261103/`.
+
 ## 2026-11-02 — Civilization Wars (OMP CivWars, unreleased)
 
 - New main-menu Civilization Wars screen: seeded mirrored three-lane maps, 1v1/2v2/3v3,

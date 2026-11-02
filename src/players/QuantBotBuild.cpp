@@ -2497,6 +2497,32 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 economy.cost=pass.lastEconomyInvestment.cost;
                 economy.proceeds=pass.lastEconomyInvestment.proceeds();
                 economy.delay=pass.lastEconomyInvestment.delayCycles;
+                // The lot's amortized power charge is not a generator purchase.
+                // Protect its next real prerequisite as the growth investment:
+                // otherwise a cheap Starport unit wins every time the city
+                // approaches the windtrap price, and zoning never resumes.
+                if (botConfig().force.cityGrowthPower && DuneCity::isCityZoneStructure(economy.item)
+                    && getHouse()->getProducedPower()-getHouse()->getPowerRequirement()<24
+                    && !powerGenerationPending(pass)) {
+                    Uint32 generator=NONE_ID;
+                    Coord site=Coord::Invalid();
+                    for (Uint32 item:{Structure_WindTrap,Structure_NuclearPlant}) {
+                        if (!campaignAvailableToBuild(builder,item)) continue;
+                        const Coord at=findPlaceLocation(item);
+                        if (!at.isValid()) continue;
+                        // Keep the ordinary city preference: cheap wind while
+                        // saving, a reactor once its complete price is funded.
+                        if (generator!=NONE_ID && pass.money<buildingCapitalCost(pass,item)) continue;
+                        generator=item;site=at;
+                    }
+                    if (generator!=NONE_ID) {
+                        economy.item=generator;economy.site=site;
+                        economy.cost=buildingCapitalCost(pass,generator);
+                        economy.foundationCost=economy.cost-data[generator][houseID].price;
+                        economy.delay=data[generator][houseID].buildtime*15;
+                        economy.kind="city_growth_power";
+                    }
+                }
             } else if (campaignAvailableToBuild(builder,Structure_Refinery)
                 && findPlaceLocation(Structure_Refinery).isValid()) {
                 forecastSpiceTrip(pass, findPlaceLocation(Structure_Refinery));
@@ -2519,7 +2545,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             if (economy.item!=NONE_ID) {
                 economy.price=data[economy.item][houseID].price;
                 economy.score=QuantBotSpendingPolicy::economyScore(economy.proceeds,economy.cost);
-                economy.reason=economy.score>0 ? "marginal_income" : "no_marginal_income";
+                economy.reason=economy.kind==std::string("city_growth_power") ? "unlock_demanded_city_growth"
+                    : economy.score>0 ? "marginal_income" : "no_marginal_income";
                 pass.capitalCandidates.push_back(economy);
             }
             // Services must be allowed to save their price, not wait for money
@@ -2899,11 +2926,15 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         planningBuilder=NONE_ID;clearPlacementCache(false,true);
     }
     if (!pass.cityGrowthProtected && pass.citySimEnabled
-        && getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=24
+        && (getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=24
+            || botConfig().force.cityGrowthPower)
         && pass.capitalChoice>=0 && pass.capitalCandidates[pass.capitalChoice].kind==std::string("military")) {
         int growth=-1;
         for (size_t i=0;i<pass.capitalCandidates.size();++i)
-            if (DuneCity::isCityZoneStructure(pass.capitalCandidates[i].item) && pass.capitalCandidates[i].score>0
+            if ((DuneCity::isCityZoneStructure(pass.capitalCandidates[i].item)
+                    ? getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=24
+                    : pass.capitalCandidates[i].kind==std::string("city_growth_power"))
+                && pass.capitalCandidates[i].score>0
                 && (growth<0 || pass.capitalCandidates[i].score>pass.capitalCandidates[growth].score)) growth=int(i);
         if (growth>=0) {pass.capitalChoice=growth;pass.cityGrowthProtected=true;}
     }

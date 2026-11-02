@@ -343,6 +343,19 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
         yardTurn.skipRemainingStructureLogic=true;
     }
 
+    // A demanded plot can be blocked by generation rather than its own
+    // hundred-credit price. Its selected, bounded power project owns the
+    // savings and this yard until queued; other producers keep the remainder.
+    if (yardTurn.itemID==NONE_ID && capitalPending(pass) && !yardTurn.civicClaimsYard
+        && pass.capitalCandidates[pass.capitalChoice].kind==std::string("city_growth_power")
+        && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()) {
+        const auto& power=pass.capitalCandidates[pass.capitalChoice];
+        const bool funded=pass.money>=power.price+power.foundationCost;
+        yardTurn.itemID=funded ? power.item : Uint32(NONE_ID);
+        yardTurn.structureRule=funded ? "city_growth_power" : "save_city_growth_power";
+        yardTurn.skipRemainingStructureLogic=true;
+    }
+
     // Honour the growth allocation in the actual yard decision,
     // not just the shared cash reserve. Previously this yard could
     // immediately spend the protected plot's budget on a service.

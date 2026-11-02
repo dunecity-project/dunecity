@@ -353,6 +353,7 @@ QuantBotConfig::QuantBotConfig() {
     // Stefan, 2026-11-01: Hard's city 20k/40k/60k/90k, growing to the largest other city.
     force.hardCityMatch = true;
     force.researchLab = true;
+    force.cityGrowthPower = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -652,6 +653,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
         iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
         iniFile.setBoolValue("Force Concentration", "ResearchLab", force.researchLab);
+        iniFile.setBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -778,6 +780,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
     civWarsStrategy = iniFile.getBoolValue("Civ Wars", "Strategy", civWarsStrategy);
     force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);
+    force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1262,6 +1265,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("defencePrerequisites", force.defencePrerequisites);
     addNamed("hardCityMatch", force.hardCityMatch);
     addNamed("researchLab", force.researchLab);
+    addNamed("cityGrowthPower", force.cityGrowthPower);
     configStr += "|/FORCE|";
     addNamed("civWarsStrategy", civWarsStrategy);
     configStr += "|STRATEGY";

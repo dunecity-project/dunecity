@@ -43,6 +43,22 @@ also gets this idle fallback. The existing protection against military savings
 now binds the actual yard selection as well as reserving credits. A blackout,
 absent demand, insufficient cash or unavailable land still prevents zoning.
 
+`[Force Concentration] CityGrowthPower=1` (hashed, default on) extends that
+growth allocation to its real generation prerequisite. When a demanded legal
+R/C/I plot has a positive return but less than 24 spare power, the capital
+planner substitutes a legal Windtrap, or an already affordable Nuclear Plant,
+for the plot. Its full price and required concrete are reserved from military
+orders and Starport bargains, including while cash accumulates. A pending
+generator prevents another allocation; after it completes the ordinary zoning
+and military rules resume. Actual air/crime protection and required civics keep
+their existing priority. The switch is inert outside city games; off preserves
+the previous allocation, including the power-starved Starport stall.
+
+The `quantbot_no_spice_city` engine fixture reproduces the four-zone,
+ten-spare-power/cheap-import deadlock from `harkonan doing nothing.dls`, checks
+the off/on queues and exact funded generator, prevents a duplicate pending
+generator, and confirms zoning resumes with power. No saved AI state changes.
+
 Falling cash alone is not a shortage. The four-minute runway comparison is:
 
 `projected cash = cash − unpaid orders + forecast net income − continued production cost`

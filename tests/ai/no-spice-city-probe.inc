@@ -255,6 +255,63 @@ void runNoSpiceCityProbe(Game& game) {
         state.taxBaseEighths=0;
     }
 
+    // harkonan doing nothing.dls (1.0.864): the seed existed, but only ten
+    // spare power remained. The next cheap import repeatedly consumed the
+    // generator savings, so a four-lot city stayed four lots indefinitely.
+    {
+        auto* port=static_cast<StarPort*>(put(Structure_StarPort,2,18));
+        put(Structure_Radar,2,24); // The save already unlocked rocket-turret prerequisites.
+        const auto savedStructures=structureList;
+        const auto savedConfig=bot->configOverride;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        bot->configOverride=config;
+        bot->difficulty=QuantBot::Difficulty::Hard;bot->militaryValueLimit=70000;
+        // One actual planning yard, as in the save; retain the fixture's real
+        // generators, storage, zones and road-connected placement space.
+        structureList.remove_if([&](const auto* structure) {
+            return structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard
+                && structure!=yard;
+        });
+        state.resPop=120;state.comPop=3;state.indPop=15;state.taxBaseEighths=304;
+        state.avgLandValue=160;state.civicDemandBlocked=0;
+        state.resValve=2000;state.comValve=1500;state.indValve=717;
+        const auto& wind=game.objectData.data[Structure_WindTrap][HOUSE_HARKONNEN];
+        const Coord windSize=getStructureSize(Structure_WindTrap);
+        const int windCapital=wind.price+(game.getGameInitSettings().getGameOptions().concreteRequired
+            ? windSize.x*windSize.y*game.objectData.data[Structure_Slab1][HOUSE_HARKONNEN].price : 0);
+        auto marketDecide=[&](int credits,int power) {
+            port->informFrigateDestroyed(); // Reset this fixture's preceding shipment.
+            port->updateBuildList();
+            for(auto& offer:port->buildList)if(offer.itemID==Unit_Quad)offer.price=80;
+            for(auto& offer:house->getChoam().availableItems)offer.num=offer.itemID==Unit_Quad ? 10 : 0;
+            return decide(credits,power);
+        };
+        try {
+            config->force.cityGrowthPower=false;
+            const Pass legacy=marketDecide(windCapital,-1);
+            require(ordered(legacy,Unit_Quad),"Power-stall negative control did not spend on the cheap import");
+            require(!ordered(legacy,Structure_WindTrap)&&!ordered(legacy,Structure_NuclearPlant),
+                "Power-stall negative control already funded generation");
+            config->force.cityGrowthPower=true;
+            const Pass saving=marketDecide(windCapital-1,-1);
+            require(port->getProductionQueueSize()==0,"A Starport bargain consumed required growth-power savings");
+            require(!ordered(saving,Structure_WindTrap),"Growth power spent cash not yet in hand");
+            const Pass funded=marketDecide(windCapital,-1);
+            require(ordered(funded,Structure_WindTrap),"Demanded growth failed to fund its real generator prerequisite");
+            require(port->getProductionQueueSize()==0,"Military spending took the generator's purchase budget");
+            bot->build(0);
+            int pending=0;
+            for(const auto& order:yard->getProductionQueue())pending+=order.itemID==Structure_WindTrap;
+            require(pending==1,"A pending growth generator was ordered twice");
+            const Pass powered=marketDecide(1000,10000);
+            require(powered.zones>0,"Funded power did not release the city back to demanded zoning");
+            SDL_Log("CITY_GROWTH_POWER_PASS: off buys import; on saves %d, orders one generator, resumes zoning",windCapital);
+        } catch (...) {
+            bot->configOverride=savedConfig;structureList=savedStructures;throw;
+        }
+        bot->configOverride=savedConfig;structureList=savedStructures;
+    }
+
     SDL_Log("NO_SPICE_CITY_OK");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=no_spice_city outcome=passed");
 }

@@ -348,3 +348,6 @@ Strategy=true
 # Basic income, power, defence and existing production keep their funding first.
 [Force Concentration]
 ResearchLab=1
+# Fund a legal generator before demanded city growth loses its power headroom.
+# Military production and Starport bargains may spend only the remaining cash.
+CityGrowthPower=1
