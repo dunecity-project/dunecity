@@ -22,7 +22,7 @@ inline bool betterSite(const Site& candidate,const Site& best) {
 // space. No nested full-map searches or per-candidate pathfinding.
 inline Site choose(int w,int h,const std::vector<Tile>& tiles,
                    const std::vector<int>& starts,const std::vector<int>& enemies,
-                   const std::vector<int>& reserved, int mainBase=-1) {
+                   const std::vector<int>& reserved, int mainBase=-1, int minimumRoom=48) {
     const int n=w*h;
     std::vector<int> component(n,-1),distance(n,-1),freeCount;
     std::vector<char> occupied;
@@ -97,14 +97,14 @@ inline Site choose(int w,int h,const std::vector<Tile>& tiles,
     Site best;
     for(int y=0;y<h-1;++y) for(int x=0;x<w-1;++x) {
         const int i=y*w+x,c=component[i];
-        if(c<0||occupied[c]||freeCount[c]<48||distance[i]<0)continue;
+        if(c<0||occupied[c]||freeCount[c]<minimumRoom||distance[i]<0)continue;
         bool valid=true;
         for(int d:{0,1,w,w+1}) if(!tiles[i+d].rock||!tiles[i+d].free||tiles[i+d].unsafe)valid=false;
         if(reservedComponent[c])valid=false;
         if(!valid)continue;
         const int x0=std::max(0,x-6),x1=std::min(w,x+8),y0=std::max(0,y-6),y1=std::min(h,y+8);
         const int room=sum[y1*(w+1)+x1]-sum[y0*(w+1)+x1]-sum[y1*(w+1)+x0]+sum[y0*(w+1)+x0];
-        if(room<48)continue;
+        if(room<minimumRoom)continue;
         int clearance=enemyDistance[i];
         for(const auto& [ex,ey]:offMapEnemies) clearance=std::min(clearance,std::max(std::abs(x-ex),std::abs(y-ey)));
         if(clearance<12)continue;

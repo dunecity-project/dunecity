@@ -179,6 +179,10 @@ public:
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
+    /// CivWars mod rules on any map; ordinary Research Lab matches remain unchanged.
+    bool civWarsRules() const;
+    /// Lane geometry is authorised only by the generated map's canonical marker.
+    bool isCivWarsMatch() const;
     AIRole getRole() const { return role; }
     /// The Builder role (formerly "AI Support"): builds and runs the economy, never commands the army.
     bool builderOnly() const { return role == AIRole::Builder; }
@@ -1710,9 +1714,12 @@ private:
     void traceCapitalOutcome(BuildPass& pass);
     /// Match option and hashed policy switch; never consumes RNG or adds saved AI state.
     bool researchLabPolicyActive() const;
+    bool techInvestmentReady(BuildPass& pass);
+    /// Research is required progression in Civ Wars; reserve it before repeatable orders.
+    void planCivWarsResearch(BuildPass& pass);
     /// Preserve working capital, protected purchases and existing production runway.
     bool canFundTechInvestment(BuildPass& pass, int cost);
-    /// Runs after ordinary producers have charged the shared spending budget.
+    /// Ordinary matches run this after producers; Civ Wars runs its paced plan first.
     void startTechResearch(BuildPass& pass);
     // Planning helpers shared by the producers and yards (QuantBotBuild.cpp).
     bool openingFleetIncomplete(BuildPass& pass);

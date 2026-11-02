@@ -22,6 +22,7 @@
 
 #include <FormationOrders.h>
 
+#include <array>
 #include <iterator>
 
 Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
@@ -45,6 +46,12 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
     AITelemetry::PerformanceScope survey("ai.rock_survey.anchor_field",
         getGameCycleCount(), getHouse()->getHouseID());
     const int w=getMap().getSizeX(),h=getMap().getSizeY();
+    const bool civWars=isCivWarsMatch();
+    const int end=w/4;
+    std::array<bool,NUM_HOUSES> alliedHouses{};
+    if(civWars) for(int i=0;i<NUM_HOUSES;++i)
+        if(const auto* house=getHouse(i);house&&!house->isNatives()&&house->getTeamID()==getHouse()->getTeamID())
+            alliedHouses[i]=true;
     // Map::isWithinBuildRange() is a box dilation of the owned-tile set, but it
     // is evaluated pointwise: BUILDRANGE 2 means a 5x5 probe for every rock
     // tile on the map. One summed-area table over the anchor indicator answers
@@ -86,7 +93,14 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
         out.rock=tile->isRock()&&!tile->isMountain();
         out.free=!structure && (!tile->hasAGroundObject() || tile->getNonInfantryGroundObject()==mcv);
         out.walkable=!tile->isMountain()&&!structure;
-        out.owned=structure&&tile->getOwner()==getHouse()->getHouseID();
+        const int owner=tile->getOwner();
+        // The generated map's outer quarters are team ends, never strategic
+        // islands, even when the opposite end has not been seen. Occupancy
+        // only excludes destinations: free room and routes keep their normal
+        // meaning. Allied buildings also claim their whole island.
+        out.owned=(structure&&(owner==getHouse()->getHouseID()
+            ||(civWars&&owner>=0&&owner<NUM_HOUSES&&alliedHouses[owner])))
+            ||(civWars&&(x<end||x>=w-end));
         // A site that already swallowed repeated construction yards is not
         // expanded onto again just because the short-term loss block expired:
         // redeploying there without cover is what turned single losses into a
@@ -140,6 +154,23 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
             if(it!=mcvExpansionSites.end()&&getMap().tileExists(it->second.x,it->second.y))reserved.push_back(it->second.y*w+it->second.x);
         }
     }
+    if(civWars) for(int i=0;i<NUM_HOUSES;++i) {
+        if(!alliedHouses[i]) continue;
+        const auto* house=getHouse(i);
+        for(const auto& player:house->getPlayerList()) {
+            const auto* bot=dynamic_cast<const QuantBot*>(player.get());
+            if(!bot||bot==this) continue;
+            // Read saved assignments only for live MCVs still owned by that
+            // ally. Their order is immaterial: choose() marks whole formations.
+            for(const auto& entry:bot->mcvExpansionSites) {
+                const auto* colonist=getObject(entry.first);
+                if(!colonist||colonist==mcv||colonist->getOwner()!=house
+                    ||colonist->getItemID()!=Unit_MCV||colonist->getHealth()<=0) continue;
+                if(getMap().tileExists(entry.second.x,entry.second.y))
+                    reserved.push_back(entry.second.y*w+entry.second.x);
+            }
+        }
+    }
     const StructureBase* mainYard=nullptr;
     for(const auto* structure:getStructureList())
         if(structure->getOwner()==getHouse() && structure->getItemID()==Structure_ConstructionYard
@@ -147,7 +178,7 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
             && (!mainYard || structure->getObjectID()<mainYard->getObjectID())) mainYard=structure;
     const int mainBase=mainYard ? mainYard->getY()*w+mainYard->getX() : -1;
     survey.next("ai.rock_survey.choose");
-    const auto result=RockExpansionPolicy::choose(w,h,tiles,starts,enemies,reserved,mainBase);
+    const auto result=RockExpansionPolicy::choose(w,h,tiles,starts,enemies,reserved,mainBase,civWars?24:48);
     if(!result.valid())return Coord::Invalid();
     const Coord site(result.x,result.y);
     if(!overlapsReservedStructure(site.x,site.y,2,2)&&preservesGroundAccess(Structure_ConstructionYard,site)) {
@@ -191,6 +222,31 @@ QuantBotColonisationPolicy::Demand QuantBot::colonisationDemand(int mcvsIncludin
     demand.yards=getHouse()->getNumItems(Structure_ConstructionYard);
     demand.mcvsIncludingQueued=mcvsIncludingQueued;
     demand.yardLimit=yardLimit;
+    // Strategic islands become a separate reason to buy/send one colonist
+    // only after the first ground wave. colonySiteOpen() keeps the core,
+    // danger, reachability and lost-colonist gates; a roomy home means its
+    // production-core prerequisite has not been waived for lack of space.
+    if(isCivWarsMatch()&&customWave.launched!=0&&demand.siteAvailable
+        &&QuantBotColonisationPolicy::colonisationAllowed(demand)
+        &&!QuantBotColonisationPolicy::builtOut(demand)&&mcvsIncludingQueued==0
+        &&(yardLimit<=0||demand.yards<yardLimit)) {
+        bool income=lastCalculatedSpice>0&&getAIHarvesterCount()>0&&getAIRefineryBays()>0;
+        if(!income&&getHouse()->getCapacity()>0) {
+            if(const auto* sim=currentGame->getCitySimulation()) {
+                const int house=getHouse()->getHouseID();
+                const auto& state=sim->getHouseState(house);
+                const int land=state.avgLandValue>0?state.avgLandValue:128;
+                const int tax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(
+                    state.taxBaseEighths,sim->getCityTax(house),land));
+                const int upkeep=DuneCity::annualPerMinute(state.lastPoliceExpense)
+                    +(getHouse()->isPowerRequired()?getHouse()->getPowerRequirement()/8:0);
+                income=tax>upkeep;
+            }
+        }
+        // Existing health-weighted active ground value, not another map or
+        // tactical survey. Departure still requires its gathered escort.
+        demand.strategicSiteWanted=income&&ownGroundArmyValue()>=std::max(1,minWaveValue());
+    }
     return demand;
 }
 
@@ -201,8 +257,8 @@ bool QuantBot::colonisationMcvDue(int mcvsIncludingQueued, int yardLimit) const 
 bool QuantBot::colonyMissionDue(const MCV* pMCV) const {
     // The MCV in hand may have been bought for anything; what decides its job
     // is the base it stands in. A built-out base sends it away, and so does a
-    // formation that already runs its share of yards: stacking every yard on
-    // one rock leaves the rest of the map unsettled. Only a surveyed
+    // formation that already runs its share of yards or a ready generated
+    // Civ Wars base claiming a strategic island. Only a surveyed
     // destination ever sends one across the map, under exactly the rules that
     // would have bought a colonist, so campaigns, helpers and capped games
     // keep the behaviour they had.
@@ -602,16 +658,15 @@ void QuantBot::manageMcv(const MCV* pMCV) {
     if(expansion&&(stale||(target.isValid()&&!mcvSiteUsable(pMCV,target)))) {
         mcvSurveyCycles[id]=cycle;
         surveyedNow=true;
-        // Grow on the formation the base already stands on first; only when it
-        // has no room left, or already runs its share of yards, does
-        // colonising a new one apply, under its own gates. A stalled trip can
-        // use the nearest clear footprint; moving MCVs retain their
+        // Grow on the formation the base already stands on first unless it
+        // has no room, already runs its share of yards, or a ready generated
+        // Civ Wars base wants a strategic island. A stalled trip can use the
+        // nearest clear footprint; moving MCVs retain their
         // assignments above.
         //
-        // Either of those reverses the order: the colony is offered first and
-        // the local search stays as the fallback, so an MCV with nowhere safe
-        // to go still becomes a yard where it stands instead of waiting. The
-        // first production yard on a formation still deploys on the spot.
+        // A colony mission reverses the order: new rock is offered first and
+        // the local search stays the fallback, so an MCV with nowhere safe to
+        // go still becomes a yard where it stands instead of waiting.
         //
         // A trip already under way to a remote formation is kept while its
         // site is still a legal footprint. The survey re-runs every five

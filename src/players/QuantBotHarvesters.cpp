@@ -61,6 +61,11 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
         return TacticalSafetyPolicy::escapeCorridor(origin.x,origin.y,end.x,end.y,
             [&](int x,int y) { return danger(Coord(x,y)); });
     };
+    const bool generatedCivWars = isCivWarsMatch();
+    auto spiceRouteSafe = [&](Coord end) {
+        return routeSafe(end) && TacticalSafetyPolicy::spiceCorridor(origin.x,origin.y,end.x,end.y,
+            [&](int x,int y) { return getMap().getTile(x,y)->isMountain(); }, generatedCivWars);
+    };
     // Ask for help before the first missile lands. Use the cached visible
     // launcher list, and one nearest threat per check; incident debounce and
     // already-committed forces keep many harvesters from recruiting repeatedly.
@@ -86,7 +91,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
             && target->acceptsHarvesterDropoff() && danger(target->getClosestPoint(origin))==0
             && routeSafe(target->getClosestPoint(origin))
             && (harvester->getAttackMode()==STOP
-                || (job.isValid() && danger(job)==0 && memoryPenalty(job)==0 && routeSafe(job)))) {
+                || (job.isValid() && danger(job)==0 && memoryPenalty(job)==0 && spiceRouteSafe(job)))) {
             state.controlled=true;
             return true;
         }
@@ -94,7 +99,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     // Do not hold a safe vehicle after enemies leave. Keep its existing safe job.
     if (!threatened && !harvester->isReturning() && destination.isValid()
         && danger(destination)==0 && memoryPenalty(destination)==0
-        && harvester->getAttackMode() != STOP && !newHarvester && routeSafe(destination)) {
+        && harvester->getAttackMode() != STOP && !newHarvester && spiceRouteSafe(destination)) {
         state.controlled = false;
         state.retreatUntil = 0;
         return false;
@@ -202,7 +207,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
         candidates.push_back(candidate);
     }
     const int pick = TacticalSafetyPolicy::lowestSafeCandidate(scores,
-        [&](int k) { return routeSafe(candidates[k]); }, rejectedRoutes);
+        [&](int k) { return spiceRouteSafe(candidates[k]); }, rejectedRoutes);
     if (pick >= 0) { bestScore = scores[pick]; best = candidates[pick]; }
     const bool foundSpice = best.isValid();
     // A partial load can continue harvesting elsewhere. Only unload a full load,
@@ -232,7 +237,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
             // Replace the remembered job before unloading, so deploy/carryall
             // return resumes at the alternate field rather than the old one.
             const Coord job=harvester->getGuardPoint();
-            const bool replaceJob=job.isInvalid() || danger(job)>0 || memoryPenalty(job)>0 || !routeSafe(job);
+            const bool replaceJob=job.isInvalid() || danger(job)>0 || memoryPenalty(job)>0 || !spiceRouteSafe(job);
             if (replaceJob) {
                 doSetAttackMode(harvester,foundSpice ? HARVEST : STOP);
                 if (foundSpice) doMove2Pos(harvester,best.x,best.y,false);

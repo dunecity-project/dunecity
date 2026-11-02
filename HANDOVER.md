@@ -110,6 +110,33 @@
   six standing guns. Raw final arms: `supplier-{off,on,fast-year-on}/`; numbers and
   purchase/loss times: `actual-save-comparison.json` beside the preserved probe.
 
+## 2026-11-02 — QuantBot Civilization Wars training (experimental, unreleased)
+
+- Branch `feat/civ-wars-ai` contains a real generated-match matrix/probe and a hashed
+  `[Civ Wars] Strategy` switch (default on as requested). Research Lab plus the canonical
+  generated marker, or the `CivWars` mod, gates the new policies; ordinary Research Lab
+  games retain their original policy. No separate protocol bump: shared release protocol111.
+- Candidate policies stage the opening worker fleet/research, reserve a funded research
+  payment and operating runway, field a ground wave before research beyond tech4, and limit
+  optional city land investment. Visible active worms warn at8tiles without revealing
+  sleeping/hidden worms; generated-only spice corridors avoid mountain ridges. The existing
+  MCV/escort planner can admit small midpoint islands, respecting allied claims and losses.
+  Army Hunt orders, human-order authority and saboteurs are unchanged.
+- Measured: **45/45** baseline games (3team sizes ×3mirror difficulties ×5fixed seeds),
+  plus **21** candidate/control pilot games; complete telemetry and actual AI CPU retained.
+  Native focused CivWars-tagged tests passed **34cases /6,577,297assertions**. Native
+  candidate builds passed through shared ccache at nice10/-j4.
+- **Not acceptance-complete / not release-ready:** early research and harvester safety
+  improved, but all nine candidate2 cross-format/difficulty pilots timed out at30min.
+  At40min only the right-only seed7101 pilot beat its control (32.62min); both-on still
+  timed out. The four-worker pre-wave cap constrains income/army throughput. A subsequent
+  unlimited-population/finite-land admission correction is not simulation-measured.
+- Final ≥5-seed off/on and side-swapped difficulty-ladder evidence, mandatory AI regressions,
+  full cluster CTest, performance/FPS acceptance, paired non-Civ-Wars digests and a specific
+  early-ornithopter defence simulation are **unverified**. Do not infer strength acceptance
+  from the default-on setting. All parameters, experiment tables, source/job IDs and data
+  locations are in `docs/civilization-wars-ai.md`; no origin push.
+
 ## 2026-11-03 — Power-starved Harkonnen city (OMP IdleAISave, unreleased)
 
 - Stefan's `harkonan doing nothing.dls` is a 1.0.864/9879 Random Skirmish save,

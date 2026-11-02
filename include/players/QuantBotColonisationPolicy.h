@@ -3,17 +3,16 @@
 #include <vector>
 
 // When a city has built out the rock it stands on, growth can only continue
-// somewhere else. This policy answers two questions: should another MCV be
-// ordered so that safe, reachable free rock can be settled, whatever the
-// production-yard target already says; and should an MCV already in hand
-// settle a new formation rather than add one more yard where it stands?
+// somewhere else. A caller may also request safe rock for a strategic objective
+// after establishing its economy and army. This policy answers whether to order
+// one colonist, whatever the production-yard target already says, and whether an
+// MCV already in hand should settle a new formation instead of another local yard.
 //
 // It deliberately owns nothing else. Where a colony goes stays with
 // RockExpansionPolicy, growing on the formation the base already holds stays
 // with McvDeployPolicy, and replacing a lost yard stays with the opening path.
-// Nothing here is map, seed or difficulty specific: the same rule applies at
-// every custom difficulty, and the campaign is excluded outright so scripted
-// missions cannot start expanding.
+// The caller owns strategic readiness; its request defaults off. Every request
+// shares the same custom-city, campaign, helper and yard-cap boundaries.
 namespace QuantBotColonisationPolicy {
 
 // Yards one rock formation hosts before further MCVs move on. The founding
@@ -62,6 +61,7 @@ struct Demand {
     bool supportMode = false;           ///< A helper on someone else's house does not colonise.
     bool siteAvailable = false;         ///< A colonist may set out for safe, reachable, roomy rock right now.
     bool productionRoomBlocked = false; ///< The placement search finds no site for another factory.
+    bool strategicSiteWanted = false;  ///< A ready base wants the surveyed formation even with room at home.
     int freeFootprints = 0;             ///< Building slots left on the base's own rock.
     int yards = 0;                      ///< Construction yards standing.
     int mcvsIncludingQueued = 0;        ///< MCVs alive, paid for or queued.
@@ -95,17 +95,17 @@ inline bool due(const Demand& demand) {
     // Availability is re-surveyed, never remembered: rock that was unsafe
     // while an enemy held it becomes eligible again once that enemy is gone.
     if(!demand.siteAvailable) return false;
-    return builtOut(demand);
+    return builtOut(demand) || demand.strategicSiteWanted;
 }
 
-// An MCV in hand settles new rock when its base is built out, or when the
-// formation it stands on already runs its share of yards. Without a confirmed
-// destination it stays a local yard: placing on the current rock is the
-// fallback, never a reason to leave an MCV idle.
+// An MCV in hand settles new rock when its base is built out, its formation
+// already runs its share of yards, or a ready base wants a strategic formation.
+// Without a confirmed destination it stays a local yard: placing on the current
+// rock is the fallback, never a reason to leave an MCV idle.
 inline bool missionDue(const Demand& demand) {
     if(!colonisationAllowed(demand) || !demand.siteAvailable) return false;
     if(demand.yardLimit > 0 && demand.yards >= demand.yardLimit) return false;
-    return builtOut(demand) || demand.yardsOnFormation >= kYardsPerFormation;
+    return builtOut(demand) || demand.strategicSiteWanted || demand.yardsOnFormation >= kYardsPerFormation;
 }
 
 // Production yards the capacity target may ask for: the home formation's

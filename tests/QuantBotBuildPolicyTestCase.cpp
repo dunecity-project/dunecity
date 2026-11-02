@@ -112,6 +112,53 @@ TEST_CASE("Research never replaces income bootstrap power recovery or the off po
     REQUIRE_FALSE(canFundTechInvestment(state));
 }
 
+TEST_CASE("Civ Wars funds a small tech-opening fleet before difficulty-scaled expansion",
+          "[quantbot][civ-wars][production]") {
+    for (int difficulty : {1, 2, 3}) {
+        REQUIRE(civWarsWorkerTarget(40, 1, false, difficulty) == 2);
+        REQUIRE(civWarsWorkerTarget(40, 3, false, difficulty) == 2);
+        REQUIRE(civWarsWorkerTarget(40, 4, false, difficulty) == 4 + 2*difficulty);
+        REQUIRE(civWarsWorkerTarget(40, 9, false, difficulty) == 4 + 2*difficulty);
+        REQUIRE(civWarsWorkerTarget(1, 1, false, difficulty) == 1);
+        REQUIRE(civWarsWorkerTarget(0, 9, true, difficulty) == 0);
+        REQUIRE(civWarsWorkerTarget(-1, 9, true, difficulty) == 0);
+    }
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 1) == 8);
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 2) == 12);
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 3) == 16);
+    REQUIRE(civWarsWorkerTarget(3, 5, true, 3) == 3);
+}
+
+TEST_CASE("Civ Wars research saving leaves a tiny tax city able to compound",
+          "[quantbot][civ-wars][research]") {
+    REQUIRE(civWarsResearchSaving(600, 300, 899) == 0);
+    REQUIRE(civWarsResearchSaving(600, 300, 900) == 900);
+    REQUIRE(civWarsResearchSaving(600, 600, 1200) == 1200);
+    REQUIRE(civWarsResearchSaving(2700, 0, 3000) == 3000);
+    REQUIRE(civWarsResearchSaving(0, 300, 3000) == 0);
+    REQUIRE(civWarsResearchSaving(std::numeric_limits<int>::max(), 300,
+                                  std::numeric_limits<int>::max()) == 0);
+}
+
+TEST_CASE("Civ Wars technology leaves room for the first wave and reinforcements",
+          "[quantbot][civ-wars][research]") {
+    CHECK(civWarsResearchPacing(1, false, 0, 3000));
+    CHECK(civWarsResearchPacing(3, false, 0, 3000));
+    CHECK_FALSE(civWarsResearchPacing(4, false, 7500, 3000));
+    CHECK_FALSE(civWarsResearchPacing(4, true, 2999, 3000));
+    CHECK(civWarsResearchPacing(4, true, 3000, 3000));
+    CHECK_FALSE(civWarsResearchPacing(8, true, 0, 3000));
+}
+
+TEST_CASE("Civ Wars city expansion grows after its first field army",
+          "[quantbot][civ-wars][city]") {
+    for (int difficulty = 1; difficulty <= 3; ++difficulty)
+        CHECK(civWarsZoneTarget(false, difficulty) == 24);
+    CHECK(civWarsZoneTarget(true, 1) == 36);
+    CHECK(civWarsZoneTarget(true, 2) == 48);
+    CHECK(civWarsZoneTarget(true, 3) == 60);
+}
+
 TEST_CASE("QuantBot repairs an over-residential economy even at saturated demand", "[quantbot][city]") {
     const auto zones = rankZones(60, 4, 9, 2000, 1500, 1500, false);
     REQUIRE(zones[0] == Structure_ZoneCommercial);

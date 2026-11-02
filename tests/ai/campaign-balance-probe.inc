@@ -64,6 +64,7 @@
 #include "vanilla-match.inc"
 #include "../performance/game-perf.inc"
 #include "scenario-match.inc"
+#include "civ-wars-match.inc"
 #include <FileClasses/INIFile.h>
 #include "../AchievementsTestCase/AchievementRuntimeProbe.inc"
 #include "tornie-campaign-audit.inc"
@@ -92,7 +93,10 @@ int runCampaignBalanceProbe() {
         throw std::runtime_error("Requested probe mod did not activate: "+requestedMod);
     // A scenario-matrix game takes its rules from its mod, as a new Custom Game or campaign does.
     const bool scenario=std::getenv("BALANCE_SCENARIO")!=nullptr;
-    if(std::getenv("BALANCE_DEGRADATION_PROBE") || scenario)
+    const bool civWars=std::getenv("BALANCE_CIV_WARS")!=nullptr;
+    if(civWars && requestedMod!="CivWars")
+        throw std::runtime_error("Generated Civilization Wars needs the exact CivWars mod");
+    if(std::getenv("BALANCE_DEGRADATION_PROBE") || scenario || civWars)
         settings.gameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     getQuantBotConfig().easy.attackForceMilitaryValueRatio = percent / 100.0f;
     if (const char* shape = std::getenv("BALANCE_WAVE_FORMATION")) {
@@ -100,6 +104,11 @@ int runCampaignBalanceProbe() {
         if (parsed == INT_MIN) throw std::runtime_error(std::string("Unknown wave formation: ") + shape);
         getQuantBotConfig().waveFormation = parsed;
     }
+    const std::string civStrategy=CivWarsMatch::configureStrategy(civWars);
+    if(!civStrategy.empty())
+        SDL_Log("PROBE_CONFIG: civ_wars=%d civ_strategy=%s global_civ_strategy=%d config_hash=%s",
+            int(civWars),civStrategy.c_str(),int(getQuantBotConfig().civWarsStrategy),
+            getQuantBotConfig().getConfigHash().c_str());
     SDL_Log("CAMPAIGN_BALANCE_WAVE_FORMATION: %s", QuantBotConfig::waveFormationName(getQuantBotConfig().waveFormation));
     settings.general.playerName = "Campaign balance observer";
     settings.network.metaServer = "http://127.0.0.1:1/";
@@ -167,6 +176,7 @@ int runCampaignBalanceProbe() {
         init=VanillaMatch::makeSkirmishInit(std::atoi(std::getenv("BALANCE_SKIRMISH_FFA_SIZE")),
             static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SKIRMISH_MAP_SEED"))),matchSides,enemy,
             std::getenv("BALANCE_MOD") ? std::getenv("BALANCE_MOD") : "vanilla",settings.gameOptions);
+    if(civWars) init=CivWarsMatch::makeInit(seed,partnerClass,enemyClass,settings.gameOptions);
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
     // Continue a saved match instead (its own seed, roster and options).
     const char* loadSave = std::getenv("BALANCE_LOAD_SAVE");
@@ -186,7 +196,7 @@ int runCampaignBalanceProbe() {
             roster.emplace_back(std::stoi(slot.substr(0,colon)),std::stoi(slot.substr(colon+1)));
         }
         if(roster.empty()) throw std::runtime_error("Custom test requires a roster");
-    } else if(!duel && !skirmishFfa && !loadSave) {
+    } else if(!civWars && !duel && !skirmishFfa && !loadSave) {
         for(int h=0;h<NUM_HOUSES;++h)
             if(isHouseAvailable(static_cast<HOUSETYPE>(h))) roster.emplace_back(h,h==humanHouse ? 1 : 2);
     }
@@ -222,7 +232,10 @@ int runCampaignBalanceProbe() {
     // Suppress the interactive briefing and public match analytics at setup.
     // Restore ordinary AI/command execution before advancing any game cycles.
     game->bReplay = true;
-    game->initGame(init);
+    {
+        CivWarsMatch::MeasuredFactories measuredFactories(civWars);
+        game->initGame(init);
+    }
     if(localSpectator && (!game->isObserving() || !game->getGameInitSettings().isLocalSpectator()))
         throw std::runtime_error("Custom diagnostic did not create the real local observer");
     // This diagnostic can retain a full hour of every house's decisions.
@@ -234,6 +247,10 @@ int runCampaignBalanceProbe() {
     // Headless: nothing reads the per-unit phase timing (DuneCity-Performance.log), and its
     // clock reads cost about 5% of a busy match. BALANCE_UNIT_PHASE_TIMING=1 keeps it.
     game->frameTiming.unitPhases = std::getenv("BALANCE_UNIT_PHASE_TIMING") != nullptr;
+    if(civWars) {
+        CivWarsMatch::applyTeamStrategy(*game,civStrategy);
+        CivWarsMatch::reportSetup(*game,partner,enemy,civStrategy);
+    }
     if(std::getenv("BALANCE_DEGRADATION_PROBE")) {
         runStructureDegradationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
@@ -432,7 +449,9 @@ int runCampaignBalanceProbe() {
     const long long setupMs = ProbeDigest::millisecondsSince(probeStart);
     const auto loopStart = ProbeDigest::Clock::now();
     const Uint32 firstCycle = game->getGameCycleCount();
-    if (duel) {
+    if (civWars) {
+        outcome = CivWarsMatch::run(*game, end);
+    } else if (duel) {
         FormationDuel::applyShapes(*game, duelSides);
         FormationWaveMeasure::run(*game, end, [&]() {
             ProbeDigest::periodic(*game);

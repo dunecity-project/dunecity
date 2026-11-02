@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run real campaign AI with a fixed seed, isolated profile and no human commands.
+"""Run real campaign AI with a fixed seed, isolated profile and no human commands by default.
 
 Uses the existing Ninja build (macOS: clang; Windows: MSVC objects, with the probe's
 main compiled by clang-cl). Access-control relaxation is restricted to
@@ -10,6 +10,15 @@ and structured AI decision logs remain in --output-dir; when the run ends
 (passed or failed) the profile's regenerated bulk (bundled mods, captured
 workshop revisions) is deleted unless --keep-profile-assets. This is a simulation
 comparison, not a substitute for the browser playtest or human playtesting.
+
+--civ-wars uses the real Civilization Wars generator and spectator initialization;
+--partner-difficulty/--enemy-difficulty select its left/right QuantBots. Its strategy
+defaults off; explicit --civ-strategy off/on also supplies ordinary-game digest controls.
+
+--civ-air-probe lab/yard injects one real early enemy aircraft into a canonical start,
+bounded by two covering starter rocket turrets. A registered enemy HumanPlayer
+issues its attack via normal shared-house authority; the defended bot is unmodified.
+tests/ai/civ-wars-gates.py schedules repeat/off-on air and ordinary digest controls.
 """
 import argparse
 import atexit
@@ -132,7 +141,7 @@ parser.add_argument('--mod', default='vanilla', help='Installed mod folder (vali
 parser.add_argument('--house', choices=house_names, default='harkonnen')
 parser.add_argument('--roster', help='Explicit custom-map house:team slots in lobby order, comma-separated')
 parser.add_argument('--local-spectator', action='store_true',
-                    help='Run a custom-map all-AI match through the real detached spectator setup')
+                    help='Run an all-AI map or generated Civilization Wars match through the real detached spectator setup')
 parser.add_argument('--harvester-limit', type=int, choices=range(-1,101), default=-1)
 parser.add_argument('--rocket-turrets-need-power', action=argparse.BooleanOptionalAction, default=None)
 parser.add_argument('--concrete-required', action=argparse.BooleanOptionalAction, default=None)
@@ -153,6 +162,23 @@ parser.add_argument('--enemy-ai', choices=('quantbot','ai-player','campaign'), d
                     help='Enemy controller family; AI Player has Easy/Medium/Hard; campaign = CampaignAIPlayer '
                          '(the campaign menu\'s "scenario settings" enemy, any --enemy-difficulty)')
 parser.add_argument('--enemy-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
+parser.add_argument('--civ-wars', type=int, choices=range(1, 4), metavar='TEAMSIZE',
+                    help='Real generated Civilization Wars 1v1/2v2/3v3; needs --mod CivWars --local-spectator')
+parser.add_argument('--civ-size', type=int, choices=range(4), default=0, metavar='INDEX',
+                    help='Civilization Wars map-size index, 0–3 (default 0)')
+parser.add_argument('--civ-worms', type=int, choices=range(5), default=1, metavar='COUNT',
+                    help='Civilization Wars worms per lane, 0–4 (default 1)')
+parser.add_argument('--civ-spice', type=int, choices=range(5), default=2, metavar='INDEX',
+                    help='Civilization Wars spice index, 0–4 (default 2)')
+parser.add_argument('--civ-strategy', choices=('off', 'on', 'left', 'right'),
+                    help='Civ Wars strategy (default off for --civ-wars); off/on is a hashed global switch '
+                         'before game init, also on ordinary games; left/right is a test-only unhashed team override')
+parser.add_argument('--civ-air-probe', choices=('lab', 'yard'),
+                    help='Canonical Civ Wars: single ornithopter, real human attack authority, 30-second core strike')
+parser.add_argument('--civ-air-team', type=int, choices=(1, 2), default=1,
+                    help='--civ-air-probe: defended generated team (default 1); the attacker must be Hard/Brutal')
+parser.add_argument('--civ-ordinary-gate', choices=('no-research', 'research'),
+                    help='Observe an ordinary DuneCity scenario init for civ-wars-gates.py (requires off/on)')
 parser.add_argument('--shared-spending-probe', action='store_true')
 parser.add_argument('--controls-probe', action='store_true')
 parser.add_argument('--achievements-probe', action='store_true',
@@ -286,14 +312,35 @@ parser.add_argument('--seed', type=int, default=486409243)
 parser.add_argument('--minutes', type=int, default=20)
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
 args = parser.parse_args()
+if args.civ_wars:
+    if args.mod != 'CivWars' or not args.local_spectator:
+        parser.error('--civ-wars needs --mod CivWars and --local-spectator.')
+    if (args.scenario or args.custom_map or args.roster or args.skirmish or args.duel_map_size
+            or args.skirmish_ffa_size or args.match_sides or args.load_save or args.free_for_all
+            or args.elimination_match or args.formation_measure or args.strategy_probe or args.scenario_style):
+        parser.error('--civ-wars supplies its own generated map, named-house roster and elimination loop.')
+    if args.enemy_ai != 'quantbot':
+        parser.error('--civ-wars uses QuantBots on both teams.')
+    args.civ_strategy = args.civ_strategy or 'off'
+if args.civ_strategy in ('left', 'right') and not args.civ_wars:
+    parser.error('--civ-strategy left/right needs --civ-wars; ordinary games accept off/on.')
+if args.civ_air_probe:
+    attacker_difficulty = args.enemy_difficulty if args.civ_air_team == 1 else args.partner_difficulty
+    if not args.civ_wars or args.minutes < 2 or attacker_difficulty not in ('hard', 'brutal'):
+        parser.error('--civ-air-probe needs --civ-wars, at least two minutes and a Hard/Brutal attacker.')
+    if args.civ_strategy not in ('off', 'on'):
+        parser.error('--civ-air-probe requires the hashed --civ-strategy off/on comparison.')
+if args.civ_ordinary_gate and (args.civ_wars or args.mod != 'dunecity' or not args.scenario
+                              or not args.local_spectator or args.civ_strategy not in ('off', 'on')):
+    parser.error('--civ-ordinary-gate needs an ordinary --mod dunecity --scenario observer and --civ-strategy off/on.')
 if not 1 <= args.minutes <= 120 or not 0 <= args.seed <= 0xffffffff:
     parser.error('Use 1–120 minutes and a 32-bit unsigned seed.')
 if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:
     parser.error('--free-for-all requires --custom-map.')
-if args.local_spectator and not (args.custom_map or args.duel_map_size or args.skirmish_ffa_size or args.skirmish):
-    parser.error('--local-spectator requires --custom-map, --duel-map-size, --skirmish-ffa-size or --skirmish.')
+if args.local_spectator and not (args.custom_map or args.duel_map_size or args.skirmish_ffa_size or args.skirmish or args.civ_wars):
+    parser.error('--local-spectator requires --custom-map, --duel-map-size, --skirmish-ffa-size, --skirmish or --civ-wars.')
 if args.load_save and (args.custom_map or args.duel_map_size or args.skirmish_ffa_size or not args.load_save.is_file()):
     parser.error('--load-save needs an existing savegame and no --custom-map, --duel-map-size or --skirmish-ffa-size.')
 if args.game_options and not args.game_options.is_file():
@@ -431,6 +478,12 @@ try:
                                                    stderr=subprocess.DEVNULL).strip())
 except subprocess.CalledProcessError:
     source_commit, source_modified = 'unavailable', None
+try:
+    from source_provenance import source_fingerprint
+    source_fingerprint_value = source_fingerprint(root, build, out)
+    source_fingerprint_error = ''
+except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+    source_fingerprint_value, source_fingerprint_error = None, str(error)
 if args.repeatable:
     out.mkdir(parents=True, exist_ok=True)
     # CTest reruns used to accumulate every run (~80 MB each) forever.
@@ -599,6 +652,18 @@ env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
            BALANCE_HOUSE=str(house_names.index(args.house)),BALANCE_HARVESTER_LIMIT=str(args.harvester_limit))
+if args.civ_wars:
+    env['BALANCE_CIV_WARS'] = str(args.civ_wars)
+    env['BALANCE_CIV_SIZE'] = str(args.civ_size)
+    env['BALANCE_CIV_WORMS'] = str(args.civ_worms)
+    env['BALANCE_CIV_SPICE'] = str(args.civ_spice)
+if args.civ_strategy is not None:
+    env['BALANCE_CIV_STRATEGY'] = args.civ_strategy
+if args.civ_air_probe:
+    env['BALANCE_CIV_AIR_PROBE'] = args.civ_air_probe
+    env['BALANCE_CIV_AIR_TEAM'] = str(args.civ_air_team)
+if args.civ_ordinary_gate:
+    env['BALANCE_CIV_ORDINARY_GATE'] = args.civ_ordinary_gate
 if not args.real_video:
     env['SDL_VIDEODRIVER'] = 'dummy'
 env['BALANCE_CAPTURE_MIB'] = str(args.capture_mib)
@@ -759,10 +824,26 @@ for line in events.open() if events else ():
             raise RuntimeError('Automatic campaign force exceeded its wave budget')
 summary = {'result':results[0],'sourceCommit':source_commit,
            'workingTreeModified':source_modified,
+           'sourceFingerprint':source_fingerprint_value,
+           'sourceFingerprintError':source_fingerprint_error,
            'metadata':metadata,'attacks':attacks,'final':final,'resolved_roster':roster,'enemy_controller':args.enemy_ai,'harvester_limit':args.harvester_limit}
 (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(results[0])
 print('Telemetry:',events or 'off (--no-ai-telemetry)')
+if args.civ_air_probe:
+    air_results = [line for line in (out/'run.log').read_text(errors='replace').splitlines()
+                   if 'CIV_AIR_RESULT:' in line]
+    if len(air_results) != 1 or 'pass=1 ' not in air_results[0]:
+        raise RuntimeError('Early Civ Wars aircraft strike was not defeated with the original core surviving.')
+if args.civ_ordinary_gate:
+    ordinary_setups = [dict(part.split('=', 1) for part in line.split('CIV_ORDINARY_SETUP:', 1)[1].split()
+                           if '=' in part)
+                       for line in (out/'run.log').read_text(errors='replace').splitlines()
+                       if 'CIV_ORDINARY_SETUP:' in line]
+    if (len(ordinary_setups) != 1 or ordinary_setups[0].get('civ_wars') != '0'
+            or ordinary_setups[0].get('city_sim') != '1'
+            or ordinary_setups[0].get('research_lab') != str(int(args.civ_ordinary_gate == 'research'))):
+        raise RuntimeError('Ordinary DuneCity digest control did not execute its configured research option.')
 
 if args.strategy_probe:
     # Mix production (section 3) on further seeds: one 12-minute game per mix is one trajectory, so a
