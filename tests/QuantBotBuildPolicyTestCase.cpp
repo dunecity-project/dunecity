@@ -129,6 +129,17 @@ TEST_CASE("Civ Wars funds a small tech-opening fleet before difficulty-scaled ex
     REQUIRE(civWarsWorkerTarget(3, 5, true, 3) == 3);
 }
 
+TEST_CASE("Civ Wars research saving leaves a tiny tax city able to compound",
+          "[quantbot][civ-wars][research]") {
+    REQUIRE(civWarsResearchSaving(600, 300, 899) == 0);
+    REQUIRE(civWarsResearchSaving(600, 300, 900) == 900);
+    REQUIRE(civWarsResearchSaving(600, 600, 1200) == 1200);
+    REQUIRE(civWarsResearchSaving(2700, 0, 3000) == 3000);
+    REQUIRE(civWarsResearchSaving(0, 300, 3000) == 0);
+    REQUIRE(civWarsResearchSaving(std::numeric_limits<int>::max(), 300,
+                                  std::numeric_limits<int>::max()) == 0);
+}
+
 TEST_CASE("QuantBot repairs an over-residential economy even at saturated demand", "[quantbot][city]") {
     const auto zones = rankZones(60, 4, 9, 2000, 1500, 1500, false);
     REQUIRE(zones[0] == Structure_ZoneCommercial);

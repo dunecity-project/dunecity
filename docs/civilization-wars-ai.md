@@ -178,13 +178,53 @@ candidate; it does not establish a strength improvement by itself.
   and unloading-throughput rules.
 * Research runs before optional producer orders. Its up-front payment keeps
   **max(300, city working reserve)** after existing queue obligations. While
-  saving, other producers preserve the next payment plus that runway. Live
-  economy attacks, engaged aircraft, blackout recovery, missing income and
+  saving, other producers preserve the next payment plus that runway only if
+  the existing four-minute cash forecast can cover it; tiny tax-only cities can
+  still compound their income instead of freezing every receipt indefinitely.
+  Live economy attacks, engaged aircraft, blackout recovery, missing income and
   insufficient opening workers still prevent the purchase. A crime statistic
   alone is not a permanent technology veto.
 * Tech 4 must become an actual Heavy Factory before tech 5 is researched.
   Storage expansion can spend research savings to avoid a storage-cap deadlock.
   Ordinary Research Lab matches retain their original optional-capital path.
-* Worm warning and midpoint-colonisation candidates reuse the existing safety
-  fields and MCV/escort planner; their measured parameters/results are recorded
-  with the combined candidate run.
+* Visible, active hostile worms warn harvesters and tactical planners at **8
+  tiles**; rock is safe from this worm-only field. Hidden and sleeping worms
+  do not reveal their locations. Generated-map spice assignments reject
+  straight corridors crossing mountain ridges; refinery returns keep the
+  ordinary detour-capable path rather than that conservative spice filter.
+* Generated midpoint islands require **24** free/local tiles instead of the
+  ordinary **48**. Team end formations and allied-claimed/reserved islands are
+  excluded. After the first ground wave, a solvent, defended production core
+  with at least one wave's active ground value may request one escorted
+  colonist even with room at home. Existing yard ceilings, route safety,
+  repeated-loss hold and escort gates remain in force.
+
+### Complete initial control matrix
+
+Source `23aa35a9da6d75fb88cdae0c048b67b13b1ec04d`; cluster job
+`20261102T222453-civwars-ai-baseline-fixed-b63cef` completed all **45/45** games
+on `stefPC`. Seeds were **7101, 7202, 7303, 7404, 7505**, size 0 (129×96),
+one worm per lane, spice level 2, a 30-game-minute cap, strategy off. Every
+telemetry stream was complete. Local and Windows Hard/7101 controls had the
+same end digest `1461d4bb945ce2bd`.
+
+| Format | Mirror difficulty | Decisive / 5 | Time limits / 5 | Median length, min | Median tech 2 completion, min | Worm unit deaths | Attacks launched |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 1v1 | Medium | 2 | 3 | 30.00 | 7.51 | 47 | 9 |
+| 1v1 | Hard | 0 | 5 | 30.00 | 22.77 | 59 | 6 |
+| 1v1 | Brutal | 0 | 5 | 30.00 | 22.54 | 49 | 8 |
+| 2v2 | Medium | 4 | 1 | 28.27 | 11.44 | 70 | 22 |
+| 2v2 | Hard | 2 | 3 | 30.00 | 12.20 | 78 | 33 |
+| 2v2 | Brutal | 1 | 4 | 30.00 | 12.54 | 101 | 29 |
+| 3v3 | Medium | 0 | 5 | 30.00 | 12.00 | 107 | 31 |
+| 3v3 | Hard | 2 | 3 | 30.00 | 11.33 | 92 | 32 |
+| 3v3 | Brutal | 1 | 4 | 30.00 | 10.40 | 89 | 36 |
+
+Tech timing above is the median over houses that reached that level (all
+180 houses reached tech 2 before elimination/end), not a claim that eliminated
+houses retain their technology. Decisive games are actual surviving-team wins;
+time limits are not awarded by army value or credits. Attacks are complete
+`attack_launched` decision events; worm deaths join complete lethal-damage
+attacker IDs to the engine-observed worm set. These historical controls are
+diagnostic; the final off/on comparison must use the same final binary.
+

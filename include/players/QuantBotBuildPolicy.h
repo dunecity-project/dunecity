@@ -225,6 +225,13 @@ inline int civWarsWorkerTarget(int sustainable, int tech, bool firstWave, int di
     return std::clamp(sustainable, 0, target);
 }
 
+inline int civWarsResearchSaving(int cost, int workingReserve, int forecastFunding) {
+    const int64_t needed = int64_t(cost) + std::max(300,workingReserve);
+    // A tiny tax-only start must be able to compound its city instead of
+    // reserving every receipt for a payment outside the normal forecast.
+    return cost > 0 && needed <= forecastFunding ? static_cast<int>(needed) : 0;
+}
+
 // Keep city construction first; then fund air before ground factories can
 // repeatedly consume its allocation. Light factories still precede heavy ones.
 inline int productionPlanningPriority(bool city, Uint32 item, bool waitingToPlace, bool firstTransport = false) {

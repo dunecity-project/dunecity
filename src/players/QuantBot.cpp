@@ -1066,40 +1066,42 @@ void QuantBot::refreshTacticalDanger() {
     lossDanger.assign(w*h, 0);
     visibleEnemyBases.clear();
     visibleHarvestLaunchers.clear();
+    const bool civWars = civWarsRules();
     const bool emitSafety = AITelemetry::log().enabled()
         && (lastSafetyTrace == std::numeric_limits<Uint32>::max() || now-lastSafetyTrace >= MILLI2CYCLES(30000));
     AITelemetry::Record threats;
-    auto stamp = [&](std::vector<int>& grid, Coord p, int radius, int strength) {
+    auto stamp = [&](std::vector<int>& grid, Coord p, int radius, int strength, bool reachesRock = true) {
         if (p.isInvalid()) return;
         for (int y = std::max(0, p.y-radius); y <= std::min(h-1, p.y+radius); ++y)
             for (int x = std::max(0, p.x-radius); x <= std::min(w-1, p.x+radius); ++x)
-                grid[y*w+x] = std::min(10000, grid[y*w+x] + strength);
+                if (reachesRock || !getMap().getTile(x,y)->isRock())
+                    grid[y*w+x] = std::min(10000, grid[y*w+x] + strength);
     };
-    auto observe = [&](const ObjectBase* object) {
-        if (!object || !object->getOwner() || object->getHealth() <= 0
-            || object->getOwner()->getTeamID() == getHouse()->getTeamID()
-            || !object->isVisible(getHouse()->getTeamID()) || object->getLocation().isInvalid()) return;
+    auto observe = [&](const ObjectBase* object, bool active = true) {
+        if (!TacticalSafetyPolicy::observedThreat(object,getHouse()->getTeamID(),active)) return;
         if (object->isAStructure()) visibleEnemyBases.push_back(object->getLocation());
         // Palace missiles are addressed by spacing, not a permanent map-wide veto.
         if (!object->canAttack() || object->getItemID() == Structure_Palace) return;
         Coord p = object->getLocation();
         if (const auto* structure = dynamic_cast<const StructureBase*>(object))
             p += Coord(structure->getStructureSizeX()/2, structure->getStructureSizeY()/2);
-        const int radius = std::max(1, object->getWeaponRange()) + 2;
-        stamp(tacticalDanger, p, radius, 100);
+        const bool reachesRock = TacticalSafetyPolicy::threatReachesRock(object->getItemID(),civWars);
+        const int radius = TacticalSafetyPolicy::tacticalThreatRadius(object->getItemID(),object->getWeaponRange(),civWars);
+        stamp(tacticalDanger, p, radius, 100, reachesRock);
         // Launchers get an early-warning margin: a harvester must turn before missiles arrive.
         // Tracked harvesters can crush foot troops; do not treat them like tanks.
-        const int harvestRadius = TacticalSafetyPolicy::harvesterThreatRadius(object->getItemID(),object->getWeaponRange());
+        const int harvestRadius = TacticalSafetyPolicy::harvesterThreatRadius(object->getItemID(),object->getWeaponRange(),civWars);
         if (object->getItemID()==Unit_Launcher) visibleHarvestLaunchers.push_back(object->getObjectID());
         for (int y = std::max(0,p.y-harvestRadius); y <= std::min(h-1,p.y+harvestRadius); ++y)
             for (int x = std::max(0,p.x-harvestRadius); x <= std::min(w-1,p.x+harvestRadius); ++x)
-                if ((x-p.x)*(x-p.x)+(y-p.y)*(y-p.y) <= harvestRadius*harvestRadius)
+                if ((x-p.x)*(x-p.x)+(y-p.y)*(y-p.y) <= harvestRadius*harvestRadius
+                    && (reachesRock || !getMap().getTile(x,y)->isRock()))
                     harvesterDanger[y*w+x] += 100;
         if (emitSafety) threats.set(std::to_string(object->getObjectID()), AITelemetry::Record()
             .set("item",object->getItemID()).set("x",p.x).set("y",p.y).set("radius_tiles",radius)
             .set("harvester_radius_tiles",harvestRadius));
     };
-    for (const auto* unit : getUnitList()) if (unit->isActive()) observe(unit);
+    for (const auto* unit : getUnitList()) observe(unit,unit->isActive());
     for (const auto* structure : getStructureList()) observe(structure);
     factoryEnemyClearanceStale = true;
     for (const auto& loss : recentStructureLosses) {

@@ -177,7 +177,8 @@ void QuantBot::planCivWarsResearch(BuildPass& pass) {
     if (getHouse()->getTechLevel() >= 4 && getHouse()->getNumItems(Structure_HeavyFactory) == 0) return;
     startTechResearch(pass);
     if (!getHouse()->isTechResearchActive())
-        pass.civWarsResearchReserve = getHouse()->getTechResearchCost() + std::max(300,pass.cityWorkingReserve);
+        pass.civWarsResearchReserve = QuantBotBuildPolicy::civWarsResearchSaving(
+            getHouse()->getTechResearchCost(),pass.cityWorkingReserve,pass.forecastFunding);
 }
 
 void QuantBot::startTechResearch(BuildPass& pass) {

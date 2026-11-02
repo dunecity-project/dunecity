@@ -72,9 +72,10 @@ PERF_FIELDS = COMMON + ('source', 'session', 'seq', 'cycle', 'house', 'team', 'i
                         'cycles_per_s', 'ai_wall_ms', 'ai_update_thread_cpu_ms', 'ai_update_wall_ms',
                         'ai_update_calls', 'update_thread_cpu_ms', 'update_wall_ms', 'update_calls', 'data_json')
 WORM_FIELDS = COMMON + ('cycle', 'id_object', 'object_id', 'item', 'house', 'data_json')
+DECISION_FIELDS = COMMON + ('session', 'seq', 'cycle', 'house', 'team', 'event', 'complete', 'data_json')
 CSV_FILES = (('houses.csv', HOUSE_FIELDS), ('samples.csv', SAMPLE_FIELDS), ('research.csv', RESEARCH_FIELDS),
              ('items.csv', ITEM_FIELDS), ('waves.csv', WAVE_FIELDS), ('perf.csv', PERF_FIELDS),
-             ('worms.csv', WORM_FIELDS), ('games.csv', GAME_FIELDS))
+             ('worms.csv', WORM_FIELDS), ('decisions.csv', DECISION_FIELDS), ('games.csv', GAME_FIELDS))
 RECORD = re.compile(r'\b(CIV_WARS_[A-Z_]+|PROBE_DIGEST|CAMPAIGN_BALANCE_RESULT):?\s+(.*)')
 lock = threading.Lock()
 
@@ -195,6 +196,7 @@ def telemetry(out, final_cycle, houses, worm_ids):
     counts = dict(events=0, parse_errors=0, seq_gaps=0, capture_limit=0, dropped_samples=0)
     attacks, losses = Counter(), Counter()
     waves, items, perf, metadata = [], [], [], []
+    decisions = []
     reasons = []
     summary_houses = set()
     teams = {str(h['house']): str(h['team']) for h in houses if h.get('house') and h.get('team')}
@@ -236,6 +238,9 @@ def telemetry(out, final_cycle, houses, worm_ids):
                     attacks[house] += 1
                     waves.append({**common, **data, 'source': 'telemetry', 'event': name,
                                   'data_json': encoded(data)})
+                elif name in ('attack_deferred', 'state_snapshot', 'research_started',
+                              'rock_expansion_site', 'mcv_deployment', 'colonist_escort'):
+                    decisions.append({**common, 'event': name, 'data_json': encoded(data)})
                 elif name == 'lethal_damage' and str(data.get('attacker')) in worm_ids:
                     victim = (house, str(data.get('object')))
                     if victim in seen_losses:
@@ -300,11 +305,13 @@ def telemetry(out, final_cycle, houses, worm_ids):
     performance_complete = complete and counts['dropped_samples'] == 0
     for row in perf:
         row['complete'] = int(performance_complete)
+    for row in decisions:
+        row['complete'] = int(complete)
     return dict(status='complete' if complete else 'capture_limit' if counts['capture_limit'] else
                 'missing' if not paths else 'incomplete', reasons=','.join(dict.fromkeys(reasons)),
                 complete=complete, performance_complete=performance_complete, paths=len(paths),
                 counts=counts, attacks=attacks, losses=losses, waves=waves, items=items, perf=perf,
-                metadata=metadata)
+                metadata=metadata, decisions=decisions)
 
 
 def command(args, binary, game, out):
@@ -445,6 +452,7 @@ def play(args, scratch, binary, game):
                 'samples.csv': [raw_row(base, data) for data in found['CIV_WARS_SAMPLE']],
                 'research.csv': [raw_row(base, data) for data in found['CIV_WARS_RESEARCH']],
                 'items.csv': item_rows, 'waves.csv': wave_rows, 'perf.csv': perf_rows,
+                'decisions.csv': [{**decision, **base} for decision in capture['decisions']],
                 'worms.csv': [raw_row(base, data, id_object=data.get('id', data.get('object_id', '')))
                               for data in worms], 'games.csv': [row]}
         results = Path(args.results)
