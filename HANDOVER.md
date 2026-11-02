@@ -1,3 +1,23 @@
+## 2026-11-02 — Civilization Wars (OMP CivWars, unreleased)
+
+- New main-menu Civilization Wars screen: seeded mirrored three-lane maps, 1v1/2v2/3v3,
+  rectangular size, spice, equal worms per lane, house/AI choices, Spectate, Game Rules, saved
+  maps and the ordinary online host/lobby flow. See `docs/civilization-wars.md`.
+- Fixed zero-credit tech-1 starts include Yard, built Research Lab, Refinery, permanent
+  Carryall, mature small R/C/I city/police, lane-mouth rocket turrets plus two core turrets
+  covering Yard/Lab, and sufficient windtraps. The engine's existing first-Refinery grant
+  supplies a Harvester even at tech 1; the generator does not add one.
+- Selectable `CivWars` / Civilization Wars mod inherits DuneCity content, city economy and
+  approved-online policy. Research Lab, Sandworms Respawn and Trooper Anti-Air defaults are
+  on for any authored scenario; map/lobby tech and authored starting objects are unchanged.
+- Only version-marked generated maps retain each worm's mirrored permanent lane spawn slot
+  after defeat/eating/save-load; unmarked scenarios retain ordinary map-wide random respawn.
+  Wake events are asynchronous, not automatically spawned/synchronized unit waves.
+- ResearchLab prerequisite `34841947` is merged; it owns the shared save 9881/protocol 111
+  bump and new item/option contract. App version remains 1.0.864 for the integrator.
+- Permanent coverage: `civilization_wars_tests`, `civilization_wars_probe`, menu navigation
+  and UI gallery cases. Runtime checks and artifacts are recorded below when exercised.
+
 ## 2026-11-02 — City tax per house, Micropolis land value (OMP integrator, unreleased)
 
 - Stefan: one tax rate for every house was wrong, and tax land value should follow Micropolis.

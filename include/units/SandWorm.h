@@ -56,6 +56,7 @@ public:
     bool canAttack(const ObjectBase* object) const override;
     bool canPass(int xPos, int yPos) const override;
     inline int getSleepTimer() const { return sleepTimer; }
+    const Coord& getRespawnOrigin() const { return respawnOrigin; }
 
     int getCurrentAttackAngle() const override;
 
@@ -120,6 +121,8 @@ private:
     Coord lastLocs[SANDWORM_SEGMENTS];    ///< Last locations of the sandworm
 
     Sint32 summonerHouseID = HOUSE_INVALID; ///< See setSummoner().
+    /// Captured once at initial Civ Wars deployment; sleep and movement never change it.
+    Coord respawnOrigin = Coord::Invalid();
 };
 
 #endif // SANDWORM_H

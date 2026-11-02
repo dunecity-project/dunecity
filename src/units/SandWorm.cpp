@@ -90,6 +90,10 @@ Sandworm::Sandworm(InputStream& stream, int unitType) : GroundUnit(stream) {
         summonerHouseID = stream.readSint32();
         if(summonerHouseID < HOUSE_INVALID || summonerHouseID >= NUM_HOUSES) summonerHouseID = HOUSE_INVALID;
     }
+    if(currentGame->getLoadedSavegameVersion() >= 9881) {
+        respawnOrigin.x = stream.readSint32();
+        respawnOrigin.y = stream.readSint32();
+    }
 }
 
 void Sandworm::init(int unitType) {
@@ -126,6 +130,8 @@ void Sandworm::save(OutputStream& stream) const {
         stream.writeSint32(lastLocs[i].y);
     }
     stream.writeSint32(summonerHouseID);
+    stream.writeSint32(respawnOrigin.x);
+    stream.writeSint32(respawnOrigin.y);
 }
 
 bool Sandworm::spares(const ObjectBase& object) const {
@@ -177,6 +183,11 @@ bool Sandworm::attack() {
 
 void Sandworm::deploy(const Coord& newLocation) {
     UnitBase::deploy(newLocation);
+    if(itemID == Unit_Sandworm && respawnOrigin.isInvalid()
+       && currentGame->getGameInitSettings().isCivilizationWars()
+       && currentGameMap->tileExists(newLocation)) {
+        respawnOrigin = newLocation;
+    }
 
     respondable = itemID == Unit_TameSandworm;
 }
@@ -454,20 +465,30 @@ bool Sandworm::update() {
             if(sleepTimer == 0) {
                 // awaken the worm!
 
-                for(int tries = 0 ; tries < 1000 ; tries++) {
-                    int x = currentGame->randomGen.rand(0, currentGameMap->getSizeX() - 1);
-                    int y = currentGame->randomGen.rand(0, currentGameMap->getSizeY() - 1);
-
-                    if(canPass(x, y)) {
-                        deploy(currentGameMap->getTile(x, y)->getLocation());
-                        break;
+                if(itemID == Unit_Sandworm && currentGame->getGameInitSettings().isCivilizationWars()) {
+                    if(canPass(respawnOrigin.x, respawnOrigin.y)
+                       && !currentGameMap->getTile(respawnOrigin)->hasAGroundObject()) {
+                        deploy(respawnOrigin);
+                    } else {
+                        // Each worm owns this slot permanently, even while it is blocked.
+                        sleep();
                     }
-                }
+                } else {
+                    for(int tries = 0 ; tries < 1000 ; tries++) {
+                        int x = currentGame->randomGen.rand(0, currentGameMap->getSizeX() - 1);
+                        int y = currentGame->randomGen.rand(0, currentGameMap->getSizeY() - 1);
 
-                if(isActive() == false) {
-                    // no room for sandworm on map => take another nap
-                    if(sleepOrDie() == false) {
-                        return false;
+                        if(canPass(x, y)) {
+                            deploy(currentGameMap->getTile(x, y)->getLocation());
+                            break;
+                        }
+                    }
+
+                    if(isActive() == false) {
+                        // no room for sandworm on map => take another nap
+                        if(sleepOrDie() == false) {
+                            return false;
+                        }
                     }
                 }
             }

@@ -5,6 +5,11 @@ pre-built opposing bases, armies, and DuneCity cities. It writes the map as an i
 map-editor format and starts it through the normal CustomGame path,
 `GameInitSettings(mapfile, filedata, ...)`, so saving and loading the match work as usual.
 
+The separate [Civilization Wars](civilization-wars.md) main-menu screen uses the same catalogue,
+normal map/start path and developed-zone extension for fixed tech-1, zero-credit, mirrored
+three-lane games. Selecting its `CivWars` mod in the host's map chooser makes **Random map...**
+open that mode's generator instead; other mods retain the Random Skirmish screen below.
+
 ## Where it is
 - **Main menu → "Random Skirmish"**, directly below "Custom Game". Deviation from the spec: the
   `SinglePlayerMenu` class is no longer reachable. The main menu is the live single-player menu, so
