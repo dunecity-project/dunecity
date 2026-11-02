@@ -177,7 +177,10 @@ built-tech history and local rather than house-wide turret coverage. The combine
 build at `5d4d7c72` and the original seven-case sizing fixture passed
 (`quantbot_custom_attack` 6.64 s; `quantbot_no_spice_city` 27.56 s).
 
-The final planner/candidate-reservation cutover requires its own final-source fixture result.
+The final planner/candidate-reservation fixture result is now established on combined
+`ff111654` (power code `ebd8ba42`, turret/supplier code `d76d5e62`): RocketTurrets reports
+native build PASS, `quantbot_no_spice_city` **28.72 s PASS** and `quantbot_custom_attack`
+**6.68 s PASS**. This includes the selected-generator/full-reservation assertions.
 The `820bae19` local no-spice fixture timed out at 180 s after `CITY_GROWTH_POWER_PASS`.
 Its preceding market step left a ten-Quad Starport batch: using `currentProducedItem`
 to cancel that batch can make no progress, because Starport queue items are not its
@@ -190,11 +193,16 @@ routine core-cover candidate (score2600) beat the growth-power candidate (score1
 The quote case now retains that real market, with the same reset shipment/70-credit Quad
 setup as the preceding growth-power fixture, so it exercises the actual military-to-growth
 allocation. Selected-generator and full-capital-reservation assertions remain unchanged.
-These corrections neither waive assertions nor extend the timeout; the final-source
-fixture result remains required.
+These corrections neither waived assertions nor extended the timeout.
 
 Final same-build on/off detector and win-rate tables, 90-minute adjacent-difficulty ladder,
 all mandatory AI regressions and performance/FPS gates are **not yet established** by this
 diagnostic matrix. The exact isolated control is `dunecity-audit-power-off`; do not
 present the 30-minute mirror time limits as ladder or performance evidence.
+
+The final eight-gate job is `20261103T034510-rocket-turrets-final-ad0693` (RocketTurrets).
+The three earlier `820bae19` comparison matrix jobs were explicitly cancelled when
+that candidate was withdrawn; they are not final effect estimates. Main owns relaunching
+the same-source combined control/default/isolated-power-off arms from the qualified final
+source and recording the long ladder and remaining gate outcomes.
 

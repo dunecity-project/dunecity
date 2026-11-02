@@ -39,7 +39,9 @@
   After cancellation correction the fixture terminated23s, then its new quote
   assertion exposed an omitted Starport competitor in the test inputs. Restored
   the actual reset market/cheap-Quad setup; selected-generator/full-reserve
-  assertions are unchanged. Final-source fixture result is still required.
+  assertions are unchanged. Combinedff111654 native/no-spice28.72s/custom-attack6.68s
+  PASS reported by RocketTurrets; final8-gate job20261103T034510-rocket-turrets-final-ad0693
+  is separate from the completed diagnostic baseline. Old820comparison jobs cancelled.
   `dunecity-audit-control` disables all3 new fixes; `dunecity-audit-power-off`
   isolates this one. Definitions, receipts and traces: `docs/quantbot-dunecity-audit.md`.
   Evidence: `/Users/stefan/Documents/projects/outputs/dunecity-audit-20261103/`.
