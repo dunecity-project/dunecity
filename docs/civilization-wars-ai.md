@@ -261,3 +261,59 @@ investment is capped at **24** R+C+I lots before the first wave, then
 These are AI construction ceilings, not caps on human population, city
 maturation, services or power. No attack orders or wave thresholds are changed.
 
+
+### Candidate 2 measured results and acceptance status
+
+Commit `7a51e0ce`:
+
+* `20261102T225438-civwars-candidate2-pilot-ed4673`: Hard 1v1, seed
+  7101, off/on/left/right, 30 minutes. All four timed out. On, left-only and
+  right-only each launched one ground attack; both-on had zero Harvester worm
+  deaths (15 combat-unit worm deaths), one island yard and four ground units
+  reaching the enemy end.
+* `20261102T225438-civwars-candidate2-formats-7985ba`: seed 7101,
+  both-on, Hard:Hard, Hard:Medium and Brutal:Hard in each of 1v1/2v2/3v3.
+  All **9/9 timed out at 30 minutes**, despite 1/3/4 attacks in the Hard mirrors
+  and 1/1/2 island yards respectively. Tech 2 completion was about
+  **3.74–4.10 minutes** across those houses. This does not establish a
+  difficulty ladder: there were no decisive wins in those pairings.
+* `20261102T225743-civwars-candidate2-forty-b1d7ad`: the same Hard 1v1
+  off/on/left/right pilot extended to 40 minutes:
+
+| Strategy enabled for | Outcome | End, min | Final tech left / right | Ground attacks | Island yards | Ground units reaching enemy end |
+|---|---|---:|---:|---:|---:|---:|
+| Neither | Time limit | 40.00 | 2 / 5 | 6 | 0 | 27 |
+| Both | Time limit | 40.00 | 6 / 6 | 2 | 3 | 9 |
+| Left only | Time limit | 40.00 | 8 / 2 | 1 | 1 | 25 |
+| Right only | Right won | 32.62 | eliminated / 7 | 1 | 3 | 39 |
+
+The candidate converts technology and island access much earlier and protects
+economic vehicles, but **has not met the finishing/strength acceptance gate**.
+The 30-minute control banked 75,638/77,673 refined spice credits versus
+23,804/23,165 for both-on: the four-worker pre-wave ceiling restricts ongoing
+army throughput. Future tuning must resolve that measured income/army
+bottleneck, rather than merely lowering victory or attack thresholds.
+
+Review after the pilots also found that an unlimited population ceiling
+(Brutal) bypassed the new land cap. Admission now independently enforces a
+finite zone cap even when population is unlimited; ordinary unlimited cities
+keep their old fast admission. **The admission correction has not had new
+simulation measurements.** Generator revision `df92c57f` adds only fixtures/docs;
+its author confirmed the generated map/start state is unchanged from the control.
+The measured
+candidate-2 Brutal rows above must not be relabelled as final-candidate results.
+
+No final ≥5-seed mirrored-difficulty/side-swapped ladder matrix, full cluster
+CTest, mandatory AI regression/performance pass, rendered FPS measurement or
+completed non-Civ-Wars off/on digest comparison is recorded. One ordinary
+off-arm run was exercised, but it is not a paired gate proof. Do not treat the
+default-on experimental switch as accepted for release on this evidence.
+
+Data directories under
+`/Users/stefan/Documents/projects/dunecity-results/civwars-ai/`:
+`baseline/`, `candidate1-pilot/`, `candidate2-pilot/`, `candidate2/`,
+`candidate2-pilot40/`. Each retains game/house/research/minute credit-curve,
+unit, island, attack, worm-loss and actual AI CPU tables; later runs also retain
+selected decision JSON in `decisions.csv`. Headless cycles/second is not
+rendered FPS.
+

@@ -959,7 +959,11 @@ int QuantBot::initialCityPopulation(Uint32 item) {
 }
 
 bool QuantBot::cityAdmitsStructure(BuildPass& pass, Uint32 item) {
-    if(pass.populationCeiling <= 0 || !isStructure(item)) return true;
+    if (pass.populationCeiling <= 0)
+        return pass.cityGrowthLimits.sharedZoneCap == QuantBotCityPolicy::kUnlimited
+            || !DuneCity::isCityZoneStructure(item)
+            || QuantBotCityPolicy::allowsZone(pass.cityZonesIncludingQueued,pass.cityGrowthLimits.sharedZoneCap);
+    if (!isStructure(item)) return true;
     if(DuneCity::isCityZoneStructure(item)
         && !QuantBotCityPolicy::allowsZone(pass.cityZonesIncludingQueued,pass.cityGrowthLimits.sharedZoneCap)) return false;
     const int added=QuantBotCityPolicy::displayPopulation(initialCityPopulation(item));
