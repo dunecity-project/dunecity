@@ -313,7 +313,7 @@ def command(args, binary, game, out):
            '--civ-wars', str(game['team_size']), '--civ-size', str(game['size']), '--civ-worms', str(game['worms']),
            '--civ-spice', str(game['spice']), '--civ-strategy', game['strategy'],
            '--partner-difficulty', game['left'], '--enemy-difficulty', game['right'], '--seed', str(game['seed']),
-           '--minutes', str(game['minutes']), '--capture-mib', '256', '--wall-timeout', str(args.wall_timeout),
+           '--minutes', str(game['minutes']), '--capture-mib', '1024', '--wall-timeout', str(args.wall_timeout),
            '--path-workers', '1']
     if getattr(args, 'game_options', None):
         cmd += ['--game-options', str(Path(args.game_options).resolve())]
