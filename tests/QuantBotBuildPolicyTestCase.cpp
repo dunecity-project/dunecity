@@ -1835,6 +1835,17 @@ TEST_CASE("Proactive turret overlap is interleaved with city growth", "[quantbot
     CHECK(RocketTurretPolicy::coverageTurretCap(0)==2);
     CHECK(RocketTurretPolicy::coverageTurretCap(40)==12);
 }
+
+TEST_CASE("Observed ground raids get a bounded local rocket goal", "[quantbot][defence][regression]") {
+    using RocketTurretPolicy::groundThreatGoal;
+    CHECK(groundThreatGoal(0)==0);
+    CHECK(groundThreatGoal(200)==2);
+    CHECK(groundThreatGoal(800)==2);
+    CHECK(groundThreatGoal(801)==3);
+    CHECK(groundThreatGoal(2000)==5);
+    CHECK(groundThreatGoal(100000)==8);
+    CHECK(RocketTurretPolicy::threatTurretTotalCap==12);
+}
 TEST_CASE("Air withdrawal exits new coverage without crossing a second defended area", "[quantbot][air]") {
     AirStrikePolicy::Coverage map(40,40);
     map.add(Coord(10,20),5);

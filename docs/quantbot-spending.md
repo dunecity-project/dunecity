@@ -88,6 +88,28 @@ Poorer openings retain their income-first progression. Both Starport constructio
 paths require an enabled unit in the map's CHOAM catalogue: zero stock can restock,
 but an absent entry cannot. Owning a heavy factory does not waive this check.
 
+`[Force Concentration] CityStarportSupply=1` (hashed, default on) makes the first
+useful Starport a protected one-off capital project for a city whose seed economy
+is complete and whose tax forecast exceeds upkeep and can fund the building.
+It uses the real CHOAM catalogue, legal site, prerequisites, concrete and queue
+commitments. A pending or standing port ends the claim. Without it, cheap city
+plots and the first-heavy-factory saving repeatedly win before the Starport
+fallback is reached, even when a developed no-spice city earns enough to buy it.
+
+`ThreatTurrets=1` in the same section (hashed, default on) lets Custom Hard/Brutal
+buy local rocket cover against **visible armed ground units near owned buildings**.
+The existing two-second safety survey supplies contacts; hidden armies, aircraft,
+workers and saboteurs do not increase this goal. One rocket per 400 credits of
+nearby observed fighters, rounded up, demands 2–8 local firing covers, with a
+12-rocket house-wide ceiling. Existing and reserved local emplacements count.
+An active raid protects the next turret or its power/tech prerequisite ahead of
+repeat plots and unit spending, rather than waiting for two refineries and a
+completed production core. The peaceful 8–12 battery and growth interleave stay
+unchanged. Site search is bounded to the threatened asset's weapon-range window,
+favours firing into the observed approach, and preserves spacing, roads and ground
+access. Once the local goal is met or contacts disappear, the emergency claim ends.
+Switches off preserve the old paths. No save-format or city-tax-rule change.
+
 Funded Dune City custom games use the established parallel factory/repair build
 order when current cash and projected cash cover another heavy factory, four
 minutes of its operation and the working buffer. The city-yard target is never

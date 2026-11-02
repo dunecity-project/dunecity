@@ -530,6 +530,7 @@ private:
                                       int* crimeBenefit = nullptr, int* crimeHotspot = nullptr);
 
     Coord findEffectiveTurretPlaceLocation(Uint32 itemID);
+    Coord findThreatTurretPlaceLocation(Coord asset, Coord approach);
     /// Site for an enemy-facing battery emplacement, in city mode as well as
     /// outside it. The ordinary city coverage planner keeps every other
     /// rocket-turret decision; see the definition for why the battery needs its
@@ -683,6 +684,9 @@ private:
     const std::vector<int>& factoryClearance() const;
     std::vector<Coord> visibleEnemyBases;
     std::vector<Uint32> visibleHarvestLaunchers;
+    struct GroundTurretContact { Coord at; int value; };
+    // Same visible-only two-second survey as tacticalDanger; derived, never saved.
+    std::vector<GroundTurretContact> visibleGroundTurretThreats;
     Uint32 dangerUpdated = std::numeric_limits<Uint32>::max();
     Uint32 lastSafetyTrace = std::numeric_limits<Uint32>::max();
     struct HarvesterSafety { Uint32 nextCheck = 0, retreatUntil = 0; Coord lastLocation = Coord::Invalid(), plannedDestination = Coord::Invalid(); bool controlled = false; };

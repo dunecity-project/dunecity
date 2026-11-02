@@ -346,3 +346,7 @@ ResearchLab=1
 # Fund a legal generator before demanded city growth loses its power headroom.
 # Military production and Starport bargains may spend only the remaining cash.
 CityGrowthPower=1
+# Bounded rocket cover against observed ground raids, ahead of routine growth.
+ThreatTurrets=1
+# Save a solvent city's first useful Starport instead of zoning its price away.
+CityStarportSupply=1

@@ -197,6 +197,29 @@ TEST_CASE("City growth power defaults on and is loaded saved and hashed", "[ai][
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Ground threat and city supplier switches default on and are loaded saved and hashed", "[ai][defence][config]") {
+    const QuantBotConfig baseline;
+    REQUIRE(baseline.force.threatTurrets);
+    REQUIRE(baseline.force.cityStarportSupply);
+    for (const bool turret : {false,true}) {
+        QuantBotConfig config;
+        const auto path=std::filesystem::temp_directory_path()/"quantbot-ground-defence-test.ini";
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\n" << (turret ? "ThreatTurrets" : "CityStarportSupply") << "=false\n";
+        }
+        REQUIRE(config.applyOverrides(path.string()));
+        REQUIRE(config.force.threatTurrets==!turret);
+        REQUIRE(config.force.cityStarportSupply==turret);
+        REQUIRE(config.getConfigHash()!=baseline.getConfigHash());
+        REQUIRE(config.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.getConfigHash()==config.getConfigHash());
+        std::filesystem::remove(path);
+    }
+}
+
 TEST_CASE("Strategy: the [Strategy] keys are read and every one is hashed", "[ai][strategy][config]") {
     const QuantBotConfig baseline;
     const std::string base = baseline.getConfigHash();

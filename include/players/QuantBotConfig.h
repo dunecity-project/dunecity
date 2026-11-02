@@ -252,6 +252,12 @@ struct QuantBotConfig {
         /// headroom, instead of allowing military savings and bargains to starve it.
         /// On by default; no effect outside city games or while generation is pending.
         bool cityGrowthPower;
+        /// Buy bounded, locally sited rocket cover against visible ground raids,
+        /// without waiting for the peaceful production-core/refinery gates.
+        bool threatTurrets;
+        /// Protect a solvent city's first useful Starport from repeat zoning and
+        /// factory orders. The no-spice seed economy still comes first.
+        bool cityStarportSupply;
     };
     ForceSettings force;
 

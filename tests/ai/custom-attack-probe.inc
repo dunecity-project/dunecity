@@ -1,3 +1,5 @@
+#include "threat-turret-probe.inc"
+
 // Real production selector and reserve movement; never linked into the game.
 void runCustomAttackProbe(Game& game) {
     auto require=[](bool ok,const char* why){if(!ok)throw std::runtime_error(why);};
@@ -136,5 +138,6 @@ void runCustomAttackProbe(Game& game) {
         bot->launchGroundHunt();require(hunters()==1,"Small army leaked its reserve on repeat");
     } catch(...) {unitList=saved;throw;}
     unitList=saved;
+    runThreatTurretProbe(game);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=custom_attack outcome=passed");
 }

@@ -1,3 +1,38 @@
+## 2026-11-03 — Quad-rush rocket cover and first city Starport (OMP RocketTurrets, unreleased)
+
+- Stefan's `ai dont build enough rocket turrets.dls` is a 1.0.864/9879,
+  seed418379001, 160×160, zero-spice 2v2. At cycle91269 Atreides (team2) is
+  QuantBot Hard/Both, tech9, 301 credits, 46 structures, one Harvester and no
+  combat army. CY upgrade2 can build rockets and Starport; power700/494,
+  Radar295/500. Its two rockets at(8,60),(6,61) sit behind the eastern/southeastern
+  Mercenary raid: five nearby Quads, four Trikes and a Launcher.
+- Exact pinned mod2d643c… and mapff068e… were used, not newer replacement content.
+  Six-minute baseline builds no rockets or Starport, goes46→4 structures and
+  loses its yard. First-minute gross tax1236, spice0, police114, power68 and total
+  spending1122: a250-credit turret is affordable if its budget is protected.
+- Slow City Year OFF is diagnostic only: first-minute tax2555, but still no new
+  rockets or Starport; the yard is lost and only9 structures remain at+6min.
+  Tax forecasts correctly scale1016/min ON versus2036/min OFF. The half-rate
+  income aggravates the stall, but neither stale year math nor absolute poverty
+  explains the missing purchases. The match's tax/year rules are unchanged.
+- Cause: two baseline rockets disable routine expansion until the heavy/high-tech/
+  repair core exists; the peaceful battery wants two refineries, while no-spice
+  cities keep one. The perimeter also wants a1000-credit unit reserve. First-heavy
+  saving, repeat zoning/police and unit spending prevent the late Starport fallback
+  from owning its price. Reactive ground cover had no protected capital candidate.
+- New hashed, default-on `[Force Concentration] ThreatTurrets` uses the existing
+  visible-only safety survey, a2–8 local goal (one rocket/400 hostile ground value)
+  and12-total ceiling. Local firing sites cover the attacked side; bounded search
+  preserves roads/access/spacing. The next turret or power/tech prerequisite owns
+  its cash; core/refinery opening gates do not postpone an actual visible raid.
+  `CityStarportSupply` protects a solvent, seeded city's first useful Starport,
+  ending its claim once standing or pending. Switches OFF retain the old paths.
+- No saved AI fields or extra protocol bump: the shared unreleased protocol111
+  already covers this batch. No saboteur orders or human-order leases changed.
+- Added a minimal eight-quad/rear-pair/one-refinery engine fixture to
+  `quantbot_custom_attack`, plus bounded-goal and both switches' load/save/hash
+  tests. Evidence: `/Users/stefan/Documents/projects/outputs/turrets-20261103/`.
+
 ## 2026-11-03 — Power-starved Harkonnen city (OMP IdleAISave, unreleased)
 
 - Stefan's `harkonan doing nothing.dls` is a 1.0.864/9879 Random Skirmish save,

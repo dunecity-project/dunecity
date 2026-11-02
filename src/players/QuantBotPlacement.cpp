@@ -1538,6 +1538,54 @@ QuantBot::BatteryGeometry QuantBot::batteryGeometry(Coord anchor, Coord forward)
     return geometry;
 }
 
+Coord QuantBot::findThreatTurretPlaceLocation(Coord asset, Coord approach) {
+    AITelemetry::PerformanceScope perfScope("ai.findThreatTurretPlaceLocation",getGameCycleCount(),getHouse()->getHouseID());
+    if (asset.isInvalid() || approach.isInvalid()) return Coord::Invalid();
+    const Uint32 item=Structure_RocketTurret;
+    const int range=std::max(1,currentGame->objectData.data[item][getHouse()->getHouseID()].weaponrange-1);
+    const auto geometry=batteryGeometry(asset,approach-asset);
+    Coord best=Coord::Invalid();
+    int64_t bestScore=std::numeric_limits<int64_t>::min();
+    // Only sites that can fire across this threatened asset. A new reaction
+    // does not trigger another whole-map placement sweep for every builder.
+    for (int y=std::max(0,asset.y-range);y<=std::min(getMap().getSizeY()-1,asset.y+range);++y)
+        for (int x=std::max(0,asset.x-range);x<=std::min(getMap().getSizeX()-1,asset.x+range);++x) {
+            const Coord at(x,y);
+            if (blockDistance(at,asset)>range
+                || !placeableAmongOwnUnits(x,y,1,1,item)
+                || overlapsReservedStructure(x,y,1,1)
+                || !preservesGroundAccess(item,at)
+                || !cityRoadImpact(getMap(),x,y,1,1,item).preservesConnections
+                || (currentGame->isCitySimEnabled()
+                    && wouldLandlockNeighbouringZone(getMap(),getHouse()->getHouseID(),x,y,1,1))) continue;
+            int nearest=-1,cluster=0;
+            for (const Coord turret:geometry.turrets) {
+                const int d=std::max(std::abs(turret.x-x),std::abs(turret.y-y));
+                if (nearest<0 || d<nearest) nearest=d;
+                if (d<=geometry.clusterRadius) ++cluster;
+            }
+            if (!FrontBatteryPolicy::spacedEnough(nearest)
+                || !FrontBatteryPolicy::withinClusterLimit(cluster)) continue;
+            int exits=0;
+            for (int dy=-1;dy<=1;++dy) for (int dx=-1;dx<=1;++dx) {
+                if ((!dx && !dy) || !getMap().tileExists(x+dx,y+dy)) continue;
+                const auto* tile=getMap().getTile(x+dx,y+dy);
+                if (!tile->isMountain() && !tile->hasAStructure()) ++exits;
+            }
+            if (!FrontBatteryPolicy::keepsCorridor(exits)) continue;
+            int64_t firingValue=0;
+            for (const auto& contact:visibleGroundTurretThreats)
+                if (blockDistance(at,contact.at)<=range) firingValue+=contact.value;
+            // Answer the observed approach, not a distant enemy base or the
+            // peaceful amenity scorer. Keep a few tiles of stand-off from quads.
+            const int approachDistance=blockDistance(at,approach).lround();
+            const int64_t score=firingValue*100-std::abs(approachDistance-5)*30
+                -blockDistance(at,asset).lround()*4;
+            if (score>bestScore) { bestScore=score;best=at; }
+        }
+    return best;
+}
+
 Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {
     AITelemetry::PerformanceScope perfScope("ai.findTurretPlaceLocation", getGameCycleCount(), getHouse()->getHouseID(), itemID);
     // One search per item per build pass. Several rules call this purely to ask

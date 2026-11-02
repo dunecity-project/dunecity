@@ -354,6 +354,8 @@ QuantBotConfig::QuantBotConfig() {
     force.hardCityMatch = true;
     force.researchLab = true;
     force.cityGrowthPower = true;
+    force.threatTurrets = true;
+    force.cityStarportSupply = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -652,6 +654,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
         iniFile.setBoolValue("Force Concentration", "ResearchLab", force.researchLab);
         iniFile.setBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
+        iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
+        iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -778,6 +782,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
     force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);
     force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
+    force.threatTurrets = iniFile.getBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
+    force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1263,6 +1269,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("hardCityMatch", force.hardCityMatch);
     addNamed("researchLab", force.researchLab);
     addNamed("cityGrowthPower", force.cityGrowthPower);
+    addNamed("threatTurrets", force.threatTurrets);
+    addNamed("cityStarportSupply", force.cityStarportSupply);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);

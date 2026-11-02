@@ -20,6 +20,7 @@
 
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
+#include <string_view>
 
 using QuantBotInternal::cityRoadImpact;
 using QuantBotInternal::wouldLandlockNeighbouringZone;
@@ -347,7 +348,7 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
     // hundred-credit price. Its selected, bounded power project owns the
     // savings and this yard until queued; other producers keep the remainder.
     if (yardTurn.itemID==NONE_ID && capitalPending(pass) && !yardTurn.civicClaimsYard
-        && pass.capitalCandidates[pass.capitalChoice].kind==std::string("city_growth_power")
+        && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)=="city_growth_power"
         && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()) {
         const auto& power=pass.capitalCandidates[pass.capitalChoice];
         const bool funded=pass.money>=power.price+power.foundationCost;
@@ -709,6 +710,10 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
             yardTurn.structureRule = yardTurn.itemID == NONE_ID
                 ? (prerequisite ? "save_defence_prerequisite" : "save_city_protection")
                 : (prerequisite ? "defence_prerequisite" : "city_protection");
+            if (service.reason==std::string("ground_threat"))
+                yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_ground_threat" : "ground_threat";
+            else if (service.kind==std::string("city_supply"))
+                yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_city_starport_supply" : "city_starport_supply";
             yardTurn.skipRemainingStructureLogic = true;
         }
     }

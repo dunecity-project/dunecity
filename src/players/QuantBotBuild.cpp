@@ -22,6 +22,7 @@
 
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
+#include <string_view>
 
 using QuantBotInternal::rocketCoverageTier;
 
@@ -2253,6 +2254,42 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
         if (structure->getOwner()==getHouse() && structure->getHealth()>0)
             pass.coverageDemand+=RocketTurretPolicy::desiredCoverage(structure->getItemID(),pass.coverageTier,
                 isExpansionYard(structure->getItemID(),structure->getObjectID(),anchorYard));
+    // A visible ground raid needs local firing cover, not the peaceful battery's
+    // two-refinery/production-core opening. Reuse the two-second threat survey;
+    // never inspect an unseen army or search the map per hostile unit.
+    if (botConfig().force.threatTurrets && gameMode==GameMode::Custom
+        && difficulty>=Difficulty::Hard && !visibleGroundTurretThreats.empty()
+        && pass.itemCount[Structure_RocketTurret]<RocketTurretPolicy::threatTurretTotalCap) {
+        const int range=std::max(1,data[Structure_RocketTurret][houseID].weaponrange-1);
+        int bestMissing=0;
+        for (const auto* asset:getStructureList()) {
+            if (asset->getOwner()!=getHouse() || asset->getHealth()<=0
+                || RocketTurretPolicy::defenseWeight(asset->getItemID())==0) continue;
+            int value=0;
+            int64_t x=0,y=0;
+            for (const auto& contact:visibleGroundTurretThreats) {
+                if (blockDistance(contact.at,asset->getClosestPoint(contact.at))>range+5) continue;
+                value+=contact.value;x+=int64_t(contact.at.x)*contact.value;y+=int64_t(contact.at.y)*contact.value;
+            }
+            if (value<=0) continue;
+            const Coord at=asset->getLocation()+Coord(asset->getStructureSizeX()/2,asset->getStructureSizeY()/2);
+            int cover=0;
+            for (const auto* turret:getStructureList())
+                if (turret->getOwner()==getHouse() && turret->getHealth()>0
+                    && turret->getItemID()==Structure_RocketTurret
+                    && blockDistance(turret->getLocation(),at)<=range) ++cover;
+            for (const auto& entry:reservedStructures)
+                if (entry.second.item==Structure_RocketTurret
+                    && blockDistance(entry.second.location,at)<=range) ++cover;
+            const int goal=RocketTurretPolicy::groundThreatGoal(value);
+            const int missing=goal-cover;
+            if (missing>bestMissing || (missing==bestMissing && missing>0 && value>pass.groundThreatValue)) {
+                bestMissing=missing;pass.groundThreatAsset=at;
+                pass.groundThreatApproach=Coord(int(x/value),int(y/value));
+                pass.groundThreatValue=value;pass.groundTurretGoal=goal;pass.groundTurretCover=cover;
+            }
+        }
+    }
     // Spread core assets can demand an overlap that no legal site reaches, so
     // the shortfall alone never returns to zero. Peaceful pursuit of it then
     // owns every construction slot and its savings for the rest of the game,
@@ -2491,9 +2528,41 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             if (economy.item!=NONE_ID) {
                 economy.price=data[economy.item][houseID].price;
                 economy.score=QuantBotSpendingPolicy::economyScore(economy.proceeds,economy.cost);
-                economy.reason=economy.kind==std::string("city_growth_power") ? "unlock_demanded_city_growth"
+                economy.reason=std::string_view(economy.kind)=="city_growth_power" ? "unlock_demanded_city_growth"
                     : economy.score>0 ? "marginal_income" : "no_marginal_income";
                 pass.capitalCandidates.push_back(economy);
+            }
+            if (pass.groundThreatAsset.isValid()
+                && campaignAvailableToBuild(builder,Structure_RocketTurret)) {
+                CapitalCandidate defence;
+                defence.builder=builder->getObjectID();defence.item=Structure_RocketTurret;
+                defence.kind="ground_defence";defence.reason="ground_threat";defence.score=6500;defence.urgent=true;
+                if (pass.turretPowerRequired && !hasPowerBufferForTurret(pass)) {
+                    defence.item=powerGenerationPending(pass) ? Uint32(NONE_ID) : Uint32(Structure_WindTrap);
+                }
+                if (defence.item!=NONE_ID && campaignAvailableToBuild(builder,defence.item)) {
+                    defence.site=defence.item==Structure_RocketTurret
+                        ? findThreatTurretPlaceLocation(pass.groundThreatAsset,pass.groundThreatApproach)
+                        : findPlaceLocation(defence.item);
+                    defence.price=data[defence.item][houseID].price;defence.cost=buildingCapitalCost(pass,defence.item);
+                    if (defence.site.isValid()) pass.capitalCandidates.push_back(defence);
+                }
+            }
+            // The fallback Starport rule never wins a low-cash city's yard:
+            // repeated plots and the unprotected first-heavy saving consume its
+            // price first. One useful, income-funded supplier is a finite project.
+            if (botConfig().force.cityStarportSupply && pass.citySimEnabled
+                && !cityBootstrapNeeded(pass) && pass.cityZonesIncludingQueued>=4
+                && pass.itemCount[Structure_StarPort]==0 && pass.starportMarketAvailable
+                && pass.forecastTax>pass.forecastUpkeep
+                && pass.forecastFunding>=buildingCapitalCost(pass,Structure_StarPort)
+                && campaignAvailableToBuild(builder,Structure_StarPort)) {
+                CapitalCandidate supplier;
+                supplier.builder=builder->getObjectID();supplier.item=Structure_StarPort;
+                supplier.kind="city_supply";supplier.reason="first_starport_supply";supplier.score=5500;
+                supplier.price=data[supplier.item][houseID].price;supplier.cost=buildingCapitalCost(pass,supplier.item);
+                supplier.site=findPlaceLocation(supplier.item);
+                if (supplier.site.isValid()) pass.capitalCandidates.push_back(supplier);
             }
             // Services must be allowed to save their price, not wait for money
             // left after every factory has placed another order. Use the existing
@@ -2547,18 +2616,23 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // on and never grew); aircraft over the base never wait.
             const int cityZones=pass.itemCount[Structure_ZoneResidential]+pass.itemCount[Structure_ZoneCommercial]
                 +pass.itemCount[Structure_ZoneIndustrial];
-            if (botConfig().force.defencePrerequisites && pass.citySimEnabled && getHouse()->hasPower()
-                && (pass.airEngaged || (pass.uncoveredCoreAssets>0 && cityZones>=4)) && pass.routineRocketsAllowed
+            const bool groundDefenceDue=pass.groundThreatAsset.isValid();
+            if ((botConfig().force.defencePrerequisites || groundDefenceDue) && pass.citySimEnabled && getHouse()->hasPower()
+                && (groundDefenceDue || ((pass.airEngaged || (pass.uncoveredCoreAssets>0 && cityZones>=4))
+                    && pass.routineRocketsAllowed))
                 && data[Structure_RocketTurret][houseID].enabled
                 && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()
                 && !campaignAvailableToBuild(builder,Structure_RocketTurret)) {
                 int uncovered=0;
-                if (findCityTurretPlaceLocation(Structure_RocketTurret,&uncovered).isValid() && uncovered>0) {
+                const Coord defenceSite=groundDefenceDue
+                    ? findThreatTurretPlaceLocation(pass.groundThreatAsset,pass.groundThreatApproach)
+                    : findCityTurretPlaceLocation(Structure_RocketTurret,&uncovered);
+                if (defenceSite.isValid() && (groundDefenceDue || uncovered>0)) {
                     CapitalCandidate unlock;
                     unlock.builder=builder->getObjectID();
-                    unlock.score=pass.airEngaged ? 3000 : 2600;
-                    unlock.reason=pass.airEngaged ? "air_coverage" : "core_coverage";
-                    unlock.urgent=pass.airEngaged;
+                    unlock.score=groundDefenceDue ? 6500 : pass.airEngaged ? 3000 : 2600;
+                    unlock.reason=groundDefenceDue ? "ground_threat" : pass.airEngaged ? "air_coverage" : "core_coverage";
+                    unlock.urgent=groundDefenceDue || pass.airEngaged;
                     const int rocketUpgrade=data[Structure_RocketTurret][houseID].upgradeLevel;
                     if (builder->getCurrentUpgradeLevel()<rocketUpgrade) {
                         if (builder->getMaxUpgradeLevel()>=rocketUpgrade) {
@@ -2838,6 +2912,8 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         && (pass.capitalCandidates[pass.capitalChoice].reason == std::string("crime_prevention")
             || pass.capitalCandidates[pass.capitalChoice].reason == std::string("air_coverage")
             || pass.capitalCandidates[pass.capitalChoice].reason == std::string("secure_expansion")
+            || pass.capitalCandidates[pass.capitalChoice].reason == std::string("ground_threat")
+            || pass.capitalCandidates[pass.capitalChoice].kind == std::string("city_supply")
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_upgrade")
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_prerequisite"));
     pass.cityGrowthProtected = false;
@@ -2879,7 +2955,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         for (size_t i=0;i<pass.capitalCandidates.size();++i)
             if ((DuneCity::isCityZoneStructure(pass.capitalCandidates[i].item)
                     ? getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=24
-                    : pass.capitalCandidates[i].kind==std::string("city_growth_power"))
+                    : std::string_view(pass.capitalCandidates[i].kind)=="city_growth_power")
                 && pass.capitalCandidates[i].score>0
                 && (growth<0 || pass.capitalCandidates[i].score>pass.capitalCandidates[growth].score)) growth=int(i);
         if (growth>=0) {pass.capitalChoice=growth;pass.cityGrowthProtected=true;}
@@ -2942,6 +3018,9 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("trip_cycles",pass.refineryTripCycles).set("walking_trip_cycles",pass.walkingTripCycles).set("field_risk",pass.refineryFieldRisk)
             .set("ready_yards",pass.readyYards).set("power_required",getHouse()->getPowerRequirement())
             .set("power_produced",getHouse()->getProducedPower()).set("producers",pass.capitalProducers)
+            .set("ground_threat_value",pass.groundThreatValue).set("ground_turret_goal",pass.groundTurretGoal)
+            .set("ground_turret_cover",pass.groundTurretCover)
+            .set("ground_threat_x",pass.groundThreatAsset.x).set("ground_threat_y",pass.groundThreatAsset.y)
             .set("unit_options",pass.capitalUnitOptions).set("candidates",options).set("selected",pass.capitalChoice)
             .set("reason",pass.cityGrowthProtected ? "protect_demanded_city_growth" : !pass.sharedSpending ? "funded_parallel_production" : pass.capitalChoice<0
                 ? "no_useful_available_purchase" : "highest_marginal_priority"));

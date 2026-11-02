@@ -277,6 +277,11 @@ struct QuantBot::BuildPass {
     bool airEngaged{};
     int uncoveredCoreAssets{};
     int coverageDemand{};
+    Coord groundThreatAsset = Coord::Invalid();
+    Coord groundThreatApproach = Coord::Invalid();
+    int groundThreatValue{};
+    int groundTurretGoal{};
+    int groundTurretCover{};
     Uint32 missingCoreInfrastructure{};
     bool coreInfrastructureReady{};
     bool cityCoreInfrastructureReady{};
