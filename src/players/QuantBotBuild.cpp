@@ -2971,8 +2971,9 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                         && pass.forecastTax>pass.forecastUpkeep
                         && !pass.defendingEconomy && !pass.airEngaged
                         && campaignAvailableToBuild(builder,factory)
+                        // Keep the existing city-growth floor after the factory's draw.
                         && (!pass.powerRules || getHouse()->getProducedPower()-getHouse()->getPowerRequirement()
-                            >=std::max(0,data[factory][houseID].power))) {
+                            >=std::max(0,data[factory][houseID].power)+24)) {
                         capacity.site=findPlaceLocation(factory);
                         if (capacity.site.isValid()) {
                             capacity.kind="city_construction";capacity.score=5000;

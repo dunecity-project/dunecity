@@ -481,7 +481,7 @@ void runNoSpiceCityProbe(Game& game) {
         auto& factoryData=game.objectData.data[Structure_HeavyFactory][HOUSE_HARKONNEN];
         const bool savedEnabled=factoryData.enabled;
         const int factoryPrice=factoryData.price;
-        auto marketDecide=[&](bool enabled,int credits) {
+        auto marketDecide=[&](bool enabled,int credits,int power=10000) {
             config->force.cityConstructionCapital=enabled;
             port->informFrigateDestroyed();
             for (auto& offer:house->getChoam().availableItems) {
@@ -489,7 +489,7 @@ void runNoSpiceCityProbe(Game& game) {
                 if (offer.itemID==Unit_Quad) offer.price=70;
             }
             port->updateBuildList();
-            return decide(credits,10000);
+            return decide(credits,power);
         };
         auto restore=[&]() {
             factoryData.enabled=savedEnabled;
@@ -508,7 +508,11 @@ void runNoSpiceCityProbe(Game& game) {
             const Pass saving=marketDecide(true,factoryPrice-1);
             require(!ordered(saving,Structure_HeavyFactory) && !ordered(saving,Unit_Quad),
                 "First-factory savings were spent before the real purchase was affordable");
-            const Pass funded=marketDecide(true,factoryPrice);
+            const int growthPower=house->getPowerRequirement()+std::max(0,factoryData.power)+24;
+            const Pass lastPower=marketDecide(true,factoryPrice,growthPower-1);
+            require(!ordered(lastPower,Structure_HeavyFactory),
+                "First heavy factory consumed the last city-growth power headroom");
+            const Pass funded=marketDecide(true,factoryPrice,growthPower);
             require(ordered(funded,Structure_HeavyFactory) && !ordered(funded,Unit_Quad),
                 "An affordable first heavy factory lost its cash to a Starport bargain");
             bot->build(0);
