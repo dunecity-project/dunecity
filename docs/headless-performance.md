@@ -36,6 +36,7 @@ probe's setup/loop split, game cycles per second of the loop, the outcome and ev
 | `BALANCE_UNIT_PHASE_TIMING=1` | only when profiling | Probes switch the per-unit phase timing (`DuneCity-Performance.log`) off; it cost ~5% of a busy match in clock reads. |
 | `BALANCE_DIGEST_CYCLES=N` | determinism checks | `PROBE_DIGEST` interval in cycles (default 750 = 12 game s, 0 = only the final one). |
 | `BALANCE_DIGEST_DUMP=FILE` | locating a divergence | Append each sampled cycle's RNG, exact credits and object fields, per-house city population/history/valves, and serialized QuantBot-state hashes. Set the interval to 1 around a suspect cycle. |
+| `BALANCE_SCENARIO_DUMP_MAP=FILE` | same-map release baselines | Write the exact initial map text, independent of changes to generator settings or terrain algorithms. |
 | `--jobs` | see scaling table | One game uses one core with `--path-workers 1`. |
 
 Probe binaries are cached per build tree in `build/balance-probe-cache/` (key: generated
@@ -97,6 +98,7 @@ every 750 cycles and at the end. See the results section for what was compared.
 Scenario runs also log `SCENARIO_SETUP` before the first update: the simulation seed,
 effective options and QuantBot config hashes, generated map-text hash (FNV-1a64),
 active content/ObjectData hashes, city/observer mode and requested test style.
+`SCENARIO_AI_CONFIG` records each bot's effective config hash after test-style overrides.
 Compare these inputs before attributing different platform digests to the simulation.
 
 ## Results
