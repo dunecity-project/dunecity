@@ -264,8 +264,8 @@ The manually assembled budget pass explicitly uses the normal no-capital-selecti
 sentinel (`-1`): inventory alone does not run `chooseCapitalPlan()`. This fixes the
 original fixture-only `capitalPending` null-vector SIGSEGV without weakening queue checks.
 It additionally asserts that reinforcements above the standing-wave threshold still
-queue with negative projected cash. Final detector/combat effects remain unverified
-until the new committed-source ON run finishes against the retained OFF seed set.
+queue with negative projected cash. The completed same-binary detector, combat and
+adjacent-difficulty comparisons are recorded below.
 
 The independent `CapacityMcvRunway` fixture disables `CityOpeningCapital` in both
 arms: otherwise the tax-opening guard correctly rejects the intentionally unfunded
@@ -274,39 +274,159 @@ funded-capacity and recovery assertions remain; the new tax guard is tested sepa
 
 ## Verification boundary
 
-The completed diagnostic matrix and separate ordinary-game generator telemetry are measured.
-Detector invariant checks cover persistence/reset, duplicate final samples, spice exclusion,
-built-tech history and local rather than house-wide turret coverage. The combined native
-build at `5d4d7c72` and the original seven-case sizing fixture passed
-(`quantbot_custom_attack` 6.64 s; `quantbot_no_spice_city` 27.56 s).
+### Final coverage and controls
 
-The final planner/candidate-reservation fixture result is now established on combined
-`ff111654` (power code `ebd8ba42`, turret/supplier code `d76d5e62`): RocketTurrets reports
-native build PASS, `quantbot_no_spice_city` **28.72 s PASS** and `quantbot_custom_attack`
-**6.68 s PASS**. This includes the selected-generator/full-reservation assertions.
-The `820bae19` local no-spice fixture timed out at 180 s after `CITY_GROWTH_POWER_PASS`.
-Its preceding market step left a ten-Quad Starport batch: using `currentProducedItem`
-to cancel that batch can make no progress, because Starport queue items are not its
-ordinary production slot. Fixture cleanup now cancels the real queue-front item and
-asserts progress at all four callsites. The pure nuclear-capacity rejection also runs
-before the optional reactor site search, avoiding an expensive sweep for a rejected plan.
-At `4dc09268` the corrected fixture terminated in 23 s and then exposed an input error
-in the new quote test: its builder list omitted the real Starport bargain, so a legitimate
-routine core-cover candidate (score2600) beat the growth-power candidate (score16).
-The quote case now retains that real market, with the same reset shipment/70-credit Quad
-setup as the preceding growth-power fixture, so it exercises the actual military-to-growth
-allocation. Selected-generator and full-capital-reservation assertions remain unchanged.
-These corrections neither waived assertions nor extended the timeout.
+Production policy is `d56d1710`; `495c1b23` is a fixture-only isolation correction.
 
-Final same-build on/off detector and win-rate tables, 90-minute adjacent-difficulty ladder,
-all mandatory AI regressions and performance/FPS gates are **not yet established** by this
-diagnostic matrix. The exact isolated control is `dunecity-audit-power-off`; do not
-present the 30-minute mirror time limits as ladder or performance evidence.
+- Broad diagnostic: **162 games / 540 houses**, sizes96/128/160, spiceNone/Low/Medium,
+  1v1/2v2/FFA4, Medium/Hard/Brutal, seeds9101/148680876, 30-game-minute cap.
+  No playing human. The frozen271 power/control arms also each completed162/540.
+- Final exact-same-binary capital A/B: **72 games / 240 houses per arm**,
+  sizes96/128, None/Low, all three formats/difficulties, the same two seeds,
+  30-minute cap. Both arms use probe SHA256
+  `c2f587e03d1c38c61332600d8e0b12fcceea7614d25ae8d03d675ec0de990885`.
+- Final difficulty A/B: **54 games per arm**, size128, all three spice levels,
+  B/H, H/M and M/E, both house assignments, seeds9101/148680876/424242,
+  45-minute cap. Total final acceptance: **252 games**.
+- These use the existing generator/runner, no formation, nice10/jobs2 and frozen
+  bundles without a workspace lease. The approved final mirror recheck is the
+  96/128,None/Low subset: the earlier full162 on60bbe is historical, not final
+  validation of160/Medium after the tax-scope correction. The mixed ladder covers128/Medium.
 
-The old eight-gate job `20261103T034510-rocket-turrets-final-ad0693` was superseded by
-Main's combined integration run. The earlier `820bae19` comparison jobs were also
-cancelled, and are not final effect estimates.
-Frozen `27176982874d` has three162-game arms (all3OFF/default/PowerSizing-onlyOFF)
-and two144-game adjacent-ladder arms queued; their receipts are `271-jobs.json`.
-These immutable games remain the before data for the opening-capital correction.
+### Final detector table: matched72 games / 240 houses
+
+Counts are hits/exposed, not automatic proof of a bug. Earlier wins/eliminations
+censor long deadlines; joint exposure excludes houses unobservable in either arm.
+
+| Detector | OFF | ON | Jointly exposed OFF→ON |
+|---|---:|---:|---:|
+| Economy stall | 57/233 | 39/223 | 57→39 /223 |
+| Power deficit | 3/233 | 0/223 | 3→0 /223 |
+| No local ground cover | 31/193 | 20/171 | 23→20 /156 |
+| Missing Starport | 57/202 | 17/156 | 28→15 /151 |
+| Missing Radar | 0/202 | 0/156 | 0→0 /151 |
+| Missing Heavy Factory | 0/202 | 0/156 | 0→0 /151 |
+| Missing IX | 193/202 | 147/156 | 142→142 /151 |
+| Idle under attack | 0/129 | 0/109 | 0→0 /84 |
+| Unused credits | 0/220 | 0/191 | 0→0 /187 |
+| Bankrupt/empty queue | 99/240 | 77/240 | 99→77 /240 |
+| Early no-fight elimination | 0/240 | 0/240 | 0→0 /240 |
+| Zero harvesters on spice | 1/119 | 1/119 | 1→1 /119 |
+
+The Starport gain is not merely censoring:28→15 on151 jointly20-minute-observed
+houses. Local-cover raw31→20 becomes23→20 on joint exposure, so do not attribute
+the entire raw drop to improved defence. **IX does not improve on joint exposure:
+142→142**. Its existing rule needs Heavy/HiTech/Repair, buildability and >1000
+spendable cash; the deadline remains a signal, not a resolved bug.
+
+### All12 detectors by difficulty and spice
+
+Each row has40 matched houses. Each cell is OFF hits/exposed → ON hits/exposed;
+not every stratum improves. In particular Medium/None economy flags15→16.
+
+| Difficulty/spice | Economy stall | Power deficit | No ground cover | Missing Starport | Missing Radar | Missing HF |
+|---|---:|---:|---:|---:|---:|---:|
+| Brutal/Low | 7/39 → 7/39 | 0/39 → 0/39 | 3/34 → 4/34 | 0/28 → 0/28 | 0/28 → 0/28 | 0/28 → 0/28 |
+| Brutal/None | 17/37 → 7/34 | 1/37 → 0/34 | 5/28 → 1/20 | 20/30 → 7/12 | 0/30 → 0/12 | 0/30 → 0/12 |
+| Hard/Low | 1/40 → 1/40 | 0/40 → 0/40 | 4/37 → 7/36 | 0/38 → 0/38 | 0/38 → 0/38 | 0/38 → 0/38 |
+| Hard/None | 17/37 → 7/34 | 1/37 → 0/34 | 5/28 → 1/20 | 20/30 → 7/12 | 0/30 → 0/12 | 0/30 → 0/12 |
+| Medium/Low | 0/40 → 1/40 | 0/40 → 0/40 | 8/37 → 6/37 | 0/40 → 0/40 | 0/40 → 0/40 | 0/40 → 0/40 |
+| Medium/None | 15/40 → 16/36 | 1/40 → 0/36 | 6/29 → 1/24 | 17/36 → 3/26 | 0/36 → 0/26 | 0/36 → 0/26 |
+
+| Difficulty/spice | Missing IX | Idle under attack | Unused credits | Bankrupt/empty | Early no-fight | Zero harvesters |
+|---|---:|---:|---:|---:|---:|---:|
+| Brutal/Low | 26/28 → 26/28 | 0/17 → 0/18 | 0/34 → 0/34 | 4/40 → 4/40 | 0/40 → 0/40 | 1/39 → 1/39 |
+| Brutal/None | 30/30 → 12/12 | 0/19 → 0/14 | 0/33 → 0/24 | 28/40 → 18/40 | 0/40 → 0/40 | 0/0 → 0/0 |
+| Hard/Low | 35/38 → 35/38 | 0/26 → 0/24 | 0/40 → 0/40 | 8/40 → 9/40 | 0/40 → 0/40 | 0/40 → 0/40 |
+| Hard/None | 30/30 → 12/12 | 0/19 → 0/14 | 0/33 → 0/24 | 28/40 → 18/40 | 0/40 → 0/40 | 0/0 → 0/0 |
+| Medium/Low | 36/40 → 36/40 | 0/29 → 0/27 | 0/40 → 0/40 | 0/40 → 1/40 | 0/40 → 0/40 | 0/40 → 0/40 |
+| Medium/None | 36/36 → 26/26 | 0/19 → 0/12 | 0/40 → 0/29 | 31/40 → 27/40 | 0/40 → 0/40 | 0/0 → 0/0 |
+
+### Combat, wins and length
+
+| Metric | OFF | ON |
+|---|---:|---:|
+| First nonempty ground dispatch, mean min among attackers | 8.421 | 7.074 |
+| Dispatches /10 alive-house min | 0.415 | 0.482 |
+| Attacking houses /240 | 147 | 154 |
+| Total dispatches | 264 | 268 |
+| Army value at10min | 1841.525 | 1719.957 |
+| Army value at20min | 2817.149 | 2860.180 |
+| Mean combat-unit kill value | 11140.833 | 11615.375 |
+| Mean observed minutes,30min cap | 27.881 | 25.331 |
+| Decisive games /72 | 22 | 26 |
+| Winning houses /240 | 30 | 33 |
+
+Mirror-house win fractions describe resolution, not relative AI strength. Army10
+is lower(1842→1720,236→232 observations), not hidden: earlier attrition/censoring
+and cash allocation change the stock. Army20 is higher(2817→2860,235→222 observations).
+End-army+combat-loss stock proxy rises15612→16131; kill value/alive-house-minute
+420.8→501.0. Earlier/more frequent dispatches and higher kills do not support a
+passivity regression. Dispatch is not projectile-first-shot timing.
+
+### Difficulty ordering: three seeds,18 games/pair/arm
+
+| Pair | OFF strong–weak +limits | ON strong–weak +limits | ON strong wins among decided |
+|---|---:|---:|---:|
+| Brutal–Hard | 7–4 +7 | 7–3 +8 | 70.0% |
+| Hard–Medium | 7–3 +8 | 7–1 +10 | 87.5% |
+| Medium–Easy | 10–0 +8 | 9–0 +9 | 100.0% |
+
+Observed ordering is Brutal>Hard>Medium>Easy. Three seeds and many caps do not
+statistically establish a universal ranking. H/M was initially borderline, so it
+received a targeted third seed; final validation uses all three seeds for every pair
+and both arms. The128/Low/9101 case that reversed on60bbe returns to Hard winning
+40.29min in both final arms.
+
+### Reproducible examples with both arms exposed
+
+- Economy:128/None/1v1/Medium,seeds148680876 and9101,house0,first OFF flag minute9.
+- Starport:128/None/1v1/Brutal or Hard,seed148680876,house1,first OFF flag minute20.
+- Local cover:128/None/FFA4/Brutal or Hard,seed148680876,house2,first OFF flag minute9.
+- Bankrupt/empty:128/None/1v1/Brutal or Hard,seed9101,house1,first OFF flag minute6.
+
+Exact case IDs and additional examples are in `d56-final-cleared-examples.json`.
+
+### Commits, exercised checks and limitations
+
+- Runner/sampler/reporting:ead23281,46551960,51c9cb85,9db1c94e.
+- Power sizing:110d8d3b,820bae19; corrections4dc09268,ebd8ba42,a43467cc.
+- Opening experiments8ff2d79a; no-military/cache correction60bbe8eb;
+  low-cash capability5900ca7e; controlled-pass/frozen driver2aa9efa6;
+  final tax-dependent financial scope**d56d1710**; independent guard fixture495c1b23.
+- Historical fixture corrections did not waive assertions or extend timeouts:
+  Starport cancellation uses the real queue front with a progress assertion;
+  the quote case retains the real cheap-Quad competitor; legal wind availability
+  and all owned-yard caches agree; the controlled pass uses the normal -1 sentinel.
+- Final short gates exercised by CtestTriage: no-spice city **PASS23.23s**,
+  MCV deployment **PASS9.63s**, growth installments **PASS8.31s**.
+- Completed integrationfd36161f full133: **130 PASS/3 FAIL**, source unchanged.
+  Mandatory AI gates individually passed: custom_attack6.57s, army_recovery16.85s,
+  all_against_atreides119.17s, scenario_matrix61.08s. perf_regression passed109.71s.
+- The full suite is **not clean**: spectator_online_end_probe and projectile_combat_probe
+  timed out, and shared-spending's independent negative control was masked by the
+  new guard. After495c1b23, shared-spending DuneCity **PASS23.61s**; the targeted
+  projectile test still timed out300.05s. These rechecks are not a new133/133 pass.
+  CtestTriage owns remaining profiling/integration. Its projectile sample is dominated
+  by game initialization/content pin/mod activation/GFX/PNG loading; no AI production
+  change is made here. Our final A/B cohorts ended11:35:08AEDT, before the full
+  projectile window12:04–12:09, so do not blame that failure on their overlap.
+- Earlier339 headless six-minute capture:22,500cycles, max processCPU14.863ms
+  atcycle6633; worst AI-house wall15.19ms atcycle9525 had5.618ms processCPU.
+  Render=-1, so this is not rendered FPS or final isolated CPU A/B. Earlier60bbe
+  headless diagnostic AI-build max2355us/379calls and placement max360us/1669calls
+  are historical wall-scope evidence. Final rendered FPS and isolated perf A/B are
+  **not claimed**.
+- Final mirrors do not re-cover160/Medium; browser/other-platform verification for
+  this policy is not claimed. Persistent IX and rare zero-harvester signals are not
+  all proven bugs. Saboteur orders, human leases, victory, refinery-first and unrelated
+  repair/harvester rules are unchanged. Both behaviour switches are hashed/defaultON;
+  shared unreleased protocol111 already covers them.
+
+Evidence: `../outputs/dunecity-audit-20261103/`, especially `d56-final-matrix-comparison.json`,
+`d56-final-stratified-detectors.json`, `d56-final-joint-exposure.json`,
+`d56-final-combat.json`, `d56-final-turnover.json`, `d56-ladder-*-summary.json`,
+`d56-frozen-manifest.json`, `d56-matrix-receipt.json` and raw diagnostic/crash gzip.
+Verification-owner receipts are in `../outputs/ctest-triage-20261103/`.
+Frozen bundles remain outside the checkout at `../dunecity-results/audit-d56d1710/`.
 

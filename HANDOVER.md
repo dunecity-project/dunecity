@@ -63,73 +63,53 @@
 
 ## 2026-11-03 — DuneCity QuantBot audit and right-sized reserve power (OMP DuneCityAIAudit, unreleased)
 
-- Added `tests/ai/dunecity-audit.py`: reproducible all-QuantBot Random Skirmish
-  96/128/160 × None/Low/Medium spice × 1v1/2v2/4-house FFA × Medium/Hard/Brutal
-  × seeds9101/148680876, 30-game-minute caps: 162 games / 540 AI-house histories.
-  Probe-only minute samples and cycle-based detectors cover economy/power stalls,
-  local powered turret cover, tech, idle defence, empty-queue poverty, hoarding,
-  early no-fight defeats and missing harvesters. Adjacent-ladder and paired reports
-  reuse the existing generator, runner, scoring and cluster/scratch contracts.
-- Diagnostic baseline completed 162/162: Mac mini85, Windows PC77; 540 houses,
-  144 time limits, mean29.63 game minutes. Economy flags59/522 exposed (53 on
-  zero-spice), missing local turret cover43/420, missing Starport180/501,
-  missing IX348/501, bankrupt/empty152/540. No idle-under-attack/hoarding/early-no-fight/
-  missing-harvester hits; the single sustained power case followed a base overrun.
-  Full difficulty×spice table and example seeds are in the audit doc.
-- First ordinary-game evidence exposed a distinct spending failure: seed9101,
-  96/None/1v1/Medium, Harkonnen cycle25 needs40 reserve power, has2993 credits and
-  a legal Windtrap site, but final vetting orders a2000-credit reactor. By minute1
-  it has2300/242 power; population4600 and built structures then stay flat for
-  minutes5–15 with empty queues/no attacks, earning44 credits/min. All32 initial
-  minute-one zero-spice samples showed the oversized first reactor.
-- `[Force Concentration] CityPowerSizing` (hashed/default ON) restores the existing
-  cost/load/space/working-cash comparison in the common final city-generator
-  choice, planned-reactor admission and demanded-growth candidate quote. Small
-  top-ups keep cheap wind and reserve its full foundation capital, not Nuclear's;
-  rich/useful-load/cramped/affordable-blackout choices and justified installment
-  projects retain nuclear. Existing queued reactors remain untouched. Uses cached
-  footprint capacity, with no new allocation/search or save fields. Vanilla is unchanged;
-  OFF reproduces the former choice. The unreleased protocol111 already covers it.
-- Integrated growth_installments exposed sizing against a disabled Windtrap:
-  the only legal reactor was refused at1200 cash/368 forecast. Cache live wind
-  buildability and compare prices only with a legal alternative. Its ObjectData
-  mutation also left the native third yard advertising disabled wind: refresh
-  all owned producers and assert cache consistency. Keep installment assertions.
-- Frozen271 integrated A/B exposed a second cause on the same seed: cheap wind
-  releases1700 credits, but an optional MCV900 + three producer upgrades300 each
-  + Trike150 consume1950 before tax covers upkeep. Population5400/built8 then
-  stay flat5–20min. The existing four-minute forecast was already-6070 cash.
-- New hashed/default-on `CityOpeningCapital` reuses the existing research
-  working-capital/forecast/reserve policy for optional extra yards and producer
-  upgrades, without depending on Research Lab being enabled. Lost-yard/actual-rock
-  recovery, required yard technology, blackout recovery, growth power, reactive
-  turrets and Starport supply retain precedence. The broad8ff military gate was
-  withdrawn after seed9101 produced zero combat units in15min (OFF:5/900 credits).
-  Final scope is extra MCV/producer upgrades only; military production is unchanged.
-- Added real queue/upgrade financial-boundary cases and isolated
-  `dunecity-audit-opening-capital-off`. Audit `--attack-events` retains exact
-  existing ground_hunt dispatches and reports first attack, attacks/10 alive-min,
-  army10/20 and kill value; older telemetry-disabled attack timings are unmeasured.
-  New-switch fixture/regression, detector, combat, ladder and performance results
-  are not established by the earlier power-sizing receipts below.
-- Added default/load/save/hash coverage and seven real final-yard-vetting cases;
-  these passed in combined5d4d7c72. Added planner/selected-candidate/full-reservation
-  checks for the final callsite alignment. Detector invariants and ordinary-game
-  telemetry were exercised. Final same-build matrix A/B, long ladder, mandatory
-  regression/perf receipts must not be inferred from the diagnostic baseline.
-  The820no-spicefixture's180s timeout followed a pending10-Quad Starport batch;
-  cleanup now cancels actual queue-front items (with a progress assertion), not
-  Starport's invalid ordinary production slot. Capacity rejection precedes the
-  optional reactor site sweep. No timeout/assertion relaxation.
-  After cancellation correction the fixture terminated23s, then its new quote
-  assertion exposed an omitted Starport competitor in the test inputs. Restored
-  the actual reset market/cheap-Quad setup; selected-generator/full-reserve
-  assertions are unchanged. Combinedff111654 native/no-spice28.72s/custom-attack6.68s
-  PASS reported by RocketTurrets; final8-gate job20261103T034510-rocket-turrets-final-ad0693
-  is separate from the completed diagnostic baseline. Old820comparison jobs cancelled.
-  `dunecity-audit-control` disables all3 new fixes; `dunecity-audit-power-off`
-  isolates this one. Definitions, receipts and traces: `docs/quantbot-dunecity-audit.md`.
-  Evidence: `/Users/stefan/Documents/projects/outputs/dunecity-audit-20261103/`.
+- Added reproducible all-QuantBot Random Skirmish audit/sampler:96/128/160 ×
+  None/Low/Medium × 1v1/2v2/FFA4 × Medium/Hard/Brutal × two seeds,30min:
+  initial162 games/540 houses. Cycle-based12-detector tables, exact dispatch timing,
+  local turret coverage, examples and reproducible recipes are in the audit doc.
+- `CityPowerSizing` is hashed/defaultON: a2000-credit reactor for a40-power top-up
+  at2993 cash starved the seed town. Planner/candidate/final quotes now agree on
+  useful load, legal sites and protected working cash. Wind reserves its own full
+  foundation cost. Rich/load/cramped/blackout/justified installments keep nuclear;
+  existing queues stay untouched. No new placement search/allocation/save state.
+- Final `CityOpeningCapital` is hashed/defaultON and **tax-dependent only**:
+  while no viable spice economy exists, optional MCV/producer upgrades use existing
+  four-minute financial funding/reserves, not research fleet/crime readiness.
+  Productive spice expansion keeps its normal budgets. Recovery, required yard
+  tech, live defence, growth power, reactive turrets and first supplier keep priority.
+  No military production gate, saboteur/human-lease/victory changes or new budget model.
+- Rejected8ff military gating stopped all reinforcements because the picked2000
+  standing floor was already filled by the2500 starting army. Rejected60bbe all-city
+  capital gating made H/M6–8 vs OFF7–3 in18 matched games and delayed spice-backed
+  heavy tech4.38→12.54min. Final **d56d1710** fixes tax scope/funding; the same case
+  again ends with Hard winning40.29min. Research readiness itself is unchanged.
+- Final exact-same-probe A/B:72 games/240 houses **per arm**,96/128,None/Low,
+  all formats/difficulties,two seeds,30min. Stalls57/233→39/223; empty-queue poverty
+  99→77/240; missing Starport57/202→17/156, or28→15 on151 joint exposures.
+  No IX gain on joint exposure(142→142). Not all strata improve.
+- Activity: first dispatch8.42→7.07min, dispatches/10 alive-min0.415→0.482,
+  kills11141→11615, mean observed length27.88→25.33min, decisive22→26/72.
+  Army10 falls1842→1720; army20 rises2817→2860; stock+loss proxy rises3.3%.
+  Censoring and mirror-game win counts are not hidden or sold as strength proof.
+- Final ladder:54 games **per arm**,128,all spice,three seeds,swapped houses,45min.
+  ON B/H7–3+8limits,H/M7–1+10,M/E9–0+9; observed ladder holds, sample remains small.
+  Total final acceptance252 games. Frozen app/probe copies run nice10/jobs2 without
+  holding the shared workspace lease. Final mirror recheck does not re-cover160/Medium.
+- Fixture fixes preserve assertions: legal wind/all-yard caches, real Starport queue
+  cancellation, complete quote competitor and -1 selected-capital sentinel.
+  Low-cash capability change5900ca7e followed proof of identical pre/postCYloss13682;
+  both growth assertions remain for capable survivors. No refinery-first change.
+  495c1b23 isolates the independent CapacityMcvRunway off/on control in both arms;
+  the new tax guard is separately exercised. No cash/assertion/timeout relaxation.
+- CtestTriage actual short passes: no-spice23.23s,MCV9.63s,growth installments8.31s;
+  corrected shared-spending DuneCity23.61s. Fullfd36161f **130/133 PASS, not clean**:
+  four mandatory AI regressions and perf_regression passed; spectator/projectile
+  timeouts remain with the verification owner. No claim of a new full-suite pass.
+  Historical headless CPU max14.863ms is not final rendered FPS or isolated perf A/B;
+  these and final other-platform checks are unverified.
+- Detailed tables, roots, commits and limitations: `docs/quantbot-dunecity-audit.md`.
+  Evidence: `../outputs/dunecity-audit-20261103/`; integration receipts:
+  `../outputs/ctest-triage-20261103/`. Shared unreleased protocol111 already covers it.
 
 ## 2026-11-03 — Quad-rush rocket cover and first city Starport (OMP RocketTurrets, unreleased)
 
