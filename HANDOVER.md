@@ -25,9 +25,9 @@
   remains unbuilt. First-plan tax/upkeep forecasts are1457/129per minute:
   this is an allocation failure, not absence of income or placement room.
 - Default-on hashed `[Force Concentration] CityConstructionCapital` gives
-  a seeded, quiet, positive-income, non-spice city one bounded first-HF
-  claim at its real price, only when legal and already powered. Existing
-  required colonisation MCVs get the same claim. It does not preempt active
+  a seeded, quiet, positive-income, non-spice city with a standing Starport
+  one bounded first-HF claim at its real price, only when legal and already
+  powered. Required colonisation MCVs get the same claim. It does not preempt active
   defence, fund hypothetical four-minute production burn, duplicate queued
   factories/MCVs, relax market/placement/escort checks, or alter saboteurs.
   No extra save/protocol change; protocol111 already covers this release.

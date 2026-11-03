@@ -2929,6 +2929,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     // not four minutes of hypothetical continuous factory burn.
                     if (factory==Structure_HeavyFactory && pass.citySimEnabled
                         && botConfig().force.cityConstructionCapital && !pass.spiceEconomyViable
+                        && pass.itemCount[Structure_StarPort]>0
                         && !builderOnly() && !isCampaignGameType(currentGame->gameType)
                         && pass.itemCount[factory]==0 && !cityBootstrapNeeded(pass)
                         && pass.forecastTax>pass.forecastUpkeep

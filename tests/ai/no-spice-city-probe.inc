@@ -464,6 +464,15 @@ void runNoSpiceCityProbe(Game& game) {
         yard->updateBuildList();
         const auto savedConfig=bot->configOverride;
         const auto savedState=state;
+        std::vector<std::pair<BuilderBase*,int>> yardLevels;
+        // The captured yard was already upgraded. Bulk-slab technology is a
+        // separate mandatory purchase, not the import competition under test.
+        for(auto* structure:structureList)
+            if(structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard) {
+                auto* builder=static_cast<BuilderBase*>(structure);
+                yardLevels.emplace_back(builder,builder->getCurrentUpgradeLevel());
+                builder->curUpgradeLev=builder->getMaxUpgradeLevel();builder->updateBuildList();
+            }
         auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
         config->force.storageCapacity=false; // Isolate construction, not forecast storage relief.
         bot->configOverride=config;
@@ -488,6 +497,9 @@ void runNoSpiceCityProbe(Game& game) {
             cancelOrders(port);cancelOrders(yard);cancelOrders(light);
             light->destroy();yard->updateBuildList();
             bot->configOverride=savedConfig;state=savedState;
+            for(auto [builder,level]:yardLevels) {
+                builder->curUpgradeLev=level;builder->updateBuildList();
+            }
         };
         try {
             const Pass legacy=marketDecide(false,factoryPrice);

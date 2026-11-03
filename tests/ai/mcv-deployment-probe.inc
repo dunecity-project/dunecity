@@ -664,6 +664,8 @@ void runMcvDeploymentProbe(Game& game) {
             // built-out rock. Keep the existing stock/cash/delivery tests below.
             {
                 const auto savedConfig=bot->configOverride;
+                const int savedMilitaryLimit=bot->militaryValueLimit;
+                bot->militaryValueLimit=70000; // The surrounding economy-only fixture forbids combat.
                 auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
                 config->force.storageCapacity=false;
                 bot->configOverride=config;
@@ -691,9 +693,11 @@ void runMcvDeploymentProbe(Game& game) {
                         "A combat bargain displaced the protected space-expansion colonist");
                     SDL_Log("MCV_CONSTRUCTION_CAPITAL_PASS: off buys combat imports; on dispatches one colonist");
                 } catch (...) {
-                    resetCargo();bot->configOverride=savedConfig;throw;
+                    resetCargo();bot->configOverride=savedConfig;
+                    bot->militaryValueLimit=savedMilitaryLimit;throw;
                 }
                 resetCargo();bot->configOverride=savedConfig;
+                bot->militaryValueLimit=savedMilitaryLimit;
             }
 
             stock(0);
