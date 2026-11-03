@@ -298,8 +298,20 @@ void runCivMatch(const std::string& name) {
         skirmishRequire(fullUpkeep > 0 && FixPoint(city.budget.getLastTaxRevenue()) > fullUpkeep,
                         "Civilization Wars starting city does not cover turret and police upkeep");
     }
-    SDL_Log("SKIRMISH_SMOKE_BEGIN: Civilization Wars %dv%d eight game minutes", params.teamSize, params.teamSize);
-    const Uint32 end = game->getGameCycleCount() + MILLI2CYCLES(480 * 1000);
+    // Preserve the reference test's minimum research savings rate, rather than
+    // requiring a dearer, longer first study to finish in the old eight minutes.
+    constexpr Uint32 referenceWindow = MILLI2CYCLES(480 * 1000);
+    constexpr int referenceCost = TechResearch::cost(2, TechResearch::kReferenceArea, TechResearch::Pace::Normal);
+    constexpr int referenceCycles = TechResearch::cycles(2, TechResearch::kReferenceArea, TechResearch::Pace::Normal);
+    const auto* firstHouse = game->getHouse(result.houses.front().house);
+    const int firstCost = firstHouse->getTechResearchCost();
+    const int firstCycles = firstHouse->techResearchCycles(2);
+    const Uint32 fundingCycles = static_cast<Uint32>(
+        (std::uint64_t(referenceWindow - referenceCycles) * firstCost + referenceCost - 1) / referenceCost);
+    const Uint32 window = std::max(referenceWindow, fundingCycles + firstCycles);
+    SDL_Log("SKIRMISH_SMOKE_BEGIN: Civilization Wars %dv%d window_cycles=%u first_cost=%d first_cycles=%d",
+        params.teamSize, params.teamSize, window, firstCost, firstCycles);
+    const Uint32 end = game->getGameCycleCount() + window;
     std::array<int, NUM_HOUSES> lastTech{}, lastTarget{};
     while(!game->finished && game->getGameCycleCount() < end) {
         game->updateGameState();
@@ -316,12 +328,12 @@ void runCivMatch(const std::string& name) {
         }
     }
     SDL_Log("SKIRMISH_SMOKE_END: cycle=%u target=%u finished=%d", game->getGameCycleCount(), end, game->finished ? 1 : 0);
-    skirmishRequire(!game->finished && game->getGameCycleCount() == end, "Civilization Wars did not reach its eight-minute limit");
+    skirmishRequire(!game->finished && game->getGameCycleCount() == end, "Civilization Wars did not reach its policy-scaled research window");
     for(const auto& setup : result.houses) {
         const auto* house = game->getHouse(setup.house);
         skirmishRequire(house && house->isAlive() && house->getCityTaxReceipts() > 0,
                         "Civilization Wars house died or received no city tax income");
-        skirmishRequire(house->getTechLevel() >= 2, "Civ Wars QuantBot did not advance technology in eight minutes");
+        skirmishRequire(house->getTechLevel() >= 2, "Civ Wars QuantBot did not advance technology within its policy-scaled research window");
     }
     captureCivMap(name + "-played");
     captureGame(*game, name + "-played-base", result.houses.front().start);

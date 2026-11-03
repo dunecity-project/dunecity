@@ -291,10 +291,18 @@ CivWars uses the next hexadecimal token slot.
   worm counts, including exact mirroring, building footprints/power, lane connectivity and
   separation, islands, roster and map serialization; mode-marker/cache/wire-format unit tests.
 - `civilization_wars_probe`: real menus, persisted seed, ten-worm choice at 640×480,
-  generic-start lobby and guest settings; all-AI games for each team size through a
-  eight-game-minute limit, including Easy/Medium/Hard/Brutal/Defend and Builder controllers;
-  positive starting budget and per-house research progression; worm defeat, eating,
-  occupied-slot retry, legacy RNG and sleeping save/load behavior.
+  generic-start lobby and guest settings; all-AI games for each team size, including
+  Easy/Medium/Hard/Brutal/Defend and Builder controllers; positive starting budget and
+  per-house research progression; worm defeat, eating, occupied-slot retry, legacy RNG
+  and sleeping save/load behavior. Its reference smoke window remains eight game minutes.
+  For dearer/slower research, the funding portion `(8 min − reference tech-2 duration)`
+  scales by `quoted tech-2 cost / reference cost`, rounded up to cycles, then adds the
+  actual quoted duration. This preserves the same minimum research allocation,
+  83.72 credits/game-minute, rather than adding arbitrary grace. At Normal the windows
+  after the initial city checkpoint are 8:00.000 (129×96), 15:18.352 (161×112), and
+  23:55.200 (193×128). The observed 161×112 regression was not a funding stall: all four
+  houses had paid 1,148 credits and started by 7:29.616; their 5,976-cycle study's last
+  scheduled completion was 9:05.232, beyond the obsolete eight-minute assertion.
 - `civilization_wars_research_probe`: actual Civ Wars Start button, real human SDL Lab
   selection and Research click, zero-credit feedback, normal-income enablement, queued
   command and completed tech level; 640×480 and 1280×720 screenshots. Its diagnostic
