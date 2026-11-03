@@ -186,6 +186,11 @@ void runThreatTurretProbe(Game& game) {
                 >=std::max(0,game.objectData.data[Structure_StarPort][house->getHouseID()].power)+24) break;
             put(Structure_WindTrap,at.x,at.y);
         }
+        // This checks Starport supply planning, not the city's Starport Population rule
+        // (custom-city-cap-probe covers that); the fixture city is far below 5,000.
+        auto& starportRule=game.gameInitSettings.gameOptions.starportPopulation;
+        const bool keepStarportRule=starportRule;
+        starportRule=false;house->update();
         yard->updateBuildList();
         auto established=supply(true,1000);
         config->force.threatTurrets=true;
@@ -196,6 +201,7 @@ void runThreatTurretProbe(Game& game) {
             && established.capitalChoice>=0
             && established.capitalCandidates[established.capitalChoice].kind==std::string("city_supply"),
             "An established battery's remaining covers starved its first mobile supplier");
+        starportRule=keepStarportRule;
         SDL_Log("THREAT_TURRET_PASS: observed=8 goal=%d local=%d site=%d,%d hidden=ignored cap=12 starport=saved_and_queued",
             on.groundTurretGoal,on.groundTurretCover,site.x,site.y);
         clear();
