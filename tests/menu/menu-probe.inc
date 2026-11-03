@@ -2467,6 +2467,20 @@ int runMenuProbe() {
                 if(item.id == revision.id) fs::remove_all(Workshop::store().root() / "revisions" / item.hash);
         }};
         menuRequire(Workshop::activateModRevision(revision.hash), "Cannot activate LAN source snapshot");
+        const auto* activeSurface = pGFXManager->objPic[ObjPic_Tank_Base][HOUSE_HARKONNEN][0].get();
+        menuRequire(activeSurface != nullptr, "Immutable activation fixture has no resident tank surface");
+        menuRequire(Workshop::activateModRevision(revision.hash)
+                    && pGFXManager->objPic[ObjPic_Tank_Base][HOUSE_HARKONNEN][0].get() == activeSurface,
+                    "Reactivating the same verified immutable revision rebuilt its object graphics");
+        { std::ofstream file(installed / assetPath, std::ios::binary); file << "altered installed asset"; }
+        const bool rejectedActiveTamper = !Workshop::activateModRevision(revision.hash);
+        { std::ofstream file(installed / assetPath, std::ios::binary); file << assetBytes; }
+        menuRequire(rejectedActiveTamper && manager.getActiveModName() == alias,
+                    "An already-active immutable revision bypassed installed-byte verification");
+        menuRequire(Workshop::activateModRevision(revision.hash)
+                    && pGFXManager->objPic[ObjPic_Tank_Base][HOUSE_HARKONNEN][0].get() == activeSurface,
+                    "Verified reactivation after tamper restoration rebuilt object graphics");
+        SDL_Log("MENU_PROBE_IMMUTABLE_REACTIVATION_PASS: resident graphics retained and active tampering rejected");
         const auto legacyChecksum = manager.getEffectiveChecksums().combined;
         INIFile pointer((installed / "workshop-revision.ini").string());
         menuRequire(Workshop::unhex(pointer.getStringValue("Workshop", "Manifest", "")) == revision.manifest,

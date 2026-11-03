@@ -41,6 +41,14 @@ on the Mac mini (JSONL per run, his save, perf logs, samples).
   under the continuous-ground-steps rule; otherwise the simulated ones) before each frame's first
   cycle, i.e. what that frame drew. Used for Stefan's
   `skipping.dls` (`docs/unit-route-comparison.md`, "Chained steps").
+- **Repeated scenario startup**: immutable Workshop activation still verifies the
+  stored revision and installed bytes, but retains resident graphics when that
+  verified revision is already active. Mutable mod selection/reload is unchanged.
+  The menu's real LAN fixture checks surface identity and rejection of an altered
+  already-active asset. `PROJECTILE_PINNED_INIT_DIAGNOSTIC=1` with
+  `run-unit-route-probe.py --projectile-combat` pins each selected mode before its
+  scenario loop and logs every case's initialization milliseconds, without
+  changing any combat assertion, CSV comparison or CTest time budget.
 
 ## Findings
 

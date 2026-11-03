@@ -249,7 +249,13 @@ std::string installMap(const Revision& revision) {
     pointer(path.string()+".workshop.ini",r,true);return path.string();
 }
 bool activateModRevision(const std::string& hash) {
-    try { return ModManager::instance().setActiveMod(installMod(store().get(hash))); }
+    try {
+        // Installation verifies both the stored revision and its installed bytes,
+        // including when this immutable revision is already active.
+        const auto name = installMod(store().get(hash));
+        auto& mods = ModManager::instance();
+        return mods.getActiveModName() == name || mods.setActiveMod(name);
+    }
     catch(const std::exception& e) { SDL_Log("Workshop: %s",e.what());return false; }
 }
 }
