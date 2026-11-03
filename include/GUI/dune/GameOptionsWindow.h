@@ -80,6 +80,7 @@ private:
 
     VBox vbox;                                      ///< vertical box
     HBox hbox;                                      ///< horizontal box
+    HBox okHBox;
     VBox vboxLeft;                                  ///< inner vertical box on the left side
     VBox vboxRight;                                 ///< inner vertical box on the right side
     Label captionlabel;                             ///< label that contains the caption
