@@ -168,12 +168,12 @@ void runPoliceBudgetProbe(Game& game) {
     };
     auto& commands=game.getCommandManager();
     // Returns the funding percentage actually applied by this review.
-    auto review=[&](int cash,int annualTaxTarget,int nominalCost,int startPercent) {
+    auto review=[&](int cash,int annualTaxTarget,int nominalCost,int startPercent,bool restartReview=true) {
         reset(cash);
         state.taxBaseEighths=eighthsFor(annualTaxTarget);
         state.nominalPoliceCost=nominalCost;
         state.policeFundingPercent=startPercent;
-        bot->lastPoliceBudgetReviewCycle=0;
+        if(restartReview)bot->lastPoliceBudgetReviewCycle=0;
         commands.bReadOnly=false;commands.timeslot.clear();
         // Set the owned service inventory independently of the cached city
         // scan, just as newly completed services can precede the next scan.
@@ -233,6 +233,49 @@ void runPoliceBudgetProbe(Game& game) {
     setCrime(250);
     const int broke=review(1000,0,poorCost,5);
     require(broke==0,"Dangerous crime bypassed the policing budget the city cannot pay");
+
+    // Follow the same budget through a real cut, cash recovery and the review
+    // boundary, without clearing its last-change cycle between build passes.
+    const auto originalConfig=bot->configOverride;
+    auto recoveryConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
+    bot->configOverride=recoveryConfig;
+    recoveryConfig->policeFundingRecovery=true;
+    const int cashCut=review(1000,poorTax,poorCost,100);
+    require(cashCut==earlyExpected,"Low cash did not cut an already funded service");
+    const Uint32 cashCutCycle=game.getGameCycleCount();
+    game.gameCycleCount=cashCutCycle+CityServiceInvestmentPolicy::kPoliceIncreaseReviewCycles-1;
+    require(review(6000,poorTax,poorCost,cashCut,false)==cashCut,
+        "Recovered savings bypassed the police increase review");
+    ++game.gameCycleCount;
+    const int cashRecovered=review(6000,poorTax,poorCost,cashCut,false);
+    require(cashRecovered==laterExpected,"Police funding did not recover after cash returned");
+
+    // The previous policy permanently stranded even a fully affordable target
+    // within four points. First force that small cut, then restore the same
+    // city's income; off reproduces the bug and on eventually reaches 100%.
+    const int nearFullTax=annualPower+2*((97*poorCost+99)/100);
+    const int nearFull=review(6000,nearFullTax,poorCost,100);
+    require(nearFull>=96 && nearFull<100,"Small recovery fixture missed the funding deadband");
+    const Uint32 smallCutCycle=game.getGameCycleCount();
+    const Uint32 recoveryCycles=CityServiceInvestmentPolicy::kPoliceIncreaseReviewCycles
+        *CityServiceInvestmentPolicy::kPoliceRecoveryReviewMultiplier;
+    const int fullTax=annualPower+2*poorCost;
+    recoveryConfig->policeFundingRecovery=false;
+    game.gameCycleCount=smallCutCycle+2*recoveryCycles;
+    require(review(6000,fullTax,poorCost,nearFull,false)==nearFull,
+        "Recovery-off control did not preserve the old permanent deadband");
+    recoveryConfig->policeFundingRecovery=true;
+    game.gameCycleCount=smallCutCycle+recoveryCycles-1;
+    require(review(6000,fullTax,poorCost,nearFull,false)==nearFull,
+        "Small funding recovery ignored its longer review");
+    ++game.gameCycleCount;
+    const int fullRecovery=review(6000,fullTax,poorCost,nearFull,false);
+    require(fullRecovery==100,"Affordable police funding remained permanently below its normal target");
+    bot->configOverride=originalConfig;
+    SDL_Log("POLICE_BUDGET_RECOVERY: cash=1000->6000 funding=100->%d->%d small_cut=100->%d"
+        " recovery_off=%d recovery_on=%d large_review_cycles=%u small_review_cycles=%u",
+        cashCut,cashRecovered,nearFull,nearFull,fullRecovery,
+        CityServiceInvestmentPolicy::kPoliceIncreaseReviewCycles,recoveryCycles);
     setCrime(0);
 
     // Human and campaign funding belongs to the player and the mission script.

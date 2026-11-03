@@ -300,6 +300,10 @@ struct QuantBotConfig {
     /// [General Behavior] StrategicSiteGuards: IX/Palace selections require a real site.
     /// Off reproduces the old overdue-order starvation for same-build comparisons. Hashed.
     bool strategicSiteGuards;
+    /// [General Behavior] PoliceFundingRecovery: restore small affordable funding
+    /// increases after a longer review instead of leaving them in the deadband.
+    /// Default on; off preserves the previous smoothing policy. Hashed.
+    bool policeFundingRecovery;
     /// [Civ Wars] Strategy: experimental research-aware economy and generated-map logistics.
     /// Defaults off; opt-in requires two occupied opposing initial houses and Research Lab.
     /// Lane assumptions also require the map marker. Hashed and inert outside those rules.

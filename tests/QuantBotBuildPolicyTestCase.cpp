@@ -2163,6 +2163,13 @@ TEST_CASE("Police funding cuts apply at once and increases wait for review", "[a
     // Sustained headroom past the interval, beyond the deadband, is applied.
     CHECK(smoothedPoliceFunding(60,100,1000+kPoliceIncreaseReviewCycles,1000)==100);
     CHECK(smoothedPoliceFunding(60,100,1000+kPoliceIncreaseReviewCycles-1,1000)==60);
+    // Small recoveries are delayed longer, not lost forever in the deadband.
+    const Uint32 recoveryCycles=kPoliceIncreaseReviewCycles*kPoliceRecoveryReviewMultiplier;
+    CHECK(smoothedPoliceFunding(97,100,1000+recoveryCycles-1,1000)==97);
+    CHECK(smoothedPoliceFunding(97,100,1000+recoveryCycles,1000)==100);
+    CHECK(smoothedPoliceFunding(60,63,1000+recoveryCycles,1000)==63);
+    CHECK(smoothedPoliceFunding(97,100,1000+10*recoveryCycles,1000,false)==97);
+    CHECK(smoothedPoliceFunding(97,100,900,5000)==97);
     // Demand that flips on every build pass used to move funding every pass:
     // 1,028 changes on Medium and 1,275 on Hard in the reviewed run. Cuts stay
     // immediate, so the level still follows the limit down, but the reversals

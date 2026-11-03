@@ -45,6 +45,26 @@ quota) and `houses.csv` (one row per house, with its `match_score` placement sco
 a time-out is a negative draw). Games already in `games.csv` are skipped; failed games are retried on the
 next run; a crashed game's last log lines go to `failed-*.txt`.
 
+### Source-separated economy curves
+
+For a real Random Skirmish city game, `tests/ai/dunecity-audit.py --attack-events`
+retains once-per-minute credit balances and the existing accounting ledger in
+`samples.csv`, including starting cash remaining, refined-spice and tax gross
+receipts, separate spice/city balances, storage capacity, the Construction
+Yards' share of that capacity, police funding, military target and unit-limit
+state. Spending, power, police, refunds and storage losses are cumulative
+ledger fields; `ledger_enabled=1` identifies a captured ledger (without
+`--attack-events` those fields are unavailable, not measured zero).
+
+The source counters are read-only in `DUNECITY_ECONOMY` probe rows. A Yard's
+storage is capacity, never income. Pair these rows with the existing queue,
+upgrade, held-front, growth and attack samples before calling a rising balance
+an AI spending stall. Use `--style police-recovery-off` and
+`--style police-recovery-on` for a same-build A/B of the default-on hashed
+`[General Behavior] PoliceFundingRecovery` switch. No income multiplier,
+starting grant or balance constant changes with that switch.
+
+
 ## The matrix
 
 Controller codes: QE/QM/QH/QB = QuantBot Easy/Medium/Hard/Brutal, AE/AM/AH = AI Player Easy/Medium/Hard.

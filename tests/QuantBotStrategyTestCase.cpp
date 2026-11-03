@@ -326,6 +326,33 @@ TEST_CASE("Strategy: the [Strategy] keys are read and every one is hashed", "[ai
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Police funding recovery is default-on, configurable and hashed", "[ai][city][budget][config]") {
+    QuantBotConfig config;
+    REQUIRE(config.policeFundingRecovery);
+    const auto baseline=config.getConfigHash();
+    const auto path=std::filesystem::temp_directory_path()/"quantbot-police-funding-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[General Behavior]\nPoliceFundingRecovery=false\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE_FALSE(config.policeFundingRecovery);
+    REQUIRE(config.getConfigHash()!=baseline);
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE_FALSE(restored.policeFundingRecovery);
+    REQUIRE(restored.getConfigHash()==config.getConfigHash());
+    {
+        std::ofstream ini(path);
+        ini << "[General Behavior]\nPoliceFundingRecovery=true\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE(config.policeFundingRecovery);
+    REQUIRE(config.getConfigHash()==baseline);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Strategy: Learned and Base are the 1.0.846 rules", "[ai][strategy]") {
     const MixProfile& learned = profile(Mix::Learned);
     REQUIRE(learned.priorBps == 0);

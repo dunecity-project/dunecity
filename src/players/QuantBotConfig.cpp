@@ -364,6 +364,7 @@ QuantBotConfig::QuantBotConfig() {
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
     minMoneyForProduction = 500;                // Minimum money to produce units
     strategicSiteGuards = true;
+    policeFundingRecovery = true;
     civWarsStrategy = false;                   // Experimental: mirrors did not meet the finishing gate.
     // Attack waves hunt without a formation: in the formation research (docs/formations.md,
     // "Formation research") plain engine-Hunt waves beat every formation shape.
@@ -625,6 +626,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
         iniFile.setStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
         iniFile.setBoolValue("General Behavior", "StrategicSiteGuards", strategicSiteGuards);
+        iniFile.setBoolValue("General Behavior", "PoliceFundingRecovery", policeFundingRecovery);
         iniFile.setBoolValue("Civ Wars", "Strategy", civWarsStrategy);
 
         // === FORCE CONCENTRATION ===
@@ -751,6 +753,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     attackThresholdPercent = static_cast<float>(iniFile.getDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent));
     minMoneyForProduction = iniFile.getIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
     strategicSiteGuards = iniFile.getBoolValue("General Behavior", "StrategicSiteGuards", strategicSiteGuards);
+    policeFundingRecovery = iniFile.getBoolValue("General Behavior", "PoliceFundingRecovery", policeFundingRecovery);
     {
         const std::string shape = iniFile.getStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
         const int parsed = parseWaveFormation(shape, INT_MIN);
@@ -1090,6 +1093,7 @@ void QuantBotConfig::logSettings() const {
     SDL_Log("MinMoneyForProduction: %d", minMoneyForProduction);
     SDL_Log("WaveFormation: %s", waveFormationName(waveFormation));
     SDL_Log("StrategicSiteGuards: %d", int(strategicSiteGuards));
+    SDL_Log("PoliceFundingRecovery: %d", int(policeFundingRecovery));
     SDL_Log("%s", "");
 
     SDL_Log("=== ARMY RECOVERY (Custom Hard/Brutal, provisional) ===");
@@ -1226,6 +1230,7 @@ std::string QuantBotConfig::getConfigHash() const {
         configStr += '|'; configStr += name; configStr += '='; configStr += std::to_string(value);
     };
     addNamed("strategicSiteGuards", strategicSiteGuards);
+    addNamed("policeFundingRecovery", policeFundingRecovery);
     configStr += "|REC";
     addNamed("enabled", recovery.enabled);
     addNamed("windowMs", recovery.attritionWindowMs);

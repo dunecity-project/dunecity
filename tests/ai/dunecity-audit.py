@@ -45,7 +45,10 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'structures', 'factories', 'kill_value', 'loss_value', 'power', 'need', 'population', 'tax', 'demand',
                  'built', 'structures_lost', 'base_hp', 'yards', 'yard_level', 'queue', 'upgrading', 'waiting', 'fronts',
                  'gun', 'rocket', 'radar', 'radar_built', 'starport', 'starport_built', 'heavy', 'heavy_built', 'ix',
-                 'ix_built', 'fighters', 'moving', 'targeting', 'enemies', 'enemy_value', 'covered_enemies', 'spice')
+                 'ix_built', 'fighters', 'moving', 'targeting', 'enemies', 'enemy_value', 'covered_enemies', 'spice',
+                 'ledger_enabled', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
+                 'yard_storage', 'police_funding', 'army_target', 'unit_limit', 'spice_multiplier', 'sale_credits',
+                 'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied')
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags',)
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 lock = threading.Lock()
@@ -192,9 +195,10 @@ def play(args, scratch, binary, game):
                    if 'PROBE_DIGEST:' in line and 'final=1' in line), '')
     merged = defaultdict(dict)
     for line in lines:
-        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:'):
+        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:'):
             if marker in line:
                 data = parse(line, marker)
+                data.update(json.loads(data.pop('economy', '{}')))
                 merged[(int(data['house']), int(data['cycle']))].update(data)
     samples = [dict(metadata(game), **data) for _, data in sorted(merged.items())]
     missing = any('power' not in sample for sample in samples)

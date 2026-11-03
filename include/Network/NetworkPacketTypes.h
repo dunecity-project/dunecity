@@ -343,6 +343,8 @@
 //      GameInitSettings MOD14 appends the Micropolis land value rule.
 // 111: Research Lab command, per-house technology and MOD15 research/trooper-AA rules;
 //      MOD16 Starport Population (a city house needs 5,000 people to start a Starport).
+//      QuantBot's hashed PoliceFundingRecovery restores small affordable police-budget increases.
+//      Generated Civ Wars prioritizes required per-house research independently of the experimental strategy.
 #define NETWORK_PROTOCOL_VERSION            111
 
 // Mod transfer limits

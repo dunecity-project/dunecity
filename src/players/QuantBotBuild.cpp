@@ -573,11 +573,11 @@ void QuantBot::planCityState(BuildPass& pass) {
         const int committedPoliceCost=(committedPoliceMilli+999)/1000;
         const int budgetPercent=CityServiceInvestmentPolicy::policingBudgetPercent(pass.money,taxIncome,powerCost,committedPoliceCost);
         const int affordable=CityServiceInvestmentPolicy::affordablePoliceFunding(taxIncome,powerCost,committedPoliceCost,budgetPercent);
-        // Necessary cuts keep the strict 33%/50% recurring limit and apply
-        // immediately; increases wait out the review cadence and deadband, so
-        // the service stops oscillating every build pass.
+        // Cuts enforce the recurring limit immediately. Recovered headroom
+        // waits for review; the optional longer small-increase review prevents
+        // the deadband from leaving a solvent city's funding permanently low.
         const int funding=CityServiceInvestmentPolicy::smoothedPoliceFunding(hs.policeFundingPercent,
-            affordable,getGameCycleCount(),lastPoliceBudgetReviewCycle);
+            affordable,getGameCycleCount(),lastPoliceBudgetReviewCycle,botConfig().policeFundingRecovery);
         if (funding != hs.policeFundingPercent) {
             const int previousFunding=hs.policeFundingPercent;
             lastPoliceBudgetReviewCycle=getGameCycleCount();
@@ -589,7 +589,7 @@ void QuantBot::planCityState(BuildPass& pass) {
                 .set("funding",funding).set("tax_income",taxIncome).set("power_cost",powerCost)
                 .set("nominal_cost",hs.nominalPoliceCost).set("cash",pass.money).set("recent_losses",recentLosses)
                 .set("budget_percent",budgetPercent).set("committed_police_cost",committedPoliceCost)
-                .set("reason",funding < hs.policeFundingPercent ? "police_budget_limit" : "police_budget_headroom"));
+                .set("reason",funding < previousFunding ? "police_budget_limit" : "police_budget_headroom"));
         }
     }
 

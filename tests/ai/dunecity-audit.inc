@@ -61,12 +61,13 @@ inline void sample(Game& game) {
         }
         for (int item = Structure_FirstID; item <= Structure_LastID; ++item)
             if (isStructure(item)) structuresLost += house->getNumLostItems(item);
-        int population = 0, tax = 0, demand = 0;
+        int population = 0, tax = 0, demand = 0, policeFunding = 100;
         if (const auto* sim = game.getCitySimulation(); sim && sim->isInitialized()) {
             const auto& city = sim->getHouseState(house->getHouseID());
             population = city.getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier;
             tax = city.budget.getLastTaxRevenue();
             demand = std::max({int(city.resValve), int(city.comValve), int(city.indValve)});
+            policeFunding = city.policeFundingPercent;
         }
         SDL_Log("DUNECITY_AUDIT: minute=%d cycle=%u house=%d credits=%d power=%d need=%d population=%d tax=%d "
                 "demand=%d built=%d structures_lost=%d base_hp=%d yards=%d yard_level=%d queue=%d upgrading=%d "
@@ -84,6 +85,21 @@ inline void sample(Game& game) {
                 house->getNumBuiltItems(Structure_HeavyFactory), house->getNumItems(Structure_IX),
                 house->getNumBuiltItems(Structure_IX), fighters, moving, targeting, enemies, enemyValue,
                 coveredEnemies, bot->lastCalculatedSpice);
+        // Retain source-separated balances and the existing accounting ledger
+        // before disposable game profiles are removed. Read-only, probe-only;
+        // the cumulative spending/loss fields need --attack-events telemetry.
+        SDL_Log("DUNECITY_ECONOMY: minute=%d cycle=%u house=%d ledger_enabled=%d"
+                " spice_gross=%d tax_gross=%d starting_cash=%d spice_cash=%d city_cash=%d"
+                " capacity=%d yard_storage=%d police_funding=%d army_target=%d unit_limit=%d"
+                " spice_multiplier=%u sale_credits=%u economy=%s",
+                minute,game.getGameCycleCount(),house->getHouseID(),int(AITelemetry::log().enabled()),
+                house->getHarvestedSpice().lround(),house->getCityTaxReceipts().lround(),
+                house->getStartingCredits().lround(),house->getStoredCredits().lround(),house->getCityCredits().lround(),
+                house->getCapacity(),house->getNumItems(Structure_ConstructionYard)
+                    *game.objectData.data[Structure_ConstructionYard][house->getHouseID()].capacity,
+                policeFunding,bot->militaryValueLimit,int(house->isGroundUnitLimitReached()),
+                house->getSpiceIncomeMultiplier(),house->getSaleCredits(),
+                AITelemetry::log().economyTotals(house->getHouseID()).json().c_str());
     }
 }
 

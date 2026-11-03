@@ -131,6 +131,30 @@ the city budget panel: `powerRequirement/32` every 15 seconds when enabled, or
 nominally `powerRequirement/8` per city year. Construction, units and repairs
 are also separate from gross tax income.
 
+### QuantBot police funding recovery
+
+In custom city games the full-control QuantBot reviews its own police budget.
+The normal target is the affordable share of recurring tax after power: 33%
+early, or 50% with at least 5,000 **uncommitted** credits or a healthy operating
+margin. A spice windfall is not recurring tax, so cash recovery does not bypass
+that limit. Campaign and human-house helper budgets are not rewritten.
+
+`[General Behavior] PoliceFundingRecovery=true` in `QuantBot Config.ini` is
+default-on and included in the multiplayer config hash. Cuts remain immediate;
+increases of at least five points retain the 30-game-second review. A smaller
+affordable increase now waits two game minutes rather than being rejected
+forever by the smoothing deadband (including the last 96-99% back to 100%).
+Off reproduces the former deadband for same-build comparisons. The existing
+serialized last-change cycle supplies both review intervals; no new save field.
+
+The `quantbot_police_budget` real-engine probe follows one house from fully
+funded to cash-constrained and back to its normal affordable target, then
+checks a small cut followed by full recovery, with an off-switch negative
+control and exact review-boundary checks. AI orders apply to that house
+directly after the command phase; human `CMD_CITY_SET_BUDGET` still uses its
+issuer's house through `CitySimulation::executeCityCommand`.
+
+
 ## Complete harvester cycle
 
 Capacity 700; harvesting 0.1344/cycle = 8.4/second, so filling takes 83.33 seconds.
