@@ -8,6 +8,8 @@
 // the same simulation; an engine optimisation must not change a single one of them.
 // PROBE_TIMING separates the game loop from process start-up and game setup.
 #include <network/GameStateDigest.h>
+#include <dunecity/CitySimulation.h>
+#include <misc/OMemoryStream.h>
 
 #include <chrono>
 #include <cstdio>
@@ -71,6 +73,30 @@ inline void dump(Game& game, std::uint64_t digest) {
                      static_cast<long long>(house->getStartingCredits().getRawValue()),
                      static_cast<long long>(house->getCityCredits().getRawValue()),
                      house->getNumStructures(), house->getNumUnits());
+        if (const auto* city = game.getCitySimulation(); city && city->isInitialized()
+            && h < DuneCity::kMaxCityHouses) {
+            const auto& state = city->getHouseState(h);
+            std::fprintf(out, "S %u house=%d day=%d,%d pop=%d,%d,%d prev=%d,%d,%d valves=%d,%d,%d "
+                              "land=%d unemployment=%d funding=%d tax=%d civics=%d,%d,%d,%d\n",
+                         lockstep.gameCycle, h, city->getCityYear(), city->getCityDay(),
+                         state.resPop, state.comPop, state.indPop,
+                         state.prevResPop, state.prevComPop, state.prevIndPop,
+                         state.resValve, state.comValve, state.indValve, state.avgLandValue,
+                         state.unemploymentRate, state.policeFundingPercent, int(state.taxRate),
+                         int(state.hasStadium), int(state.hasPalace), int(state.hasAirport), int(state.hasStarport));
+        }
+        for (const auto& player : house->getPlayerList()) {
+            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
+                OMemoryStream bytes;
+                bytes.open();
+                bot->save(bytes);
+                GameStateDigest::Hasher hash;
+                for (size_t i = 0; i < bytes.getDataLength(); ++i)
+                    hash.mixUint8(static_cast<unsigned char>(bytes.getData()[i]));
+                std::fprintf(out, "A %u house=%d bytes=%zu hash=%016llx\n", lockstep.gameCycle, h,
+                             static_cast<size_t>(bytes.getDataLength()), static_cast<unsigned long long>(hash.value()));
+            }
+        }
     }
     game.getObjectManager().forEachObject([&](Uint32 objectID, const ObjectBase* object) {
         if (object == nullptr) return;

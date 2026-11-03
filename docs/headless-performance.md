@@ -35,6 +35,7 @@ probe's setup/loop split, game cycles per second of the loop, the outcome and ev
 | `--no-ai-telemetry` (`DUNECITY_AI_TELEMETRY=0`) | batches (formation-duel default) | No `events.jsonl` (18 MB per 20-minute 128 game, more on bigger maps) and no JSON parsing afterwards; ~3% CPU. Same simulation. ctest probes keep it: some assert on it. |
 | `BALANCE_UNIT_PHASE_TIMING=1` | only when profiling | Probes switch the per-unit phase timing (`DuneCity-Performance.log`) off; it cost ~5% of a busy match in clock reads. |
 | `BALANCE_DIGEST_CYCLES=N` | determinism checks | `PROBE_DIGEST` interval in cycles (default 750 = 12 game s, 0 = only the final one). |
+| `BALANCE_DIGEST_DUMP=FILE` | locating a divergence | Append each sampled cycle's RNG, exact credits and object fields, per-house city population/history/valves, and serialized QuantBot-state hashes. Set the interval to 1 around a suspect cycle. |
 | `--jobs` | see scaling table | One game uses one core with `--path-workers 1`. |
 
 Probe binaries are cached per build tree in `build/balance-probe-cache/` (key: generated
