@@ -7,9 +7,10 @@
 // exact stored/starting/city credits. Two builds that print the same lines for the same seed ran
 // the same simulation; an engine optimisation must not change a single one of them.
 // PROBE_TIMING separates the game loop from process start-up and game setup.
-#include <network/GameStateDigest.h>
+#include <Network/GameStateDigest.h>
 #include <dunecity/CitySimulation.h>
 #include <misc/OMemoryStream.h>
+#include <players/QuantBot.h>
 
 #include <chrono>
 #include <cstdio>

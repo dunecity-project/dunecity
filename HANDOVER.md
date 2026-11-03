@@ -1,3 +1,24 @@
+## 2026-11-04 — Release-suite probe compatibility repairs (OMP ReleaseTriage, unreleased)
+
+- The five failures in full-suite job `20261104T062350-release-full-f84cc592-ac108b`
+  are probe compatibility failures, not a failed performance budget. The retained
+  `perf_regression` compiler diagnostic is `unknown type name 'QuantBot'` in
+  `probe-digest.inc`: `0cd42553` added serialized AI dumps without including their
+  type. The shared digest now includes `players/QuantBot.h` itself and uses the
+  canonical `Network/GameStateDigest.h` path.
+- `4e53eaac` deliberately made `StorageCapacity` forecast earned-income overflow
+  and buy a vault before the production core. The shared-spending city fixture's
+  injected tax base forecasts **29,092 credits/4min** against only **6,020 storage**,
+  so the recorded real queue correctly chose a Silo plus the protected Harvester,
+  not a city lot. Give this parallel-allocation fixture explicit ample storage;
+  keep the default-on rule and every worker, R/C/I and protection assertion.
+- All three opening-economy fixtures still assumed missing Heavy/HighTech
+  infrastructure must outrank an overflowing bank. They now retain the strict
+  old behavior with `StorageCapacity=0`, verify spare storage never displaces the
+  core, and require real Silo orders before the missing core for imminent overflow
+  with `StorageCapacity=1`. Mature storage, pending-order, ceiling and progression
+  assertions remain; no gameplay/config defaults or digest pins change.
+
 ## 2026-11-04 — Additional standing-rocket tuning remains opt-in (OMP RocketTurrets, unreleased)
 
 - Final decision: hashed `[Force Concentration] MoreRocketTurrets=0`, **default off**.

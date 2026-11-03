@@ -743,7 +743,9 @@ void runOpeningEconomyProbe(Game& game) {
         if(order.itemID==Structure_Silo)++silos;
     require(silos==1,"Parallel yards duplicated or omitted the storage order");
     clearOrders();
-    // Losing core infrastructure re-establishes its priority over storage.
+    // A safe bank leaves missing core infrastructure ahead of optional storage.
+    // StorageCapacity deliberately overrides the former core gate only when
+    // earned receipts would overflow; retain both hashed policy arms.
     auto destroyCore=[&](Uint32 item) {
         StructureBase* victim=nullptr;
         for(auto* structure:structureList)
@@ -751,13 +753,28 @@ void runOpeningEconomyProbe(Game& game) {
         require(victim,"Missing core fixture building");
         victim->destroy();
     };
-    if(game.isCitySimEnabled()) {
-        destroyCore(Structure_HighTechFactory);
-        require(storageBuild(35025,35023,0)!=Structure_Silo,"Storage displaced missing high-tech core");
+    {
+        const auto savedConfig=bot->configOverride;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        bot->configOverride=config;
+        try {
+            for(Uint32 item:{Structure_HighTechFactory,Structure_HeavyFactory}) {
+                if(item==Structure_HighTechFactory && !game.isCitySimEnabled())continue;
+                destroyCore(item);
+                config->force.storageCapacity=false;
+                require(storageBuild(35025,35023,0)!=Structure_Silo,
+                    "Storage-off control displaced missing production core");
+                config->force.storageCapacity=true;
+                require(storageBuild(999999,35023,0)!=Structure_Silo,
+                    "Spare storage displaced missing production core");
+                require(storageBuild(35025,35023,0)==Structure_Silo,
+                    "Earned-income overflow waited for missing production core");
+            }
+        } catch(...) {bot->configOverride=savedConfig;throw;}
+        bot->configOverride=savedConfig;
     }
-    destroyCore(Structure_HeavyFactory);
-    require(storageBuild(35025,35023,0)!=Structure_Silo,"Storage displaced missing heavy factory/core infrastructure");
-    SDL_Log("STORAGE_PRIORITY_PASS: core first, all difficulties, spice/tax capacity, pending orders and absolute ceiling");
+    SDL_Log("STORAGE_PRIORITY_PASS: spare banks retain core priority, overflow bypasses core only with StorageCapacity, "
+        "all difficulties, spice/tax capacity, pending orders and absolute ceiling");
 
     // Vanilla and Dune2R progression. An enemy wing elsewhere on the map buys
     // the baseline emplacements and then waits behind the production core and
