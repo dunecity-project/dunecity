@@ -176,6 +176,11 @@ void runThreatTurretProbe(Game& game) {
             pass.money=cash>=0 ? cash : pass.money+100;
             pass.emitStatsLog=true;
             pass.cashFlow.projectedCash=1000;
+            // Complete the native storage/bootstrap setup for this city pass:
+            // a value-initialized storage item is slab 0, not a quoted vault.
+            bot->planCityBootstrap(pass);
+            require(pass.cityStorageCapacityIncludingQueued>0,
+                "The established battery fixture lacks its native refinery vault");
             bot->planDefenceCoverage(pass);
             pass.capitalCandidates.clear();pass.capitalChoice=-1;pass.capitalConsumed=false;
             bot->planCapitalCandidates(pass);bot->chooseCapitalPlan(pass);
