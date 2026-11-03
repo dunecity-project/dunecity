@@ -275,6 +275,7 @@ void runNoSpiceCityProbe(Game& game) {
         const auto savedConfig=bot->configOverride;
         auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
         config->force.cityOpeningCapital=false; // Isolate the saved growth-power regression.
+        config->force.moreRocketTurrets=false; // This case measures zoning resumption, not the standing battery.
         bot->configOverride=config;
         bot->difficulty=QuantBot::Difficulty::Hard;bot->militaryValueLimit=70000;
         // One actual planning yard, as in the save; retain the fixture's real
@@ -476,6 +477,7 @@ void runNoSpiceCityProbe(Game& game) {
             }
         auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
         config->force.storageCapacity=false; // Isolate construction, not forecast storage relief.
+        config->force.moreRocketTurrets=false; // Compare the factory with imports, not a separate battery claim.
         bot->configOverride=config;
         state.resPop=500;state.comPop=25;state.indPop=35;state.taxBaseEighths=4096;
         state.resValve=state.comValve=state.indValve=0;
