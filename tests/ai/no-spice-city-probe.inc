@@ -515,10 +515,17 @@ void runNoSpiceCityProbe(Game& game) {
             const Pass funded=marketDecide(true,factoryPrice,growthPower);
             require(ordered(funded,Structure_HeavyFactory) && !ordered(funded,Unit_Quad),
                 "An affordable first heavy factory lost its cash to a Starport bargain");
+            auto pendingFactories=[&]() {
+                int pending=0;
+                for(auto* structure:structureList)
+                    if(structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard)
+                        for(const auto& order:static_cast<BuilderBase*>(structure)->getProductionQueue())
+                            pending+=order.itemID==Structure_HeavyFactory;
+                return pending;
+            };
+            require(pendingFactories()==1,"The funded pass must queue exactly one first heavy factory across all yards");
             bot->build(0);
-            int pending=0;
-            for (const auto& order:yard->getProductionQueue()) pending+=order.itemID==Structure_HeavyFactory;
-            require(pending==1,"The protected first heavy factory was ordered twice");
+            require(pendingFactories()==1,"The protected first heavy factory was duplicated or lost on the next pass");
             factoryData.enabled=false;yard->updateBuildList();
             const Pass unavailable=marketDecide(true,factoryPrice);
             require(ordered(unavailable,Unit_Quad) && !ordered(unavailable,Structure_HeavyFactory),
