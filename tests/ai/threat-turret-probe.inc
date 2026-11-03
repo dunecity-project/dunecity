@@ -239,6 +239,12 @@ void runThreatTurretProbe(Game& game) {
         require(std::none_of(weakBridge.capitalCandidates.begin(),weakBridge.capitalCandidates.end(),
             [](const auto& c){return c.score>0 && std::string_view(c.reason)=="early_rocket";}),
             "One affordable upgrade was mistaken for a funded full rocket bridge");
+        // The mandatory bulk-slab unlock owns an earlier, independent pass in
+        // both switch arms. Isolate the rocket's remaining upgrade after it.
+        const int slabLevel=game.objectData.data[Structure_Slab4][house->getHouseID()].upgradeLevel;
+        require(slabLevel>=0 && slabLevel<game.objectData.data[Structure_RocketTurret][house->getHouseID()].upgradeLevel,
+            "The native tree cannot isolate rocket tech after bulk concrete");
+        yard->curUpgradeLev=slabLevel;yard->updateBuildList();
         auto lockedCover=extraCover(true,yard->getUpgradeCost()
             +game.objectData.data[Structure_ZoneResidential][house->getHouseID()].price-1);
         require(lockedCover.capitalChoice>=0
