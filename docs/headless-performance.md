@@ -120,8 +120,13 @@ The 1.0.864 same-map baseline exposed a pre-existing vacant-tile lookup defect:
 `Tile::getNonInfantryGroundObject()` dereferenced an empty `std::list` through
 `front()`. Different standard-library sentinel layouts could invent a live zone
 on a vacant perimeter cell, promoting an ordinary one-neighbour lot to infill.
+On the exact tag's frozen 160/Medium map, the first differing decision was cycle
+3,725: Windows claimed two infill sides at `(9,44)` (score 264), while macOS chose
+`(12,44)` (score 301). The only real neighbouring residential zone was north of
+the Windows lot, so its second occupied side was impossible.
 The accessor now returns null before consulting the object manager on an empty list.
-`tile_non_infantry_lookup` checks an empty tile without any active game, real occupied
+`tile_non_infantry_lookup` creates its tile within an initialized world, then checks
+that a vacant lookup does not consult that world. It also checks real occupied
 and cleared tiles, and vacancies around a live residential neighbour. Placement unit
 tests retain the first candidate on rank ties and reject phantom infill priority.
 
