@@ -437,6 +437,10 @@ void runSharedSpendingProbe(Game& game) {
             auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
             config->force.openingCombatBudget=false;
             config->force.campaignCombatBudget=false;
+            // Isolate CapacityMcvRunway in both arms: the independent tax-opening
+            // guard also correctly rejects this unfunded negative-control MCV.
+            // Its own financial boundaries are tested by no-spice-city-probe.
+            config->force.cityOpeningCapital=false;
             bot->configOverride=config;
             try {
                 auto& hs=game.getCitySimulation()->houseState_[HOUSE_HARKONNEN];

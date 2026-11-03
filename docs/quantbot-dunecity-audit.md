@@ -267,6 +267,11 @@ It additionally asserts that reinforcements above the standing-wave threshold st
 queue with negative projected cash. Final detector/combat effects remain unverified
 until the new committed-source ON run finishes against the retained OFF seed set.
 
+The independent `CapacityMcvRunway` fixture disables `CityOpeningCapital` in both
+arms: otherwise the tax-opening guard correctly rejects the intentionally unfunded
+MCV even in the runway-OFF negative control. All real queue, combat-fallthrough,
+funded-capacity and recovery assertions remain; the new tax guard is tested separately.
+
 ## Verification boundary
 
 The completed diagnostic matrix and separate ordinary-game generator telemetry are measured.
