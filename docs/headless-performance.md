@@ -107,8 +107,9 @@ Pins must come from measured matching platform runs of the intended source and i
 
 The portable Ninja CTests `cross_platform_city_medium` and `cross_platform_city_brutal`
 pin the seed-9101, no-spice, yard-only cases at cycle 93,750: respectively
-`9c8dd9752d75dd64` (160, Medium, 1v1) and `dd327c648188768e` (96, Brutal, FFA4).
-Both were measured on macOS arm64 and Windows x64 at production source `b63879bfb7d0`.
+`c5b8f06c9e34f991` (160, Medium, 1v1) and `a2f6471233ccdaa0` (96, Brutal, FFA4).
+Both were measured on macOS arm64 and Windows x64 at production source `f84cc5927e7d`,
+including the final default-off MoreRocketTurrets configuration.
 
 `dunecity-audit.py` retains the setup hashes, per-bot config hashes, executable SHA256
 and source commit/fingerprint in `games.csv` before successful profiles are discarded.
