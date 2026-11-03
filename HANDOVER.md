@@ -116,7 +116,17 @@
 - City-effects unit coverage exercises both states. The existing real-engine degradation
   probe checks off/on across zones, services, Airport and Wall, logging full/damaged/repaired
   land values; the off state requires all three values to match.
-- Targeted build, city-effects and headless results are recorded with the integration evidence.
+- Checks on source `d635fd0acc36`, cluster job
+  `20261104T001634-land-value-damage-research-silo-3e550e`: Windows PC
+  `dunelegacy_tests` passed (1,258 passed, 3 skipped; 13,325,950 assertions),
+  including both condition-rule states. MacBook Pro `structure_degradation_dunecity`
+  passed in 32.49 s: Residential full/damaged/repaired land value was **92/92/92 off**
+  and **92/46/92 on**; all eight checked building types preserved value off and halved
+  it on. Native staging build passed before this snapshot. Measurements and receipt
+  paths: `../dunecity-results/land-value-damage/acceptance.log`.
+- The broader cohort's `menu_navigation_probe` timed out on mini and Pro; do not treat
+  retained screenshots as fresh 640×480 evidence. The integrator's combined full suite
+  and ResearchPace's menu diagnosis own that remaining cross-feature verification.
 
 ## 2026-11-03 — CTest historical-content and fixture repairs (OMP CtestTriage, unreleased)
 
