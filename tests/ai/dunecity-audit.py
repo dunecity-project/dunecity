@@ -339,21 +339,37 @@ def report(directories):
     storage_report(directories)
 
 
+def checkpoint_samples(directories):
+    samples = defaultdict(dict)
+    for sample in load(directories, 'samples.csv', ('id', 'house', 'cycle')):
+        cycle = int(sample['cycle'])
+        if cycle in (10 * CYCLES_PER_MINUTE, 20 * CYCLES_PER_MINUTE):
+            samples[(sample['id'], sample['house'])][cycle] = sample
+    return samples
+
+
+def checkpoint_value(house, samples, minute, field):
+    point = samples[(house['id'], house['house'])].get(minute * CYCLES_PER_MINUTE)
+    if point:
+        return int(point[field])
+    if house['alive'] == '0' and float(house['eliminated_s']) <= minute * 60:
+        return 0
+    return None  # A surviving early winner was not observed at this checkpoint.
+
+
 def combat_report(directories, allowed=None, label='Combat'):
     """Exact ground dispatches when enabled; checkpoints include defeated houses as zero."""
     games = {r['id']: r for r in load(directories, 'games.csv', ('id',)) if not r['error']}
     houses = [r for r in load(directories, 'houses.csv', ('id', 'house'))
               if r['id'] in games and (allowed is None or (r['id'], r['house']) in allowed)]
-    samples = defaultdict(dict)
-    for sample in load(directories, 'samples.csv', ('id', 'house', 'cycle')):
-        samples[(sample['id'], sample['house'])][int(sample['cycle'])] = sample
+    samples = checkpoint_samples(directories)
     groups = defaultdict(list)
     for house in houses:
         groups[(house['difficulty'], house['spice_level'])].append(house)
     groups[('all', 'all')] = houses
     print(f'{label}: first attack is a nonempty ground_hunt dispatch, not a readiness check or sortie duration.')
-    print('| Difficulty | Spice | Attacking/measured | First attack mean min (attackers) | Attacks/10 alive-min | Army10 mean (n) | Army20 mean (n) | Kill-value mean |')
-    print('|---|---|---|---|---|---|---|---|')
+    print('| Difficulty | Spice | Attacking/measured | First attack mean min (attackers) | Attacks/10 alive-min | Army10 mean (n) | Army20 mean (n) | Rocket10 mean (n) | Rocket20 mean (n) | Kill-value mean |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
     for (difficulty, spice), rows in sorted(groups.items()):
         measured = [r for r in rows if r.get('attack_telemetry') == '1']
         first = [float(r['first_attack_minute']) for r in measured if r.get('first_attack_minute', '') != '']
@@ -361,15 +377,14 @@ def combat_report(directories, allowed=None, label='Combat'):
                       if r['alive'] == '0' else float(games[r['id']]['minutes']) for r in measured)
         frequency = sum(int(r['attack_count']) for r in measured) * 10 / minutes if minutes else None
         checkpoints = []
-        for minute in (10, 20):
-            values = []
-            for house in rows:
-                point = samples[(house['id'], house['house'])].get(minute * CYCLES_PER_MINUTE)
-                if point:
-                    values.append(int(point['army_value']))
-                elif house['alive'] == '0' and float(house['eliminated_s']) <= minute * 60:
-                    values.append(0)
-            checkpoints.append(f'{statistics.mean(values):.1f} ({len(values)})' if values else 'unmeasured')
+        for field in ('army_value', 'rocket'):
+            for minute in (10, 20):
+                values = []
+                for house in rows:
+                    value = checkpoint_value(house, samples, minute, field)
+                    if value is not None:
+                        values.append(value)
+                checkpoints.append(f'{statistics.mean(values):.1f} ({len(values)})' if values else 'unmeasured')
         first_mean = f'{statistics.mean(first):.2f}' if first else 'unmeasured'
         rate = f'{frequency:.3f}' if frequency is not None else 'unmeasured'
         kills = f'{statistics.mean(int(r["kill_value"]) for r in rows):.1f}' if rows else 'unmeasured'
@@ -389,6 +404,51 @@ def storage_report(directories, allowed=None, label='Storage'):
           f'{sum(int(row["storage_income_lost"]) for row in rows)} credits lost '
           '(capacity-loss ticks excluded)')
 
+
+
+def rocket_comparison(control, candidate, allowed=None):
+    valid = [{r['id'] for r in load([directory], 'games.csv', ('id',)) if not r['error']}
+             for directory in (control, candidate)]
+    houses = [{(r['id'], r['house']): r for r in load([directory], 'houses.csv', ('id', 'house'))
+               if r['id'] in games} for directory, games in zip((control, candidate), valid)]
+    samples = [checkpoint_samples([directory]) for directory in (control, candidate)]
+    shared = sorted(houses[0].keys() & houses[1].keys())
+    if allowed is not None:
+        shared = [key for key in shared if key in allowed]
+    groups = defaultdict(list)
+    for key in shared:
+        house = houses[0][key]
+        groups[(house['difficulty'], house['spice_level'])].append(key)
+    groups[('all', 'all')] = shared
+    print('Rocket checkpoints: eliminated houses count as zero; surviving early winners are censored. '
+          'Joint-alive pairs require actual alive samples in both arms.')
+    print('| Difficulty | Spice | Minute | Observable control -> candidate (delta; pairs) | Joint-alive control -> candidate (delta; pairs) | Censored control/candidate |')
+    print('|---|---|---|---|---|---|')
+
+    def means(pairs):
+        if not pairs:
+            return 'unmeasured'
+        old = statistics.mean(pair[0] for pair in pairs)
+        new = statistics.mean(pair[1] for pair in pairs)
+        return f'{old:.2f} -> {new:.2f} ({new-old:+.2f}; {len(pairs)})'
+
+    for (difficulty, spice), keys in sorted(groups.items()):
+        for minute in (10, 20):
+            observed, alive = [], []
+            censored = [0, 0]
+            for key in keys:
+                values = [checkpoint_value(houses[side][key], samples[side], minute, 'rocket')
+                          for side in (0, 1)]
+                for side in (0, 1):
+                    censored[side] += values[side] is None
+                if any(value is None for value in values):
+                    continue
+                observed.append(values)
+                points = [samples[side][key].get(minute * CYCLES_PER_MINUTE) for side in (0, 1)]
+                if all(point and point['alive'] == '1' for point in points):
+                    alive.append(values)
+            print(f'| {difficulty} | {spice} | {minute} | {means(observed)} | {means(alive)} | '
+                  f'{censored[0]}/{censored[1]} |')
 
 
 def compare(control, candidate):
@@ -433,6 +493,7 @@ def compare(control, candidate):
     combat_report([candidate], set(common), 'Candidate combat')
     storage_report([control], set(common), 'Control storage')
     storage_report([candidate], set(common), 'Candidate storage')
+    rocket_comparison(control, candidate, set(common))
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

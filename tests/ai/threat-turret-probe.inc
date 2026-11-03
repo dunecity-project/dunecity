@@ -89,6 +89,25 @@ void runThreatTurretProbe(Game& game) {
             bot->planDefenceCoverage(pass);bot->planCapitalCandidates(pass);bot->chooseCapitalPlan(pass);
             return pass;
         };
+        config->force.moreRocketTurrets=false;
+        auto earlyOld=plan(false);
+        require(earlyOld.earlyRocketLimit==2 && !earlyOld.routineRocketsAllowed,
+            "More-off did not retain the two-rocket unfinished-core gate");
+        config->force.moreRocketTurrets=true;
+        auto earlyNew=plan(false);
+        require(earlyNew.earlyRocketLimit>=3 && earlyNew.earlyRocketLimit<=4 && earlyNew.routineRocketsAllowed,
+            "An established Hard base did not permit modest additional core cover");
+        for (size_t n=3;n<raiders.size();++n) raiders[n]->setVisible(house->getTeamID(),false);
+        config->force.moreRocketTurrets=false;
+        auto threeOld=plan(true);
+        config->force.moreRocketTurrets=true;
+        auto threeNew=plan(true);
+        require(threeNew.groundTurretGoal>threeOld.groundTurretGoal
+            && threeNew.groundTurretGoal<=threeOld.groundTurretGoal+2,
+            "A small visible quad rush did not receive bounded denser rocket cover");
+        SDL_Log("MORE_ROCKET_STATE: three_quads off=%d on=%d early=%d",
+            threeOld.groundTurretGoal,threeNew.groundTurretGoal,earlyNew.earlyRocketLimit);
+        for (auto* unit:raiders) unit->setVisible(house->getTeamID(),true);
         auto off=plan(false);
         require(off.groundThreatAsset.isInvalid(),"Disabled switch still demands ground turrets");
         auto on=plan(true);
@@ -122,6 +141,15 @@ void runThreatTurretProbe(Game& game) {
         bool rocket=false;
         for (const auto& order:yard->getProductionQueue()) if (order.itemID==Structure_RocketTurret) rocket=true;
         require(rocket,"Selected ground defence did not reach real production");
+        auto pending=plan(true);
+        pending.itemCount[Structure_RocketTurret]=pending.earlyRocketLimit-1;
+        bot->planDefenceCoverage(pending);
+        pending.capitalCandidates.clear();pending.capitalChoice=-1;pending.capitalConsumed=false;
+        bot->planCapitalCandidates(pending);bot->chooseCapitalPlan(pending);
+        bot->buildProducer(pending,yard);
+        require(pending.itemCount[Structure_RocketTurret]==pending.earlyRocketLimit
+            && !pending.routineRocketsAllowed,
+            "A queued rocket did not close the shared early allowance for the other yards");
         for (auto* unit:raiders) unit->setVisible(house->getTeamID(),false);
         auto unseen=plan(true);
         require(unseen.groundThreatAsset.isInvalid(),"An unseen ground army demanded cover");
@@ -136,6 +164,35 @@ void runThreatTurretProbe(Game& game) {
             game.citySimulation_=std::make_unique<DuneCity::CitySimulation>();
             game.citySimulation_->init(currentGameMap->getSizeX(),currentGameMap->getSizeY());
         }
+        // Model already-pending seed plots and first factories. The selected,
+        // funded cover must execute instead of saving for the next core item.
+        for (auto* unit:raiders) unit->setVisible(house->getTeamID(),false);
+        auto extraCover=[&](bool more) {
+            config->force.moreRocketTurrets=more;
+            auto pass=plan(false,true);
+            pass.itemCount[Structure_LightFactory]=1;pass.itemCount[Structure_HeavyFactory]=1;
+            pass.itemCount[Structure_ZoneResidential]=2;pass.itemCount[Structure_ZoneCommercial]=1;
+            pass.itemCount[Structure_ZoneIndustrial]=1;pass.cityZonesIncludingQueued=4;pass.cityYards=1;
+            pass.cashFlow.projectedCash=1000;
+            bot->planDefenceCoverage(pass);
+            pass.capitalCandidates.clear();pass.capitalChoice=-1;pass.capitalConsumed=false;
+            bot->planCapitalCandidates(pass);bot->chooseCapitalPlan(pass);
+            return pass;
+        };
+        auto oldCover=extraCover(false);
+        bot->buildProducer(oldCover,yard);
+        require(std::none_of(yard->getProductionQueue().begin(),yard->getProductionQueue().end(),
+            [](const auto& order){return order.itemID==Structure_RocketTurret;}),
+            "More-off bought extra ordinary cover before completing its core");
+        auto newCover=extraCover(true);
+        require(newCover.capitalChoice>=0 && !newCover.protectionCapital
+            && newCover.capitalCandidates[newCover.capitalChoice].item==Structure_RocketTurret,
+            "The quiet seeded base did not select useful affordable early cover");
+        bot->buildProducer(newCover,yard);
+        require(std::any_of(yard->getProductionQueue().begin(),yard->getProductionQueue().end(),
+            [](const auto& order){return order.itemID==Structure_RocketTurret;}),
+            "Optional core saving displaced the funded selected extra rocket");
+        for (auto* unit:raiders) unit->setVisible(house->getTeamID(),true);
         auto supply=[&](bool enabled,int cash) {
             config->force.cityStarportSupply=enabled;
             auto pass=plan(false,true);

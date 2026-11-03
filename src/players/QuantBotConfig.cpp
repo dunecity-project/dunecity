@@ -358,6 +358,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityOpeningCapital = true;
     force.cityConstructionCapital = true;
     force.threatTurrets = true;
+    force.moreRocketTurrets = true;
     force.cityStarportSupply = true;
     force.storageCapacity = true;
 
@@ -666,6 +667,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
         iniFile.setBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
         iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
+        iniFile.setBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
         iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
         iniFile.setBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
 
@@ -800,6 +802,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityOpeningCapital = iniFile.getBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
     force.cityConstructionCapital = iniFile.getBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
     force.threatTurrets = iniFile.getBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
+    force.moreRocketTurrets = iniFile.getBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
     force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
     force.storageCapacity = iniFile.getBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
@@ -1293,6 +1296,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("cityOpeningCapital", force.cityOpeningCapital);
     addNamed("cityConstructionCapital", force.cityConstructionCapital);
     addNamed("threatTurrets", force.threatTurrets);
+    addNamed("moreRocketTurrets", force.moreRocketTurrets);
     addNamed("cityStarportSupply", force.cityStarportSupply);
     addNamed("storageCapacity", force.storageCapacity);
     configStr += "|/FORCE|";

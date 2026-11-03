@@ -2421,7 +2421,7 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
             for (const auto& entry:reservedStructures)
                 if (entry.second.item==Structure_RocketTurret
                     && blockDistance(entry.second.location,at)<=range) ++cover;
-            const int goal=RocketTurretPolicy::groundThreatGoal(value);
+            const int goal=RocketTurretPolicy::groundThreatGoal(value,botConfig().force.moreRocketTurrets);
             const int missing=goal-cover;
             if (missing>bestMissing || (missing==bestMissing && missing>0 && value>pass.groundThreatValue)) {
                 bestMissing=missing;pass.groundThreatAsset=at;
@@ -2436,8 +2436,8 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
     // which is what stopped city growth. Bound the proactive claim by the
     // emplacements the base's own demand justifies; observed aircraft keep the
     // unbounded shortfall, because that is a present loss rather than a plan.
-    // Both custom-game economies finish the production core before repeatedly
-    // adding cover against aircraft seen elsewhere on the map.
+    // Both custom-game economies bound ordinary cover while the production
+    // core is unfinished; MoreRocketTurrets permits a small established-base allowance.
     pass.missingCoreInfrastructure = NONE_ID;
     pass.coreInfrastructureReady = true;
     if (gameMode==GameMode::Custom && !builderOnly())
@@ -2464,8 +2464,12 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
             ? QuantBotBuildPolicy::desiredSpiceRefineries(pass.spiceHarvesterTarget,pass.itemCount[Unit_Harvester])
             : pass.itemCount[Unit_Harvester]/3)
         && findPlaceLocation(Structure_Refinery).isValid();
-    pass.routineRocketsAllowed = (pass.coreInfrastructureReady && !advancedTechPending && !refiningCapacityPending)
-        || pass.itemCount[Structure_RocketTurret]<2;
+    pass.earlyRocketLimit=RocketTurretPolicy::earlyRocketLimit(
+        botConfig().force.moreRocketTurrets && gameMode==GameMode::Custom,
+        pass.coverageTier,getHouse()->getNumStructures());
+    pass.routineRocketsUnrestricted=pass.coreInfrastructureReady && !advancedTechPending && !refiningCapacityPending;
+    pass.routineRocketsAllowed=pass.routineRocketsUnrestricted
+        || pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit;
     // A proactive goal keeps its savings only while the forecast cannot also
     // fund a city plot. Growth pays the bills that reach the saved price, so a
     // hold that outlives the forecast starves the economy it is defending.

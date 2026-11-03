@@ -788,7 +788,21 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
     // Protect the income/rebuild core before optional tech. Walk the
     // actual mod prerequisites and save their cost, rather than
     // waiting for enemy aircraft to reveal that the yard is unready.
-    const bool completingCore=pass.itemCount[Structure_RocketTurret]>=2 && pass.missingCoreInfrastructure!=NONE_ID;
+    // An already-funded, useful extra cover may take this slot before optional
+    // core saving. Never wait for a third/fourth rocket that cannot be bought,
+    // and never displace the opening income supplier or protected capital.
+    bool fundedEarlyCover=false;
+    if (pass.citySimEnabled && yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && pass.itemCount[Structure_RocketTurret]>=2
+        && pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit
+        && !pass.protectionCapital && capitalPending(pass)) {
+        const auto& choice=pass.capitalCandidates[pass.capitalChoice];
+        fundedEarlyCover=choice.builder==turn.pBuilder->getObjectID()
+            && choice.item==Structure_RocketTurret && choice.site.isValid()
+            && pass.money>=choice.price+choice.foundationCost;
+    }
+    const bool completingCore=pass.itemCount[Structure_RocketTurret]>=2
+        && pass.missingCoreInfrastructure!=NONE_ID && !fundedEarlyCover;
     const bool openingWorkerSupplier = pass.openingSupplierDue || completingCore;
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.citySimEnabled
         && !yardTurn.higherPriorityCapital
@@ -1406,7 +1420,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         && !yardTurn.higherPriorityCapital
         && (yardTurn.coreShortfall>0
             || (!openingWorkersNeeded(pass) && pass.itemCount[Structure_HeavyFactory]>0
-                && pass.itemCount[Structure_RocketTurret]<2))
+                && pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit))
         && data[Structure_RocketTurret][houseID].enabled
         && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()
         && turn.pBuilder->getCurrentUpgradeLevel()<rocketUpgrade
@@ -2392,6 +2406,12 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
                 .set("item", yardTurn.itemID).set("x", selectedPlaceLocation.x).set("y", selectedPlaceLocation.y));
             pass.orderedThisTick.insert(yardTurn.itemID);
             pass.itemCount[yardTurn.itemID]++;
+            // Other yards share the pending count. Close the new early allowance
+            // immediately, without changing mature coverage or the legacy control.
+            if (yardTurn.itemID==Structure_RocketTurret && pass.earlyRocketLimit>2
+                && !pass.routineRocketsUnrestricted
+                && pass.itemCount[Structure_RocketTurret]>=pass.earlyRocketLimit)
+                pass.routineRocketsAllowed=false;
             if (yardTurn.itemID == Structure_Doublefinery) pass.itemCount[Structure_Refinery] += 2;
             else if (yardTurn.itemID == Structure_Worfinery) ++pass.itemCount[Structure_Refinery];
 

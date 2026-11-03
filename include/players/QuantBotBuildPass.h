@@ -276,6 +276,7 @@ struct QuantBot::BuildPass {
 
     // planDefenceCoverage()
     int coverageTier{};
+    int earlyRocketLimit{2};
     bool airEngaged{};
     int uncoveredCoreAssets{};
     int coverageDemand{};
@@ -287,6 +288,7 @@ struct QuantBot::BuildPass {
     Uint32 missingCoreInfrastructure{};
     bool coreInfrastructureReady{};
     bool cityCoreInfrastructureReady{};
+    bool routineRocketsUnrestricted{};
     bool routineRocketsAllowed{};
     int cityPlotPrice{};
     int rocketPowerBuffer{};

@@ -295,6 +295,28 @@ TEST_CASE("Storage capacity defaults on and is loaded saved and hashed", "[ai][c
     std::filesystem::remove(path);
 }
 
+TEST_CASE("More rocket turrets is independent loaded saved and hashed", "[ai][defence][config]") {
+    QuantBotConfig config;
+    REQUIRE(config.force.moreRocketTurrets);
+    const auto enabledHash=config.getConfigHash();
+    const auto path=std::filesystem::temp_directory_path()/"quantbot-more-rocket-turrets-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nMoreRocketTurrets=false\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE_FALSE(config.force.moreRocketTurrets);
+    REQUIRE(config.force.threatTurrets);
+    REQUIRE(config.getConfigHash()!=enabledHash);
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE_FALSE(restored.force.moreRocketTurrets);
+    REQUIRE(restored.force.threatTurrets);
+    REQUIRE(restored.getConfigHash()==config.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Ground threat and city supplier switches default on and are loaded saved and hashed", "[ai][defence][config]") {
     const QuantBotConfig baseline;
     REQUIRE(baseline.force.threatTurrets);

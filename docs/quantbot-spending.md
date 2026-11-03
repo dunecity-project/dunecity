@@ -101,9 +101,10 @@ buy local rocket cover against **visible armed ground units near the production,
 income and power core (including Radar)**, rather than chasing every outlying plot.
 The build's existing visible-unit survey supplies contacts; hidden armies, aircraft,
 workers and saboteurs do not increase this goal. Contacts are transient per-pass
-scratch (no unsaved two-second decision cache). One rocket per 200 credits of
-nearby observed fighters, rounded up, demands 2–8 local firing covers, with a
-12-rocket house-wide ceiling. Existing and reserved local emplacements count.
+scratch (no unsaved two-second decision cache). With `MoreRocketTurrets=1`, one
+rocket per 150 credits of nearby observed fighters, rounded up, demands 2–8 local
+firing covers, with a 12-rocket reactive house ceiling. Existing and reserved
+local emplacements count. More-off retains the former one-per-200 calculation.
 An active core raid protects the next turret or power/tech prerequisite ahead of
 repeat plots and unit spending, without waiting for two refineries and a
 completed production core. This finite goal and the house-wide cap bound the
@@ -122,6 +123,19 @@ Generation, tech rebuilds and the first supplier prefer legal sites inside the s
 rocket battery, minimizing observed return fire; a Radar rebuilt outside it can
 otherwise die again before its first replacement rocket finishes.
 Switches off preserve the old paths. No save-format or city-tax-rule change.
+
+`MoreRocketTurrets=1` (hashed, default on) also raises the ordinary allowance
+before the production/tech core finishes from two to three rockets in Custom
+Medium+ bases with at least eight built structures, or four for Hard/Brutal bases
+with at least sixteen. This is permission to buy useful cover, not a forced count:
+power, tech, legal placement and the existing growth interleave still apply.
+A selected extra cover may precede optional core saving only when its entire
+current quote is funded; it creates no new savings hold and does not outrank
+protected construction, income supply or emergencies. Pending rockets close the
+allowance across parallel yards. Mature coverage goals are unchanged (and can
+exceed the reactive twelve), as are the local-eight/reactive-twelve raid caps.
+`more-rocket-turrets-off` isolates just this tuning in same-build comparisons;
+it keeps `ThreatTurrets` and all other fixes enabled.
 
 Funded Dune City custom games use the established parallel factory/repair build
 order when current cash and projected cash cover another heavy factory, four
