@@ -1515,14 +1515,27 @@ TEST_CASE("Spectator city runtime restores derived state and rejects invalid dim
     }
 }
 
-TEST_CASE("Building condition lowers land value and repairs restore it", "[city-effects][condition]") {
-    REQUIRE(conditionLandValue(200,100,100)==200);
-    REQUIRE(conditionLandValue(200,75,100)==150);
-    REQUIRE(conditionLandValue(200,50,100)==100);
-    REQUIRE(conditionLandValue(200,25,100)==50);
-    REQUIRE(conditionLandValue(200,0,100)==1);
-    REQUIRE(conditionLandValue(0,50,100)==0);
-    REQUIRE(conditionLandValue(200,110,100)==200);
+TEST_CASE("Building damage affects land value only with its match rule on", "[city-effects][condition]") {
+    const SettingsClass::GameOptionsClass defaults;
+    REQUIRE_FALSE(defaults.damageLowersLandValue);
+    SECTION("default off leaves land value unchanged at every condition") {
+        for (int health : {110, 100, 75, 50, 25, 0, -10}) {
+            INFO("health=" << health);
+            REQUIRE(conditionLandValue(200,health,100,defaults.damageLowersLandValue)==200);
+            REQUIRE(conditionLandValue(0,health,100,defaults.damageLowersLandValue)==0);
+        }
+    }
+    SECTION("on preserves proportional damage and repair behavior") {
+        REQUIRE(conditionLandValue(200,100,100,true)==200);
+        REQUIRE(conditionLandValue(200,75,100,true)==150);
+        REQUIRE(conditionLandValue(200,50,100,true)==100);
+        REQUIRE(conditionLandValue(200,25,100,true)==50);
+        REQUIRE(conditionLandValue(200,0,100,true)==1);
+        REQUIRE(conditionLandValue(200,-10,100,true)==1);
+        REQUIRE(conditionLandValue(0,50,100,true)==0);
+        REQUIRE(conditionLandValue(200,110,100,true)==200);
+        REQUIRE(conditionLandValue(200,50,0,true)==200);
+    }
 }
 
 // ============================================================================

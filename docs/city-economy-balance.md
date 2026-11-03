@@ -61,11 +61,17 @@ both. Under the old rule many small buildings (walls, turrets, windtraps) each c
 as a zone, and parked units and roads pulled the centre away from the zones, so a large mixed
 base earned less per citizen than a compact AI city.
 
-The block land value itself is unchanged by the rule: `4*(34 - distance/2)` + terrain (open sand
-counts as water) - pollution, -20 above crime 190, clamped 1-250, then parks, Palace/Stadium,
-hostile units and damaged buildings. The census check is `custom-city-cap-probe.inc`
-(ctest `quantbot_custom_attack`): a parked unit changes neither a block nor the house average
-with the rule on, and still develops its block with it off.
+The block land value itself is unchanged by the Micropolis rule: `4*(34 - distance/2)` +
+terrain (open sand counts as water) - pollution, -20 above crime 190, clamped 1-250, then
+parks, Palace/Stadium and hostile units. Building damage does **not** reduce land value
+by default. The separate **Damage Lowers Land Value** match rule (default off, MOD17)
+restores the old proportional health penalty on occupied blocks after these effects;
+repairs restore that value on the next scan. Shared blocks use the worst building
+condition, not compounded penalties. This rule does not change health-scaled windtrap power.
+The census check is `custom-city-cap-probe.inc` (ctest `quantbot_custom_attack`): a parked
+unit changes neither a block nor the house average with Micropolis on, and still develops
+its block with it off. `structure_degradation_dunecity` checks damaged and repaired
+buildings through real effects scans with Damage Lowers Land Value both off and on.
 
 ### Starport population (match rule `Starport Population`, default on; MOD16, protocol 111)
 

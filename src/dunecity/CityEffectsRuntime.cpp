@@ -631,22 +631,24 @@ void CitySimulation::runEffectsScans() {
         if (value > 0) landValueMap_.set(bx,by,std::max(1,value-hostileLandValuePenaltyMap_.get(bx,by)));
     }
 
-    // All buildings devalue their occupied land when damaged, regardless of
-    // role or owner. A block shared by footprints uses the worst condition;
-    // never compound penalties based on structure iteration order.
-    std::vector<int> conditionValues(blocksW * blocksH, kMaxLandValue);
-    forEachStructureOrigin(map, [&](int x, int y, const StructureBase* building) {
-        const Coord size = building->getStructureSize();
-        for (int by=y/bs; by<=(y+size.y-1)/bs; ++by)
-            for (int bx=x/bs; bx<=(x+size.x-1)/bs; ++bx) {
-                if (bx<0 || by<0 || bx>=blocksW || by>=blocksH) continue;
-                const int value = conditionLandValue(landValueMap_.get(bx,by),
-                    building->getHealth(), building->getMaxHealth());
-                conditionValues[by*blocksW+bx] = std::min(conditionValues[by*blocksW+bx], value);
-            }
-    });
-    for (int by=0; by<blocksH; ++by) for (int bx=0; bx<blocksW; ++bx)
-        landValueMap_.set(bx,by,std::min<int>(landValueMap_.get(bx,by),conditionValues[by*blocksW+bx]));
+    const bool damageLowersLandValue = currentGame->getGameInitSettings().getGameOptions().damageLowersLandValue;
+    if (damageLowersLandValue) {
+        // Optional condition penalty: shared blocks use the worst condition,
+        // never compounded penalties based on structure iteration order.
+        std::vector<int> conditionValues(blocksW * blocksH, kMaxLandValue);
+        forEachStructureOrigin(map, [&](int x, int y, const StructureBase* building) {
+            const Coord size = building->getStructureSize();
+            for (int by=y/bs; by<=(y+size.y-1)/bs; ++by)
+                for (int bx=x/bs; bx<=(x+size.x-1)/bs; ++bx) {
+                    if (bx<0 || by<0 || bx>=blocksW || by>=blocksH) continue;
+                    const int value = conditionLandValue(landValueMap_.get(bx,by),
+                        building->getHealth(), building->getMaxHealth(), damageLowersLandValue);
+                    conditionValues[by*blocksW+bx] = std::min(conditionValues[by*blocksW+bx], value);
+                }
+        });
+        for (int by=0; by<blocksH; ++by) for (int bx=0; bx<blocksW; ++bx)
+            landValueMap_.set(bx,by,std::min<int>(landValueMap_.get(bx,by),conditionValues[by*blocksW+bx]));
+    }
 
     phase.next("city.effects.population");
     // Population density is needed by the crime formula below (SC's
