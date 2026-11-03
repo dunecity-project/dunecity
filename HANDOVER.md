@@ -27,7 +27,8 @@
 - Default-on hashed `[Force Concentration] CityConstructionCapital` gives
   a seeded, quiet, positive-income, non-spice city with a standing Starport
   one bounded first-HF claim at its real price, only when legal and already
-  powered. Required colonisation MCVs get the same claim. It does not preempt active
+  powered with the existing24-power growth floor left over. Required
+  colonisation MCVs get the same claim. It does not preempt active
   defence, fund hypothetical four-minute production burn, duplicate queued
   factories/MCVs, relax market/placement/escort checks, or alter saboteurs.
   No extra save/protocol change; protocol111 already covers this release.
@@ -106,6 +107,35 @@
   `outputs/research-pace-20261103/{baseline-probe.app,baseline-manifest.json,before/}`.
   Normal per-level cost/time tables and pace/migration rationale are in
   `docs/civilization-wars.md`; exact cycles in the output's `normal-cost-time.csv`.
+- Same-build controlled A/B on clean `d635fd0acc36`, same193×128 map/config/seed:
+  reference-price control reached tech9 at32:58.880 Atreides /26:56.544 Ordos;
+  Normal left both attech7 at45:00 (Ordos researching8). Both alive, complete
+  telemetry/no sequence gaps; every observed start matched scaled price/cycles.
+  Exact per-level timing, hashes and the single-seed limitation are in the guide
+  and `outputs/research-pace-20261103/{reference,normal,paired-progression.json}`.
+- Actual `research.dls` loaded all1,775,110bytes atcycle112730 on the new build:
+  Normal,area24704,next-tech9 quote8073credits/22423cycles, all original
+  tech/timer states preserved. One real tick and9882 resave passed. Recovered the
+  exact original four-file CivWars revision, matching saved SHA256 `37d5ce34…066f38`
+  before use; no save/checksum/resolver bypass. Provenance/cache and load receipt:
+  `outputs/research-save-20261103/{revision-reconstruction.json,exact-profile}`,
+  `outputs/research-pace-20261103/save-load-exact-d635fd0a/`.
+- Corrected the observed640×480 Research Pace corner-crest overlap in `5e60f97a`:
+  compact row gaps and a centered OK footer, not weaker assertions. On mandatory
+  `e551dd78` suite `20261104T012524-combined-full-2-cec93f`, menu navigation passed
+  563.44s across640/854/1280, exactly one PASS marker per run. Fresh640 GameRules,
+  CivWars and Tornie screenshots were viewed; all four choices fit. Receipt:
+  `outputs/research-pace-20261103/menu-acceptance.json`. Native unit suite passed
+  1261cases/3skips,13,329,994assertions; ResearchLab engine probe passed12.18s.
+- `5f91e4b7` fixes the stale eight-minute team-game research assertion, not the AI.
+  At161×112 the first step costs1148 and lasts95.616s; all four houses had started
+  by7:29.616 and actually completed by9:05.232. The test retains its reference
+  funding rate: `(8min−reference duration)×quoted price/reference price`, ceiling
+  to cycles, plus the quoted duration; reference8min stays unchanged. Normal
+  windows are8:00.000/15:18.352/23:55.200 on129/161/193-wide maps; all six193×128
+  houses completed first research by11:27.968. On clean `f0763fee`, requested
+  `civilization_wars_probe` and `civilization_wars_research_probe` passed53.3s/24.1s:
+  `20261104T020512-research-policy-windows-b7a879`,2/2. Matrix Python tests9/9 passed.
 
 ## 2026-11-03 — Building damage no longer lowers land value (OMP LandValueDamage, unreleased)
 
