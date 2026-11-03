@@ -840,7 +840,7 @@ void House::updateBuildLists() {
 
 bool House::meetsStarportPopulation() const {
     if(!currentGame->getGameInitSettings().getGameOptions().starportPopulation
-       || currentGame->getGameInitSettings().getGameType() == GameType::Campaign
+       || isCampaignGameType(currentGame->gameType)
        || !currentGame->isCitySimEnabled()) return true;
     const auto* sim = currentGame->getCitySimulation();
     if(sim == nullptr || !sim->isInitialized() || houseID < 0 || houseID >= DuneCity::kMaxCityHouses) return true;

@@ -283,6 +283,9 @@ void runCustomCityCapProbe(Game& game) {
         const bool keepRule=rule;
         if(house->getNumItems(Structure_WindTrap)<=0) require(placeItem(Structure_WindTrap),"No windtrap site");
         if(house->getNumItems(Structure_Refinery)<=0) require(placeItem(Structure_Refinery),"No refinery site");
+        // The fixture starts from an early Vanilla mission; offer the Starport like a city game.
+        auto& port=game.objectData.data[Structure_StarPort][house->getHouseID()];
+        port.enabled=true;port.builder=Structure_ConstructionYard;port.techLevel=1;port.upgradeLevel=0;
         auto& hs=sim->houseState_[house->getHouseID()];
         const auto keepPop=std::make_tuple(hs.resPop,hs.comPop,hs.indPop);
         auto setPopulation=[&](int display){hs.resPop=display/DuneCity::CitySimulation::kPopDisplayMultiplier;hs.comPop=0;hs.indPop=0;
