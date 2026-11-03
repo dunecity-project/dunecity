@@ -26,7 +26,8 @@ GameInitSettings makeInit(const SkirmishGenerator::Result& result,
 /// Offline play, or the generic PlayerN map step used by the online host flow.
 class CivWarsMenu final : public MenuBase {
 public:
-    explicit CivWarsMenu(bool multiplayer = false);
+    explicit CivWarsMenu(bool multiplayer = false,
+                         const SettingsClass::GameOptionsClass* initialRules = nullptr);
     const std::string& getCreatedMap() const { return createdMap; }
     SettingsClass::GameOptionsClass getMatchRules() const;
 
@@ -62,7 +63,7 @@ private:
     TextBox seedBox;
     TextButton newSeedButton;
     Checkbox fixedSeedBox, spectateBox;
-    DropDownBox houseBox;
+    DropDownBox houseBox, researchPaceBox;
     HBox allyAIBox, enemyAIBox, spectateAIBox;
     AIPlayerSelector allyAI, enemyAI, spectateAI;
     TextButton backButton, rulesButton, saveButton, hostButton, startButton;

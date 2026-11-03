@@ -49,6 +49,7 @@ constexpr Uint32 GAMEINIT_MOD13_MARKER = 0x4D4F4444; // MODD: shared factory que
 constexpr Uint32 GAMEINIT_MOD14_MARKER = 0x4D4F4445; // MODE: Micropolis land value
 constexpr Uint32 GAMEINIT_MOD15_MARKER = 0x4D4F4446; // MODF: per-house research and trooper anti-air
 constexpr Uint32 GAMEINIT_MOD16_MARKER = 0x4D4F4447; // MODG: Starport city population requirement
+constexpr Uint32 GAMEINIT_MOD17_MARKER = 0x4D4F4448; // MODH: research pace/map area and damage land value
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -251,6 +252,9 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.slowCityYear = false;
     gameOptions.micropolisLandValue = false;
     gameOptions.researchLab = false;
+    gameOptions.researchPace = TechResearch::Pace::Normal;
+    gameOptions.researchMapArea = TechResearch::kReferenceArea;
+    gameOptions.damageLowersLandValue = false;
     gameOptions.trooperAntiAir = false;
     gameOptions.starportPopulation = false;
 
@@ -259,9 +263,10 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     Uint32 modMarker = 0;
     try {
         modMarker = stream.readUint32();
-        const bool hasStarportPopulation = modMarker == GAMEINIT_MOD16_MARKER;
+        const bool hasResearchPace = modMarker == GAMEINIT_MOD17_MARKER;
+        const bool hasStarportPopulation = modMarker == GAMEINIT_MOD16_MARKER || hasResearchPace;
         const bool hasResearchOptions = modMarker == GAMEINIT_MOD15_MARKER || hasStarportPopulation;
-        // MOD15 appends two rules to the complete MOD14 prefix; MOD16 one more after MOD15's.
+        // MOD15..17 append their rules to the complete MOD14 prefix.
         if(hasResearchOptions) modMarker = GAMEINIT_MOD14_MARKER;
         if (isKnownModMarker(modMarker)) {
             modName = stream.readString();
@@ -361,6 +366,14 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             if(hasStarportPopulation) {
                 gameOptions.starportPopulation = stream.readBool();
             }
+            if(hasResearchPace) {
+                const Uint32 pace = stream.readUint32();
+                gameOptions.researchMapArea = stream.readUint32();
+                if(!TechResearch::isValid(pace) || gameOptions.researchMapArea == 0)
+                    throw std::runtime_error("Invalid research pace or map area.");
+                gameOptions.researchPace = static_cast<TechResearch::Pace>(pace);
+                gameOptions.damageLowersLandValue = stream.readBool();
+            }
         }
     } catch (InputStream::eof&) {
         if(markerHasWorkshopRevisions(modMarker)) throw;
@@ -452,6 +465,8 @@ GameInitSettings::~GameInitSettings() {
 }
 
 void GameInitSettings::save(OutputStream& stream) const {
+    if(!TechResearch::isValid(static_cast<Uint32>(gameOptions.researchPace)) || gameOptions.researchMapArea == 0)
+        THROW(std::runtime_error, "GameInitSettings::save(): invalid research pace or map area.");
     if(houseInfoList.size() > static_cast<std::size_t>(CustomGamePlayerPolicy::maxPlayers(isTornieFamilyMatch())))
         THROW(std::runtime_error, "GameInitSettings::save(): too many house rows.");
     stream.writeSint8(static_cast<Sint8>(gameType));
@@ -487,7 +502,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD16_MARKER);
+    stream.writeUint32(GAMEINIT_MOD17_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -546,6 +561,10 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.trooperAntiAir);
     // MOD16: older streams keep the Starport without a population requirement.
     stream.writeBool(gameOptions.starportPopulation);
+    // MOD17: old settings read Normal; initial map loading binds their actual area.
+    stream.writeUint32(static_cast<Uint32>(gameOptions.researchPace));
+    stream.writeUint32(gameOptions.researchMapArea);
+    stream.writeBool(gameOptions.damageLowersLandValue);
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

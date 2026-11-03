@@ -389,7 +389,7 @@ void runSharedSpendingProbe(Game& game) {
                 reset(100000,1000000);structureList.push_back(lab);bot->build(10000);
                 require(house->isTechResearchActive() && house->getTechResearchTarget()==2,
                     "Funded QuantBot did not start the next research level");
-                require(house->getTechResearchRemaining()==House::techResearchCycles(2),
+                require(house->getTechResearchRemaining()==house->techResearchCycles(2),
                     "Research duration differs from simulated House timing");
                 require(house->getCredits()>=1000,"Accepted research left no working reserve");
                 const int paidCredits=house->getCredits();

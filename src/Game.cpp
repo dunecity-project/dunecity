@@ -338,6 +338,10 @@ void Game::initializeSpatialGrid(int mapWidth, int mapHeight) {
         return;
     }
 
+    // New-map and save-map allocation share this initial geometry boundary. Research
+    // never rescales from the changing economy, roster, visibility or live objects.
+    gameInitSettings.setResearchMapSize(mapWidth, mapHeight);
+
     try {
         spatialGrid = std::make_unique<SpatialGrid>(mapWidth, mapHeight, kSpatialGridCellSize);
     } catch(const std::exception& ex) {

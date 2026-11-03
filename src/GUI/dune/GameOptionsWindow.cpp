@@ -174,6 +174,18 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(&researchLabCheckbox);
     vboxLeft.addWidget(VSpacer::create(6));
 
+    researchPaceLabel.setText(_("Research Pace"));
+    researchPaceHBox.addWidget(&researchPaceLabel, 110);
+    researchPaceDropDownBox.addEntry(_("Fast"), static_cast<int>(TechResearch::Pace::Fast));
+    researchPaceDropDownBox.addEntry(_("Normal"), static_cast<int>(TechResearch::Pace::Normal));
+    researchPaceDropDownBox.addEntry(_("Slow"), static_cast<int>(TechResearch::Pace::Slow));
+    researchPaceDropDownBox.addEntry(_("Very slow"), static_cast<int>(TechResearch::Pace::VerySlow));
+    researchPaceDropDownBox.setSelectedItem(static_cast<int>(gameOptions.researchPace));
+    researchPaceDropDownBox.setTooltipText(_("Research price and duration scale with map size. Pace changes both."));
+    researchPaceHBox.addWidget(&researchPaceDropDownBox);
+    vboxLeft.addWidget(&researchPaceHBox, 24);
+    vboxLeft.addWidget(VSpacer::create(6));
+
     if(ModManager::instance().isTornieFamilyContentActive()) {
         alliedControlCheckbox.setText(_("Allied control"));
         alliedControlCheckbox.setTooltipText(_("Allies may command each other's units and buildings. Ownership and credits remain separate."));
@@ -226,6 +238,12 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     originalUnitDamageCheckbox.setExplanation(_("Original Dune II damage and splash"),
         _("Use original Dune II damage against ground units, as reproduced by Dune Dynasty classic. Tank hits rise from 12 to 25; Launcher rockets from 37 to 75. Splash halves every quarter tile and stops at one tile. Unchecked keeps DuneCity balance. Building damage, aircraft hits and special weapons keep their existing rules."));
     vboxRight.addWidget(&originalUnitDamageCheckbox);
+    vboxRight.addWidget(VSpacer::create(6));
+
+    damageLowersLandValueCheckbox.setText(_("Damage Lowers Land Value"));
+    damageLowersLandValueCheckbox.setTooltipText(_("Damaged buildings reduce the land value of their occupied tiles; repairs restore it."));
+    damageLowersLandValueCheckbox.setChecked(gameOptions.damageLowersLandValue);
+    vboxRight.addWidget(&damageLowersLandValueCheckbox);
     vboxRight.addWidget(VSpacer::create(6));
 
     trooperAntiAirCheckbox.setText(_("Trooper Anti-Air"));
@@ -299,8 +317,10 @@ void GameOptionsWindow::onOK() {
     gameOptions.instantBuild = instantBuildCheckbox.isChecked();
     gameOptions.onlyOnePalace = onlyOnePalaceCheckbox.isChecked();
     gameOptions.originalUnitDamage = originalUnitDamageCheckbox.isChecked();
+    gameOptions.damageLowersLandValue = damageLowersLandValueCheckbox.isChecked();
     gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
     gameOptions.researchLab = researchLabCheckbox.isChecked();
+    gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
     gameOptions.trooperAntiAir = trooperAntiAirCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();
     gameOptions.sandwormsRespawn = sandwormsRespawnCheckbox.isChecked();

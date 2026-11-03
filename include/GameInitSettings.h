@@ -262,6 +262,10 @@ public:
         gameOptions = options;
         chaosCampaignEligible = chaosCampaignEligible && options.chaosMode;
     }
+    /// Called by initial map loading (including save loading), before any house advances.
+    void setResearchMapSize(int width, int height) {
+        gameOptions.researchMapArea = TechResearch::mapArea(width, height);
+    }
     inline GraphicsSkin getCampaignGraphicsSkin() const { return campaignGraphicsSkin; };
     inline void setCampaignGraphicsSkin(GraphicsSkin skin) { campaignGraphicsSkin = skin; };
 

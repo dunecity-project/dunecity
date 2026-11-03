@@ -25,6 +25,7 @@
 #include <GUI/Label.h>
 #include <GUI/Spacer.h>
 #include <GUI/Checkbox.h>
+#include <GUI/DropDownBox.h>
 #include <GUI/PictureButton.h>
 #include <GUI/ProgressBar.h>
 #include <GUI/dune/DigitsTextBox.h>
@@ -88,6 +89,7 @@ private:
     Checkbox instantBuildCheckbox;                  ///< If checked the building of structures and units does not take any time
     Checkbox onlyOnePalaceCheckbox;                 ///< If checked only one palace can be build per house
     DamageRulesCheckbox originalUnitDamageCheckbox;
+    Checkbox damageLowersLandValueCheckbox;
     Checkbox rocketTurretsNeedPowerCheckbox;        ///< If checked rocket turrets are dysfunctional on power shortage
     Checkbox sandwormsRespawnCheckbox;              ///< If checked killed sandworms respawn after some time
     Checkbox killedSandwormsDropSpiceCheckbox;      ///< If checked killed sandworms drop some spice
@@ -109,6 +111,9 @@ private:
     Checkbox        planBuildingSitesCheckbox;      ///< Match rule: Construction Yard orders pick their plot first (pre-placement queue)
     Checkbox rememberDefaults;
     Checkbox researchLabCheckbox;
+    HBox researchPaceHBox;
+    Label researchPaceLabel;
+    DropDownBox researchPaceDropDownBox;
     Checkbox trooperAntiAirCheckbox;
     Checkbox alliedControlCheckbox;
     Checkbox alliedBuildingCheckbox;

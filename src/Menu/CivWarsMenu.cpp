@@ -61,8 +61,13 @@ void selectCivAI(AIPlayerSelector& selector, const std::string& name) {
 }
 }
 
-CivWarsMenu::CivWarsMenu(bool multiplayer) : multiplayer(multiplayer) {
+CivWarsMenu::CivWarsMenu(bool multiplayer, const SettingsClass::GameOptionsClass* initialRules)
+ : multiplayer(multiplayer) {
     RandomSkirmish::activateMod("CivWars");
+    if(initialRules) {
+        rules = *initialRules;
+        rulesChosen = true;
+    }
     auto* background = pGFXManager->getUIGraphic(UI_MenuBackground);
     setBackground(background);
     resize(getTextureSize(background));
@@ -122,6 +127,13 @@ CivWarsMenu::CivWarsMenu(bool multiplayer) : multiplayer(multiplayer) {
         addRow(1, 3, "", &spectateBox);
         addRow(1, 4, _("Watched AI"), &spectateAIBox);
     }
+    researchPaceBox.addEntry(_("Fast"), static_cast<int>(TechResearch::Pace::Fast));
+    researchPaceBox.addEntry(_("Normal"), static_cast<int>(TechResearch::Pace::Normal));
+    researchPaceBox.addEntry(_("Slow"), static_cast<int>(TechResearch::Pace::Slow));
+    researchPaceBox.addEntry(_("Very slow"), static_cast<int>(TechResearch::Pace::VerySlow));
+    researchPaceBox.setTooltipText(_("Research price and duration scale with map size. Pace changes both."));
+    selectCivData(researchPaceBox, static_cast<int>((rulesChosen ? rules : effectiveGameOptions).researchPace));
+    addRow(1, multiplayer ? 0 : 5, _("Research Pace"), &researchPaceBox);
     setupLabel.setText(_("Starts: Yard, Research Lab, Refinery, Carryall, rocket turrets, power and a small city.\n"
                          "Credits 0. Tech level 1. Research unlocks higher tech. No free armies or automatic income nodes."));
     setupLabel.setTextFontSize(13);
@@ -236,7 +248,7 @@ bool CivWarsMenu::prepareStart(GameInitSettings& init) {
     CivWarsGenerator::Params params;
     SkirmishGenerator::Result result;
     if(!generate(params, result)) return false;
-    init = CivWars::makeInit(result, rulesChosen ? rules : effectiveGameOptions, params);
+    init = CivWars::makeInit(result, getMatchRules(), params);
     if(!params.fixedSeed) { params.seed = freshCivSeed(); remember(params); }
     return true;
 }
@@ -251,7 +263,8 @@ void CivWarsMenu::onStart() {
 void CivWarsMenu::onHost() {
     remember(readParams());
     // The normal online setup owns the lobby, identity checks and direct peer connections.
-    playCustomGame(true, true, false, true);
+    const auto chosenRules = getMatchRules();
+    playCustomGame(true, true, false, true, &chosenRules);
 }
 
 void CivWarsMenu::onCreateMap() {
@@ -292,7 +305,7 @@ void CivWarsMenu::onGameRules() {
         }
         rules = effectiveGameOptions;
     }
-    rules = CivWars::matchRules(rules);
+    rules = getMatchRules();
     openWindow(GameOptionsWindow::create(rules));
 }
 
@@ -300,9 +313,12 @@ void CivWarsMenu::onChildWindowClose(Window* child) {
     if(auto* options = dynamic_cast<GameOptionsWindow*>(child)) {
         rules = CivWars::matchRules(options->getGameOptions());
         rulesChosen = true;
+        selectCivData(researchPaceBox, static_cast<int>(rules.researchPace));
     }
 }
 
 SettingsClass::GameOptionsClass CivWarsMenu::getMatchRules() const {
-    return CivWars::matchRules(rulesChosen ? rules : effectiveGameOptions);
+    auto options = CivWars::matchRules(rulesChosen ? rules : effectiveGameOptions);
+    options.researchPace = static_cast<TechResearch::Pace>(researchPaceBox.getSelectedEntryIntData());
+    return options;
 }

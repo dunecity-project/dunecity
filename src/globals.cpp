@@ -164,7 +164,9 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Shared Factory Queue", options.sharedFactoryQueue);
     config.setBoolValue(section, "Slow City Year", options.slowCityYear);
     config.setBoolValue(section, "Micropolis Land Value", options.micropolisLandValue);
+    config.setBoolValue(section, "Damage Lowers Land Value", options.damageLowersLandValue);
     config.setBoolValue(section, "Research Lab", options.researchLab);
+    config.setIntValue(section, "Research Pace", static_cast<int>(options.researchPace));
     config.setBoolValue(section, "Trooper Anti-Air", options.trooperAntiAir);
     config.setBoolValue(section, "Starport Population", options.starportPopulation);
     config.setBoolValue(section, "Allied Control", options.alliedControl);
@@ -207,7 +209,10 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Shared Factory Queue", options.sharedFactoryQueue);
     readBool("Slow City Year", options.slowCityYear);
     readBool("Micropolis Land Value", options.micropolisLandValue);
+    readBool("Damage Lowers Land Value", options.damageLowersLandValue);
     readBool("Research Lab", options.researchLab);
+    if(config.hasKey(section, "Research Pace"))
+        options.researchPace = TechResearch::sanitize(config.getIntValue(section, "Research Pace", static_cast<int>(options.researchPace)));
     readBool("Trooper Anti-Air", options.trooperAntiAir);
     readBool("Starport Population", options.starportPopulation);
     readBool("Allied Control", options.alliedControl);

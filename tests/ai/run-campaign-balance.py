@@ -173,6 +173,8 @@ parser.add_argument('--civ-spice', type=int, choices=range(5), default=2, metava
 parser.add_argument('--civ-strategy', choices=('off', 'on', 'left', 'right'),
                     help='Civ Wars strategy (default off for --civ-wars); off/on is a hashed global switch '
                          'before game init, also on ordinary games; left/right is a test-only unhashed team override')
+parser.add_argument('--civ-research-baseline', action='store_true',
+                    help='Test-only same-build pre-scaling research: Normal at reference area; generated terrain stays unchanged')
 parser.add_argument('--civ-air-probe', choices=('lab', 'yard'),
                     help='Canonical Civ Wars: single ornithopter, real human attack authority, 30-second core strike')
 parser.add_argument('--civ-air-team', type=int, choices=(1, 2), default=1,
@@ -322,6 +324,8 @@ if args.civ_wars:
     if args.enemy_ai != 'quantbot':
         parser.error('--civ-wars uses QuantBots on both teams.')
     args.civ_strategy = args.civ_strategy or 'off'
+if args.civ_research_baseline and not args.civ_wars:
+    parser.error('--civ-research-baseline needs --civ-wars.')
 if args.civ_strategy in ('left', 'right') and not args.civ_wars:
     parser.error('--civ-strategy left/right needs --civ-wars; ordinary games accept off/on.')
 if args.civ_air_probe:
@@ -657,6 +661,8 @@ if args.civ_wars:
     env['BALANCE_CIV_SIZE'] = str(args.civ_size)
     env['BALANCE_CIV_WORMS'] = str(args.civ_worms)
     env['BALANCE_CIV_SPICE'] = str(args.civ_spice)
+    if args.civ_research_baseline:
+        env['BALANCE_CIV_RESEARCH_BASELINE'] = '1'
 if args.civ_strategy is not None:
     env['BALANCE_CIV_STRATEGY'] = args.civ_strategy
 if args.civ_air_probe:

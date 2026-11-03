@@ -15,12 +15,18 @@ import sys
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import default_build_dir, discard_profile_assets, require_free_space, scratch_dir
+from probe_profile import copy_revisions, default_build_dir, discard_profile_assets, require_free_space, scratch_dir
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=default_build_dir(root))
 parser.add_argument('--output-dir', type=Path, required=True)
+parser.add_argument('--load-save', type=Path, help='Also load an old player save as Normal and resave after one real tick')
+parser.add_argument('--save-profile', type=Path, help='Profile holding the exact Workshop revisions pinned by --load-save')
 args = parser.parse_args()
+if args.load_save and not args.load_save.is_file():
+    parser.error('--load-save needs an existing saved game')
+if args.save_profile and not args.load_save:
+    parser.error('--save-profile needs --load-save')
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 require_free_space()
 out.mkdir(parents=True, exist_ok=True)
@@ -64,6 +70,8 @@ with (out / 'build.log').open('w') as log:
 with scratch_dir('research-lab-probe') as scratch:
     profile = scratch / 'profile'
     profile.mkdir()
+    if args.save_profile:
+        copy_revisions(args.save_profile, profile, [args.load_save])
     (profile / 'Dune City.ini').write_text(
         '[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
         'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\nPlayer Name = Research tester\n',
@@ -71,6 +79,8 @@ with scratch_dir('research-lab-probe') as scratch:
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy',
                SDL_AUDIODRIVER='dummy', SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1',
                DUNECITY_AI_TELEMETRY='1', RESEARCH_LAB_PROBE_OUT=str(out))
+    if args.load_save:
+        env['RESEARCH_LAB_LOAD_SAVE'] = str(args.load_save.resolve())
     logfile = out / 'run.log'
     with logfile.open('w') as log:
         subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,

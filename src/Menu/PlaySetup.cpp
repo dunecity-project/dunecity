@@ -177,7 +177,8 @@ SettingsClass::GameOptionsClass initialCustomGameRules() {
     return effectiveGameOptions;
 }
 
-void playCustomGame(bool online, bool publicGame, bool randomMap, bool civilizationWars) {
+void playCustomGame(bool online, bool publicGame, bool randomMap, bool civilizationWars,
+                    const SettingsClass::GameOptionsClass* initialRules) {
     civilizationWars = civilizationWars || (randomMap && ModManager::instance().getActiveModName() == "CivWars");
     if(civilizationWars && !RandomSkirmish::activateMod("CivWars")) {
         PlayError(_("The Civilization Wars mod could not be activated.")).showMenu();
@@ -187,6 +188,7 @@ void playCustomGame(bool online, bool publicGame, bool randomMap, bool civilizat
     setup.rules = (randomMap || civilizationWars)
         ? effectiveGameOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions)
         : initialCustomGameRules();
+    if(initialRules) setup.rules = *initialRules;
     if(civilizationWars) setup.rules = CivWars::matchRules(setup.rules);
     setup.maps = maps();
     setup.mods = ModManager::instance().listModChoices();
@@ -200,15 +202,15 @@ void playCustomGame(bool online, bool publicGame, bool randomMap, bool civilizat
     if(randomMap || civilizationWars) {
         std::string path;
         if(civilizationWars) {
-            CivWarsMenu generator(true);
+            CivWarsMenu generator(true, &setup.rules);
             generator.showMenu();
             setup.rules = generator.getMatchRules();
             path = generator.getCreatedMap();
         } else {
-            RandomSkirmishMenu generator(ModManager::instance().getActiveModName());
+            RandomSkirmishMenu generator(ModManager::instance().getActiveModName(), &setup.rules);
             generator.showMenu();
             path = generator.getCreatedMap();
-            setup.rules.researchLab = generator.getCreatedResearchLab();
+            setup.rules = generator.getMatchRules();
         }
         if(path.empty()) return;
         const auto found = std::find(setup.maps.begin(), setup.maps.end(), path);

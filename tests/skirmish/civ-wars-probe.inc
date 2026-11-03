@@ -159,7 +159,7 @@ void runCivResearchGame(const GameInitSettings& init) {
     capture("zero-credits");
     skirmishRequire(!panel->research.isEnabled() && !pLocalHouse->canStartTechResearch(lab->getObjectID()),
                     "Zero-credit Civ Wars house unexpectedly offers research");
-    skirmishRequire(panel->status.getText() == "Needs 600 credits",
+    skirmishRequire(panel->status.getText() == "Needs 600 credits\nTime: 0:50",
                     "Unaffordable research does not explain its credit requirement");
     click(button.x, button.y);
     skirmishRequire(commands() == 0 && !pLocalHouse->isTechResearchActive(),

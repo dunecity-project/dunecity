@@ -51,9 +51,10 @@ public:
         const int target = house->getTechResearchTarget();
         if (house->isTechResearchActive() && (target != targetBefore
                 || house->getTechResearchLabID() != labBefore || house->getTechResearchRemaining() > remainingBefore))
-            SDL_Log("CIV_WARS_RESEARCH: cycle=%u house=%d team=%d event=start tech=%d target=%d remaining=%d lab=%u",
+            SDL_Log("CIV_WARS_RESEARCH: cycle=%u house=%d team=%d event=start tech=%d target=%d remaining=%d lab=%u cost=%d",
                 currentGame->getGameCycleCount() + 1, house->getHouseID(), house->getTeamID(),
-                house->getTechLevel(), target, house->getTechResearchRemaining(), house->getTechResearchLabID());
+                house->getTechLevel(), target, house->getTechResearchRemaining(), house->getTechResearchLabID(),
+                house->getTechResearchCost());
     }
 };
 
@@ -158,7 +159,8 @@ inline void reportSetup(Game& game, const std::string& left, const std::string& 
             "observing=1 global_strategy=%d strategy_override=%s width=%d height=%d baseline_cycle=%u "
             "produced_scope=all_unit_build_notifications lost_scope=all_unit_decrements city_pop_scale=display "
             "islands_scope=live_yards_on_midpoint_rock reached_scope=distinct_ground_combat_on_enemy_end_rock "
-            "waves_source=custom_wave_launch_changes waves_complete=0 research_cycle=post_update",
+            "waves_source=custom_wave_launch_changes waves_complete=0 research_cycle=post_update "
+            "research_pace=%u research_area=%u research_baseline=%d",
         init.getRandomSeed(), std::getenv("BALANCE_CIV_WARS"),
         std::getenv("BALANCE_CIV_SIZE") ? std::getenv("BALANCE_CIV_SIZE") : "0",
         std::getenv("BALANCE_CIV_WORMS") ? std::getenv("BALANCE_CIV_WORMS") : "1",
@@ -166,7 +168,8 @@ inline void reportSetup(Game& game, const std::string& left, const std::string& 
         left.c_str(), right.c_str(), strategy.c_str(), getQuantBotConfig().getConfigHash().c_str(),
         rules.getHash().c_str(), static_cast<unsigned long long>(mapHash.value()),
         int(getQuantBotConfig().civWarsStrategy), strategy == "left" || strategy == "right" ? "test_only_unhashed" : "none",
-        currentGameMap->getSizeX(), currentGameMap->getSizeY(), game.getGameCycleCount());
+        currentGameMap->getSizeX(), currentGameMap->getSizeY(), game.getGameCycleCount(),
+        static_cast<unsigned>(rules.researchPace), rules.researchMapArea, int(std::getenv("BALANCE_CIV_RESEARCH_BASELINE") != nullptr));
     // The existing performance runner's optional dump path works here too; the exact map hash
     // is always retained, without making each batch keep a copy of every generated map.
     if (const char* path = std::getenv("BALANCE_PERF_DUMP_MAP")) {

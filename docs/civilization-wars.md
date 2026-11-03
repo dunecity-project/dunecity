@@ -64,8 +64,9 @@ Other settings are available in **Game Rules**. Tech progression is the Research
 per-house tech-level system; no new resource, era or unit-control system is introduced.
 
 Select the Lab and use **Research tech level N**. The zero-credit start cannot immediately
-pay the first 600-credit step: the sidebar explicitly says **Needs 600 credits**, then
-**Ready to research** when normal tax/spice receipts cover it. A click sends the normal
+pay the first step: at Normal on 129×96 it is 600 credits; larger maps cost more (below).
+The sidebar shows the actual price, **Needs N credits** or **Ready to research**, and the
+research time; active work shows its real remaining time. A click sends the normal
 synchronized command; a completed level updates the house's build lists. There is no
 population requirement for Lab research.
 
@@ -75,6 +76,105 @@ defence recovery, and rebuilds a lost Lab. This applies to teams and every diffi
 including Builder/Defend controllers; it does not wait for an attack wave or an
 unbuildable high-tech worker fleet. It uses the hashed `[Force Concentration] ResearchLab`
 switch (on by default), **not** the experimental `[Civ Wars] Strategy` switch.
+
+## Research size and pace
+
+**Research Pace** is available directly on the Civ Wars setup and in **Game Rules** for
+Civ Wars, Custom Game and Random Skirmish, including online generated maps. It changes
+both the price and duration for humans and AI:
+
+| Pace | Price and time multiplier |
+|---|---:|
+| Fast | ½ |
+| Normal (default) | 1 |
+| Slow | 2 |
+| Very slow | 4 |
+
+For initial map area `A = width × height`, reference `A0 = 129 × 96 = 12,384`, target tech
+`n` (2–9), and pace multiplier `P`, the single shared policy in `include/TechResearch.h` is:
+
+```text
+S = max(A0, 2*A - A0) / A0
+price(n)  = ceil(300*n * S * P) credits
+cycles(n) = ceil(((30 + 10*n)*1000 / 16) * S * P)
+```
+
+All arithmetic is integer, using 64-bit intermediates; there is one final ceiling for each
+price and duration, not a rounded Normal value multiplied again by pace. Maps at or below
+the reference area retain today's prices/times at Normal; Fast halves them. Each additional
+reference area's worth of map adds 2× research, so larger maps have a deliberately longer
+technology phase. No income, live player count, surviving buildings or explored area affects
+the scale. The actual initial dimensions are bound during map allocation, before any house
+advances; both this frozen area and pace are saved and included in the game-options hash.
+QuantBot's research payment, protected saving and forecast all use the same House price.
+
+### Normal: credits / game seconds
+
+Seconds below are rounded **up** for display; the simulation's exact boundary is a 16-ms
+cycle. Tech 1 is the free starting level.
+
+| Target tech | 129×96 | 161×112 | 193×128 | 255×160 |
+|---:|---:|---:|---:|---:|
+| 2 | 600 / 50 | 1,148 / 96 | 1,794 / 150 | 3,354 / 280 |
+| 3 | 900 / 60 | 1,721 / 115 | 2,691 / 180 | 5,031 / 336 |
+| 4 | 1,200 / 70 | 2,295 / 134 | 3,588 / 210 | 6,707 / 392 |
+| 5 | 1,500 / 80 | 2,869 / 153 | 4,485 / 240 | 8,384 / 448 |
+| 6 | 1,800 / 90 | 3,442 / 173 | 5,382 / 270 | 10,061 / 504 |
+| 7 | 2,100 / 100 | 4,016 / 192 | 6,279 / 299 | 11,738 / 559 |
+| 8 | 2,400 / 110 | 4,590 / 211 | 7,176 / 329 | 13,414 / 615 |
+| 9 | 2,700 / 120 | 5,163 / 230 | 8,073 / 359 | 15,091 / 671 |
+| **Total price** | **13,200** | **25,244** | **39,468** | **73,780** |
+| **Exact total time** | **11:20.000** | **21:40.304** | **33:53.024** | **63:20.688** |
+
+Times are uninterrupted research only: funding, cancelled attempts and rebuilding can only
+delay them. They are game time, not wall time at a faster/slower game-speed setting.
+Save format 9882 / MOD17 stores the new rules. Older saves load as Normal and bind their
+original map dimensions; completed tech and an already-paid active research timer are
+retained, with the new prices/durations used for subsequent starts.
+
+### Calibration: Stefan's `research.dls`, 2026-11-03
+
+The save is a 193×128, medium-spice, 3v3 match, seed 138083612, cycle 112,730:
+**30:03.680 game time**. All six controllers are QuantBots (Ordos Medium, the rest Hard).
+The map starts at tech 1 with zero credits. Byte-preserving decoding of the saved House
+ledgers gives:
+
+| House | Tech / active target | Credits now | Gross tax received | Harvested credits | Gross credits / min |
+|---|---:|---:|---:|---:|---:|
+| Harkonnen | 9 / — | 638 | 10,762.21 | 43,278.97 | 1,797.70 |
+| Ordos | 9 / — | 1,015 | 12,762.27 | 54,978.97 | 2,253.43 |
+| Fremen | 8 / 9 | 587 | 9,410.97 | 44,304.08 | 1,786.85 |
+| Mercenary | 8 / 9 | 473 | 13,108.01 | 44,427.90 | 1,913.95 |
+| Neutral | 8 / — | 1,358 | 9,247.11 | 44,351.28 | 1,782.97 |
+| Rebels | 9 / — | 729 | 7,274.46 | 38,162.45 | 1,511.47 |
+
+Income is cumulative gross tax plus refined spice credit value divided by game minutes,
+**before** police/upkeep, storage losses and spending; it is not net spendable cash.
+The median is 1,792.27 gross credits/min (tax alone 335.53/min). The old complete research
+bill, 13,200, was only 7.365 such income-minutes / 24.50% of the median accumulated gross.
+A simple area ratio would still allow an uninterrupted tech-9 chain in 22:36, before this
+checkpoint. The chosen excess-area scale is 2.989664× here: 39,468 credits, 22.021 observed
+gross-income-minutes / 73.25% of the median accumulated gross, and **no tech 9 before
+33:53.024**, even with unlimited funding. Actual AI spending and funding waits add time.
+
+Completed-level timestamps are **not recorded** in these saves or the supplied log.
+There is no invented per-level history: three houses had finished level 9 by the checkpoint;
+the others had finished level 8. The two active level-9 timers imply starts at cycles
+106,788 (Fremen) and 109,696 (Mercenary), within one update-cycle boundary; if their labs
+survive, their remaining timers finish at cycles 114,288 and 117,196 respectively.
+The earlier `notresearching.dls` is a **different seed/game** (95244949), at cycle 36,876 /
+9:50.016, with all six houses at tech 1 and no active research; it is not an earlier snapshot
+from which this match's income or completion-time deltas can be calculated.
+
+The same-build pacing comparison uses `tests/ai/run-campaign-balance.py --civ-wars 1
+--civ-size 2 --civ-worms 2 --civ-spice 2 --seed 138083612 --partner-difficulty hard
+--enemy-difficulty hard --local-spectator --mod CivWars --minutes 45`, with and without
+`--civ-research-baseline`. The test-only baseline binds reference research area at cycle 0,
+without changing terrain or other AI settings, and reports its distinct options hash.
+Raw checkpoint fields, offsets, hashes and exact Normal costs/cycles are retained under
+`outputs/research-save-20261103/research-analysis.json` and
+`outputs/research-pace-20261103/normal-cost-time.csv` on the staging host.
+
 
 ## Sandworms
 
@@ -133,6 +233,12 @@ CivWars uses the next hexadecimal token slot.
 
 ## Checks
 
+- `dunelegacy_tests` covers research size/pace boundaries, exact prices/cycles at all four
+  Civ Wars sizes, one-step rounding, safe integer limits, option hashes and MOD17/older
+  stream migration, truncation and invalid-value refusal.
+- `research_lab_probe` covers exact scaled House timing as well as command/payment,
+  active-save continuation, cancellation/rebuild and QuantBot. Its optional `--load-save`
+  exercises a real old player save, Normal migration and a one-tick 9882 resave.
 - `civilization_wars_tests`: seeded generator matrices for all team counts, all sizes and all
   worm counts, including exact mirroring, building footprints/power, lane connectivity and
   separation, islands, roster and map serialization; mode-marker/cache/wire-format unit tests.

@@ -9,6 +9,7 @@
 #include <structures/BuilderBase.h>
 #include <structures/ResearchLab.h>
 #include <Network/GameStateDigest.h>
+#include <Network/WorkshopGameContent.h>
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 #include <fstream>
@@ -23,11 +24,12 @@ void researchRequire(bool value, const char* why) {
     }
 }
 
-std::unique_ptr<Game> researchGame(bool enabled, bool ai = false) {
+std::unique_ptr<Game> researchGame(bool enabled, bool ai = false, int mapSize = 64,
+                                 TechResearch::Pace pace = TechResearch::Pace::Normal) {
     using namespace SkirmishGenerator;
     Params params;
     params.house = HOUSE_ATREIDES;
-    params.mapSize = 64;
+    params.mapSize = mapSize;
     params.techLevel = 1;
     params.researchLab = enabled;
     params.mod = "dunecity";
@@ -36,7 +38,9 @@ std::unique_ptr<Game> researchGame(bool enabled, bool ai = false) {
     params.credits = 20000;
     params.allies = 0;
     params.enemies = 1;
-    params.rock = Rock::High;
+    params.sandPercent = 65;
+    params.rockPercent = 30;
+    params.mountainPercent = 5;
     params.spice = Spice::High;
     params.playerSide = Side{"", BaseSize::Small, 0, 0};
     params.enemySide = Side{"HumanPlayer", BaseSize::Outpost, 0, 0};
@@ -45,6 +49,7 @@ std::unique_ptr<Game> researchGame(bool enabled, bool ai = false) {
         researchRequire(entry.item != Structure_ResearchLab, "Random Skirmish granted a free lab");
     auto options = effectiveGameOptions;
     options.researchLab = enabled;
+    options.researchPace = pace;
     options.trooperAntiAir = false;
     options.concreteRequired = false;
     GameInitSettings init(map.name, map.ini, false, options);
@@ -119,6 +124,38 @@ int runResearchLabProbe() {
                 << owner->getTechResearchLabID() << ',' << owner->getCredits() << '\n';
     };
 
+    if(const char* savedMatch = std::getenv("RESEARCH_LAB_LOAD_SAVE")) {
+        // Fail noninteractively if the exact pinned content is unavailable.
+        const auto bytes = readCompleteFile(savedMatch);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings::HouseInfoList rows;
+        auto setup = GameInitSettings::readSaveSetup(input, rows);
+        WorkshopGameContent::resolveMod(setup, false);
+        auto loaded = std::make_unique<Game>();
+        currentGame = loaded.get();
+        loaded->bReplay = true;
+        loaded->initGame(GameInitSettings(savedMatch));
+        loaded->bReplay = false;
+        loaded->initializeGameLoop();
+        const auto& rules = loaded->getGameInitSettings().getGameOptions();
+        researchRequire(rules.researchPace == TechResearch::Pace::Normal, "Old save did not migrate to Normal");
+        researchRequire(rules.researchMapArea == TechResearch::mapArea(currentGameMap->getSizeX(), currentGameMap->getSizeY()),
+                        "Old save did not bind its initial map dimensions");
+        SDL_Log("RESEARCH_SAVED_MATCH: cycle=%u version=%u width=%d height=%d pace=%u area=%u options=%s",
+            loaded->getGameCycleCount(), loaded->getLoadedSavegameVersion(), currentGameMap->getSizeX(),
+            currentGameMap->getSizeY(), static_cast<unsigned>(rules.researchPace), rules.researchMapArea, rules.getHash().c_str());
+        for(const auto& row : rows) if(const House* house = loaded->getHouse(row.houseID)) {
+            note("old_save_loaded", *loaded, house);
+            SDL_Log("RESEARCH_SAVED_HOUSE: house=%d tech=%d target=%d remaining=%d credits=%d next_cost=%d next_cycles=%d",
+                house->getHouseID(), house->getTechLevel(), house->getTechResearchTarget(), house->getTechResearchRemaining(),
+                house->getCredits(), house->getTechResearchCost(), house->techResearchCycles(std::min(9, house->getTechLevel() + 1)));
+        }
+        loaded->updateGameState();
+        researchRequire(loaded->saveGame(out + "/research-user-resaved.dls"), "User's migrated save did not resave");
+        researchEnd(loaded);
+        researchRequire(RandomSkirmish::activateMod("dunecity"), "DuneCity reactivation after user save failed");
+    }
+
     auto game = researchGame(true);
     House* owner = game->getHouse(HOUSE_ATREIDES);
     House* opponent = nullptr;
@@ -136,11 +173,13 @@ int runResearchLabProbe() {
     const Uint32 labID = lab->getObjectID();
     const Uint32 spareID = secondLab->getObjectID();
     const int credits = owner->getCredits();
+    const int nextCost = owner->getTechResearchCost();
     const auto held = owner->payCredits(credits);
     researchRequire(!owner->startTechResearch(labID), "Unaffordable research was accepted");
-    owner->addUnstoredCredits(599.75_fix);
+    const FixPoint nearlyEnough = FixPoint(nextCost) - 0.25_fix;
+    owner->addUnstoredCredits(nearlyEnough);
     researchRequire(!owner->startTechResearch(labID), "Rounded displayed credits funded unaffordable research");
-    owner->takeCredits(599.75_fix);
+    owner->takeCredits(nearlyEnough);
     owner->returnCredits(held.total, held.fromStarting);
     const auto enemyPlayer = opponent->getPlayerList().front()->getPlayerID();
     Command(enemyPlayer, CMD_RESEARCH_TECH_LEVEL, labID).executeCommand();
@@ -149,8 +188,8 @@ int runResearchLabProbe() {
     const auto ownPlayer = owner->getPlayerList().front()->getPlayerID();
     Command(ownPlayer, CMD_RESEARCH_TECH_LEVEL, labID).executeCommand();
     researchRequire(owner->isTechResearchActive() && owner->getTechResearchTarget() == 2
-                    && owner->getCredits() == credits - 600
-                    && owner->getTechResearchRemaining() == House::techResearchCycles(2),
+                    && owner->getCredits() == credits - nextCost
+                    && owner->getTechResearchRemaining() == owner->techResearchCycles(2),
                     "Owner command did not start and pay exactly the next research");
     researchRequire(!owner->startTechResearch(spareID), "Second lab started concurrent house research");
     for(int cycle = 0; cycle < 123; ++cycle) game->updateGameState();
@@ -195,7 +234,7 @@ int runResearchLabProbe() {
     researchRequire(owner->startTechResearch(spareID), "Surviving lab could not restart the cancelled level");
     for(int target = 3; target <= 9; ++target) {
         if(target != 3) researchRequire(owner->startTechResearch(spareID), "Research chain stopped before tech 9");
-        const int duration = House::techResearchCycles(target);
+        const int duration = owner->techResearchCycles(target);
         for(int cycle = 0; cycle < duration; ++cycle) game->updateGameState();
         researchRequire(owner->getTechLevel() == target && !owner->isTechResearchActive(),
                         "Research did not finish at its deterministic duration");
@@ -221,6 +260,23 @@ int runResearchLabProbe() {
                         "Research-off technology/digest changed from the original match path");
     }
     note("off_legacy_digest", *game, owner);
+    researchEnd(game);
+
+    game = researchGame(true, false, 160, TechResearch::Pace::Slow);
+    owner = game->getHouse(HOUSE_ATREIDES);
+    lab = researchPlaceLab(owner);
+    researchRequire(game->getGameInitSettings().getGameOptions().researchMapArea == 160u * 160u,
+                    "New match did not freeze its map area");
+    researchRequire(owner->getTechResearchCost() == 3762 && owner->techResearchCycles(2) == 19590,
+                    "Real House ignored the larger map or Slow pace");
+    researchRequire(owner->startTechResearch(lab->getObjectID()), "Scaled Slow research did not start");
+    const int scaledDuration = owner->techResearchCycles(2);
+    for(int cycle = 0; cycle < scaledDuration - 1; ++cycle) game->updateGameState();
+    researchRequire(owner->getTechLevel() == 1 && owner->getTechResearchRemaining() == 1,
+                    "Scaled research completed before its exact cycle");
+    game->updateGameState();
+    researchRequire(owner->getTechLevel() == 2, "Scaled research missed its exact completion cycle");
+    note("scaled_slow_complete", *game, owner);
     researchEnd(game);
 
     game = researchGame(true, true);

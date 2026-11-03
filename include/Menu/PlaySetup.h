@@ -45,7 +45,9 @@ SettingsClass::GameOptionsClass initialCustomGameRules();
 // A generated-map start skips the map browser. Civilization Wars uses its fixed three-lane
 // generator and CivWars mod; randomMap otherwise uses Random Skirmish for the active mod.
 // Cancelling either generator leaves without opening a connection.
-void playCustomGame(bool online, bool publicGame = true, bool randomMap = false, bool civilizationWars = false);
+// initialRules carries a generator's selected rules into its online setup without changing defaults.
+void playCustomGame(bool online, bool publicGame = true, bool randomMap = false, bool civilizationWars = false,
+                    const SettingsClass::GameOptionsClass* initialRules = nullptr);
 void showGameLibrary(bool replays = false);
 bool hasRecentGame();
 void continueRecentGame();

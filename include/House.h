@@ -64,8 +64,8 @@ public:
     int getTechResearchTarget() const { return techResearchTarget; }
     int getTechResearchRemaining() const { return techResearchRemaining; }
     Uint32 getTechResearchLabID() const { return techResearchLabID; }
-    int getTechResearchCost() const { return getTechLevel() < 9 ? 300 * (getTechLevel() + 1) : 0; }
-    static int techResearchCycles(int target) { return MILLI2CYCLES((30 + 10 * target) * 1000); }
+    int getTechResearchCost() const;
+    int techResearchCycles(int target) const;
     bool canStartTechResearch(Uint32 labObjectID) const;
     bool startTechResearch(Uint32 labObjectID);
     /// Losing the particular lab doing the work cancels it without a refund.

@@ -89,7 +89,9 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9880 lets the QuantBot role byte hold Off (an AI partner switched off in game) and saves a
     // tax rate per city house.
     // 9881 appends Research Lab house state and MOD15 research/trooper-AA rules.
-    REQUIRE(SAVEGAMEVERSION == 9881);
+    // 9882 appends map-scaled Research Pace and damage land value rules (MOD17).
+    REQUIRE(SAVEGAMEVERSION == 9882);
+    REQUIRE(SAVEGAMEVERSION_RESEARCH_PACE == 9882);
     REQUIRE(SAVEGAMEVERSION_RESEARCH_LAB == 9881);
     REQUIRE(SAVEGAMEVERSION_TORNIE546 == 9878);
     REQUIRE(SAVEGAMEVERSION_AI_ROLE == 9875);

@@ -462,20 +462,18 @@ void CustomGameMenu::onRandomMap()
     }
     std::string path;
     if(mod == "CivWars") {
-        CivWarsMenu generator(true);
+        CivWarsMenu generator(true, &currentGameOptions);
         generator.showMenu();
         path = generator.getCreatedMap();
-        if(!path.empty()) {
-            currentGameOptions = generator.getMatchRules();
-            if(setup) setup->rules = currentGameOptions;
-        }
+        if(!path.empty()) currentGameOptions = generator.getMatchRules();
     } else {
-        RandomSkirmishMenu generator(mod);
+        RandomSkirmishMenu generator(mod, &currentGameOptions);
         generator.showMenu();
         path = generator.getCreatedMap();
-        if(!path.empty()) currentGameOptions.researchLab = generator.getCreatedResearchLab();
+        if(!path.empty()) currentGameOptions = generator.getMatchRules();
     }
     if(path.empty()) return;
+    if(setup) setup->rules = currentGameOptions;
     if(!selectUserMap(path)) {
         openWindow(MsgBox::create(_("The generated map could not be found in MP User Maps.")));
         return;

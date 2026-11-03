@@ -778,6 +778,18 @@ int House::getTechLevel() const {
         ? researchedTechLevel : currentGame ? currentGame->techLevel : researchedTechLevel;
 }
 
+int House::getTechResearchCost() const {
+    if(!currentGame) return TechResearch::cost(getTechLevel() + 1, TechResearch::kReferenceArea, TechResearch::Pace::Normal);
+    const auto& rules = currentGame->getGameInitSettings().getGameOptions();
+    return TechResearch::cost(getTechLevel() + 1, rules.researchMapArea, rules.researchPace);
+}
+
+int House::techResearchCycles(int target) const {
+    if(!currentGame) return TechResearch::cycles(target, TechResearch::kReferenceArea, TechResearch::Pace::Normal);
+    const auto& rules = currentGame->getGameInitSettings().getGameOptions();
+    return TechResearch::cycles(target, rules.researchMapArea, rules.researchPace);
+}
+
 bool House::canStartTechResearch(Uint32 labObjectID) const {
     if(!currentGame || !currentGame->getGameInitSettings().getGameOptions().researchLab
        || isNatives() || isTechResearchActive() || getTechLevel() >= 9

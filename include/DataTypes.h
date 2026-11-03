@@ -19,6 +19,7 @@
 #define DATATYPES_H
 
 #include <Definitions.h>
+#include <TechResearch.h>
 #include <misc/SDL2pp.h>
 
 // Libraries
@@ -321,7 +322,10 @@ public:
                     && (sharedFactoryQueue == goc.sharedFactoryQueue)
                     && (slowCityYear == goc.slowCityYear)
                     && (micropolisLandValue == goc.micropolisLandValue)
+                    && (damageLowersLandValue == goc.damageLowersLandValue)
                     && (researchLab == goc.researchLab)
+                    && (researchPace == goc.researchPace)
+                    && (researchMapArea == goc.researchMapArea)
                     && (trooperAntiAir == goc.trooperAntiAir)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
@@ -364,7 +368,10 @@ public:
             optStr += "/sharedFactoryQueue=" + std::to_string(sharedFactoryQueue);
             optStr += "/slowCityYear=" + std::to_string(slowCityYear);
             optStr += "/micropolisLandValue=" + std::to_string(micropolisLandValue);
+            optStr += "/damageLowersLandValue=" + std::to_string(damageLowersLandValue);
             optStr += "/researchLab=" + std::to_string(researchLab);
+            optStr += "/researchPace=" + std::to_string(static_cast<std::uint32_t>(researchPace));
+            optStr += "/researchMapArea=" + std::to_string(researchMapArea);
             optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
@@ -434,8 +441,13 @@ public:
         /// buildings; off keeps the per-building-origin average measured from the centre of
         /// every developed block (docs/city-economy-balance.md, "Land value for tax").
         bool        micropolisLandValue;
+        /// Damaged buildings lower their city's land value; opt-in, city content only.
+        bool        damageLowersLandValue = false;
         /// Optional Research Lab and per-house technology progression (levels 1-9).
         bool        researchLab;
+        TechResearch::Pace researchPace = TechResearch::Pace::Normal;
+        /// Frozen from the initial map dimensions; hashed/saved, never a user preference.
+        std::uint32_t researchMapArea = TechResearch::kReferenceArea;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
