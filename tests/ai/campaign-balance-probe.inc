@@ -71,13 +71,6 @@
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
-    if (std::getenv("BALANCE_CITY_PLACEMENT_PROBE")) {
-        if (currentGame) throw std::runtime_error("Empty-tile fixture requires no active game");
-        const Tile vacant;
-        if (vacant.getNonInfantryGroundObject()!=nullptr)
-            throw std::runtime_error("An empty tile returned a ground object without a game");
-        SDL_Log("TILE_LOOKUP_EMPTY_PASS: no active game required");
-    }
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
     const int minutes = std::atoi(std::getenv("BALANCE_MINUTES"));
     const auto seed = static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SEED")));

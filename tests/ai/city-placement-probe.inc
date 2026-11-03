@@ -20,6 +20,14 @@ void runCityPlacementProbe(Game& game) {
             if(clear)site=Coord(x,y);
         }
     require(site.isValid(),"Missing clear placement fixture");
+    {
+        const auto* vacant=currentGameMap->getTile(site);
+        struct RestoreGame { Game* previous; ~RestoreGame() { currentGame=previous; } } restore{currentGame};
+        currentGame=nullptr;
+        require(vacant->getNonInfantryGroundObject()==nullptr,
+            "An empty lookup consulted the object manager without an occupant");
+    }
+    SDL_Log("TILE_LOOKUP_EMPTY_PASS: vacant lookup needs no active game");
     auto reset=[&]() {
         for(int dy=0;dy<7;++dy) for(int dx=0;dx<7;++dx) {
             auto* tile=currentGameMap->getTile(site.x+dx,site.y+dy);
