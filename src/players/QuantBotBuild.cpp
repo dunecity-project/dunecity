@@ -2964,6 +2964,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     // working cash from the city's unfinished income base.
                     if (factory==Structure_HeavyFactory && pass.citySimEnabled
                         && botConfig().force.cityConstructionCapital && !pass.spiceEconomyViable
+                        && difficulty>=Difficulty::Hard
                         && pass.itemCount[Structure_StarPort]>0
                         && !builderOnly() && !isCampaignGameType(currentGame->gameType)
                         && pass.itemCount[factory]==0 && !cityBootstrapNeeded(pass)

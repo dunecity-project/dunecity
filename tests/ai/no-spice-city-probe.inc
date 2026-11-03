@@ -464,6 +464,7 @@ void runNoSpiceCityProbe(Game& game) {
         yard->updateBuildList();
         const auto savedConfig=bot->configOverride;
         const auto savedState=state;
+        const auto savedDifficulty=bot->difficulty;
         std::vector<std::pair<BuilderBase*,int>> yardLevels;
         // The captured yard was already upgraded. Bulk-slab technology is a
         // separate mandatory purchase, not the import competition under test.
@@ -496,12 +497,25 @@ void runNoSpiceCityProbe(Game& game) {
             port->informFrigateDestroyed();
             cancelOrders(port);cancelOrders(yard);cancelOrders(light);
             light->destroy();yard->updateBuildList();
-            bot->configOverride=savedConfig;state=savedState;
+            bot->configOverride=savedConfig;state=savedState;bot->difficulty=savedDifficulty;
             for(auto [builder,level]:yardLevels) {
                 builder->curUpgradeLev=level;builder->updateBuildList();
             }
         };
         try {
+            for(auto level:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+                bot->difficulty=level;
+                const Pass unchanged=marketDecide(true,factoryPrice);
+                require(ordered(unchanged,Unit_Quad) && !ordered(unchanged,Structure_HeavyFactory),
+                    "First-factory protection changed an Easy/Medium house's ordinary import priority");
+            }
+            for(auto level:{QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
+                bot->difficulty=level;
+                const Pass eligible=marketDecide(true,factoryPrice);
+                require(ordered(eligible,Structure_HeavyFactory) && !ordered(eligible,Unit_Quad),
+                    "A fully affordable Hard/Brutal factory lost its cash to an import");
+            }
+            bot->difficulty=savedDifficulty;
             const Pass legacy=marketDecide(false,factoryPrice);
             require(ordered(legacy,Unit_Quad) && !ordered(legacy,Structure_HeavyFactory),
                 "First-factory negative control did not divert affordable factory cash into imports");
@@ -530,7 +544,7 @@ void runNoSpiceCityProbe(Game& game) {
             const Pass unavailable=marketDecide(true,factoryPrice);
             require(ordered(unavailable,Unit_Quad) && !ordered(unavailable,Structure_HeavyFactory),
                 "Unavailable heavy technology kept reserving cash from useful military imports");
-            SDL_Log("CITY_CONSTRUCTION_CAPITAL_PASS: affordable first factory orders once; short cash and unavailable tech release imports");
+            SDL_Log("CITY_CONSTRUCTION_CAPITAL_PASS: Hard/Brutal affordable first factory orders once; Easy/Medium and short cash retain imports");
         } catch (...) {
             restore();throw;
         }

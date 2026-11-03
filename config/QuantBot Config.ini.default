@@ -358,7 +358,7 @@ CityPowerSizing=1
 # Viable spice economies retain normal budgets; only optional MCVs/producer upgrades are gated.
 # Military production and required power/supply are unchanged.
 CityOpeningCapital=1
-# Protect a seeded tax city's fully affordable first Heavy Factory from Starport bargains.
+# Hard/Brutal: protect a seeded tax city's fully affordable first Heavy Factory from bargains.
 # Never save below the complete quote or change the existing MCV priority.
 CityConstructionCapital=1
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
