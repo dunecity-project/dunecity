@@ -224,6 +224,16 @@ void runThreatTurretProbe(Game& game) {
             "Starting rockets hid the affordable yard unlock needed to add another");
         yard->curUpgradeLev=readyLevel;yard->updateBuildList();
         for (auto* unit:raiders) unit->setVisible(house->getTeamID(),true);
+        // These cases test supplier funding, not the separate Starport Population
+        // rule (custom-city-cap-probe covers it); this fresh city is below 5,000.
+        auto& starportRule=game.gameInitSettings.gameOptions.starportPopulation;
+        const bool keepStarportRule=starportRule;
+        SDL_Log("THREAT_TURRET_SUPPLY_STATE: population_rule=%d population_met=%d available=%d",
+            int(starportRule),int(house->meetsStarportPopulation()),
+            int(bot->campaignAvailableToBuild(yard,Structure_StarPort)));
+        starportRule=false;house->update();yard->updateBuildList();
+        require(bot->campaignAvailableToBuild(yard,Structure_StarPort),
+            "The supplier funding fixture lacks a native buildable Starport");
         auto supply=[&](bool enabled,int cash) {
             config->force.cityStarportSupply=enabled;
             auto pass=plan(false,true);
@@ -233,6 +243,7 @@ void runThreatTurretProbe(Game& game) {
             pass.itemCount[Structure_ZoneIndustrial]=3;pass.starportMarketAvailable=true;
             pass.forecastTax=1000;pass.forecastUpkeep=100;pass.forecastFunding=3600;
             pass.cashFlow.projectedCash=1000;pass.money=cash;
+            pass.emitStatsLog=true;
             bot->planCapitalCandidates(pass);bot->chooseCapitalPlan(pass);
             return pass;
         };
@@ -274,11 +285,7 @@ void runThreatTurretProbe(Game& game) {
                 >=std::max(0,game.objectData.data[Structure_StarPort][house->getHouseID()].power)+24) break;
             put(Structure_WindTrap,at.x,at.y);
         }
-        // This checks Starport supply planning, not the city's Starport Population rule
-        // (custom-city-cap-probe covers that); the fixture city is far below 5,000.
-        auto& starportRule=game.gameInitSettings.gameOptions.starportPopulation;
-        const bool keepStarportRule=starportRule;
-        starportRule=false;house->update();
+        house->update();
         yard->updateBuildList();
         auto established=supply(true,1000);
         config->force.threatTurrets=true;
