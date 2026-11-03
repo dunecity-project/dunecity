@@ -363,9 +363,10 @@ CityOpeningCapital=1
 CityConstructionCapital=1
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
-# Fund a 3-rocket baseline (4 for Hard+ at 32 structures), leaving working cash.
+# Experimental 3-rocket baseline (4 for Hard+ at 16 structures), with a full income budget.
 # Denser observed-ground cover (175 value/rocket), still 2-8 locally and 12 reactive total.
-MoreRocketTurrets=1
+# Default off: the final paired trial did not meet the +1 rocket/house acceptance gate.
+MoreRocketTurrets=0
 # Save a solvent city's first useful Starport instead of zoning its price away.
 CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.

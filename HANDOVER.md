@@ -1,3 +1,43 @@
+## 2026-11-04 — Additional standing-rocket tuning remains opt-in (OMP RocketTurrets, unreleased)
+
+- Final decision: hashed `[Force Concentration] MoreRocketTurrets=0`, **default off**.
+  The extra tuning did not meet Stefan's final acceptance gate; it is not claimed as
+  an enabled increase. The original `ThreatTurrets` and `CityStarportSupply` fixes
+  remain default on; their original-save evidence and qualified survival result below
+  are unchanged.
+- Experimental production `b98c698a` permits three rockets from eight structures,
+  four for Hard/Brutal from sixteen, and uses175 rather than200 observed ground
+  value per local cover (local8/reactive-house12 ceilings retained). Tax-only towns
+  need positive recurring income and a four-minute budget covering every remaining
+  yard step plus the next rocket, concrete and working cash; actual production
+  still leaves the working buffer. Existing power/prerequisites, real transport work,
+  emergency/income priorities and the growth interleave remain required.
+- The retained causal trace at+1.008min had497cash/322spendable, a payable200
+  yard step, but forecast net−60/4min and only262funding, below the full755
+  rocket bridge/buffer. An idle-fleet500Hi-Tech quote scored5500 over3500
+  despite no spice-worker/pickup/repair/busy-transport demand. The final guarded
+  policy avoids that partial-funding mistake but did not deliver enough extra guns.
+- Final **88 completed/error-free paired games**, immutable source`b98c698a6155`,
+  same seed/options/map/content identities:32matrix and12ladder games per arm,
+  None/Low spice,30min cap. Matrix joint-alive rockets10m5.60→5.60(n78),
+  20m19.38→19.41(n64). The targeted no-spice20m cohort rises only
+  **1.89→2.00(+0.11,n18)**, not the required≥+1; Low is unchanged.
+  Matrix bankrupt31→31/96, kills12724.3→12713.4; ladder wins unchanged,
+  bankrupt5→5/24, stalls2→3, kills14531.2→14526.2. Mixed-host loop times
+  are diagnostic only, not a performance gate. No further retune was accepted.
+- Whole `quantbot_custom_attack` **PASS22.5s**, source`f793b88d` (same production),
+  job`20261104T060933-isolated-battery-native-f793b88d-d90c53`. Fixtures retain
+  native funded/poor/negative-income/full-bridge/savings/real-upgrade, threat-site,
+  active-transport and Starport assertions. Native bootstrap, the separate5,000-pop
+  rule and mandatory bulk-concrete priority are correctly isolated; no production
+  guard was added for the fixture-only default-slab state (reachability proof`2c2bd222`).
+- Default-off load/save/hash regression and explicit `more-rocket-turrets-{on,off}`
+  styles retain reproducibility. Final default-off combined regressions, cross-platform
+  pins and performance verification belong to the integrator and are not claimed here.
+  Tables/provenance/decision: `outputs/more-rocket-turrets-20261104/healthy-tax-final/`
+  (`submission.json`, `acceptance.json`, matrix/ladder comparison tables);
+  policy: `docs/quantbot-spending.md`. No extra save/protocol bump or tax-rule change.
+
 ## 2026-11-04 — Stop earned-income storage overflow (OMP SiloCapacity, unreleased)
 
 - Commits `4e53eaac` (policy/config/hash/probe/audit/fixtures) and `0c1a0aa5`

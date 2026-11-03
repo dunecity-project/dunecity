@@ -136,8 +136,10 @@ rocket battery, minimizing observed return fire; a Radar rebuilt outside it can
 otherwise die again before its first replacement rocket finishes.
 Switches off preserve the old paths. No save-format or city-tax-rule change.
 
-`MoreRocketTurrets=1` (hashed, default on) raises the ordinary pre-core allowance
-from two to three rockets in Custom Medium+ bases with at least eight built
+`MoreRocketTurrets=0` is hashed and **default off**. The additional tuning did not
+meet its final same-build acceptance gate; it is retained only as an explicit
+opt-in experiment. When enabled, the ordinary pre-core allowance rises from two
+to three rockets in Custom Medium+ bases with at least eight built
 structures, or four for Hard/Brutal bases with at least sixteen. Tax-only cities
 buy toward that small standing battery after the seed economy/worker opening
 once recurring income is positive. Raising permission alone cannot request a
@@ -156,8 +158,13 @@ Idle fleet-ratio Carryall/Hi-Tech savings also yield to a fully budgeted
 standing battery when there is no spice-worker target, busy transport,
 pickup/repair work or MCV. Actual transport demand retains its normal priority;
 this is not permission to divert its savings into quiet-base defences.
-`more-rocket-turrets-off` isolates just this tuning in same-build comparisons;
-it keeps `ThreatTurrets` and all other fixes enabled.
+`more-rocket-turrets-on` and `more-rocket-turrets-off` isolate this opt-in tuning
+in same-build comparisons; both retain `ThreatTurrets` and all other fixes.
+The final 88-game paired trial on `b98c698a` raised no-spice joint-alive rockets
+at 20 minutes only 1.89→2.00 (+0.11, below the required +1); bankruptcy was
+unchanged and mean kill value slightly lower. This is not an accepted
+default-on increase. Evidence and complete tables:
+`outputs/more-rocket-turrets-20261104/healthy-tax-final/`.
 
 Funded Dune City custom games use the established parallel factory/repair build
 order when current cash and projected cash cover another heavy factory, four
