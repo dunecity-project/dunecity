@@ -25,6 +25,7 @@
 #include <structures/BuilderBase.h>
 #include <structures/ZoneStructure.h>
 #include <units/UnitBase.h>
+#include <units/InfantryBase.h>
 #include <dunecity/CitySimulation.h>
 #include <GameInterface.h>
 #include <GUI/ObjectInterfaces/ResearchLabInterface.h>
@@ -175,6 +176,13 @@ void checkLoaded(Game& game, const Result& result, const Params& params) {
         for(const UnitBase* u : unitList) if(u->getOwner() == house && wantUnits.count(u->getItemID())) {
             ++haveUnits[u->getItemID()];
             if(u->getItemID() != Unit_MCV) armyValue += game.objectData.data[u->getItemID()][setup.house].price;
+            if(const auto* infantry = dynamic_cast<const InfantryBase*>(u)) {
+                const Coord at = infantry->getLocation();
+                skirmishRequire(currentGameMap->tileExists(at) && !currentGameMap->getTile(at)->isMountain(),
+                                "Generated infantry started on invalid or mountain terrain");
+                skirmishRequire(infantry->getTilePosition() >= 0 && infantry->getTilePosition() < NUM_INFANTRY_PER_TILE,
+                                "Generated infantry did not receive a valid tile slot");
+            }
         }
         for(const auto& [item, count] : wantStructures)
             skirmishRequire(haveStructures[item] == count, "House " + std::to_string(setup.house) + " has "
@@ -211,6 +219,33 @@ void checkLoaded(Game& game, const Result& result, const Params& params) {
                 setup.house, house->getTeamID(), static_cast<int>(setup.role), setup.playerClass.c_str(), structures,
                 armyValue, setup.armyBudget, house->getProducedPower(), house->getPowerRequirement());
     }
+}
+
+/// Research and slow changes must not calculate a step for never-moved infantry.
+void checkStationaryInfantrySpeedRefresh(Game& game) {
+    for(auto* unit : unitList) {
+        auto* infantry = dynamic_cast<InfantryBase*>(unit);
+        if(!infantry || infantry->getOwner() != pLocalHouse || infantry->moving
+           || infantry->oldTilePosition != INVALID_POS) continue;
+        const Coord at = infantry->getLocation();
+        skirmishRequire(infantry->getTilePosition() >= 0 && infantry->xSpeed == 0 && infantry->ySpeed == 0,
+                        "Stationary infantry fixture was not freshly deployed");
+        infantry->refreshRadarResearch();
+        infantry->applySlow();
+        skirmishRequire(infantry->getSlowTimer() > 0 && !infantry->moving
+                        && infantry->oldTilePosition == INVALID_POS && infantry->getLocation() == at
+                        && infantry->xSpeed == 0 && infantry->ySpeed == 0,
+                        "Research or slow refresh changed a stationary infantry step");
+        infantry->slowTimer = 1; // Exercise real expiry on the next game tick.
+        game.updateGameState();
+        skirmishRequire(infantry->getSlowTimer() == 0 && !infantry->moving
+                        && infantry->oldTilePosition == INVALID_POS && infantry->getLocation() == at
+                        && infantry->xSpeed == 0 && infantry->ySpeed == 0,
+                        "Slow expiry changed a stationary infantry step");
+        SDL_Log("SKIRMISH_PROBE: stationary infantry research/slow/expiry kept its valid spawn slot");
+        return;
+    }
+    skirmishRequire(false, "No never-moved infantry for the stationary speed fixture");
 }
 
 /// The Fighter partner of @a houseID plays a minute without queueing, upgrading or placing anything.
@@ -286,6 +321,7 @@ void runMatch(const std::string& name, bool smoke) {
 
     if(smoke) {
         SDL_Log("SKIRMISH_SMOKE_BEGIN: %s", result.name.c_str());
+        if(name == "allied-2v3") checkStationaryInfantrySpeedRefresh(*game);
         const Uint32 end = game->getGameCycleCount() + MILLI2CYCLES(60 * 1000);
         while(!game->finished && game->getGameCycleCount() < end) game->updateGameState();
         SDL_Log("SKIRMISH_SMOKE_END: cycle=%u finished=%d", game->getGameCycleCount(), game->finished ? 1 : 0);

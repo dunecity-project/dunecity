@@ -453,6 +453,10 @@ generated", and "random settings on army and city must apply equally to each pla
   - **allied-2v3** (128, Large, 10k): 5 houses with the right teams, 36–37 structures each,
     army 10000/10000 each, positive power. A one-minute played smoke had no problem lines, and a
     save/load round trip kept every structure and team.
+    It also validates every loaded infantry tile/slot and exercises radar research, slow
+    application and slow expiry on never-moved infantry inside the strict smoke-log window.
+    Such infantry legitimately have no previous movement slot; only active steps recalculate
+    velocity when modifiers change. Starting the next step reads the latest modifiers.
   - **city-192** (DuneCity, 15k, tech 8): 52 structures, 1 reactor and 1 wind trap, power
     2,100/878, army 5000/5000 per AI house. Measured population after two city days was 14,720
     and 14,360 (within 25%). A one-minute smoke had a clean log, and save/load passed.
