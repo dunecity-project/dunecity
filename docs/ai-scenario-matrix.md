@@ -572,3 +572,10 @@ and later restores its own eligible census for the absent-market,
 sold-out-supported and disabled-import assertions, and adds a separate
 below-threshold negative control. It does not disable or bypass the match rule;
 campaign exemption follows `isCampaignGameType(game.gameType)`.
+
+The Starport-economy probe's late empty-market technology cases similarly
+switch from their initial campaign into a custom game. Those cases establish
+and restore the required population before checking locked/disabled/unrelated
+technology, exactly one prerequisite Starport, pending-order deduplication
+and resumed IX/Palace construction. Earlier campaign import and MCV-recovery
+checks keep their original population and assertions.

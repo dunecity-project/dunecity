@@ -1,9 +1,12 @@
 // Real-game fixture, included only by the diagnostic main.
+#include <dunecity/CityConstants.h>
+#include <dunecity/CitySimulation.h>
 #include <players/QuantBot.h>
 #include <structures/StarPort.h>
 #include <Choam.h>
 #include <Map.h>
 #include <units/UnitBase.h>
+#include <array>
 #include <limits>
 #include <stdexcept>
 
@@ -394,6 +397,20 @@ void runStarportEconomyProbe(Game& game) {
         if (structure->getOwner()==house && structure->getItemID()==Structure_StarPort) oldPorts.push_back(structure);
     for (auto* structure : oldPorts) structure->destroy();
     market.availableItems.clear();
+    // The late technology cases run as a custom game, unlike the initial
+    // campaign import cases. Supply their independent population prerequisite
+    // without disabling the rule or weakening any empty-market tech assertion.
+    auto* techCity=game.isCitySimEnabled() ? game.getCitySimulation() : nullptr;
+    if(game.isCitySimEnabled() && !techCity) throw std::runtime_error("Tech fixture needs its active city census");
+    std::array<int,3> savedTechPopulation{};
+    if(techCity) {
+        auto& state=techCity->getHouseStateMut(house->getHouseID());
+        savedTechPopulation={state.resPop,state.comPop,state.indPop};
+        state.resPop=(DuneCity::kStarportPopulation+DuneCity::CitySimulation::kPopDisplayMultiplier-1)
+            /DuneCity::CitySimulation::kPopDisplayMultiplier;
+        state.comPop=0;state.indPop=0;
+        if(!house->meetsStarportPopulation()) throw std::runtime_error("Tech fixture did not meet the Starport population prerequisite");
+    }
     for(int y=0;y<currentGameMap->getSizeY();++y) for(int x=0;x<currentGameMap->getSizeX();++x)
         if(!currentGameMap->getTile(x,y)->hasAStructure()) currentGameMap->getTile(x,y)->setType(Terrain_Rock);
     auto* techYard=static_cast<BuilderBase*>(place(Structure_ConstructionYard));
@@ -469,5 +486,9 @@ void runStarportEconomyProbe(Game& game) {
         }
     }
     game.objectData=originalData;
+    if(techCity) {
+        auto& state=techCity->getHouseStateMut(house->getHouseID());
+        state.resPop=savedTechPopulation[0];state.comPop=savedTechPopulation[1];state.indPop=savedTechPopulation[2];
+    }
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=starport outcome=passed");
 }
