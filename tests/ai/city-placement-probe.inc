@@ -2,6 +2,7 @@
 // after planning. No production objects are replaced by test doubles.
 #include <structures/ConstructionYard.h>
 #include <Command.h>
+#include <Tile.h>
 
 void runCityPlacementProbe(Game& game) {
     auto require=[](bool ok,const char* why) {
@@ -64,6 +65,21 @@ void runCityPlacementProbe(Game& game) {
         require(zone,"Valid anchored sand zone failed execution");
         zone->destroy();
     }
+    reset();
+    auto* north = house->placeStructure(NONE_ID,Structure_ZoneResidential,site.x+2,site.y,false,false);
+    require(north,"Could not create the one-sided residential neighbour");
+    // The 864 desync invented a second occupied side on this otherwise empty lot.
+    // Read every surrounding vacancy while another live zone can resolve by id.
+    for(int dy=0;dy<7;++dy) for(int dx=0;dx<7;++dx) {
+        const bool occupied=dx>=2 && dx<4 && dy<2;
+        auto* tile=currentGameMap->getTile(site.x+dx,site.y+dy);
+        require(tile->hasANonInfantryGroundObject()==occupied,"Unexpected fixture occupancy");
+        require(tile->getNonInfantryGroundObject()==(occupied ? north : nullptr),
+            "Vacant tile resolved to a phantom residential neighbour");
+    }
+    north->destroy();
+    require(currentGameMap->getTile(site.x+2,site.y)->getNonInfantryGroundObject()==nullptr,
+        "A cleared tile retained its former ground object");
     reset();
     ConstructionYard* yard=nullptr;
     for(auto* structure:structureList) if(structure->getOwner()==house)

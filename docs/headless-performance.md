@@ -116,6 +116,15 @@ Use a new results directory when its CSV schema changes; resuming into an old he
 is rejected rather than appending mislabelled fields. Older rows without these identities
 cannot establish that two differing digests came from identical inputs and executables.
 
+The 1.0.864 same-map baseline exposed a pre-existing vacant-tile lookup defect:
+`Tile::getNonInfantryGroundObject()` dereferenced an empty `std::list` through
+`front()`. Different standard-library sentinel layouts could invent a live zone
+on a vacant perimeter cell, promoting an ordinary one-neighbour lot to infill.
+The accessor now returns null before consulting the object manager on an empty list.
+`tile_non_infantry_lookup` checks an empty tile without any active game, real occupied
+and cleared tiles, and vacancies around a live residential neighbour. Placement unit
+tests retain the first candidate on rank ties and reject phantom infill priority.
+
 ## Results
 
 Fixed benchmark, three Hard duels (128/7101, 160/7202, 192/7303, 20 game minutes),

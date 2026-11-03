@@ -1065,6 +1065,7 @@ InfantryBase* Tile::getInfantry() const {
 }
 
 ObjectBase* Tile::getNonInfantryGroundObject() const {
+    if (assignedNonInfantryGroundObjectList.empty()) return nullptr;
     return currentGame->getObjectManager().getObject(assignedNonInfantryGroundObjectList.front());
 }
 
