@@ -69,10 +69,11 @@ bool pictureSpice(int t) {
 /// Shares and outline shape of a map, plus per-house power and zoning facts.
 std::string measure(const MapPicture& p) {
     const int s = p.size, area = s * s;
-    int rock = 0, mountain = 0, spice = 0, thick = 0, dunes = 0;
+    int rock = 0, mountain = 0, spice = 0, thick = 0, dunes = 0, sand = 0;
     for(int t : p.terrain) {
         rock += pictureRockLike(t); mountain += t == Terrain_Mountain; spice += pictureSpice(t);
         thick += t == Terrain_ThickSpice; dunes += t == Terrain_Dunes;
+        sand += t == Terrain_Sand;
     }
     auto rockAt = [&](int x, int y) { return x >= 0 && y >= 0 && x < s && y < s && pictureRockLike(p.terrain[y * s + x]); };
     // Outline: edges between rock and non-rock, corners (2x2 windows with an odd rock count),
@@ -126,7 +127,9 @@ std::string measure(const MapPicture& p) {
     out << "rock=" << rock * 100 / area << "% mountain=" << mountain * 100 / area << "% spice=" << spice * 100 / area
         << "% thick=" << thick * 100 / area << "% dunes=" << dunes * 100 / area << "% rockBodies=" << bodies
         << " smallIslands=" << islands << " outlineCornersPer100Edges=" << (edges ? corners * 100 / edges : 0)
-        << " longestStraightOutline=" << longest;
+        << " longestStraightOutline=" << longest
+        << " sandTiles=" << sand << " duneTiles=" << dunes << " rockTiles=" << rock - mountain
+        << " mountainTiles=" << mountain << " spiceTiles=" << spice;
     std::map<int, std::array<int, 7>> houses;    // windtraps, nukes, R, C, I, police, closest I-R gap
     for(const PictureObject& o : p.objects) {
         if(o.unit) continue;
@@ -275,6 +278,37 @@ void runRender() {
         const Catalogue catalogue = RandomSkirmish::loadCatalogue(params.mode);
         const Result result = SkirmishGenerator::generate(params, catalogue);
         renderPicture(pictureOf(result, catalogue), tag + "-generated-" + name);
+    }
+    // The 80rock.dls reproduction: Random Skirmish with the CivWars mod, not the separate
+    // Civilization Wars lane generator. Preserve its seed/start kit while varying geology.
+    skirmishRequire(RandomSkirmish::activateMod("CivWars"), "Terrain-mix render mod did not activate");
+    const Catalogue catalogue = RandomSkirmish::loadCatalogue(Mode::DuneCity);
+    std::ofstream matrix(probeOut(tag + "-terrain-mix.csv"), std::ios::binary);
+    matrix << "size,target,sand,dunes,rock,mountain,spice,map_seed,attempts\n";
+    for(int size : kMapSizes) for(int land : {20, 50, 80}) {
+        Params params;
+        params.mapSize = size; params.seed = 418379001u; params.house = HOUSE_INVALID;
+        params.allies = 1; params.enemies = 2; params.techLevel = 1; params.spice = Spice::None;
+        params.mode = Mode::DuneCity; params.mod = "CivWars";
+        params.sandPercent = 100 - land; params.rockPercent = land - 5; params.mountainPercent = 5;
+        params.playerSide = Side{"qBotHard", BaseSize::None, 0, 0};
+        params.allySide = params.enemySide = Side{"qBotHard", BaseSize::None, 0, 0};
+        const Result result = SkirmishGenerator::generate(params, catalogue);
+        int sand = 0, dunes = 0, rock = 0, mountain = 0, spice = 0;
+        for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
+            const auto t = result.map(x, y);
+            sand += t == Terrain_Sand; dunes += t == Terrain_Dunes; rock += t == Terrain_Rock;
+            mountain += t == Terrain_Mountain; spice += pictureSpice(t);
+        }
+        matrix << size << ',' << land << ',' << sand << ',' << dunes << ',' << rock << ','
+               << mountain << ',' << spice << ',' << result.mapSeed << ',' << result.attempts << '\n';
+        SDL_Log("SKIRMISH_RENDER_MIX: size=%d target=%d sand=%d dunes=%d rock=%d mountain=%d spice=%d mapSeed=%u",
+                size, land, sand, dunes, rock, mountain, spice, result.mapSeed);
+        if(size == 160 && land == 80) {
+            skirmishRequire(mountain <= 6544 / 2, "Default mountains exceed half of 80rock.dls");
+            renderPicture(pictureOf(result.map), tag + "-generated-80rock");
+            std::ofstream(probeOut(tag + "-generated-80rock.ini"), std::ios::binary) << result.ini;
+        }
     }
     if(const char* save = std::getenv("SKIRMISH_RENDER_SAVE"))
         renderPicture(pictureOfSavedMap(save), "saved-" + getBasename(save, true));

@@ -174,7 +174,7 @@ def command(args, binary, game, out):
     size = (256 if len(game['houses']) == 12 else 192) if game['category'] == 'custom' else 96
     base = 'large' if game['category'] == 'custom' else 'small'
     return cmd + ['--local-spectator', '--scenario-sides', sides, '--skirmish',
-                  f'size={size},base={base},army=0,tech=9,credits=10000,rock=3,spice=4,seed={game["seed"]}']
+                  f'size={size},base={base},army=0,tech=9,credits=10000,sand=50,rock=45,mountain=5,spice=4,seed={game["seed"]}']
 
 
 def play(args, scratch, binary, game):

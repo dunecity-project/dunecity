@@ -31,20 +31,26 @@ open that mode's generator instead; other mods retain the Random Skirmish screen
 ## Parameters
 All of these are saved as last-used values in the configuration file, section `[Random Skirmish]`.
 
-Settings with an order (Size, Rock, Spice, Sandworms, Credits, Tech level, Allies, Enemies, and each side's
-Base, Army and City) are horizontal sliders (`include/GUI/Slider.h`): lowest on the left, highest
+Settings with an order (Size, Sand, Rock, Mountain, Spice, Sandworms, Credits, Tech level, Allies,
+Enemies, and each side's Base, Army and City) are horizontal sliders (`include/GUI/Slider.h`): lowest on the left, highest
 on the right, the chosen step's text beside the track. Click or drag on the track, use the mouse
 wheel, or Left/Right when the slider is active. "Random" is the rightmost step of Army and City.
 Mod, house, AI and AI partner stay drop-downs.
 
 - **Map**
   - Size: 64, 96, 128, 160, 192 or 256. Default 128.
-  - Rock: 15 / 25 / 35 / 50 / 65 / 80 / 90 / 100% target share of rock plus mountain (the first four
-    keep their saved indices). Past what the editor's rock fields reach, rock grows outward from its
-    edges ring by ring with a seeded coin flip per tile (`growRock`), so coasts stay ragged and
-    mirrored maps stay symmetric; at 100% the whole map is rock and mountain. Spice only grows on
-    sand, so high rock leaves little (at 100% no) spice. Starts are always clean rock, so a crowded
-    map ends above its target: Stefan's 128x128 5-house 40,000-people match measures 67%.
+  - **Sand / Rock / Mountain:** map percentages, 0–100 in steps of 5, summing to 100.
+    Default **75 / 20 / 5**. Sand includes dunes and any spice; Rock is ordinary buildable,
+    passable rock; Mountain is impassable. Moving Sand or Rock trades the other first, preserving
+    Mountain where possible; moving Mountain trades Rock first, then Sand. The selected control
+    always wins. Clean start cores/rims can force extra rock on crowded maps; connecting lanes
+    can limit mountains at extreme settings. The organic rock fields can overshoot their target
+    (the generator tests retain the existing +12-point tolerance). Spice only grows on the sand
+    share, so zero sand also means no spice.
+    Last-used keys are `Sand Percent`, `Rock Percent`, `Mountain Percent`. An old `Rock` index
+    (15 / 25 / 35 / 50 / 65 / 80 / 90 / 100% **rock plus mountain**) migrates once: retain that
+    combined target and assign 5 points to Mountain. Thus old 80% becomes **20 / 75 / 5**;
+    literal 80% ordinary Rock plus 5% Mountain is instead **15 / 80 / 5**. Saving removes the old key.
   - Spice: None, Low 6%, Medium 12%, High 18%, Very high 24% of the map (spice, thick spice and
     blooms; Very high matches the map editor's default random map). Thick spice share inside the
     fields 0/10/25/40/55%.
@@ -172,35 +178,69 @@ never serialized or sent, and no protocol, save or map format changed.
   running at half speed (35 s behind when the host left), and a Dune City game with Natives worms.
   `--remote ROLE=SSHHOST` runs a role on another Mac (the service through an ssh tunnel).
 
+## Mountain coverage correction (2026-11-03)
+
+`80rock.dls` starts from Random Skirmish seed **418379001**, **160×160**, four players
+(one ally, two allied enemies), tech 1, 3,000 credits, no prebuilt base/army/city, no spice,
+not mirrored, with the `CivWars` mod. This is **not** the separate Civilization Wars lane
+generator. Regenerating the old generator with those settings matched the save's complete
+embedded map INI byte-for-byte.
+
+The old **Rock** control counted rock **plus mountain**. `shapeRock` changed every eligible
+rock tile at least eight tiles from sand into a mountain massif (outside a ragged 10–16-tile
+base berth), without a mountain budget. It also added a wandering ridge per 110 remaining
+outer rock tiles, each 8 to `12 + mapSize / 8` steps, plus rim outcrops. Higher coverage made
+large deep interiors; larger maps also lengthened the ridges. At 160×160 / 80%, the 25 chosen
+editor fields produced **3,531 massif + 2,974 ridge + 39 outcrop = 6,544 mountain tiles**,
+25.5625% of the map and 31.9360% of all rock-like terrain. Reducing the earlier average ratio
+did not bound this high-coverage case.
+
+Measured old mountain counts for the same seed and four bare starts:
+
+| Map size | 20% combined land | 50% combined land | 80% combined land |
+|---|---:|---:|---:|
+| 64×64 | 19 (0.46%) | 211 (5.15%) | 474 (11.57%) |
+| 96×96 | 126 (1.37%) | 674 (7.31%) | 1,852 (20.10%) |
+| 128×128 | 408 (2.49%) | 1,367 (8.34%) | 3,002 (18.32%) |
+| 160×160 | 1,026 (4.01%) | 3,205 (12.52%) | 6,544 (25.56%) |
+| 192×192 | 1,436 (3.90%) | 5,089 (13.80%) | 13,337 (36.18%) |
+| 256×256 | 2,787 (4.25%) | 9,318 (14.22%) | 22,750 (34.71%) |
+
+20% is an instrumented target in the unchanged old algorithm; the old menu offered 15/25%
+instead. The new default mountain quota is 5% of the map, not a fraction of however much rock
+the field generator happens to produce. At 160×160 this caps it at 1,280 tiles, below half the
+reported 6,544. Source hashes, old phase counts, exact regenerated INI and before image are
+retained under `outputs/rock-mountain-20261103/`. The `render` probe now emits a matching
+six-size, three-coverage matrix and `*-generated-80rock.png` for the corrected generator.
+
 ## Generation
-- **Terrain** (`shapeRock`, `addSpice`), modelled on the map editor's random map
+- **Terrain** (`shapeRock`, `addSpice`, `addMountains`), modelled on the map editor's random map
   (`generateRandomMap`, which itself is unchanged):
   - The base layer is the editor's random map itself (organic rock fields, dunes, rock bits,
     blooms) with no spice. A binary search picks the smallest editor rock-field count that reaches
-    the rock target with everything below in place.
+    combined Rock + Mountain target with everything below in place. Above the editor fields'
+    reach, `growRock` grows outward in ragged seeded rings, mirrored where required.
   - Scattered rock islands (one per 2,048 tiles, editor-style random walks).
   - Every start's clean core (the rectangle its base and city need) is rock, grown by a rim of
     irregular width: smooth value noise between 2 and 7 tiles, plus a tile of per-tile jitter,
     smoothed with the editor's fill-in rule, plus three editor-style rock lobes walked out from
     beyond the rim. The core is never the outline.
-  - Mountains, never within about 3 tiles of a core: massifs in rock at least 8 tiles from the
-    sand and a ragged 10–16 tiles from every core, wandering ridges (one per 110 rock tiles
-    outside the cores) through rock fields away from the rims, and clumps of outcrops on the rims
-    within 3 tiles of the sand (4 per 40 tiles of core width + height). The map border counts as
-    an edge of the rock. Over random configurations that is about 0.23 mountain tiles per rock
-    tile.
+  - Mountains have an independent tile budget: selected map percentage × map area, rounded down
+    to a whole mirrored group (at most three tiles below target). Seeded smooth value noise,
+    with a preference for deeper rock, chooses coherent patches from ordinary rock; there is no
+    unconditional depth-to-mountain conversion. No mountain comes within about three tiles of
+    a start's clean core. Three-tile-wide protected ground routes join all starts and every
+    spice tile before any mountain is painted; a crowded/extreme request uses only eligible
+    rock rather than painting through those routes or levelling all mountains afterwards.
   - Spice fields grow like the editor's: random walks over sand and dunes that turn thick where
     they cross themselves, then the editor's fill-in passes for spice and thick spice, until the
     spice target is reached. The first field goes beside every start (toward the map centre),
     then between neighbouring starts, then anywhere.
   - Mirrored maps paint every change at every mirror image and key all noise and coin flips to
     the mirror-canonical tile, so they stay exactly symmetric.
-  - Every start is checked for ground connection. Up to 8 seeds are tried, then mountains are
-    levelled. In the unit test's 150-configuration random sweep no map needs levelling.
-  - Measured (`render` probe case, 128x128): editor random maps have their longest straight rock
-    edge at 11–12 tiles and 45–47 outline corners per 100 outline edges; the old generator had 57
-    and 3 on Stefan's map (rectangular plateaus) and 23 and 37 on a vanilla 2v2; the new generator
-    has 12 and 53 on Stefan's configuration and 10 and 56 on the vanilla 2v2.
+  - Up to eight terrain seeds are tried for nearby spice; start/spice ground connectivity is
+    preserved by construction. The legal-placement sweep still checks connected starts and
+    requires that no mountains were levelled.
 - **Start positions**
   - Mirrored mode: point mirroring for 2 houses; otherwise both axes, from the corner and edge slots.
   - Normal mode: an evenly spaced square ring with a seeded offset.
@@ -269,8 +309,13 @@ never serialized or sent, and no protocol, save or map format changed.
     population are already saved.
 - **Save map** writes `<user>/maps/multiplayer/<N>P - <S>x<S> - Random <a>v<e>[ FFA] <Mode> T<tech> <seed>.ini`.
   The map shows up under Custom Game > MP User Maps and can be hosted (its houses are fixed; the
-  multiplayer Random map's starts are open). A `[RANDOMSKIRMISH]` section records seed, map seed
-  and per-house plan; the loader ignores it.
+  multiplayer Random map's starts are open). A `[RANDOMSKIRMISH]` section records seed, map seed,
+  terrain version 2, Sand/Rock/Mountain shares, their `TerrainOptionsHash` (fixed-byte-order
+  FNV-1a), and the per-house plan; the loader ignores this provenance. The complete INI is already
+  sent in `GameInitSettings` and embedded in saves, so the new map-only controls need no extra
+  game-options wire fields, protocol bump or save-version bump. Corrected mountain defaults
+  intentionally change newly generated maps for existing seeds; existing saves keep their
+  embedded terrain unchanged.
 - If a crowded map cannot fit everything (for example many houses on 64x64), the items that do not
   fit are skipped. They are counted in `HouseSetup::skipped`, and the screen reports them.
 
@@ -282,7 +327,7 @@ generated", and "random settings on army and city must apply equally to each pla
 - **Flow:** the host opens Custom Game as usual (LAN / Internet game, or Custom Game → Online) and
   presses **Random map...** beside Load/Next. The **Random Map** screen
   (`RandomSkirmishMenu(hostMod)`) offers:
-  - Map: Size, Rock, Spice, Mirrored starts (on by default here, saved separately as
+  - Map: Size, Sand, Rock, Mountain, Spice, Mirrored starts (on by default here, saved separately as
     `Multiplayer Symmetric`), Seed, Keep this seed — the same controls as single player.
   - Game: the host's mod (shown, not chosen: the map chooser's Mod box stays the one mod picker),
     Credits, Tech level. Game Rules stay on the map chooser's Game Options / Game Rules button.
@@ -343,8 +388,10 @@ generated", and "random settings on army and city must apply equally to each pla
     keys, across six configurations from 64 to 256, Stefan's configuration, and a 150-configuration
     seeded sweep over every choice (which also requires connected starts and no levelled mountains).
   - Ground connectivity, including a negative case.
-  - Rock share is monotonic and within +12 points of its target; spice share within 3 points of
-    its target for every preset over three seeds, monotonic, with thick spice.
+  - Sand/Rock targets within the organic +12-point combined-land tolerance, independently
+    budgeted mountains (including exact zero), monotonic controls, configuration migration,
+    normalization, terrain-options hash, deterministic INI, clean cores and reachable spice.
+    Spice share remains within 3 points of its target for every preset over three seeds.
   - Terrain looks like the editor's: longest straight rock edge at most 16 tiles, mountains and
     dunes present, every start's rim reaches at least 2 tiles past its core and changes width at
     least once per 8 edge tiles, and the core stays clean rock.

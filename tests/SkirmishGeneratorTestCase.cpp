@@ -14,8 +14,10 @@
 
 #include <SDL2/SDL.h>
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <set>
 #include <sstream>
@@ -110,6 +112,47 @@ Params params(int size, int allies, int enemies, Mode mode, int techLevel, uint3
     return p;
 }
 
+constexpr std::array<int, 8> kLegacyGeologicalTotals{15, 25, 35, 50, 65, 80, 90, 100};
+
+void setTerrainShares(Params& p, int sand, int rock, int mountain) {
+    p.sandPercent = sand; p.rockPercent = rock; p.mountainPercent = mountain;
+}
+
+bool isSpiceTile(TERRAINTYPE t) {
+    return t == Terrain_Spice || t == Terrain_ThickSpice || t == Terrain_SpiceBloom || t == Terrain_SpecialBloom;
+}
+
+struct TerrainCounts { int sand = 0, rock = 0, mountain = 0; };
+
+TerrainCounts terrainCounts(const MapData& map) {
+    TerrainCounts counts;
+    for(int y = 0; y < map.getSizeY(); ++y) for(int x = 0; x < map.getSizeX(); ++x) {
+        const TERRAINTYPE t = map(x, y);
+        if(t == Terrain_Rock) ++counts.rock;
+        else if(t == Terrain_Mountain) ++counts.mountain;
+        else {
+            REQUIRE((t == Terrain_Sand || t == Terrain_Dunes || isSpiceTile(t)));
+            ++counts.sand;    // dunes, spice and blooms still occupy the Sand share
+        }
+    }
+    return counts;
+}
+
+/// Mountain painting may neither dirty a start's core nor isolate any harvestable spice.
+void requireCleanConnected(const Result& r) {
+    REQUIRE_FALSE(r.houses.empty());
+    std::vector<Coord> points;
+    points.reserve(r.houses.size() + r.map.getSizeX() * r.map.getSizeY());
+    for(const HouseSetup& h : r.houses) {
+        points.push_back(h.start);
+        for(int y = h.plateau.y; y < h.plateau.y + h.plateau.h; ++y)
+            for(int x = h.plateau.x; x < h.plateau.x + h.plateau.w; ++x) REQUIRE(r.map(x, y) == Terrain_Rock);
+    }
+    for(int y = 0; y < r.map.getSizeY(); ++y) for(int x = 0; x < r.map.getSizeX(); ++x)
+        if(isSpiceTile(r.map(x, y))) points.emplace_back(x, y);
+    REQUIRE(groundConnected(r.map, points));
+}
+
 bool isZoneItem(int item) {
     return item == Structure_ZoneResidential || item == Structure_ZoneCommercial || item == Structure_ZoneIndustrial;
 }
@@ -179,6 +222,7 @@ TEST_CASE("Random skirmish: same seed and parameters give identical INI text", "
     for(Mode mode : {Mode::Vanilla, Mode::DuneCity}) for(bool symmetric : {false, true}) {
         Params p = params(128, 1, 2, mode, 8, 4242);
         p.symmetric = symmetric;
+        setTerrainShares(p, symmetric ? 50 : 60, symmetric ? 20 : 40, symmetric ? 30 : 0);
         p.allySide.city = 2; p.enemySide.city = 2;
         const Catalogue& c = mode == Mode::DuneCity ? city() : vanilla();
         const Result a = generate(p, c), b = generate(p, c);
@@ -208,10 +252,10 @@ uint64_t terrainDigest(const MapData& map) {
 } // namespace
 
 TEST_CASE("Random skirmish: pinned seeds give the same map on every platform", "[skirmish][generator][determinism]") {
-    // Digests of the macOS generator (re-pinned when the 1.0.862 batch cut mountains by 35%
-    // relative to rock), where clang evaluates function arguments left to right. MSVC evaluates
-    // them right to left, so Coord(random.rand(..), random.rand(..)) built a different map from
-    // the same seed on Windows; macOS, the browser and Windows must agree.
+    // Keep these cross-platform pins enabled when the terrain algorithm/options change;
+    // actual digests below provide the measured replacements. Coord(random.rand(..),
+    // random.rand(..)) once differed between clang and MSVC argument evaluation orders,
+    // so macOS, the browser and Windows must agree on every seed.
     struct Pin { int size; uint32_t seed; Mode mode; uint64_t terrain, ini; };
     const Pin pins[] = {
         {64, 1u, Mode::Vanilla, 0x919294c20c525201ull, 0x9843030d06816a8bull},
@@ -250,9 +294,13 @@ TEST_CASE("Random skirmish: pinned seeds give the same map on every platform", "
         p.symmetric = pin.seed % 2 == 1;            // odd seeds mirror the starts
         p.allySide.city = p.enemySide.city = 2;
         const Result r = generate(p, pin.mode == Mode::DuneCity ? city() : vanilla());
-        CAPTURE(pin.size, pin.seed, pin.mode == Mode::DuneCity);
-        CHECK(terrainDigest(r.map) == pin.terrain);
-        CHECK(fnv1a(r.ini) == pin.ini);
+        const uint64_t actualTerrain = terrainDigest(r.map), actualIni = fnv1a(r.ini);
+        CAPTURE(pin.size, pin.seed, pin.mode == Mode::DuneCity, actualTerrain, actualIni);
+        INFO("actual pin {" << pin.size << ", " << pin.seed << "u, Mode::"
+             << (pin.mode == Mode::DuneCity ? "DuneCity" : "Vanilla") << ", 0x"
+             << std::hex << actualTerrain << "ull, 0x" << actualIni << "ull}");
+        CHECK(actualTerrain == pin.terrain);
+        CHECK(actualIni == pin.ini);
     }
 }
 
@@ -440,64 +488,155 @@ TEST_CASE("Random skirmish: starts are ground-connected and symmetric maps mirro
     walled(16, 5) = Terrain_Rock;
     REQUIRE(groundConnected(walled, {Coord(2, 2), Coord(30, 30)}));
 
-    for(int rock = 0; rock <= 3; ++rock) for(uint32_t seed : {1u, 2u, 3u}) {
+    for(int total : {15, 25, 35, 50}) for(uint32_t seed : {1u, 2u, 3u}) {
         Params p = params(128, 1, 2, Mode::Vanilla, 8, seed);
-        p.rock = static_cast<Rock>(rock);
+        setTerrainShares(p, 100 - total, total - 5, 5);
         const Result r = generate(p, vanilla());
-        std::vector<Coord> starts;
-        for(const auto& h : r.houses) starts.push_back(h.start);
-        REQUIRE(groundConnected(r.map, starts));
+        requireCleanConnected(r);
     }
 
-    // Rock share follows the preset, all the way to 100%.
+    // Legacy geological presets now mean explicit Sand / passable Rock / Mountain shares.
     int previous = 0;
-    for(int rock = 0; rock < static_cast<int>(kRockPercent.size()); ++rock) {
+    for(int total : kLegacyGeologicalTotals) {
         Params p = params(128, 0, 1, Mode::Vanilla, 8, 11);
-        p.rock = static_cast<Rock>(rock);
+        setTerrainShares(p, 100 - total, total - 5, 5);
+        p.playerSide.base = p.enemySide.base = BaseSize::Outpost;
+        p.playerSide.army = p.enemySide.army = 0;
         const Result r = generate(p, vanilla());
-        int tiles = 0;
-        for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x)
-            tiles += r.map(x, y) == Terrain_Rock || r.map(x, y) == Terrain_Mountain;
+        const TerrainCounts counts = terrainCounts(r.map);
+        const int tiles = counts.rock + counts.mountain;
         const int percent = tiles * 100 / (128 * 128);
-        INFO("rock preset " << rock << " share " << percent);
-        REQUIRE(percent >= kRockPercent[rock]);
-        REQUIRE(percent <= std::min(100, kRockPercent[rock] + 12));
+        INFO("legacy geological target " << total << " actual share " << percent);
+        REQUIRE(tiles * 100 >= total * 128 * 128 - 300);
+        REQUIRE(percent <= std::min(100, total + 12));
         REQUIRE(percent > previous);
-        if(kRockPercent[rock] == 100) REQUIRE(tiles == 128 * 128);    // no sand, so no spice either
-        std::vector<Coord> starts;
-        for(const auto& h : r.houses) starts.push_back(h.start);
-        REQUIRE(groundConnected(r.map, starts));
+        if(total == 100) REQUIRE(counts.sand == 0);
+        requireCleanConnected(r);
         requireLegal(r, vanilla());
         previous = percent;
     }
     // A crowded, mirrored all-rock map stays symmetric, connected and legal.
     {
         Params p = params(128, 3, 4, Mode::DuneCity, 9, 5);
-        p.rock = Rock::All; p.symmetric = true;
+        setTerrainShares(p, 0, 100, 0); p.symmetric = true;
         const Result r = generate(p, city());
-        for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x) REQUIRE(r.map(x, y) == r.map(127 - x, 127 - y));
-        std::vector<Coord> starts;
-        for(const auto& h : r.houses) starts.push_back(h.start);
-        REQUIRE(groundConnected(r.map, starts));
+        for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x) {
+            REQUIRE(r.map(x, y) == Terrain_Rock);
+            REQUIRE(r.map(x, y) == r.map(127 - x, 127 - y));
+        }
+        requireCleanConnected(r);
         requireLegal(r, city());
     }
 
-    Params p = params(128, 1, 2, Mode::Vanilla, 8, 77);
-    p.symmetric = true;
-    const Result r = generate(p, vanilla());
-    for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x) {
-        REQUIRE(r.map(x, y) == r.map(127 - x, y));
-        REQUIRE(r.map(x, y) == r.map(x, 127 - y));
+    for(const std::array<int, 3>& shares : {std::array<int, 3>{75, 20, 5}, {50, 20, 30}, {60, 40, 0}}) {
+        Params p = params(128, 1, 2, Mode::Vanilla, 8, 77);
+        setTerrainShares(p, shares[0], shares[1], shares[2]);
+        p.symmetric = true;
+        const Result r = generate(p, vanilla());
+        CAPTURE(p.sandPercent, p.rockPercent, p.mountainPercent);
+        for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x) {
+            REQUIRE(r.map(x, y) == r.map(127 - x, y));
+            REQUIRE(r.map(x, y) == r.map(x, 127 - y));
+        }
+        requireCleanConnected(r);
+        requireLegal(r, vanilla());
+        p.enemies = 1; p.allies = 0;
+        const Result duel = generate(p, vanilla());
+        for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x) REQUIRE(duel.map(x, y) == duel.map(127 - x, 127 - y));
+        requireCleanConnected(duel);
     }
-    p.enemies = 1; p.allies = 0;
-    const Result duel = generate(p, vanilla());
-    for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x) REQUIRE(duel.map(x, y) == duel.map(127 - x, 127 - y));
 
     // No spice at all when asked for none.
+    Params p = params(128, 0, 1, Mode::Vanilla, 8, 77);
     p.spice = Spice::None;
     const Result dry = generate(p, vanilla());
-    for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x)
-        REQUIRE((dry.map(x, y) != Terrain_Spice && dry.map(x, y) != Terrain_ThickSpice && dry.map(x, y) != Terrain_SpiceBloom));
+    for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x) REQUIRE_FALSE(isSpiceTile(dry.map(x, y)));
+}
+
+TEST_CASE("Random skirmish: explicit terrain shares control Sand Rock and Mountain independently", "[skirmish][generator][terrain]") {
+    const std::array<int, 3> mixes[] = {{75, 25, 0}, {75, 20, 5}, {50, 45, 5}, {50, 20, 30}};
+    for(int size : {96, 160, 256}) {
+        const int area = size * size;
+        std::array<TerrainCounts, 4> actual;
+        for(size_t i = 0; i < actual.size(); ++i) {
+            Params p = params(size, 0, 1, Mode::Vanilla, 8, 20261103u);
+            setTerrainShares(p, mixes[i][0], mixes[i][1], mixes[i][2]);
+            // Two small starts leave enough room to measure the requested shares rather
+            // than the forced cores of a crowded city/army map.
+            p.playerSide.base = p.enemySide.base = BaseSize::Outpost;
+            p.playerSide.army = p.enemySide.army = 0;
+            const Result r = generate(p, vanilla());
+            actual[i] = terrainCounts(r.map);
+            const TerrainCounts& counts = actual[i];
+            INFO("size " << size << " requested " << p.sandPercent << "/" << p.rockPercent << "/" << p.mountainPercent
+                 << " actual tiles " << counts.sand << "/" << counts.rock << "/" << counts.mountain);
+            REQUIRE(counts.sand + counts.rock + counts.mountain == area);
+            // Whole organic editor fields may overshoot geological coverage by 12 points;
+            // the independent mountain painter is bounded to the requested tile quota.
+            REQUIRE(std::abs(counts.sand * 100 - p.sandPercent * area) <= 12 * area + 300);
+            REQUIRE(std::abs(counts.rock * 100 - p.rockPercent * area) <= 12 * area + 300);
+            REQUIRE(std::abs(counts.mountain - p.mountainPercent * area / 100) <= 3);
+            if(p.mountainPercent == 0) REQUIRE(counts.mountain == 0);
+            REQUIRE(counts.sand > 0);
+            int spice = 0;
+            for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) spice += isSpiceTile(r.map(x, y));
+            REQUIRE(spice > 0);
+            requireCleanConnected(r);
+            requireLegal(r, vanilla());
+        }
+        // Raising Mountain must increase impassable terrain, not merely total geology.
+        REQUIRE(actual[0].mountain < actual[1].mountain);
+        REQUIRE(std::abs(actual[1].mountain - actual[2].mountain) <= 3);
+        REQUIRE(actual[2].mountain < actual[3].mountain);
+        REQUIRE(actual[2].rock > actual[1].rock);
+        REQUIRE(actual[2].sand < actual[1].sand);
+    }
+}
+
+TEST_CASE("Random skirmish: pure Sand and Mountain requests retain legal connected starts", "[skirmish][generator][terrain]") {
+    for(Mode mode : {Mode::Vanilla, Mode::DuneCity}) for(bool symmetric : {false, true}) for(bool mountains : {false, true}) {
+        Params p = params(96, 1, 2, mode, 8, 20261103u);
+        setTerrainShares(p, mountains ? 0 : 100, 0, mountains ? 100 : 0);
+        p.symmetric = symmetric;
+        for(Side* side : {&p.playerSide, &p.allySide, &p.enemySide}) {
+            side->base = BaseSize::Small; side->army = 2; side->city = mode == Mode::DuneCity ? 1 : 0;
+        }
+        const Catalogue& c = mode == Mode::DuneCity ? city() : vanilla();
+        const Result r = generate(p, c);
+        const TerrainCounts counts = terrainCounts(r.map);
+        CAPTURE(mode == Mode::DuneCity, symmetric, mountains, counts.sand, counts.rock, counts.mountain);
+        // Forced starting rock and ground corridors take precedence over an extreme share.
+        REQUIRE(counts.rock > 0);
+        if(mountains) {
+            REQUIRE(counts.mountain > 0);
+            REQUIRE(counts.mountain < 96 * 96);
+        } else {
+            REQUIRE(counts.mountain == 0);
+            REQUIRE(counts.sand > 0);
+        }
+        REQUIRE_FALSE(r.flattenedMountains);
+        requireCleanConnected(r);
+        requireLegal(r, c);
+        if(symmetric) for(int y = 0; y < 96; ++y) for(int x = 0; x < 96; ++x)
+            REQUIRE(r.map(x, y) == r.map(95 - x, 95 - y));
+    }
+}
+
+TEST_CASE("Random skirmish: Stefan's 80 percent geology no longer overproduces mountains", "[skirmish][generator][terrain]") {
+    Params p = params(160, 1, 2, Mode::DuneCity, 1, 418379001u);
+    setTerrainShares(p, 20, 75, 5);
+    p.house = HOUSE_INVALID; p.mod = "CivWars"; p.spice = Spice::None;
+    for(Side* side : {&p.playerSide, &p.allySide, &p.enemySide}) {
+        side->base = BaseSize::None; side->army = 0; side->city = 0;
+    }
+    p.playerSide.playerClass = "qBotHard";
+    const Result r = generate(p, city());
+    const TerrainCounts counts = terrainCounts(r.map);
+    CAPTURE(counts.sand, counts.rock, counts.mountain);
+    CHECK(counts.mountain <= 6544 / 2);    // the played legacy map contained 6,544 mountain tiles
+    REQUIRE(counts.mountain == 160 * 160 * 5 / 100);
+    requireCleanConnected(r);
+    requireLegal(r, city());
 }
 
 TEST_CASE("Random skirmish: city population lands within 25% of every preset", "[skirmish][generator][city]") {
@@ -556,7 +695,8 @@ TEST_CASE("Zone start level: older map entries are unchanged, the new field is s
 
 TEST_CASE("Random skirmish: last-used parameters survive the configuration file", "[skirmish][generator]") {
     Params p = params(192, 2, 4, Mode::DuneCity, 6, 4000000000u);
-    p.rock = Rock::VeryHigh; p.spice = Spice::Low; p.symmetric = true; p.fixedSeed = true;
+    setTerrainShares(p, 50, 45, 5);
+    p.spice = Spice::Low; p.symmetric = true; p.fixedSeed = true;
     p.credits = 7500; p.enemiesAllied = false; p.house = HOUSE_ORDOS;
     p.allySide = Side{"qBotHard", BaseSize::Large, 4, 3};
     p.enemySide = Side{"AIPlayerEasy", BaseSize::Outpost, kArmyRandom, kCityRandom};
@@ -564,7 +704,12 @@ TEST_CASE("Random skirmish: last-used parameters survive the configuration file"
     p.save(config);
     Params loaded;
     loaded.load(config);
-    REQUIRE(loaded.mapSize == 192); REQUIRE(loaded.rock == Rock::VeryHigh); REQUIRE(loaded.spice == Spice::Low);
+    REQUIRE(loaded.mapSize == 192); REQUIRE(loaded.spice == Spice::Low);
+    REQUIRE(loaded.sandPercent == 50); REQUIRE(loaded.rockPercent == 45); REQUIRE(loaded.mountainPercent == 5);
+    REQUIRE(config.getIntValue("Random Skirmish", "Sand Percent", -1) == 50);
+    REQUIRE(config.getIntValue("Random Skirmish", "Rock Percent", -1) == 45);
+    REQUIRE(config.getIntValue("Random Skirmish", "Mountain Percent", -1) == 5);
+    REQUIRE_FALSE(config.hasKey("Random Skirmish", "Rock"));
     REQUIRE(loaded.symmetric); REQUIRE(loaded.fixedSeed); REQUIRE(loaded.seed == 4000000000u);
     REQUIRE(loaded.house == HOUSE_ORDOS); REQUIRE(loaded.credits == 7500);
     REQUIRE(loaded.allies == 2); REQUIRE(loaded.enemies == 4); REQUIRE_FALSE(loaded.enemiesAllied);
@@ -578,15 +723,101 @@ TEST_CASE("Random skirmish: last-used parameters survive the configuration file"
     INIFile bad(false, std::string());
     bad.setIntValue("Random Skirmish", "Map Size", 100);
     bad.setIntValue("Random Skirmish", "Tech Level", 42);
-    bad.setIntValue("Random Skirmish", "Rock", 17);
+    bad.setIntValue("Random Skirmish", "Sand Percent", -35);
+    bad.setIntValue("Random Skirmish", "Rock Percent", 285);
+    bad.setIntValue("Random Skirmish", "Mountain Percent", 3);
     bad.setStringValue("Random Skirmish", "Seed", "-5");
     Params fallback;
     fallback.load(bad);
     fallback.clamp(8);
     REQUIRE(fallback.mapSize == 96);
     REQUIRE(fallback.techLevel == 9);
-    REQUIRE(fallback.rock == Rock::All);
+    REQUIRE(fallback.sandPercent + fallback.rockPercent + fallback.mountainPercent == 100);
+    for(int share : {fallback.sandPercent, fallback.rockPercent, fallback.mountainPercent}) {
+        REQUIRE((share >= 0 && share <= 100));
+        REQUIRE(share % 5 == 0);
+    }
     REQUIRE(fallback.seed == Params().seed);
+}
+
+TEST_CASE("Random skirmish: terrain percentages migrate every legacy Rock index", "[skirmish][generator][terrain]") {
+    for(size_t index = 0; index < kLegacyGeologicalTotals.size(); ++index) {
+        INIFile config(false, std::string());
+        config.setIntValue("Random Skirmish", "Rock", static_cast<int>(index));
+        Params loaded;
+        loaded.load(config);
+        loaded.clamp(8);
+        const int total = kLegacyGeologicalTotals[index];
+        CAPTURE(index, total);
+        REQUIRE(loaded.sandPercent == 100 - total);
+        REQUIRE(loaded.rockPercent == total - 5);
+        REQUIRE(loaded.mountainPercent == 5);
+        loaded.save(config);
+        REQUIRE_FALSE(config.hasKey("Random Skirmish", "Rock"));
+        REQUIRE(config.getIntValue("Random Skirmish", "Sand Percent", -1) == 100 - total);
+        REQUIRE(config.getIntValue("Random Skirmish", "Rock Percent", -1) == total - 5);
+        REQUIRE(config.getIntValue("Random Skirmish", "Mountain Percent", -1) == 5);
+    }
+
+    // Explicit shares win even when an old configuration still carries a conflicting index.
+    for(int oldIndex : {0, 7}) {
+        INIFile config(false, std::string());
+        config.setIntValue("Random Skirmish", "Rock", oldIndex);
+        config.setIntValue("Random Skirmish", "Sand Percent", 60);
+        config.setIntValue("Random Skirmish", "Rock Percent", 25);
+        config.setIntValue("Random Skirmish", "Mountain Percent", 15);
+        Params loaded;
+        loaded.load(config);
+        loaded.clamp(8);
+        REQUIRE(loaded.sandPercent == 60);
+        REQUIRE(loaded.rockPercent == 25);
+        REQUIRE(loaded.mountainPercent == 15);
+        loaded.save(config);
+        REQUIRE_FALSE(config.hasKey("Random Skirmish", "Rock"));
+    }
+}
+
+TEST_CASE("Random skirmish: terrain shares clamp deterministically to five point percentages summing to 100", "[skirmish][generator][terrain]") {
+    Params defaults;
+    REQUIRE(defaults.sandPercent == 75);
+    REQUIRE(defaults.rockPercent == 20);
+    REQUIRE(defaults.mountainPercent == 5);
+
+    for(const std::array<int, 3>& shares : {std::array<int, 3>{75, 20, 5}, {100, 0, 0}, {0, 100, 0}, {0, 0, 100}, {50, 15, 35}}) {
+        Params p;
+        setTerrainShares(p, shares[0], shares[1], shares[2]);
+        p.clamp(8);
+        REQUIRE(p.sandPercent == shares[0]);
+        REQUIRE(p.rockPercent == shares[1]);
+        REQUIRE(p.mountainPercent == shares[2]);
+    }
+
+    const std::array<int, 3> badShares[] = {{-25, 145, -5}, {0, 0, 0}, {73, 21, 6}, {33, 33, 33},
+                                         {100, 100, 100}, {2000, -1000, 7}, {1, 2, 1}, {10, 10, 10}};
+    for(const auto& shares : badShares) {
+        Params a, b;
+        setTerrainShares(a, shares[0], shares[1], shares[2]);
+        setTerrainShares(b, shares[0], shares[1], shares[2]);
+        a.clamp(8); b.clamp(8);
+        CAPTURE(shares[0], shares[1], shares[2], a.sandPercent, a.rockPercent, a.mountainPercent);
+        REQUIRE(a.sandPercent + a.rockPercent + a.mountainPercent == 100);
+        for(int share : {a.sandPercent, a.rockPercent, a.mountainPercent}) {
+            REQUIRE((share >= 0 && share <= 100));
+            REQUIRE(share % 5 == 0);
+        }
+        REQUIRE(a.sandPercent == b.sandPercent);
+        REQUIRE(a.rockPercent == b.rockPercent);
+        REQUIRE(a.mountainPercent == b.mountainPercent);
+        a.clamp(8);
+        REQUIRE(a.sandPercent == b.sandPercent);
+        REQUIRE(a.rockPercent == b.rockPercent);
+        REQUIRE(a.mountainPercent == b.mountainPercent);
+    }
+    Params zero, rounded;
+    setTerrainShares(zero, 0, 0, 0); zero.clamp(8);
+    REQUIRE(zero.sandPercent == 75); REQUIRE(zero.rockPercent == 20); REQUIRE(zero.mountainPercent == 5);
+    setTerrainShares(rounded, 73, 21, 6); rounded.clamp(8);
+    REQUIRE(rounded.sandPercent == 75); REQUIRE(rounded.rockPercent == 20); REQUIRE(rounded.mountainPercent == 5);
 }
 
 TEST_CASE("Random skirmish: Spectate is remembered, single player only, and leaves the map alone", "[skirmish][generator]") {
@@ -939,15 +1170,17 @@ TEST_CASE("Random skirmish: bases grow around the Construction Yard", "[skirmish
 }
 
 TEST_CASE("Random skirmish: random configurations stay legal, connected and keep their mountains", "[skirmish][generator][terrain]") {
-    // 150 seeded configurations over every size, mode, mirror, rock, spice, base, army and city
-    // choice. Crowded small maps may skip items (counted in HouseSetup::skipped); they must
-    // never place anything illegally, cut a start off, or need the mountains levelled.
+    // Keep the same 150 seeded configurations, now varying all three terrain shares as well
+    // as every size, mode, mirror, spice, base, army and city choice. Crowded small maps may
+    // skip items; they must never place anything illegally or isolate starts or spice.
     Random random(99);
     for(int i = 0; i < 150; ++i) {
         Params p = params(kMapSizes[random.rand(0, 5)], random.rand(0, 3), random.rand(1, 4),
                           random.rand(0, 1) ? Mode::DuneCity : Mode::Vanilla, random.rand(1, 9), random.rand());
         p.symmetric = random.rand(0, 1);
-        p.rock = static_cast<Rock>(random.rand(0, 3));
+        p.sandPercent = 5 * random.rand(0, 20);
+        p.mountainPercent = 5 * random.rand(0, (100 - p.sandPercent) / 5);
+        p.rockPercent = 100 - p.sandPercent - p.mountainPercent;
         p.spice = static_cast<Spice>(random.rand(0, 4));
         for(Side* side : {&p.allySide, &p.enemySide, &p.playerSide}) {
             side->base = static_cast<BaseSize>(random.rand(0, 5));
@@ -956,12 +1189,12 @@ TEST_CASE("Random skirmish: random configurations stay legal, connected and keep
         }
         const Catalogue& c = p.mode == Mode::DuneCity ? city() : vanilla();
         const Result r = generate(p, c);
-        INFO("configuration " << i << " size " << p.mapSize << " houses " << r.houses.size() << " mirrored " << p.symmetric);
+        INFO("configuration " << i << " size " << p.mapSize << " houses " << r.houses.size() << " mirrored " << p.symmetric
+             << " Sand/Rock/Mountain " << p.sandPercent << "/" << p.rockPercent << "/" << p.mountainPercent);
         requireLegal(r, c);
         REQUIRE_FALSE(r.flattenedMountains);
-        std::vector<Coord> starts;
-        for(const auto& h : r.houses) starts.push_back(h.start);
-        REQUIRE(groundConnected(r.map, starts));
+        requireCleanConnected(r);
+        if(p.mountainPercent == 0) REQUIRE(terrainCounts(r.map).mountain == 0);
     }
 }
 
@@ -1092,6 +1325,33 @@ Params multiplayerParams(int starts, int size, Mode mode, BaseSize base, int arm
     return p;
 }
 
+}
+
+TEST_CASE("Random skirmish: terrain option hashes identify each mix in map provenance", "[skirmish][generator][terrain][determinism]") {
+    const std::array<int, 3> mixes[] = {{75, 20, 5}, {70, 25, 5}, {70, 20, 10}, {75, 15, 10}};
+    std::set<std::string> hashes;
+    for(size_t i = 0; i < std::size(mixes); ++i) {
+        Params p = params(96, 0, 1, Mode::Vanilla, 8, 20261103u);
+        setTerrainShares(p, mixes[i][0], mixes[i][1], mixes[i][2]);
+        p.multiplayer = i % 2 != 0;
+        const std::string hash = p.terrainHash();
+        CAPTURE(p.sandPercent, p.rockPercent, p.mountainPercent, p.multiplayer, hash);
+        REQUIRE(hash.size() == 16);
+        REQUIRE(hash.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos);
+        REQUIRE(hashes.insert(hash).second);
+        REQUIRE(p.terrainHash() == hash);
+        Params unrelated = p;
+        unrelated.seed += 1; unrelated.mapSize = 160; unrelated.spice = Spice::VeryHigh;
+        unrelated.worms = 4; unrelated.symmetric = !p.symmetric;
+        REQUIRE(unrelated.terrainHash() == hash);    // this hash is the three shares and their version
+
+        const Result r = generate(p, vanilla());
+        const ParsedMap parsed(r.ini);
+        REQUIRE(parsed.ini->getIntValue("RANDOMSKIRMISH", "Sand", -1) == p.sandPercent);
+        REQUIRE(parsed.ini->getIntValue("RANDOMSKIRMISH", "Rock", -1) == p.rockPercent);
+        REQUIRE(parsed.ini->getIntValue("RANDOMSKIRMISH", "Mountain", -1) == p.mountainPercent);
+        REQUIRE(parsed.ini->getStringValue("RANDOMSKIRMISH", "TerrainOptionsHash") == hash);
+    }
 }
 
 TEST_CASE("Random skirmish: multiplayer maps have equal open starts the lobby assigns", "[skirmish][generator][multiplayer]") {

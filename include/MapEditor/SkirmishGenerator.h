@@ -44,8 +44,6 @@ class Random;
 */
 namespace SkirmishGenerator {
 
-/// Rock share steps; the first four keep their saved indices from earlier versions.
-enum class Rock { Low, Medium, High, VeryHigh, Mostly, Nearly, AlmostAll, All };
 enum class Spice { None, Low, Medium, High, VeryHigh };
 enum class BaseSize { None, Outpost, Small, Medium, Large, Fortress };
 enum class Mode { Vanilla, DuneCity };
@@ -53,9 +51,8 @@ enum class Mode { Vanilla, DuneCity };
 enum class Role { Human, Ally, Enemy, Open };
 
 constexpr std::array<int, 6> kMapSizes{64, 96, 128, 160, 192, 256};
-/// Target share (percent) of rock + mountain terrain per Rock choice. Spice only grows on sand,
-/// so the higher steps leave less (at 100% none) for harvesting.
-constexpr std::array<int, 8> kRockPercent{15, 25, 35, 50, 65, 80, 90, 100};
+/// Terrain sliders use percentages in five-point steps, summing to 100.
+constexpr int kTerrainStep = 5;
 /// Target share (percent) of spice terrain (thick spice and blooms included) per Spice choice.
 /// Very high matches the map editor's default random map (7 fields, about 24%).
 constexpr std::array<int, 5> kSpicePercent{0, 6, 12, 18, 24};
@@ -118,7 +115,11 @@ struct Side {
 
 struct Params {
     int mapSize = 128;
-    Rock rock = Rock::Medium;
+    /// Requested map shares, summing to 100. Sand includes dunes/spice; start cores and
+    /// connecting lanes take precedence over impossible sand/mountain requests.
+    int sandPercent = 75;
+    int rockPercent = 20;
+    int mountainPercent = 5;
     Spice spice = Spice::Medium;
     int worms = 0;                  ///< one of kWormChoices
     bool symmetric = false;
@@ -159,6 +160,9 @@ struct Params {
     /// writes the mod or Spectate, which there are the host's and the lobby's.
     void load(const INIFile& config);
     void save(INIFile& config) const;
+    /// FNV-1a over the normalized terrain shares and terrain algorithm version. Included
+    /// in the map INI, which the existing multiplayer setup and saves carry verbatim.
+    std::string terrainHash() const;
 };
 
 /// What one house may field of one item, taken from ObjectData.

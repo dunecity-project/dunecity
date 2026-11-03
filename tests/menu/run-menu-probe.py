@@ -20,6 +20,7 @@ parser.add_argument('--audio-failure', action='store_true', help='Verify startup
 parser.add_argument('--size', action='append', metavar='WxH', help='Run at this window size instead of 640x480, 854x480 and 1280x720 (repeatable)')
 parser.add_argument('--retina-resolution', action='store_true', help='Verify HD selection, Apply/reinitialization and fullscreen with Retina display data')
 parser.add_argument('--tornie-family', action='store_true', help='Run only the six-edition campaign, custom lobby and map editor matrix')
+parser.add_argument('--terrain-mix', action='store_true', help='Run only the 640x480 Random Skirmish terrain controls, saved choices and layout checks')
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -108,13 +109,14 @@ with (out/'build.log').open('w') as log:
 sizes = [tuple(int(v) for v in size.lower().split('x')) for size in args.size] if args.size else [(640, 480), (854, 480), (1280, 720)]
 family_results = []
 with scratch_dir('menu-probe') as scratch:
-    for width, height in ([(640,480)] if args.retina_resolution else sizes):
+    for width, height in ([(640,480)] if args.retina_resolution or args.terrain_mix else sizes):
         profile = scratch / ('profile-' + str(width) + 'x' + str(height))
         profile.mkdir()
         (profile/'Dune City.ini').write_text('[Video]\nPhysical Width = '+str(width)+'\nPhysical Height = '+str(height)+'\nWidth = '+str(width)+'\nHeight = '+str(height)+'\nInterface Height = '+str(height)+'\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Menu tester\n')
         env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='unavailable-test-driver' if args.audio_failure else 'dummy', MENU_PROBE_OUT=str(out), MENU_PROBE_WIDTH=str(width), MENU_PROBE_HEIGHT=str(height))
         if args.retina_resolution: env['MENU_RETINA_RESOLUTION']='1'
         if args.tornie_family: env['MENU_TORNIE_FAMILY']='1'
+        if args.terrain_mix: env['MENU_TERRAIN_MIX']='1'
         logpath = out / ('run-' + str(width) + '.log')
         with logpath.open('w') as log:
             # The complete navigation fixture reloads every bundled graphics pack
@@ -124,7 +126,7 @@ with scratch_dir('menu-probe') as scratch:
         text = logpath.read_text(errors="replace")
         results = [line for line in text.splitlines() if 'MENU_PROBE_PASS:' in line]
         if len(results) != 1: raise RuntimeError('Missing menu test result; see '+str(logpath))
-        if not args.retina_resolution:
+        if not args.retina_resolution and not args.terrain_mix:
             rows = [dict(field.split('=', 1) for field in line.split('TORNIE_MENU_PASS: ', 1)[1].split())
                     for line in text.splitlines() if 'TORNIE_MENU_PASS: ' in line]
             if {row['mod'] for row in rows} != {'Tornie', 'TornieLite', 'Jericho', 'JerichoLite', 'ArcaKev', 'ArcaKevLite'} or len(rows) != 6:

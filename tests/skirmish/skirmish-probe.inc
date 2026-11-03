@@ -657,8 +657,10 @@ void runMultiplayerLobby() {
         for(Widget* hidden : std::initializer_list<Widget*>{&menu.alliesBox, &menu.enemiesBox, &menu.enemiesAlliedBox, &menu.houseBox,
                                                             &menu.partnerBox, &menu.allyAIBox, &menu.enemyAIBox, &menu.modBox,
                                                             &menu.partnerAI.roleBox, &menu.spectateBox, &menu.spectateAIBox,
-                                                            &menu.rulesButton, &menu.saveButton, &menu.startButton})
+                                                            &menu.saveButton, &menu.startButton})
             skirmishRequire(hidden->getParent() == nullptr, "The multiplayer screen shows a single-player control");
+        skirmishRequire(menu.rulesButton.getParent() == &menu.windowWidget && menu.rulesButton.isVisible(),
+                        "The multiplayer map generator cannot open Game Rules");
         skirmishRequire(menu.symmetricBox.isChecked(), "Mirrored starts are not on by default for a hosted map");
         skirmishRequire(menu.startsBox.getEntryIntData(0) == kMinStarts
                         && menu.startsBox.getEntryIntData(menu.startsBox.getNumEntries() - 1) == maxStarts(menu.houseCount, menu.tornieFamily),

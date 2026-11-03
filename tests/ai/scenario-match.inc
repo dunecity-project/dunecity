@@ -71,8 +71,8 @@ inline std::vector<Side> sidesFromEnv() {
 /// BALANCE_SKIRMISH "key=value,...": a Random Skirmish multiplayer map with one start per side,
 /// every start alike (the menu's start choices). Keys: size (64..256), base (none = MCV only, cy =
 /// Construction Yard only, outpost, small, medium, large, fortress), army (kArmyBudgets index),
-/// city (kCityTargets index), seed, tech, rock, spice (indices), credits, symmetric (0/1). The
-/// mode (vanilla or DuneCity city sim) follows the active mod, as the menu sets it.
+/// city (kCityTargets index), seed, tech, sand/rock/mountain (map percentages in steps of 5,
+/// summing to 100), spice (index), credits, symmetric (0/1). The mode follows the active mod.
 struct Skirmish {
     SkirmishGenerator::Params params;
     bool constructionYardOnly = false;
@@ -107,7 +107,9 @@ inline Skirmish parseSkirmish(const std::string& text, int starts) {
         else if (key == "city") p.startSide.city = std::stoi(value);
         else if (key == "seed") p.seed = static_cast<uint32_t>(std::stoul(value));
         else if (key == "tech") p.techLevel = std::stoi(value);
-        else if (key == "rock") p.rock = static_cast<Rock>(std::stoi(value));
+        else if (key == "sand") p.sandPercent = std::stoi(value);
+        else if (key == "rock") p.rockPercent = std::stoi(value);
+        else if (key == "mountain") p.mountainPercent = std::stoi(value);
         else if (key == "spice") p.spice = static_cast<Spice>(std::stoi(value));
         else if (key == "credits") p.credits = std::stoi(value);
         else if (key == "symmetric") p.symmetric = value == "1";
@@ -117,7 +119,8 @@ inline Skirmish parseSkirmish(const std::string& text, int starts) {
     p.clamp(getNumCustomGameHouses(), ModManager::instance().isTornieFamilyContentActive());
     if (p.starts != requested.starts || p.mapSize != requested.mapSize || p.credits != requested.credits
         || p.techLevel != requested.techLevel || p.startSide.army != requested.startSide.army
-        || p.startSide.city != requested.startSide.city)
+        || p.startSide.city != requested.startSide.city || p.sandPercent != requested.sandPercent
+        || p.rockPercent != requested.rockPercent || p.mountainPercent != requested.mountainPercent)
         throw std::runtime_error("Skirmish options out of range: " + text);
     return out;
 }
@@ -225,6 +228,7 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         for (auto it = triggers.begin(); it != triggers.end() && (*it)->getCycleNumber() == now; ++it) ++fired;
         game.updateGameState();
         EliminationMatch::crushCount.observe();
+        DuneCityAudit::observe(game);
         const Uint32 cycle = game.getGameCycleCount();
         if (cycle % minute == 0) {
             EliminationMatch::sample(game);

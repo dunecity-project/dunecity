@@ -35,7 +35,7 @@ inline std::string playerClass(const FormationDuel::Side& side, const std::strin
 /// A generated free-for-all (vanilla-match.py --skirmish, docs/formations.md "Free-for-all: the
 /// army deploys"): a multiplayer Random Skirmish map of \a mapSize from \a mapSeed with one start
 /// per side, each a Fortress with the 20,000-credit army and, in the DuneCity mod, the 40,000
-/// city, Rock High and Spice Medium, not mirrored - Stefan's 4P DuneCity FFA settings
+/// city, Sand/Rock/Mountain 65/30/5 and Spice Medium, not mirrored - Stefan's 4P DuneCity FFA
 /// ([Random Skirmish] Base 5, Army 5, City 4). Every side its own team; the engine assigns the
 /// starts from the match seed as in any custom game.
 inline GameInitSettings makeSkirmishInit(int mapSize, Uint32 mapSeed, const std::vector<FormationDuel::Side>& sides,
@@ -49,7 +49,7 @@ inline GameInitSettings makeSkirmishInit(int mapSize, Uint32 mapSeed, const std:
     params.mapSize = mapSize;
     params.seed = mapSeed;
     params.symmetric = false;
-    params.rock = Rock::High;
+    params.sandPercent = 65; params.rockPercent = 30; params.mountainPercent = 5;
     params.spice = Spice::Medium;
     params.mode = city ? Mode::DuneCity : Mode::Vanilla;
     params.mod = mod;

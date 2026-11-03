@@ -69,15 +69,18 @@ class RandomSkirmishMenu : public MenuBase
 public:
     RandomSkirmishMenu();
     /// Multiplayer mode for a game hosted with @a hostMod.
-    explicit RandomSkirmishMenu(const std::string& hostMod);
+    explicit RandomSkirmishMenu(const std::string& hostMod,
+                               const SettingsClass::GameOptionsClass* initialRules = nullptr);
     ~RandomSkirmishMenu() override;
 
     /// Multiplayer mode: path of the map Next saved, "" while none was created.
     const std::string& getCreatedMap() const { return createdMap; }
-    bool getCreatedResearchLab() const { return createdResearchLab; }
+    /// Selected match rules, including the generated map's Research Lab setting.
+    SettingsClass::GameOptionsClass getMatchRules() const;
 
 private:
-    RandomSkirmishMenu(bool multiplayer, const std::string& hostMod);
+    RandomSkirmishMenu(bool multiplayer, const std::string& hostMod,
+                       const SettingsClass::GameOptionsClass* initialRules);
     void onStart();
     /// What Start does before it plays: generate, remember the choices (rolling the next seed)
     /// and build the match start; false if the match cannot start.
@@ -89,11 +92,11 @@ private:
     /// Opens the Game Rules window (fog of war, concrete, game speed, unit caps...), as Custom Game does.
     void onGameRules();
     void onChildWindowClose(Window* pChildWindow) override;
-    /// The rules the match starts with: the player's choice once made, else the mod's defaults.
-    const SettingsClass::GameOptionsClass& matchRules() const;
     void onNewSeed();
     /// Allies or enemies moved: the other one gives way so their sum stays within the cap.
     void onPlayersChanged(bool alliesMoved = true);
+    /// Terrain shares always total 100; the unedited shares give way in a fixed order.
+    void onTerrainChanged(Slider& changed);
     void onModChanged();
     void refreshFamilyRoster();
     /// Spectate toggled: the AI that plays the watched house is chosen only while watching.
@@ -107,7 +110,7 @@ private:
     bool generate(SkirmishGenerator::Params& params, SkirmishGenerator::Result& result);
 
     void addRow(int column, int row, const std::string& caption, Widget* control);
-    void addHeader(int column, int row, const std::string& caption);
+    void addHeader(int column, int row, const std::string& caption, Widget* control = nullptr);
 
     int houseCount = 8;
     bool tornieFamily = false;
@@ -115,7 +118,6 @@ private:
     bool multiplayer = false;
     std::string hostMod;                     ///< multiplayer: the mod the hosted game plays
     std::string createdMap;
-    bool createdResearchLab = false;
     SkirmishGenerator::Params loaded;        ///< last-used choices; readParams() keeps the ones not shown
 
     StaticContainer windowWidget;
@@ -124,6 +126,7 @@ private:
     std::array<Label, 36> captions;
     int usedCaptions = 0;
     int rowPitch = 25;                       ///< row height + gap; shrinks on short screens
+    int rowHeight = 22;                      ///< compact rows keep at least 18 px for their controls
     Label* allyCityCaption = nullptr;
     Label* enemyCityCaption = nullptr;
     Label* playerCityCaption = nullptr;
@@ -132,7 +135,8 @@ private:
     Label* skinCaption = nullptr;            ///< "City skin", shown only for a city-sim mod
 
     // Settings that run from low to high are sliders; choices without an order are drop-downs.
-    Slider sizeBox, rockBox, spiceBox, wormsBox;
+    Slider sizeBox, sandBox, rockBox, mountainBox, spiceBox, wormsBox;
+    bool terrainMixUpdating = false;        ///< showing parameters and balancing shares never re-enter
     Checkbox symmetricBox;
     TextBox seedBox;
     TextButton newSeedButton;

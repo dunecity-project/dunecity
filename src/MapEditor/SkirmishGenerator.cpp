@@ -54,11 +54,6 @@ constexpr int kZonesPerPolice = 16;
 constexpr int kMaxCityRows = 8;     ///< city blocks across the base-to-edge axis
 constexpr int kNoiseCell = 6;       ///< lattice spacing of the rim noise
 constexpr int kCoreClearance = 2;   ///< no mountain this close to a start's clean core
-// Massif depth, ridge spacing and outcrop count together give about 0.23 mountain tiles per
-// rock tile over random configurations (0.35 before; mountains cut by 35% relative to rock).
-constexpr int kMassifDepth = 8;     ///< rock this deep inside a rock field becomes a mountain massif
-constexpr int kRidgeEvery = 110;    ///< one mountain ridge per this many rock tiles outside the cores
-constexpr int kOutcropsPerStart = 4;  ///< rim outcrops per 40 tiles of core width + height
 constexpr int kBlastGap = 5;        ///< footprint distance a reactor keeps from protected buildings
 
 int ceilDiv(int a, int b) { return (a + b - 1) / b; }
@@ -82,6 +77,17 @@ int snapTo(int value, const int* begin, const int* end) {
     for(const int* it = begin; it != end; ++it)
         if(std::abs(*it - value) < std::abs(best - value)) best = *it;
     return best;
+}
+
+std::array<int, 3> normalizedTerrain(int sand, int rock, int mountain) {
+    const auto units = [](int amount) { return (std::clamp(amount, 0, 100) + kTerrainStep / 2) / kTerrainStep; };
+    sand = units(sand); rock = units(rock); mountain = units(mountain);
+    const int total = sand + rock + mountain;
+    if(total == 0) return {75, 20, 5};
+    const int steps = 100 / kTerrainStep;
+    sand = sand * steps / total;
+    mountain = mountain * steps / total;
+    return {sand * kTerrainStep, (steps - sand - mountain) * kTerrainStep, mountain * kTerrainStep};
 }
 
 bool isZone(int item) {
@@ -354,7 +360,8 @@ int fillExactly(int remaining, const std::vector<int>& prices, const std::vector
 
 struct TerrainSpec {
     int size = 128;
-    Rock rock = Rock::Medium;
+    int landPercent = 25;         ///< rock + mountain; the remaining share is sand/dunes/spice
+    int mountainPercent = 5;
     Spice spice = Spice::Medium;
     MirrorMode mirror = MirrorModeNone;
     std::vector<Rect> cores;        ///< every start's clean rock, mirror images included
@@ -499,12 +506,10 @@ std::vector<int> rockDepth(const MapData& map) {
 }
 
 /**
-    Rock and mountains, no spice yet. The map editor's random map with @a rockFields rock
+    Rock, no mountains or spice yet. The map editor's random map with @a rockFields rock
     fields (organic fields, dunes, rock bits) as the base; then scattered rock islands; then
     every start's clean core with an irregular rim grown around it (noise between kRimMin and
-    kRimMax tiles, smoothed with the editor's fill-in rule); then mountains: massifs deep inside
-    large rock fields, wandering ridges through rock, and a few outcrops on every start's rim.
-    No mountain comes within kCoreClearance tiles of a core.
+    kRimMax tiles, smoothed with the editor's fill-in rule).
 */
 MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
     const int size = spec.size, area = size * size;
@@ -512,7 +517,6 @@ MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
     const auto mirror = MapMirror::createMapMirror(spec.mirror, size, size);
     Random random(mix(mapSeed, 0x2F6B1u));
     auto onSand = [](TERRAINTYPE t) { return isSandTile(t); };
-    auto onRock = [](TERRAINTYPE t) { return t == Terrain_Rock; };
 
     // Rock islands scattered over the sand.
     const int islands = std::max(2, area / 2048);
@@ -523,7 +527,7 @@ MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
     }
 
     // Start plateaus: the clean core, then a rim of irregular width around it.
-    std::vector<char> nearCore(area, 0), rimZone(area, 0);
+    std::vector<char> rimZone(area, 0);
     const uint32_t rimSeed = mix(mapSeed, 0x7A11u);
     const int c2 = kNoiseCell * kNoiseCell;
     for(const Rect& r : spec.cores) {
@@ -536,7 +540,6 @@ MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
                 const int rim = std::max(kRimMin * c2, valueNoise(rimSeed, canonical % size, canonical / size, kRimMin, kRimMax)
                                                         + jitter * c2);
                 rimZone[y * size + x] = 1;
-                if(d2 <= kCoreClearance * kCoreClearance * 2) nearCore[y * size + x] = 1;
                 if(d2 * c2 * c2 <= rim * rim) map(x, y) = Terrain_Rock;
             }
     }
@@ -556,78 +559,6 @@ MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
         }
     }
 
-    // Mountains: massifs deep inside rock fields away from every start, wandering ridges, and
-    // outcrops on the start rims. The cores stay clean.
-    const std::vector<int> depth = rockDepth(map);
-    auto mountainOk = [&](int x, int y) {
-        return map.isInsideMap(x, y) && map(x, y) == Terrain_Rock && !nearCore[y * size + x];
-    };
-    int outer = 0;      // rock outside every clean core
-    const uint32_t massifSeed = mix(mapSeed, 0x3A55u);
-    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
-        const int d = depth[y * size + x];
-        if(!mountainOk(x, y)) continue;
-        // Massifs keep a ragged berth of 10-16 tiles from every start's core.
-        const int canonical = canonicalIndex(*mirror, size, x, y);
-        const int berth = valueNoise(massifSeed, canonical % size, canonical / size, kRimMax + 3, kRimMax + 9);
-        bool open = !rimZone[y * size + x];
-        for(const Rect& r : spec.cores) open = open && distanceToRect2(r, x, y) * c2 * c2 > berth * berth;
-        if(d >= kMassifDepth && open) map(x, y) = Terrain_Mountain;
-        else ++outer;
-    }
-    // Ridges wander through rock fields at least two tiles in from the sand, outside the start
-    // rims (whose edges get outcrops instead), so they never trace an outline.
-    auto ridgeOk = [&](int x, int y) { return mountainOk(x, y) && depth[y * size + x] >= 2 && !rimZone[y * size + x]; };
-    auto ridge = [&](Coord at, int length) {
-        int dir = static_cast<int>(random.rand(0, 3));
-        static const Coord steps[] = {Coord(1,0), Coord(0,1), Coord(-1,0), Coord(0,-1)};
-        for(int i = 0; i < length; ++i) {
-            paintMirrored(map, *mirror, at.x, at.y, Terrain_Mountain, onRock);
-            if(random.rand(0, 1) == 0) {
-                const Coord side = steps[(dir + 1) % 4];
-                if(ridgeOk(at.x + side.x, at.y + side.y))
-                    paintMirrored(map, *mirror, at.x + side.x, at.y + side.y, Terrain_Mountain, onRock);
-            }
-            if(random.rand(0, 1) == 0) dir = (dir + (random.rand(0, 1) ? 1 : 3)) % 4;
-            // Wander on through rock; a ridge ends only where every way on is blocked.
-            bool moved = false;
-            for(int turn : {0, 1, 3, 2}) {
-                const int d = (dir + turn) % 4;
-                const Coord next(at.x + steps[d].x, at.y + steps[d].y);
-                if(!ridgeOk(next.x, next.y)) continue;
-                dir = d; at = next; moved = true;
-                break;
-            }
-            if(!moved) return;
-        }
-    };
-    const int ridges = outer / kRidgeEvery;
-    for(int i = 0, tries = 0; i < ridges && tries < ridges * 20; ++tries) {
-        const int x = static_cast<int>(random.rand(0, size - 1)), y = static_cast<int>(random.rand(0, size - 1));
-        if(!ridgeOk(x, y)) continue;
-        ridge(Coord(x, y), static_cast<int>(random.rand(8, 12 + size / 8)));
-        ++i;
-    }
-    // Outcrops on the rims, where a plateau meets the sand: clumps like the editor's spots, more
-    // of them along a longer outline.
-    // Every outcrop is painted at each mirror image, so a mirrored map draws fewer per core.
-    // They stay within three tiles of the sand: inside a crowded rock plain they would wall
-    // starts off from each other.
-    auto outcropOk = [&](const Rect& r, int x, int y) {
-        return mountainOk(x, y) && distanceToRect2(r, x, y) >= 9 && depth[y * size + x] <= 3;
-    };
-    for(const Rect& r : spec.cores) {
-        const int outcrops = std::max(1, kOutcropsPerStart * (r.w + r.h) / 40 / mirror->getSize());
-        for(int i = 0, tries = 0; i < outcrops && tries < 400; ++tries) {
-            const int x = r.x - kRimMax + static_cast<int>(random.rand(0, r.w + 2 * kRimMax));
-            const int y = r.y - kRimMax + static_cast<int>(random.rand(0, r.h + 2 * kRimMax));
-            if(!outcropOk(r, x, y)) continue;
-            walk(random, size, Coord(x, y), static_cast<int>(random.rand(15, 40)), [&](int wx, int wy) {
-                if(outcropOk(r, wx, wy)) paintMirrored(map, *mirror, wx, wy, Terrain_Mountain, onRock);
-            });
-            ++i;
-        }
-    }
     return map;
 }
 
@@ -700,6 +631,75 @@ void addSpice(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
     }
 }
 
+/// A bounded mountain layer, independent of geological coverage. Smooth seeded noise keeps
+/// patches coherent; deeper rock is preferred, but never converted wholesale into massifs.
+/// Reserve a three-tile ground network between starts and every spice tile before selecting
+/// mountains, so even extreme shares cannot wall a base or a field off.
+void addMountains(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
+    const int size = spec.size, area = size * size;
+    const int target = spec.mountainPercent * area / 100;
+    if(target == 0) return;
+    const auto mirror = MapMirror::createMapMirror(spec.mirror, size, size);
+    // Bit 1 reserves a lane's width; bit 2 marks its connected centre line. A route must
+    // not mistake the width it just painted around its previous step for an older route.
+    std::vector<char> protectedGround(area, 0);
+    const auto protect = [&](int x, int y, char flags = 1) {
+        if(!map.isInsideMap(x, y)) return;
+        for(int image = 0; image < mirror->getSize(); ++image) {
+            const Coord at = mirror->getCoord(Coord(x, y), image);
+            protectedGround[at.y * size + at.x] |= flags;
+        }
+    };
+    const Coord middle(size / 2, size / 2);
+    const auto protectRoute = [&](Coord at) {
+        while(!(protectedGround[at.y * size + at.x] & 2)) {
+            for(int dy = -1; dy <= 1; ++dy) for(int dx = -1; dx <= 1; ++dx) protect(at.x + dx, at.y + dy);
+            protect(at.x, at.y, 3);
+            if(at == middle) break;
+            const int dx = middle.x - at.x, dy = middle.y - at.y;
+            if(std::abs(dx) >= std::abs(dy)) at.x += dx > 0 ? 1 : -1;
+            else at.y += dy > 0 ? 1 : -1;
+        }
+    };
+    // Every protected tile belongs to this connected network. Add the cores afterwards so
+    // stopping a later route upon reaching any protected core also reaches its start's route.
+    protectRoute(middle);
+    for(const Coord& start : spec.centers) protectRoute(start);
+    for(const Rect& core : spec.cores) {
+        for(int y = std::max(0, core.y - kCoreClearance - 1); y < std::min(size, core.y + core.h + kCoreClearance + 1); ++y)
+            for(int x = std::max(0, core.x - kCoreClearance - 1); x < std::min(size, core.x + core.w + kCoreClearance + 1); ++x)
+                if(distanceToRect2(core, x, y) <= 2 * kCoreClearance * kCoreClearance) protect(x, y, 3);
+    }
+    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x)
+        if(isSpiceTerrain(map(x, y))) protectRoute(Coord(x, y));
+
+    const auto depth = rockDepth(map);
+    struct Candidate { int score, index; };
+    std::vector<Candidate> candidates;
+    candidates.reserve(area / mirror->getSize());
+    const uint32_t mountainSeed = mix(mapSeed, 0x3A55u);
+    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
+        const int index = y * size + x;
+        if(map(x, y) != Terrain_Rock || protectedGround[index] || canonicalIndex(*mirror, size, x, y) != index) continue;
+        const int score = valueNoise(mountainSeed, x, y, 0, 1024)
+                        + std::min(depth[index], 12) * kNoiseCell * kNoiseCell * 16;
+        candidates.push_back({score, index});
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
+        return a.score != b.score ? a.score > b.score : a.index < b.index;
+    });
+    int painted = 0;
+    for(const Candidate& candidate : candidates) {
+        // A mirror group is indivisible: stay within the budget rather than breaking symmetry.
+        if(painted + mirror->getSize() > target) break;
+        for(int image = 0; image < mirror->getSize(); ++image) {
+            const Coord at = mirror->getCoord(Coord(candidate.index % size, candidate.index / size), image);
+            map(at.x, at.y) = Terrain_Mountain;
+            ++painted;
+        }
+    }
+}
+
 /**
     Above what the editor's rock fields reach, rock spreads outward from its edges ring by ring,
     each sand tile taking a seeded coin flip per ring, so coastlines stay ragged. Every tile is
@@ -734,10 +734,10 @@ void growRock(MapData& map, const TerrainSpec& spec, uint32_t mapSeed, int targe
     }
 }
 
-/// Smallest editor rock-field count whose terrain reaches the Rock setting (rock then grows
-/// further for the high settings), then spice on whatever sand is left.
+/// Smallest editor rock-field count reaching the combined rock + mountain target (rock grows
+/// further for the high settings), then spice and the independently budgeted mountain layer.
 MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
-    const int target = kRockPercent[indexOf(spec.rock)];
+    const int target = spec.landPercent;
     int lo = 0, hi = 64;
     if(rockPercent(shapeRock(spec, mapSeed, hi)) < target) lo = hi;
     while(lo < hi) {
@@ -747,6 +747,7 @@ MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
     MapData map = shapeRock(spec, mapSeed, lo);
     if(rockPercent(map) < target) growRock(map, spec, mapSeed, target);
     addSpice(map, spec, mapSeed);
+    addMountains(map, spec, mapSeed);
     return map;
 }
 
@@ -1115,7 +1116,11 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
     line("[RANDOMSKIRMISH]");
     line("Seed=" + std::to_string(params.seed));
     line("MapSeed=" + std::to_string(result.mapSeed));
-    line("Rock=" + std::to_string(kRockPercent[indexOf(params.rock)]));
+    line("TerrainVersion=2");
+    line("Sand=" + std::to_string(params.sandPercent));
+    line("Rock=" + std::to_string(params.rockPercent));
+    line("Mountain=" + std::to_string(params.mountainPercent));
+    line("TerrainOptionsHash=" + params.terrainHash());
     line("Spice=" + std::to_string(indexOf(params.spice)));
     if(!result.worms.empty()) line("Sandworms=" + std::to_string(result.worms.size()));
     line(std::string("Symmetric=") + (params.symmetric ? "true" : "false"));
@@ -1141,7 +1146,8 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
 void Params::clamp(int houseCount, bool tornieFamily) {
     if(std::find(kMapSizes.begin(), kMapSizes.end(), mapSize) == kMapSizes.end())
         mapSize = snapTo(mapSize, kMapSizes.data(), kMapSizes.data() + kMapSizes.size());
-    rock = static_cast<Rock>(std::clamp(indexOf(rock), 0, indexOf(Rock::All)));
+    const auto terrain = normalizedTerrain(sandPercent, rockPercent, mountainPercent);
+    sandPercent = terrain[0]; rockPercent = terrain[1]; mountainPercent = terrain[2];
     spice = static_cast<Spice>(std::clamp(indexOf(spice), 0, indexOf(Spice::VeryHigh)));
     worms = snapTo(worms, kWormChoices.data(), kWormChoices.data() + kWormChoices.size());
     mode = static_cast<Mode>(std::clamp(indexOf(mode), 0, indexOf(Mode::DuneCity)));
@@ -1172,7 +1178,17 @@ constexpr const char* kSection = "Random Skirmish";
 
 void Params::load(const INIFile& config) {
     mapSize = config.getIntValue(kSection, "Map Size", mapSize);
-    rock = static_cast<Rock>(config.getIntValue(kSection, "Rock", indexOf(rock)));
+    if(config.hasKey(kSection, "Sand Percent") || config.hasKey(kSection, "Rock Percent") || config.hasKey(kSection, "Mountain Percent")) {
+        sandPercent = config.getIntValue(kSection, "Sand Percent", sandPercent);
+        rockPercent = config.getIntValue(kSection, "Rock Percent", rockPercent);
+        mountainPercent = config.getIntValue(kSection, "Mountain Percent", mountainPercent);
+    } else if(config.hasKey(kSection, "Rock")) {
+        // The old Rock slider meant rock + mountain. Keep its coastline target, not its
+        // unbounded mountain conversion; all earlier preset indices retain their meaning.
+        constexpr std::array<int, 8> legacyRock{15, 25, 35, 50, 65, 80, 90, 100};
+        const int total = legacyRock[std::clamp(config.getIntValue(kSection, "Rock", 1), 0, 7)];
+        sandPercent = 100 - total; rockPercent = total - 5; mountainPercent = 5;
+    }
     spice = static_cast<Spice>(config.getIntValue(kSection, "Spice", indexOf(spice)));
     worms = config.getIntValue(kSection, "Sandworms", worms);
     // The multiplayer screen keeps its own layout choice, mirrored unless the host changed it.
@@ -1212,7 +1228,11 @@ void Params::load(const INIFile& config) {
 
 void Params::save(INIFile& config) const {
     config.setIntValue(kSection, "Map Size", mapSize);
-    config.setIntValue(kSection, "Rock", indexOf(rock));
+    const auto terrain = normalizedTerrain(sandPercent, rockPercent, mountainPercent);
+    config.removeKey(kSection, "Rock");
+    config.setIntValue(kSection, "Sand Percent", terrain[0]);
+    config.setIntValue(kSection, "Rock Percent", terrain[1]);
+    config.setIntValue(kSection, "Mountain Percent", terrain[2]);
     config.setIntValue(kSection, "Spice", indexOf(spice));
     config.setIntValue(kSection, "Sandworms", worms);
     config.setBoolValue(kSection, multiplayer ? "Multiplayer Symmetric" : "Symmetric", symmetric);
@@ -1241,6 +1261,17 @@ void Params::save(INIFile& config) const {
     config.setIntValue(kSection, "Start Base", indexOf(startSide.base));
     config.setIntValue(kSection, "Start Army", startSide.army);
     config.setIntValue(kSection, "Start City", startSide.city);
+}
+
+std::string Params::terrainHash() const {
+    const auto terrain = normalizedTerrain(sandPercent, rockPercent, mountainPercent);
+    uint64_t hash = 14695981039346656037ull;
+    // Fixed byte order, not a compiler's representation or a locale-sensitive formatter.
+    for(uint32_t value : {2u, static_cast<uint32_t>(terrain[0]), static_cast<uint32_t>(terrain[1]), static_cast<uint32_t>(terrain[2])})
+        for(int shift = 0; shift < 32; shift += 8) { hash ^= (value >> shift) & 0xffu; hash *= 1099511628211ull; }
+    char text[17];
+    std::snprintf(text, sizeof(text), "%016llx", static_cast<unsigned long long>(hash));
+    return text;
 }
 
 // ---- Catalogue ----------------------------------------------------------------------------
@@ -1691,7 +1722,8 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
 
     TerrainSpec spec;
     spec.size = size;
-    spec.rock = params.rock;
+    spec.landPercent = params.rockPercent + params.mountainPercent;
+    spec.mountainPercent = params.mountainPercent;
     spec.spice = params.spice;
     spec.mirror = mirror;
     spec.centers = slotCenters;
@@ -1736,12 +1768,6 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
     if(fallback >= 0) {
         result.mapSeed = params.seed + static_cast<uint32_t>(fallback);
         result.map = buildTerrain(spec, result.mapSeed);
-    }
-    if(!groundConnected(result.map, starts)) {
-        // Only mountains block ground units; levelling them always connects the starts.
-        for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x)
-            if(result.map(x, y) == Terrain_Mountain) result.map(x, y) = Terrain_Rock;
-        result.flattenedMountains = true;
     }
 
     Layout layout(catalogue, result.map, result);

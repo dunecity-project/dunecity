@@ -1,3 +1,73 @@
+## 2026-11-04 — Adjustable Random Skirmish terrain (OMP TerrainMix, unreleased)
+
+- `80rock.dls`: Random Skirmish/CivWars mod, seed418379001,160×160,4P2v2,
+  tech1,3000credits,MCVs only,no spice,not mirrored. The unchanged generator
+  reproduced the save's **complete embedded map INI byte-for-byte**.
+- Initial tiles: sand4053(15.8320%),dunes1056(4.1250%),ordinary rock13947
+  (54.4805%),mountain6544(25.5625%),spice0. Old “80% Rock” counted rock plus
+  mountain (80.0430% combined), not80% buildable rock.
+- Cause: unbudgeted depth≥8 massifs plus one ridge/110outer rock tiles
+  (8..12+size/8 steps),plus outcrops. Its25editor fields yielded
+  **3531massif+2974ridge+39outcrop=6544**. At256/80%,old mountains were22750
+  tiles(34.71%); the oldaverage-ratio reduction did not bound highcoverage.
+- Sand/Rock/Mountain are now explicit0..100%,step5,sum100; default75/20/5.
+  OldRock80 migrates to20/75/5 (same geological target), with a1280-tile
+  mountain budget at160. Coherent seeded patches cannot occupy clean start
+  cores or reserved ground routes between starts and every spice tile.
+- Newkeys and terrain-options FNV are stored in map provenance and the usual
+  saved config. Full map INI already travels in multiplayer and saves; no extra
+  terrain save/protocol change. Existing saves retain terrain; new generation
+  intentionally changes mountains. Separate Civ Wars lane terrain is unchanged.
+- New generator coverage and640×480 focused `terrain_mix_menu_probe` are
+  registered; exact old-source hashes/matrix/phase counts/INI/before image:
+  `outputs/rock-mountain-20261103/`. New-build receipts are recorded separately.
+
+## 2026-11-03 — Map-scaled Research Pace (OMP ResearchPace, unreleased)
+
+- Stefan's `research.dls` is193×128,3v3,seed138083612,cycle112730 /
+  **30:03.680**. Harkonnen/Ordos/Rebels are tech9; Fremen/Mercenary are tech8
+  researching9; Neutral is tech8. Median lifetime gross tax+spice income is
+  **1792.27credits/game-min**, tax alone335.53. Old tech1→9 cost13200 was
+  7.365such income-minutes /24.50% of median accumulated gross.
+- Approved integer policy in `include/TechResearch.h`: `A0=129*96`,
+  `S=max(A0,2*A-A0)/A0`; apply `S*P` to both300×target credits and the
+  old30+10×target-second duration, ceiling once to credits/cycles.
+  Fast½,Normal1,Slow2,Very slow4. Small/reference maps do not slow at Normal.
+  On Stefan's map: **39468credits /33:53.024 uninterrupted** versus13200 /
+  11:20;22.021observed gross-income-minutes /73.25% of median accumulated gross.
+  Even unlimited money cannot reach tech9 before that new duration.
+- Pace and initial-map area are hashed/saved; bind geometry before any house
+  advances, never from live economy or roster. House, Lab price/time/progress and
+  QuantBot's existing research reserve/forecast share the policy.
+  Direct Civ Wars setup and Game Rules in Custom/Random/online preserve pace.
+- Shared save9882/MOD17 appends paceu32,areau32,damage-land-valuebool.
+  Older saves load Normal; completed tech and already-paid active remaining
+  timers are retained, subsequent starts use map scaling. No protocol112 bump:
+  this is part of the already-unreleased111 cutover.
+- The two user saves are different games, not income/progression delta samples.
+  `notresearching.dls` seed95244949 is9:50.016,all tech1/inactive.
+  Completed research timestamps are not serialized/logged; no invented history.
+  Active level9 starts infer cycles106788/109696 (±onecycle), conditional
+  completion114288/117196. Exact ledgers/offsets/hashes/bounds:
+  `outputs/research-save-20261103/research-analysis.json`.
+- Frozen pre-change 1v1 Hard/Hard,193×128,seed138083612,medium spice,two worms/lane,
+  45min reached tech9 at **26:54.944 Ordos /28:39.680 Atreides**; time-limit,
+  both alive. Original binary/manifest and logs retained in
+  `outputs/research-pace-20261103/{baseline-probe.app,baseline-manifest.json,before/}`.
+  Normal per-level cost/time tables and pace/migration rationale are in
+  `docs/civilization-wars.md`; exact cycles in the output's `normal-cost-time.csv`.
+
+## 2026-11-03 — Building damage no longer lowers land value (OMP LandValueDamage, unreleased)
+
+- Stefan: "dont make damage to buildings affect land value". **Damage Lowers Land Value**
+  is a default-off, hashed Game Rules option (MOD17, shared save 9882). Off skips the
+  building-condition scan entirely; on retains proportional damage penalties on occupied
+  blocks and repair recovery. Windtrap health-scaled power is unchanged.
+- City-effects unit coverage exercises both states. The existing real-engine degradation
+  probe checks off/on across zones, services, Airport and Wall, logging full/damaged/repaired
+  land values; the off state requires all three values to match.
+- Targeted build, city-effects and headless results are recorded with the integration evidence.
+
 ## 2026-11-03 — CTest historical-content and fixture repairs (OMP CtestTriage, unreleased)
 
 - Original cluster `20261103T045258-release-integration-760977`, source27176982:
