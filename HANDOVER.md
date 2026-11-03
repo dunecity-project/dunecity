@@ -36,8 +36,8 @@
   a feature without evidence: both native ICE production files are unchanged
   from897249cf. The same six-case mini probe passed582.97s in
   `20261101T231611-ctest-365281`. Today's plain Vanilla control also exchanges
-  host candidates but selects no pair/ICE fails40896ms; current integration
-  attempts time out before gameplay. Evidence:
+  host candidates but selects no pair/ICE fails40896ms. The later full run's
+  decision controllers finish together, but its Viewer still fails before gameplay. Evidence:
   `outputs/civ-wars-final/plain-loopback-control/`. Read-only inspection found
   firewallState1, defaulten1 and Tailscaleutun1; the exact changed setting/time
   is unproven. No firewall change, TURN, relay or relaxed network assertion.
@@ -48,6 +48,65 @@
   documented local fallback, `nice -n 10 ctest --test-dir build-int -j3`, through
   the shared coordinator after the combined fixes. Passing final receipts are
   not established by the original or cancelled initial job.
+- `fd36161f` makes the command probe's partner-selector subcase explicitly
+  offline. Its default-online dependency dates to `8b352f038` (1.0.740):
+  an unapproved temporary mod correctly disables those controls for the lobby.
+  The measured failure had entry0, empty partner and correct640x480/origin0,0;
+  all keyboard/difficulty/role assertions remain.
+- Independent owning-agent fixes: `11a2f104` isolates peaceful fixture hostility
+  exposed by ThreatTurrets policy `329b6bea` in city-growth/first-carryall cases.
+  `a43467cc` checks legal Wind availability (planner comparison `820bae19`),
+  and `60bbe8eb` refreshes every owned fixture yard after shared rule mutation.
+  `5900ca7e` replaces the old alive-only eligibility (`a64c7db28`) with actual
+  construction capability, retaining both income/opening assertions and at least
+  one capable survivor; the premerge loss timeline was identical. The exact
+  survivor-trajectory exposer was not bisected. `d56d1710` fixes the new MCV
+  financial-readiness coupling from `8ff2d79a` without changing its fixture.
+  `495c1b23` isolates both arms of the separate capacity/runway negative-control
+  case from the now-independent CityOpeningCapital guard; no cash/assertion change.
+- Completed local receipts on `fd36161f`: previous18 set17PASS/1spectator timeout
+  (`local-final18-fd36161f`,1879.72s); complete133 set130PASS/3fail
+  (`local-full133-fd36161f`,4448.41s). The latter also exposed projectile startup
+  timeout and the shared-spending negative control. This is not a clean full-suite
+  receipt. The earlier339898a9 full attempt was externally interrupted after103
+  results and is not a completed suite. Both completedfd source guards are unchanged.
+- Projectile sampling placed3705/3778 main-thread samples in Game initialization,
+  chiefly Workshop pin/activation and complete graphics reload, not combat updates.
+  Its12:04–12:09AEDT failure did not overlap Audit cohorts (last ended11:35:08).
+  Unconditional immutable reactivation dates to `b6a8920c`, predating1.0.864.
+  `f4eaa94a` retains resident graphics only after the stored and installed exact
+  revision bytes have both been verified; ordinary mutable-mod reload is unchanged.
+  The real LAN menu regression checks stable surface identity, rejects altered
+  already-active content and checks successful reactivation after restoring bytes.
+- Exact897249cf production code and the fixed build both ran the complete
+  three-mode combat/gas/CSV assertions with identical opt-in pinned-init hooks.
+  Mean milliseconds over128 case initializations per mode:
+
+  | Mode | 1.0.864 /897249cf | Fixed /f4eaa94a |
+  |---|---:|---:|
+  | Vanilla | 693.9 | 10.3 |
+  | Dune City | 2086.5 | 925.3 |
+  | Dune2R | 702.3 | 11.4 |
+
+  Baseline total499.03s included445.78s in initialization; this is a deliberately
+  pinned-path diagnostic, not a claim that its ordinary approved-profile CTest took
+  499s. Fixed `projectile_combat_probe` passed147.78s within the unchanged300s
+  CTest budget; full menu passed460.03s and Dune City shared-spending24.54s.
+  That three-test source guard is unchanged. Temporary baseline instrumentation
+  was reverted; six owned successful baseline asset roots were registered and
+  removed through the managed lifecycle, preserving INIs, logs, CSVs and binaries.
+- Spectator termination uses SIGTERM and40s bounded cleanup grace with the same
+  1200s gameplay deadline; nested finalization also runs if service cleanup fails
+  (`d0567781`, `339898a9`, `13ca5a6f`). The completedfd full receipt finalized
+  its artifacts without the earlier orphan-lease exception. Its Viewer logged
+  no selected ICE pair after45006ms even when Host/Partner agreed at cycle2491.
+- Evidence: `/Users/stefan/Documents/projects/outputs/ctest-triage-20261103/`
+  contains per-test JUnit/log/results/source-guard receipts, `failure-roots.json`,
+  `immutable-init-comparison.json`, native CPU sample and exact network excerpts.
+  The bounded339898a9 performance diagnostic passed all unchanged budgets: its
+  worst house0 wall cycle9525 was15.190ms with5.618ms whole-cycle thread CPU,
+  in the AI build phase. Raw CPU for the earlier93ms wall outlier was not retained,
+  so that earlier exact spike is not attributed to scheduling as a measured fact.
 
 ## 2026-11-03 — Windows online host roster stack use (OMP CivWars, unreleased)
 
