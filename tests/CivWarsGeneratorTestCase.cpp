@@ -364,7 +364,7 @@ void requireLanesIslandsAndWorms(const Result& r, const CivParams& params, const
             const int top = y;
             while(y + 1 < height && r.map(x, y + 1) == Terrain_Mountain) ++y;
             if(runs < 2) rows[runs] = top;
-            ridgesContinuous = ridgesContinuous && y - top + 1 == 3;
+            ridgesContinuous = ridgesContinuous && y - top + 1 == 7;
             ++runs;
         }
         ridgesContinuous = ridgesContinuous && runs == 2;
@@ -413,7 +413,7 @@ void requireLanesIslandsAndWorms(const Result& r, const CivParams& params, const
         for(int x = end - 1; x <= width - end; ++x) clearLane = clearLane
             && r.map(x, cy) != Terrain_Mountain && occupied.building[occupied.index(x, cy)] == -1;
         REQUIRE(clearLane);
-        for(int dy = -2; dy <= 2; ++dy) for(int dx = -2; dx <= 2; ++dx) REQUIRE(r.map(middle + dx, cy + dy) == Terrain_Rock);
+        for(int dy = -3; dy <= 3; ++dy) for(int dx = -3; dx <= 3; ++dx) REQUIRE(r.map(middle + dx, cy + dy) == Terrain_Rock);
         std::vector<Coord> queue{{middle, cy}};
         std::set<std::pair<int, int>> seen{{middle, cy}};
         bool sandMoat = true;
@@ -428,8 +428,8 @@ void requireLanesIslandsAndWorms(const Result& r, const CivParams& params, const
             }
         }
         REQUIRE(sandMoat);
-        REQUIRE(queue.size() >= 25);
-        REQUIRE(queue.size() <= 15 * 11);
+        REQUIRE(queue.size() >= 89);
+        REQUIRE(queue.size() <= 23 * 13);
         for(Coord p : queue) {
             REQUIRE(p.x > end + 1);
             REQUIRE(p.x < width - end - 2);
@@ -624,7 +624,7 @@ TEST_CASE("Civilization Wars: fixed API and shared Research Lab contract", "[civ
 TEST_CASE("Civilization Wars: every size, team and worm count stays playable and mirrored over many seeds", "[civwars][generator][matrix]") {
     const Catalogue& c = rules();
     for(std::size_t seedIndex = 0; seedIndex < kSeeds.size(); ++seedIndex) for(int size = 0; size < 4; ++size)
-        for(int team = 1; team <= 3; ++team) for(int worms = 0; worms <= 4; ++worms) {
+        for(int team = 1; team <= 3; ++team) for(int worms = 0; worms <= CivWarsGenerator::kMaxWormsPerLane; ++worms) {
             CivParams p;
             p.seed = kSeeds[seedIndex]; p.size = size; p.teamSize = team; p.wormsPerLane = worms; p.house = HOUSE_ATREIDES;
             p.spice = static_cast<Spice>((seedIndex + size + team + worms) % 5);
@@ -648,7 +648,7 @@ TEST_CASE("Civilization Wars: every size, team and worm count stays playable and
 TEST_CASE("Civilization Wars: generic multiplayer starts retain mirrored kits and team metadata", "[civwars][generator][multiplayer]") {
     for(int size = 0; size < 4; ++size) for(int team = 1; team <= 3; ++team) {
         CivParams p;
-        p.size = size; p.teamSize = team; p.seed = 9101u + size; p.wormsPerLane = 4; p.multiplayer = true;
+        p.size = size; p.teamSize = team; p.seed = 9101u + size; p.wormsPerLane = CivWarsGenerator::kMaxWormsPerLane; p.multiplayer = true;
         p.house = HOUSE_ATREIDES;
         const Result r = CivWarsGenerator::generate(p, rules());
         const Occupancy occupied = requirePlacementAndMirror(r, rules(), team);
@@ -714,11 +714,11 @@ TEST_CASE("Civilization Wars: seed changes ridges, island outlines, spice and bl
 TEST_CASE("Civilization Wars: permanent worm slots and map content ignore menu-only choices", "[civwars][generator][determinism]") {
     for(int size = 0; size < 4; ++size) for(int team = 1; team <= 3; ++team) {
         CivParams p;
-        p.size = size; p.teamSize = team; p.seed = 0xFFFFFFFFu; p.wormsPerLane = 4;
+        p.size = size; p.teamSize = team; p.seed = 0xFFFFFFFFu; p.wormsPerLane = CivWarsGenerator::kMaxWormsPerLane;
         const Result baseline = CivWarsGenerator::generate(p, rules());
         p.fixedSeed = true; p.spectate = true; p.spectateClass = "qBotHard";
         REQUIRE(CivWarsGenerator::generate(p, rules()).ini == baseline.ini);
-        for(int worms = 0; worms <= 4; ++worms) {
+        for(int worms = 0; worms <= CivWarsGenerator::kMaxWormsPerLane; ++worms) {
             p.wormsPerLane = worms;
             const Result r = CivWarsGenerator::generate(p, rules());
             bool same = true;
@@ -760,7 +760,7 @@ TEST_CASE("Civilization Wars: parameter persistence is isolated and preserves th
         INIFile config(false, std::string{});
         config.setIntValue("Random Skirmish", "Credits", 7500);
         CivParams p;
-        p.teamSize = 3; p.size = 3; p.wormsPerLane = 4; p.spice = Spice::VeryHigh;
+        p.teamSize = 3; p.size = 3; p.wormsPerLane = CivWarsGenerator::kMaxWormsPerLane; p.spice = Spice::VeryHigh;
         p.seed = seed; p.fixedSeed = true; p.house = HOUSE_ATREIDES;
         p.allyClass = "qBotEasy"; p.enemyClass = "qBotHard"; p.spectate = !multiplayer;
         p.spectateClass = "qBotBrutal"; p.multiplayer = multiplayer;
@@ -799,7 +799,7 @@ TEST_CASE("Civilization Wars: clamping and incomplete catalogues cannot produce 
     p.clamp(8);
     REQUIRE(p.teamSize == 3);
     REQUIRE(p.size == 3);
-    REQUIRE(p.wormsPerLane == 4);
+    REQUIRE(p.wormsPerLane == CivWarsGenerator::kMaxWormsPerLane);
     REQUIRE(p.spice == Spice::VeryHigh);
     REQUIRE(p.house == HOUSE_INVALID);
     REQUIRE(p.allyClass == "qBotMedium");

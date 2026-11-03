@@ -14,12 +14,14 @@ added here.
 - **Size:** 129×96, 161×112, 193×128 or 255×160. Odd widths are deliberate: an odd number of
   worms needs an actual centre tile, rather than a centre line between two tiles.
 - Each end is an all-rock plateau, roughly a quarter of the map's width. Three horizontal
-  sand lanes connect them. Two mountain ridges run continuously across the middle, from
-  one plateau to the other. The ridges do not cut the plateaus: teammates can change lanes
-  behind their front. These are normal Dune mountains: vehicles cannot cross, infantry can.
-- A buildable rock island sits halfway along each lane, with sand routes around it. Spice
-  fields and some blooms grow on lane sand, never over the rock ends or the islands. The
-  Spice slider ranges from None to Very high.
+  sand lanes connect them. Two **seven-tile-thick** mountain ridges run continuously across
+  the middle, from one plateau to the other (previously three tiles). The ridges do not cut
+  the plateaus: teammates can change lanes behind their front. These are normal Dune
+  mountains: vehicles cannot cross, infantry can.
+- A larger buildable rock island sits halfway along each lane, with a guaranteed **7×7**
+  core and sand routes around it. Seeded outlines span 19–23 tiles horizontally and 11–13
+  vertically. Spice fields and some blooms grow on lane sand, never over the rock ends or
+  the islands. The Spice slider ranges from None to Very high.
 - The seed changes ridge wiggle, island outlines and spice patterns. Every terrain tile,
   starting position, building footprint, road, foundation, aircraft and worm origin is
   mirrored left-to-right. **New** rolls another seed; **Keep this seed** retains it for the
@@ -56,15 +58,30 @@ starting Carryall. The normal buildable Harvester requires a Heavy Factory, whic
 tech-1 building; new Refineries also retain their normal Harvester grant.
 
 The generated match uses the **CivWars** mod and enables Research Lab, respawning sandworms,
-trooper anti-air and city effects. Other settings are available in **Game Rules**. Tech progression
-is the Research Lab's per-house tech-level system; no new resource, era or unit-control system is
-introduced.
+trooper anti-air, city effects and **Original Unit Damage**. This is a match-local choice:
+opening Civ Wars does not change the saved global damage preference for other modes.
+Other settings are available in **Game Rules**. Tech progression is the Research Lab's
+per-house tech-level system; no new resource, era or unit-control system is introduced.
+
+Select the Lab and use **Research tech level N**. The zero-credit start cannot immediately
+pay the first 600-credit step: the sidebar explicitly says **Needs 600 credits**, then
+**Ready to research** when normal tax/spice receipts cover it. A click sends the normal
+synchronized command; a completed level updates the house's build lists. There is no
+population requirement for Lab research.
+
+QuantBot treats research as required progression in generated Civ Wars, before repeatable
+city/military orders. It preserves queued commitments, operating cash and urgent power/
+defence recovery, and rebuilds a lost Lab. This applies to teams and every difficulty,
+including Builder/Defend controllers; it does not wait for an attack wave or an
+unbuildable high-tech worker fleet. It uses the hashed `[Force Concentration] ResearchLab`
+switch (on by default), **not** the experimental `[Civ Wars] Strategy` switch.
 
 ## Sandworms
 
-**Worms / lane** is 0–4, default 1: total starting worms are three times that value. Each lane
+**Worms / lane** is **0–10**, default 1: up to **30** starting worms in total. Each lane
 gets the same count. Two-worm pairs are mirrored about the vertical centre column; an odd
-unpaired worm starts on that column. All origins are sand tiles, outside the central islands.
+unpaired worm starts on that column. All origins are distinct sand tiles outside the
+central islands. Changing only the worm count never changes the terrain.
 
 Ordinary sandworm respawn picks random positions across the whole map. Generated Civilization
 Wars maps instead carry `[CIVILIZATIONWARS]` with `Version=1`. An untamed worm's first valid
@@ -119,10 +136,15 @@ CivWars uses the next hexadecimal token slot.
 - `civilization_wars_tests`: seeded generator matrices for all team counts, all sizes and all
   worm counts, including exact mirroring, building footprints/power, lane connectivity and
   separation, islands, roster and map serialization; mode-marker/cache/wire-format unit tests.
-- `civilization_wars_probe`: real menus, persisted seed, generic-start lobby and guest settings;
-  an all-QuantBot game for each team size through a three-game-minute limit; starting kit,
-  powered turrets, normal Harvester grant and positive starting city budget; worm defeat,
-  eating, occupied-slot retry, legacy RNG and sleeping save/load behavior.
+- `civilization_wars_probe`: real menus, persisted seed, ten-worm choice at 640×480,
+  generic-start lobby and guest settings; all-AI games for each team size through a
+  five-game-minute limit, including Easy/Medium/Hard/Brutal/Defend and Builder controllers;
+  positive starting budget and per-house research progression; worm defeat, eating,
+  occupied-slot retry, legacy RNG and sleeping save/load behavior.
+- `civilization_wars_research_probe`: actual Civ Wars Start button, real human SDL Lab
+  selection and Research click, zero-credit feedback, normal-income enablement, queued
+  command and completed tech level; 640×480 and 1280×720 screenshots. Its diagnostic
+  launcher replaces only the blocking interactive loop with deterministic game steps.
 - `menu_navigation_probe` includes the main-menu destination, selectable mod activation and
   online generator-to-player setup flow. `ui_gallery_probe` renders and lints the play,
   Spectate and online map screens, including 640×480 desert corner-crest clearance.

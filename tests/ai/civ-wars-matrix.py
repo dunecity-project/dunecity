@@ -818,7 +818,7 @@ parser.add_argument('--pairs', nargs='+', type=difficulty_pair, default=list(PAI
 parser.add_argument('--arms', nargs='+', choices=ARMS, default=list(ARMS))
 parser.add_argument('--minutes', type=int, choices=range(1, 121), default=30)
 parser.add_argument('--size', type=int, choices=range(4), default=0)
-parser.add_argument('--worms', type=int, choices=range(5), default=1)
+parser.add_argument('--worms', type=int, choices=range(11), default=1)
 parser.add_argument('--spice', type=int, choices=range(5), default=2)
 parser.add_argument('--both-sides', action='store_true', help='Also exchange controllers AND their strategy settings')
 parser.add_argument('--jobs', type=positive, default=1, help='Standalone parallelism; cluster schedules one game per unit')

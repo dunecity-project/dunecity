@@ -29,7 +29,7 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/skirmis
   render       whole-map pictures (4 px per tile) and terrain measurements of map-editor random
                maps and of generated maps; --render-save adds the map a saved match started from
   civ-menu     Civilization Wars settings, remembered seed, generic multiplayer starts/lobby/wire rules
-  civ-1v1      fixed starting kit and positive city income, three game minutes with QuantBot on every seat
+  civ-1v1      fixed starting kit and positive city income, five game minutes with QuantBot on every seat
   civ-2v2      the same four-house match and mirrored lane setup
   civ-3v3      the same six-house match and one lane per player
   civ-research human selected from Civ Wars menu: zero-credit rejection, normal-income enablement,
@@ -83,6 +83,14 @@ main = main[:position] + '#include "' + str(root / 'tests/skirmish/skirmish-prob
 work = Path(tempfile.mkdtemp(prefix='skirmish-probe-build-', dir=out))
 source, obj = work / 'skirmish-main.cpp', work / 'skirmish-main.o'
 source.write_text(main)
+menu_source, menu_obj = work / 'civ-wars-menu.cpp', work / 'civ-wars-menu.o'
+menu = (root / 'src/Menu/CivWarsMenu.cpp').read_text()
+launcher = 'startSinglePlayerGame(init);'
+if menu.count(launcher) != 1:
+    raise RuntimeError('Civ Wars game-launch boundary changed.')
+menu_source.write_text('#include <GameInitSettings.h>\n'
+                       'void startCivWarsProbeGame(const GameInitSettings&);\n'
+                       + menu.replace(launcher, 'startCivWarsProbeGame(init);'))
 compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
 for option in ('-include', '-MT', '-MF'):
     if option in compile_command:
@@ -94,6 +102,9 @@ for option in ('-MD', '-MMD'):
 compile_command[compile_command.index('-o') + 1] = str(obj)
 compile_command[compile_command.index('-c') + 1] = str(source)
 compile_command.append('-fno-access-control')
+menu_compile = compile_command.copy()
+menu_compile[menu_compile.index('-o') + 1] = str(menu_obj)
+menu_compile[menu_compile.index('-c') + 1] = str(menu_source)
 app = work / 'skirmish-probe.app/Contents'
 (app / 'MacOS').mkdir(parents=True)
 (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
@@ -103,8 +114,10 @@ link = link[link.index('&&') + 1:]
 link = link[:link.index('&&')]
 link[link.index('-o') + 1] = str(binary)
 link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
+link = [str(menu_obj) if arg.endswith('/Menu/CivWarsMenu.cpp.o') else arg for arg in link]
 with (work / 'build.log').open('w') as log:
     subprocess.run(['nice', '-n', '10'] + compile_command, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+    subprocess.run(['nice', '-n', '10'] + menu_compile, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
     subprocess.run(['nice', '-n', '10'] + link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 
 # Engine lines that mean a generated map or match is broken.

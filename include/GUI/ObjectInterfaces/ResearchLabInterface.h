@@ -29,6 +29,10 @@ protected:
             if(lab) lab->handleResearchClick();
         });
         box.addWidget(&research, 38);
+        status.setTextFontSize(11);
+        status.setTextColor(color);
+        status.setAlignment(Alignment_HCenter);
+        box.addWidget(&status, 42);
         box.addWidget(Spacer::create(), 0.99);
     }
 
@@ -43,11 +47,22 @@ protected:
         research.setVisible(currentGame->getGameInitSettings().getGameOptions().researchLab);
         research.setText(tech >= 9 ? _("All tech researched") : _("Research tech level ") + std::to_string(target));
         research.setPrice(tech >= 9 ? 0 : 300 * target);
-        research.setEnabled(currentGame->canControlHouse(owner) && owner->canStartTechResearch(objectID));
+        const bool canControl = currentGame->canControlHouse(owner);
+        const bool affordable = owner->getStartingCredits() + owner->getEarnedCredits()
+            >= FixPoint(owner->getTechResearchCost());
+        research.setEnabled(canControl && owner->canStartTechResearch(objectID));
         if(active) {
             const int percent = 100 - owner->getTechResearchRemaining() * 100 / House::techResearchCycles(target);
             research.setStatus(std::to_string(percent) + " %");
-        } else research.setStatus(tech >= 9 ? _("Complete") : "");
+            status.setText(_("Research in progress"));
+        } else {
+            research.setStatus(tech >= 9 ? _("Complete") : "");
+            status.setText(tech >= 9 ? _("All technology unlocked")
+                : !canControl ? _("View only")
+                : !affordable ? _("Needs ") + std::to_string(owner->getTechResearchCost()) + _(" credits")
+                : !lab->isActive() ? _("Lab must be deployed")
+                : _("Ready to research"));
+        }
         if(displayedTarget != target) {
             displayedTarget = target;
             research.setTooltipText(_("Raises only your house's tech level. ")
@@ -61,6 +76,7 @@ private:
     VBox box;
     Label level;
     ResearchButton research;
+    Label status;
     int displayedTarget = -1;
 };
 

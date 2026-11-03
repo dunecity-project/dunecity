@@ -22,6 +22,11 @@ control follows the existing structure-command authorization rules. Progress is 
 percentage, and completion refreshes every one of the house's build lists (normal building
 prerequisites and factory/yard upgrades still apply).
 
+The Lab sidebar explains a disabled button: **Needs N credits** until the complete
+up-front price is available, **Research in progress**, **View only**, or **All technology
+unlocked**. In particular, a zero-credit Civ Wars start must earn 600 credits before its
+first step. Research itself has no population threshold.
+
 The cost and duration depend only on the **target** level:
 
 | Target level | Credits | Game seconds |
@@ -51,6 +56,13 @@ controllers do not start construction/research. AI decision telemetry records
 `tech_research_started` (`from`, `to`, `cost`, `cycles`, `lab`),
 `tech_research_completed` (`tech_level`) and cancellation. Match analytics add the current
 `tech_level`, `research_target` and `research_remaining` only for research-enabled games.
+
+Generated Civilization Wars treats these tech payments as required prerequisites rather
+than optional expansion. The same hashed ResearchLab switch prioritizes them before
+repeatable production, maintains working cash and existing queue commitments, and saves
+for/rebuilds a missing Lab before optional city growth. It does not require the unfinished
+opening worker fleet, an attack wave, or the experimental `[Civ Wars] Strategy` switch.
+Ordinary maps retain the optional-capital policy above.
 
 Random Skirmish shows a **Research Lab** checkbox below Tech level only below level 9. It is
 remembered as `[Random Skirmish] Research Lab`; starting uses that choice, not an implicit free

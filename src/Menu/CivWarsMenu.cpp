@@ -21,6 +21,7 @@ SettingsClass::GameOptionsClass matchRules(SettingsClass::GameOptionsClass rules
     rules.sandwormsRespawn = true;
     rules.trooperAntiAir = true;
     rules.cityEffects = true;
+    rules.originalUnitDamage = true;
     return rules;
 }
 
@@ -82,7 +83,7 @@ CivWarsMenu::CivWarsMenu(bool multiplayer) : multiplayer(multiplayer) {
         const Coord size = CivWarsGenerator::kMapSizes[i];
         sizeBox.addEntry(std::to_string(size.x) + " x " + std::to_string(size.y), i);
     }
-    for(int n = 0; n <= 4; ++n) wormsBox.addEntry(std::to_string(n), n);
+    for(int n = 0; n <= CivWarsGenerator::kMaxWormsPerLane; ++n) wormsBox.addEntry(std::to_string(n), n);
     const char* spiceNames[] = {"None", "Low", "Medium", "High", "Very high"};
     for(int n = 0; n < 5; ++n) spiceBox.addEntry(_(spiceNames[n]), n);
     seedBox.setAllowedChars("0123456789");

@@ -24,6 +24,16 @@ activation rather than equating a direct-match advantage with a finished AI.
 Research Lab's independent basic AI policy remains available while this strategy
 is off; disabling the experiment does not disable research or Civ Wars itself.
 
+Generated-mode research is now an independent required-progression path under the
+existing hashed `[Force Concentration] ResearchLab` switch. It runs with Strategy off
+and in 1v1/2v2/3v3, including Easy, Medium, Defend and Builder-only houses. It reserves the
+next payment before repeatable orders without waiting for a fleet or attack wave whose
+technology is still locked. Existing queued commitments, positive income, operating cash,
+power and active economic-defence gates remain. A missing Lab gets a protected rebuild
+allocation and the rebuilding yard can spend it before optional zoning. Ordinary maps
+retain their original optional-capital policy. Historical strategy results below predate
+this progression correction and the enlarged islands/seven-tile ridges.
+
 The generated-map contract is three horizontal lanes, centred at
 `(2 * lane + 1) * height / 6`, rock ends of width `width / 4`, mirrored teams
 (left team 1, right team 2), and one midpoint rock island per lane. Vehicles stay
@@ -82,12 +92,11 @@ safe, reachable island and retain existing recent-loss, destination reservation,
 escort and MCV footprint protection. Do not create yards without an economic or
 lane-control purpose.
 
-Code inspection found two concrete control limitations: `RockExpansionPolicy`
-requires 48 free tiles in both the formation and local window, whereas a generated
-island guarantees only a 5×5 core; the smallest `(rx=5, ry=3)` bounds contain at most
-37 rock tiles. New-colonist demand also waits for the home base to be built out.
-Changing island ranking alone cannot overcome either gate. Teammates' existing
-buildings and assigned MCV destinations must count when avoiding duplicate colonies.
+The former generator guaranteed only a 5×5 core (as few as 37 rock tiles), below the
+ordinary `RockExpansionPolicy` 48-tile threshold. The current generator guarantees a 7×7
+core and larger seeded islands (at least 89 rock tiles). New-colonist demand still waits
+for the home base to be built out unless the optional duel strategy applies. Changing
+island size does not enable that strategy or change its team-format gate.
 
 Harvester safety already reacts to visible/remembered threats; inspect its worm
 handling and measure worm-attributed worker deaths. Respawning worms mean a

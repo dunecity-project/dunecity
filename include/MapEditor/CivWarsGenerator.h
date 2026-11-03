@@ -27,6 +27,7 @@ namespace CivWarsGenerator {
 
 // Odd widths put an odd lane's unpaired worm on the integer centre column.
 inline const std::array<Coord, 4> kMapSizes{{{129, 96}, {161, 112}, {193, 128}, {255, 160}}};
+inline constexpr int kMaxWormsPerLane = 10;
 
 struct Params {
     int teamSize = 1;

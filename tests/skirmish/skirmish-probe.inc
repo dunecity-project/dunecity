@@ -45,6 +45,8 @@
 #include <map>
 #include <sstream>
 
+void startCivWarsProbeGame(const GameInitSettings& init);
+
 namespace {
 
 using namespace SkirmishGenerator;
@@ -830,6 +832,10 @@ void runMultiplayerLobby() {
 
 #include "civ-wars-probe.inc"
 
+}
+
+void startCivWarsProbeGame(const GameInitSettings& init) {
+    runCivResearchGame(init);
 }
 
 int runSkirmishProbe() {

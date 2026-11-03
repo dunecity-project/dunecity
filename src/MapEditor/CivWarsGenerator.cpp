@@ -51,12 +51,12 @@ struct Island {
 };
 
 Island islandShape(uint32_t seed, int lane) {
-    return {5 + static_cast<int>(mix(seed, 100u + lane) % 3),
-            3 + static_cast<int>(mix(seed, 200u + lane) % 3)};
+    return {9 + static_cast<int>(mix(seed, 100u + lane) % 3),
+            5 + static_cast<int>(mix(seed, 200u + lane) % 2)};
 }
 
 // The bounded, linearly interpolated ridge moves at most one row per column.
-// Three-tile thickness closes diagonal vehicle crossings as well as cardinal ones.
+// Seven-tile thickness makes the territory boundaries substantial without cutting the lanes.
 int ridgeY(uint32_t seed, int x, int width, int height, int ridge) {
     const int local = std::min(x, width - 1 - x) - width / 4;
     const int cell = local / 8, fraction = local % 8;
@@ -76,7 +76,7 @@ void makeTerrain(Result& result, const Params& params) {
 
     for(int x = end; x <= middle; ++x) for(int ridge = 0; ridge < 2; ++ridge) {
         const int y = ridgeY(params.seed, x, width, height, ridge);
-        for(int dy = -1; dy <= 1; ++dy)
+        for(int dy = -3; dy <= 3; ++dy)
             map(x, y + dy) = map(width - 1 - x, y + dy) = Terrain_Mountain;
     }
     // Half the map is sand: twice the normal share there keeps the familiar spice
@@ -97,24 +97,24 @@ void makeTerrain(Result& result, const Params& params) {
     for(int lane = 0; lane < kLanes; ++lane) {
         const int cy = laneY(height, lane);
         const Island shape = islandShape(params.seed, lane);
-        // A plain-sand moat keeps the buildable 5x5 island core distinct from both
+        // A plain-sand moat keeps the buildable 7x7 island core distinct from both
         // team ends and the ridges, even with Very High spice and blooms.
         for(int dy = -shape.ry - 2; dy <= shape.ry + 2; ++dy)
             for(int dx = -shape.rx - 2; dx <= shape.rx + 2; ++dx) map(middle + dx, cy + dy) = Terrain_Sand;
         for(int dy = -shape.ry; dy <= shape.ry; ++dy) for(int dx = -shape.rx; dx <= shape.rx; ++dx) {
             const int ax = std::abs(dx), ay = std::abs(dy);
             const int edge = static_cast<int>(noise(params.seed, ax, ay, 0x49534C41u + lane) % 3) - 1;
-            if((ax <= 2 && ay <= 2) || ax * shape.ry + ay * shape.rx <= shape.rx * shape.ry + edge)
+            if((ax <= 3 && ay <= 3) || ax * shape.ry + ay * shape.rx <= shape.rx * shape.ry + edge)
                 map(middle + dx, cy + dy) = Terrain_Rock;
         }
 
         // Reserve every possible permanent origin, not only this worm count's
         // subset: changing worms never changes the generated terrain or the kit.
         const int sign = mix(params.seed, 300u + lane) & 1u ? 1 : -1;
-        const int wormY = cy + sign * (shape.ry + 4);
+        const int wormY = cy + sign * (shape.ry + 3);
         map(middle, wormY) = Terrain_Sand;
-        for(int pair = 0; pair < 2; ++pair) {
-            const int x = end + (pair + 1) * (middle - end) / 3;
+        for(int pair = 0; pair < kMaxWormsPerLane / 2; ++pair) {
+            const int x = end + (pair + 1) * (middle - end) / (kMaxWormsPerLane / 2 + 1);
             map(x, wormY) = map(width - 1 - x, wormY) = Terrain_Sand;
         }
     }
@@ -305,7 +305,7 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
 void Params::clamp(int houseCount) {
     teamSize = std::clamp(teamSize, 1, std::clamp(houseCount / 2, 1, 3));
     size = std::clamp(size, 0, static_cast<int>(kMapSizes.size()) - 1);
-    wormsPerLane = std::clamp(wormsPerLane, 0, 4);
+    wormsPerLane = std::clamp(wormsPerLane, 0, kMaxWormsPerLane);
     spice = static_cast<SkirmishGenerator::Spice>(std::clamp(static_cast<int>(spice), 0, 4));
     if(house < 0 || house >= NUM_PLAYER_HOUSES) house = HOUSE_INVALID;
     if(allyClass.empty()) allyClass = "qBotMedium";
@@ -393,11 +393,11 @@ SkirmishGenerator::Result generate(const Params& requested, const SkirmishGenera
     result.worms.reserve(kLanes * params.wormsPerLane);
     for(int lane = 0; lane < kLanes; ++lane) {
         const int sign = mix(params.seed, 300u + lane) & 1u ? 1 : -1;
-        const int y = laneY(dimensions.y, lane) + sign * (islandShape(params.seed, lane).ry + 4);
+        const int y = laneY(dimensions.y, lane) + sign * (islandShape(params.seed, lane).ry + 3);
         const int end = dimensions.x / 4, middle = dimensions.x / 2;
         if(params.wormsPerLane & 1) result.worms.push_back({HOUSE_FREMEN, Unit_Sandworm, middle, y});
         for(int pair = 0; pair < params.wormsPerLane / 2; ++pair) {
-            const int x = end + (pair + 1) * (middle - end) / 3;
+            const int x = end + (pair + 1) * (middle - end) / (kMaxWormsPerLane / 2 + 1);
             result.worms.push_back({HOUSE_FREMEN, Unit_Sandworm, x, y});
             result.worms.push_back({HOUSE_FREMEN, Unit_Sandworm, dimensions.x - 1 - x, y});
         }

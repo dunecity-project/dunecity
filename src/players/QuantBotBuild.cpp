@@ -126,7 +126,7 @@ void QuantBot::build(int militaryValue) {
             if (pStructure->isABuilder()) buildProducer(pass, pStructure);
         }
     }
-    if (!civWarsRules()) startTechResearch(pass);
+    if (!civWarsRules() && !civWarsResearchRequired()) startTechResearch(pass);
 
     traceCapitalOutcome(pass);
     // MULTIPLAYER FIX: Use deterministic timer instead of random
@@ -138,18 +138,22 @@ bool QuantBot::researchLabPolicyActive() const {
         && botConfig().force.researchLab && !switchedOff() && !fighterOnly();
 }
 
+bool QuantBot::civWarsResearchRequired() const {
+    return researchLabPolicyActive() && currentGame->getGameInitSettings().isCivilizationWars();
+}
+
 bool QuantBot::economyReadyForCapital(BuildPass& pass) {
     const bool spiceIncome = pass.spiceEconomyViable && getAIRefineryBays() > 0
         && pass.actualHarvesters >= std::max(1,std::min(2,pass.mapSpiceHarvesterTarget));
     const bool taxIncome = pass.citySimEnabled && getHouse()->getCapacity() > 0
         && pass.forecastTax > pass.forecastUpkeep;
     return (spiceIncome || taxIncome) && pass.forecastNetIncome > 0
-        && !cityBootstrapNeeded(pass) && !openingFleetIncomplete(pass)
+        && !cityBootstrapNeeded(pass) && (civWarsResearchRequired() || !openingFleetIncomplete(pass))
         && getHouse()->hasPower()
         && (!(pass.citySimEnabled || pass.powerRules)
             || getHouse()->getProducedPower() >= getHouse()->getPowerRequirement())
         && !pass.defendingEconomy && !pass.airEngaged
-        && (civWarsRules() || pass.dangerousCrimeProperties <= 0);
+        && (civWarsRules() || civWarsResearchRequired() || pass.dangerousCrimeProperties <= 0);
 }
 
 bool QuantBot::techInvestmentReady(BuildPass& pass) {
@@ -179,7 +183,19 @@ bool QuantBot::canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier)
 }
 
 bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
-    return techInvestmentReady(pass) && canFundWorkingCapital(pass,cost,NONE_ID);
+    if (!techInvestmentReady(pass)) return false;
+    if (!civWarsResearchRequired()) return canFundWorkingCapital(pass,cost,NONE_ID);
+    // Technology is a prerequisite, not an optional expansion that must wait for
+    // the unlocked worker fleet or repeated city/factory allocations to finish.
+    // Queued purchases are already deducted from pass.money; keep real operating
+    // cash, never borrow expected receipts or spend another queue's commitment.
+    QuantBotBuildPolicy::TechInvestment investment;
+    investment.enabled = investment.economyReady = investment.powerReady = true;
+    investment.cash = std::min(pass.money,getHouse()->getCredits());
+    investment.projectedCash = investment.cash;
+    investment.cost = cost;
+    investment.reserve = std::max(300,pass.cityWorkingReserve);
+    return QuantBotBuildPolicy::canFundTechInvestment(investment);
 }
 
 bool QuantBot::cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 supplier) {
@@ -203,16 +219,25 @@ bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* buil
 }
 
 void QuantBot::planCivWarsResearch(BuildPass& pass) {
-    if (!civWarsRules() || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9
-        || getHouse()->getNumItems(Structure_ResearchLab) == 0 || !techInvestmentReady(pass)) return;
-    // Unlock tanks first, then field a real wave before buying more technology.
-    // Once repairs unlock, establish the yard before unlocking still more tech.
-    const int tech = getHouse()->getTechLevel();
-    if ((tech >= 4 && getHouse()->getNumItems(Structure_HeavyFactory) == 0)
-        || (tech >= 5 && getHouse()->getNumItems(Structure_RepairYard) == 0)) return;
-    const bool firstWave = customWave.launched != 0;
-    const int groundValue = tech >= 4 && firstWave ? ownGroundArmyValue() : 0;
-    if (!QuantBotBuildPolicy::civWarsResearchPacing(tech,firstWave,groundValue,minWaveValue())) return;
+    const bool required = civWarsResearchRequired();
+    if ((!required && !civWarsRules()) || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9
+        || !techInvestmentReady(pass)) return;
+    if (getHouse()->getNumItems(Structure_ResearchLab) == 0) {
+        if (required)
+            pass.civWarsResearchReserve = QuantBotBuildPolicy::civWarsResearchSaving(
+                buildingCapitalCost(pass,Structure_ResearchLab),pass.cityWorkingReserve,pass.forecastFunding);
+        return;
+    }
+    // The optional duel strategy retains its army pacing. Basic progression must
+    // also work for teams, Easy/Medium and Builder/Defend houses that never launch.
+    if (!required) {
+        const int tech = getHouse()->getTechLevel();
+        if ((tech >= 4 && getHouse()->getNumItems(Structure_HeavyFactory) == 0)
+            || (tech >= 5 && getHouse()->getNumItems(Structure_RepairYard) == 0)) return;
+        const bool firstWave = customWave.launched != 0;
+        const int groundValue = tech >= 4 && firstWave ? ownGroundArmyValue() : 0;
+        if (!QuantBotBuildPolicy::civWarsResearchPacing(tech,firstWave,groundValue,minWaveValue())) return;
+    }
     startTechResearch(pass);
     if (!getHouse()->isTechResearchActive())
         pass.civWarsResearchReserve = QuantBotBuildPolicy::civWarsResearchSaving(

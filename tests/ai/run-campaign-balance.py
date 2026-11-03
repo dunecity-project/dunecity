@@ -166,8 +166,8 @@ parser.add_argument('--civ-wars', type=int, choices=range(1, 4), metavar='TEAMSI
                     help='Real generated Civilization Wars 1v1/2v2/3v3; needs --mod CivWars --local-spectator')
 parser.add_argument('--civ-size', type=int, choices=range(4), default=0, metavar='INDEX',
                     help='Civilization Wars map-size index, 0–3 (default 0)')
-parser.add_argument('--civ-worms', type=int, choices=range(5), default=1, metavar='COUNT',
-                    help='Civilization Wars worms per lane, 0–4 (default 1)')
+parser.add_argument('--civ-worms', type=int, choices=range(11), default=1, metavar='COUNT',
+                    help='Civilization Wars worms per lane, 0–10 (default 1)')
 parser.add_argument('--civ-spice', type=int, choices=range(5), default=2, metavar='INDEX',
                     help='Civilization Wars spice index, 0–4 (default 2)')
 parser.add_argument('--civ-strategy', choices=('off', 'on', 'left', 'right'),
