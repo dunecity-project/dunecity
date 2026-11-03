@@ -93,6 +93,11 @@ house credits/counts, every object's id, item, owner, health, tile) plus every o
 fixed-point position and angle, destination and target, and each house's exact credits,
 every 750 cycles and at the end. See the results section for what was compared.
 
+Scenario runs also log `SCENARIO_SETUP` before the first update: the simulation seed,
+effective options and QuantBot config hashes, generated map-text hash (FNV-1a64),
+active content/ObjectData hashes, city/observer mode and requested test style.
+Compare these inputs before attributing different platform digests to the simulation.
+
 ## Results
 
 Fixed benchmark, three Hard duels (128/7101, 160/7202, 192/7303, 20 game minutes),

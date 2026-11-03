@@ -207,6 +207,17 @@ inline std::string classesOf(const House* house) {
 /// team (the campaign's own result in a campaign), or "time_limit".
 inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, bool constructionYardOnly) {
     if (constructionYardOnly) deployMcvs(game);
+    const auto& init = game.getGameInitSettings();
+    GameStateDigest::Hasher mapHash;
+    for (const unsigned char byte : init.getFiledata()) mapHash.mixUint8(byte);
+    const auto checksums = ModManager::instance().getEffectiveChecksums();
+    const char* style = std::getenv("BALANCE_SCENARIO_STYLE");
+    SDL_Log("SCENARIO_SETUP: seed=%u cycle=%u config_hash=%s options_hash=%s map_hash=%016llx "
+            "map_hash_algorithm=fnv1a64 content_hash=%s object_data_hash=%s city_sim=%d observing=%d style=%s",
+            init.getRandomSeed(), game.getGameCycleCount(), getQuantBotConfig().getConfigHash().c_str(),
+            init.getGameOptions().getHash().c_str(), static_cast<unsigned long long>(mapHash.value()),
+            checksums.combined.c_str(), checksums.objectData.c_str(), int(game.isCitySimEnabled()),
+            int(game.isObserving()), style && *style ? style : "default");
     const House* tracked = game.getHouse(trackedHouse);
     // The houses that start with something: a campaign roster also names houses its map lacks.
     std::vector<const House*> houses;
