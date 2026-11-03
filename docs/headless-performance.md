@@ -105,6 +105,17 @@ Compare these inputs before attributing different platform digests to the simula
 executable regression pin: a missing, duplicate or different final digest fails the run.
 Pins must come from measured matching platform runs of the intended source and inputs.
 
+The portable Ninja CTests `cross_platform_city_medium` and `cross_platform_city_brutal`
+pin the seed-9101, no-spice, yard-only cases at cycle 93,750: respectively
+`9c8dd9752d75dd64` (160, Medium, 1v1) and `dd327c648188768e` (96, Brutal, FFA4).
+Both were measured on macOS arm64 and Windows x64 at production source `b63879bfb7d0`.
+
+`dunecity-audit.py` retains the setup hashes, per-bot config hashes, executable SHA256
+and source commit/fingerprint in `games.csv` before successful profiles are discarded.
+Use a new results directory when its CSV schema changes; resuming into an old header
+is rejected rather than appending mislabelled fields. Older rows without these identities
+cannot establish that two differing digests came from identical inputs and executables.
+
 ## Results
 
 Fixed benchmark, three Hard duels (128/7101, 160/7202, 192/7303, 20 game minutes),

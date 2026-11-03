@@ -470,6 +470,31 @@ if(DUNECITY_DIRECT_P2P AND NOT EMSCRIPTEN)
     target_compile_features(dunecity_p2p_interop PRIVATE cxx_std_17)
 endif()
 
+# The same measured 25-minute city simulations pin both native lockstep platforms.
+# Keep these outside the macOS-only UI/probe group so MSVC exercises the same inputs.
+if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME cross_platform_city_medium COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/cross-platform-city-medium
+            --scenario --mod dunecity --house harkonnen --local-spectator --seed 9101 --minutes 25
+            --capture-mib 256 --path-workers 1 --expect-digest 9c8dd9752d75dd64
+            --scenario-sides harkonnen:1:qBotMedium,atreides:2:qBotMedium
+            --scenario-style city-construction-capital-off
+            --skirmish size=160,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
+        add_test(NAME cross_platform_city_brutal COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/cross-platform-city-brutal
+            --scenario --mod dunecity --house harkonnen --local-spectator --seed 9101 --minutes 25
+            --capture-mib 256 --path-workers 1 --expect-digest dd327c648188768e
+            --scenario-sides harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal
+            --skirmish size=96,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
+        set_tests_properties(cross_platform_city_medium cross_platform_city_brutal PROPERTIES
+            TIMEOUT 300 RUN_SERIAL TRUE ENVIRONMENT "BALANCE_DUNECITY_AUDIT=1")
+    endif()
+endif()
+
 # Real SDL menu rendering and setup preservation, using isolated local profiles.
 # The diagnostic main links production menu objects; no test access ships in the app.
 if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")

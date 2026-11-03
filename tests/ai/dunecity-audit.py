@@ -35,7 +35,9 @@ DETECTORS = ('economy_stall', 'power_deficit', 'no_ground_defence', 'missing_sta
              'bankrupt_queue_empty', 'early_no_fight', 'zero_harvesters', 'storage_full')
 META = ('id', 'seed', 'size', 'spice_level', 'format', 'difficulty', 'variant', 'base', 'army', 'city', 'limit', 'style')
 GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes',
-                      'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error')
+                      'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error', 'config_hash', 'options_hash',
+                      'map_hash', 'content_hash', 'object_data_hash', 'ai_config_hashes', 'probe_sha256',
+                      'source_commit', 'source_fingerprint', 'source_fingerprint_error')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
@@ -66,6 +68,10 @@ def read(path):
 def append(path, fields, rows):
     with lock:
         new = not path.exists()
+        if not new:
+            with path.open(newline='') as handle:
+                if next(csv.reader(handle), []) != list(fields):
+                    raise ValueError(f'CSV schema changed; use a new results directory: {path}')
         with path.open('a', newline='') as handle:
             writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
             if new:
@@ -187,6 +193,7 @@ def command(args, binary, game, out):
 
 def play(args, scratch, binary, game):
     out = scratch / ('g' + hashlib.sha256(game['id'].encode()).hexdigest()[:12])
+    probe_sha256 = hashlib.sha256(Path(binary).read_bytes()).hexdigest()
     started = time.monotonic()
     process = subprocess.run(command(args, binary, game, out), cwd=root, capture_output=True, text=True,
                              env=dict(os.environ, BALANCE_DUNECITY_AUDIT='1'))
@@ -196,6 +203,10 @@ def play(args, scratch, binary, game):
     final = [parse(line, 'SCENARIO_HOUSE:') for line in lines if 'SCENARIO_HOUSE:' in line]
     generated = next((parse(line, 'SCENARIO_MAP:') for line in lines if 'SCENARIO_MAP:' in line), {})
     timing = next((parse(line, 'PROBE_TIMING:') for line in lines if 'PROBE_TIMING:' in line), {})
+    setup = next((parse(line, 'SCENARIO_SETUP:') for line in lines if 'SCENARIO_SETUP:' in line), {})
+    configs = [parse(line, 'SCENARIO_AI_CONFIG:') for line in lines if 'SCENARIO_AI_CONFIG:' in line]
+    summary_path = out / 'summary.json'
+    summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
     digest = next((parse(line, 'PROBE_DIGEST:').get('digest', '') for line in lines
                    if 'PROBE_DIGEST:' in line and 'final=1' in line), '')
     merged = defaultdict(dict)
@@ -213,6 +224,12 @@ def play(args, scratch, binary, game):
                skipped=generated.get('skipped', ''), outcome=result.get('outcome', ''), winner_team=result.get('winner_team', ''),
                minutes=result.get('minutes', ''), loop_ms=timing.get('loop_ms', ''),
                wall_s=round(time.monotonic() - started, 3), digest=digest, attack_telemetry=int(args.attack_events), error=error)
+    row.update({field: setup.get(field, '') for field in (
+        'config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
+    row.update(ai_config_hashes=','.join(f'{item["house"]}:{item["config_hash"]}' for item in configs),
+               probe_sha256=probe_sha256, source_commit=summary.get('sourceCommit', ''),
+               source_fingerprint=summary.get('sourceFingerprint', ''),
+               source_fingerprint_error=summary.get('sourceFingerprintError', ''))
     results = Path(args.results)
     if error:
         (results / f'failed-{out.name}.txt').write_text(game['id'] + '\n' + process.stdout[-4000:] + '\n'
@@ -230,7 +247,7 @@ def play(args, scratch, binary, game):
         attacks = defaultdict(list)
         attack_rows = []
         if args.attack_events:
-            for event in json.loads((out / 'summary.json').read_text())['attacks']:
+            for event in summary['attacks']:
                 if int(event['data']['members']) <= 0:
                     continue
                 house = int(event['house'])
