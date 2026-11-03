@@ -665,6 +665,8 @@ void runNoSpiceCityProbe(Game& game) {
             pass.capitalChoice=-1;pass.citySimEnabled=true;pass.money=house->getCredits();
             pass.cityCoreInfrastructureReady=false;
             pass.forecastNetIncome=7200;pass.activeProductionBurn=0;
+            pass.populationCeiling=40000;pass.cityDisplayPopulation=40000;
+            pass.cityGrowthLimits.sharedZoneCap=QuantBotCityPolicy::kUnlimited;
             return pass;
         };
         try {
@@ -673,10 +675,17 @@ void runNoSpiceCityProbe(Game& game) {
             auto old=storagePass();
             require(bot->storageExpansionItem(old,yard)==NONE_ID,
                 "Storage-off control no longer reproduces the missing production-core gate");
+            require(bot->initialCityPopulation(Structure_Silo)>0 && !bot->cityAdmitsStructure(old,Structure_Silo),
+                "Storage-off control must reproduce the Silo's industrial-population cap refusal");
             config->force.storageCapacity=true;
             auto on=storagePass();
             require(bot->storageExpansionItem(on,yard)==Structure_Silo,
                 "A full tax city without the production core did not choose its available Silo");
+            require(bot->cityAdmitsStructure(on,Structure_Silo)
+                && bot->cityAdmitsStructure(on,Structure_Refinery),
+                "A full city's population ceiling still rejects physical income storage");
+            require(!bot->cityAdmitsStructure(on,Structure_ZoneResidential),
+                "Storage relief incorrectly removed the ordinary zoning population ceiling");
             QuantBot::BuilderTurn turn(on.money);turn.pBuilder=yard;turn.pStructure=yard;
             require(bot->queueFoundedStructure(on,turn,Structure_Silo,__LINE__,"storage_capacity"),
                 "Full-storage relief did not enter the real founded production queue");
@@ -698,7 +707,7 @@ void runNoSpiceCityProbe(Game& game) {
             require(bot->storageExpansionItem(early,yard)==NONE_ID,"Parallel yards duplicated a pending refinery vault");
             cancelOrders(yard);
             bot->builderPlaceLocations.clear();bot->reservedStructures.clear();
-            SDL_Log("STORAGE_CAPACITY_PASS: full2,005 without core; founded Silo and T1 refinery; pending vaults deduplicated");
+            SDL_Log("STORAGE_CAPACITY_PASS: full2,005 at40kpopulation without core; founded Silo and T1 refinery; pending vaults deduplicated");
         } catch(...) {
             game.techLevel=savedTech;house->researchedTechLevel=savedResearched;
             bot->configOverride=savedConfig;throw;

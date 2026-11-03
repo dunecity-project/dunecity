@@ -117,6 +117,15 @@ also required a Heavy Factory and the city's complete Heavy/HighTech/Repair core
 80% occupancy without forecasting income or construction lead time. A refinery's vault was
 only an opening bootstrap or a side-effect of spice expansion, not an overflow alternative.
 
+The first paired audit exposed a second independent gate at the population limit. In
+`matrix/medium-a2-c0/128/low/1v1/medium/30m/9101`, Harkonnen repeatedly selected a Silo at
+cycle103025: safe site(110,46),197 legal candidates,666 free rock, forecast net26,848/4min
+against active burn1,562/min. The queue accepted nothing because `cityAdmitsStructure`
+counts a Silo's industrial workers against the already-full40,000 population ceiling.
+The StorageCapacity-on rule therefore admits physical-storage buildings at that ceiling;
+ordinary R/C/I zoning keeps its existing cap. No redevelopment or placement exception was
+needed or added. The retained causal trace is `outputs/silo-capacity-20261103/residual-cause/`.
+
 The default-on, multiplayer-hashed `[Force Concentration] StorageCapacity` policy selects the
 best buildable storage capacity per capital cost, normally the Silo, with a refinery-vault
 fallback at technology1. It forecasts earned income over the building/foundation lead time

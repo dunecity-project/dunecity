@@ -1040,6 +1040,11 @@ bool QuantBot::cityAdmitsStructure(BuildPass& pass, Uint32 item) {
             || !DuneCity::isCityZoneStructure(item)
             || QuantBotCityPolicy::allowsZone(pass.cityZonesIncludingQueued,pass.cityGrowthLimits.sharedZoneCap);
     if (!isStructure(item)) return true;
+    // A Silo/refinery also houses industrial workers, but refusing the vault
+    // at the population ceiling destroys the existing city's income. Zoning
+    // keeps its cap; physical storage remains available to bank that income.
+    if (botConfig().force.storageCapacity && !DuneCity::isCityZoneStructure(item)
+        && currentGame->objectData.data[item][getHouse()->getHouseID()].capacity>0) return true;
     if(DuneCity::isCityZoneStructure(item)
         && !QuantBotCityPolicy::allowsZone(pass.cityZonesIncludingQueued,pass.cityGrowthLimits.sharedZoneCap)) return false;
     const int added=QuantBotCityPolicy::displayPopulation(initialCityPopulation(item));
