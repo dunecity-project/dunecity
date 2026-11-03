@@ -659,9 +659,9 @@ void runMcvDeploymentProbe(Game& game) {
                 bot->build(0);
             };
 
-            // A live shipment is a priority decision, not just affordability:
-            // a discounted combat batch must not replace the only way out of
-            // built-out rock. Keep the existing stock/cash/delivery tests below.
+            // First-factory arbitration must not change the existing MCV
+            // ranking. Both switch states retain this ordinary import choice;
+            // the independent stock/cash/delivery checks follow below.
             {
                 const auto savedConfig=bot->configOverride;
                 const int savedMilitaryLimit=bot->militaryValueLimit;
@@ -689,9 +689,10 @@ void runMcvDeploymentProbe(Game& game) {
                         && port->currentProductionQueue.front().itemID==Unit_Quad,
                         "Colonist negative control did not divert the expansion order into a combat bargain");
                     competingImports(true);
-                    require(portMcvs()==1 && port->currentProductionQueue.size()==1,
-                        "A combat bargain displaced the protected space-expansion colonist");
-                    SDL_Log("MCV_CONSTRUCTION_CAPITAL_PASS: off buys combat imports; on dispatches one colonist");
+                    require(portMcvs()==0 && !port->currentProductionQueue.empty()
+                        && port->currentProductionQueue.front().itemID==Unit_Quad,
+                        "First-factory arbitration changed the ordinary colonist/import ranking");
+                    SDL_Log("MCV_CONSTRUCTION_CAPITAL_PASS: both switch states retain ordinary import priority");
                 } catch (...) {
                     resetCargo();bot->configOverride=savedConfig;
                     bot->militaryValueLimit=savedMilitaryLimit;throw;

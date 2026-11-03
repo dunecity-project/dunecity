@@ -505,9 +505,9 @@ void runNoSpiceCityProbe(Game& game) {
             const Pass legacy=marketDecide(false,factoryPrice);
             require(ordered(legacy,Unit_Quad) && !ordered(legacy,Structure_HeavyFactory),
                 "First-factory negative control did not divert affordable factory cash into imports");
-            const Pass saving=marketDecide(true,factoryPrice-1);
-            require(!ordered(saving,Structure_HeavyFactory) && !ordered(saving,Unit_Quad),
-                "First-factory savings were spent before the real purchase was affordable");
+            const Pass shortCash=marketDecide(true,factoryPrice-1);
+            require(!ordered(shortCash,Structure_HeavyFactory) && ordered(shortCash,Unit_Quad),
+                "An unaffordable first factory withheld working cash from ordinary imports");
             const int growthPower=house->getPowerRequirement()+std::max(0,factoryData.power)+24;
             const Pass lastPower=marketDecide(true,factoryPrice,growthPower-1);
             require(!ordered(lastPower,Structure_HeavyFactory),
@@ -523,7 +523,7 @@ void runNoSpiceCityProbe(Game& game) {
             const Pass unavailable=marketDecide(true,factoryPrice);
             require(ordered(unavailable,Unit_Quad) && !ordered(unavailable,Structure_HeavyFactory),
                 "Unavailable heavy technology kept reserving cash from useful military imports");
-            SDL_Log("CITY_CONSTRUCTION_CAPITAL_PASS: first factory saves %d, orders once, unavailable tech releases cash",factoryPrice);
+            SDL_Log("CITY_CONSTRUCTION_CAPITAL_PASS: affordable first factory orders once; short cash and unavailable tech release imports");
         } catch (...) {
             restore();throw;
         }

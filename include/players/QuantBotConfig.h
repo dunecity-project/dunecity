@@ -261,9 +261,9 @@ struct QuantBotConfig {
         /// existing four-minute working-capital forecast. Viable spice economies
         /// retain their normal budgets; military and required recovery are unchanged.
         bool cityOpeningCapital;
-        /// Protect a seeded tax city's first legal heavy factory once its
-        /// Starport is present, and a due space-expansion MCV, from repeat
-        /// military bargains. Existing income, power and defence gates apply.
+        /// Protect an already affordable first heavy factory in a seeded tax
+        /// city with a standing Starport from repeat military bargains.
+        /// Existing income, power and defence gates apply; never save below its quote.
         bool cityConstructionCapital;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.

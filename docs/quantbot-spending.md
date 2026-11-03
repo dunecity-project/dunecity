@@ -96,6 +96,14 @@ commitments. A pending or standing port ends the claim. Without it, cheap city
 plots and the first-heavy-factory saving repeatedly win before the Starport
 fallback is reached, even when a developed no-spice city earns enough to buy it.
 
+`CityConstructionCapital=1` (hashed, default on) arbitrates a seeded tax city's
+first legal Heavy Factory against repeated military imports once its Starport
+is standing, the full factory and foundation quote is already affordable, tax
+exceeds upkeep, and standing power leaves the existing 24-power growth floor
+after the factory's draw. It never saves below that quote, runs during active
+defence, duplicates a queued factory, or changes the ordinary MCV ranking.
+This is a bounded purchase, not permission to fund continuous factory operation.
+
 `ThreatTurrets=1` in the same section (hashed, default on) lets Custom Hard/Brutal
 buy local rocket cover against **visible armed ground units near the production,
 income and power core (including Radar)**, rather than chasing every outlying plot.

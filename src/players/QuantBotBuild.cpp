@@ -2959,10 +2959,9 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     added,std::max(0,pass.militaryBudget-pass.militaryValue),capacity.cost);
                 if (actual==0) {
                     capacity.reason="bootstrap_managed_separately";
-                    // The yard's first-factory ladder cannot save money that a
-                    // selected Starport bargain reserves first. This one legal
-                    // tax-city purchase needs the same shared claim as a colonist,
-                    // not four minutes of hypothetical continuous factory burn.
+                    // Only arbitrate an already affordable first factory
+                    // against imports. Saving below its quote also withheld
+                    // working cash from the city's unfinished income base.
                     if (factory==Structure_HeavyFactory && pass.citySimEnabled
                         && botConfig().force.cityConstructionCapital && !pass.spiceEconomyViable
                         && pass.itemCount[Structure_StarPort]>0
@@ -3051,13 +3050,12 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             }
             pass.capitalCandidates.push_back(transport);
         }
-        // Give an imported colonist the same shared cash protection as a
-        // factory-built one; otherwise repeated bargains consume its savings.
+        // An imported colonist uses the ordinary shared capital ranking and
+        // the same real stock, cash and delivery checks as local production.
         if (port && pass.colonisationNeeded && !pass.mcvBuildAvailable && pass.itemCount[Unit_MCV]==0) {
             CapitalCandidate colonist;
             colonist.builder=builder->getObjectID();colonist.item=Unit_MCV;
-            colonist.kind=botConfig().force.cityConstructionCapital && !pass.defendingEconomy && !pass.airEngaged
-                ? "city_construction" : "construction";
+            colonist.kind="construction";
             colonist.price=purchasePrice(builder,Unit_MCV);
             colonist.cost=colonist.price;colonist.delay=MILLI2CYCLES(30000);
             if (!ready) colonist.reason="producer_busy";
@@ -3086,9 +3084,6 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // grow at all until someone settles the next formation, however
             // many yards it already runs.
             const bool colonyNeed=pass.colonisationNeeded;
-            if (pass.citySimEnabled && botConfig().force.cityConstructionCapital
-                && !pass.defendingEconomy && !pass.airEngaged
-                && (pass.rockExpansionNeeded || colonyNeed)) mcv.kind="city_construction";
             const bool vanillaNeed=!pass.citySimEnabled && DuneCity::prioritizeVanillaMcv(pass.money,
                 pass.actualHarvesters,pass.itemCount[Structure_ConstructionYard],pass.itemCount[Unit_MCV],mcv.price);
             if (!(cityNeed || colonyNeed || vanillaNeed)) mcv.reason="construction_capacity_available";
@@ -3167,6 +3162,10 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             && pass.money<candidate.price+candidate.foundationCost
                 +(pass.citySimEnabled ? pass.cityPlotPrice : std::max(0,pass.economyReserve))) {
             candidate.score=0;candidate.reason="early_rocket_working_cash";
+        }
+        if (std::string_view(candidate.kind)=="city_construction"
+            && pass.money<candidate.price+candidate.foundationCost) {
+            candidate.score=0;candidate.reason="first_heavy_not_affordable";
         }
     }
 }
