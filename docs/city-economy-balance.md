@@ -348,3 +348,134 @@ Redundant finished roads are redirected to connected gaps around owned buildings
 excluding queued locations. If none is useful/free, keep the road ready and retry
 with a five-second delay rather than cancelling it. This preserves later building
 orders, although a held road occupies the yard until a site becomes available.
+
+## Rich-AI investigation (2026-11-03, protocol 111 staging)
+
+Ten real 30-minute all-QuantBot city games compared `police-recovery-off/on`
+in the same native build: 160×160 Fortress starts, 20,000-credit armies,
+40,000 starting cities, Medium spice, Hard and Brutal mirrors, seeds 9101 and
+148680876; plus 128×128 Medium-base, 2,500-credit-army, no-prebuilt-city Hard
+mirrors at seed 9101. Every house started with **3,000 credits**, spice factor
+1, the default slow city year and the mod's other defaults. These are ten
+30-minute observations, all time limits, not a win-rate experiment.
+
+Raw per-house minute curves, sources, expenditure, queue fronts and attacks:
+`~/Documents/projects/outputs/ai-rich-police-20261103/{fortress,medium}-{off,on}/`.
+The paired snapshot is source `2456373e6002`; a further full-capture replay of
+the richest Hard game is in `capital-trace/` (commit `f23489918a5c`, no working
+tree edits, no capture limit). Its final balance and original game digest
+reproduce the measured wealthy household.
+
+### Where the credits came from
+
+Hard Atreides, Fortress seed 9101, ended with **37,257** credits:
+
+| Cumulative source or use over 30 game minutes | Credits |
+|---|---:|
+| Starting grant, identical for every house | 3,000 |
+| Refined spice, factor 1 | 159,401 |
+| Gross city tax | 147,294 |
+| Net city credits actually applied, after policing | 123,834 |
+| Withdrawals for construction, units, upgrades, repairs and power | 248,978 |
+| Power, already included in those withdrawals | 16,819 |
+| Posted police charges, separate from withdrawals | 23,466 |
+| Refunds / sales / storage losses | 0 / 0 / 0 |
+| Construction Yard income | **0** |
+
+The exact balance is `3,000 + 159,401 + 123,834 - 248,978 = 37,257`.
+Posted police charges exceed the actual reduction of gross tax by six
+credits: the existing empty-city-treasury floor waives an early deficit
+(`House::addCityCredits`), rather than taking it from starting/spice cash.
+This small floor effect does not explain the large balance.
+
+Its four Yards supply **4,000 of 42,040 storage capacity**, not income.
+`Game.cpp` sets each city Yard's capacity to 1,000; `House::incrementStructures`
+adds capacity, while only refinery delivery and city-budget payout add the
+measured recurring income. No AI-only starting grant or passive Yard payout
+was found.
+
+### Why money accumulates late
+
+Between minutes 20 and 30 the same house banked **31,930** additional credits:
+64,812 spice + 72,384 gross tax - 10,363 police - 94,903 other withdrawals.
+Thus it was still spending **9,490 credits/minute** (779 of that power), not
+forgetting to pay for production; income after police was 12,683/minute.
+Tax supplied 52.8% of this window's gross recurring income.
+
+The construction sink reaches a deliberate difficulty limit. At cycle 96,979
+the full trace records city population **89,860 + 480 pending**, versus Hard's
+90,000 ceiling, **30,927** cash, **59,850** queue-inclusive military versus a
+70,000 target, four idle Yards and available building space. Each yard wants
+another Repair Yard, but `QuantBotBuildProducers.cpp::produceItemWithLogging`
+first calls `QuantBotBuild.cpp::cityAdmitsStructure`. That ceiling includes
+government jobs as well as private lots, so the repair investment cannot be
+admitted; additional population-bearing factories face the same ceiling.
+Zero-population services/power and military production remain available.
+The capital comparison also refuses another production lane when existing
+four-minute nominal military capacity (50,001 credits here) already exceeds
+the remaining army shortfall (`QuantBotSpendingPolicy::additionalProduction`).
+
+This is an **income-versus-deliberate-city/army-cap balance constraint**, not
+uncreated build commands or an extra source of AI cash. All five paired games
+had active production whenever a house retained 5,000+ credits and a Yard;
+none met the audit's four-minute whole-production-idle `unused_credits` flag.
+That detector does not mean every individual yard was busy: the capped city's
+yard-idle period above is explicitly retained in the evidence.
+
+No spending-cap bypass or income rebalance is implemented by this fix.
+**Recommendation:** if smaller mature-city treasuries are desired, A/B the
+private-zone multiplier at 1.5× rather than 2× before choosing a balance
+change; do not remove Yard storage or the 3,000-credit opening grant. At fixed
+population/behaviour, a 25% reduction of this window's tax would remove at most
+18,096 of its 31,930 surplus (Palace is exempt from the private-zone multiplier).
+That is a bounded estimate, not a played result; ordinary starts in this sample
+were cash-constrained, so a universal tax nerf needs wider validation.
+
+### Credit curves and police acceptance
+
+Every Fortress household's OFF/ON credit curve is identical, including final
+game digests: these well-funded cities normally remained at 100% police funding.
+All start at 3,000; each entry below is the balance at the stated game minute.
+
+| Difficulty | Seed | House | 10 min | 20 min | 30 min |
+|---|---:|---|---:|---:|---:|
+| Brutal | 148680876 | Harkonnen | 1,217 | 1,479 | 13,633 |
+| Brutal | 148680876 | Atreides | 463 | 1,037 | 0 |
+| Brutal | 148680876 | Ordos | 1,168 | 518 | 1,267 |
+| Brutal | 148680876 | Sardaukar | 735 | 656 | 655 |
+| Brutal | 9101 | Harkonnen | 381 | 905 | 0 |
+| Brutal | 9101 | Atreides | 7,048 | 2,245 | 5,649 |
+| Brutal | 9101 | Ordos | 899 | 2,465 | 6,472 |
+| Brutal | 9101 | Sardaukar | 1,647 | 577 | 0 |
+| Hard | 148680876 | Harkonnen | 1,998 | 2,175 | 2,164 |
+| Hard | 148680876 | Atreides | 1,140 | 836 | 1,169 |
+| Hard | 148680876 | Ordos | 1,629 | 6,303 | 32,623 |
+| Hard | 148680876 | Sardaukar | 294 | 433 | 0 |
+| Hard | 9101 | Harkonnen | 0 | 0 | 0 |
+| Hard | 9101 | Atreides | 1,103 | 5,327 | 37,257 |
+| Hard | 9101 | Ordos | 2,091 | 5,844 | 860 |
+| Hard | 9101 | Sardaukar | 1,044 | 0 | 0 |
+
+Ordinary Medium-base starts, Hard seed 9101, **OFF / ON**:
+
+| House | 10 min | 20 min | 30 min |
+|---|---:|---:|---:|
+| Harkonnen | 496 / 369 | 1,752 / 945 | 1,184 / 2,208 |
+| Atreides | 715 / 463 | 825 / 1,219 | 350 / 563 |
+| Ordos | 558 / 574 | 2,076 / 1,490 | 713 / 884 |
+| Sardaukar | 947 / 344 | 909 / 248 | 1,205 / 1,026 |
+
+Funding recovery changes this cash-constrained game's subsequent simulation,
+so its differing end balances are not an isolated economic-strength claim.
+The controlled real-engine budget probe proves the exact cause and fix:
+cash 1,000→6,000 takes funding **100→53→81** after the 30-second review;
+a small tax-headroom cut takes **100→97→100** after two minutes with recovery
+on, while off remains at **97**. Immediate cuts, exact review boundaries,
+campaign/helper ownership and actual budget charging all pass unchanged.
+
+Verification on the frozen paired source: `quantbot_police_budget` and the ten
+other selected QuantBot/performance tests pass (cluster job
+`20261103T202057-ctest-daf8f5`); `dunelegacy_tests` passes on the Windows PC
+in `20261103T201949-ctest-746ac5`. The former includes police placement,
+shared spending, no-spice city, growth installments, custom attack, strategic
+site stalls, all-against-Atreides, scenario smoke, FFA deployment and performance.

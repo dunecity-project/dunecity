@@ -527,3 +527,37 @@ regression is fixed only when explicitly enabled, not claimed shipped by default
 Raw inputs, all36 outcomes and actual host coverage:
 `~/Documents/projects/dunecity-results/unit-movement/serviceownership-78eaa25e/`.
 
+
+## Police recovery and rich-city audit (2026-11-03)
+
+Source `2456373e6002`, same-build `police-recovery-off/on`: ten 30-minute
+Random Skirmish FFA games, forty AI-house histories. Four paired Fortress
+games cover Hard/Brutal, seeds 9101/148680876, 160×160, 20,000 armies,
+40,000 cities and Medium spice. A fifth pair uses the ordinary Medium-base,
+no-city, 2,500-army 128×128 Hard start, seed 9101. All houses receive 3,000
+credits and spice factor 1. All games reach the time limit without a harness
+error; this is an economy/recovery observation, not an expected-winner gate.
+
+Minute-level per-AI credit curves, sources, spending and funding are retained
+under `~/Documents/projects/outputs/ai-rich-police-20261103/`; the complete
+tables, capped-city spending explanation and unimplemented balance
+recommendation are in [City economy: Rich-AI investigation](city-economy-balance.md#rich-ai-investigation-2026-11-03-protocol-111-staging).
+The wealthiest case is Hard Atreides, seed 9101: 37,257 credits at minute 30,
+from ordinary starting cash plus 159,401 refined spice and 147,294 gross tax,
+not Yard storage income. Existing population/army admission ceilings constrain
+late construction. Fortress OFF/ON curves and final digests match; ordinary
+starts exercise budget changes and diverge. No income or difficulty-cap change
+is silently folded into police recovery.
+
+The real-engine `quantbot_police_budget` gate now proves funding **100→53→81**
+after cash recovers and **100→97→100** after a small affordable recovery; the
+off-switch control remains 97. Its 30-second/two-minute review boundaries,
+immediate cuts and per-house/campaign/helper ownership checks pass.
+
+Acceptance: cluster `20261103T202057-ctest-daf8f5` **11/11 PASS**:
+police budget/placement, shared-spending DuneCity, no-spice city, growth
+installments, custom attack, strategic-site stall, mandatory all-against-Atreides,
+scenario matrix smoke, FFA deployment and performance. Air ran the strategic
+stall/FFA gates; mini ran the six short probes; Pro ran performance and the two
+match matrices. `dunelegacy_tests` separately passed on PC in the shared
+same-source job `20261103T201949-ctest-746ac5`.
