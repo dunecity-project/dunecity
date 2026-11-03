@@ -149,6 +149,71 @@ the same tick, leaving the minute checkpoint slightly below capacity. The older
 `storage_lost` ledger still includes capacity destruction. Reports never label old, unmeasured
 CSV histories as zero loss. Divide cycle totals by3,750 for house-minutes.
 
+### Frozen StorageCapacity OFF/ON evidence (2026-11-04)
+
+Both arms use source `87479bf109a21eb10a6f0e06b2c271dd1334eb09`, one frozen probe
+(`sha256:8ab8039c14f232eed9b6e52b869eed0a278105ba80e791ab9311f618ac8127b6`), and identical
+seeds/options; only `play-styles/dunecity-audit-storage-off.ini` changes. The real-save pair
+loads the exact historical CivWars revision
+`37d5ce34e477fc5ddbb21f2328cf9898bd6baa347c1311f0f4dec307cf066f38`
+(saved checksum `9addf5f78f6e678a`), reconstructed and hash-checked against its original
+manifest. No checksum bypass, injected cash, replacement AI or artificial orders are used.
+
+Continuing `80rock.dls` from cycle26,188 to75,000 (minute20):
+
+| House | Full-storage house-minutes OFF / ON | Income lost OFF / ON | Final capacity OFF / ON |
+|---|---:|---:|---:|
+| Neutral6 | 8.9312 / 0 | 11,275 / 0 | 2,005 / 6,025 |
+| Sardaukar5 | 1.5717 / 0 | 1,274 / 0 | 2,005 / 5,020 |
+| All four houses | **10.5029 / 0** | **12,549 / 0** | — |
+
+The two other houses lose no income in either arm. The candidate buys technology-legal
+refinery vaults; it does not unlock Silos early.
+
+The distributed audit has **144 completed games, zero run errors**:36 per arm in a
+30-minute 96/128-map,1v1/FFA4 matrix (Medium/Hard/Brutal,seed9101), and36 per arm in a
+45-minute128-map adjacent-difficulty ladder (both house assignments,seeds9101/148680876).
+Both cover spice **None/Low/Medium** in the DuneCity mod.
+
+| Metric | Matrix OFF / ON (108 houses each) | Ladder OFF / ON (72 houses each) |
+|---|---:|---:|
+| Physical full-storage house-minutes | 1.6861 / **0** | 71.8232 / **0.1261** |
+| Income-refusal tick house-minutes | 52.2613 / 50.2667 | 101.0336 / 27.8600 |
+| Income credits lost | 12,589 / **4,493** | 395,906 / **16,972** |
+| Economy-stall flags | 15 / 16 (103 eligible) | 6 / 6 |
+| Bankrupt/empty-queue flags | 25 / 25 | 11 / 12 |
+| Houses launching attacks | 68 / 69 | 62 / 62 |
+| Attack waves | 135 / 133 | 284 / 277 |
+| Mean kill value | 19,236.94 / 19,253.89 | 36,694.86 / 37,796.11 |
+
+All36 matrix winners are unchanged. Among the68 jointly attacking matrix houses, mean
+first-attack time is8.8270/8.8729 minutes. Ladder first attack is10.2605/10.2876 minutes.
+The extra matrix stall is Low-spice Hard FFA house4,minute26: it never buys storage, never
+loses income in ON, and peaks at678 earned credits against at least13,010 capacity.
+It is a changed combat/build trajectory, not evidence of storage purchases exhausting its
+budget. The extra flag is nevertheless retained, not discarded from the comparison.
+
+Ladder stronger-side wins are Brutal/Hard6/6, Hard/Medium6/5, and Medium/Easy8/8; weaker-side
+wins are unchanged4/4,1/1,0/0. Time limits rise11/12. The paired score report classifies
+each difficulty as “level with” its control (Hard delta−0.052,95% CI[−0.156,0]); this is
+not a claim of identical combat outcomes or uniformly improved point estimates.
+
+Residual ON losses only increase in one-minute sample intervals where the house has no
+Construction Yard at one or both endpoints. No loss increases in intervals with a standing
+yard at both endpoints. The remaining physical-full time is473 cycles (7.568 seconds) in
+one such ladder house. Sampling does not prove the exact intra-minute destruction/loss
+order, and the report does not call these losses eliminated. Across both audits physical-full
+time falls73.5093→0.1261 house-minutes; refused income falls408,495→21,465 credits.
+
+Evidence is retained under `outputs/silo-capacity-20261103/`:
+`final-provenance.json`, `final-80rock-{off,on}/`, `final-80rock-comparison.json`,
+`final-{matrix,ladder}-{off,on}/`, `final-{matrix,ladder}-comparison.txt`,
+`final-audit-summary.json`, `final-combat-detail.json`, and `final-residual-losses.json`.
+Queue receipts are `20261104T010424-silo-storage-final-033ffd-{1,2,3,4}` and
+`20261104T012607-silo-final-80rock-{off-9368fe,on-b480fd}`. The engine regression also
+asserts actual founded Silo/refinery queues, pending-vault deduplication, the full40,000
+population case, preserved ordinary-zone limits and remaining useful-production budget.
+
 ## Root cause: a reserve top-up spent the seed town's working capital
 
 Diagnostic source `9db1c94e15e6`, game

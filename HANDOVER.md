@@ -1,3 +1,41 @@
+## 2026-11-04 — Stop earned-income storage overflow (OMP SiloCapacity, unreleased)
+
+- Commits `4e53eaac` (policy/config/hash/probe/audit/fixtures) and `0c1a0aa5`
+  (physical vault admission at the population ceiling). Busy-yard placement avoidance
+  landed with `0d27bb65`. Default-on hashed `[Force Concentration] StorageCapacity`;
+  no save/protocol change beyond the release's existing111 bump.
+- Two measured causes: technology1 cannot build the only previously considered storage
+  item (Silo); higher-tech storage also waited for Heavy/HighTech/Repair. Separately,
+  a Silo's industrial workers made the population cap reject a funded safe vault.
+  The latter trace selected a Silo with26,848 forecast net/4min but never queued it
+  at40,000/40,000 population.
+- Forecast earned receipts over actual construction/foundation lead time, subtract active
+  production and ordered capital, then buy one safe funded vault only as needed. Count all
+  pending capacity, retain power/air-defence priority, use technology-legal refinery vaults
+  before Silos, and leave other cash for useful production. Starting grants are exempt;
+  ordinary city zoning retains its cap. No saboteur or human-order changes.
+- Exact historical-revision `80rock.dls`, cycle26,188→75,000: all-house full-storage time
+  **10.5029→0 house-minutes**, refused income **12,549→0 credits**, OFF→ON. Neutral's
+  final capacity2,005→6,025; Sardaukar's2,005→5,020. No injected income/orders.
+- Frozen source `87479bf109a2`, probe SHA256 `8ab8039c14f232eed9b6e52b869eed0a278105ba80e791ab9311f618ac8127b6`:
+  **144 distributed paired games**, DuneCity None/Low/Medium spice. Matrix full time
+  1.6861→0; ladder71.8232→0.1261 house-minutes. Credits lost12,589→4,493 and
+  395,906→16,972. All remaining increases occur in sampled intervals with a yard absent
+  at one/both endpoints; no claim that these unrecoverable-house losses are eliminated.
+- Combat/economy caveats are retained: matrix stall15→16, attackers68→69, all36 winners
+  unchanged; ladder stalls6→6, bankrupt11→12, attackers62→62, Hard-over-Medium wins6→5
+  (weaker wins unchanged). Kill value rises slightly; ladder score CIs include zero.
+  This is not a blanket claim that every point metric improves.
+- Source-pinned cluster evidence: `d635fd0a` no-spice fixture PASS and Atreides6/6 PASS;
+  `e551dd78` unit/army-recovery/scenario/FFA/perf PASS. That full batch is not all-green:
+  HF duplicate-queue and funded-extra-rocket fixture assertions stop before the storage
+  case, and Atreides seed906213928 wins at40.8m rather than≤40. Owners/integrator have
+  the logs; do not represent the later combined full suite as passed.
+- Full tables, switch semantics, detectors and causal traces:
+  `docs/quantbot-dunecity-audit.md`; evidence `outputs/silo-capacity-20261103/`,
+  especially `final-provenance.json`, `final-80rock-comparison.json`,
+  `final-audit-summary.json` and `final-residual-losses.json`.
+
 ## 2026-11-04 — Protect tax-city factory and expansion capital (OMP ExpandAI, unreleased)
 
 - `atreides no expand.dls`: original DuneCity revisions, 8P256×256 FFA,
