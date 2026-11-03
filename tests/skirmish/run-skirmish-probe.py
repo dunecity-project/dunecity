@@ -32,6 +32,8 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/skirmis
   civ-1v1      fixed starting kit and positive city income, three game minutes with QuantBot on every seat
   civ-2v2      the same four-house match and mirrored lane setup
   civ-3v3      the same six-house match and one lane per player
+  civ-research human selected from Civ Wars menu: zero-credit rejection, normal-income enablement,
+               real SDL Lab selection/research click, queued command and tech-2 completion
 
 Every match case asserts houses/teams, players per house, structure and unit counts, army value
 and power against the generator's own plan, and draws the loaded (and played) map. A smoke run
@@ -112,7 +114,7 @@ startup_noise = re.compile(r'Error loading|Warning: could not|libpng', re.IGNORE
 
 summary = []
 for case in args.cases.split(','):
-    sizes = ((640, 480), (1280, 720)) if case in ('menu', 'civ-menu') else ((1024, 768),)
+    sizes = ((640, 480), (1280, 720)) if case in ('menu', 'civ-menu', 'civ-research') else ((1024, 768),)
     for width, height in sizes:
         label = case if len(sizes) == 1 else f'{case}-{width}'
         profile = work / ('profile-' + label) / 'profile'

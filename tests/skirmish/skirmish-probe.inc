@@ -26,6 +26,8 @@
 #include <structures/ZoneStructure.h>
 #include <units/UnitBase.h>
 #include <dunecity/CitySimulation.h>
+#include <GameInterface.h>
+#include <GUI/ObjectInterfaces/ResearchLabInterface.h>
 #include <dunecity/CityConstants.h>
 #include <dunecity/CityEffects.h>
 #include <mod/ModManager.h>
@@ -840,6 +842,7 @@ int runSkirmishProbe() {
     else if(kind == "spectate") runSpectate();
     else if(kind == "render") runRender();
     else if(kind == "civ-menu") runCivMenu();
+    else if(kind == "civ-research") runCivResearch();
     else if(kind == "civ-1v1" || kind == "civ-2v2" || kind == "civ-3v3") runCivMatch(kind);
     else runMatch(kind, std::getenv("SKIRMISH_PROBE_SMOKE") != nullptr);
     SDL_Log("SKIRMISH_PROBE_PASS: %s", kind.c_str());

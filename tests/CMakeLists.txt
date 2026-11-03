@@ -580,6 +580,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/civ-wars-probe
             --cases civ-menu,civ-1v1,civ-2v2,civ-3v3)
         set_tests_properties(civilization_wars_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        add_test(NAME civilization_wars_research_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/civ-wars-research-probe
+            --cases civ-research)
+        set_tests_properties(civilization_wars_research_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)

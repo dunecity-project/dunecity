@@ -82,6 +82,118 @@ void runCivMenu() {
     std::filesystem::remove(path);
 }
 
+// Menu's normal Start preparation, then real SDL map/sidebar clicks and queued commands.
+// No injected credits, research state, player substitutions or direct House research calls.
+void runCivResearch() {
+    CivWarsMenu menu;
+    probeSelect(menu.teamsBox, 1);
+    probeSelect(menu.sizeBox, 0);
+    probeSelect(menu.houseBox, HOUSE_ATREIDES);
+    menu.spectateBox.setChecked(false);
+    menu.onSpectateChanged();
+    menu.seedBox.setText("20261103");
+    menu.fixedSeedBox.setChecked(true);
+    skirmishCapture(menu, "civ-research-menu");
+    GameInitSettings init;
+    skirmishRequire(menu.prepareStart(init), "Civ Wars menu Start preparation failed");
+    auto game = startMatch(init);
+    skirmishRequire(!game->isObserving() && pLocalHouse && pLocalPlayer
+                    && dynamic_cast<HumanPlayer*>(pLocalPlayer), "Civ Wars did not seat the human controller");
+    ResearchLab* lab = nullptr;
+    for(auto* structure : structureList)
+        if(structure->getOwner() == pLocalHouse && structure->getItemID() == Structure_ResearchLab)
+            lab = dynamic_cast<ResearchLab*>(structure);
+    skirmishRequire(lab, "Human's generated Lab is missing");
+    captureCivMap("civ-research-initial");
+    std::ofstream(probeOut("civ-research-initial.ini"), std::ios::binary) << init.getFiledata();
+    const Coord centre = lab->getCenterPoint();
+    screenborder->setNewScreenCenter(centre);
+    auto click = [&](int x, int y) {
+        SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+        for(auto type : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) {
+            SDL_Event event{};
+            event.type = type; event.button.button = SDL_BUTTON_LEFT;
+            event.button.x = x; event.button.y = y;
+            SDL_PushEvent(&event);
+        }
+        game->doInput();
+    };
+    click(screenborder->world2screenX(centre.x), screenborder->world2screenY(centre.y));
+    skirmishRequire(game->getSelectedList() == std::set<Uint32>{lab->getObjectID()},
+                    "Actual map click did not select the Research Lab");
+    auto& gui = game->getGameInterface();
+    gui.updateObjectInterface();
+    gui.updateObjectInterface();
+    auto* panel = dynamic_cast<ResearchLabInterface*>(gui.pObjectContainer);
+    skirmishRequire(panel, "Selecting the Lab did not open its research sidebar");
+    auto researchPoint = [&]() {
+        const Point at = gui.windowWidget.getWidgetPosition(panel)
+            + panel->getWidgetPosition(&panel->mainHBox)
+            + panel->mainHBox.getWidgetPosition(&panel->box)
+            + panel->box.getWidgetPosition(&panel->research);
+        return Point(at.x + panel->research.getSize().x / 2, at.y + panel->research.getSize().y / 2);
+    };
+    auto commands = [&]() {
+        int count = 0;
+        for(const auto& slot : game->cmdManager.timeslot) for(const auto& command : slot)
+            count += command.getCommandID() == CMD_RESEARCH_TECH_LEVEL;
+        return count;
+    };
+    const Point button = researchPoint();
+    auto capture = [&](const char* stage) {
+        captureGame(*game, std::string("civ-research-") + stage + "-" + std::to_string(getRendererWidth()),
+                    lab->getLocation());
+    };
+    skirmishRequire(button.x >= 0 && button.x < getRendererWidth()
+                    && button.y >= 0 && button.y < getRendererHeight(), "Research button lies outside the window");
+    capture("zero-credits");
+    skirmishRequire(!panel->research.isEnabled() && !pLocalHouse->canStartTechResearch(lab->getObjectID()),
+                    "Zero-credit Civ Wars house unexpectedly offers research");
+    click(button.x, button.y);
+    skirmishRequire(commands() == 0 && !pLocalHouse->isTechResearchActive(),
+                    "Unaffordable research click sent a command or spent credits");
+    SDL_Log("CIV_HUMAN_RESEARCH: event=unaffordable cycle=%u house=%d credits=%d tech=%d button=%d,%d enabled=%d",
+        game->getGameCycleCount(), pLocalHouse->getHouseID(), pLocalHouse->getCredits(), pLocalHouse->getTechLevel(),
+        button.x, button.y, int(panel->research.isEnabled()));
+    const Uint32 limit = MILLI2CYCLES(180000);
+    while(game->getGameCycleCount() < limit && !pLocalHouse->canStartTechResearch(lab->getObjectID()))
+        game->updateGameState();
+    gui.updateObjectInterface();
+    SDL_Log("CIV_HUMAN_RESEARCH: event=ready cycle=%u house=%d credits=%d tech=%d enabled=%d active_lab=%d",
+        game->getGameCycleCount(), pLocalHouse->getHouseID(), pLocalHouse->getCredits(), pLocalHouse->getTechLevel(),
+        int(panel->research.isEnabled()), int(lab->isActive()));
+    capture("ready");
+    skirmishRequire(panel->research.isEnabled(), "Normal Civ Wars income did not enable human research");
+    const int paid = pLocalHouse->getCredits();
+    const int cost = pLocalHouse->getTechResearchCost();
+    click(button.x, button.y);
+    skirmishRequire(commands() == 1 && !pLocalHouse->isTechResearchActive(),
+                    "Research button did not queue exactly one delayed command");
+    for(int tick = 0; tick < 20 && !pLocalHouse->isTechResearchActive(); ++tick) game->updateGameState();
+    skirmishRequire(pLocalHouse->isTechResearchActive() && pLocalHouse->getTechResearchTarget() == 2
+                    && pLocalHouse->getCredits() <= paid - cost,
+                    "Human GUI research command did not execute against the selected Lab");
+    gui.updateObjectInterface();
+    capture("active");
+    SDL_Log("CIV_HUMAN_RESEARCH: event=start cycle=%u house=%d credits=%d tech=%d target=%d lab=%u",
+        game->getGameCycleCount(), pLocalHouse->getHouseID(), pLocalHouse->getCredits(),
+        pLocalHouse->getTechLevel(), pLocalHouse->getTechResearchTarget(), lab->getObjectID());
+    while(game->getGameCycleCount() < limit && pLocalHouse->getTechLevel() < 2) game->updateGameState();
+    skirmishRequire(pLocalHouse->getTechLevel() == 2, "Human GUI research failed to advance to tech 2");
+    gui.updateObjectInterface();
+    capture("complete");
+    SDL_Log("CIV_HUMAN_RESEARCH: event=complete cycle=%u house=%d credits=%d tech=%d",
+        game->getGameCycleCount(), pLocalHouse->getHouseID(), pLocalHouse->getCredits(), pLocalHouse->getTechLevel());
+    while(game->getGameCycleCount() < limit) game->updateGameState();
+    for(const auto& setup : init.getHouseInfoList()) {
+        const auto* house = game->getHouse(setup.houseID);
+        SDL_Log("CIV_HUMAN_RESEARCH: event=three_minutes cycle=%u house=%d credits=%d tech=%d target=%d",
+            game->getGameCycleCount(), house->getHouseID(), house->getCredits(),
+            house->getTechLevel(), house->getTechResearchTarget());
+    }
+    endMatch(game);
+}
+
 void runCivMatch(const std::string& name) {
     CivWarsGenerator::Params params;
     params.teamSize = name == "civ-1v1" ? 1 : name == "civ-2v2" ? 2 : 3;
