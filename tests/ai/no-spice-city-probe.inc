@@ -498,10 +498,11 @@ void runNoSpiceCityProbe(Game& game) {
         auto restore=[&]() {
             factoryData.enabled=savedEnabled;
             port->informFrigateDestroyed();
-            cancelOrders(port);cancelOrders(yard);cancelOrders(light);
-            light->destroy();yard->updateBuildList();
+            cancelOrders(port);cancelOrders(light);
+            light->destroy();
             bot->configOverride=savedConfig;state=savedState;bot->difficulty=savedDifficulty;
             for(auto [builder,level]:yardLevels) {
+                cancelOrders(builder);
                 builder->curUpgradeLev=level;builder->updateBuildList();
             }
         };
@@ -543,7 +544,8 @@ void runNoSpiceCityProbe(Game& game) {
             require(pendingFactories()==1,"The funded pass must queue exactly one first heavy factory across all yards");
             bot->build(0);
             require(pendingFactories()==1,"The protected first heavy factory was duplicated or lost on the next pass");
-            factoryData.enabled=false;yard->updateBuildList();
+            factoryData.enabled=false;
+            for(const auto& yardLevel:yardLevels)yardLevel.first->updateBuildList();
             const Pass unavailable=marketDecide(true,factoryPrice);
             require(ordered(unavailable,Unit_Quad) && !ordered(unavailable,Structure_HeavyFactory),
                 "Unavailable heavy technology kept reserving cash from useful military imports");
