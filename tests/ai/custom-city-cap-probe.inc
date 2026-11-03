@@ -276,6 +276,40 @@ void runCustomCityCapProbe(Game& game) {
         rule=keepRule;
         sim->runEffectsScans();
     }
+    // Starport Population (match rule): the yard offers a Starport only once the house's
+    // displayed city population reaches 5,000, and an order already queued survives a dip.
+    {
+        auto& rule=game.gameInitSettings.gameOptions.starportPopulation;
+        const bool keepRule=rule;
+        if(house->getNumItems(Structure_WindTrap)<=0) require(placeItem(Structure_WindTrap),"No windtrap site");
+        if(house->getNumItems(Structure_Refinery)<=0) require(placeItem(Structure_Refinery),"No refinery site");
+        auto& hs=sim->houseState_[house->getHouseID()];
+        const auto keepPop=std::make_tuple(hs.resPop,hs.comPop,hs.indPop);
+        auto setPopulation=[&](int display){hs.resPop=display/DuneCity::CitySimulation::kPopDisplayMultiplier;hs.comPop=0;hs.indPop=0;
+            house->update();yard->updateBuildList();};
+        rule=false; setPopulation(1000);
+        require(yard->isAvailableToBuild(Structure_StarPort),"With the rule off the yard does not offer a Starport");
+        rule=true; setPopulation(4980);
+        require(!house->meetsStarportPopulation() && !yard->isAvailableToBuild(Structure_StarPort),
+            "The yard offers a Starport below 5,000 population");
+        setPopulation(5000);
+        require(yard->isAvailableToBuild(Structure_StarPort),"The yard does not offer a Starport at 5,000 population");
+        house->takeCredits(house->getCredits());house->addCredits(100000);
+        const HumanPlayer* human=nullptr;
+        for(const auto& player:house->players)
+            if(auto* candidate=dynamic_cast<const HumanPlayer*>(player.get()))human=candidate;
+        require(human,"Starport fixture needs the human");
+        human->doProduceItem(yard,Structure_StarPort);
+        require(yard->getProductionQueueSize()>0,"The Starport order was not queued");
+        setPopulation(1000);
+        require(yard->isAvailableToBuild(Structure_StarPort) && yard->getProductionQueueSize()>0,
+            "A city dipping under 5,000 cancelled a queued Starport");
+        SDL_Log("CUSTOM_CITY_CAP_PROBE: starport offered at 5000, hidden at 4980, queued order kept at 1000");
+        clearQueues();
+        rule=keepRule;
+        std::tie(hs.resPop,hs.comPop,hs.indPop)=keepPop;
+        house->update();yard->updateBuildList();
+    }
     bot->difficulty=QuantBot::Difficulty::Easy;
-    SDL_Log("CUSTOM_CITY_CAP_PROBE_PASS: capped helper refuses orders and growth, Hard grows to a bigger rival city, human placement and natural growth continue, Brutal grows, campaign excluded, human switches the AI partner None/Build/Fight/Both, units do not develop Micropolis land value");
+    SDL_Log("CUSTOM_CITY_CAP_PROBE_PASS: capped helper refuses orders and growth, Hard grows to a bigger rival city, human placement and natural growth continue, Brutal grows, campaign excluded, human switches the AI partner None/Build/Fight/Both, units do not develop Micropolis land value, Starport needs 5,000 population");
 }
