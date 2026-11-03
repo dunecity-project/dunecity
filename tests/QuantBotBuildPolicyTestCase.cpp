@@ -1907,8 +1907,9 @@ TEST_CASE("More rockets allow only a modest established-base head start", "[quan
     CHECK(earlyRocketLimit(true,1,1000)==3);
     CHECK(earlyRocketLimit(true,2,8)==3);
     CHECK(earlyRocketLimit(true,2,15)==3);
-    CHECK(earlyRocketLimit(true,2,31)==3);
+    CHECK(earlyRocketLimit(true,2,16)==4);
     CHECK(earlyRocketLimit(true,2,32)==4);
+    CHECK(earlyRocketLimit(true,3,16)==4);
     CHECK(earlyRocketLimit(true,3,32)==4);
     CHECK(earlyRocketLimit(true,3,1000)==4);
 }

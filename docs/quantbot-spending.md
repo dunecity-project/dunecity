@@ -138,18 +138,21 @@ Switches off preserve the old paths. No save-format or city-tax-rule change.
 
 `MoreRocketTurrets=1` (hashed, default on) raises the ordinary pre-core allowance
 from two to three rockets in Custom Medium+ bases with at least eight built
-structures, or four for Hard/Brutal bases with at least thirty-two. It also buys
-toward that small standing battery after the seed economy/worker opening:
-raising permission alone cannot request a third fully-overlapping gun, and
-starting-map turrets do not unlock their yard build tech. Each optional unlock
-or emplacement must already be funded while leaving working cash; no new
-unfunded savings hold is introduced. Existing finite prerequisite/placement
+structures, or four for Hard/Brutal bases with at least sixteen. Tax-only cities
+buy toward that small standing battery after the seed economy/worker opening
+once recurring income is positive. Raising permission alone cannot request a
+third overlapping gun, and starting-map turrets do not unlock their yard tech.
+The four-minute income budget must cover all remaining yard upgrades plus the
+next rocket, concrete and working cash; unpriced prerequisites are not rushed.
+Only then may the finite project save its next step, which still needs current
+cash plus the working buffer before production. Mining bases keep their normal
+quiet capital priorities. Existing finite prerequisite/placement
 paths are reused. Income supply, first-factory/expansion capital, emergencies,
 power and the growth interleave keep their priority. Pending rockets close the
 allowance across parallel yards. Mature coverage goals are unchanged (and can
 exceed twelve); the local-eight/reactive-twelve caps remain. The 175-value scale
 adds at most one local cover over the former 200-value scale.
-Idle fleet-ratio Carryall/Hi-Tech savings also yield to a currently funded
+Idle fleet-ratio Carryall/Hi-Tech savings also yield to a fully budgeted
 standing battery when there is no spice-worker target, busy transport,
 pickup/repair work or MCV. Actual transport demand retains its normal priority;
 this is not permission to divert its savings into quiet-base defences.

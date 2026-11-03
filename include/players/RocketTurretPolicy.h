@@ -70,7 +70,7 @@ inline int coverageTurretCap(int coverageDemand) {
 // larger Hard+ bases get a second. Funding and growth still gate purchases.
 inline int earlyRocketLimit(bool more, int tier, int structures) {
     if (!more || tier <= 0 || structures < 8) return 2;
-    return tier >= 2 && structures >= 32 ? 4 : 3;
+    return tier >= 2 && structures >= 16 ? 4 : 3;
 }
 // An actual ground raid is not the peaceful coverage plan. Price the observed
 // vehicles, not the whole enemy army; never restore the old unbounded battery.

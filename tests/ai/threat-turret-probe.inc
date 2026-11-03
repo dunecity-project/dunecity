@@ -167,15 +167,19 @@ void runThreatTurretProbe(Game& game) {
         // Model already-pending seed plots and first factories. The selected,
         // funded cover must execute instead of saving for the next core item.
         for (auto* unit:raiders) unit->setVisible(house->getTeamID(),false);
-        auto extraCover=[&](bool more,int cash=-1) {
+        auto extraCover=[&](bool more,int cash=-1,int netPerMinute=250) {
             config->force.moreRocketTurrets=more;
             auto pass=plan(false,true);
             pass.itemCount[Structure_LightFactory]=1;pass.itemCount[Structure_HeavyFactory]=1;
             pass.itemCount[Structure_ZoneResidential]=2;pass.itemCount[Structure_ZoneCommercial]=1;
             pass.itemCount[Structure_ZoneIndustrial]=1;pass.cityZonesIncludingQueued=4;pass.cityYards=1;
             pass.money=cash>=0 ? cash : pass.money+100;
+            pass.cityPlotPrice=game.objectData.data[Structure_ZoneResidential][house->getHouseID()].price;
+            pass.forecastTax=50+netPerMinute;pass.forecastUpkeep=50;
+            pass.forecastNetIncome=netPerMinute*QuantBotSpendingPolicy::horizonMinutes;
+            pass.forecastFunding=std::max(0,pass.money+pass.forecastNetIncome);
             pass.emitStatsLog=true;
-            pass.cashFlow.projectedCash=1000;
+            pass.cashFlow.projectedCash=pass.forecastFunding;
             // Complete the native storage/bootstrap setup for this city pass:
             // a value-initialized storage item is slab 0, not a quoted vault.
             bot->planCityBootstrap(pass);
@@ -211,17 +215,42 @@ void runThreatTurretProbe(Game& game) {
         require(std::any_of(yard->getProductionQueue().begin(),yard->getProductionQueue().end(),
             [](const auto& order){return order.itemID==Structure_RocketTurret;}),
             "Optional core saving displaced the funded selected extra rocket");
-        auto poorCover=extraCover(true,game.objectData.data[Structure_RocketTurret][house->getHouseID()].price-1);
+        auto savingCover=extraCover(true,game.objectData.data[Structure_RocketTurret][house->getHouseID()].price
+            +game.objectData.data[Structure_ZoneResidential][house->getHouseID()].price-1);
+        require(savingCover.capitalChoice>=0 && savingCover.protectionCapital
+            && std::string_view(savingCover.capitalCandidates[savingCover.capitalChoice].reason)=="early_rocket",
+            "A fully income-budgeted standing battery could not save its next step");
+        bot->buildProducer(savingCover,yard);
+        require(std::none_of(yard->getProductionQueue().begin(),yard->getProductionQueue().end(),
+            [](const auto& order){return order.itemID==Structure_RocketTurret;}),
+            "The standing battery spent its working cash");
+        auto poorCover=extraCover(true,game.objectData.data[Structure_RocketTurret][house->getHouseID()].price-1,0);
         require(std::none_of(poorCover.capitalCandidates.begin(),poorCover.capitalCandidates.end(),
             [](const auto& c){return c.score>0 && std::string_view(c.reason)=="early_rocket";}),
             "An unfunded optional battery created a savings hold");
+        auto losingIncome=extraCover(true,10000,-1);
+        require(std::none_of(losingIncome.capitalCandidates.begin(),losingIncome.capitalCandidates.end(),
+            [](const auto& c){return c.score>0 && std::string_view(c.reason)=="early_rocket";}),
+            "A negative-income city committed to an optional standing battery");
         const auto readyLevel=yard->curUpgradeLev;
         yard->curUpgradeLev=0;yard->updateBuildList();
-        auto lockedCover=extraCover(true,yard->getUpgradeCost()+200);
+        auto weakBridge=extraCover(true,yard->getUpgradeCost()
+            +game.objectData.data[Structure_ZoneResidential][house->getHouseID()].price,10);
+        require(std::none_of(weakBridge.capitalCandidates.begin(),weakBridge.capitalCandidates.end(),
+            [](const auto& c){return c.score>0 && std::string_view(c.reason)=="early_rocket";}),
+            "One affordable upgrade was mistaken for a funded full rocket bridge");
+        auto lockedCover=extraCover(true,yard->getUpgradeCost()
+            +game.objectData.data[Structure_ZoneResidential][house->getHouseID()].price-1);
         require(lockedCover.capitalChoice>=0
             && std::string_view(lockedCover.capitalCandidates[lockedCover.capitalChoice].reason)=="early_rocket"
             && std::string_view(lockedCover.capitalCandidates[lockedCover.capitalChoice].kind)=="defence_upgrade",
             "Starting rockets hid the affordable yard unlock needed to add another");
+        bot->buildProducer(lockedCover,yard);
+        require(!yard->isUpgrading(),"A funded unlock consumed its working cash");
+        lockedCover.money=lockedCover.capitalCandidates[lockedCover.capitalChoice].price+lockedCover.cityPlotPrice;
+        bot->buildProducer(lockedCover,yard);
+        require(yard->isUpgrading(),"The fully budgeted unlock did not reach native production");
+        yard->upgrading=false;
         yard->curUpgradeLev=readyLevel;yard->updateBuildList();
         for (auto* unit:raiders) unit->setVisible(house->getTeamID(),true);
         // These cases test supplier funding, not the separate Starport Population

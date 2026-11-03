@@ -2775,6 +2775,44 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 supplier.site=findCoveredDefencePlaceLocation(supplier.item,builder->getLocation());
                 if (supplier.site.isValid()) pass.capitalCandidates.push_back(supplier);
             }
+            // Tax-only towns need a small standing battery even when two starting
+            // guns overlap every current asset. Fund the complete next rocket,
+            // not just its first 200-credit yard upgrade, from healthy income.
+            const int cityZones=pass.itemCount[Structure_ZoneResidential]+pass.itemCount[Structure_ZoneCommercial]
+                +pass.itemCount[Structure_ZoneIndustrial];
+            const bool groundDefenceDue=pass.groundThreatAsset.isValid();
+            const bool taxBattery=pass.citySimEnabled && pass.spiceShare<=0 && pass.desiredWorkers==0;
+            const bool extraTaxCover=taxBattery && pass.earlyRocketLimit>2
+                && pass.itemCount[Structure_RocketTurret]>=2 && !pass.routineRocketsUnrestricted;
+            const int earlyBuffer=std::max(0,pass.cityPlotPrice);
+            bool earlyRocketDue=false;
+            if (taxBattery && pass.forecastNetIncome>0 && pass.earlyRocketLimit>2
+                && pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit
+                && !pass.defendingEconomy && !pass.airEngaged && !groundDefenceDue
+                && !openingWorkersNeeded(pass) && !pass.openingSupplierDue && cityZones>=4
+                && builder->getHealth()>=builder->getMaxHealth()
+                && data[Structure_RocketTurret][houseID].enabled
+                && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()
+                && builder->getMaxUpgradeLevel()>=data[Structure_RocketTurret][houseID].upgradeLevel
+                && getHouse()->hasPower() && hasPowerBufferForTurret(pass)
+                && RocketTurretPolicy::proactiveCoverageTurn(false,pass.uncoveredCoreAssets,nonServiceConstructionOrders)) {
+                const int upgrades=std::max(0,data[Structure_RocketTurret][houseID].upgradeLevel
+                    -int(builder->getCurrentUpgradeLevel()));
+                int64_t investment=int64_t(upgrades)*builder->getUpgradeCost()
+                    +data[Structure_RocketTurret][houseID].price;
+                // Existing power already covers this rocket. Its cash quote
+                // needs concrete, not the ROI quote's amortized new generation.
+                if (getGameInitSettings().getGameOptions().concreteRequired) {
+                    const Coord size=getStructureSize(Structure_RocketTurret);
+                    investment+=int64_t(size.x)*size.y*data[Structure_Slab1][houseID].price;
+                }
+                earlyRocketDue=investment>0 && int64_t(pass.forecastFunding)>=investment+earlyBuffer;
+                // Do not start an optional, only partly priced prerequisite chain.
+                // Already-pending prerequisites are funded in queuedProductionCost.
+                if (earlyRocketDue) for (Uint32 prerequisite=Structure_FirstID; prerequisite<=Structure_LastID; ++prerequisite)
+                    if (data[Structure_RocketTurret][houseID].prerequisiteStructuresSet[prerequisite]
+                        && pass.itemCount[prerequisite]==0) { earlyRocketDue=false;break; }
+            }
             // Services must be allowed to save their price, not wait for money
             // left after every factory has placed another order. Use the existing
             // marginal coverage search; pending services are included in it.
@@ -2794,6 +2832,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                         || nonServiceConstructionOrders>=3 || pass.itemCount[Structure_RocketTurret]==0)
                     && (!pass.openingSupplierDue || pass.airEngaged)
                     && pass.routineRocketsAllowed
+                    && (!extraTaxCover || pass.airEngaged || earlyRocketDue)
                     && campaignAvailableToBuild(builder,Structure_RocketTurret)
                     && (!pass.turretPowerRequired || getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=pass.rocketPowerBuffer)) {
                     int uncovered=0;
@@ -2825,28 +2864,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // Proactive cover waits for a four-zone city opening (a low-cash
             // no-spice city otherwise saved for the upgrade from its third zone
             // on and never grew); aircraft over the base never wait.
-            const int cityZones=pass.itemCount[Structure_ZoneResidential]+pass.itemCount[Structure_ZoneCommercial]
-                +pass.itemCount[Structure_ZoneIndustrial];
-            const bool groundDefenceDue=pass.groundThreatAsset.isValid();
-            // Owning two starting rockets does not unlock their build tech, and
-            // merely raising an allowance cannot request another fully-overlapping
-            // emplacement. Buy a small standing battery, one funded step at a time.
-            const int earlyBuffer=pass.citySimEnabled ? pass.cityPlotPrice : std::max(0,pass.economyReserve);
-            bool earlyRocketDue=false;
-            if (pass.earlyRocketLimit>2 && pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit
-                && !pass.defendingEconomy && !pass.airEngaged && !groundDefenceDue
-                && !openingWorkersNeeded(pass) && !pass.openingSupplierDue
-                && (!pass.citySimEnabled || cityZones>=4)
-                && builder->getHealth()>=builder->getMaxHealth()
-                && data[Structure_RocketTurret][houseID].enabled
-                && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()
-                && RocketTurretPolicy::proactiveCoverageTurn(false,pass.uncoveredCoreAssets,nonServiceConstructionOrders)) {
-                const int price=builder->getCurrentUpgradeLevel()<data[Structure_RocketTurret][houseID].upgradeLevel
-                    ? builder->getUpgradeCost() : data[Structure_RocketTurret][houseID].price;
-                earlyRocketDue=price>0 && pass.money>=price+earlyBuffer;
-            }
-            if (earlyRocketDue && getHouse()->hasPower() && hasPowerBufferForTurret(pass)
-                && campaignAvailableToBuild(builder,Structure_RocketTurret)) {
+            if (earlyRocketDue && campaignAvailableToBuild(builder,Structure_RocketTurret)) {
                 CapitalCandidate early;
                 early.builder=builder->getObjectID();early.item=Structure_RocketTurret;
                 early.kind="early_rocket";early.reason="early_rocket";early.score=3500;
@@ -2857,8 +2875,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     early.site=findFrontBatteryPlaceLocation();
                 if (early.site.isValid()) pass.capitalCandidates.push_back(early);
             }
-            const bool ordinaryUnlockDue=(pass.airEngaged || (pass.uncoveredCoreAssets>0 && cityZones>=4))
-                && pass.routineRocketsAllowed;
+            const bool ordinaryUnlockDue=(pass.airEngaged || (pass.uncoveredCoreAssets>0 && cityZones>=4
+                    && (!extraTaxCover || earlyRocketDue))) && pass.routineRocketsAllowed;
             if ((botConfig().force.defencePrerequisites || groundDefenceDue) && pass.citySimEnabled && getHouse()->hasPower()
                 && (groundDefenceDue || ordinaryUnlockDue || earlyRocketDue)
                 && data[Structure_RocketTurret][houseID].enabled
@@ -2902,7 +2920,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                             step=missing;
                         }
                     }
-                    if (earlyRocketDue && unlock.price>0 && pass.money>=unlock.price+earlyBuffer) {
+                    if (earlyRocketDue && unlock.price>0) {
                         unlock.reason="early_rocket";unlock.score=3500;
                     }
                     if (unlock.price>0 && (groundDefenceDue || ordinaryUnlockDue
@@ -3159,11 +3177,6 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             for (const auto& foundation:foundationPlan(builder,candidate.item,site,removed).orders)
                 candidate.foundationCost+=purchasePrice(builder,foundation.item);
         }
-        if (std::string_view(candidate.reason)=="early_rocket"
-            && pass.money<candidate.price+candidate.foundationCost
-                +(pass.citySimEnabled ? pass.cityPlotPrice : std::max(0,pass.economyReserve))) {
-            candidate.score=0;candidate.reason="early_rocket_working_cash";
-        }
         if (std::string_view(candidate.kind)=="city_construction"
             && pass.money<candidate.price+candidate.foundationCost) {
             candidate.score=0;candidate.reason="first_heavy_not_affordable";
@@ -3175,7 +3188,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     planningBuilder=NONE_ID; clearPlacementCache(false,true);
     pass.capitalChoice = -1;
     // A fleet-ratio carryall plan is not active mining, repair or pickup work.
-    // It must not indefinitely outrank a standing battery already payable now.
+    // It must not indefinitely outrank a fully income-budgeted standing battery.
     // Keep actual transport work and every other safety/income priority intact.
     const bool mayPreferBattery=pass.earlyRocketLimit>2
         && pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit
@@ -3192,8 +3205,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         if (pass.capitalChoice<0 || candidate.score>pass.capitalCandidates[pass.capitalChoice].score)
             pass.capitalChoice=int(i);
         if (mayPreferBattery) {
-            fundedBattery |= std::string_view(candidate.reason)=="early_rocket"
-                && pass.money>=candidate.price+candidate.foundationCost;
+            fundedBattery |= std::string_view(candidate.reason)=="early_rocket";
             if (!idleTransport(candidate) && (withoutIdleTransport<0
                 || candidate.score>pass.capitalCandidates[withoutIdleTransport].score))
                 withoutIdleTransport=int(i);

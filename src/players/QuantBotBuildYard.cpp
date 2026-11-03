@@ -718,7 +718,12 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
         && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()) {
         const auto& service = pass.capitalCandidates[pass.capitalChoice];
         const bool defenceUpgrade=service.kind==std::string("defence_upgrade");
-        if (service.kind==std::string("expansion_upgrade") || defenceUpgrade) {
+        const int working=std::max(0,pass.cityPlotPrice);
+        if (std::string_view(service.reason)=="early_rocket"
+            && int64_t(pass.money)<int64_t(service.price)+service.foundationCost+working) {
+            yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
+            yardTurn.structureRule="save_early_rocket";
+        } else if (service.kind==std::string("expansion_upgrade") || defenceUpgrade) {
             yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
             yardTurn.structureRule=defenceUpgrade ? "save_defence_upgrade" : "save_expansion_upgrade";
             if (pass.money>=service.price && turn.pBuilder->getHealth()>=turn.pBuilder->getMaxHealth()
@@ -1404,11 +1409,17 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     // demanded core coverage buys it once the first refinery pays the
     // bills rather than after the whole opening worker fleet.
     const int rocketUpgrade=data[Structure_RocketTurret][houseID].upgradeLevel;
+    // Extra tax-city cover uses the fully budgeted capital project above, not
+    // the old next-upgrade-only saving path while its whole bridge is unfunded.
+    const bool quietExtraTaxCover=pass.earlyRocketLimit>2 && !pass.routineRocketsUnrestricted
+        && pass.itemCount[Structure_RocketTurret]>=2 && pass.spiceShare<=0 && pass.desiredWorkers==0
+        && !pass.airEngaged && pass.groundThreatAsset.isInvalid();
     if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.citySimEnabled
         && !yardTurn.higherPriorityCapital
+        && !quietExtraTaxCover
         && (yardTurn.coreShortfall>0
             || (!openingWorkersNeeded(pass) && pass.itemCount[Structure_HeavyFactory]>0
-                && pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit))
+                && pass.itemCount[Structure_RocketTurret]<2))
         && data[Structure_RocketTurret][houseID].enabled
         && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()
         && turn.pBuilder->getCurrentUpgradeLevel()<rocketUpgrade
@@ -1430,7 +1441,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     // the emplacement, or the yard upgrade that unlocks it. Bounded
     // by the forecast, so a city that cannot reach the price keeps
     // growing instead of idling.
-    if (yardTurn.isCitySim && yardTurn.coreShortfall>0 && !yardTurn.serviceSavingHold) {
+    if (yardTurn.isCitySim && yardTurn.coreShortfall>0 && !yardTurn.serviceSavingHold && !quietExtraTaxCover) {
         const int upgradeStep=turn.pBuilder->getCurrentUpgradeLevel()<rocketUpgrade
             && turn.pBuilder->getMaxUpgradeLevel()>=rocketUpgrade ? turn.pBuilder->getUpgradeCost() : 0;
         const int wanted=upgradeStep>0 ? upgradeStep : data[Structure_RocketTurret][houseID].price;
@@ -2167,6 +2178,15 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         yardTurn.itemID=NONE_ID;
         yardTurn.crimeServiceSite=Coord::Invalid();
         yardTurn.structureRule="core_infrastructure_before_more_rockets";
+    }
+    if (yardTurn.itemID==Structure_RocketTurret && pass.citySimEnabled && pass.spiceShare<=0
+        && pass.desiredWorkers==0 && pass.earlyRocketLimit>2 && !pass.routineRocketsUnrestricted
+        && pass.itemCount[Structure_RocketTurret]>=2 && !pass.airEngaged
+        && std::string_view(yardTurn.structureRule)!="ground_threat"
+        && std::string_view(yardTurn.structureRule)!="perimeter_battery"
+        && std::string_view(yardTurn.structureRule)!="early_rocket_cover") {
+        yardTurn.itemID=NONE_ID;yardTurn.crimeServiceSite=Coord::Invalid();
+        yardTurn.structureRule="funded_standing_battery_required";
     }
     if (pass.emitStatsLog) logDebug("BUILD-CHOICE: CY=%u item=%u credits=%d skip=%d",
         turn.pBuilder->getObjectID(), yardTurn.itemID, pass.money, yardTurn.skipRemainingStructureLogic);
