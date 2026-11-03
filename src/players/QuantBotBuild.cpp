@@ -264,7 +264,7 @@ void QuantBot::startTechResearch(BuildPass& pass) {
         traceDecision("research_started",AITelemetry::Record().set("capital_plan",pass.capitalDecision)
             .set("lab",lab->getObjectID())
             .set("from",from).set("to",from+1).set("cost",cost)
-            .set("cycles",House::techResearchCycles(from+1))
+            .set("cycles",getHouse()->techResearchCycles(from+1))
             .set("spendable_after",pass.money).set("state",decisionState(pass)));
     }
 }
@@ -2446,8 +2446,7 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
             if (getHouse()->getNumItems(item)==0) pass.coreInfrastructureReady=false;
             if (pass.missingCoreInfrastructure==NONE_ID && pass.itemCount[item]==0) pass.missingCoreInfrastructure=item;
         }
-    // Storage relief keeps its established city-only core condition: an
-    // overflowing bank is lost income now, whatever tech is still missing.
+    // The StorageCapacity-off control retains the former city core gate.
     pass.cityCoreInfrastructureReady = !pass.citySimEnabled || pass.coreInfrastructureReady;
     // IX unlocks the units and upgrades that make further emplacements worth
     // owning, so a non-city base that can already order it finishes that step
@@ -2529,26 +2528,64 @@ int QuantBot::coreCoverageShortfall(BuildPass& pass) {
     return shortfall;
 }
 
-// Earned spice and city income share storage. Make room before optional
-// growth can monopolize the yards, and stop once storage reaches the global
-// credit ceiling. Count queued capacity so parallel yards do not spam silos.
-bool QuantBot::storageExpansionNeeded(BuildPass& pass) {
-    int houseID = getHouse()->getHouseID();
-    auto& data = currentGame->objectData.data;
+// Earned spice and taxes share storage; grants do not occupy it. Predict the
+// surplus after real production, rather than waiting for a late-game factory
+// ladder or treating an unbuilt Silo as the only possible vault at tech 1.
+Uint32 QuantBot::storageExpansionItem(BuildPass& pass, const BuilderBase* builder) {
+    const int houseID = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
     const int capacity = getHouse()->getCapacity();
-    // A bay already ordered brings its own storage, so count that pending
-    // capacity instead of cancelling every silo while refineries expand.
-    const int pendingCapacity=std::max(0,pass.itemCount[Structure_Refinery]
-        -getAIRefineryBays())*data[Structure_Refinery][houseID].capacity;
-    const int projectedCapacity=capacity+pendingCapacity;
-    // Where the tech level has no heavy factory yet (DuneCity campaign levels 1-3), storage
-    // is not deferred for one: taxes fill the store and the spice quota waits on it.
-    return (getHouse()->getNumItems(Structure_HeavyFactory)>0
-            || data[Structure_HeavyFactory][houseID].techLevel>getHouse()->getTechLevel())
-        && pass.cityCoreInfrastructureReady
-        && capacity > 0 && projectedCapacity < 999999
-        && getHouse()->getEarnedCredits() >= projectedCapacity * 0.80_fix
-        && pass.itemCount[Structure_Silo] == getHouse()->getNumItems(Structure_Silo);
+    if (!botConfig().force.storageCapacity) {
+        const int pendingCapacity = std::max(0,pass.itemCount[Structure_Refinery]
+            -getAIRefineryBays())*data[Structure_Refinery][houseID].capacity;
+        const int projectedCapacity = capacity+pendingCapacity;
+        return (getHouse()->getNumItems(Structure_HeavyFactory)>0
+                || data[Structure_HeavyFactory][houseID].techLevel>getHouse()->getTechLevel())
+            && pass.cityCoreInfrastructureReady && capacity>0 && projectedCapacity<House::MAX_GAME_CREDITS
+            && getHouse()->getEarnedCredits()>=projectedCapacity*0.80_fix
+            && pass.itemCount[Structure_Silo]==getHouse()->getNumItems(Structure_Silo)
+            && campaignAvailableToBuild(builder,Structure_Silo) ? Uint32(Structure_Silo) : Uint32(NONE_ID);
+    }
+    if (!getHouse()->hasPower() || pass.forecastNetIncome<=0) return NONE_ID;
+    int64_t projectedCapacity = capacity;
+    const Uint32 last = ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID;
+    for (Uint32 item=Structure_FirstID; item<=last; ++item) {
+        if (!isStructure(item) || data[item][houseID].capacity<=0) continue;
+        const int pending = std::max(0,rawPlannedItemCount(pass,item)-getHouse()->getNumItems(item));
+        // A pending refinery, Silo or other vault gets delivered before another
+        // storage project is ordered, including across parallel yards.
+        if (pending>0 && item!=Structure_ConstructionYard) return NONE_ID;
+        projectedCapacity += int64_t(pending)*data[item][houseID].capacity;
+    }
+    const int ceiling = House::MAX_GAME_CREDITS-getHouse()->getStartingCredits().lround();
+    if (projectedCapacity<=0 || projectedCapacity>=ceiling) return NONE_ID;
+    Uint32 choice = NONE_ID;
+    int choiceCost = 0, choiceCapacity = 0;
+    for (Uint32 item=Structure_FirstID; item<=last; ++item) {
+        const int added = data[item][houseID].capacity;
+        if (!isStructure(item) || item==Structure_ConstructionYard || added<=0
+            || !campaignAvailableToBuild(builder,item)) continue;
+        const int cost = buildingCapitalCost(pass,item);
+        if (cost<=0 || cost>pass.money || (choice!=NONE_ID
+            && int64_t(cost)*choiceCapacity>=int64_t(choiceCost)*added)) continue;
+        // Allow a planning/placement interval as well as actual construction.
+        // This bounded forecast cannot buy years of empty capacity in advance.
+        const FixPoint speed = std::min(builder->getHealth()/builder->getMaxHealth(),builder->getBuildSpeedLimit());
+        if (speed<=0) continue;
+        const Coord size = getStructureSize(item);
+        const int foundationTicks = getGameInitSettings().getGameOptions().concreteRequired
+            ? size.x*size.y*cityBuildTicks(pass,Structure_Slab1) : 0;
+        const int lead = std::clamp((FixPoint(cityBuildTicks(pass,item)+foundationTicks)/speed).lround()
+                + int(MILLI2CYCLES(5000)),int(DuneCity::kCyclesPerMinute),CityEconomyInvestmentPolicy::horizonCycles);
+        const int receipts = int(int64_t(pass.forecastNetIncome)*lead/CityEconomyInvestmentPolicy::horizonCycles);
+        const int spending = int(int64_t(pass.activeProductionBurn)*lead/DuneCity::kCyclesPerMinute);
+        if (!QuantBotBuildPolicy::storageCapacityNeeded(getHouse()->getEarnedCredits().lround(),
+                int(projectedCapacity),receipts,spending,pass.capitalOrderedCost)) continue;
+        const Coord site = findPlaceLocation(item);
+        if (site.isInvalid() || dangerAt(site,size)>0) continue;
+        choice=item;choiceCost=cost;choiceCapacity=added;
+    }
+    return choice;
 }
 
 // Coverage worth buying this pass. The unbounded shortfall belongs to

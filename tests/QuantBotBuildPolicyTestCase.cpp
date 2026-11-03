@@ -63,6 +63,19 @@ TEST_CASE("QuantBot strategic savings leave excess funds available for tanks", "
     REQUIRE(spendableCredits(-100, 2000) == 0);
 }
 
+TEST_CASE("QuantBot storage forecasts earned surplus after useful spending", "[quantbot][production][storage]") {
+    REQUIRE(storageCapacityNeeded(1800,2005,400,100,0));
+    REQUIRE(storageCapacityNeeded(2005,2005,1800,300,0));
+    REQUIRE_FALSE(storageCapacityNeeded(1800,2005,400,400,0));
+    REQUIRE_FALSE(storageCapacityNeeded(1800,2005,400,500,0));
+    REQUIRE_FALSE(storageCapacityNeeded(1800,2005,400,100,500));
+    REQUIRE_FALSE(storageCapacityNeeded(0,2005,400,100,0)); // A starting grant is not earned storage.
+    REQUIRE_FALSE(storageCapacityNeeded(2005,2005,0,0,0));
+    REQUIRE_FALSE(storageCapacityNeeded(2005,0,1800,300,0));
+    REQUIRE(storageCapacityNeeded(std::numeric_limits<int>::max(),std::numeric_limits<int>::max(),
+                                 std::numeric_limits<int>::max(),0,0));
+}
+
 TEST_CASE("Research keeps current and forecast economy and defence reserves",
           "[quantbot][research][production]") {
     TechInvestment state;

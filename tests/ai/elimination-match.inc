@@ -161,6 +161,7 @@ inline std::string run(Game& game, Uint32 end, int house) {
         ProbeDigest::periodic(game);
         game.updateGameState();
         crushCount.observe();
+        DuneCityAudit::observe(game);
         if (game.getGameCycleCount() % minute == 0) sample(game);
         if ((winner = survivingTeam(game)) != 0) break;
     }

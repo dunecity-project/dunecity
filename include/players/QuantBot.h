@@ -1760,7 +1760,7 @@ private:
     bool cityBootstrapNeeded(BuildPass& pass);
     int cityBootstrapReserve(BuildPass& pass);
     int coreCoverageShortfall(BuildPass& pass);
-    bool storageExpansionNeeded(BuildPass& pass);
+    Uint32 storageExpansionItem(BuildPass& pass, const BuilderBase* builder);
     int proactiveCoverageShortfall(BuildPass& pass);
     bool proactiveSavingHold(BuildPass& pass, int price);
     bool capitalPending(BuildPass& pass);

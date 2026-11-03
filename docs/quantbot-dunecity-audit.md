@@ -33,6 +33,7 @@ Use a separate results directory for every config arm:
   completed fixes. Compare this against no style to isolate the power fix in one native build.
 - `--game-options FILE` changes game rules, not QuantBot policy switches.
 - `--style dunecity-audit-opening-capital-off` disables **only CityOpeningCapital**.
+- `--style dunecity-audit-storage-off` disables **only StorageCapacity**.
 - `--prebuilt-probe FILE` uses an already-built, frozen probe without compiling.
   For a bounded local fallback, copy the committed app/probe bundles outside `build-int`,
   pass the frozen executable here and run at `nice -n 10 --jobs 2`; do not hold an
@@ -73,6 +74,7 @@ satisfy a persistence threshold. Every flag has a first-minute field and inspect
 | `bankrupt_queue_empty` | Cash <100, empty production queues and no upgrades for 2 minutes; alive with a yard. |
 | `early_no_fight` | Eliminated before minute 10 with <500 credits of confirmed kill value. All observed houses are exposed. |
 | `zero_harvesters` | At minute 5+, alive with a yard and spice still on the map, but no harvester for 4 minutes. A profitable city may deliberately not harvest; not automatically a bug. |
+| `storage_full` | Earned income was refused during at least one observed simulation tick without a simultaneous storage-capacity decrease. All living houses with cycle accounting and the economy ledger enabled are exposed. A destroyed vault is not attributed to failure to buy storage. |
 
 Combat values, turret and prerequisite counts, yard upgrades, queue fronts/holds, population/demand,
 power, cumulative building/loss counts, city tax and nearby enemy values accompany every minute.
@@ -98,6 +100,45 @@ difficulty, game length and loop timing. Placement intervals resample **game mea
 that opposing houses in one game are independent. Mixed-host loop timings are diagnostic only:
 AI building-placement CPU and frame/FPS gates come from the mandatory performance tests, not these
 noisy numbers. No-formation remains the control; saboteur orders and human-order leases are untouched.
+
+## Storage capacity: income outgrows the first vault (2026-11-03)
+
+`80rock.dls` from Stefan's Air reproduces the reported loss without artificial income or
+orders. The saved 160x160 CivWars match has no spice and begins at technology 1. Continuing
+from cycle26188 with the frozen pre-change probe, Neutral (house6) stays at **2,005 storage**
+(Construction Yard1,000 + Refinery1,005) through minute15. Its cumulative storage loss rises
+at minutes10–15: **1, 552, 1,705, 2,474, 2,783, 2,870 credits**. No structure is lost in
+that interval. Research2 completes at cycle52825; the first Silo is ordered at56700 and
+capacity reaches12,005 by minute16. Raw evidence:
+`outputs/silo-capacity-20261103/{80rock-baseline,reproduction-evidence.json}`.
+
+The old rule only considered Silos (unavailable until technology2), and at higher technology
+also required a Heavy Factory and the city's complete Heavy/HighTech/Repair core. It checked
+80% occupancy without forecasting income or construction lead time. A refinery's vault was
+only an opening bootstrap or a side-effect of spice expansion, not an overflow alternative.
+
+The default-on, multiplayer-hashed `[Force Concentration] StorageCapacity` policy selects the
+best buildable storage capacity per capital cost, normally the Silo, with a refinery-vault
+fallback at technology1. It forecasts earned income over the building/foundation lead time
+(one-minute minimum, four-minute maximum), subtracts confirmed active production burn and
+orders already made in the pass, and leaves starting grants outside physical storage.
+Existing queues spend before surplus is banked; theoretical factory throughput is not assumed
+to be actual spending. A storage order consumes only its own funded cost, not the rest of the
+army/defence/city budget. Live power recovery and air defence retain priority.
+
+All pending storage types are counted, one non-yard vault project is allowed in flight, and
+capacity is bounded by the absolute credit ceiling after exempt starting cash. Sites use the
+ordinary placement/foundation rules and must have no current weapon danger. The off style
+retains the old Silo-only/core/80% decision for same-build comparisons. No save state, combat
+orders or human-order leases are added or changed.
+
+The read-only probe observes every simulation cycle. `storage_full_cycles` measures time at
+the physical ceiling at cycle boundaries; `storage_overflow_cycles` counts ticks with refused
+income; `storage_income_lost` retains whole credits lost on those ticks, excluding ticks where
+storage capacity fell. These are distinct: taxes can overflow before construction spends in
+the same tick, leaving the minute checkpoint slightly below capacity. The older
+`storage_lost` ledger still includes capacity destruction. Reports never label old, unmeasured
+CSV histories as zero loss. Divide cycle totals by3,750 for house-minutes.
 
 ## Root cause: a reserve top-up spent the seed town's working capital
 

@@ -32,13 +32,14 @@ CLASSES = {'easy': 'qBotEasy', 'medium': 'qBotMedium', 'hard': 'qBotHard', 'brut
 SPICE = {'none': 0, 'low': 1, 'medium': 2}
 DETECTORS = ('economy_stall', 'power_deficit', 'no_ground_defence', 'missing_starport', 'missing_radar',
              'missing_heavy_factory', 'missing_ix', 'idle_under_attack', 'unused_credits',
-             'bankrupt_queue_empty', 'early_no_fight', 'zero_harvesters')
+             'bankrupt_queue_empty', 'early_no_fight', 'zero_harvesters', 'storage_full')
 META = ('id', 'seed', 'size', 'spice_level', 'format', 'difficulty', 'variant', 'base', 'army', 'city', 'limit', 'style')
 GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes',
                       'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
-                       'first_attack_minute', 'score', 'drawn', 'won', 'flags') + tuple(
+                       'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                       'score', 'drawn', 'won', 'flags') + tuple(
     field for detector in DETECTORS for field in (detector, 'eligible_' + detector, 'first_' + detector))
 CYCLES_PER_MINUTE = 3750  # The engine's 16 ms fixed simulation tick.
 SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_value', 'army_units', 'harvesters',
@@ -48,7 +49,8 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'ix_built', 'fighters', 'moving', 'targeting', 'enemies', 'enemy_value', 'covered_enemies', 'spice',
                  'ledger_enabled', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
                  'yard_storage', 'police_funding', 'army_target', 'unit_limit', 'spice_multiplier', 'sale_credits',
-                 'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied')
+                 'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
+                 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost')
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags',)
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 lock = threading.Lock()
@@ -108,7 +110,8 @@ def schedule(args):
                                               difficulty=difficulty, variant=args.variant, sides=sides, base=args.base, army=args.army,
                                               city=args.city, limit=args.minutes, style=args.style or 'default',
                                               minutes=args.minutes, skirmish=f'size={size},base={args.base},army={args.army},'
-                                              f'city={args.city},spice={SPICE[spice]},rock=2,tech=9,credits=3000,seed={seed}'))
+                                              f'city={args.city},spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
+                                              f'tech=9,credits=3000,seed={seed}'))
     return games
 
 
@@ -141,6 +144,8 @@ def detect(samples):
                                      2, city and minute >= 2),
             'zero_harvesters': (city and minute >= 5 and s['spice'] > 0 and s['harvesters'] == 0,
                                 4, city and minute >= 5 and s['spice'] > 0),
+            'storage_full': (s.get('storage_overflow_cycles', 0) > old.get('storage_overflow_cycles', 0),
+                             0, alive and s.get('ledger_enabled') == 1 and 'storage_overflow_cycles' in s),
         }
         for item in seen:
             name = {'heavy': 'missing_heavy_factory', 'ix': 'missing_ix'}.get(item, 'missing_' + item)
@@ -236,6 +241,7 @@ def play(args, scratch, binary, game):
         for house in final:
             number = int(house['house'])
             detectors = detect(groups[number])
+            last = max(groups[number], key=lambda row: int(row['cycle']))
             house_rows.append(dict(metadata(game), **{key: house[key] for key in (
                 'house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                 'army_value', 'army_units', 'sortie_minutes')}, **detectors,
@@ -244,6 +250,8 @@ def play(args, scratch, binary, game):
                 attack_telemetry=int(args.attack_events),
                 attack_count=len(attacks[number]) if args.attack_events else '',
                 first_attack_minute=min(attacks[number]) if attacks[number] else '',
+                **{key: last.get(key, '') if args.attack_events or key == 'storage_full_cycles' else ''
+                   for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost')},
                 flags='/'.join(d for d in DETECTORS if detectors[d])))
         append(results / 'samples.csv', SAMPLE_FIELDS, samples)
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
@@ -311,13 +319,13 @@ def report(directories):
     for (difficulty, spice), rows in sorted(groups.items()):
         cells = []
         for name in DETECTORS:
-            hits = sum(int(row[name]) for row in rows)
-            exposed = sum(int(row['eligible_' + name]) for row in rows)
+            hits = sum(int(row.get(name, 0)) for row in rows)
+            exposed = sum(int(row.get('eligible_' + name, 0)) for row in rows)
             cells.append(f'{hits}/{exposed}')
         print(f'| {difficulty} | {spice} | {len(rows)} | ' + ' | '.join(cells) + ' |')
     for name in DETECTORS:
         examples = [f'{row["id"]}:h{row["house"]}@{row["first_" + name]}'
-                    for row in houses if row[name] == '1']
+                    for row in houses if row.get(name) == '1']
         print(f'{name}: ' + ('; '.join(examples[:6]) if examples else 'none'))
     ladder = defaultdict(list)
     for game in completed:
@@ -328,6 +336,7 @@ def report(directories):
               f'weaker {sum(row["winner_team"] == "2" for row in rows)}, '
               f'time limit {sum(row["winner_team"] == "0" for row in rows)}')
     combat_report(directories)
+    storage_report(directories)
 
 
 def combat_report(directories, allowed=None, label='Combat'):
@@ -367,6 +376,20 @@ def combat_report(directories, allowed=None, label='Combat'):
         print(f'| {difficulty} | {spice} | {len(first)}/{len(measured)} | {first_mean} | {rate} | '
               + ' | '.join(checkpoints) + f' | {kills} |')
 
+def storage_report(directories, allowed=None, label='Storage'):
+    rows = [row for row in load(directories, 'houses.csv', ('id', 'house'))
+            if (allowed is None or (row['id'], row['house']) in allowed)
+            and row.get('storage_overflow_cycles', '') != '']
+    if not rows:
+        print(f'{label}: full/overflow cycle accounting unmeasured')
+        return
+    print(f'{label}: {len(rows)} measured houses; '
+          f'full-storage {sum(int(row["storage_full_cycles"]) for row in rows) / CYCLES_PER_MINUTE:.3f} house-min; '
+          f'income-overflow {sum(int(row["storage_overflow_cycles"]) for row in rows) / CYCLES_PER_MINUTE:.3f} house-min; '
+          f'{sum(int(row["storage_income_lost"]) for row in rows)} credits lost '
+          '(capacity-loss ticks excluded)')
+
+
 
 def compare(control, candidate):
     old = {(row['id'], row['house']): row for row in load([control], 'houses.csv', ('id', 'house'))}
@@ -379,8 +402,8 @@ def compare(control, candidate):
     for name in DETECTORS:
         rates = []
         for source in (old, new):
-            rates.append(f'{sum(int(source[key][name]) for key in common)}/'
-                         f'{sum(int(source[key]["eligible_" + name]) for key in common)}')
+            rates.append(f'{sum(int(source[key].get(name, 0)) for key in common)}/'
+                         f'{sum(int(source[key].get("eligible_" + name, 0)) for key in common)}')
         print(f'| {name} | ' + ' | '.join(rates) + ' |')
     for level in CLASSES:
         by_game = defaultdict(list)
@@ -408,6 +431,8 @@ def compare(control, candidate):
                   '(diagnostic only: mixed host/load, not a performance gate)')
     combat_report([control], set(common), 'Control combat')
     combat_report([candidate], set(common), 'Candidate combat')
+    storage_report([control], set(common), 'Control storage')
+    storage_report([candidate], set(common), 'Candidate storage')
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

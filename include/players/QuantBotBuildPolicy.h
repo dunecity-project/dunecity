@@ -241,6 +241,16 @@ inline int civWarsZoneTarget(bool firstWave, int difficulty) {
     return !firstWave ? 24 : difficulty >= 3 ? 60 : difficulty >= 2 ? 48 : 36;
 }
 
+// Starting cash is deliberately absent: only earned credits occupy storage.
+// Confirmed production burn and orders made earlier in this pass get their
+// spending first; theoretical factory capacity is not a promise to spend.
+inline bool storageCapacityNeeded(int earned, int capacity, int receipts,
+                                  int productionSpend, int orderedSpend) {
+    const int64_t surplus = int64_t(receipts) - std::max(0,productionSpend);
+    return capacity > 0 && surplus > 0
+        && std::max<int64_t>(0,int64_t(earned)-std::max(0,orderedSpend)) + surplus >= capacity;
+}
+
 // Keep city construction first; then fund air before ground factories can
 // repeatedly consume its allocation. Light factories still precede heavy ones.
 inline int productionPlanningPriority(bool city, Uint32 item, bool waitingToPlace, bool firstTransport = false) {

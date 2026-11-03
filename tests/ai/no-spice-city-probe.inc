@@ -566,6 +566,82 @@ void runNoSpiceCityProbe(Game& game) {
         house->producedPower=savedProduced;house->powerRequirement=savedRequired;
     }
 
+    // 80rock.dls: Neutral's T1 city overflowed its 1,000-yard + 1,005-refinery
+    // vault for 2,870 credits before research unlocked the Silo. Higher-tech
+    // cities also waited for Heavy/HighTech/Repair before the old rule ran.
+    {
+        const auto savedConfig=bot->configOverride;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        bot->configOverride=config;
+        const int savedTech=game.techLevel, savedResearched=house->researchedTechLevel;
+        StructureBase* refinery=nullptr;
+        const auto buildings=structureList;
+        for(auto* structure:buildings) if(structure->getOwner()==house) {
+            if(structure->isABuilder()) {
+                auto* builder=static_cast<BuilderBase*>(structure);
+                cancelOrders(builder);builder->upgrading=false;
+            }
+            const Uint32 item=structure->getItemID();
+            if(item==Structure_Refinery && !refinery) refinery=structure;
+            else if((game.objectData.data[item][HOUSE_HARKONNEN].capacity>0 && structure!=yard)
+                || item==Structure_HeavyFactory || item==Structure_HighTechFactory || item==Structure_RepairYard)
+                structure->destroy();
+        }
+        require(refinery && house->getCapacity()==2005,"Storage fixture must retain the real 2,005-credit physical store");
+        house->storedCredits=0;house->startingCredits=0;house->cityCredits=0;
+        house->addCityCredits(2005);house->producedPower=10000;
+        auto storagePass=[&]() {
+            cancelOrders(yard);
+            bot->builderPlaceLocations.clear();bot->reservedStructures.clear();bot->clearPlacementCache();
+            bot->planningBuilder=yard->getObjectID();
+            yard->updateBuildList();
+            QuantBot::BuildPass pass(0);
+            bot->planBuildInventory(pass);
+            pass.capitalChoice=-1;pass.citySimEnabled=true;pass.money=house->getCredits();
+            pass.cityCoreInfrastructureReady=false;
+            pass.forecastNetIncome=7200;pass.activeProductionBurn=0;
+            return pass;
+        };
+        try {
+            game.techLevel=9;house->researchedTechLevel=9;
+            config->force.storageCapacity=false;
+            auto old=storagePass();
+            require(bot->storageExpansionItem(old,yard)==NONE_ID,
+                "Storage-off control no longer reproduces the missing production-core gate");
+            config->force.storageCapacity=true;
+            auto on=storagePass();
+            require(bot->storageExpansionItem(on,yard)==Structure_Silo,
+                "A full tax city without the production core did not choose its available Silo");
+            QuantBot::BuilderTurn turn(on.money);turn.pBuilder=yard;turn.pStructure=yard;
+            require(bot->queueFoundedStructure(on,turn,Structure_Silo,__LINE__,"storage_capacity"),
+                "Full-storage relief did not enter the real founded production queue");
+            ++on.itemCount[Structure_Silo];
+            require(bot->storageExpansionItem(on,yard)==NONE_ID,"Parallel yards duplicated a pending Silo");
+            require(on.money>500,"A small storage purchase consumed the entire army/city budget");
+
+            game.techLevel=1;house->researchedTechLevel=1;
+            auto early=storagePass();
+            require(!bot->campaignAvailableToBuild(yard,Structure_Silo)
+                && bot->campaignAvailableToBuild(yard,Structure_Refinery),
+                "T1 storage fixture must have a buildable Refinery and a locked Silo");
+            require(bot->storageExpansionItem(early,yard)==Structure_Refinery,
+                "T1 overflow relief waited for an unavailable Silo on a spiceless map");
+            QuantBot::BuilderTurn earlyTurn(early.money);earlyTurn.pBuilder=yard;earlyTurn.pStructure=yard;
+            require(bot->queueFoundedStructure(early,earlyTurn,Structure_Refinery,__LINE__,"storage_capacity"),
+                "T1 vault fallback never entered the real founded queue");
+            ++early.itemCount[Structure_Refinery];
+            require(bot->storageExpansionItem(early,yard)==NONE_ID,"Parallel yards duplicated a pending refinery vault");
+            cancelOrders(yard);
+            bot->builderPlaceLocations.clear();bot->reservedStructures.clear();
+            SDL_Log("STORAGE_CAPACITY_PASS: full2,005 without core; founded Silo and T1 refinery; pending vaults deduplicated");
+        } catch(...) {
+            game.techLevel=savedTech;house->researchedTechLevel=savedResearched;
+            bot->configOverride=savedConfig;throw;
+        }
+        game.techLevel=savedTech;house->researchedTechLevel=savedResearched;
+        bot->configOverride=savedConfig;
+    }
+
     SDL_Log("NO_SPICE_CITY_OK");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=no_spice_city outcome=passed");
 }

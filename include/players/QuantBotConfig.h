@@ -141,7 +141,8 @@ struct QuantBotConfig {
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
-    /// CityPowerSizing, CityOpeningCapital, ThreatTurrets, CityStarportSupply; optional keys, hashed for multiplayer.
+    /// CityPowerSizing, CityOpeningCapital, ThreatTurrets, CityStarportSupply, StorageCapacity;
+    /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -266,6 +267,10 @@ struct QuantBotConfig {
         /// Protect a solvent city's first useful Starport from repeat zoning and
         /// factory orders. The no-spice seed economy still comes first.
         bool cityStarportSupply;
+        /// Bank forecast income before it outgrows physical storage, after useful
+        /// production spending. One safe storage project at a time; use a buildable
+        /// refinery for its vault when the cheaper Silo is not unlocked yet.
+        bool storageCapacity;
     };
     ForceSettings force;
 

@@ -3,11 +3,54 @@
 #include <dunecity/CitySimulation.h>
 #include <dunecity/PowerRules.h>
 #include <structures/BuilderBase.h>
+#include <array>
 
 namespace DuneCityAudit {
 
+struct StorageObservation {
+    const House* house{};
+    Uint32 cycle{};
+    Uint32 fullCycles{}, overflowCycles{};
+    int capacity{};
+    int64_t lostRaw{}, incomeLostRaw{};
+    bool full{};
+};
+inline std::array<StorageObservation,NUM_HOUSES> storage;
+
+// Every simulation tick, not a minute-sample estimate. The private ledger is
+// read only in this existing -fno-access-control probe. A capacity-loss tick is
+// excluded from income overflow: destroying a vault is not failure to buy one.
+inline void observe(Game& game) {
+    static const bool enabled = std::getenv("BALANCE_DUNECITY_AUDIT")!=nullptr;
+    if (!enabled) return;
+    const Uint32 cycle = game.getGameCycleCount();
+    for (int h=0; h<NUM_HOUSES; ++h) {
+        const House* house = game.getHouse(h);
+        if (!house || !FfaArmy::quantBotOf(house)) continue;
+        auto& state = storage[h];
+        int64_t lost = 0;
+        const auto totals = AITelemetry::log().economy.find(h);
+        if (totals!=AITelemetry::log().economy.end()) {
+            const auto entry = totals->second.find("storage_lost");
+            if (entry!=totals->second.end()) lost=entry->second;
+        }
+        if (state.house!=house || cycle<state.cycle) state={};
+        if (state.house==house && cycle>state.cycle) {
+            const Uint32 elapsed = cycle-state.cycle;
+            if (state.full) state.fullCycles+=elapsed;
+            if (lost>state.lostRaw && house->getCapacity()>=state.capacity) {
+                state.overflowCycles+=elapsed;
+                state.incomeLostRaw+=lost-state.lostRaw;
+            }
+        }
+        state.house=house;state.cycle=cycle;state.capacity=house->getCapacity();state.lostRaw=lost;
+        state.full=house->isAlive() && state.capacity>0 && house->getEarnedCredits()>=FixPoint(state.capacity);
+    }
+}
+
 inline void sample(Game& game) {
     if (!std::getenv("BALANCE_DUNECITY_AUDIT")) return;
+    observe(game);
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
     for (const House* house : EliminationMatch::playingHouses(game)) {
         const QuantBot* bot = FfaArmy::quantBotOf(house);
@@ -91,7 +134,8 @@ inline void sample(Game& game) {
         SDL_Log("DUNECITY_ECONOMY: minute=%d cycle=%u house=%d ledger_enabled=%d"
                 " spice_gross=%d tax_gross=%d starting_cash=%d spice_cash=%d city_cash=%d"
                 " capacity=%d yard_storage=%d police_funding=%d army_target=%d unit_limit=%d"
-                " spice_multiplier=%u sale_credits=%u economy=%s",
+                " spice_multiplier=%u sale_credits=%u storage_full_cycles=%u storage_overflow_cycles=%u"
+                " storage_income_lost=%lld economy=%s",
                 minute,game.getGameCycleCount(),house->getHouseID(),int(AITelemetry::log().enabled()),
                 house->getHarvestedSpice().lround(),house->getCityTaxReceipts().lround(),
                 house->getStartingCredits().lround(),house->getStoredCredits().lround(),house->getCityCredits().lround(),
@@ -99,6 +143,8 @@ inline void sample(Game& game) {
                     *game.objectData.data[Structure_ConstructionYard][house->getHouseID()].capacity,
                 policeFunding,bot->militaryValueLimit,int(house->isGroundUnitLimitReached()),
                 house->getSpiceIncomeMultiplier(),house->getSaleCredits(),
+                storage[house->getHouseID()].fullCycles,storage[house->getHouseID()].overflowCycles,
+                static_cast<long long>(storage[house->getHouseID()].incomeLostRaw/(int64_t{1}<<32)),
                 AITelemetry::log().economyTotals(house->getHouseID()).json().c_str());
     }
 }

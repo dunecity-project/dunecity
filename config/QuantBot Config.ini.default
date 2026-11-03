@@ -362,3 +362,6 @@ CityOpeningCapital=1
 ThreatTurrets=1
 # Save a solvent city's first useful Starport instead of zoning its price away.
 CityStarportSupply=1
+# Forecast earned-income overflow after useful production, including T1 refinery vaults.
+# Bound storage projects to one in flight and the absolute credit ceiling.
+StorageCapacity=1

@@ -358,6 +358,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityOpeningCapital = true;
     force.threatTurrets = true;
     force.cityStarportSupply = true;
+    force.storageCapacity = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -664,6 +665,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
         iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
         iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
+        iniFile.setBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -796,6 +798,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityOpeningCapital = iniFile.getBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
     force.threatTurrets = iniFile.getBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
     force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
+    force.storageCapacity = iniFile.getBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1287,6 +1290,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("cityOpeningCapital", force.cityOpeningCapital);
     addNamed("threatTurrets", force.threatTurrets);
     addNamed("cityStarportSupply", force.cityStarportSupply);
+    addNamed("storageCapacity", force.storageCapacity);
     configStr += "|/FORCE|";
     addNamed("civWarsStrategy", civWarsStrategy);
     configStr += "|STRATEGY";

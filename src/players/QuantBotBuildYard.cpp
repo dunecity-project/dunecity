@@ -186,11 +186,14 @@ bool QuantBot::buildCampaignYard(BuildPass& pass, BuilderTurn& turn, YardTurn& y
     auto& data = currentGame->objectData.data;
     //logDebug("GameMode Campaign.. ");
 
-    if (storageExpansionNeeded(pass) && getHouse()->hasPower()
-        && campaignAvailableToBuild(turn.pBuilder,Structure_Silo)
-        && findPlaceLocation(Structure_Silo).isValid()
-        && queueFoundedStructure(pass, turn, Structure_Silo,__LINE__,"spice_storage_priority")) {
-        ++pass.itemCount[Structure_Silo];
+    const Uint32 storage = storageExpansionItem(pass,turn.pBuilder);
+    if (storage!=NONE_ID && getHouse()->hasPower()
+        && findPlaceLocation(storage).isValid()
+        && queueFoundedStructure(pass,turn,storage,__LINE__,
+            botConfig().force.storageCapacity ? "storage_capacity" : "spice_storage_priority")) {
+        ++pass.itemCount[storage];
+        if (storage==Structure_Doublefinery) pass.itemCount[Structure_Refinery]+=2;
+        else if (storage==Structure_Worfinery) ++pass.itemCount[Structure_Refinery];
         return true;
     }
 
@@ -295,6 +298,15 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     startYardSelection(pass, turn, yardTurn);
     chooseYardAirDefence(pass, turn, yardTurn);
     chooseYardEssentials(pass, turn, yardTurn);
+    // Power recovery and a present air threat keep priority. Storage consumes
+    // only its own price, leaving useful army/defence/city spending available.
+    if (botConfig().force.storageCapacity && yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic) {
+        const Uint32 storage = storageExpansionItem(pass,turn.pBuilder);
+        if (storage!=NONE_ID) {
+            yardTurn.itemID=storage;yardTurn.structureRule="storage_capacity";
+            yardTurn.skipRemainingStructureLogic=true;
+        }
+    }
     if (civWarsResearchRequired() && pass.itemCount[Structure_ResearchLab] == 0
         && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
         // Only the rebuilding yard may spend this reservation. Repeatable city
@@ -345,8 +357,8 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
     yardTurn.urgentProtection = pass.airEngaged
         || (capitalPending(pass) && pass.capitalCandidates[pass.capitalChoice].urgent);
 
-    if (storageExpansionNeeded(pass) && getHouse()->hasPower()
-        && campaignAvailableToBuild(turn.pBuilder,Structure_Silo)
+    if (!botConfig().force.storageCapacity && storageExpansionItem(pass,turn.pBuilder)!=NONE_ID
+        && getHouse()->hasPower()
         && pass.money >= buildingCapitalCost(pass, Structure_Silo)
         && findPlaceLocation(Structure_Silo).isValid()) {
         yardTurn.itemID=Structure_Silo;
@@ -2169,7 +2181,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
 bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     const Uint32 variant = yardTurn.itemID != NONE_ID || !yardTurn.skipRemainingStructureLogic
         ? chooseTornieStructure(turn.pBuilder, yardTurn.itemID, pass.money) : Uint32(NONE_ID);
-    if (variant != yardTurn.itemID && campaignAvailableToBuild(turn.pBuilder,variant)
+    if (yardTurn.structureRule!=std::string_view("storage_capacity")
+        && variant != yardTurn.itemID && campaignAvailableToBuild(turn.pBuilder,variant)
         && findPlaceLocation(variant).isValid()) {
         yardTurn.itemID = variant;
         yardTurn.crimeServiceSite = Coord::Invalid();
