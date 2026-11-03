@@ -718,6 +718,12 @@ void runOpeningEconomyProbe(Game& game) {
 
     // Mature bases must relieve a full earned-income bank before continuing
     // optional expansion. Exercise the real order path at every difficulty.
+    // A standing lift is part of this mature-base premise. Otherwise the first
+    // Carryall spends 800 earned credits before the yard runs: the three-worker
+    // progression case forecasts only 525 receipts over the Silo's lead time,
+    // so a near-full bank is not actually at risk after that mandatory purchase.
+    if(!house->getNumItems(Unit_Carryall))
+        require(house->createUnit(Unit_Carryall,true),"Mature storage fixture needs its real transport");
     const auto savedDifficulty=bot->difficulty;
     for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,
             QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal,QuantBot::Difficulty::Defend}) {
@@ -864,27 +870,44 @@ void runOpeningEconomyProbe(Game& game) {
         house->numItem[Unit_Harvester]=3;
         require(build(4000)!=Structure_Refinery,"Empty bays kept expanding without workers to fill them");
 
-        // A queued bay brings its own storage. Count that pending capacity
-        // rather than cancelling every silo a growing refinery base still needs.
+        // A pending bay delivers its vault before another storage project starts.
+        // Keep the former proportional-capacity rule as an explicit off control,
+        // then verify default-on deduplication and a genuinely full unserved bank.
         const int bayCapacity=game.objectData.data[Structure_Refinery][HOUSE_ATREIDES].capacity;
         require(bayCapacity>0,"Fixture needs refinery storage capacity");
-        auto storageWithPendingBay=[&](int capacity,int stored) {
+        auto storageWithBay=[&](int capacity,int stored,bool pending) {
             clearOrders();
             house->capacity=capacity;house->startingCredits=0;
             house->storedCredits=stored;house->cityCredits=0;
             house->producedPower=10000;bot->lastCalculatedSpice=1300000;
-            secondYard->doProduceItem(Structure_Refinery);
-            require(secondYard->getProductionQueueSize()>0,"Fixture could not queue the pending bay");
+            if(pending) {
+                secondYard->doProduceItem(Structure_Refinery);
+                require(secondYard->getProductionQueueSize()>0,"Fixture could not queue the pending bay");
+            }
             bot->build(5100);
             int silos=0;
             for(auto* builder:{yard,secondYard})for(const auto& order:builder->currentProductionQueue)
                 if(order.itemID==Structure_Silo)++silos;
             return silos;
         };
-        require(storageWithPendingBay(20000,19000)==1,
-            "A queued refinery cancelled the storage the bank still needed");
-        require(storageWithPendingBay(20000,(20000+bayCapacity)*79/100)==0,
-            "Pending refinery capacity was not counted before ordering another silo");
+        {
+            const auto savedConfig=bot->configOverride;
+            auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+            bot->configOverride=config;
+            try {
+                config->force.storageCapacity=false;
+                require(storageWithBay(20000,19000,true)==1,
+                    "Storage-off control lost the bank's unmet capacity after a queued refinery");
+                config->force.storageCapacity=true;
+                require(storageWithBay(20000,19999,false)==1,
+                    "A genuinely overflowing bank without pending capacity failed to order storage");
+                require(storageWithBay(20000,19999,true)==0,
+                    "A pending refinery vault was duplicated by another storage order");
+                require(storageWithBay(20000,(20000+bayCapacity)*79/100,true)==0,
+                    "Pending refinery capacity was not counted before ordering another silo");
+            } catch(...) {bot->configOverride=savedConfig;throw;}
+            bot->configOverride=savedConfig;
+        }
 
         // Parallel yards share one power package. Every generator already on
         // order counts as capacity, so the idle yard fills what is still

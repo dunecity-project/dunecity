@@ -18,6 +18,13 @@
   core, and require real Silo orders before the missing core for imminent overflow
   with `StorageCapacity=1`. Mature storage, pending-order, ceiling and progression
   assertions remain; no gameplay/config defaults or digest pins change.
+- Continuing the Vanilla/Dune2R fixtures exposed two more old premises from the
+  same storage cutover: the first Carryall spends **800 earned credits** before
+  a yard with only **525 forecast receipts** over the Silo's lead time, so the
+  formerly “overflowing” bank is safe. Give the mature-base fixture its actual
+  first Carryall. Preserve the legacy pending-refinery assertion in the off arm;
+  the on arm must order a Silo for a genuinely full bank without pending capacity
+  and must not duplicate a vault already being built.
 
 ## 2026-11-04 — Additional standing-rocket tuning remains opt-in (OMP RocketTurrets, unreleased)
 
