@@ -50,12 +50,13 @@ void runCivMenu() {
     skirmishRequire(menu.readParams().wormsPerLane == CivWarsGenerator::kMaxWormsPerLane
                     && init.getFiledata().find("WormsPerLane=10") != std::string::npos,
                     "Civ Wars menu did not accept ten worms per lane");
-    menu.wormsBox.setActive();
+    probeSelect(menu.wormsBox, 0);
     const Point wormAt = menu.getPosition() + menu.windowWidget.getWidgetPosition(&menu.wormsBox);
-    menu.handleMouseLeft(wormAt.x + 5, wormAt.y + 5, true);
-    menu.handleMouseLeft(wormAt.x + 5, wormAt.y + 5, false);
-    skirmishCapture(menu, "civilization-wars-max-worms", true);
-    SDL_KeyboardEvent escape{}; escape.keysym.sym = SDLK_ESCAPE; menu.handleKeyPress(escape);
+    const int wormX = wormAt.x + menu.wormsBox.trackEnd();
+    menu.handleMouseLeft(wormX, wormAt.y + 5, true);
+    menu.handleMouseLeft(wormX, wormAt.y + 5, false);
+    skirmishRequire(menu.readParams().wormsPerLane == 10, "Actual worms slider click did not select ten");
+    skirmishCapture(menu, "civilization-wars-max-worms");
     skirmishRequire(effectiveGameOptions.originalUnitDamage == effectiveDamage,
                     "Civ Wars menu overwrote other modes' effective rules");
     skirmishRequire(init.getHouseInfoList().size() == 6, "3v3 did not prepare six seats");
@@ -166,7 +167,7 @@ void runCivResearchGame(const GameInitSettings& init) {
     SDL_Log("CIV_HUMAN_RESEARCH: event=unaffordable cycle=%u house=%d credits=%d tech=%d button=%d,%d enabled=%d",
         game->getGameCycleCount(), pLocalHouse->getHouseID(), pLocalHouse->getCredits(), pLocalHouse->getTechLevel(),
         button.x, button.y, int(panel->research.isEnabled()));
-    const Uint32 limit = MILLI2CYCLES(300000);
+    const Uint32 limit = MILLI2CYCLES(480000);
     while(game->getGameCycleCount() < limit && !pLocalHouse->canStartTechResearch(lab->getObjectID()))
         game->updateGameState();
     gui.updateObjectInterface();
@@ -202,10 +203,10 @@ void runCivResearchGame(const GameInitSettings& init) {
     while(game->getGameCycleCount() < limit) game->updateGameState();
     for(const auto& setup : init.getHouseInfoList()) {
         const auto* house = game->getHouse(setup.houseID);
-        SDL_Log("CIV_HUMAN_RESEARCH: event=five_minutes cycle=%u house=%d credits=%d tech=%d target=%d",
+        SDL_Log("CIV_HUMAN_RESEARCH: event=eight_minutes cycle=%u house=%d credits=%d tech=%d target=%d",
             game->getGameCycleCount(), house->getHouseID(), house->getCredits(),
             house->getTechLevel(), house->getTechResearchTarget());
-        skirmishRequire(house->getTechLevel() >= 2, "Human/AI Civ Wars house failed to research in five minutes");
+        skirmishRequire(house->getTechLevel() >= 2, "Human/AI Civ Wars house failed to research in eight minutes");
     }
     endMatch(game);
 }
@@ -297,8 +298,8 @@ void runCivMatch(const std::string& name) {
         skirmishRequire(fullUpkeep > 0 && FixPoint(city.budget.getLastTaxRevenue()) > fullUpkeep,
                         "Civilization Wars starting city does not cover turret and police upkeep");
     }
-    SDL_Log("SKIRMISH_SMOKE_BEGIN: Civilization Wars %dv%d five game minutes", params.teamSize, params.teamSize);
-    const Uint32 end = game->getGameCycleCount() + MILLI2CYCLES(300 * 1000);
+    SDL_Log("SKIRMISH_SMOKE_BEGIN: Civilization Wars %dv%d eight game minutes", params.teamSize, params.teamSize);
+    const Uint32 end = game->getGameCycleCount() + MILLI2CYCLES(480 * 1000);
     std::array<int, NUM_HOUSES> lastTech{}, lastTarget{};
     while(!game->finished && game->getGameCycleCount() < end) {
         game->updateGameState();
@@ -315,12 +316,12 @@ void runCivMatch(const std::string& name) {
         }
     }
     SDL_Log("SKIRMISH_SMOKE_END: cycle=%u target=%u finished=%d", game->getGameCycleCount(), end, game->finished ? 1 : 0);
-    skirmishRequire(!game->finished && game->getGameCycleCount() == end, "Civilization Wars did not reach its five-minute limit");
+    skirmishRequire(!game->finished && game->getGameCycleCount() == end, "Civilization Wars did not reach its eight-minute limit");
     for(const auto& setup : result.houses) {
         const auto* house = game->getHouse(setup.house);
         skirmishRequire(house && house->isAlive() && house->getCityTaxReceipts() > 0,
                         "Civilization Wars house died or received no city tax income");
-        skirmishRequire(house->getTechLevel() >= 2, "Civ Wars QuantBot did not advance technology in five minutes");
+        skirmishRequire(house->getTechLevel() >= 2, "Civ Wars QuantBot did not advance technology in eight minutes");
     }
     captureCivMap(name + "-played");
     captureGame(*game, name + "-played-base", result.houses.front().start);

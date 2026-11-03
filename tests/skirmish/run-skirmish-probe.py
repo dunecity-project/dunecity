@@ -29,7 +29,7 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/skirmis
   render       whole-map pictures (4 px per tile) and terrain measurements of map-editor random
                maps and of generated maps; --render-save adds the map a saved match started from
   civ-menu     Civilization Wars settings, remembered seed, generic multiplayer starts/lobby/wire rules
-  civ-1v1      fixed starting kit and positive city income, five game minutes with QuantBot on every seat
+  civ-1v1      fixed starting kit and positive city income, eight game minutes with QuantBot on every seat
   civ-2v2      the same four-house match and mirrored lane setup
   civ-3v3      the same six-house match and one lane per player
   civ-research human selected from Civ Wars menu: zero-credit rejection, normal-income enablement,

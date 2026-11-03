@@ -138,7 +138,7 @@ CivWars uses the next hexadecimal token slot.
   separation, islands, roster and map serialization; mode-marker/cache/wire-format unit tests.
 - `civilization_wars_probe`: real menus, persisted seed, ten-worm choice at 640×480,
   generic-start lobby and guest settings; all-AI games for each team size through a
-  five-game-minute limit, including Easy/Medium/Hard/Brutal/Defend and Builder controllers;
+  eight-game-minute limit, including Easy/Medium/Hard/Brutal/Defend and Builder controllers;
   positive starting budget and per-house research progression; worm defeat, eating,
   occupied-slot retry, legacy RNG and sleeping save/load behavior.
 - `civilization_wars_research_probe`: actual Civ Wars Start button, real human SDL Lab
