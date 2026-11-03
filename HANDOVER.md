@@ -1,3 +1,53 @@
+## 2026-11-04 — Protect tax-city factory and expansion capital (OMP ExpandAI, unreleased)
+
+- `atreides no expand.dls`: original DuneCity revisions, 8P256×256 FFA,
+  map seed418379001, match seed1229922152, Brutal, tech9, cycle69986
+  (18:39.776). Blue Atreides has37structures,725credits,2005capacity,
+  10380displayed population, one CY/Light Factory/Starport, no HF/MCV.
+  Annual tax2883, police130, power600/518; only5lifetime spice receipts,
+  no remaining viable spice. This is not the5000-population Starport rule.
+- The rock is small but not yet full:266connected rock tiles; the first
+  actual survey reports147free tiles and **at least4** usable2×2 footprints,
+  a legal HF at(233,0), built-out=false, colonisation-due=false.
+  Once home production room runs out, the existing expansion planner finds
+  the remote site(202,6); the MCV is not initially due.
+- The live log bounds the last pre-save placement to cycles51792..51948:
+  **288.608..291.104seconds idle** before saving. During that gap recorded
+  army value rises3250→12400 while sampled cash is646/718/744 (HF price600).
+  An original-map minute0 reproduction to22minutes, with the human replaced
+  by AI, orders/builds HF at14.208/14.794min and orders its MCV at14.501min.
+  It is a reproduction, not an exact replay of the user's inputs/global RNG.
+- Cause: the first HF had score0 `bootstrap_managed_separately`, without
+  a shared capital claim. A cheap military import could reserve/spend its
+  budget first, leaving the CY in `starport_opening`. A controlled real-save
+  bargain test gives711cash,100already committed,611spendable: a70-credit
+  Quad reserve leaves541, then8Quads consume560; the legal600-credit HF
+  remains unbuilt. First-plan tax/upkeep forecasts are1457/129per minute:
+  this is an allocation failure, not absence of income or placement room.
+- Default-on hashed `[Force Concentration] CityConstructionCapital` gives
+  a seeded, quiet, positive-income, non-spice city one bounded first-HF
+  claim at its real price, only when legal and already powered. Existing
+  required colonisation MCVs get the same claim. It does not preempt active
+  defence, fund hypothetical four-minute production burn, duplicate queued
+  factories/MCVs, relax market/placement/escort checks, or alter saboteurs.
+  No extra save/protocol change; protocol111 already covers this release.
+- Individual10-minute continuations with CityOpeningCapital, CityPowerSizing,
+  CityGrowthPower, ThreatTurrets, or CityStarportSupply off all build an HF
+  and deploy an MCV; none isolates the reported stall. The supplied save
+  itself already resumes under legacy behaviour (HF order6.288s).
+- Same frozen `0d27bb65` native probe, sha256`37031c9c…`, exact37500cycles
+  after the save: OFF/ON HF order6.288/1.488s, completion41.488/36.688s;
+  Starport MCV order103.888/107.088s, delivery138.064/141.264s,
+  deployment217.888/215.488s. Both end with2CYs/1HF. Standing structures at
+  minutes0/2/4/6/8/10 are OFF37/40/45/52/63/82 and ON37/39/43/52/64/80;
+  no claim that the fix increases total final buildings in this continuation.
+- Engine fixtures cover affordable versus one-credit-short HF, cheap-import
+  competition, pending-HF deduplication/unavailability, and required-MCV
+  competition plus the existing stock/cash/delivery/deployment checks.
+  Evidence: `outputs/atreides-no-expand-20261103/`, especially `diagnosis.json`,
+  `original-live-timeline.json`, `suspect-comparison-with-timelines.json`,
+  `final-save-comparison.json`, and `final-probe-provenance.json`.
+
 ## 2026-11-04 — Adjustable Random Skirmish terrain (OMP TerrainMix, unreleased)
 
 - `80rock.dls`: Random Skirmish/CivWars mod, seed418379001,160×160,4P2v2,
