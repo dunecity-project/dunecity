@@ -636,6 +636,15 @@ void BuilderBase::updateBuildList()
             removeItem(buildList, iter, itemID2Add);
             continue;
         }
+        // City games: a Starport needs the house's city population (match rule). An order already
+        // started stays, so a city dipping under the threshold never cancels a paid Starport.
+        if(itemID2Add == Structure_StarPort && owner && !owner->meetsStarportPopulation()
+           && currentProducedItem != Structure_StarPort
+           && std::none_of(currentProductionQueue.begin(), currentProductionQueue.end(),
+                           [](const ProductionQueueItem& q) { return q.itemID == Structure_StarPort; })) {
+            removeItem(buildList, iter, itemID2Add);
+            continue;
+        }
         const bool wildspadeChemical = specialChemicalCarryall
             && isHouseFaction(static_cast<HOUSETYPE>(technology), HOUSE_WILDSPADE)
             && (objData.techLevel == 5 || objData.techLevel == 6);

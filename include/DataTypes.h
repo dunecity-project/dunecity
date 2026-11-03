@@ -293,7 +293,7 @@ public:
            immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true),
            continuousGroundSteps(false), retryPlannedPlacement(true), sharedYardQueue(true),
            sharedFactoryQueue(true), slowCityYear(true), micropolisLandValue(true),
-           researchLab(false), trooperAntiAir(true) {
+           researchLab(false), trooperAntiAir(true), starportPopulation(true) {
         }
 
 
@@ -323,6 +323,7 @@ public:
                     && (micropolisLandValue == goc.micropolisLandValue)
                     && (researchLab == goc.researchLab)
                     && (trooperAntiAir == goc.trooperAntiAir)
+                    && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
                     && (easyMode == goc.easyMode)
@@ -365,6 +366,7 @@ public:
             optStr += "/micropolisLandValue=" + std::to_string(micropolisLandValue);
             optStr += "/researchLab=" + std::to_string(researchLab);
             optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
+            optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
             optStr += "/easyMode=" + std::to_string(easyMode);
@@ -436,6 +438,9 @@ public:
         bool        researchLab;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
+        /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
+        /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
+        bool        starportPopulation;
 
         /// Tornie-family rules; ignored by other content families.
         bool        alliedControl = false;

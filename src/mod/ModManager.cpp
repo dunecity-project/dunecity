@@ -1031,6 +1031,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Micropolis Land Value") result.micropolisLandValue = parseBool(value);
             else if (key == "Research Lab") result.researchLab = parseBool(value);
             else if (key == "Trooper Anti-Air") result.trooperAntiAir = parseBool(value);
+            else if (key == "Starport Population") result.starportPopulation = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);
             else if (key == "City Effects") result.cityEffects = parseBool(value);
             else if (key == "Selling Buildings") result.sellingBuildings = parseBool(value);

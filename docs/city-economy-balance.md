@@ -67,6 +67,14 @@ hostile units and damaged buildings. The census check is `custom-city-cap-probe.
 (ctest `quantbot_custom_attack`): a parked unit changes neither a block nor the house average
 with the rule on, and still develops its block with it off.
 
+### Starport population (match rule `Starport Population`, default on; MOD16, protocol 111)
+
+In non-campaign city games a house can start a Starport only while its displayed city population
+(internal × 20) is at least 5,000 (`DuneCity::kStarportPopulation`). The Construction Yard list
+refreshes when the city crosses the line. A Starport already being built or queued is kept if the
+city later shrinks, and existing Starports keep working. Off, older saves and campaigns: no
+requirement.
+
 ## Income readout
 
 At 7% tax and house-average land value 128, gross credits per simulated minute:

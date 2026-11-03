@@ -1350,6 +1350,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.micropolisLandValue = myINIFile.getBoolValue("Game Options", "Micropolis Land Value", true);
             settings.gameOptions.researchLab = myINIFile.getBoolValue("Game Options", "Research Lab", false);
             settings.gameOptions.trooperAntiAir = myINIFile.getBoolValue("Game Options", "Trooper Anti-Air", true);
+            settings.gameOptions.starportPopulation = myINIFile.getBoolValue("Game Options", "Starport Population", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
             settings.gameOptions.alliedBuilding = myINIFile.getBoolValue("Game Options", "Allied Building", false);
             settings.gameOptions.easyMode = myINIFile.getBoolValue("Game Options", "Easy Mode", false);

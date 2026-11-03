@@ -15,7 +15,8 @@ constexpr std::size_t Mod12Bytes = 6;
 constexpr std::size_t Mod13Bytes = 1;
 constexpr std::size_t Mod14Bytes = 1;
 constexpr std::size_t Mod15Bytes = 2;
-constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes + Mod15Bytes;
+constexpr std::size_t Mod16Bytes = 1;
+constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes + Mod15Bytes + Mod16Bytes;
 struct ActiveTestMod {
     explicit ActiveTestMod(const std::string& name) { ModManager::instance().setActiveMod(name); }
     ~ActiveTestMod() { ModManager::instance().setActiveMod("vanilla"); }
@@ -84,7 +85,7 @@ TEST_CASE("Original damage is a shared rule preserved by setup, saves and campai
 
     SECTION("MOD5 defaults the new rule off without consuming following save bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("FDOM");
+        const auto marker = bytes.rfind("GDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '5';
         // Everything MOD5 does not know about: the MOD6 rule byte, MOD7's count plus one
@@ -120,7 +121,7 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
     SECTION("MOD7 and older default the rule on without consuming following bytes") {
         const char older = GENERATE('4', '5', '6', '7');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("FDOM");
+        const auto marker = bytes.rfind("GDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1;                // MOD14 through MOD8
@@ -162,7 +163,7 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("MOD8 streams keep the rule off without consuming following bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("FDOM");
+        const auto marker = bytes.rfind("GDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '8';
         bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD14 through MOD9, which MOD8 does not own
@@ -214,7 +215,7 @@ TEST_CASE("The planned-construction rules participate in match identity and save
         // A save or replay recorded before the rules existed must replay with the legacy behaviour.
         const char older = GENERATE('8', '9');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("FDOM");
+        const auto marker = bytes.rfind("GDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         bytes.resize(bytes.size() - PostMod11Bytes - (older == '8' ? 4 : 3));
@@ -228,7 +229,7 @@ TEST_CASE("The planned-construction rules participate in match identity and save
 
     SECTION("an announced MOD10 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("FDOM");
+        const auto marker = bytes.rfind("GDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
         bytes.resize(bytes.size() - PostMod11Bytes - 2);   // MOD14..MOD11 and the missing last MOD10 byte
@@ -264,7 +265,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
         mod10.setGameOptions(planned);
         OMemoryStream mod10Out; mod10Out.open(); mod10.save(mod10Out);
         std::string bytes(mod10Out.getData(), mod10Out.getDataLength());
-        const auto marker = bytes.rfind("FDOM");
+        const auto marker = bytes.rfind("GDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
         bytes.resize(bytes.size() - PostMod11Bytes);
@@ -279,7 +280,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
 
     SECTION("an announced MOD11 byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("FDOM");
+        const auto marker = bytes.rfind("GDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'B';
         bytes.resize(bytes.size() - PostMod11Bytes - 1);
@@ -338,7 +339,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("every marker before MOD7 means 1x and leaves the following bytes alone") {
         const char older = GENERATE('!', '2', '3', '4', '5', '6');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("FDOM");
+        const auto marker = bytes.rfind("GDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         // Strip what that older marker cannot account for, so the tail is unambiguous.
@@ -669,7 +670,7 @@ TEST_CASE("Legacy MOD3 remains readable and truncated MOD14 fails closed", "[wor
     auto original = makeCoop(false, true);
     OMemoryStream out; out.open(); original.save(out);
     std::string bytes(reinterpret_cast<const char*>(out.getData()), out.getDataLength());
-    const auto marker = bytes.find("FDOM");
+    const auto marker = bytes.find("GDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("old graphics marker") {
         bytes[marker] = '3';
@@ -793,10 +794,10 @@ TEST_CASE("MOD12 is append-only and every announced rule byte is required",
     const auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("FDOM");
+    const auto marker = encoded.rfind("GDOM");
     REQUIRE(marker != std::string::npos);
     encoded[marker] = 'C';
-    encoded.resize(encoded.size() - Mod13Bytes - Mod14Bytes - Mod15Bytes); // Released MOD12 layout.
+    encoded.resize(encoded.size() - Mod13Bytes - Mod14Bytes - Mod15Bytes - Mod16Bytes); // Released MOD12 layout.
     SECTION("a MOD11 stream consumes none of the six new fields") {
         auto bytes = encoded;
         REQUIRE(bytes[marker] == 'C');
@@ -833,10 +834,10 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
     auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("FDOM");
+    const auto marker = encoded.rfind("GDOM");
     REQUIRE(marker != std::string::npos);
     encoded[marker] = 'D';
-    encoded.resize(encoded.size() - Mod14Bytes - Mod15Bytes); // Released MOD13 layout.
+    encoded.resize(encoded.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes); // Released MOD13 layout.
 
     SECTION("both switch states round-trip without consuming following bytes") {
         const bool enabled = GENERATE(false, true);
@@ -861,6 +862,7 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
         expected.sharedFactoryQueue = false;
         expected.micropolisLandValue = false;
         expected.trooperAntiAir = false;
+        expected.starportPopulation = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE_FALSE(restored.getGameOptions().sharedFactoryQueue);
         REQUIRE(restored.isChaosCampaignEligible() == original.isChaosCampaignEligible());
@@ -886,7 +888,7 @@ TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when 
     auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     const std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("FDOM");
+    const auto marker = encoded.rfind("GDOM");
     REQUIRE(marker != std::string::npos);
 
     SECTION("both switch states round-trip without consuming following bytes") {
@@ -904,13 +906,14 @@ TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when 
     SECTION("a released MOD13 stream keeps every old field and reads the new rule off") {
         auto bytes = encoded;
         bytes[marker] = 'D';
-        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes);
+        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes);
         bytes.append("tail");
         IMemoryStream input(bytes.data(), bytes.size());
         GameInitSettings restored(input);
         auto expected = original.getGameOptions();
         expected.micropolisLandValue = false;
         expected.trooperAntiAir = false;
+        expected.starportPopulation = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(restored.getGameOptions().getHash() == expected.getHash());
         REQUIRE_FALSE(restored.getGameOptions().micropolisLandValue);
@@ -919,7 +922,7 @@ TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when 
     }
     SECTION("truncating the MOD14 byte is an error, not a legacy save") {
         auto bytes = encoded;
-        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes);
+        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes);
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
@@ -945,7 +948,7 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
-    const auto marker = encoded.rfind("FDOM");
+    const auto marker = encoded.rfind("GDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("all combinations round-trip without consuming the next record") {
         saved.writeUint32(0xabcdef01u);
@@ -957,13 +960,14 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
     SECTION("released MOD14 streams retain their rules and default both mechanics off") {
         auto bytes = encoded;
         bytes[marker] = 'E';
-        bytes.resize(bytes.size() - Mod15Bytes);
+        bytes.resize(bytes.size() - Mod15Bytes - Mod16Bytes);
         bytes.append("tail");
         IMemoryStream input(bytes.data(), bytes.size());
         GameInitSettings restored(input);
         auto expected = options;
         expected.researchLab = false;
         expected.trooperAntiAir = false;
+        expected.starportPopulation = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
@@ -971,6 +975,49 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
         const int missing = GENERATE(1, 2);
         auto bytes = encoded;
         bytes.resize(bytes.size() - missing);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams read off",
+          "[citybudget][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.starportPopulation);
+    auto changed = defaults;
+    changed.starportPopulation = false;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
+    auto original = makeSeparateFactionCoop(false);
+    auto options = original.getGameOptions();
+    options.starportPopulation = GENERATE(false, true);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    const auto marker = encoded.rfind("GDOM");
+    REQUIRE(marker != std::string::npos);
+    SECTION("both states round-trip without consuming the next record") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a MOD15 stream keeps its rules and has no Starport requirement") {
+        auto bytes = encoded;
+        bytes[marker] = 'F';
+        bytes.resize(bytes.size() - Mod16Bytes);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.starportPopulation = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("the announced MOD16 byte is required") {
+        auto bytes = encoded;
+        bytes.resize(bytes.size() - Mod16Bytes);
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }

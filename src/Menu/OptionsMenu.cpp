@@ -868,6 +868,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("Game Options", "Micropolis Land Value", settings.gameOptions.micropolisLandValue);
     myINIFile.setBoolValue("Game Options", "Research Lab", settings.gameOptions.researchLab);
     myINIFile.setBoolValue("Game Options", "Trooper Anti-Air", settings.gameOptions.trooperAntiAir);
+    myINIFile.setBoolValue("Game Options", "Starport Population", settings.gameOptions.starportPopulation);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);
 
     myINIFile.setIntValue("Network","ServerPort",settings.network.serverPort);

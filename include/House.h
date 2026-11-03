@@ -281,6 +281,9 @@ public:
     void printStat() const;
 
     void updateBuildLists();
+    /// False only in a non-campaign city game with the `Starport Population` rule on while this
+    /// house's displayed city population is below DuneCity::kStarportPopulation.
+    bool meetsStarportPopulation() const;
 
     void update();
     bool hasRadarResearch(int kind) const;
@@ -376,6 +379,7 @@ protected:
     int techResearchTarget = 0;
     int techResearchRemaining = 0;
     Uint32 techResearchLabID = NONE_ID;
+    bool starportPopulationMet = true; ///< last meetsStarportPopulation(); derived, not saved
     Uint32 structuresSold = 0;
     Uint32 saleCredits = 0;
 

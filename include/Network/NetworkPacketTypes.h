@@ -341,7 +341,8 @@
 //      in game; a 109 peer cannot validate the new command id (save 9880).
 //      CMD_CITY_SET_TAX_RATE sets only the issuer's house (a 109 peer sets every house), and
 //      GameInitSettings MOD14 appends the Micropolis land value rule.
-// 111: Research Lab command, per-house technology and MOD15 research/trooper-AA rules.
+// 111: Research Lab command, per-house technology and MOD15 research/trooper-AA rules;
+//      MOD16 Starport Population (a city house needs 5,000 people to start a Starport).
 #define NETWORK_PROTOCOL_VERSION            111
 
 // Mod transfer limits

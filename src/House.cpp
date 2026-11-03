@@ -838,13 +838,25 @@ void House::updateBuildLists() {
     }
 }
 
-
-
+bool House::meetsStarportPopulation() const {
+    if(!currentGame->getGameInitSettings().getGameOptions().starportPopulation
+       || currentGame->getGameInitSettings().getGameType() == GameType::Campaign
+       || !currentGame->isCitySimEnabled()) return true;
+    const auto* sim = currentGame->getCitySimulation();
+    if(sim == nullptr || !sim->isInitialized() || houseID < 0 || houseID >= DuneCity::kMaxCityHouses) return true;
+    return sim->getHouseState(houseID).getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier
+        >= DuneCity::kStarportPopulation;
+}
 
 void House::update() {
     enforceCreditCapacity();
     updateTechResearch();
     updateRadarResearch();
+    // The Starport appears in (or leaves) the yard's list when the city crosses the threshold.
+    if(const bool met = meetsStarportPopulation(); met != starportPopulationMet) {
+        starportPopulationMet = met;
+        updateBuildLists();
+    }
     if(ModManager::instance().isTornieFamilyContentActive() && !isNatives()
        && isAI() && radarResearch.active < 0 && getCredits() >= 2000) {
         for(int kind = 0; kind < radar::Count; ++kind)

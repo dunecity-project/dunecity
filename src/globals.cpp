@@ -166,6 +166,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Micropolis Land Value", options.micropolisLandValue);
     config.setBoolValue(section, "Research Lab", options.researchLab);
     config.setBoolValue(section, "Trooper Anti-Air", options.trooperAntiAir);
+    config.setBoolValue(section, "Starport Population", options.starportPopulation);
     config.setBoolValue(section, "Allied Control", options.alliedControl);
     config.setBoolValue(section, "Allied Building", options.alliedBuilding);
     config.setBoolValue(section, "Easy Mode", options.easyMode);
@@ -208,6 +209,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Micropolis Land Value", options.micropolisLandValue);
     readBool("Research Lab", options.researchLab);
     readBool("Trooper Anti-Air", options.trooperAntiAir);
+    readBool("Starport Population", options.starportPopulation);
     readBool("Allied Control", options.alliedControl);
     readBool("Allied Building", options.alliedBuilding);
     readBool("Easy Mode", options.easyMode);
