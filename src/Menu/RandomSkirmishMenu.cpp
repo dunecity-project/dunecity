@@ -312,8 +312,6 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         // A partner shares the player's house: a QuantBot that builds, fights, or does both.
         partnerAI.addSpecial(_("None"), kNoPartner);
         partnerAI.setFamilies({"QuantBot"});
-        partnerAI.aiBox.enableResizing(true, true);
-        partnerAI.difficultyBox.enableResizing(true, true);
         partnerBox.addWidget(&partnerAI.aiBox);
         partnerBox.addWidget(&partnerAI.difficultyBox);
 
