@@ -141,8 +141,8 @@ struct QuantBotConfig {
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
-    /// CityPowerSizing, CityOpeningCapital, ThreatTurrets, CityStarportSupply, StorageCapacity;
-    /// optional keys, hashed for multiplayer.
+    /// CityPowerSizing, CityOpeningCapital, CityConstructionCapital, ThreatTurrets,
+    /// CityStarportSupply, StorageCapacity; optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -261,6 +261,10 @@ struct QuantBotConfig {
         /// existing four-minute working-capital forecast. Viable spice economies
         /// retain their normal budgets; military and required recovery are unchanged.
         bool cityOpeningCapital;
+        /// Protect a seeded tax city's first legal heavy factory and a due
+        /// space-expansion MCV from repeat military bargains. Ends on purchase;
+        /// existing income, power, defence and colonisation gates still apply.
+        bool cityConstructionCapital;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;

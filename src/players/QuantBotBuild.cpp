@@ -2546,7 +2546,8 @@ Uint32 QuantBot::storageExpansionItem(BuildPass& pass, const BuilderBase* builde
             && pass.itemCount[Structure_Silo]==getHouse()->getNumItems(Structure_Silo)
             && campaignAvailableToBuild(builder,Structure_Silo) ? Uint32(Structure_Silo) : Uint32(NONE_ID);
     }
-    if (!getHouse()->hasPower() || pass.forecastNetIncome<=0) return NONE_ID;
+    if (builder->isUpgrading() || builder->getProductionQueueSize()!=0
+        || !getHouse()->hasPower() || pass.forecastNetIncome<=0) return NONE_ID;
     int64_t projectedCapacity = capacity;
     const Uint32 last = ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID;
     for (Uint32 item=Structure_FirstID; item<=last; ++item) {
@@ -2911,8 +2912,28 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     / CityEconomyInvestmentPolicy::horizonCycles);
                 capacity.capacity=QuantBotSpendingPolicy::additionalProduction(pass.militaryFunding,pass.existingMilitaryCapacity,
                     added,std::max(0,pass.militaryBudget-pass.militaryValue),capacity.cost);
-                if (actual==0) capacity.reason="bootstrap_managed_separately";
-                else if (factory==Structure_LightFactory && int64_t(pass.lightVehicleValue)*10000
+                if (actual==0) {
+                    capacity.reason="bootstrap_managed_separately";
+                    // The yard's first-factory ladder cannot save money that a
+                    // selected Starport bargain reserves first. This one legal
+                    // tax-city purchase needs the same shared claim as a colonist,
+                    // not four minutes of hypothetical continuous factory burn.
+                    if (factory==Structure_HeavyFactory && pass.citySimEnabled
+                        && botConfig().force.cityConstructionCapital && !pass.spiceEconomyViable
+                        && !builderOnly() && !isCampaignGameType(currentGame->gameType)
+                        && pass.itemCount[factory]==0 && !cityBootstrapNeeded(pass)
+                        && pass.forecastTax>pass.forecastUpkeep
+                        && !pass.defendingEconomy && !pass.airEngaged
+                        && campaignAvailableToBuild(builder,factory)
+                        && (!pass.powerRules || getHouse()->getProducedPower()-getHouse()->getPowerRequirement()
+                            >=std::max(0,data[factory][houseID].power))) {
+                        capacity.site=findPlaceLocation(factory);
+                        if (capacity.site.isValid()) {
+                            capacity.kind="city_construction";capacity.score=5000;
+                            capacity.reason="first_heavy_factory";
+                        }
+                    }
+                } else if (factory==Structure_LightFactory && int64_t(pass.lightVehicleValue)*10000
                     >= int64_t(pass.vehiclePlanValue)*pass.lightVehicleBps) capacity.reason="light_mix_satisfied";
                 else if (pass.itemCount[factory]>actual) capacity.reason="factory_pending";
                 else if (busy<actual) capacity.reason="existing_line_available";
@@ -2988,7 +3009,9 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         if (port && pass.colonisationNeeded && !pass.mcvBuildAvailable && pass.itemCount[Unit_MCV]==0) {
             CapitalCandidate colonist;
             colonist.builder=builder->getObjectID();colonist.item=Unit_MCV;
-            colonist.kind="construction";colonist.price=purchasePrice(builder,Unit_MCV);
+            colonist.kind=botConfig().force.cityConstructionCapital && !pass.defendingEconomy && !pass.airEngaged
+                ? "city_construction" : "construction";
+            colonist.price=purchasePrice(builder,Unit_MCV);
             colonist.cost=colonist.price;colonist.delay=MILLI2CYCLES(30000);
             if (!ready) colonist.reason="producer_busy";
             else if (!campaignAvailableToBuild(builder,Unit_MCV) || colonist.price<=0)
@@ -3016,6 +3039,9 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // grow at all until someone settles the next formation, however
             // many yards it already runs.
             const bool colonyNeed=pass.colonisationNeeded;
+            if (pass.citySimEnabled && botConfig().force.cityConstructionCapital
+                && !pass.defendingEconomy && !pass.airEngaged
+                && (pass.rockExpansionNeeded || colonyNeed)) mcv.kind="city_construction";
             const bool vanillaNeed=!pass.citySimEnabled && DuneCity::prioritizeVanillaMcv(pass.money,
                 pass.actualHarvesters,pass.itemCount[Structure_ConstructionYard],pass.itemCount[Unit_MCV],mcv.price);
             if (!(cityNeed || colonyNeed || vanillaNeed)) mcv.reason="construction_capacity_available";
@@ -3109,7 +3135,8 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             const auto& candidate=pass.capitalCandidates[i];
             if (candidate.score<=0 || std::string_view(candidate.kind)=="military") continue;
             boundedClaim |= std::string_view(candidate.reason)=="ground_threat"
-                || std::string_view(candidate.kind)=="city_supply";
+                || std::string_view(candidate.kind)=="city_supply"
+                || std::string_view(candidate.kind)=="city_construction";
             if (protectedChoice<0 || candidate.score>pass.capitalCandidates[protectedChoice].score)
                 protectedChoice=int(i);
         }
@@ -3135,6 +3162,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             || pass.capitalCandidates[pass.capitalChoice].reason == std::string("secure_expansion")
             || pass.capitalCandidates[pass.capitalChoice].reason == std::string("ground_threat")
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("city_supply")
+            || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "city_construction"
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_upgrade")
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_prerequisite"));
     pass.cityGrowthProtected = false;

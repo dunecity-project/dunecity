@@ -356,6 +356,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityGrowthPower = true;
     force.cityPowerSizing = true;
     force.cityOpeningCapital = true;
+    force.cityConstructionCapital = true;
     force.threatTurrets = true;
     force.cityStarportSupply = true;
     force.storageCapacity = true;
@@ -663,6 +664,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
         iniFile.setBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
         iniFile.setBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
+        iniFile.setBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
         iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
         iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
         iniFile.setBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
@@ -796,6 +798,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
     force.cityPowerSizing = iniFile.getBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
     force.cityOpeningCapital = iniFile.getBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
+    force.cityConstructionCapital = iniFile.getBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
     force.threatTurrets = iniFile.getBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
     force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
     force.storageCapacity = iniFile.getBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
@@ -1288,6 +1291,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("cityGrowthPower", force.cityGrowthPower);
     addNamed("cityPowerSizing", force.cityPowerSizing);
     addNamed("cityOpeningCapital", force.cityOpeningCapital);
+    addNamed("cityConstructionCapital", force.cityConstructionCapital);
     addNamed("threatTurrets", force.threatTurrets);
     addNamed("cityStarportSupply", force.cityStarportSupply);
     addNamed("storageCapacity", force.storageCapacity);

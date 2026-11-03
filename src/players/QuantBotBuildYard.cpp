@@ -736,6 +736,8 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
                 yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_ground_threat" : "ground_threat";
             else if (service.kind==std::string("city_supply"))
                 yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_city_starport_supply" : "city_starport_supply";
+            else if (std::string_view(service.kind)=="city_construction")
+                yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_city_construction" : "city_construction";
             yardTurn.skipRemainingStructureLogic = true;
         }
     }

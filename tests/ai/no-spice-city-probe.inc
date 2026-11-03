@@ -449,6 +449,71 @@ void runNoSpiceCityProbe(Game& game) {
         house->producedPower=savedProduced;house->powerRequirement=savedRequired;
     }
 
+    // atreides no expand.dls: the first heavy factory had no shared capital
+    // claim. A cheap imported Quad reserved its price from the yard first,
+    // then repeated bargains spent the rest while the factory stayed absent.
+    {
+        require(house->getNumItems(Structure_HeavyFactory)==0,
+            "First-factory fixture must start without a heavy factory");
+        StarPort* port=nullptr;
+        for (auto* structure:structureList)
+            if (structure->getOwner()==house && structure->getItemID()==Structure_StarPort
+                && structure->getHealth()>0) port=static_cast<StarPort*>(structure);
+        require(port!=nullptr,"First-factory fixture needs the standing Starport");
+        auto* light=static_cast<BuilderBase*>(put(Structure_LightFactory,2,14));
+        yard->updateBuildList();
+        const auto savedConfig=bot->configOverride;
+        const auto savedState=state;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        config->force.storageCapacity=false; // Isolate construction, not forecast storage relief.
+        bot->configOverride=config;
+        state.resPop=500;state.comPop=25;state.indPop=35;state.taxBaseEighths=4096;
+        state.resValve=state.comValve=state.indValve=0;
+        auto& factoryData=game.objectData.data[Structure_HeavyFactory][HOUSE_HARKONNEN];
+        const bool savedEnabled=factoryData.enabled;
+        const int factoryPrice=factoryData.price;
+        auto marketDecide=[&](bool enabled,int credits) {
+            config->force.cityConstructionCapital=enabled;
+            port->informFrigateDestroyed();
+            for (auto& offer:house->getChoam().availableItems) {
+                offer.num=offer.itemID==Unit_Quad ? 10 : 0;
+                if (offer.itemID==Unit_Quad) offer.price=70;
+            }
+            port->updateBuildList();
+            return decide(credits,10000);
+        };
+        auto restore=[&]() {
+            factoryData.enabled=savedEnabled;
+            port->informFrigateDestroyed();
+            cancelOrders(port);cancelOrders(yard);cancelOrders(light);
+            light->destroy();yard->updateBuildList();
+            bot->configOverride=savedConfig;state=savedState;
+        };
+        try {
+            const Pass legacy=marketDecide(false,factoryPrice);
+            require(ordered(legacy,Unit_Quad) && !ordered(legacy,Structure_HeavyFactory),
+                "First-factory negative control did not divert affordable factory cash into imports");
+            const Pass saving=marketDecide(true,factoryPrice-1);
+            require(!ordered(saving,Structure_HeavyFactory) && !ordered(saving,Unit_Quad),
+                "First-factory savings were spent before the real purchase was affordable");
+            const Pass funded=marketDecide(true,factoryPrice);
+            require(ordered(funded,Structure_HeavyFactory) && !ordered(funded,Unit_Quad),
+                "An affordable first heavy factory lost its cash to a Starport bargain");
+            bot->build(0);
+            int pending=0;
+            for (const auto& order:yard->getProductionQueue()) pending+=order.itemID==Structure_HeavyFactory;
+            require(pending==1,"The protected first heavy factory was ordered twice");
+            factoryData.enabled=false;yard->updateBuildList();
+            const Pass unavailable=marketDecide(true,factoryPrice);
+            require(ordered(unavailable,Unit_Quad) && !ordered(unavailable,Structure_HeavyFactory),
+                "Unavailable heavy technology kept reserving cash from useful military imports");
+            SDL_Log("CITY_CONSTRUCTION_CAPITAL_PASS: first factory saves %d, orders once, unavailable tech releases cash",factoryPrice);
+        } catch (...) {
+            restore();throw;
+        }
+        restore();
+    }
+
     // The right-sized generator alone was insufficient in Random Skirmish
     // 96/None/T9 seed 9101: 900 went to an optional MCV and another 900 to
     // factory upgrades before tax covered upkeep. Exercise the actual queue
