@@ -113,11 +113,17 @@ void runCustomCityCapProbe(Game& game) {
             if(DuneCity::isCityZoneStructure(order.itemID))return true;
         return false;
     };
-    auto hasPopulationOrder=[&]() {
-        for(auto* builder:yards)for(const auto& order:builder->currentProductionQueue)
-            if(DuneCity::isCityZoneStructure(order.itemID)
-                || DuneCity::getZonePopulation(order.itemID,1)>0
-                || (order.itemID==Structure_Palace && DuneCity::getPalaceCommercialPopulation(1)>0))return true;
+    auto hasCappedPopulationOrder=[&]() {
+        for(auto* builder:yards)for(const auto& order:builder->currentProductionQueue) {
+            const bool zone=DuneCity::isCityZoneStructure(order.itemID);
+            // Vault workers no longer block income storage at a full city.
+            // Keep checking every zone and every other population-bearing product.
+            const bool storageExempt=bot->botConfig().force.storageCapacity
+                && isStructure(order.itemID) && !zone
+                && game.objectData.data[order.itemID][house->getHouseID()].capacity>0;
+            if(!storageExempt && (zone || DuneCity::getZonePopulation(order.itemID,1)>0
+                || (order.itemID==Structure_Palace && DuneCity::getPalaceCommercialPopulation(1)>0)))return true;
+        }
         return false;
     };
     auto clearQueues=[&]() {
@@ -138,7 +144,7 @@ void runCustomCityCapProbe(Game& game) {
     };
     for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard}) {
         plan(difficulty);
-        require(!hasPopulationOrder(),"Capped bot ordered city population above its ceiling");
+        require(!hasCappedPopulationOrder(),"Capped bot ordered city population above its ceiling");
     }
     plan(QuantBot::Difficulty::Brutal);
     require(hasZone(),"Uncapped helper cannot zone here, so the capped refusal proves nothing");
@@ -186,7 +192,7 @@ void runCustomCityCapProbe(Game& game) {
     for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard}) {
         plan(difficulty);
         require(bot->getCityPopulationLimit(area)>0,"Shared helper lost its ceiling beside a human");
-        require(!hasPopulationOrder(),"Shared helper ordered city population above its ceiling");
+        require(!hasCappedPopulationOrder(),"Shared helper ordered city population above its ceiling");
         auto* shared=place();require(shared,"No human placement site above the ceiling");
         shared->setResidentialPopulation(0);
         ready();sim->runZoneGrowth();
