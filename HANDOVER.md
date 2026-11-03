@@ -36,56 +36,114 @@
   especially `final-provenance.json`, `final-80rock-comparison.json`,
   `final-audit-summary.json` and `final-residual-losses.json`.
 
-## 2026-11-04 — Protect tax-city factory and expansion capital (OMP ExpandAI, unreleased)
+## 2026-11-04 — First Heavy Factory capital: default on for Hard/Brutal (OMP ExpandFinish, unreleased)
 
-- `atreides no expand.dls`: original DuneCity revisions, 8P256×256 FFA,
-  map seed418379001, match seed1229922152, Brutal, tech9, cycle69986
-  (18:39.776). Blue Atreides has37structures,725credits,2005capacity,
-  10380displayed population, one CY/Light Factory/Starport, no HF/MCV.
-  Annual tax2883, police130, power600/518; only5lifetime spice receipts,
-  no remaining viable spice. This is not the5000-population Starport rule.
-- The rock is small but not yet full:266connected rock tiles; the first
-  actual survey reports147free tiles and **at least4** usable2×2 footprints,
-  a legal HF at(233,0), built-out=false, colonisation-due=false.
-  Once home production room runs out, the existing expansion planner finds
-  the remote site(202,6); the MCV is not initially due.
-- The live log bounds the last pre-save placement to cycles51792..51948:
-  **288.608..291.104seconds idle** before saving. During that gap recorded
-  army value rises3250→12400 while sampled cash is646/718/744 (HF price600).
-  An original-map minute0 reproduction to22minutes, with the human replaced
-  by AI, orders/builds HF at14.208/14.794min and orders its MCV at14.501min.
-  It is a reproduction, not an exact replay of the user's inputs/global RNG.
-- Cause: the first HF had score0 `bootstrap_managed_separately`, without
-  a shared capital claim. A cheap military import could reserve/spend its
-  budget first, leaving the CY in `starport_opening`. A controlled real-save
-  bargain test gives711cash,100already committed,611spendable: a70-credit
-  Quad reserve leaves541, then8Quads consume560; the legal600-credit HF
-  remains unbuilt. First-plan tax/upkeep forecasts are1457/129per minute:
-  this is an allocation failure, not absence of income or placement room.
-- Default-on hashed `[Force Concentration] CityConstructionCapital` gives
-  a seeded, quiet, positive-income, non-spice city with a standing Starport
-  one bounded first-HF claim at its real price, only when legal and already
-  powered with the existing24-power growth floor left over. Required
-  colonisation MCVs get the same claim. It does not preempt active
-  defence, fund hypothetical four-minute production burn, duplicate queued
-  factories/MCVs, relax market/placement/escort checks, or alter saboteurs.
-  No extra save/protocol change; protocol111 already covers this release.
-- Individual10-minute continuations with CityOpeningCapital, CityPowerSizing,
-  CityGrowthPower, ThreatTurrets, or CityStarportSupply off all build an HF
-  and deploy an MCV; none isolates the reported stall. The supplied save
-  itself already resumes under legacy behaviour (HF order6.288s).
-- Same frozen `0d27bb65` native probe, sha256`37031c9c…`, exact37500cycles
-  after the save: OFF/ON HF order6.288/1.488s, completion41.488/36.688s;
-  Starport MCV order103.888/107.088s, delivery138.064/141.264s,
-  deployment217.888/215.488s. Both end with2CYs/1HF. Standing structures at
-  minutes0/2/4/6/8/10 are OFF37/40/45/52/63/82 and ON37/39/43/52/64/80;
-  no claim that the fix increases total final buildings in this continuation.
-- Engine fixtures cover affordable versus one-credit-short HF, cheap-import
-  competition, pending-HF deduplication/unavailability, and required-MCV
-  competition plus the existing stock/cash/delivery/deployment checks.
-  Evidence: `outputs/atreides-no-expand-20261103/`, especially `diagnosis.json`,
-  `original-live-timeline.json`, `suspect-comparison-with-timelines.json`,
-  `final-save-comparison.json`, and `final-probe-provenance.json`.
+- Production commits: `11e13cf2` narrows the claim to an already affordable
+  first HF and removes the extra protected-MCV priority; `a3d6c2c6` limits it
+  to Hard/Brutal. Hashed `[Force Concentration] CityConstructionCapital=1`
+  remains default on; Easy/Medium keep their existing allocation. It requires
+  a standing Starport, completed tax seed, positive tax less upkeep, legal
+  technology/site, no active defence, and the existing 24-power growth floor
+  after the factory draw. The complete factory/foundation quote must already
+  be affordable: no below-price savings hold, production-burn forecast loan,
+  duplicated queued HF, new MCV priority, saboteur order or human-lease change.
+  Protocol111/save9882 already cover the batch; no independent bump.
+- Original save: DuneCity8P256×256 FFA, map418379001, match1229922152, Brutal,
+  T9, cycle69986 (18:39.776). Blue Atreides has37structures,725credits,
+  2005capacity,10380displayed population, one CY/Light Factory/Starport,
+  no HF/MCV, power600/518, annual tax2883/police130, and no viable spice.
+  The first survey finds147free rock tiles and at least4usable2×2 footprints,
+  including HF(233,0); built-out/colonisation-due are initially false.
+  Existing expansion subsequently finds(202,6).
+- Live pre-save placements stop for288.608–291.104seconds while army value
+  rises3250→12400 and sampled cash is646/718/744 against a600-credit HF.
+  Its old score0 `bootstrap_managed_separately` let a70-credit Quad claim
+  reserve first;8Quads then consume560. Controlled save-pass forecasts
+  tax/upkeep1457/129per minute, so this is allocation, not absent income.
+- The rejected `04b076dc` floor guard was not safe merely because an HF
+  appeared. Exact retained replays match all4original FFA digests:
+  Atreides/None had12unaffordable HF claims above affordable100-credit plots;
+  Sardaukar/None had38such claims,30above affordable plots; Atreides/Low
+  already had its HF but made25unaffordable protected-MCV claims,17above
+  affordable plots, and bought a third MCV at16.794min instead of a first
+  Starport at18.181min. The two bankrupt houses subsequently lost44/26
+  structures. Sardaukar's later stall reports allR/C/I sites unavailable,
+  not a still-pending HF claim. Full causal scope and per-minute evidence:
+  `floor-claim-investigation.json`.
+
+| Paired audit phase | Houses/arm | Economy stalls OFF→ON | Bankrupt OFF→ON | Missing Starport OFF→ON | Missing HF OFF→ON |
+|---|---:|---:|---:|---:|---:|
+| Rejected24-power floor guard, original4CY games |12|0→2|0→2|2→4|4→1|
+| Affordable-only, all difficulties,36games |108|0→2|0→1|13→13|22→14|
+| Final Hard/Brutal scope, original4CY games |12|0→0|0→0|2→2|4→3|
+| Final scope,36games, same-probe diagnostic replacements below |108|0→0|0→0|13→13|22→17|
+
+- Final source `a3d6c2c62bc2584243f82358874b60c87f06b01a`: CY/army0/city0,
+  None/Low/Medium spice,96/160,1v1/FFA4,Medium/Hard/Brutal,seed9101,25min:
+  **36games per arm** plus the repeated original4-game pair. The broader
+  all-difficulty candidate's extra stalls/bankruptcy were all Medium; this
+  is why the switch is difficulty-scoped rather than enabled everywhere.
+
+| Final matrix difficulty | Houses/arm | Stalls | Bankrupt | Missing Starport | Missing HF | Ground dispatches | Mean kill value |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Medium |36|0→0|0→0|6→6|6→6|31→31|7613.61→7613.61|
+| Hard |36|0→0|0→0|3→3|8→5|17→16|7830.28→7935.00|
+| Brutal |36|0→0|0→0|4→4|8→6|15→15|7860.00→8462.50|
+
+- **Platform caveat, not hidden row replacement:** the preceding final table
+  uses retained same-Mac-binary replays for2crossed-host pairs, with the
+  remaining34pairs unchanged. Raw cluster matrix is also preserved:
+  HF23→17, dispatches63→64, mean kills7739.72→8003.61; after the explicit
+  two-pair replays: HF22→17, dispatches63→62, kills7767.96→8003.70.
+  Stalls0/0, bankrupt0/0 and missing-Starport13/13 are equal in both tables.
+  Medium160/None/1v1, where the switch is inert, differed PC-OFF/mini-ON;
+  one frozen mini binary gives identical9c8dd9752d75dd64digests in both arms.
+  Brutal96/None/FFA4 mini-ONdd327c648188768e differs from PC-ON75b1ce2c53e2cb75.
+  CrossPlatform subsequently identified/fixed empty-list `front()` UB in
+  `2b497206`; these pre-fix rows do not prove latest combined crossplay parity.
+- Final45-minute ladder:36games/arm,128,None/Low/Medium,two seeds and both
+  house assignments. Strong–weak+limits: B/H4–4+4 in both arms;
+  H/M3–2+7→3–3+6; M/E9–0+3 in both. Hard score delta−0.031,
+  95%CI[−0.094,0], classified level with control. This is not a claim of a
+  strengthened or strictly established difficulty ladder. Ladder stalls1/1,
+  bankrupt1/1, missing-Starport3/3; HF21→18; dispatches298→304.
+- Exact original-save continuation, **one frozen a3d6c2c6 probe for both
+  arms**, SHA256`3876bf328459f67677358634a71e472a2f97254cd024378817677aeaae82cf0c`,
+  original pinned revisions,37500cycles,69986→107486:
+
+| Save measurement after loading | OFF | ON |
+|---|---:|---:|
+| HF order/completion seconds |403.088 /438.288|1.488 /36.688|
+| MCV order/delivery seconds |465.488 /499.664|489.488 /523.664|
+| MCV deployment seconds |581.888|599.488|
+| Standing structures at+10min |45|41|
+| Standing CY/HF at+10min |2/1|2/1|
+
+- Integrator explicitly accepts the17.6-second-later MCV and4fewer final
+  buildings to remove401.6seconds of first-HF delay, and Hard's17→16
+  dispatch tradeoff. Second-CY observation counts77→75 do not improve;
+  no blanket expansion/growth-strength claim accompanies this fix.
+- Verification: shared `build-int` PASS on final HF sourcea3d6c2c6;
+  `dunelegacy_tests`2.0s and `quantbot_mcv_deployment`9.3s PASS[mini,a3d].
+  `quantbot_no_spice_city` **PASS26.2s[mini,55b3a594]**,
+  job`20261104T042652-ctest-2e7783`. Fixtures retain all4difficulties,
+ 600/599cash,23/24power, cheap imports, all-yard deduplication/availability
+  refresh, ordinary MCV ranking, and the original40000-population storage
+  assertions. `9dd61b5b`/`55b3a594` fix the two-yard fixture accounting;
+  `5746a962`/`b63879bf` isolate power/HF budget cases from the separate
+  optional standing-battery claim without changing production defaults.
+  `quantbot_custom_attack` was exercised and failed8.1s[mini,a3d] at
+  RocketTurrets's funded-extra-rocket real-queue assertion; that peer owns
+  its separate repair/receipt. No passing combined release suite is claimed.
+- Evidence root `outputs/atreides-no-expand-20261103/`:
+  `scoped-{cy-audit,matrix,ladder45}-{off,on}/`,
+  `scoped-audit-comparison.json`, `scoped-save-comparison.json`,
+  `scoped-platform-crossover.json`, `floor-claim-investigation.json`.
+  Final152distributed games ran mini109/PC43; Pro/Air contributed none.
+  Matrix/CY job stems`20261104T024332-expand-scoped-*`; ladder jobs
+  `20261104T024457-expand-scoped-ladder45-{off-f77ee6,on-9bac79}`.
+  Later Rocket transport-priority and crossplay fixes are distinct source
+  changes; Main owns the latest combined release full-suite gate.
 
 ## 2026-11-04 — Adjustable Random Skirmish terrain (OMP TerrainMix, unreleased)
 
