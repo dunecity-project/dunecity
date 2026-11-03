@@ -25,6 +25,36 @@
   first Carryall. Preserve the legacy pending-refinery assertion in the off arm;
   the on arm must order a Silo for a genuinely full bank without pending capacity
   and must not duplicate a vault already being built.
+- Fixes: `3fb17a4a` (digest include, ample shared-spending store, both storage/core
+  policy arms), `2bf51eeb` (real mature transport and pending-vault controls).
+  Shared `build-int` rebuilt successfully at `2bf51eeb`; Ninja dependency checks
+  passed before/after and no native recompilation was needed.
+- Final cluster acceptance: **8/8 PASS**, source `2bf51eeb7b84`, job
+  `20261104T090754-release-triage-final-80f241`, all on **mini**.
+  Start times below are **2026-11-04 AEDT (UTC+11)**; durations are CTest wall time.
+
+| Test | Start | Duration | Result |
+|---|---|---:|---|
+| `perf_regression` |09:28:08|100.33s|PASS|
+| `quantbot_shared-spending_dunecity` |09:08:58|7.72s|PASS|
+| `quantbot_opening-economy_vanilla` |09:09:10|6.95s|PASS|
+| `quantbot_opening-economy_dunecity` |09:08:34|20.26s|PASS|
+| `quantbot_opening-economy_Dune2R` |09:09:04|6.84s|PASS|
+| `quantbot_custom_attack` |09:08:43|10.04s|PASS|
+| `quantbot_no_spice_city` |09:08:28|26.12s|PASS|
+| `dunelegacy_tests` |09:08:28|1.90s|PASS|
+
+- Performance emitted `PERF_BUDGET_OK`: normalized CPU mean **0.047/0.250**,
+  house p99 **0.149/1.000**, eight-house CPU p99 **1.096/1.600**,
+  eight-house frame CPU p99 **3.910/5.500**, main-loop frame p99 **4.568/8.000**;
+  five checkpoint digests matched. Logs and `summary.txt` are under
+  `~/.local/state/dunecity-queue/ctest/20261104T090754-release-triage-final-80f241/`.
+  The earlier `20261104T083259-release-triage-72f3a8` was superseded/cancelled
+  after exposing the remaining non-city transport premise; it is not an all-green
+  receipt. Observed scheduler restrictions: Pro at **23.3GB free** plus macOS
+  daemon load, Air offline, PC without a prepared eligible source. No cross-host
+  acceptance is claimed. This is the required eight-test repair acceptance,
+  not a fresh run of all138 tests, installation, or publication of1.0.865.
 
 ## 2026-11-04 — Additional standing-rocket tuning remains opt-in (OMP RocketTurrets, unreleased)
 
