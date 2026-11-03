@@ -174,6 +174,7 @@ void runThreatTurretProbe(Game& game) {
             pass.itemCount[Structure_ZoneResidential]=2;pass.itemCount[Structure_ZoneCommercial]=1;
             pass.itemCount[Structure_ZoneIndustrial]=1;pass.cityZonesIncludingQueued=4;pass.cityYards=1;
             pass.money=cash>=0 ? cash : pass.money+100;
+            pass.emitStatsLog=true;
             pass.cashFlow.projectedCash=1000;
             bot->planDefenceCoverage(pass);
             pass.capitalCandidates.clear();pass.capitalChoice=-1;pass.capitalConsumed=false;
