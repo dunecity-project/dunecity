@@ -336,6 +336,7 @@ void runNoSpiceCityProbe(Game& game) {
         const int savedGrowth=bot->projectedPowerDemandGrowth;
         auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
         config->force.cityOpeningCapital=false; // Keep the original competing military quote.
+        config->force.moreRocketTurrets=false; // Keep the growth-power quote independent of the standing battery.
         bot->configOverride=config;bot->availableBaseFootprints=4;
         bot->clearPlacementCache();
         require(bot->findPlaceLocation(Structure_WindTrap).isValid()
