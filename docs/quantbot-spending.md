@@ -149,6 +149,10 @@ power and the growth interleave keep their priority. Pending rockets close the
 allowance across parallel yards. Mature coverage goals are unchanged (and can
 exceed twelve); the local-eight/reactive-twelve caps remain. The 175-value scale
 adds at most one local cover over the former 200-value scale.
+Idle fleet-ratio Carryall/Hi-Tech savings also yield to a currently funded
+standing battery when there is no spice-worker target, busy transport,
+pickup/repair work or MCV. Actual transport demand retains its normal priority;
+this is not permission to divert its savings into quiet-base defences.
 `more-rocket-turrets-off` isolates just this tuning in same-build comparisons;
 it keeps `ThreatTurrets` and all other fixes enabled.
 
