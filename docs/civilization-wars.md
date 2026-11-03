@@ -166,13 +166,61 @@ The earlier `notresearching.dls` is a **different seed/game** (95244949), at cyc
 9:50.016, with all six houses at tech 1 and no active research; it is not an earlier snapshot
 from which this match's income or completion-time deltas can be calculated.
 
-The same-build pacing comparison uses `tests/ai/run-campaign-balance.py --civ-wars 1
---civ-size 2 --civ-worms 2 --civ-spice 2 --seed 138083612 --partner-difficulty hard
---enemy-difficulty hard --local-spectator --mod CivWars --minutes 45`, with and without
-`--civ-research-baseline`. The test-only baseline binds reference research area at cycle 0,
-without changing terrain or other AI settings, and reports its distinct options hash.
-Raw checkpoint fields, offsets, hashes and exact Normal costs/cycles are retained under
-`outputs/research-save-20261103/research-analysis.json` and
+### Measured same-build comparison
+
+Both 45-game-minute arms ran on clean `d635fd0acc36`, Hard vs Hard, 193×128, seed
+138083612, medium spice, two worms/lane, strategy off. They used the same binary,
+source fingerprint, AI configuration hash `c5cf0c6e3cda82a5` and terrain hash
+`f7a83c439bd0eb21`. Only the frozen research area differed: reference 12,384
+(old prices/durations) versus actual 24,704 (new Normal). Options hashes were
+`b640f8ca8a87867a` and `57f618c4c52f6f87`, respectively.
+
+| Completed tech | Atreides, reference | Atreides, Normal | Ordos, reference | Ordos, Normal |
+| --- | ---: | ---: | ---: | ---: |
+| 2 | 5:23.280 | 8:54.768 | 5:33.744 | 10:09.232 |
+| 3 | 8:45.280 | 13:51.872 | 8:41.344 | 14:08.736 |
+| 4 | 11:40.080 | 18:52.160 | 11:21.744 | 19:15.424 |
+| 5 | 13:11.680 | 24:16.464 | 12:42.144 | 25:42.128 |
+| 6 | 15:07.280 | 33:34.352 | 15:06.544 | 31:54.416 |
+| 7 | 18:45.280 | 39:57.856 | 17:53.344 | 38:53.120 |
+| 8 | 24:21.680 | >45:00 | 23:34.544 | >45:00 |
+| 9 | 32:58.880 | >45:00 | 26:56.544 | >45:00 |
+
+All four houses remained alive at the time limit. Both Normal houses ended at tech 7;
+Ordos was researching 8. Both arms' telemetry was complete, with no parse errors or
+sequence gaps. Every observed start's charged price and duration matched the integer
+policy. This is a controlled pacing example, not a win-rate or multi-seed balance claim.
+The separate frozen pre-change `3d5db650` run reached tech 9 at 28:39.680 (Atreides) and
+26:54.944 (Ordos); the same-build control above avoids attributing other combined-feature
+AI changes to research.
+
+Reproduce with `tests/ai/run-campaign-balance.py --civ-wars 1 --civ-size 2 --civ-worms 2
+--civ-spice 2 --seed 138083612 --partner-difficulty hard --enemy-difficulty hard
+--local-spectator --mod CivWars --minutes 45`, with and without
+`--civ-research-baseline`. The test-only control binds reference research area at cycle 0,
+without changing terrain or other AI settings. Raw CSVs and the paired receipt are in
+`outputs/research-pace-20261103/{reference,normal,paired-progression.json}`.
+
+### Saved-match compatibility
+
+The actual `research.dls` loaded through the full 1,775,110-byte save in the new build,
+at its original cycle 112,730 and all six original tech/timer states. Its migrated rule
+was **Normal**, initial research area 24,704; the next level-9 quote was **8,073 credits /
+22,423 cycles**. Fremen's and Mercenary's already-paid remaining timers stayed 1,558 and
+4,466 cycles. One real engine tick and a 9882 resave succeeded; the resaved pace/area
+were independently decoded as Normal / 24,704.
+
+An empty test profile initially lacked the save's immutable CivWars revision. Its four
+original rule files were recovered from the retained producer source/configuration;
+the canonical manifest SHA256 exactly matched the saved
+`37d5ce34e477fc5ddbb21f2328cf9898bd6baa347c1311f0f4dec307cf066f38` before use.
+No checksum, save or resolver bypass was used. Provenance and the minimal reusable exact
+revision cache are in `outputs/research-save-20261103/{revision-reconstruction.json,exact-profile}`;
+the load log, research CSV, migrated save and receipt are in
+`outputs/research-pace-20261103/save-load-exact-d635fd0a/`.
+
+Raw checkpoint fields, offsets and hashes are in
+`outputs/research-save-20261103/research-analysis.json`; exact Normal prices/cycles are in
 `outputs/research-pace-20261103/normal-cost-time.csv` on the staging host.
 
 
