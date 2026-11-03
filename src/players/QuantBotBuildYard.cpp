@@ -738,6 +738,8 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
                 yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_city_starport_supply" : "city_starport_supply";
             else if (std::string_view(service.kind)=="city_construction")
                 yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_city_construction" : "city_construction";
+            else if (std::string_view(service.reason)=="early_rocket")
+                yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_early_rocket" : "early_rocket_cover";
             yardTurn.skipRemainingStructureLogic = true;
         }
     }
@@ -788,21 +790,7 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
     // Protect the income/rebuild core before optional tech. Walk the
     // actual mod prerequisites and save their cost, rather than
     // waiting for enemy aircraft to reveal that the yard is unready.
-    // An already-funded, useful extra cover may take this slot before optional
-    // core saving. Never wait for a third/fourth rocket that cannot be bought,
-    // and never displace the opening income supplier or protected capital.
-    bool fundedEarlyCover=false;
-    if (pass.citySimEnabled && yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && pass.itemCount[Structure_RocketTurret]>=2
-        && pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit
-        && !pass.protectionCapital && capitalPending(pass)) {
-        const auto& choice=pass.capitalCandidates[pass.capitalChoice];
-        fundedEarlyCover=choice.builder==turn.pBuilder->getObjectID()
-            && choice.item==Structure_RocketTurret && choice.site.isValid()
-            && pass.money>=choice.price+choice.foundationCost;
-    }
-    const bool completingCore=pass.itemCount[Structure_RocketTurret]>=2
-        && pass.missingCoreInfrastructure!=NONE_ID && !fundedEarlyCover;
+    const bool completingCore=pass.itemCount[Structure_RocketTurret]>=2 && pass.missingCoreInfrastructure!=NONE_ID;
     const bool openingWorkerSupplier = pass.openingSupplierDue || completingCore;
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.citySimEnabled
         && !yardTurn.higherPriorityCapital

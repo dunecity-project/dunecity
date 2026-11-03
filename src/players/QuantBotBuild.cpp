@@ -2828,17 +2828,48 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             const int cityZones=pass.itemCount[Structure_ZoneResidential]+pass.itemCount[Structure_ZoneCommercial]
                 +pass.itemCount[Structure_ZoneIndustrial];
             const bool groundDefenceDue=pass.groundThreatAsset.isValid();
+            // Owning two starting rockets does not unlock their build tech, and
+            // merely raising an allowance cannot request another fully-overlapping
+            // emplacement. Buy a small standing battery, one funded step at a time.
+            const int earlyBuffer=pass.citySimEnabled ? pass.cityPlotPrice : std::max(0,pass.economyReserve);
+            bool earlyRocketDue=false;
+            if (pass.earlyRocketLimit>2 && pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit
+                && !pass.defendingEconomy && !pass.airEngaged && !groundDefenceDue
+                && !openingWorkersNeeded(pass) && !pass.openingSupplierDue
+                && (!pass.citySimEnabled || cityZones>=4)
+                && builder->getHealth()>=builder->getMaxHealth()
+                && data[Structure_RocketTurret][houseID].enabled
+                && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()
+                && RocketTurretPolicy::proactiveCoverageTurn(false,pass.uncoveredCoreAssets,nonServiceConstructionOrders)) {
+                const int price=builder->getCurrentUpgradeLevel()<data[Structure_RocketTurret][houseID].upgradeLevel
+                    ? builder->getUpgradeCost() : data[Structure_RocketTurret][houseID].price;
+                earlyRocketDue=price>0 && pass.money>=price+earlyBuffer;
+            }
+            if (earlyRocketDue && getHouse()->hasPower() && hasPowerBufferForTurret(pass)
+                && campaignAvailableToBuild(builder,Structure_RocketTurret)) {
+                CapitalCandidate early;
+                early.builder=builder->getObjectID();early.item=Structure_RocketTurret;
+                early.kind="early_rocket";early.reason="early_rocket";early.score=3500;
+                early.price=data[early.item][houseID].price;early.cost=buildingCapitalCost(pass,early.item);
+                early.site=pass.citySimEnabled && pass.uncoveredCoreAssets>0
+                    ? findCityTurretPlaceLocation(early.item) : findFrontBatteryPlaceLocation();
+                if (early.site.isInvalid() && pass.citySimEnabled && pass.uncoveredCoreAssets>0)
+                    early.site=findFrontBatteryPlaceLocation();
+                if (early.site.isValid()) pass.capitalCandidates.push_back(early);
+            }
+            const bool ordinaryUnlockDue=(pass.airEngaged || (pass.uncoveredCoreAssets>0 && cityZones>=4))
+                && pass.routineRocketsAllowed;
             if ((botConfig().force.defencePrerequisites || groundDefenceDue) && pass.citySimEnabled && getHouse()->hasPower()
-                && (groundDefenceDue || ((pass.airEngaged || (pass.uncoveredCoreAssets>0 && cityZones>=4))
-                    && pass.routineRocketsAllowed))
+                && (groundDefenceDue || ordinaryUnlockDue || earlyRocketDue)
                 && data[Structure_RocketTurret][houseID].enabled
                 && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel()
                 && !campaignAvailableToBuild(builder,Structure_RocketTurret)) {
                 int uncovered=0;
-                const Coord defenceSite=groundDefenceDue
+                Coord defenceSite=groundDefenceDue
                     ? findThreatTurretPlaceLocation(pass.groundThreatAsset,pass.groundThreatApproach)
                     : findCityTurretPlaceLocation(Structure_RocketTurret,&uncovered);
-                if (defenceSite.isValid() && (groundDefenceDue || uncovered>0)) {
+                if (defenceSite.isInvalid() && earlyRocketDue) defenceSite=findFrontBatteryPlaceLocation();
+                if (defenceSite.isValid() && (groundDefenceDue || uncovered>0 || earlyRocketDue)) {
                     CapitalCandidate unlock;
                     unlock.builder=builder->getObjectID();
                     unlock.score=groundDefenceDue ? 6500 : pass.airEngaged ? 3000 : 2600;
@@ -2871,7 +2902,12 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                             step=missing;
                         }
                     }
-                    if (unlock.price>0 && (unlock.kind==std::string("defence_upgrade") || unlock.site.isValid()))
+                    if (earlyRocketDue && unlock.price>0 && pass.money>=unlock.price+earlyBuffer) {
+                        unlock.reason="early_rocket";unlock.score=3500;
+                    }
+                    if (unlock.price>0 && (groundDefenceDue || ordinaryUnlockDue
+                            || std::string_view(unlock.reason)=="early_rocket")
+                        && (unlock.kind==std::string("defence_upgrade") || unlock.site.isValid()))
                         pass.capitalCandidates.push_back(unlock);
                 }
             }
@@ -3126,6 +3162,11 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             for (const auto& foundation:foundationPlan(builder,candidate.item,site,removed).orders)
                 candidate.foundationCost+=purchasePrice(builder,foundation.item);
         }
+        if (std::string_view(candidate.reason)=="early_rocket"
+            && pass.money<candidate.price+candidate.foundationCost
+                +(pass.citySimEnabled ? pass.cityPlotPrice : std::max(0,pass.economyReserve))) {
+            candidate.score=0;candidate.reason="early_rocket_working_cash";
+        }
     }
 }
 
@@ -3145,6 +3186,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             const auto& candidate=pass.capitalCandidates[i];
             if (candidate.score<=0 || std::string_view(candidate.kind)=="military") continue;
             boundedClaim |= std::string_view(candidate.reason)=="ground_threat"
+                || std::string_view(candidate.reason)=="early_rocket"
                 || std::string_view(candidate.kind)=="city_supply"
                 || std::string_view(candidate.kind)=="city_construction";
             if (protectedChoice<0 || candidate.score>pass.capitalCandidates[protectedChoice].score)
@@ -3171,6 +3213,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             || pass.capitalCandidates[pass.capitalChoice].reason == std::string("air_coverage")
             || pass.capitalCandidates[pass.capitalChoice].reason == std::string("secure_expansion")
             || pass.capitalCandidates[pass.capitalChoice].reason == std::string("ground_threat")
+            || std::string_view(pass.capitalCandidates[pass.capitalChoice].reason)=="early_rocket"
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("city_supply")
             || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "city_construction"
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_upgrade")

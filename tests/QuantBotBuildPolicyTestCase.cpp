@@ -1907,8 +1907,9 @@ TEST_CASE("More rockets allow only a modest established-base head start", "[quan
     CHECK(earlyRocketLimit(true,1,1000)==3);
     CHECK(earlyRocketLimit(true,2,8)==3);
     CHECK(earlyRocketLimit(true,2,15)==3);
-    CHECK(earlyRocketLimit(true,2,16)==4);
-    CHECK(earlyRocketLimit(true,3,16)==4);
+    CHECK(earlyRocketLimit(true,2,31)==3);
+    CHECK(earlyRocketLimit(true,2,32)==4);
+    CHECK(earlyRocketLimit(true,3,32)==4);
     CHECK(earlyRocketLimit(true,3,1000)==4);
 }
 
@@ -1923,18 +1924,19 @@ TEST_CASE("Observed ground raids get a bounded local rocket goal", "[quantbot][d
     CHECK(groundThreatGoal(2000,false)==8);
     CHECK(groundThreatGoal(100000,false)==8);
     CHECK(groundThreatGoal(0,true)==0);
-    CHECK(groundThreatGoal(300,true)==2);
-    CHECK(groundThreatGoal(301,true)==3);
+    CHECK(groundThreatGoal(350,true)==2);
+    CHECK(groundThreatGoal(351,true)==3);
     CHECK(groundThreatGoal(600,true)==4);
-    CHECK(groundThreatGoal(601,true)==5);
-    CHECK(groundThreatGoal(1050,true)==7);
-    CHECK(groundThreatGoal(1051,true)==8);
+    CHECK(groundThreatGoal(700,true)==4);
+    CHECK(groundThreatGoal(701,true)==5);
+    CHECK(groundThreatGoal(1225,true)==7);
+    CHECK(groundThreatGoal(1226,true)==8);
     CHECK(groundThreatGoal(100000,true)==8);
     for (int value=0;value<=2000;++value) {
         const int oldGoal=groundThreatGoal(value,false);
         const int newGoal=groundThreatGoal(value,true);
         CHECK(newGoal>=oldGoal);
-        CHECK(newGoal<=oldGoal+2);
+        CHECK(newGoal<=oldGoal+1);
     }
     CHECK(RocketTurretPolicy::threatTurretTotalCap==12);
 }

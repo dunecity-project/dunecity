@@ -268,8 +268,8 @@ struct QuantBotConfig {
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;
-        /// Allow one or two more useful pre-core rockets in established bases and
-        /// price local ground cover at 150 credits per turret; retain raid caps.
+        /// Fund a small established-base battery and its affordable unlocks;
+        /// price local ground cover at 175 credits per turret, retaining raid caps.
         bool moreRocketTurrets;
         /// Protect a solvent city's first useful Starport from repeat zoning and
         /// factory orders. The no-spice seed economy still comes first.

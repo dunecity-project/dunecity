@@ -167,12 +167,13 @@ void runThreatTurretProbe(Game& game) {
         // Model already-pending seed plots and first factories. The selected,
         // funded cover must execute instead of saving for the next core item.
         for (auto* unit:raiders) unit->setVisible(house->getTeamID(),false);
-        auto extraCover=[&](bool more) {
+        auto extraCover=[&](bool more,int cash=-1) {
             config->force.moreRocketTurrets=more;
             auto pass=plan(false,true);
             pass.itemCount[Structure_LightFactory]=1;pass.itemCount[Structure_HeavyFactory]=1;
             pass.itemCount[Structure_ZoneResidential]=2;pass.itemCount[Structure_ZoneCommercial]=1;
             pass.itemCount[Structure_ZoneIndustrial]=1;pass.cityZonesIncludingQueued=4;pass.cityYards=1;
+            pass.money=cash>=0 ? cash : pass.money+100;
             pass.cashFlow.projectedCash=1000;
             bot->planDefenceCoverage(pass);
             pass.capitalCandidates.clear();pass.capitalChoice=-1;pass.capitalConsumed=false;
@@ -185,13 +186,26 @@ void runThreatTurretProbe(Game& game) {
             [](const auto& order){return order.itemID==Structure_RocketTurret;}),
             "More-off bought extra ordinary cover before completing its core");
         auto newCover=extraCover(true);
-        require(newCover.capitalChoice>=0 && !newCover.protectionCapital
-            && newCover.capitalCandidates[newCover.capitalChoice].item==Structure_RocketTurret,
-            "The quiet seeded base did not select useful affordable early cover");
+        newCover.capitalCandidates.push_back(bargain);bot->chooseCapitalPlan(newCover);
+        require(newCover.capitalChoice>=0 && newCover.protectionCapital
+            && std::string_view(newCover.capitalCandidates[newCover.capitalChoice].reason)=="early_rocket",
+            "A bargain displaced the bounded currently-funded standing battery");
         bot->buildProducer(newCover,yard);
         require(std::any_of(yard->getProductionQueue().begin(),yard->getProductionQueue().end(),
             [](const auto& order){return order.itemID==Structure_RocketTurret;}),
             "Optional core saving displaced the funded selected extra rocket");
+        auto poorCover=extraCover(true,game.objectData.data[Structure_RocketTurret][house->getHouseID()].price-1);
+        require(std::none_of(poorCover.capitalCandidates.begin(),poorCover.capitalCandidates.end(),
+            [](const auto& c){return c.score>0 && std::string_view(c.reason)=="early_rocket";}),
+            "An unfunded optional battery created a savings hold");
+        const auto readyLevel=yard->curUpgradeLev;
+        yard->curUpgradeLev=0;yard->updateBuildList();
+        auto lockedCover=extraCover(true,yard->getUpgradeCost()+200);
+        require(lockedCover.capitalChoice>=0
+            && std::string_view(lockedCover.capitalCandidates[lockedCover.capitalChoice].reason)=="early_rocket"
+            && std::string_view(lockedCover.capitalCandidates[lockedCover.capitalChoice].kind)=="defence_upgrade",
+            "Starting rockets hid the affordable yard unlock needed to add another");
+        yard->curUpgradeLev=readyLevel;yard->updateBuildList();
         for (auto* unit:raiders) unit->setVisible(house->getTeamID(),true);
         auto supply=[&](bool enabled,int cash) {
             config->force.cityStarportSupply=enabled;

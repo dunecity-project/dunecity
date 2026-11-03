@@ -102,7 +102,7 @@ income and power core (including Radar)**, rather than chasing every outlying pl
 The build's existing visible-unit survey supplies contacts; hidden armies, aircraft,
 workers and saboteurs do not increase this goal. Contacts are transient per-pass
 scratch (no unsaved two-second decision cache). With `MoreRocketTurrets=1`, one
-rocket per 150 credits of nearby observed fighters, rounded up, demands 2–8 local
+rocket per 175 credits of nearby observed fighters, rounded up, demands 2–8 local
 firing covers, with a 12-rocket reactive house ceiling. Existing and reserved
 local emplacements count. More-off retains the former one-per-200 calculation.
 An active core raid protects the next turret or power/tech prerequisite ahead of
@@ -124,16 +124,19 @@ rocket battery, minimizing observed return fire; a Radar rebuilt outside it can
 otherwise die again before its first replacement rocket finishes.
 Switches off preserve the old paths. No save-format or city-tax-rule change.
 
-`MoreRocketTurrets=1` (hashed, default on) also raises the ordinary allowance
-before the production/tech core finishes from two to three rockets in Custom
-Medium+ bases with at least eight built structures, or four for Hard/Brutal bases
-with at least sixteen. This is permission to buy useful cover, not a forced count:
-power, tech, legal placement and the existing growth interleave still apply.
-A selected extra cover may precede optional core saving only when its entire
-current quote is funded; it creates no new savings hold and does not outrank
-protected construction, income supply or emergencies. Pending rockets close the
+`MoreRocketTurrets=1` (hashed, default on) raises the ordinary pre-core allowance
+from two to three rockets in Custom Medium+ bases with at least eight built
+structures, or four for Hard/Brutal bases with at least thirty-two. It also buys
+toward that small standing battery after the seed economy/worker opening:
+raising permission alone cannot request a third fully-overlapping gun, and
+starting-map turrets do not unlock their yard build tech. Each optional unlock
+or emplacement must already be funded while leaving working cash; no new
+unfunded savings hold is introduced. Existing finite prerequisite/placement
+paths are reused. Income supply, first-factory/expansion capital, emergencies,
+power and the growth interleave keep their priority. Pending rockets close the
 allowance across parallel yards. Mature coverage goals are unchanged (and can
-exceed the reactive twelve), as are the local-eight/reactive-twelve raid caps.
+exceed twelve); the local-eight/reactive-twelve caps remain. The 175-value scale
+adds at most one local cover over the former 200-value scale.
 `more-rocket-turrets-off` isolates just this tuning in same-build comparisons;
 it keeps `ThreatTurrets` and all other fixes enabled.
 
