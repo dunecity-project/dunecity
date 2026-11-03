@@ -633,8 +633,8 @@ void addSpice(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
 
 /// A bounded mountain layer, independent of geological coverage. Smooth seeded noise keeps
 /// patches coherent; deeper rock is preferred, but never converted wholesale into massifs.
-/// Reserve a three-tile ground network between starts and every spice tile before selecting
-/// mountains, so even extreme shares cannot wall a base or a field off.
+/// Reserve three-tile routes between starts and minimum-rock connectors to every spice tile
+/// before selecting mountains, so neither fields nor bases can be walled off.
 void addMountains(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
     const int size = spec.size, area = size * size;
     const int target = spec.mountainPercent * area / 100;
@@ -670,8 +670,42 @@ void addMountains(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
             for(int x = std::max(0, core.x - kCoreClearance - 1); x < std::min(size, core.x + core.w + kCoreClearance + 1); ++x)
                 if(distanceToRect2(core, x, y) <= 2 * kCoreClearance * kCoreClearance) protect(x, y, 3);
     }
-    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x)
-        if(isSpiceTerrain(map(x, y))) protectRoute(Coord(x, y));
+    if(spec.spice != Spice::None && spiceTiles(map) > 0) {
+        // Reuse passable sand/spice instead of reserving a wide straight spoke for every
+        // field tile. A multi-source 0/1 BFS minimizes the rock needed to join each field
+        // to the existing start network (sand costs zero, ordinary rock costs one).
+        struct Path { int cost = INT_MAX, parent = -1; };
+        std::vector<Path> paths(area);
+        std::deque<int> queue;
+        for(int index = 0; index < area; ++index) if(protectedGround[index]) {
+            paths[index].cost = 0;
+            queue.push_back(index);
+        }
+        while(!queue.empty()) {
+            const int index = queue.front(); queue.pop_front();
+            const int x = index % size, y = index / size;
+            for(const Coord step : {Coord(1,0), Coord(-1,0), Coord(0,1), Coord(0,-1)}) {
+                const int nx = x + step.x, ny = y + step.y;
+                if(!map.isInsideMap(nx, ny)) continue;
+                const int next = ny * size + nx;
+                const int cost = map(nx, ny) == Terrain_Rock ? 1 : 0;
+                const int distance = paths[index].cost + cost;
+                if(paths[next].cost <= distance) continue;
+                paths[next] = {distance, index};
+                if(cost == 0) queue.push_front(next); else queue.push_back(next);
+            }
+        }
+        std::vector<int> route;
+        route.reserve(area);
+        for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
+            if(!isSpiceTerrain(map(x, y))) continue;
+            route.clear();
+            for(int at = y * size + x; at >= 0 && !protectedGround[at]; at = paths[at].parent) route.push_back(at);
+            // Paint only after tracing the whole route: its own mirror image is not an
+            // already connected route, and must not stop this walk prematurely.
+            for(int at : route) protect(at % size, at / size, 3);
+        }
+    }
 
     const auto depth = rockDepth(map);
     struct Candidate { int score, index; };

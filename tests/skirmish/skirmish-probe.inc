@@ -422,8 +422,8 @@ void runMenu() {
             rulesWindow->rememberDefaults.setChecked(false);
             rulesWindow->onOK();
             menu.processChildWindowOpenCloses();
-            skirmishRequire(menu.rulesChosen && menu.matchRules().fogOfWar == !fog
-                            && menu.matchRules().startWithExploredMap == !explored,
+            skirmishRequire(menu.rulesChosen && menu.getMatchRules().fogOfWar == !fog
+                            && menu.getMatchRules().startWithExploredMap == !explored,
                             "The match does not take the rules chosen in the window");
             SDL_Log("SKIRMISH_PROBE: game rules window sets the match rules (fog %d -> %d, explored %d -> %d)",
                     int(fog), int(!fog), int(explored), int(!explored));

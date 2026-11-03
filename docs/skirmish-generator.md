@@ -229,8 +229,9 @@ six-size, three-coverage matrix and `*-generated-80rock.png` for the corrected g
     to a whole mirrored group (at most three tiles below target). Seeded smooth value noise,
     with a preference for deeper rock, chooses coherent patches from ordinary rock; there is no
     unconditional depth-to-mountain conversion. No mountain comes within about three tiles of
-    a start's clean core. Three-tile-wide protected ground routes join all starts and every
-    spice tile before any mountain is painted; a crowded/extreme request uses only eligible
+    a start's clean core. Three-tile-wide protected ground routes join the starts; a 0/1 BFS
+    then connects every spice tile through existing sand/spice while minimizing reserved rock.
+    Harvesting connectors need only one tile. A crowded/extreme request uses only eligible
     rock rather than painting through those routes or levelling all mountains afterwards.
   - Spice fields grow like the editor's: random walks over sand and dunes that turn thick where
     they cross themselves, then the editor's fill-in passes for spice and thick spice, until the
@@ -330,7 +331,8 @@ generated", and "random settings on army and city must apply equally to each pla
   - Map: Size, Sand, Rock, Mountain, Spice, Mirrored starts (on by default here, saved separately as
     `Multiplayer Symmetric`), Seed, Keep this seed — the same controls as single player.
   - Game: the host's mod (shown, not chosen: the map chooser's Mod box stays the one mod picker),
-    Credits, Tech level. Game Rules stay on the map chooser's Game Options / Game Rules button.
+    Credits, Tech level, and Game Rules (including Research Pace); the selected rules return to
+    the parent lobby with the generated map.
   - Players: **Start positions** 2–8 (and within the engine's custom-game house cap).
   - **Every house starts with** Base / Army / City, applied to every start (Random draws once).
   - No allies/enemies counts, no house, no AI type, no AI partner: the lobby decides those.
