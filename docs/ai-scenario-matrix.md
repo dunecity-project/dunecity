@@ -561,3 +561,14 @@ scenario matrix smoke, FFA deployment and performance. Air ran the strategic
 stall/FFA gates; mini ran the six short probes; Pro ran performance and the two
 match matrices. `dunelegacy_tests` separately passed on PC in the shared
 same-source job `20261103T201949-ctest-746ac5`.
+
+### Opening-market fixture and Starport Population
+
+The full-suite opening-economy fixture's synthetic base does not run a city
+census before testing market support. With the default-on Starport Population
+rule, that is not an eligible city: a supported but sold-out import cannot
+justify a Starport below 5,000 displayed population. The fixture now establishes
+and later restores its own eligible census for the absent-market,
+sold-out-supported and disabled-import assertions, and adds a separate
+below-threshold negative control. It does not disable or bypass the match rule;
+campaign exemption follows `isCampaignGameType(game.gameType)`.

@@ -1,7 +1,10 @@
+#include <dunecity/CityConstants.h>
+#include <dunecity/CitySimulation.h>
 #include <structures/Refinery.h>
 #include <units/Harvester.h>
 #include <players/QuantBotBuildPolicy.h>
 #include <players/QuantBotPowerInvestmentPolicy.h>
+#include <array>
 #include <set>
 
 // Drive real build decisions on All against Atreides, with its empty market.
@@ -454,13 +457,44 @@ void runOpeningEconomyProbe(Game& game) {
         if(!house->getNumItems(item))place(item);
     while(house->getNumItems(Structure_Refinery)<4)place(Structure_Refinery);
     bot->militaryValueLimit=5100;
+    // These assertions isolate market support, not the independent city
+    // population prerequisite. Establish an eligible census for the market
+    // cases, and separately prove that supported imports cannot bypass it.
+    auto* marketCity=game.isCitySimEnabled() ? game.getCitySimulation() : nullptr;
+    require(!game.isCitySimEnabled() || marketCity,"Market fixture needs its active city census");
+    std::array<int,3> savedMarketPopulation{};
+    const int starportPopulation=(DuneCity::kStarportPopulation
+        +DuneCity::CitySimulation::kPopDisplayMultiplier-1)/DuneCity::CitySimulation::kPopDisplayMultiplier;
+    if(marketCity) {
+        auto& state=marketCity->getHouseStateMut(house->getHouseID());
+        savedMarketPopulation={state.resPop,state.comPop,state.indPop};
+        state.resPop=starportPopulation;state.comPop=0;state.indPop=0;
+        yard->updateBuildList();
+        require(house->meetsStarportPopulation(),"Market fixture did not meet the Starport population prerequisite");
+    }
     require(build(1800)!=Structure_StarPort,"Heavy factory bypassed absent-market check");
     house->getChoam().addItem(Unit_Harvester,0);
+    const bool populationGate=marketCity && game.gameInitSettings.gameOptions.starportPopulation
+        && !isCampaignGameType(game.gameType);
+    if(populationGate) {
+        auto& state=marketCity->getHouseStateMut(house->getHouseID());
+        state.resPop=starportPopulation-1;yard->updateBuildList();
+        require(!house->meetsStarportPopulation(),"Below-threshold market fixture already qualifies for a Starport");
+        require(build(1800)!=Structure_StarPort,"Supported imports bypassed the Starport population prerequisite");
+        state.resPop=starportPopulation;yard->updateBuildList();
+    }
     require(build(1800)==Structure_StarPort,"Sold-out supported imports incorrectly treated as disabled");
     auto& worker=game.objectData.data[Unit_Harvester][HOUSE_ATREIDES];
     const bool enabled=worker.enabled;worker.enabled=false;
     require(build(1800)!=Structure_StarPort,"All disabled imports still caused Starport construction");
     worker.enabled=enabled;clearOrders();
+    if(marketCity) {
+        auto& state=marketCity->getHouseStateMut(house->getHouseID());
+        state.resPop=savedMarketPopulation[0];state.comPop=savedMarketPopulation[1];state.indPop=savedMarketPopulation[2];
+        yard->updateBuildList();
+    }
+    SDL_Log("OPENING_MARKET_PASS: population_gate=%d threshold=%d absent_market=0 sold_out_supported=1 disabled_imports=0",
+        int(populationGate),DuneCity::kStarportPopulation);
 
     const auto probeDifficulty=bot->difficulty;
     // Condition policy across the whole base. Three quarters of health is above
