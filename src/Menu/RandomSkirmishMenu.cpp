@@ -156,8 +156,6 @@ void selectData(Box& box, int data) {
 void fillAI(AIPlayerSelector& selector, HBox& row) {
     selector.setShowRole(false);
     selector.setFamilies();
-    selector.aiBox.enableResizing(true, true);
-    selector.difficultyBox.enableResizing(true, true);
     row.addWidget(&selector.aiBox);
     row.addWidget(&selector.difficultyBox);
 }
@@ -629,6 +627,12 @@ void RandomSkirmishMenu::onModChanged() {
     enemyCityBox.setEnabled(city);
     playerCityBox.setEnabled(city);
     startCityBox.setEnabled(city);
+    // HBox keeps fixed-height drop-downs at their minimum height. Use their public resize
+    // API after the row/roster layout so compact menus do not paint into the following row.
+    for(AIPlayerSelector* selector : {&allyAI, &enemyAI, &spectateAI, &partnerAI}) {
+        selector->aiBox.resize(selector->aiBox.getSize().x, rowHeight);
+        selector->difficultyBox.resize(selector->difficultyBox.getSize().x, rowHeight);
+    }
 }
 
 void RandomSkirmishMenu::onSpectateChanged() {
