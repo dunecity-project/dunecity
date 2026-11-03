@@ -146,6 +146,7 @@ parser.add_argument('--harvester-limit', type=int, choices=range(-1,101), defaul
 parser.add_argument('--rocket-turrets-need-power', action=argparse.BooleanOptionalAction, default=None)
 parser.add_argument('--concrete-required', action=argparse.BooleanOptionalAction, default=None)
 parser.add_argument('--require-win', action='store_true', help='Fail a full-match run on defeat or time limit')
+parser.add_argument('--expect-digest', help='Require this exact final PROBE_DIGEST (cross-platform regression pin)')
 parser.add_argument('--game-options', type=Path,
                     help='Apply this INI file\'s [Game Options] section (a player\'s Dune City.ini format) last')
 parser.add_argument('--elimination-match', action='store_true',
@@ -811,8 +812,14 @@ env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
 with (out/'run.log').open('w') as log:
     subprocess.run([str(binary),'--window','--showlog'],cwd=out,env=env,
                    stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
-results = [line for line in (out/'run.log').read_text(errors='replace').splitlines() if 'CAMPAIGN_BALANCE_RESULT:' in line]
+run_lines = (out/'run.log').read_text(errors='replace').splitlines()
+results = [line for line in run_lines if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')
+if args.expect_digest:
+    digests = [dict(part.split('=', 1) for part in line.split('PROBE_DIGEST:', 1)[1].split() if '=' in part)
+               for line in run_lines if 'PROBE_DIGEST:' in line and 'final=1' in line]
+    if len(digests) != 1 or digests[0].get('digest') != args.expect_digest:
+        raise RuntimeError(f'Final simulation digest differs: expected {args.expect_digest}, got {digests}')
 events = None if args.no_ai_telemetry else next((out/'profile').rglob('events.jsonl'))
 metadata, attacks, final = None, [], []
 for line in events.open() if events else ():

@@ -101,6 +101,10 @@ active content/ObjectData hashes, city/observer mode and requested test style.
 `SCENARIO_AI_CONFIG` records each bot's effective config hash after test-style overrides.
 Compare these inputs before attributing different platform digests to the simulation.
 
+`run-campaign-balance.py --expect-digest HEX` makes a recorded final digest an
+executable regression pin: a missing, duplicate or different final digest fails the run.
+Pins must come from measured matching platform runs of the intended source and inputs.
+
 ## Results
 
 Fixed benchmark, three Hard duels (128/7101, 160/7202, 192/7303, 20 game minutes),
