@@ -187,10 +187,21 @@ void runThreatTurretProbe(Game& game) {
             [](const auto& order){return order.itemID==Structure_RocketTurret;}),
             "More-off bought extra ordinary cover before completing its core");
         auto newCover=extraCover(true);
-        newCover.capitalCandidates.push_back(bargain);bot->chooseCapitalPlan(newCover);
+        auto idleTransport=bargain;
+        idleTransport.item=Structure_HighTechFactory;idleTransport.kind="transport_production";
+        idleTransport.reason="transport_imports_unavailable";idleTransport.price=500;idleTransport.score=5500;
+        idleTransport.site=bot->findPlaceLocation(Structure_HighTechFactory);
+        newCover.capitalCandidates.push_back(bargain);newCover.capitalCandidates.push_back(idleTransport);
+        bot->chooseCapitalPlan(newCover);
         require(newCover.capitalChoice>=0 && newCover.protectionCapital
             && std::string_view(newCover.capitalCandidates[newCover.capitalChoice].reason)=="early_rocket",
-            "A bargain displaced the bounded currently-funded standing battery");
+            "A bargain or idle fleet-ratio transport displaced the funded standing battery");
+        auto activeTransport=newCover;
+        activeTransport.waitingRepairVehicles=1;
+        bot->chooseCapitalPlan(activeTransport);
+        require(activeTransport.capitalChoice>=0
+            && std::string_view(activeTransport.capitalCandidates[activeTransport.capitalChoice].kind)=="transport_production",
+            "The standing battery displaced actual repair transport work");
         bot->buildProducer(newCover,yard);
         require(std::any_of(yard->getProductionQueue().begin(),yard->getProductionQueue().end(),
             [](const auto& order){return order.itemID==Structure_RocketTurret;}),

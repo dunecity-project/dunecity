@@ -3174,9 +3174,33 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
 void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     planningBuilder=NONE_ID; clearPlacementCache(false,true);
     pass.capitalChoice = -1;
-    for (size_t i=0;i<pass.capitalCandidates.size();++i)
-        if (pass.capitalCandidates[i].score>0 && (pass.capitalChoice<0
-            || pass.capitalCandidates[i].score>pass.capitalCandidates[pass.capitalChoice].score)) pass.capitalChoice=int(i);
+    // A fleet-ratio carryall plan is not active mining, repair or pickup work.
+    // It must not indefinitely outrank a standing battery already payable now.
+    // Keep actual transport work and every other safety/income priority intact.
+    const bool mayPreferBattery=pass.earlyRocketLimit>2
+        && pass.itemCount[Structure_RocketTurret]<pass.earlyRocketLimit
+        && pass.spiceShare<=0 && pass.desiredWorkers==0 && pass.busyTransports==0
+        && pass.pickupQueue.empty() && pass.waitingRepairVehicles==0 && pass.itemCount[Unit_MCV]==0;
+    const auto idleTransport=[](const auto& candidate) {
+        return std::string_view(candidate.kind)=="transport_production" || candidate.item==Unit_Carryall;
+    };
+    bool fundedBattery=false;
+    int withoutIdleTransport=-1;
+    for (size_t i=0;i<pass.capitalCandidates.size();++i) {
+        const auto& candidate=pass.capitalCandidates[i];
+        if (candidate.score<=0) continue;
+        if (pass.capitalChoice<0 || candidate.score>pass.capitalCandidates[pass.capitalChoice].score)
+            pass.capitalChoice=int(i);
+        if (mayPreferBattery) {
+            fundedBattery |= std::string_view(candidate.reason)=="early_rocket"
+                && pass.money>=candidate.price+candidate.foundationCost;
+            if (!idleTransport(candidate) && (withoutIdleTransport<0
+                || candidate.score>pass.capitalCandidates[withoutIdleTransport].score))
+                withoutIdleTransport=int(i);
+        }
+    }
+    const bool preferFundedBattery=mayPreferBattery && fundedBattery;
+    if (preferFundedBattery) pass.capitalChoice=withoutIdleTransport;
     // A bargain's return score must not divert the bounded safety/supplier
     // savings into the military-to-zoning interleave just before they are paid.
     if (pass.capitalChoice>=0
@@ -3186,6 +3210,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         for (size_t i=0;i<pass.capitalCandidates.size();++i) {
             const auto& candidate=pass.capitalCandidates[i];
             if (candidate.score<=0 || std::string_view(candidate.kind)=="military") continue;
+            if (preferFundedBattery && idleTransport(candidate)) continue;
             boundedClaim |= std::string_view(candidate.reason)=="ground_threat"
                 || std::string_view(candidate.reason)=="early_rocket"
                 || std::string_view(candidate.kind)=="city_supply"
@@ -3291,6 +3316,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("projected_cash",pass.cashFlow.projectedCash).set("cash_buffer",pass.cashBuffer)
             .set("net_burn_per_minute",pass.cashFlow.netBurnPerMinute).set("cash_runway_seconds",pass.cashFlow.runwaySeconds)
             .set("funds_parallel_production",pass.cashFlow.fundsParallelProduction).set("shared_priority",pass.sharedSpending)
+            .set("prefer_funded_battery",preferFundedBattery)
             .set("starport_market_available",pass.starportMarketAvailable).set("funded_factory_opening",pass.fundedFactoryOpening)
             .set("funded_city_production",pass.fundedCityProduction).set("next_heavy_runway",pass.nextHeavyRunway)
             .set("city_growth_protected",pass.cityGrowthProtected)
