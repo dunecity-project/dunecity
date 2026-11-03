@@ -62,16 +62,27 @@
   **3531massif+2974ridge+39outcrop=6544**. At256/80%,old mountains were22750
   tiles(34.71%); the oldaverage-ratio reduction did not bound highcoverage.
 - Sand/Rock/Mountain are now explicit0..100%,step5,sum100; default75/20/5.
-  OldRock80 migrates to20/75/5 (same geological target), with a1280-tile
-  mountain budget at160. Coherent seeded patches cannot occupy clean start
-  cores or reserved ground routes between starts and every spice tile.
+  OldRock80 migrates to20/75/5 (same geological target). Measured160result:
+  sand4053/dunes1056/spice0 unchanged;rock19211(75.0430%);mountain1280(5.0000%),
+  **80.4401% fewer mountains**. Coast mask unchanged; coherent patches preserve
+  clean start cores and connected ground routes to starts/every spice tile.
 - Newkeys and terrain-options FNV are stored in map provenance and the usual
   saved config. Full map INI already travels in multiplayer and saves; no extra
   terrain save/protocol change. Existing saves retain terrain; new generation
   intentionally changes mountains. Separate Civ Wars lane terrain is unchanged.
-- New generator coverage and640×480 focused `terrain_mix_menu_probe` are
-  registered; exact old-source hashes/matrix/phase counts/INI/before image:
-  `outputs/rock-mountain-20261103/`. New-build receipts are recorded separately.
+- Correctedf076snapshot,job`20261104T020444-terrain-final-02e94e`: generator
+  **35cases/3,322,285assertions PASS**(mini13.47s); full native skirmish probe
+  **PASS97.1s**,including strict smoke,MP equal state,save/load and render.
+  Thirty terrain/INI hash pairs agreed on Mac+Windows; pins updated8f9a43d6.
+- Focused640×480 terrain menu **PASS14.34s** in full2e551job; exactly one
+  pass marker; desert/city/multiplayer screenshots viewed. Before/after160PNG
+  and matched-palette side-by-side viewed. Matrices,INIs,images and verification:
+  `outputs/rock-mountain-20261103/`.
+- Allied smoke exposed an engine—not placement—bug: all178starting Troopers
+  were on ordinary rock,max5/tile. Radar/slow refresh incorrectly calculated
+  velocity for never-moved infantry without a previous movement slot.
+  `1345f662` refreshes active steps only; next steps read current modifiers.
+  Native fixture exercises research/slow/expiry inside unchanged strict logs.
 
 ## 2026-11-03 — Map-scaled Research Pace (OMP ResearchPace, unreleased)
 

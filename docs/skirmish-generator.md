@@ -195,23 +195,46 @@ editor fields produced **3,531 massif + 2,974 ridge + 39 outcrop = 6,544 mountai
 25.5625% of the map and 31.9360% of all rock-like terrain. Reducing the earlier average ratio
 did not bound this high-coverage case.
 
-Measured old mountain counts for the same seed and four bare starts:
+Measured mountain counts for the same seed and four bare starts; the corrected 5% setting is
+independent of the three combined-land targets:
 
-| Map size | 20% combined land | 50% combined land | 80% combined land |
-|---|---:|---:|---:|
-| 64×64 | 19 (0.46%) | 211 (5.15%) | 474 (11.57%) |
-| 96×96 | 126 (1.37%) | 674 (7.31%) | 1,852 (20.10%) |
-| 128×128 | 408 (2.49%) | 1,367 (8.34%) | 3,002 (18.32%) |
-| 160×160 | 1,026 (4.01%) | 3,205 (12.52%) | 6,544 (25.56%) |
-| 192×192 | 1,436 (3.90%) | 5,089 (13.80%) | 13,337 (36.18%) |
-| 256×256 | 2,787 (4.25%) | 9,318 (14.22%) | 22,750 (34.71%) |
+| Map size | Old 20% land | Old 50% land | Old 80% land | New 5% mountain (all three) |
+|---|---:|---:|---:|---:|
+| 64×64 | 19 (0.46%) | 211 (5.15%) | 474 (11.57%) | 204 (4.98%) |
+| 96×96 | 126 (1.37%) | 674 (7.31%) | 1,852 (20.10%) | 460 (4.99%) |
+| 128×128 | 408 (2.49%) | 1,367 (8.34%) | 3,002 (18.32%) | 819 (5.00%) |
+| 160×160 | 1,026 (4.01%) | 3,205 (12.52%) | 6,544 (25.56%) | 1,280 (5.00%) |
+| 192×192 | 1,436 (3.90%) | 5,089 (13.80%) | 13,337 (36.18%) | 1,843 (5.00%) |
+| 256×256 | 2,787 (4.25%) | 9,318 (14.22%) | 22,750 (34.71%) | 3,276 (5.00%) |
 
 20% is an instrumented target in the unchanged old algorithm; the old menu offered 15/25%
 instead. The new default mountain quota is 5% of the map, not a fraction of however much rock
-the field generator happens to produce. At 160×160 this caps it at 1,280 tiles, below half the
-reported 6,544. Source hashes, old phase counts, exact regenerated INI and before image are
-retained under `outputs/rock-mountain-20261103/`. The `render` probe now emits a matching
-six-size, three-coverage matrix and `*-generated-80rock.png` for the corrected generator.
+the field generator happens to produce.
+
+The original 160×160 / 80% geological target migrates to **Sand 20 / Rock 75 / Mountain 5**.
+Measured before/after terrain, with the same seed, mod and starting kit:
+
+| Terrain | Before tiles | Before % | After tiles | After % |
+|---|---:|---:|---:|---:|
+| Sand | 4,053 | 15.8320 | 4,053 | 15.8320 |
+| Dunes | 1,056 | 4.1250 | 1,056 | 4.1250 |
+| Ordinary rock | 13,947 | 54.4805 | 19,211 | 75.0430 |
+| Mountain | 6,544 | 25.5625 | 1,280 | 5.0000 |
+| Spice | 0 | 0 | 0 | 0 |
+
+Mountains fall by **80.4401%**, comfortably below half the old amount. The geological
+rock-plus-mountain mask and every sand/dune tile are unchanged in this reproduction.
+`outputs/rock-mountain-20261103/` preserves both matrices, exact before/after INIs, source
+hashes, phase counts, `before-after-80rock.png` (viewed, matched palette) and
+`terrain-verification.json`.
+
+Corrected source `f0763fee78cd`, cluster job `20261104T020444-terrain-final-02e94e`:
+**35 generator cases / 3,322,285 assertions passed** (mini, 13.47 s) and the complete native
+skirmish probe passed (mini, 97.1 s), including multiplayer equal-state/save-load checks,
+strict played smoke logs and the full render matrix. Thirty measured terrain/INI digest pairs
+also matched macOS and Windows before repinning. The focused 640×480 terrain menu probe
+passed in `20261104T012524-combined-full-2-cec93f` (mini, 14.34 s, exactly one pass marker);
+desert, city and multiplayer screenshots were viewed at actual minimum size.
 
 ## Generation
 - **Terrain** (`shapeRock`, `addSpice`, `addMountains`), modelled on the map editor's random map
