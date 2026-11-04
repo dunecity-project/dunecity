@@ -328,6 +328,8 @@ void CitySimulation::runEffectsScans() {
     // a road or a building, as Micropolis counts tiles from ROADBASE up; units do not develop
     // land. Off keeps the earlier rule, where any ground object (a unit too) develops a block.
     const bool micropolisLandValue = currentGame->getGameInitSettings().getGameOptions().micropolisLandValue;
+    const bool mountainScenery = currentGame->getGameInitSettings().getGameOptions().mountainScenery;
+    parkTerrain_.init(mapWidth_, mapHeight_);
     static_assert(kMaxCityHouses <= 32, "block owner masks hold one bit per city house");
     // Buildings on the map, decided by membership of their origin tile's object list rather than
     // its order: which object is listed first (a unit docked on a building) is not saved state,
@@ -376,6 +378,8 @@ void CitySimulation::runEffectsScans() {
             const int bx = wx / bs;
             const int by = wy / bs;
             const int idx = by * blocksW + bx;
+            if (const int scenery = mountainScenerySource(t->isMountain(), mountainScenery))
+                parkTerrain_.addSource(wx, wy, scenery);
             if ((t->isSand() || t->isDunes()) && !t->hasAGroundObject()) {
                 // Sand-as-water: on Dune, sand is the scenic "feature" that
                 // SimCity's water/tree counted as. The header constant
@@ -495,9 +499,8 @@ void CitySimulation::runEffectsScans() {
             }
     }
 
-    // One raw terrain contribution per park-like structure origin. Smooth
-    // using the shared Micropolis kernel, before pollution and clamping.
-    parkTerrain_.init(mapWidth_, mapHeight_);
+    // Mountains and park-like structure origins share Micropolis's natural-terrain
+    // source grid and one-pass kernel, before pollution and clamping.
     forEachStructureOrigin(map, [&](int x, int y, const StructureBase* structure) {
         const int item = structure->getItemID();
         if (usesParkTerrain(item)) parkTerrain_.addSource(x,y,getParkLandValueBonus(item));

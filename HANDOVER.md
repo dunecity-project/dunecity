@@ -1,3 +1,18 @@
+## 2026-11-04 — Mountains are forest scenery (OMP MountainLandValue, unreleased)
+
+- **Mountain Scenery** is a default-on hashed/saved Game Rules option. Mountains and
+  Civ Wars ridges contribute Micropolis's forest +15 per tile through the existing
+  park-terrain grid/kernel: one integer `(centre + cardinalSum/4)/2` pass on 3-tile
+  terrain blocks (Micropolis uses 4), averaged into the 2x2 land-value map before
+  pollution/crime/clamping. No new allocation/pass; existing park investment estimates
+  see the shared scenery baseline. Infantry do not remove mountain scenery.
+- Ordinary rock remains neutral. Existing sand/dunes retain raw40, twice-smoothed
+  2x2 terrain plus direct8/radius5 water-like bonuses. Empty undeveloped land stays0.
+- Appends one boolean to unreleased MOD17/save9882; protocol111 is unchanged. Older
+  settings load scenery off. Game Rules, remembered defaults and mod rules carry it.
+- Added no-mountain/adjacent/rule-off unit coverage, dense ridge weighting/range,
+  hashed/wire/legacy/truncation coverage and Game Rules persistence/viewport checks.
+
 ## 2026-11-04 — Development builds identify themselves as dev (OMP DevVersion, unreleased)
 
 - Normal CMake, staging and helper-script builds now display **1.0.864dev**.

@@ -323,6 +323,7 @@ public:
                     && (slowCityYear == goc.slowCityYear)
                     && (micropolisLandValue == goc.micropolisLandValue)
                     && (damageLowersLandValue == goc.damageLowersLandValue)
+                    && (mountainScenery == goc.mountainScenery)
                     && (researchLab == goc.researchLab)
                     && (researchPace == goc.researchPace)
                     && (researchMapArea == goc.researchMapArea)
@@ -369,6 +370,7 @@ public:
             optStr += "/slowCityYear=" + std::to_string(slowCityYear);
             optStr += "/micropolisLandValue=" + std::to_string(micropolisLandValue);
             optStr += "/damageLowersLandValue=" + std::to_string(damageLowersLandValue);
+            optStr += "/mountainScenery=" + std::to_string(mountainScenery);
             optStr += "/researchLab=" + std::to_string(researchLab);
             optStr += "/researchPace=" + std::to_string(static_cast<std::uint32_t>(researchPace));
             optStr += "/researchMapArea=" + std::to_string(researchMapArea);
@@ -443,6 +445,8 @@ public:
         bool        micropolisLandValue;
         /// Damaged buildings lower their city's land value; opt-in, city content only.
         bool        damageLowersLandValue = false;
+        /// Mountain/ridge terrain supplies Micropolis forest scenery to nearby developed land.
+        bool        mountainScenery = true;
         /// Optional Research Lab and per-house technology progression (levels 1-9).
         bool        researchLab;
         TechResearch::Pace researchPace = TechResearch::Pace::Normal;

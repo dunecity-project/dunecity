@@ -1030,6 +1030,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Slow City Year") result.slowCityYear = parseBool(value);
             else if (key == "Micropolis Land Value") result.micropolisLandValue = parseBool(value);
             else if (key == "Damage Lowers Land Value") result.damageLowersLandValue = parseBool(value);
+            else if (key == "Mountain Scenery") result.mountainScenery = parseBool(value);
             else if (key == "Research Lab") result.researchLab = parseBool(value);
             else if (key == "Research Pace") result.researchPace = TechResearch::sanitize(std::stoi(value));
             else if (key == "Trooper Anti-Air") result.trooperAntiAir = parseBool(value);

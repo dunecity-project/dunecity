@@ -91,6 +91,7 @@ private:
     Checkbox onlyOnePalaceCheckbox;                 ///< If checked only one palace can be build per house
     DamageRulesCheckbox originalUnitDamageCheckbox;
     Checkbox damageLowersLandValueCheckbox;
+    Checkbox mountainSceneryCheckbox;
     Checkbox rocketTurretsNeedPowerCheckbox;        ///< If checked rocket turrets are dysfunctional on power shortage
     Checkbox sandwormsRespawnCheckbox;              ///< If checked killed sandworms respawn after some time
     Checkbox killedSandwormsDropSpiceCheckbox;      ///< If checked killed sandworms drop some spice

@@ -17,7 +17,7 @@ constexpr std::size_t Mod13Bytes = 1;
 constexpr std::size_t Mod14Bytes = 1;
 constexpr std::size_t Mod15Bytes = 2;
 constexpr std::size_t Mod16Bytes = 1;
-constexpr std::size_t Mod17Bytes = 9;
+constexpr std::size_t Mod17Bytes = 10;
 constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes + Mod15Bytes + Mod16Bytes + Mod17Bytes;
 struct ActiveTestMod {
     explicit ActiveTestMod(const std::string& name) { ModManager::instance().setActiveMod(name); }
@@ -865,6 +865,7 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
         expected.micropolisLandValue = false;
         expected.trooperAntiAir = false;
         expected.starportPopulation = false;
+        expected.mountainScenery = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE_FALSE(restored.getGameOptions().sharedFactoryQueue);
         REQUIRE(restored.isChaosCampaignEligible() == original.isChaosCampaignEligible());
@@ -916,6 +917,7 @@ TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when 
         expected.micropolisLandValue = false;
         expected.trooperAntiAir = false;
         expected.starportPopulation = false;
+        expected.mountainScenery = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(restored.getGameOptions().getHash() == expected.getHash());
         REQUIRE_FALSE(restored.getGameOptions().micropolisLandValue);
@@ -970,6 +972,7 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
         expected.researchLab = false;
         expected.trooperAntiAir = false;
         expected.starportPopulation = false;
+        expected.mountainScenery = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
@@ -1015,6 +1018,7 @@ TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams r
         GameInitSettings restored(input);
         auto expected = options;
         expected.starportPopulation = false;
+        expected.mountainScenery = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
@@ -1086,13 +1090,14 @@ TEST_CASE("Normal research prices and times match every Civilization Wars size",
     REQUIRE_FALSE(isValid(4));
 }
 
-TEST_CASE("MOD17 research pace and initial map area and damage land value are hashed saved rules",
+TEST_CASE("MOD17 research pace and map area and land value rules are hashed saved rules",
           "[research][citybudget][network][save]") {
     using namespace TechResearch;
     SettingsClass::GameOptionsClass defaults;
     REQUIRE(defaults.researchPace == Pace::Normal);
     REQUIRE(defaults.researchMapArea == kReferenceArea);
     REQUIRE_FALSE(defaults.damageLowersLandValue);
+    REQUIRE(defaults.mountainScenery);
     auto changed = defaults;
     changed.researchPace = Pace::Fast;
     REQUIRE(changed != defaults);
@@ -1105,11 +1110,16 @@ TEST_CASE("MOD17 research pace and initial map area and damage land value are ha
     changed.damageLowersLandValue = true;
     REQUIRE(changed != defaults);
     REQUIRE(changed.getHash() != defaults.getHash());
+    changed = defaults;
+    changed.mountainScenery = false;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
     auto original = makeCoop(false, true);
     auto options = original.getGameOptions();
     options.researchPace = GENERATE(Pace::Fast, Pace::Normal, Pace::Slow, Pace::VerySlow);
     options.researchMapArea = GENERATE(kReferenceArea, 24704u);
     options.damageLowersLandValue = GENERATE(false, true);
+    options.mountainScenery = GENERATE(false, true);
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
@@ -1134,6 +1144,7 @@ TEST_CASE("MOD17 research pace and initial map area and damage land value are ha
         expected.researchPace = Pace::Normal;
         expected.researchMapArea = kReferenceArea;
         expected.damageLowersLandValue = false;
+        expected.mountainScenery = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
         const auto hashBeforeMap = restored.getGameOptions().getHash();
@@ -1142,7 +1153,7 @@ TEST_CASE("MOD17 research pace and initial map area and damage land value are ha
         REQUIRE(restored.getGameOptions().getHash() != hashBeforeMap);
     }
     SECTION("every announced MOD17 byte is required") {
-        const int missing = GENERATE(1,2,3,4,5,6,7,8,9);
+        const int missing = GENERATE(1,2,3,4,5,6,7,8,9,10);
         auto bytes = encoded;
         bytes.resize(bytes.size() - missing);
         IMemoryStream input(bytes.data(), bytes.size());

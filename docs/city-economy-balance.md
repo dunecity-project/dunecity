@@ -62,9 +62,10 @@ as a zone, and parked units and roads pulled the centre away from the zones, so 
 base earned less per citizen than a compact AI city.
 
 The block land value itself is unchanged by the Micropolis rule: `4*(34 - distance/2)` +
-terrain (open sand counts as water) - pollution, -20 above crime 190, clamped 1-250, then
-parks, Palace/Stadium and hostile units. Building damage does **not** reduce land value
-by default. The separate **Damage Lowers Land Value** match rule (default off, MOD17)
+terrain (open sand counts as water; mountains count as forest with Mountain Scenery on),
+including park terrain, - pollution, -20 above crime 190, clamped 1-250, then
+Palace/Stadium bonuses and hostile-unit penalties. Building damage does **not** reduce
+land value by default. The separate **Damage Lowers Land Value** match rule (default off, MOD17)
 restores the old proportional health penalty on occupied blocks after these effects;
 repairs restore that value on the next scan. Shared blocks use the worst building
 condition, not compounded penalties. This rule does not change health-scaled windtrap power.
@@ -72,6 +73,28 @@ The census check is `custom-city-cap-probe.inc` (ctest `quantbot_custom_attack`)
 unit changes neither a block nor the house average with Micropolis on, and still develops
 its block with it off. `structure_degradation_dunecity` checks damaged and repaired
 buildings through real effects scans with Damage Lowers Land Value both off and on.
+
+### Mountain scenery (match rule `Mountain Scenery`, default on; MOD17, protocol 111)
+
+Mountain tiles, including Civilization Wars divider ridges, act like Micropolis forests:
+each contributes **15 raw terrain points**. Sources share the existing park-terrain grid
+and integer smoothing: `(centre + (north + south + east + west)/4)/2`, one pass.
+Micropolis uses 4-tile terrain blocks (3-tile zone + road); DuneCity uses 3-tile blocks
+(2-tile zone + road). The score reaches the source block and its four cardinal neighbours,
+not a radial long-distance stamp. The resulting tile scores are averaged over each
+2x2 land-value block before pollution/crime and clamping. Empty, undeveloped desert stays
+at zero. Mountains remain scenic even with infantry on them.
+
+This reuses the natural-terrain treatment in Micropolis
+[`pollutionTerrainLandValueScan` and `smoothTerrain`](https://github.com/SimHacker/micropolis/blob/master/MicropolisCore/src/MicropolisEngine/src/scan.cpp):
+nonzero terrain below rubble (including trees) adds 15, then one terrain smooth.
+No mountain terrain bonus existed before this rule. Ordinary rock has no scenery bonus.
+Open sand/dunes retain their separate, stronger water-like effect: 40 raw points per
+unoccupied tile smoothed twice on the 2x2 grid, plus a direct 8-point falloff over 5 tiles.
+Switching Mountain Scenery off restores the former terrain calculation; earlier
+settings streams load it off. The option is saved/hashed in the existing unreleased MOD17
+extension (save 9882), and can be set in Game Rules, remembered defaults or mod rules.
+
 
 ### Starport population (match rule `Starport Population`, default on; MOD16, protocol 111)
 

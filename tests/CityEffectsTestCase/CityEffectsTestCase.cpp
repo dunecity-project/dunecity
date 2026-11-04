@@ -1360,6 +1360,34 @@ TEST_CASE("Park terrain counts each source once and uses Micropolis smoothing", 
     CHECK(kParkTerrainBlockSize == 3); // 2-tile zone + unchanged 1-tile road
 }
 
+TEST_CASE("Mountain scenery gives adjacent zones the Micropolis forest terrain bonus",
+          "[city-effects][mountain][regression]") {
+    const SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.mountainScenery);
+    auto zoneValue = [](bool mountain, bool rule) {
+        ParkTerrainPolicy terrain;
+        terrain.init(18,18);
+        // A 2x2 zone at (4,4), immediately west of a mountain tile at (6,4).
+        terrain.addSource(6,4,mountainScenerySource(mountain,rule));
+        return computeBaseLandValue(0,terrain.landValueContribution(4,4),0);
+    };
+    CHECK(zoneValue(false,true) == 136);
+    CHECK(zoneValue(true,true) == 137);
+    CHECK(zoneValue(true,false) == 136);
+    CHECK(mountainScenerySource(false,true) == 0); // rock/sand do not become forest
+    ParkTerrainPolicy forest;
+    forest.init(18,18);
+    for(int y=3;y<6;++y) for(int x=6;x<9;++x)
+        forest.addSource(x,y,mountainScenerySource(true,true));
+    // Nine forest-equivalent tiles: raw135, centre67, cardinal16, diagonal0.
+    CHECK(forest.valueAt(6,4) == 67);
+    CHECK(forest.landValueContribution(4,4) == 16);
+    CHECK(forest.valueAt(6,7) == 16);
+    CHECK(forest.valueAt(4,7) == 0);
+    CHECK(forest.valueAt(12,4) == 0);
+    CHECK(computeBaseLandValue(0,forest.landValueContribution(4,4),0) == 152);
+}
+
 TEST_CASE("Park source boundaries do not alias or wrap at map edges", "[city-effects][park]") {
     ParkTerrainPolicy terrain;
     terrain.init(8,7);

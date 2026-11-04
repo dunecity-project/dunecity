@@ -56,6 +56,7 @@ namespace DuneCity {
 //   Rocket Turret     -> one park terrain source, 15% police coverage
 //   Wall               -> Park bonus only
 //   Sand (terrain)     -> Water (land-value bonus)
+//   Mountain (terrain) -> Forest (Micropolis terrain bonus, Mountain Scenery rule)
 // =============================================================================
 
 // --- Radii (in tiles, distances measured Chebyshev / square) -----------------
@@ -101,6 +102,12 @@ constexpr int kPoliceCoverageGunTurret  = 150; // 15% of a police station
 constexpr int kPoliceCoverageRocketTurret = kPoliceCoverageFull * 15 / 100;  // 15% of police-station coverage.
 
 constexpr int kMaxLandValue = 250;
+
+/// Micropolis natural terrain below RUBBLE (water/trees) contributes +15 per tile.
+/// Reuse the park terrain grid/kernel, not sand's separately tuned long-range stamp.
+inline int mountainScenerySource(bool mountain, bool enabled) {
+    return mountain && enabled ? kParkLandValueBonus : 0;
+}
 
 /// With Damage Lowers Land Value on, damage devalues a building's own land
 /// proportionally after amenity bonuses; repairs restore it on the next scan.

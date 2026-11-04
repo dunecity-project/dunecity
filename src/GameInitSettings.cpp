@@ -255,6 +255,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.researchPace = TechResearch::Pace::Normal;
     gameOptions.researchMapArea = TechResearch::kReferenceArea;
     gameOptions.damageLowersLandValue = false;
+    gameOptions.mountainScenery = false;
     gameOptions.trooperAntiAir = false;
     gameOptions.starportPopulation = false;
 
@@ -373,6 +374,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     throw std::runtime_error("Invalid research pace or map area.");
                 gameOptions.researchPace = static_cast<TechResearch::Pace>(pace);
                 gameOptions.damageLowersLandValue = stream.readBool();
+                gameOptions.mountainScenery = stream.readBool();
             }
         }
     } catch (InputStream::eof&) {
@@ -565,6 +567,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeUint32(static_cast<Uint32>(gameOptions.researchPace));
     stream.writeUint32(gameOptions.researchMapArea);
     stream.writeBool(gameOptions.damageLowersLandValue);
+    stream.writeBool(gameOptions.mountainScenery);
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

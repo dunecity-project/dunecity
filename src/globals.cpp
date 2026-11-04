@@ -165,6 +165,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Slow City Year", options.slowCityYear);
     config.setBoolValue(section, "Micropolis Land Value", options.micropolisLandValue);
     config.setBoolValue(section, "Damage Lowers Land Value", options.damageLowersLandValue);
+    config.setBoolValue(section, "Mountain Scenery", options.mountainScenery);
     config.setBoolValue(section, "Research Lab", options.researchLab);
     config.setIntValue(section, "Research Pace", static_cast<int>(options.researchPace));
     config.setBoolValue(section, "Trooper Anti-Air", options.trooperAntiAir);
@@ -210,6 +211,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Slow City Year", options.slowCityYear);
     readBool("Micropolis Land Value", options.micropolisLandValue);
     readBool("Damage Lowers Land Value", options.damageLowersLandValue);
+    readBool("Mountain Scenery", options.mountainScenery);
     readBool("Research Lab", options.researchLab);
     if(config.hasKey(section, "Research Pace"))
         options.researchPace = TechResearch::sanitize(config.getIntValue(section, "Research Pace", static_cast<int>(options.researchPace)));

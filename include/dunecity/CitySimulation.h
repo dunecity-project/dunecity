@@ -251,7 +251,7 @@ private:
     CityMapLayer<uint8_t> trafficDensityMap_;
     CityMapLayer<uint8_t> pollutionDensityMap_;
     CityMapLayer<uint8_t> landValueMap_;
-    ParkTerrainPolicy parkTerrain_; // derived from structures; rebuilt, not serialized
+    ParkTerrainPolicy parkTerrain_; // derived from scenery/structures; rebuilt, not serialized
     CityMapLayer<uint8_t> hostileLandValuePenaltyMap_;
     CityMapLayer<uint16_t> crimeRateMap_;
     std::vector<CrimeUnrestDistrict> crimeUnrestProgress_; // Per-house 16x16 districts; persisted.

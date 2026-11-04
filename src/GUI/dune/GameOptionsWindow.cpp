@@ -248,6 +248,12 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxRight.addWidget(&damageLowersLandValueCheckbox);
     vboxRight.addWidget(VSpacer::create(ruleGap));
 
+    mountainSceneryCheckbox.setText(_("Mountain Scenery"));
+    mountainSceneryCheckbox.setTooltipText(_("Mountains and ridges raise nearby land value like forests in Micropolis."));
+    mountainSceneryCheckbox.setChecked(gameOptions.mountainScenery);
+    vboxRight.addWidget(&mountainSceneryCheckbox);
+    vboxRight.addWidget(VSpacer::create(ruleGap));
+
     trooperAntiAirCheckbox.setText(_("Trooper Anti-Air"));
     trooperAntiAirCheckbox.setTooltipText(_("DuneCity content: trooper small rockets track aircraft. Other content keeps its original combat."));
     trooperAntiAirCheckbox.setChecked(gameOptions.trooperAntiAir);
@@ -321,6 +327,7 @@ void GameOptionsWindow::onOK() {
     gameOptions.onlyOnePalace = onlyOnePalaceCheckbox.isChecked();
     gameOptions.originalUnitDamage = originalUnitDamageCheckbox.isChecked();
     gameOptions.damageLowersLandValue = damageLowersLandValueCheckbox.isChecked();
+    gameOptions.mountainScenery = mountainSceneryCheckbox.isChecked();
     gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
     gameOptions.researchLab = researchLabCheckbox.isChecked();
     gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
