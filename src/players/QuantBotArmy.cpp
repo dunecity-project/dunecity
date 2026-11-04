@@ -677,9 +677,10 @@ int QuantBot::launcherEscapeRange(const UnitBase* launcher, const ObjectBase* th
     // attacker backwards, including one that has just landed a hit.
     const int closeBand = std::min(reach + 1, weaponRange/2 + 1);
     if (blockDistance(launcher->getLocation(),hostile->getLocation()).lround() > closeBand) return 0;
-    // Stand off just outside the enemy's reach and never beyond the launcher's
-    // own firing range, so the gap it opens is a gap it can shoot across.
-    return std::clamp(reach + 2, closeBand + 1, weaponRange);
+    // Keep the extra two-tile escape inside the launcher's own firing range.
+    // The close-band trigger stays unchanged: distant enemies never cause a dodge.
+    return std::clamp(reach + 2 + botConfig().force.launcherKiteExtraDistance,
+                      closeBand + 1, weaponRange);
 }
 
 const ObjectBase* QuantBot::closeThreatWhileHunting(const UnitBase* launcher, const ObjectBase* knownThreat,
@@ -3213,9 +3214,11 @@ void QuantBot::kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThre
 	blend_x /= blendDist;
 	blend_y /= blendDist;
 
-	// Calculate retreat distance proportional to threat proximity
-	// Closer threats = longer retreat to reach weapon range edge
-	FixPoint retreatDistance = std::min(FixPoint(2), desiredRange - distToThreat);
+	// Launchers take two more tiles in their spacing step; other units retain
+	// the established two-tile cap. Never step past the requested firing gap.
+	const bool launcher = pUnit->getItemID()==Unit_Launcher || pUnit->getItemID()==Unit_EliteLauncher;
+	const int step = 2 + (launcher ? botConfig().force.launcherKiteExtraDistance : 0);
+	FixPoint retreatDistance = std::min(FixPoint(step), desiredRange - distToThreat);
 	if (retreatDistance < 1) {
 		retreatDistance = 1;  // Minimum 1-tile retreat
 	}

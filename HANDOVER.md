@@ -1,3 +1,17 @@
+## 2026-11-04 — Launcher kite moves two more tiles (OMP LauncherKite, unreleased)
+
+- QuantBot spacing now has independent hashed/saved INI value
+  `[Force Concentration] LauncherKiteExtraDistance` (0..2, provisional default2).
+  OFF preserves the previous policy; ON increases the Launcher/EliteLauncher
+  movement cap2→4 tiles and Hunt target gap enemy range+2→+4, never beyond
+  launcher firing range. Other units, close-band trigger, human/service ownership,
+  Hunt restoration and saboteur orders are unchanged. No save/protocol change.
+- Real-engine fixture pairs OFF/ON for both launcher types and Hard/Brutal,
+  using a tank that actually approaches, completed escape movement and landed
+  rocket damage; config hash/roundtrip/bounds and isolated audit styles included.
+  Mandatory regression and short paired audit receipts are pending, not claimed.
+- Details and final acceptance measurements: `docs/formations.md`, launcher spacing.
+
 ## 2026-11-04 — Restore funded classic Brutal production (OMP BrutalRegression, unreleased)
 
 - `worseaiallagainstatreides.dls` is a detached spectator of **Atreides QuantBot

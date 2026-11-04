@@ -296,6 +296,9 @@ struct QuantBotConfig {
         /// army escorts, using the existing infantry share and economy reserves.
         /// Experimental, provisionally on for shared-candidate acceptance only.
         bool trooperSupport;
+        /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
+        /// Clamped to 0..2; other units keep their existing retreat distance.
+        int launcherKiteExtraDistance;
     };
     ForceSettings force;
 

@@ -365,6 +365,7 @@ QuantBotConfig::QuantBotConfig() {
     force.storageCapacity = true;
     force.fundedClassicProduction = true;
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
+    force.launcherKiteExtraDistance = 2; // Provisional ON; paired outcome gate decides the final default.
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -680,6 +681,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
         iniFile.setBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
         iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
+        iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -820,6 +822,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.storageCapacity = iniFile.getBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
     force.fundedClassicProduction = iniFile.getBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
     force.trooperSupport = iniFile.getBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
+    force.launcherKiteExtraDistance = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1320,6 +1324,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("storageCapacity", force.storageCapacity);
     addNamed("fundedClassicProduction", force.fundedClassicProduction);
     addNamed("trooperSupport", force.trooperSupport);
+    addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
     configStr += "|/FORCE|";
     addNamed("civWarsStrategy", civWarsStrategy);
     configStr += "|STRATEGY";

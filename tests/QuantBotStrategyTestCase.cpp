@@ -400,6 +400,29 @@ TEST_CASE("Trooper support provisionally defaults on and is independently loaded
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Launcher extra kite distance is independently loaded saved bounded and hashed", "[ai][launcher][config]") {
+    QuantBotConfig config;
+    REQUIRE(config.force.launcherKiteExtraDistance == 2);
+    const auto enabledHash = config.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-launcher-kite-test.ini";
+    for (const int input : {0, 1, 2, -1, 3}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nLauncherKiteExtraDistance=" << input << '\n';
+        }
+        REQUIRE(config.applyOverrides(path.string()));
+        REQUIRE(config.force.launcherKiteExtraDistance == std::clamp(input, 0, 2));
+        REQUIRE((config.getConfigHash() == enabledHash) == (input >= 2));
+        REQUIRE(config.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.launcherKiteExtraDistance == config.force.launcherKiteExtraDistance);
+        REQUIRE(restored.getConfigHash() == config.getConfigHash());
+        REQUIRE(restored.force.trooperSupport == QuantBotConfig{}.force.trooperSupport);
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("More rocket turrets defaults off and is independent loaded saved and hashed", "[ai][defence][config]") {
     QuantBotConfig config;
     REQUIRE_FALSE(config.force.moreRocketTurrets);

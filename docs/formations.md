@@ -584,6 +584,21 @@ non-launcher hunter may be given as an unforced attack (focus fire) but nothing 
 fixes the launcher's facing at the start of the escape section for both difficulties (a 180-degree turn
 costs two of its eight passes).
 
+**2026-11-04 launcher spacing candidate (unreleased).** Hashed and INI-round-tripped
+`[Force Concentration] LauncherKiteExtraDistance=2` increases only Launcher/EliteLauncher
+spacing: the per-order movement cap is **2 → 4 tiles**, while the Hunt stand-off is
+`enemy weapon range + 2 → +4`, still capped at the launcher's own firing range.
+`=0` is the exact previous spacing policy; `=1` is also supported, and INI input is
+bounded to 0..2. The too-close trigger, deterministic fixed-point direction, Hunt
+restoration, service/human authority and non-launcher kiting are unchanged. No saved
+AI state or protocol change is needed. The real-engine launcher probe now pairs
+both launcher types on Hard/Brutal against a genuinely approaching tank, completes
+the escape through pathfinding and requires an extra two tiles plus a landed rocket.
+`launcher-kite-off` / `launcher-kite-on` isolate the candidate for same-build audits.
+The initial default is provisional ON pending mandatory regressions and paired
+stall/bankruptcy/dispatch/kill acceptance; it is not a claimed accepted outcome.
+
+
 **Bundling made shippable.** Optional `[Force Concentration]` keys `Bundle` and `LaunchFromBundle`
 (code defaults true, hashed; `forceBits()` adds B and W from them). Changes against the round-3 test-only
 rule:

@@ -63,6 +63,7 @@ void runLauncherKitingProbe(Game& game) {
     bot->forceVariantOverride=QuantBot::kNoForceOverride;
     getQuantBotConfig().recovery.enabled=true;
     const bool savedServiceOwnership=getQuantBotConfig().force.respectServiceOwnership;
+    const int savedKiteExtra=getQuantBotConfig().force.launcherKiteExtraDistance;
 
     // ---- Free ground, large enough for a stand-off and a real retreat -------
     Coord origin=Coord::Invalid();
@@ -158,6 +159,57 @@ void runLauncherKitingProbe(Game& game) {
             bot->customWave.members.insert(unit->getObjectID());
             publish();
         };
+
+        // Same real approach in each arm, then exactly one completed escape.
+        // At the unchanged close-band edge the candidate must open another two
+        // tiles and land a real rocket from its new stand-off.
+        for(const auto difficulty:{QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
+            bot->difficulty=difficulty;
+            for(const Uint32 item:{Uint32(Unit_Launcher),Uint32(Unit_EliteLauncher)}) {
+                int oldGap=0;
+                for(const int extra:{0,2}) {
+                    getQuantBotConfig().force.launcherKiteExtraDistance=extra;
+                    auto* artillery=spawn(owner,item,Coord(20,12));
+                    auto* approaching=spawn(enemy,Unit_Tank,Coord(20+band+2,12));
+                    artillery->doSetAttackMode(STOP);
+                    approaching->doAttackObject(artillery,true);
+                    publish();
+                    int approachTicks=0;
+                    while(gap(artillery,approaching)>band && approachTicks++<1200) tick(1);
+                    require(gap(artillery,approaching)==band,
+                        "Paired enemy never approached the unchanged close-band edge");
+                    approaching->doSetAttackMode(STOP);
+                    approaching->setTarget(nullptr);
+                    approaching->setForced(false);
+                    hunt(artillery,artillery->getLocation());
+                    require(bot->escapeCloseThreatWhileHunting(artillery),
+                        "Paired approaching enemy did not trigger launcher spacing");
+                    const Coord destination=artillery->getDestination();
+                    int moveTicks=0;
+                    while((artillery->getLocation()!=destination || artillery->isMoving())
+                            && moveTicks++<1200) tick(1);
+                    require(artillery->getLocation()==destination,
+                        "Paired launcher did not complete its real spacing move");
+                    const int endGap=gap(artillery,approaching);
+                    if(extra==0) oldGap=endGap;
+                    else require(endGap>=oldGap+2,
+                        "Candidate launcher did not end at least two tiles further away");
+                    const FixPoint health=approaching->getHealth();
+                    int fireTicks=0;
+                    while(approaching->getHealth()>=health && fireTicks<1200) {
+                        tick(1); ++fireTicks;
+                    }
+                    require(approaching->getHealth()<health && gap(artillery,approaching)>reach,
+                        "Paired launcher failed to land a rocket while standing off");
+                    SDL_Log("LAUNCHER_KITE_PAIR: difficulty=%d item=%u extra=%d approach=%d end=%d move_ticks=%d fire_ticks=%d damage=%d",
+                        int(difficulty),unsigned(item),extra,band,endGap,moveTicks,fireTicks,
+                        (health-approaching->getHealth()).lround());
+                    bot->customWave.members.erase(artillery->getObjectID());
+                    retire(artillery); retire(approaching);
+                }
+            }
+        }
+        getQuantBotConfig().force.launcherKiteExtraDistance=savedKiteExtra;
 
         UnitBase* focusVictim=nullptr;      // Section 2b's damaged tank, parked off-stage between uses.
         int sectionOnePose=-1;              // The launcher's facing when section 1 first starts.
@@ -936,9 +988,11 @@ void runLauncherKitingProbe(Game& game) {
         }
     } catch(...) {
         getQuantBotConfig().force.respectServiceOwnership=savedServiceOwnership;
+        getQuantBotConfig().force.launcherKiteExtraDistance=savedKiteExtra;
         cleanupStructures(); unitList=savedUnits; throw;
     }
     getQuantBotConfig().force.respectServiceOwnership=savedServiceOwnership;
+    getQuantBotConfig().force.launcherKiteExtraDistance=savedKiteExtra;
     cleanupStructures();
     unitList=savedUnits;
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=launcher_kiting outcome=passed");
