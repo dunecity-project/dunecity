@@ -190,6 +190,19 @@
   zoom direction/limits/pointer anchor, trackpad accumulation, a real sidebar
   build list, drag pixel displacement at all ten zooms, release/focus/map bounds,
   unchanged selection and no commands; captures mouse-zoom-before/after.bmp.
+- Feature commit `fe954e6c`; final repeatable acceptance fixture `5fd117ad`.
+  Pinned cluster job `20261104T213024-mouse-controls-repeatable-1a05fa` passed on
+  **Mac mini, 33.18 s**, including `MOUSE_CONTROLS_PASS`, the existing order/
+  selection/WASD checks and confirmed/cancelled mission-skip assertions.
+- SDL2-compat 2.32.72 truncates synthetic SDL2 `SDL_PushEvent` wheel precision
+  and drops whole-tick fields. The probe injects complete native SDL3 wheel
+  events into the same queue on that runtime, preserving every real
+  `Game::doInput` precision/sidebar assertion; no production workaround.
+- Viewed the passing 640×480 before/after captures: terrain grows from 175% to
+  200% around the pointer, while the sidebar stays unchanged. Preserved PNGs:
+  `../outputs/mouse-zoom-before.png` and `../outputs/mouse-zoom-after.png`.
+  The passing run/log/screenshots are also retained in that job's
+  `cluster-evidence/.../probe-evidence.tar.gz`.
 - Local presentation only: no simulation, protocol, configuration or save change.
 
 ## 2026-11-04 — Production plots cannot exclude their own prerequisite (OMP SardaukarExpand, unreleased)
