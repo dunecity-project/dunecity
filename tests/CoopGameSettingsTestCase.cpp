@@ -17,7 +17,7 @@ constexpr std::size_t Mod13Bytes = 1;
 constexpr std::size_t Mod14Bytes = 1;
 constexpr std::size_t Mod15Bytes = 2;
 constexpr std::size_t Mod16Bytes = 1;
-constexpr std::size_t CurrentResearchBytes = 6; // MOD18: pace4 + damage1 + scenery1
+constexpr std::size_t CurrentResearchBytes = 6; // MOD18: pace4 + damage1 + city-rule bits1
 constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes + Mod15Bytes + Mod16Bytes + CurrentResearchBytes;
 struct ActiveTestMod {
     explicit ActiveTestMod(const std::string& name) { ModManager::instance().setActiveMod(name); }
@@ -866,6 +866,7 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
         expected.trooperAntiAir = false;
         expected.starportPopulation = false;
         expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE_FALSE(restored.getGameOptions().sharedFactoryQueue);
         REQUIRE(restored.isChaosCampaignEligible() == original.isChaosCampaignEligible());
@@ -918,6 +919,7 @@ TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when 
         expected.trooperAntiAir = false;
         expected.starportPopulation = false;
         expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(restored.getGameOptions().getHash() == expected.getHash());
         REQUIRE_FALSE(restored.getGameOptions().micropolisLandValue);
@@ -973,6 +975,7 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
         expected.trooperAntiAir = false;
         expected.starportPopulation = false;
         expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
@@ -1019,6 +1022,7 @@ TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams r
         auto expected = options;
         expected.starportPopulation = false;
         expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
@@ -1073,6 +1077,7 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
     REQUIRE(defaults.researchPace == Pace::Normal);
     REQUIRE_FALSE(defaults.damageLowersLandValue);
     REQUIRE(defaults.mountainScenery);
+    REQUIRE(defaults.unpoweredZonesVacate);
     auto changed = defaults;
     changed.researchPace = Pace::Fast;
     REQUIRE(changed != defaults);
@@ -1085,11 +1090,16 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
     changed.mountainScenery = false;
     REQUIRE(changed != defaults);
     REQUIRE(changed.getHash() != defaults.getHash());
+    changed = defaults;
+    changed.unpoweredZonesVacate = false;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
     auto original = makeCoop(false,true);
     auto options = original.getGameOptions();
     options.researchPace = GENERATE(Pace::Fast,Pace::Normal,Pace::Slow,Pace::VerySlow);
     options.damageLowersLandValue = GENERATE(false,true);
     options.mountainScenery = GENERATE(false,true);
+    options.unpoweredZonesVacate = GENERATE(false,true);
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(),saved.getDataLength());
@@ -1106,7 +1116,7 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
     SECTION("MOD17 reads its exact nine-byte suffix and ignores its obsolete area") {
         const Uint32 area = GENERATE(0u,12384u,24704u,40800u);
         // Keep the complete old prefix and pace; replace MOD18's two rule bytes
-        // with the released MOD17 area4 + damage1. There was no scenery byte.
+        // with the released MOD17 area4 + damage1. There was no city-rules byte.
         auto bytes = encoded;
         bytes[marker] = 'H';
         bytes.resize(bytes.size()-2);
@@ -1117,6 +1127,7 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
         GameInitSettings restored(input);
         auto expected = options;
         expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
@@ -1131,6 +1142,7 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
         expected.researchPace = Pace::Normal;
         expected.damageLowersLandValue = false;
         expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
@@ -1149,6 +1161,23 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
         const int missing = GENERATE(1,2,3,4,5,6);
         auto bytes = encoded;
         bytes.resize(bytes.size()-missing);
+        IMemoryStream input(bytes.data(),bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+    SECTION("earlier MOD18 city-rule bytes keep vacancy off and the next record intact") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(options.mountainScenery);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(),bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.unpoweredZonesVacate = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("unknown MOD18 city-rule bits are refused") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(4);
         IMemoryStream input(bytes.data(),bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }

@@ -324,6 +324,7 @@ public:
                     && (micropolisLandValue == goc.micropolisLandValue)
                     && (damageLowersLandValue == goc.damageLowersLandValue)
                     && (mountainScenery == goc.mountainScenery)
+                    && (unpoweredZonesVacate == goc.unpoweredZonesVacate)
                     && (researchLab == goc.researchLab)
                     && (researchPace == goc.researchPace)
                     && (trooperAntiAir == goc.trooperAntiAir)
@@ -370,6 +371,7 @@ public:
             optStr += "/micropolisLandValue=" + std::to_string(micropolisLandValue);
             optStr += "/damageLowersLandValue=" + std::to_string(damageLowersLandValue);
             optStr += "/mountainScenery=" + std::to_string(mountainScenery);
+            optStr += "/unpoweredZonesVacate=" + std::to_string(unpoweredZonesVacate);
             optStr += "/researchLab=" + std::to_string(researchLab);
             optStr += "/researchPace=" + std::to_string(static_cast<std::uint32_t>(researchPace));
             optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
@@ -445,6 +447,8 @@ public:
         bool        damageLowersLandValue = false;
         /// Mountain/ridge terrain supplies Micropolis forest scenery to nearby developed land.
         bool        mountainScenery = true;
+        /// Unpowered R/C/I lots lose one population step per city day down to empty.
+        bool        unpoweredZonesVacate = true;
         /// Optional Research Lab and per-house technology progression (levels 1-9).
         bool        researchLab;
         TechResearch::Pace researchPace = TechResearch::Pace::Normal;

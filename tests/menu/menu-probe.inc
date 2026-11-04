@@ -379,6 +379,7 @@ void verifyResearchPaceMenus(const CustomPlaySetup& fixture) {
                     "Family Game Rules no longer fit the viewport");
         requireResearchMenuBounds(options, options.damageLowersLandValueCheckbox);
         requireResearchMenuBounds(options, options.mountainSceneryCheckbox);
+        requireResearchMenuBounds(options, options.unpoweredZonesVacateCheckbox);
         chooseResearchMenuPace(options, options.researchPaceDropDownBox, TechResearch::Pace::Normal,
                               "family-research-pace-Tornie");
     }
@@ -3202,6 +3203,7 @@ int runMenuProbe() {
         menuRequire(!menu.originalUnitDamageCheckbox.isChecked(), "Original damage must default off");
         menuRequire(!menu.damageLowersLandValueCheckbox.isChecked(), "Damage Lowers Land Value must default off");
         menuRequire(menu.mountainSceneryCheckbox.isChecked(), "Mountain Scenery must default on");
+        menuRequire(menu.unpoweredZonesVacateCheckbox.isChecked(), "Unpowered Zones Vacate must default on");
         menuRequire(menu.planBuildingSitesCheckbox.isChecked(), "Plan building sites must default on");
         menuRequire(menu.vbox.getMinimumSize().x <= menu.getSize().x && menu.vbox.getMinimumSize().y <= menu.getSize().y
                     && menu.getSize().x <= getRendererWidth() && menu.getSize().y <= getRendererHeight(),
@@ -3214,6 +3216,7 @@ int runMenuProbe() {
         menu.originalUnitDamageCheckbox.setChecked(true);
         menu.damageLowersLandValueCheckbox.setChecked(true);
         menu.mountainSceneryCheckbox.setChecked(false);
+        menu.unpoweredZonesVacateCheckbox.setChecked(false);
         menu.planBuildingSitesCheckbox.setChecked(false);
         menu.originalUnitDamageCheckbox.bHover = true;
         menu.originalUnitDamageCheckbox.tooltipLastMouseMotion = SDL_GetTicks() - 1000;
@@ -3230,12 +3233,14 @@ int runMenuProbe() {
         menuRequire(menu.getGameOptions().originalUnitDamage, "Original damage checkbox did not save selection");
         menuRequire(menu.getGameOptions().damageLowersLandValue, "Damage Lowers Land Value checkbox did not save selection");
         menuRequire(!menu.getGameOptions().mountainScenery, "Mountain Scenery checkbox did not save selection");
+        menuRequire(!menu.getGameOptions().unpoweredZonesVacate, "Unpowered Zones Vacate checkbox did not save selection");
         menuRequire(!menu.getGameOptions().planBuildingSites, "Plan building sites checkbox did not save selection");
         auto savedRules = menu.getGameOptions();
         GameOptionsWindow reopened(savedRules);
         menuRequire(reopened.originalUnitDamageCheckbox.isChecked(), "Original damage selection lost on reopening");
         menuRequire(reopened.damageLowersLandValueCheckbox.isChecked(), "Damage Lowers Land Value selection lost on reopening");
         menuRequire(!reopened.mountainSceneryCheckbox.isChecked(), "Mountain Scenery selection lost on reopening");
+        menuRequire(!reopened.unpoweredZonesVacateCheckbox.isChecked(), "Unpowered Zones Vacate selection lost on reopening");
         menuRequire(!reopened.planBuildingSitesCheckbox.isChecked(), "Plan building sites selection lost on reopening");
         INIFile config(false, "Damage rule fixture");
         for(const auto* section : {"Game Options", "Game Options dunecity", "Game Options dune2r"}) {
@@ -3245,20 +3250,24 @@ int runMenuProbe() {
             menuRequire(loaded.originalUnitDamage, "Original damage preference did not round-trip through INI");
             menuRequire(loaded.damageLowersLandValue, "Damage Lowers Land Value preference did not round-trip through INI");
             menuRequire(!loaded.mountainScenery, "Mountain Scenery preference did not round-trip through INI");
+            menuRequire(!loaded.unpoweredZonesVacate, "Vacancy preference did not round-trip through INI");
             menuRequire(!loaded.planBuildingSites, "Plan building sites preference did not round-trip through INI");
             loaded.originalUnitDamage = false;
             loaded.damageLowersLandValue = false;
             loaded.mountainScenery = true;
+            loaded.unpoweredZonesVacate = true;
             loaded.planBuildingSites = true;
             writeGameOptionsToConfig(config, section, loaded);
             applyGameOptionsFromConfig(config, section, savedRules);
             menuRequire(!savedRules.originalUnitDamage, "Original damage preference could not be cleared");
             menuRequire(!savedRules.damageLowersLandValue, "Damage Lowers Land Value preference could not be cleared");
             menuRequire(savedRules.mountainScenery, "Mountain Scenery preference could not be restored");
+            menuRequire(savedRules.unpoweredZonesVacate, "Vacancy preference could not be restored");
             menuRequire(savedRules.planBuildingSites, "Plan building sites preference could not be restored");
             savedRules.originalUnitDamage = true;
             savedRules.damageLowersLandValue = true;
             savedRules.mountainScenery = false;
+            savedRules.unpoweredZonesVacate = false;
             savedRules.planBuildingSites = false;
         }
         menuRequire(!menu.getGameOptions().concreteRequired,"Concrete checkbox did not disable requirements");

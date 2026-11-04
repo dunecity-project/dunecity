@@ -256,6 +256,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.researchPace = TechResearch::Pace::Normal;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
+    gameOptions.unpoweredZonesVacate = false;
     gameOptions.trooperAntiAir = false;
     gameOptions.starportPopulation = false;
 
@@ -376,7 +377,16 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     throw std::runtime_error("Invalid research pace.");
                 gameOptions.researchPace = static_cast<TechResearch::Pace>(pace);
                 gameOptions.damageLowersLandValue = stream.readBool();
-                if(hasMountainScenery) gameOptions.mountainScenery = stream.readBool();
+                if(hasMountainScenery) {
+                    // MOD18 originally wrote a bool (0/1). Reserve bit 1 for
+                    // vacancy without extending that unframed settings block:
+                    // earlier MOD18 saves and protocol-112 packets read it off.
+                    const Uint8 cityRules = stream.readUint8();
+                    if(cityRules & ~Uint8(3))
+                        throw std::runtime_error("Invalid city rules.");
+                    gameOptions.mountainScenery = (cityRules & 1) != 0;
+                    gameOptions.unpoweredZonesVacate = (cityRules & 2) != 0;
+                }
             }
         }
     } catch (InputStream::eof&) {
@@ -565,10 +575,11 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.trooperAntiAir);
     // MOD16: older streams keep the Starport without a population requirement.
     stream.writeBool(gameOptions.starportPopulation);
-    // MOD18 preserves pace/damage, drops obsolete area, and adds mountain scenery.
+    // MOD18: pace4 + damage1 + city rules1 (bit0 scenery, bit1 vacancy).
     stream.writeUint32(static_cast<Uint32>(gameOptions.researchPace));
     stream.writeBool(gameOptions.damageLowersLandValue);
-    stream.writeBool(gameOptions.mountainScenery);
+    stream.writeUint8((gameOptions.mountainScenery ? 1 : 0)
+        | (gameOptions.unpoweredZonesVacate ? 2 : 0));
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

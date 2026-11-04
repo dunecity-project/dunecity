@@ -868,6 +868,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("Game Options", "Micropolis Land Value", settings.gameOptions.micropolisLandValue);
     myINIFile.setBoolValue("Game Options", "Damage Lowers Land Value", settings.gameOptions.damageLowersLandValue);
     myINIFile.setBoolValue("Game Options", "Mountain Scenery", settings.gameOptions.mountainScenery);
+    myINIFile.setBoolValue("Game Options", "Unpowered Zones Vacate", settings.gameOptions.unpoweredZonesVacate);
     myINIFile.setBoolValue("Game Options", "Research Lab", settings.gameOptions.researchLab);
     myINIFile.setIntValue("Game Options", "Research Pace", static_cast<int>(settings.gameOptions.researchPace));
     myINIFile.setBoolValue("Game Options", "Trooper Anti-Air", settings.gameOptions.trooperAntiAir);

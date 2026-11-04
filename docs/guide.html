@@ -63,8 +63,12 @@
 
   <h3>Power</h3>
   <p>
-    Zones need power from Wind Traps to grow efficiently. Unpowered zones receive a heavy growth penalty.
-    Check the Power Grid overlay (<kbd>Shift</kbd>+<kbd>2</kbd>) to ensure coverage.
+    Zones use their owning house's power grid, not allied generation or the Rocket-Turrets Need Power rule.
+    With <strong>Unpowered Zones Vacate</strong> (on for new games), a power shortage blocks growth and
+    removes one population step each city day until the lot is empty (<strong>L0</strong>).
+    Commercial/industrial lots lose one level per day; residential apartments lose eight residents,
+    then individual houses leave one per day. Restoring sufficient power allows normal regrowth.
+    The selected zone panel shows its live density and <strong>UNPOWERED</strong> status.
   </p>
 
   <!-- Zone Mechanics -->

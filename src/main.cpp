@@ -1350,6 +1350,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.micropolisLandValue = myINIFile.getBoolValue("Game Options", "Micropolis Land Value", true);
             settings.gameOptions.damageLowersLandValue = myINIFile.getBoolValue("Game Options", "Damage Lowers Land Value", false);
             settings.gameOptions.mountainScenery = myINIFile.getBoolValue("Game Options", "Mountain Scenery", true);
+            settings.gameOptions.unpoweredZonesVacate = myINIFile.getBoolValue("Game Options", "Unpowered Zones Vacate", true);
             settings.gameOptions.researchLab = myINIFile.getBoolValue("Game Options", "Research Lab", false);
             settings.gameOptions.researchPace = TechResearch::sanitize(myINIFile.getIntValue("Game Options", "Research Pace", 1));
             settings.gameOptions.trooperAntiAir = myINIFile.getBoolValue("Game Options", "Trooper Anti-Air", true);

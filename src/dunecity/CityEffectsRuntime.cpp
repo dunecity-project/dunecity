@@ -1244,9 +1244,8 @@ void CitySimulation::runZoneGrowth() {
         const int crime = crimeRateMap_.get(
             pos.x / crimeRateMap_.getBlockSize(),
             pos.y / crimeRateMap_.getBlockSize());
-        const bool powered = n.pStruct->getOwner() &&
-                             n.pStruct->getOwner()->getProducedPower() >=
-                             n.pStruct->getOwner()->getPowerRequirement();
+        const bool powered = n.pZone ? n.pZone->hasCityPower()
+            : n.pStruct->getOwner()->getProducedPower() >= n.pStruct->getOwner()->getPowerRequirement();
 
         bool grew = false;
         bool declined = false;
@@ -1434,10 +1433,13 @@ void CitySimulation::runZoneGrowth() {
             }
         }
 
-        // Power-starved decline: guaranteed drop when unpowered.
-        // Non-zone Dune structures floor at level 1.
-        if (!grew && !declined && !powered && n.level > 1) {
-            const int floorLevel = n.isDuneStructure ? 1 : 1;  // both floor at 1 for power
+        // A powered lot follows demand as before. With the vacancy rule,
+        // power loss removes one population step per city day, including the
+        // final apartment and individual houses. Dune buildings retain L1.
+        const bool vacate = n.pZone
+            && currentGame->getGameInitSettings().getGameOptions().unpoweredZonesVacate;
+        if (!grew && !declined && !powered && (vacate ? initialPopulation > 0 : n.level > 1)) {
+            const int floorLevel = vacate ? 0 : 1;
             const int nextPopulation = residentialLot ? ResidentialPopulation::decline(initialPopulation) : 0;
             const int newLevel = residentialLot ? ResidentialPopulation::density(nextPopulation)
                 : std::max(floorLevel, n.level - 1);
@@ -1456,6 +1458,13 @@ void CitySimulation::runZoneGrowth() {
                     n.pStruct->setCityOccupancy(static_cast<uint8_t>(newLevel));
                 }
                 n.level = newLevel;
+                if (vacate) {
+                    const int gbs = growthRateMap_.getBlockSize();
+                    const int gbx = pos.x / gbs;
+                    const int gby = pos.y / gbs;
+                    growthRateMap_.set(gbx, gby, static_cast<int8_t>(std::max(-128,
+                        int(growthRateMap_.get(gbx, gby)) + kGrowthRateDecrement)));
+                }
                 SDL_Log("[CitySim] %s DECLINED (%d,%d) item=%d pop=%d->%d (power-starved)",
                         n.pZone ? "zone" : "bldg",
                         pos.x, pos.y, n.pStruct->getItemID(),

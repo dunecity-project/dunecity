@@ -92,6 +92,7 @@ private:
     DamageRulesCheckbox originalUnitDamageCheckbox;
     Checkbox damageLowersLandValueCheckbox;
     Checkbox mountainSceneryCheckbox;
+    Checkbox unpoweredZonesVacateCheckbox;
     Checkbox rocketTurretsNeedPowerCheckbox;        ///< If checked rocket turrets are dysfunctional on power shortage
     Checkbox sandwormsRespawnCheckbox;              ///< If checked killed sandworms respawn after some time
     Checkbox killedSandwormsDropSpiceCheckbox;      ///< If checked killed sandworms drop some spice

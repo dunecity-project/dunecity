@@ -120,7 +120,7 @@ void ZoneStructure::updateStructureSpecificStuff() {
 
     const int frame = DuneCity::CitySprites::zoneFrame(
         zoneType_, density, valueT, pos.x, pos.y,
-        currentGame->getGameCycleCount(), owner->hasPower(), getResidentialPopulation());
+        currentGame->getGameCycleCount(), hasCityPower(), getResidentialPopulation());
     firstAnimFrame = lastAnimFrame = curAnimFrame = frame;
 }
 
@@ -140,7 +140,7 @@ void ZoneStructure::blitToScreen() {
         // progression. Every other state - and any package without an Active
         // cell - keeps the static Idle Compact through GFXManager's fallback.
         const bool industrialActive = zoneType_ == DuneCity::ZoneType::Industrial
-            && skinDensity_ > 0 && owner->hasPower();
+            && skinDensity_ > 0 && hasCityPower();
         const auto activity = industrialActive
             ? GFXManager::DuneCityZoneActivity::Active
             : GFXManager::DuneCityZoneActivity::Idle;
@@ -170,6 +170,11 @@ void ZoneStructure::drawPreview(const SDL_Rect& bounds) const {
     if(!fogged && civicOverlay_ == CivicOverlay::None)
         pGFXManager->drawDuneCityZone(itemID, owner->getHouseID(), 1, skinDensity_, skinValueTier_,
             GFXManager::DuneCityZoneActivity::Idle, 0, 0, 0, &bounds);
+}
+
+bool ZoneStructure::hasCityPower() const {
+    return owner && DuneCity::hasZonePower(owner->getProducedPower(), owner->getPowerRequirement(),
+        currentGame && currentGame->getGameInitSettings().getGameOptions().unpoweredZonesVacate);
 }
 
 void ZoneStructure::refreshZonePowerDraw() {

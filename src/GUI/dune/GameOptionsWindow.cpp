@@ -254,6 +254,12 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxRight.addWidget(&mountainSceneryCheckbox);
     vboxRight.addWidget(VSpacer::create(ruleGap));
 
+    unpoweredZonesVacateCheckbox.setText(_("Unpowered Zones Vacate"));
+    unpoweredZonesVacateCheckbox.setTooltipText(_("Unpowered city zones lose one population step per city day until empty. Power restoration permits normal growth."));
+    unpoweredZonesVacateCheckbox.setChecked(gameOptions.unpoweredZonesVacate);
+    vboxRight.addWidget(&unpoweredZonesVacateCheckbox);
+    vboxRight.addWidget(VSpacer::create(ruleGap));
+
     trooperAntiAirCheckbox.setText(_("Trooper Anti-Air"));
     trooperAntiAirCheckbox.setTooltipText(_("DuneCity content: trooper small rockets track aircraft. Other content keeps its original combat."));
     trooperAntiAirCheckbox.setChecked(gameOptions.trooperAntiAir);
@@ -328,6 +334,7 @@ void GameOptionsWindow::onOK() {
     gameOptions.originalUnitDamage = originalUnitDamageCheckbox.isChecked();
     gameOptions.damageLowersLandValue = damageLowersLandValueCheckbox.isChecked();
     gameOptions.mountainScenery = mountainSceneryCheckbox.isChecked();
+    gameOptions.unpoweredZonesVacate = unpoweredZonesVacateCheckbox.isChecked();
     gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
     gameOptions.researchLab = researchLabCheckbox.isChecked();
     gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
