@@ -315,6 +315,26 @@ TEST_CASE("Storage capacity defaults on and is loaded saved and hashed", "[ai][c
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Funded classic production defaults off and is loaded saved and hashed", "[ai][production][config]") {
+    QuantBotConfig config;
+    REQUIRE_FALSE(config.force.fundedClassicProduction);
+    const auto disabledHash = config.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-funded-classic-production-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nFundedClassicProduction=true\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE(config.force.fundedClassicProduction);
+    REQUIRE(config.getConfigHash() != disabledHash);
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.force.fundedClassicProduction);
+    REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("More rocket turrets defaults off and is independent loaded saved and hashed", "[ai][defence][config]") {
     QuantBotConfig config;
     REQUIRE_FALSE(config.force.moreRocketTurrets);

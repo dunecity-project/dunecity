@@ -140,6 +140,30 @@ CityPowerSizing, CityOpeningCapital, CityConstructionCapital and
 CityProductionPrerequisites. The default-off Civ Wars and MoreRocketTurrets
 experiments are not enabled in the control.
 
+### Powered non-city executor
+
+The real saved position has 99 Harvesters but only 35,110 credits of live combat
+units against 120,710 enemy combat value. Six of seven fully upgraded Heavy
+Factories are idle; the seventh is building a Harvester. A normal 60-second
+continuation earns 8,392 spice credits but builds no heavy combat units while
+losing three yards, two heavy factories and ten refineries.
+
+Dune2R is neither city economy nor `vanillaEconomy`: it retains power rules.
+Its executor still requires more than 2,000 **remaining planning credits**
+after the shared planner has reserved existing queues and other purchases.
+The planner selected an affordable active-defence Launcher in 15 of 37 passes,
+but that separate floor prevented every heavy-allocation decision. Earlier
+classic fallback branches bought Harvesters below the AI cap even though the
+planned worker target was already exceeded.
+
+The hashed `FundedClassicProduction` candidate reuses the existing funded
+worker target and 500-credit heavy-production gate for Custom Brutal powered
+non-city games. It does not reclassify the economy, remove power requirements,
+discard queue commitments, change campaign helpers or alter city/vanilla
+execution. It defaults off while the matched historical and off/on outcomes
+are measured. The shared-spending Dune2R probe exercises actual low-cash queues,
+the surplus-worker negative control and unaffordable purchases in both arms.
+
 ## CI
 
 Not in the CI Linux job. The harness relinks the macOS app bundle

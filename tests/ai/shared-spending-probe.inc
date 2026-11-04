@@ -514,6 +514,42 @@ void runSharedSpendingProbe(Game& game) {
             } catch (...) {bot->configOverride=savedConfig;throw;}
             bot->configOverride=savedConfig;
         }
+        if (!game.isCitySimEnabled() && house->isPowerRequired()) {
+            const auto savedConfig=bot->configOverride;
+            auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+            bot->configOverride=config;
+            try {
+                heavy->curUpgradeLev=heavy->getMaxUpgradeLevel();heavy->updateBuildList();
+                while(house->getNumItems(Unit_Harvester)<8)house->createUnit(Unit_Harvester,true);
+                auto combatQueued=[&]() {
+                    return std::any_of(heavy->currentProductionQueue.begin(),heavy->currentProductionQueue.end(),
+                        [](const auto& order){return QuantBotBuildPolicy::militaryItem(order.itemID);});
+                };
+                for (bool enabled:{false,true}) {
+                    config->force.fundedClassicProduction=enabled;
+                    // The shared planner has already priced the queue. The
+                    // legacy powered-mod floor must actually leave this idle.
+                    reset(1000,0);structureList.remove(yard);
+                    bot->build(10000);
+                    require(combatQueued()==enabled,
+                        "Powered non-city heavy production ignored the funded spendable budget");
+                    // Enough existing workers for this finite field: the
+                    // legacy cap-only fallback still adds a ninth Harvester.
+                    reset(1000,10000);structureList.remove(yard);
+                    bot->build(10000);
+                    require((count(heavy,Unit_Harvester)>0)!=enabled,
+                        "Powered non-city worker execution disagreed with the planned fleet target");
+                    if(enabled)require(combatQueued(),
+                        "Rejected surplus worker swallowed affordable heavy combat production");
+                }
+                reset(200,10000);structureList.remove(yard);
+                bot->build(10000);
+                require(heavy->getProductionQueueSize()==0,
+                    "Funded classic production bypassed the actual purchase price");
+                SDL_Log("FUNDED_CLASSIC_PRODUCTION_PASS: real off/on low-cash combat, surplus workers, purchase budget");
+            } catch (...) {bot->configOverride=savedConfig;throw;}
+            bot->configOverride=savedConfig;
+        }
         SDL_Log("SHARED_SPENDING_PASS: exact worker reserve, simultaneous construction, depletion, scarce credits (%s)",game.isCitySimEnabled()?"city":"vanilla");
     }catch(...){structureList=saved;throw;}
     structureList=saved;

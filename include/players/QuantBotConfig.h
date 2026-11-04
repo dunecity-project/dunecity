@@ -142,7 +142,8 @@ struct QuantBotConfig {
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
     /// CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
-    /// ThreatTurrets, MoreRocketTurrets, CityStarportSupply, StorageCapacity; optional keys, hashed for multiplayer.
+    /// ThreatTurrets, MoreRocketTurrets, CityStarportSupply, StorageCapacity, FundedClassicProduction;
+    /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -281,6 +282,10 @@ struct QuantBotConfig {
         /// production spending. One safe storage project at a time; use a buildable
         /// refinery for its vault when the cheaper Silo is not unlocked yet.
         bool storageCapacity;
+        /// Experimental, default off: Custom Brutal powered non-city games use
+        /// the funded worker target and heavy-production budget already selected
+        /// by the capital planner, not the legacy raw-cash floor/worker fallback.
+        bool fundedClassicProduction;
     };
     ForceSettings force;
 
