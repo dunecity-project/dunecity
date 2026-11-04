@@ -3,6 +3,7 @@
 #include <structures/RepairYard.h>
 #include <units/GroundUnit.h>
 #include <units/Harvester.h>
+#include <array>
 #include <map>
 #include <tuple>
 
@@ -40,7 +41,8 @@ void runExhaustedArmyProbe(Game& game) {
     const auto oldStarting=house->startingCredits;
     const auto oldStored=house->storedCredits;
     const auto oldCityCredits=house->cityCredits;
-    const int oldRepairYards=house->numItem[Structure_RepairYard];
+    std::array<int,Num_ItemID> oldItemCounts;
+    std::copy_n(house->numItem,Num_ItemID,oldItemCounts.begin());
     const auto oldManual=bot->manualUnitOrders;
     const auto oldDefence=bot->defenceAssignments;
     const auto oldWave=bot->customWave;
@@ -78,7 +80,8 @@ void runExhaustedArmyProbe(Game& game) {
         bot->strategyPicked=oldStrategyPicked;
         bot->bundleGateSince=oldBundleSince;bot->forceStats=oldForceStats;
         house->startingCredits=oldStarting;house->storedCredits=oldStored;
-        house->cityCredits=oldCityCredits;house->numItem[Structure_RepairYard]=oldRepairYards;
+        house->cityCredits=oldCityCredits;
+        std::copy(oldItemCounts.begin(),oldItemCounts.end(),house->numItem);
         house->researchedTechLevel=oldResearchedTech;
         game.gameType=oldType;game.techLevel=oldTech;game.citySimEnabled_=oldCity;
         if (hadSimulation) game.citySimulation_->getHouseStateMut(house->getHouseID())=oldCityState;
@@ -124,6 +127,10 @@ void runExhaustedArmyProbe(Game& game) {
         auto* worker=dynamic_cast<Harvester*>(spawn(Unit_Harvester));
         require(worker,"Exhausted army fixture needs a real harvester");
         unitList.clear();for (auto* unit:created) unitList.push_back(unit);
+        // The fixture hides the original roster, so hide its inventory too:
+        // militaryUnitValue() deliberately uses the House item counters.
+        for (const auto* unit:oldUnits)
+            if (unit->getOwner()==house) --house->numItem[unit->getItemID()];
         structureList.clear();structureList.push_back(defendedBuilding);
         auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
         config->recovery.enabled=false; // Isolate rebuild gates, not tactical withdrawal.
@@ -329,6 +336,32 @@ void runExhaustedArmyProbe(Game& game) {
         bot->attack(bot->militaryUnitValue());
         require(yard->isFree() && damaged->isActive() && damaged->getAttackMode()==HUNT,
             "attack() did not deploy and launch the unaffordable AI yard occupant");
+
+        // Exercise the real debit gate, not just a model of per-point cost.
+        // Cash below 0.5 rounds to zero and cannot buy even the last point.
+        for (const int missing:{1,5}) for (const bool funded:{false,true}) {
+            reset();
+            damaged->setHealth(damaged->getMaxHealth()-missing);
+            const FixPoint required=FixPoint(1)/2+(missing-1)*UNIT_REPAIRCOST;
+            house->startingCredits=required-(funded?FixPoint(0):FixPoint(1)/1000);
+            invalidate();
+            damaged->doRepair();damaged->setGettingRepaired();
+            damaged->setGuardPoint(yard->getLocation());
+            require(yard->getContainedRepairUnit()==damaged && !damaged->isActive(),
+                "Fractional repair fixture did not enter the actual repair bay");
+            require(bot->declinesUnfundedRepair(damaged)!=funded,
+                "Repair ownership ignored the real rounded-credit payment threshold");
+            for (int tick=0;tick<=missing;++tick) yard->updateStructureSpecificStuff();
+            require((damaged->getHealth()==damaged->getMaxHealth())==funded,
+                "Actual repair progress disagreed with the cash-to-finish boundary");
+            if (!funded)
+                require(yard->getContainedRepairUnit()==damaged && !damaged->isActive(),
+                    "The underfunded repair control did not actually stall in its bay");
+            bot->releaseExhaustedArmyRepairs();
+            require(yard->isFree() && damaged->isActive(),
+                "The real fractional-cash repair hold was not released when it could not finish");
+            house->startingCredits=0;
+        }
 
         for (auto* protectedUnit:{manual,defender}) {
             config->force.exhaustedArmyDispatch=false;reset();

@@ -107,9 +107,12 @@ campaign timing or a human command. Easy's existing standing-army share remains
 its own launch path.
 
 The same gate releases only AI-owned repair work that cannot finish under the
-yard's per-point charging rule: `cash <= (ceil(missing health)-1) * UNIT_REPAIRCOST`.
-Any positive partial last charge still heals the last point. The gate makes damaged
-combat troops available, cancels repair-yard travel and releases unaffordable AI yard occupants;
+yard's real payment rule:
+`cash < 0.5 + (ceil(missing health)-1) * UNIT_REPAIRCOST`.
+`House::payCredits` requires rounded credits of at least one before every debit,
+so a sub-half-credit balance cannot pay even an otherwise affordable last point.
+The gate makes damaged combat troops available, cancels repair-yard travel and
+releases unaffordable AI yard occupants;
 the engine's automatic repair decision uses the same owner check so it cannot
 immediately rebook them. Human orders, saboteurs, live/base/posted defenders,
 colony guards and colonist escorts keep their orders and repair authority.
@@ -221,6 +224,8 @@ cargo, city tax income and developing lots. It compares actual campaign orders
 across switch states and protects human, defence and saboteur orders. Actual
 repair-yard trips and bay occupants exercise AI-only release, protected human
 and defender occupants, and the engine's automatic-repair no-rebooking rule.
+The actual repair-yard update proves both sides of the rounded-credit boundary
+for one and five missing health points.
 These fixture assertions describe coverage, not an unrun full-match or win-rate
 certification.
 

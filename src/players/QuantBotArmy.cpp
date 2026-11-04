@@ -507,13 +507,15 @@ bool QuantBot::exhaustedArmyEconomy() const {
 }
 
 bool QuantBot::declinesUnfundedRepair(const UnitBase* unit) const {
-    if (!campaignCombatUnit(unit) || unitRole(unit, {UnitRole::Human, UnitRole::Defence,
-            UnitRole::BaseDefence, UnitRole::LiveDefence, UnitRole::Escort, UnitRole::ColonyGuard}) != UnitRole::Free
-        || !exhaustedArmyEconomy()) return false;
+    if (!exhaustedArmyEconomy() || !campaignCombatUnit(unit)
+        || unitRole(unit, {UnitRole::Human, UnitRole::Defence, UnitRole::BaseDefence,
+            UnitRole::LiveDefence, UnitRole::Escort, UnitRole::ColonyGuard}) != UnitRole::Free) return false;
     const FixPoint cash = getHouse()->getStartingCredits() + getHouse()->getEarnedCredits();
     const int steps = (unit->getMaxHealth() - unit->getHealth()).ceil();
-    // The engine heals the last point for any positive remainder of its charge.
-    return steps > 0 && cash <= (steps - 1) * UNIT_REPAIRCOST;
+    // House::payCredits stops once lround(cash) is zero, even when the raw
+    // balance could cover another 0.1-credit repair point. Before the final
+    // point the yard must still have at least half a credit to debit it.
+    return steps > 0 && cash < FixPoint(1) / 2 + (steps - 1) * UNIT_REPAIRCOST;
 }
 
 void QuantBot::releaseExhaustedArmyRepairs() {
