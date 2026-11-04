@@ -1823,7 +1823,9 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     // The strategy's hold scales the fielded army the evidence is weighed against (100 = as is).
     const int64_t priorArmyValue = pass.strategyMixProfile
         ? int64_t(pass.militaryValue) * pass.strategyMixProfile->holdPercent / 100 : int64_t(pass.militaryValue);
-    pass.unitMix = UnitMixPolicy::allocate(scores, defaults, pass.learningUnitMix, pass.vanillaEconomy,
+    // Funding a powered classic economy must not change its existing learning model.
+    const bool evidenceWeightedLearning = !pass.citySimEnabled && !pass.powerRules;
+    pass.unitMix = UnitMixPolicy::allocate(scores, defaults, pass.learningUnitMix, evidenceWeightedLearning,
                                                   totalLostValue, priorArmyValue);
     // Test-only play styles (docs/ai-play-styles.md): inert in every real game.
     pass.unitMix = styledUnitMix(pass.unitMix, available);
@@ -1900,7 +1902,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     const int fundedArmyValue = QuantBotBuildPolicy::fundedArmyTarget(pass.militaryValue, pass.militaryBudget, productionCash);
     pass.vehiclePlanValue = std::max(0, fundedArmyValue - pass.infantryValue);
     if (pass.emitStatsLog && AITelemetry::log().enabled()) {
-        traceDecision("unit_mix", AITelemetry::Record().set("basis", !pass.learningUnitMix ? "configured" : pass.vanillaEconomy ? "lifetime_evidence_weighted_value_per_loss" : "lifetime_value_per_loss")
+        traceDecision("unit_mix", AITelemetry::Record().set("basis", !pass.learningUnitMix ? "configured" : evidenceWeightedLearning ? "lifetime_evidence_weighted_value_per_loss" : "lifetime_value_per_loss")
             .set("tank_bps", (pass.tankPercent * 10000).lround()).set("siege_bps", (pass.siegePercent * 10000).lround())
             .set("special_bps", specialBps).set("devastator_bps", pass.unitMix[3]).set("sonic_tank_bps", pass.unitMix[4])
             .set("deviator_bps", pass.unitMix[5]).set("launcher_bps", (pass.launcherPercent * 10000).lround())
