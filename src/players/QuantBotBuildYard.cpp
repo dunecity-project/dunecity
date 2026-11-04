@@ -728,6 +728,7 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
     // actual blackout recovery stay ahead of it.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && pass.protectionCapital && capitalPending(pass)
+        && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)!="trooper_support"
         && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()) {
         const auto& service = pass.capitalCandidates[pass.capitalChoice];
         const bool defenceUpgrade=service.kind==std::string("defence_upgrade");

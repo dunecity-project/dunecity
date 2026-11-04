@@ -83,6 +83,19 @@ def house_row(house='0', difficulty='hard', **extra):
 
 
 class DuneCityAuditTests(unittest.TestCase):
+    def test_optional_six_house_audit_covers_every_faction_without_changing_defaults(self):
+        args = audit['parser'].parse_args([
+            '--sizes', '128', '--spice', 'medium', '--formats', 'ffa6',
+            '--difficulties', 'hard', '--seeds', '9101', '148680876'])
+        games = audit['schedule'](args)
+        self.assertEqual(len(games), 2)
+        for game in games:
+            self.assertEqual({side[0] for side in game['sides']}, set(audit['HOUSES']))
+            self.assertEqual({side[1] for side in game['sides']}, set(range(1, 7)))
+            self.assertEqual({side[2] for side in game['sides']}, {'hard'})
+        self.assertNotEqual(games[0]['sides'][0][0], games[1]['sides'][0][0])
+        self.assertEqual(audit['parser'].parse_args([]).formats, ['1v1', '2v2', 'ffa4'])
+
     def test_capture_allowance_passes_through_the_existing_probe_option(self):
         args = audit['parser'].parse_args(['--attack-events', '--capture-mib', '512'])
         game = audit['schedule'](args)[0]

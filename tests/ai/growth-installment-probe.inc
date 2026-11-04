@@ -55,6 +55,15 @@ void runGrowthInstallmentProbe(Game& game) {
     const int houseID=static_cast<int>(house->getHouseID());
     game.gameType=GameType::CustomGame;bot->gameMode=QuantBot::GameMode::Custom;
     bot->role=AIRole::Both;bot->difficulty=QuantBot::Difficulty::Brutal;
+    if (const char* style=std::getenv("BALANCE_SCENARIO_STYLE")) {
+        const char* directory=std::getenv("BALANCE_STYLE_DIR");
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        require(directory && config->applyOverrides(std::string(directory)+"/"+style+".ini"),
+            "Growth installment switch control could not be applied");
+        bot->configOverride=config;
+        SDL_Log("GROWTH_INSTALLMENT: switch_control=%s config_hash=%s",
+            style,config->getConfigHash().c_str());
+    }
     game.gameCycleCount=MILLI2CYCLES(600000);
     require(!game.getGameInitSettings().getGameOptions().instantBuild,
         "Instant build would bypass the installment accounting under test");
@@ -844,6 +853,8 @@ void runGrowthInstallmentProbe(Game& game) {
     SDL_Log("GROWTH_INSTALLMENT: reactor AI selection queued=%d cash=%d forecast=%d",
         queuedAnywhere(Structure_NuclearPlant),house->getCredits(),fourMinuteForecast());
     require(queuedAnywhere(Structure_NuclearPlant)==1,"The AI did not select a needed reactor below full price");
+    require(queuedAnywhere(Structure_WOR)==0,
+        "First WOR consumed a recovery yard without its required current power headroom");
     bot->planningBuilder=secondYard->getObjectID();bot->clearPlacementCache();
     bot->build(0);
     require(queuedAnywhere(Structure_NuclearPlant)==1,"A second yard ordered a duplicate reactor");

@@ -124,6 +124,13 @@ inline std::uint64_t hashOf(const std::string& bytes) {
 /// A config copy only this bot plays by (QuantBot::configOverride, as applyStrategy does).
 inline void setStrategy(QuantBot& bot, const QuantBotStrategy::Settings& strategy) {
     auto config = std::make_shared<QuantBotConfig>(getQuantBotConfig());
+    if (const char* style = std::getenv("BALANCE_SCENARIO_STYLE")) {
+        const char* directory = std::getenv("BALANCE_STYLE_DIR");
+        require(directory && config->applyOverrides(std::string(directory) + "/" + style + ".ini"),
+                "Strategy ablation style could not be applied");
+        SDL_Log("STRATEGY_PROBE: check=config_ablation style=%s config_hash=%s",
+                style, config->getConfigHash().c_str());
+    }
     config->strategy = strategy;
     bot.configOverride = config;
 }
@@ -660,8 +667,10 @@ inline std::vector<size_t> leadSlots(Mix mix, const Production& p) {
 /// One up-to-12-minute game per mix is one trajectory of the whole fight. If conquest ends
 /// either game sooner, Section 3 compares both at that same observed cycle, replaying the
 /// Learned reference when needed. The probe logs each margin (check=lead_margin), and
-/// run-campaign-balance.py requires the mean over three seeds to be positive
-/// (--strategy-margin-seeds). Over twelve seeds (486409243, 11, 22, ... 122) a single game's
+/// run-campaign-balance.py requires the strict positive mean over the twelve seeds predeclared
+/// in docs/unit-route-comparison.md: 486409243, 11, 22, 33, 44, 55, 66, 77, 88, 99, 111, 122.
+/// The original three-seed runner option remains available for paired switch attribution.
+/// Over that calibration corpus a single game's
 /// margin was below 1 bps in 6 of 84 checks on 1.0.852 and 4 of 84 with the protocol 95 movement fix,
 /// so a one-seed check failed on 5 and 3 of the 12 seeds; the three-seed mean failed in 5 and 8 of
 /// 220 seed triples, with every mix's twelve-seed mean +534..+1482 bps (HANDOVER, "Unit movement").

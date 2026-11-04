@@ -311,6 +311,9 @@ inline void availabilityAndBudgetGates(World& world) {
     blocked(world, capped, "no_standing_heavy_factory_despite_pending_factory_and_air");
     world.owner->numItem[Structure_HeavyFactory] = heavyFactories;
     capped = pass;
+    capped.committedPowerDemand = world.owner->getProducedPower() - world.owner->getPowerRequirement();
+    blocked(world, capped, "power_headroom_already_committed");
+    capped = pass;
     capped.itemCount[Unit_Harvester] = 0;
     capped.fundedHarvesterTarget = std::max(1, capped.fundedHarvesterTarget);
     require(!capped.harvesterFactories.empty(), "Worker gate has no real supplier");
@@ -800,6 +803,11 @@ inline void productionAndAirDefence() {
     }
     const auto* live = world.game->getObjectManager().getObject(birdID);
     const bool destroyed = !live || live->getHealth() <= 0;
+    // Killing-blow credit is immediate; the victim's loss counter belongs to
+    // ordinary destruction cleanup, which may run on the following engine tick.
+    if (destroyed)
+        for (int i = 0; i < MILLI2CYCLES(1000)
+             && world.game->getObjectManager().getObject(birdID); ++i) world.tick();
     const auto& reward = world.owner->getCombatReward(Unit_Trooper);
     const auto troopKills = reward.kills - rewardBefore.kills;
     const auto troopHits = reward.hits - rewardBefore.hits;

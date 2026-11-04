@@ -1081,12 +1081,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # in lockstep; the pick survives save/load (byte-identical blocks, a 9864 block re-picks
         # it, the checkpoint load continues to the host's digest); every mix strategy's production
         # passes play its prior before combat evidence and still learn, and its lead slots get a
-        # larger share of the built value than the Learned game's on the mean over three seeds
-        # (486409243 and --strategy-margin-seeds 11,22: one game per mix is one trajectory);
+        # larger share of the built value than the Learned game's on the strict positive mean
+        # over the twelve predeclared calibration seeds (docs/unit-route-comparison.md);
         # Learned/Base plays exactly the configured default's game.
         add_test(NAME quantbot_strategy COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --strategy-probe --repeatable
             --mod vanilla --seed 486409243 --no-ai-telemetry --path-workers 1
+            --strategy-margin-seeds 11,22,33,44,55,66,77,88,99,111,122
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 64x64 - Four Chambers.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/strategy-probe)
         set_tests_properties(quantbot_strategy PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)

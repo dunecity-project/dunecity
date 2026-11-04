@@ -240,7 +240,7 @@ def schedule(args):
                 for levels in difficulties:
                     for index, seed in enumerate(args.seeds):
                         for swapped in range(2 if args.mode == 'ladder' else 1):
-                            count = 2 if fmt == '1v1' else 4
+                            count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
                             houses = list(HOUSES[:count])
                             shift = index % count
                             houses = houses[shift:] + houses[:shift]
@@ -923,7 +923,7 @@ parser.add_argument('--capture-mib', type=int, default=256,
                     help='Ordinary diagnostic telemetry allowance (256-4096 MiB); shipped log cap is unchanged')
 parser.add_argument('--sizes', nargs='+', type=int, choices=(96, 128, 160), default=[96, 128, 160])
 parser.add_argument('--spice', nargs='+', choices=tuple(SPICE), default=list(SPICE))
-parser.add_argument('--formats', nargs='+', choices=('1v1', '2v2', 'ffa4'), default=['1v1', '2v2', 'ffa4'])
+parser.add_argument('--formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6'), default=['1v1', '2v2', 'ffa4'])
 parser.add_argument('--difficulties', nargs='+', choices=('medium', 'hard', 'brutal'), default=['medium', 'hard', 'brutal'])
 parser.add_argument('--seeds', nargs='+', type=int, default=[9101, 148680876])
 parser.add_argument('--minutes', type=int, default=30)

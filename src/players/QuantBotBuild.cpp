@@ -1939,8 +1939,12 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         && int64_t(pass.militaryValue) + trooper.price <= pass.lightBudget) {
         const int missing = std::max(0, QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft) - pass.trooperCount);
         pass.trooperReserveValue = int(std::min<int64_t>(INT_MAX, int64_t(missing) * trooper.price));
+        // Unbuilt troops claim only genuinely funded headroom in this mix.
+        // Their full cap reservation and next-order cash are protected below
+        // by the common producer admission path, not charged as an existing army.
         plannedInfantryValue = int(std::min<int64_t>(INT_MAX,
-            int64_t(pass.infantryValue) + pass.trooperReserveValue));
+            int64_t(pass.infantryValue) + std::min(pass.trooperReserveValue,
+                std::max(0, fundedArmyValue - pass.militaryValue))));
     }
     pass.vehiclePlanValue = std::max(0, fundedArmyValue - plannedInfantryValue);
     if (pass.emitStatsLog && AITelemetry::log().enabled()) {
@@ -2064,6 +2068,13 @@ Uint32 QuantBot::trooperInfrastructureItem(BuildPass& pass, const BuilderBase* y
             break;
         }
     if (!campaignAvailableToBuild(yard, candidate)) return NONE_ID;
+    // A cost estimate for extra generation is not generation. Do not occupy a
+    // recovery yard with a WOR that would consume power already promised to
+    // queued consumers, even while a larger generator is being paid for.
+    if ((pass.citySimEnabled || pass.powerRules)
+        && int64_t(getHouse()->getProducedPower()) < int64_t(getHouse()->getPowerRequirement())
+            + pass.committedPowerDemand + std::max(0, currentGame->objectData.data[candidate][technology].power))
+        return NONE_ID;
     const int64_t reserve = pass.citySimEnabled ? pass.cityWorCashReserve
         : std::max(pass.strategicReserveCost, pass.economyReserve);
     const int64_t fundedCost = buildingCapitalCost(pass, candidate) + reserve;
