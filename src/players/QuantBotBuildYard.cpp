@@ -1489,6 +1489,15 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         && findPlaceLocation(Structure_RepairYard).isValid()) {
         yardTurn.itemID=Structure_RepairYard;yardTurn.structureRule="funded_repair_capacity";
     }
+    // One useful rocket-infantry lane precedes optional factory expansion, not
+    // the opening economy, power, defence, Starport or mandatory production core.
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
+        const Uint32 infantry = trooperInfrastructureItem(pass, turn.pBuilder);
+        if (infantry != NONE_ID) {
+            yardTurn.itemID = infantry;
+            yardTurn.structureRule = infantry == Structure_WOR ? "trooper_support" : "trooper_prerequisite";
+        }
+    }
     // Fund combat-air capacity before optional ground-factory expansion.
     // Pending factories prevent duplicate lanes across parallel yards.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && yardTurn.airBacklog
@@ -1561,8 +1570,9 @@ void QuantBot::chooseYardMilitaryInfrastructure(BuildPass& pass, BuilderTurn& tu
     // troop content, or with no room left in the infantry quota, is not worth
     // founding at all.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && !pass.trooperSupport
         && (!(pass.vanillaEconomy && gameMode == GameMode::Custom) || infantryStrategy())
-        && (!yardTurn.isCitySim || (pass.cityAntiAirInfantryDemand && cityTroopContentExists(pass)
+        && (!yardTurn.isCitySim || (pass.cityAntiAirInfantryDemand && troopContentExists(pass, turn.pBuilder)
             && !openingWorkersNeeded(pass)
             && int64_t(pass.money) >= data[Structure_WOR][houseID].price + pass.cityWorCashReserve))
         && pass.itemCount[Structure_WOR] == 0

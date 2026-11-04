@@ -63,6 +63,27 @@ TEST_CASE("QuantBot strategic savings leave excess funds available for tanks", "
     REQUIRE(spendableCredits(-100, 2000) == 0);
 }
 
+TEST_CASE("Rocket infantry support follows observed threats and bounded army escorts",
+          "[quantbot][production][troopers]") {
+    REQUIRE(trooperSupportTarget(1999,0,0) == 0);
+    REQUIRE(trooperSupportTarget(2000,0,0) == 1);
+    REQUIRE(trooperSupportTarget(12000,0,0) == 6);
+    REQUIRE(trooperSupportTarget(0,1,0) == 5);
+    REQUIRE(trooperSupportTarget(0,2,0) == 10);
+    REQUIRE(trooperSupportTarget(0,3,0) == 15);
+    REQUIRE(trooperSupportTarget(0,4,0) == 18);
+    REQUIRE(trooperSupportTarget(0,0,600) == 1);
+    REQUIRE(trooperSupportTarget(0,0,601) == 2);
+    REQUIRE(trooperSupportTarget(30000,0,6000) == 9);
+    REQUIRE(trooperSupportTarget(-1,-1,-1) == 0);
+    REQUIRE(trooperSupportTarget(std::numeric_limits<int>::max(),
+        std::numeric_limits<int>::max(),std::numeric_limits<int>::max()) == 18);
+    REQUIRE(rocketInfantrySize(Unit_Trooper) == 1);
+    REQUIRE(rocketInfantrySize(Unit_Troopers) == 3);
+    REQUIRE(rocketInfantrySize(Unit_Soldier) == 0);
+    REQUIRE_FALSE(rocketInfantry(Unit_Saboteur));
+}
+
 TEST_CASE("QuantBot storage forecasts earned surplus after useful spending", "[quantbot][production][storage]") {
     REQUIRE(storageCapacityNeeded(1800,2005,400,100,0));
     REQUIRE(storageCapacityNeeded(2005,2005,1800,300,0));

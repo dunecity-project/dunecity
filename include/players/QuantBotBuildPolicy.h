@@ -42,6 +42,23 @@ inline bool militaryItem(Uint32 item) {
 inline int fundedArmyTarget(int committed, int limit, int spendable) {
     return int(std::min<int64_t>(limit, int64_t(committed) + std::max(0, spendable)));
 }
+
+inline bool rocketInfantry(Uint32 item) {
+    return item == Unit_Trooper || item == Unit_Troopers;
+}
+inline int rocketInfantrySize(Uint32 item) {
+    return item == Unit_Troopers ? 3 : item == Unit_Trooper ? 1 : 0;
+}
+// The infantry share is still the spending ceiling. This smaller count target
+// gives those credits a purpose without taxing every opening or growing a wing
+// counter without bound: five rockets answer one ordinary ornithopter, while
+// a mature ground army keeps a small escort even after the visible wing leaves.
+inline int trooperSupportTarget(int armyValue, int hostileAircraft, int hostileArmourValue) {
+    const int escort = std::min(6, std::max(0, armyValue) / 2000);
+    const int armour = int(std::min<int64_t>(9, (int64_t(std::max(0, hostileArmourValue)) + 599) / 600));
+    const int air = std::min(18, std::clamp(hostileAircraft, 0, 4) * 5);
+    return std::max({escort, armour, air});
+}
 // Banked credits buy army past the configured cap (docs/ai-scenario-matrix.md, "Difficulty
 // ladder"): what lies above `reserve` raises the planning budget, by at most `maxPercent` of the
 // cap. Medium takes half the cap (kSurplusMilitaryMediumPercent), so a Medium never reaches Hard's

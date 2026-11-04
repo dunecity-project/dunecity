@@ -163,13 +163,14 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
                 ? "city_working_capital" : "existing_production_runway"));
         return false;
     }
-    // Enforce reactive infantry and its funded quota at queue acceptance,
-    // including callers outside the WOR selection branch.
-    if (cityInfantryItem(pass, itemID) && (!pass.cityAntiAirInfantryDemand
+    // Every producer shares the same committed troop count and infantry budget.
+    const bool supportTroop = pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(itemID);
+    if (supportTroop && !trooperOrderAdmitted(pass, itemID, data[itemID][houseID].price)) return false;
+    if (cityInfantryItem(pass, itemID) && ((!pass.cityAntiAirInfantryDemand && !supportTroop)
         || !infantryQuotaAdmits(pass, data[itemID][houseID].price)
         || int64_t(quotedPrice) + pass.cityWorkingReserve > pass.money)) return false;
     if (pass.citySimEnabled && itemID == Structure_WOR
-        && (!pass.cityAntiAirInfantryDemand || !cityTroopContentExists(pass)
+        && ((!pass.cityAntiAirInfantryDemand && !pass.trooperSupport) || !troopContentExists(pass, turn.pBuilder)
             || openingWorkersNeeded(pass)
             || int64_t(quotedPrice) + pass.cityWorCashReserve > pass.money)) return false;
     const bool emergencyGenerator=!getHouse()->hasPower()
@@ -214,6 +215,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
         if (itemID != requestedItem) ++pass.itemCount[itemID];
+        if (supportTroop) pass.trooperCount += QuantBotBuildPolicy::rocketInfantrySize(itemID);
         pass.cityPendingDisplayPopulation += QuantBotCityPolicy::displayPopulation(initialCityPopulation(itemID));
         if(DuneCity::isCityZoneStructure(itemID)) ++pass.cityZonesIncludingQueued;
         if (itemID>=Structure_FirstID && itemID<=Structure_LastID)
@@ -816,6 +818,31 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.trooperSupport) {
+        if (turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0
+            || getHouse()->isGroundUnitLimitReached()) return;
+        Uint32 item = NONE_ID;
+        int bestPrice = 0, bestSize = 0;
+        for (const Uint32 candidate : {Unit_Trooper, Unit_Troopers}) {
+            if (!campaignAvailableToBuild(turn.pBuilder, candidate)
+                || !trooperOrderAdmitted(pass, candidate, data[candidate][houseID].price)) continue;
+            const int price = purchasePrice(turn.pBuilder, candidate);
+            const int size = QuantBotBuildPolicy::rocketInfantrySize(candidate);
+            if (price > pass.money - (pass.citySimEnabled ? pass.cityWorkingReserve : 0)) continue;
+            if (item == NONE_ID || int64_t(price) * bestSize < int64_t(bestPrice) * size
+                || (int64_t(price) * bestSize == int64_t(bestPrice) * size && size > bestSize)) {
+                item = candidate; bestPrice = price; bestSize = size;
+            }
+        }
+        if (item != NONE_ID && produceItemWithLogging(pass, turn, item, __LINE__,
+                pass.hostileAircraft > 0 ? "trooper_anti_air" : "trooper_army_support")) {
+            ++pass.itemCount[item];
+            pass.infantryCount += bestSize;
+            pass.infantryValue += data[item][houseID].price;
+            pass.militaryValue += data[item][houseID].price;
+        }
+        return;
+    }
     // A city raises rocket infantry only while a hostile wing is actually
     // observed, and then only inside the ordinary infantry quota, because they
     // supplement the launcher share and the turrets rather than replacing them.

@@ -101,6 +101,50 @@ that opposing houses in one game are independent. Mixed-host loop timings are di
 AI building-placement CPU and frame/FPS gates come from the mandatory performance tests, not these
 noisy numbers. No-formation remains the control; saboteur orders and human-order leases are untouched.
 
+## Rocket-infantry support (2026-11-04, unreleased candidate)
+
+`[Force Concentration] TrooperSupport` is an independent multiplayer-hashed
+Custom-game switch. Its initial default is **off pending the paired outcome gate**;
+`trooper-support-off` and `trooper-support-on` compare the same native build.
+Campaign recruitment and all combat-order authority are unchanged.
+
+The old ordinary Custom vanilla yard policy deliberately skipped both Barracks
+and WOR unless the bot played the Infantry strategy. City games had a narrower
+reactive WOR path: a currently observed hostile aircraft, legal troop content,
+the existing infantry value quota and protected working cash were all required.
+Atreides' ordinary house technology does not offer WOR at all; Harkonnen requires
+Windtrap/Radar, and the other enabled house trees can additionally need Barracks.
+These are engine build-list/prerequisite gates, not reasons to grant unavailable
+technology. The learned ten-slot vehicle/air mix excludes infantry; its separate
+difficulty quota remains the infantry budget, not ten additional independent
+shares or a new saved mix slot.
+
+With the switch on, one useful WOR lane precedes optional factory expansion
+after the existing economy, power, defence and mandatory-production choices.
+The first missing legal WOR prerequisite can supply that lane instead; pending
+prerequisites/WORs count, including Tornie-family Worfinery production. A house
+must have power, have no opening-worker shortfall, and already have a Heavy
+Factory or see a hostile aircraft. Normal construction placement, founded cost,
+economy reserves and city working/next-zone cash still apply.
+
+The target is the largest of a small army escort (one trooper per 2,000 credits
+of non-infantry army, at most six), remembered enemy armour (one per 600 credits,
+at most nine), and visible hostile aircraft (five per aircraft, at most eighteen).
+Every order must also fit the **aggregate existing infantry quota** and ordinary
+military budget. Singles/squads consume one/three troop places and their complete
+queue prices; several producers cannot each claim a fresh allowance. The WOR
+chooses an affordable enabled ordinary troop offer, preferring the lower price
+per deployed trooper and a full squad only when its complete cost/quota fits.
+When no further useful allowance remains it stops ordering; existing troops keep
+the ordinary army, base/harvester-defence and unitRole systems.
+
+No controller, saboteur order, human-order lease, save state or protocol field is
+added. The focused real-engine fixture reports its scope explicitly: normal yard
+selection/foundations/payment/queue completion and WOR troop production, followed
+by real SmallRocket combat, not a claim that a controlled fixture measures full
+game outcome priorities. Ordinary paired audit games supply that independent
+evidence.
+
 ## Storage capacity: income outgrows the first vault (2026-11-03)
 
 `80rock.dls` from Stefan's Air reproduces the reported loss without artificial income or

@@ -1728,6 +1728,7 @@ void QuantBot::traceBuildState(BuildPass& pass) {
 void QuantBot::planUnitMix(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    pass.trooperSupport = gameMode == GameMode::Custom && botConfig().force.trooperSupport;
     // Infantry retains its separate difficulty quota. Vehicle openings use
     // the current technology and actual production availability below.
     pass.infantryPercent = 10;
@@ -1833,8 +1834,9 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     // mobile anti-air share while a visible hostile wing is active.
     // The floor only exists while hostile aircraft are genuinely visible and
     // launchers are genuinely producible, so it cannot become a standing tax.
-    const int observedHostileAircraft = autonomousCustomArmy()
+    const int observedHostileAircraft = (autonomousCustomArmy() || pass.trooperSupport)
         ? visibleHostileAircraft() : 0;
+    pass.hostileAircraft = observedHostileAircraft;
     const bool launcherFloorAuthorised = observedHostileAircraft > 0 && available[2]
         && launcherProductionAvailable;
     const int launcherBpsBeforeFloor = pass.unitMix[2];
@@ -1893,6 +1895,20 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             pass.lightVehicleCount += pass.itemCount[item];
         }
     }
+    pass.trooperCount = pass.itemCount[Unit_Trooper] + 3 * pass.itemCount[Unit_Troopers];
+    int hostileArmourValue = 0;
+    if (pass.trooperSupport) {
+        for (const auto& [id, sighting] : enemySightings) {
+            const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+            if (!unit || !unit->isAGroundUnit() || unit->isInfantry() || !unit->canAttack()
+                || QuantBotBuildPolicy::isLightRaider(unit->getItemID())
+                || unit->getItemID() == Unit_Sandworm) continue;
+            hostileArmourValue = int(std::min<int64_t>(std::numeric_limits<int>::max(),
+                int64_t(hostileArmourValue) + sighting.value));
+        }
+        pass.trooperTarget = QuantBotBuildPolicy::trooperSupportTarget(
+            std::max(0, pass.militaryValue - pass.infantryValue), observedHostileAircraft, hostileArmourValue);
+    }
 
 
     const int productionCash = std::max(0, pass.money
@@ -1917,6 +1933,8 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             .set("launcher_production_available", launcherProductionAvailable)
             .set("launcher_bps_before_floor", launcherBpsBeforeFloor)
             .set("visible_hostile_aircraft", observedHostileAircraft)
+            .set("trooper_support", pass.trooperSupport).set("trooper_target", pass.trooperTarget)
+            .set("troopers_committed", pass.trooperCount).set("hostile_armour_value", hostileArmourValue)
             .set("performance_exponent_milli",1500).set("performance_confidence_bps", performanceConfidenceBps).set("funded_army_value",fundedArmyValue)
             .set("vehicle_plan_value",pass.vehiclePlanValue).set("queued_military_value",pass.queuedMilitaryValue).set("mix_inputs", [&]() {
                 AITelemetry::Record inputs;
@@ -1969,13 +1987,15 @@ bool QuantBot::cityInfantryItem(BuildPass& pass, Uint32 item) {
 
 // Check troop content and its existing prerequisites; the new WOR supplies itself.
 // Its real build list still decides which offers can be queued once it exists.
-bool QuantBot::cityTroopContentExists(BuildPass& pass) {
-    int houseID = getHouse()->getHouseID();
+bool QuantBot::troopContentExists(BuildPass& pass, const BuilderBase* builder) {
+    const int houseID = ModManager::instance().isTornieFamilyContentActive()
+        ? builder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     for (const Uint32 troop : {Unit_Trooper, Unit_Troopers}) {
         const auto& spec = data[troop][houseID];
         if (!spec.enabled || spec.price <= 0 || spec.techLevel > getHouse()->getTechLevel()
-            || spec.builder != Structure_WOR || !infantryQuotaAdmits(pass, spec.price)) continue;
+            || spec.builder != Structure_WOR || !infantryQuotaAdmits(pass, spec.price)
+            || (pass.trooperSupport && !trooperOrderAdmitted(pass, troop, spec.price))) continue;
         bool prerequisites = true;
         for (int item = Structure_FirstID; item <= Structure_LastID; ++item)
             if (item != Structure_WOR && spec.prerequisiteStructuresSet[item]
@@ -1983,6 +2003,41 @@ bool QuantBot::cityTroopContentExists(BuildPass& pass) {
         if (prerequisites) return true;
     }
     return false;
+}
+
+bool QuantBot::trooperOrderAdmitted(BuildPass& pass, Uint32 item, int value) {
+    const int troops = QuantBotBuildPolicy::rocketInfantrySize(item);
+    return troops > 0 && pass.trooperCount + troops <= pass.trooperTarget
+        && infantryQuotaAdmits(pass, value)
+        && int64_t(pass.militaryValue) + value <= pass.lightBudget;
+}
+
+Uint32 QuantBot::trooperInfrastructureItem(BuildPass& pass, const BuilderBase* yard) {
+    if (!pass.trooperSupport || pass.trooperCount >= pass.trooperTarget
+        || pass.itemCount[Structure_WOR] > 0
+        || (ModManager::instance().isTornieFamilyContentActive() && pass.itemCount[Structure_Worfinery] > 0)
+        || !getHouse()->hasPower() || openingWorkersNeeded(pass)
+        || (pass.itemCount[Structure_HeavyFactory] == 0 && pass.hostileAircraft == 0)
+        || getHouse()->isGroundUnitLimitReached() || !troopContentExists(pass, yard)) return NONE_ID;
+    const int technology = ModManager::instance().isTornieFamilyContentActive()
+        ? yard->getTechnologyHouseID() : getHouse()->getHouseID();
+    const auto& spec = currentGame->objectData.data[Structure_WOR][technology];
+    if (!spec.enabled || spec.builder != int(yard->getItemID())
+        || spec.techLevel > getHouse()->getTechLevel()) return NONE_ID;
+    Uint32 candidate = Structure_WOR;
+    for (int prerequisite = Structure_FirstID; prerequisite <= Structure_LastID; ++prerequisite)
+        if (spec.prerequisiteStructuresSet[prerequisite]
+            && getHouse()->getNumItems(prerequisite) == 0) {
+            if (pass.itemCount[prerequisite] > 0) return NONE_ID;
+            candidate = prerequisite;
+            break;
+        }
+    if (!campaignAvailableToBuild(yard, candidate)) return NONE_ID;
+    const int64_t reserve = pass.citySimEnabled ? pass.cityWorCashReserve
+        : std::max(pass.strategicReserveCost, pass.economyReserve);
+    if (int64_t(pass.money) < buildingCapitalCost(pass, candidate) + reserve
+        || !findPlaceLocation(candidate).isValid()) return NONE_ID;
+    return candidate;
 }
 
 void QuantBot::planCapitalForecast(BuildPass& pass) {
@@ -3170,7 +3225,10 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // City infantry answer an observed wing and claim the aggregate infantry
             // share, not a full share each. Without this a finished air raid would go
             // on reserving cash for troops nobody is going to order.
-            else if (cityInfantryItem(pass, item) && !pass.cityAntiAirInfantryDemand) reason="no_observed_air";
+            else if (pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item)
+                && !trooperOrderAdmitted(pass, item, value)) reason="trooper_support_satisfied";
+            else if (cityInfantryItem(pass, item) && !pass.cityAntiAirInfantryDemand
+                && !(pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item))) reason="no_observed_air";
             else if (cityInfantryItem(pass, item) && !infantryQuotaAdmits(pass, value)) reason="infantry_quota_satisfied";
             else if (item==Unit_Ornithopter && int64_t(pass.itemCount[item]+1)*value*10000
                 > int64_t(pass.militaryValue+value)*2000) reason="air_composition_cap";

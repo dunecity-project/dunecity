@@ -211,6 +211,10 @@ struct QuantBot::BuildPass {
     bool learningUnitMix{};
     UnitMixPolicy::Mix unitMix{};
     bool cityAntiAirInfantryDemand{};
+    bool trooperSupport{};
+    int trooperTarget{};
+    int trooperCount{};
+    int hostileAircraft{};
     FixPoint tankPercent{};
     FixPoint siegePercent{};
     FixPoint launcherPercent{};
