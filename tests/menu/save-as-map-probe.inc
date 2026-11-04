@@ -32,6 +32,7 @@ struct ObjectExpectation {
 struct Snapshot {
     int width = 0;
     int height = 0;
+    bool supportsRoads = false;
     Coord patch;
     std::vector<int> terrain;
     std::vector<ObjectExpectation> structures;
@@ -178,11 +179,12 @@ ObjectExpectation expect(const ObjectBase& object) {
 }
 
 Coord clearPatch() {
-    for(int y = 2; y + 8 < currentGameMap->getSizeY(); ++y) {
-        for(int x = 2; x + 14 < currentGameMap->getSizeX(); ++x) {
+    // Keep samples beyond existing buildings' automatic new-scenario road rings.
+    for(int y = 2; y + 10 < currentGameMap->getSizeY(); ++y) {
+        for(int x = 2; x + 16 < currentGameMap->getSizeX(); ++x) {
             bool clear = true;
-            for(int dy = 0; dy < 8 && clear; ++dy)
-                for(int dx = 0; dx < 14 && clear; ++dx) {
+            for(int dy = -2; dy < 10 && clear; ++dy)
+                for(int dx = -2; dx < 16 && clear; ++dx) {
                     const auto* tile = currentGameMap->getTile(x + dx, y + dy);
                     clear = !tile->hasAnObject() && !tile->hasCityZone();
                 }
@@ -199,6 +201,8 @@ Snapshot changeCurrent(Game& game) {
     result.height = currentGameMap->getSizeY();
     result.patch = clearPatch();
     House* owner = pLocalHouse;
+    result.supportsRoads = game.isCitySimEnabled()
+        && game.objectData.data[Structure_Road][House::factionForRuntimeHouse(owner->getHouseID())].enabled;
     StructureBase* removed = nullptr;
     for(auto* structure : structureList)
         if(structure->getOwner() == owner && structure->getItemID() == Structure_WindTrap) { removed = structure; break; }
@@ -215,11 +219,17 @@ Snapshot changeCurrent(Game& game) {
     const int terrains[] = {Terrain_Sand, Terrain_Rock, Terrain_Dunes, Terrain_Mountain,
         Terrain_Spice, Terrain_ThickSpice, Terrain_SpiceBloom, Terrain_SpecialBloom};
     for(int x = 0; x < 8; ++x) currentGameMap->getTile(result.patch.x + x, result.patch.y)->setType(terrains[x]);
-    // Independent concrete, independent road, and both on one tile must all survive.
-    currentGameMap->getTile(result.patch + Coord(0, 2))->setType(Terrain_Slab);
-    currentGameMap->getTile(result.patch + Coord(1, 2))->setRoad(true);
-    currentGameMap->getTile(result.patch + Coord(2, 2))->setType(Terrain_Slab);
-    currentGameMap->getTile(result.patch + Coord(2, 2))->setRoad(true);
+    // Concrete works in both modes. Roads are a real city-only item, not a vanilla flag.
+    for(int dx : {0, 2}) {
+        const Coord at = result.patch + Coord(dx, 2);
+        owner->placeStructure(NONE_ID, Structure_Slab1, at.x, at.y, true);
+        menuRequire(currentGameMap->getTile(at)->isConcrete(), "Could not place real export-test concrete");
+    }
+    if(result.supportsRoads) for(int dx : {1, 2}) {
+        const Coord at = result.patch + Coord(dx, 2);
+        owner->placeStructure(NONE_ID, Structure_Road, at.x, at.y, true);
+        menuRequire(currentGameMap->getTile(at)->isRoad(), "Could not place real export-test roads");
+    }
 
     const Coord windAt = result.patch + Coord(0, 4), wallAt = result.patch + Coord(4, 4);
     auto* wind = owner->placeStructure(NONE_ID, Structure_WindTrap, windAt.x, windAt.y, true);
@@ -453,7 +463,7 @@ void requireEditorSnapshot(MapEditor& editor, const Snapshot& snapshot) {
             concrete += structure.itemID == Structure_Slab1;
             roads += structure.itemID == Structure_Road;
         }
-        menuRequire(concrete == (dx != 1) && roads == (dx != 0),
+        menuRequire(concrete == (dx != 1) && roads == (snapshot.supportsRoads && dx != 0),
                     "Editor lost independent concrete/road layers on the same tile");
     }
 }
@@ -497,7 +507,7 @@ void requireReloadedSnapshot(Game& game, const Snapshot& snapshot) {
                     "Starting the current map did not restore each house's complete current credit balance");
     for(int dx = 0; dx < 3; ++dx) {
         const auto* tile = currentGameMap->getTile(snapshot.patch + Coord(dx, 2));
-        menuRequire(tile->isConcrete() == (dx != 1) && tile->isRoad() == (dx != 0),
+        menuRequire(tile->isConcrete() == (dx != 1) && tile->isRoad() == (snapshot.supportsRoads && dx != 0),
                     "Starting the current map lost the concrete/road overlay combination");
     }
 }
@@ -683,6 +693,8 @@ void verifySaveAsMap() {
         Match match(init);
         match.advance(32);
         const auto snapshot = changeCurrent(*match.game);
+        menuRequire(snapshot.supportsRoads == civWars,
+                    "Road-layer coverage requires enabled Civilization Wars roads and real vanilla rules");
         menuRequire(MatchMapExport::available(*match.game) && !MatchMapExport::defaultName(*match.game).empty(),
                     "Generated custom match has no map-export capability or default name");
         const auto start = MatchMapExport::mapData(*match.game, Moment::Start);
