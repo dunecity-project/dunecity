@@ -132,6 +132,10 @@ void runControlsProbe(Game& game) {
         e.wheel.preciseY=precise;
 #endif
         SDL_PushEvent(&e); game.doInput();
+        if(precise != 0) SDL_Log("MOUSE_WHEEL_TRACE: precise=%f zoom=%d remainder=%f smooth=%d now=%u event=%u step=%u pointer=%d,%d inside=%d",
+            precise, game.zoomStep, screenborder->wheelRemainder, screenborder->wheelSmooth,
+            SDL_GetTicks(), screenborder->wheelLastEvent, screenborder->wheelLastStep,
+            drawnMouseX, drawnMouseY, screenborder->isScreenCoordInsideMap(drawnMouseX,drawnMouseY));
     };
     auto middle = [&](Coord p, bool down) {
         SDL_Event e{}; e.type=down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
