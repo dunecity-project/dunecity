@@ -171,6 +171,7 @@ target_sources(dunecity
         INIMap/INIMapEditorLoader.cpp
         INIMap/INIMapPreviewCreator.cpp
         INIMap/CampaignMapLibrary.cpp
+        INIMap/MatchMapExport.cpp
 
         # FileClasses
         FileClasses/Animation.cpp
@@ -225,6 +226,7 @@ target_sources(dunecity
         GUI/dune/DuneStyle.cpp
         GUI/dune/GameOptionsWindow.cpp
         GUI/dune/LoadSaveWindow.cpp
+        GUI/dune/SaveMapWindow.cpp
         GUI/dune/InGameMenu.cpp
         GUI/dune/InGameSettingsMenu.cpp
         GUI/dune/NewsTicker.cpp

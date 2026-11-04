@@ -122,6 +122,37 @@ You can play a **pure city-builder** skirmish on a big rock map, or a
 **hybrid** where you defend the colony while it grows. The simulation
 runs the same way in both modes.
 
+## Save a favourite map
+
+In a Random Skirmish, Civilization Wars or Custom Game, open the game menu
+and choose **Save as Map**. This also works while spectating; campaign
+missions do not offer it.
+
+- **From the start** exports the original map embedded in the match, unchanged:
+  its terrain, spice, starting buildings and units, players and generator settings.
+  Your chosen name is used for the file and map browser; the original map's
+  internal name is retained.
+- **From right now** makes a new starting map from the current terrain, spice
+  types, concrete/roads, surviving buildings and units, houses, teams and credits.
+  Health is rounded to the map format's 1/256 steps. Unit facing and supported
+  attack modes, wind-trap upgrades and map-supported city-zone density are kept.
+  Units in transports, contained in buildings or off-map, and aircraft crossing
+  buildings, are placed on nearby legal tiles that the map loader can represent.
+
+Enter a map name and press **Save**. Replacing an existing file requires
+confirmation. Maps appear under **Custom Game → MP User Maps** (more than
+one player) or **SP User Maps** (one player), and in the map editor's user maps.
+The map keeps its gameplay mod dependency, including the Civilization Wars marker.
+
+This is a **new map**, not a resumable save: exact spice amounts, transported
+cargo, zone residents and civic overlays, completed/active research, construction
+and production queues, targets and paths, fog of war, statistics and scheduled
+reinforcements are not copied. Current credits become starting credits.
+Native sandworms are retained; native crime units are omitted because maps cannot
+express their special ownership. Normal new-map initialization still applies,
+including building road rings and a first refinery's harvester when needed.
+Use **Save Game** when you want to continue the complete match.
+
 ## Mouse camera controls
 
 - Over the map, **wheel up** zooms in and **wheel down** zooms out, one step

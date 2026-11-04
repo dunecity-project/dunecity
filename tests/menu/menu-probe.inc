@@ -629,6 +629,8 @@ void verify() {
 
 }
 
+#include "save-as-map-probe.inc"
+
 // Captured MBA metrics, substituted only in the diagnostic OptionsMenu object.
 extern "C" int SDLCALL retinaProbeDisplayBounds(int, SDL_Rect* bounds) {
     *bounds = {0,0,1440,900};
@@ -722,6 +724,7 @@ int runMenuProbe() {
     }
     verifySavedUserMapLists();
     verifyCampaignMapLibrary();
+    verifySaveAsMap();
     settings.network.relayUseDevelopmentEndpoint = true;
     // Disable online discovery in this fixture; admission and transport have separate tests.
     settings.network.directDevelopmentEndpoint = "";

@@ -1,3 +1,32 @@
+## 2026-11-04 — Save a running match as a custom map (OMP SaveAsMap, unreleased)
+
+- Game menu **Save as Map** opens a named export dialog with **From the start**
+  and **From right now**. Custom/generated matches and spectators can use it;
+  campaign/co-op campaign missions cannot. Offline spectator menus no longer
+  dereference a missing network manager; host spectators have separate join and
+  request-to-play controls. Pause/menu/error dialogs stay between desert crests.
+- Start writes the exact embedded original INI, without renaming its BASIC data.
+  Current writes live terrain/spice types, concrete and independent roads, houses,
+  teams, complete credit balances, surviving structures/units, health in 1/256
+  steps, facing/attack modes, supported zone density and windtrap upgrades.
+  The Civ Wars marker is kept without replaying original startup armies/cities.
+- Exported maps go to SP/MP user maps by player count. Portable names, explicit
+  overwrite confirmation, staged binary writes and existing Workshop dependencies
+  are reused; the chosen filename supplies the browser label without changing
+  original map bytes. No simulation, protocol or savegame format change.
+- This is a new scenario, not a savegame: research, queues, paths/targets, cargo,
+  exact spice/zone populations, fog, statistics and reinforcements reset.
+  Contained/off-map units and aircraft over buildings move to legal map tiles.
+  Native worms stay native; native crime units are omitted. Normal fresh-map
+  road-ring and first-refinery harvester rules still apply. HOWTOPLAY and the
+  in-game help explain these format boundaries.
+- The menu fixture now drives both real generators, advances real game cycles,
+  saves both moments through the dialog, compares Start bytes, checks live world
+  mutations, loads all four files in the editor/Custom Game, starts each, and
+  exercises safe names, confirmed/cancelled overwrite, spectator/campaign policy
+  and 640x480 control/crest geometry. It emits SAVE_AS_MAP_OK, not an additional
+  MENU_PROBE_PASS line.
+
 ## 2026-11-04 — Fixed research prices and level-minute timing (OMP ResearchPace, unreleased)
 
 - Stefan rejected map scaling after `researchtooexpensive.dls` (9882, Normal,
