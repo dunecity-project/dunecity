@@ -170,6 +170,9 @@ void runSharedSpendingProbe(Game& game) {
             // its six-yard target, while its dedicated yard still zones.
             const auto savedPlotConfig=bot->configOverride;
             auto plotConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
+            // This compares generic factory/growth allocation, not the separate
+            // proactive WOR purchase covered by the full-build trooper fixture.
+            plotConfig->force.trooperSupport=false;
             bot->configOverride=plotConfig;
             try {
                 for(bool prerequisites:{true,false}) {
