@@ -2,6 +2,7 @@
 #include <dunecity/CitySimulation.h>
 #include <dunecity/CityStructurePopulation.h>
 #include <GUI/ObjectInterfaces/ZoneStructureInterface.h>
+#include <GUI/dune/GameOptionsWindow.h>
 #include <structures/ZoneStructure.h>
 #include <map>
 #include <tuple>
@@ -147,6 +148,31 @@ void runZonePowerProbe(Game& game) {
         status(zone,true);
     }
     overlay(true);
+    const auto activeMod=ModManager::instance().getActiveModName();
+    for (const char* mod:{"dunecity","Tornie"}) {
+        require(ModManager::instance().setActiveMod(mod),"Cannot activate rule-window layout fixture");
+        GameOptionsWindow window(game.gameInitSettings.gameOptions);
+        require(window.getSize().x<=640 && window.getSize().y<=480,
+            "Game Rules window exceeds the minimum viewport");
+        require(window.vbox.getMinimumSize().x<=window.getSize().x
+            && window.vbox.getMinimumSize().y<=window.getSize().y,
+            "Game Rules content does not fit its window");
+        auto& checkbox=window.unpoweredZonesVacateCheckbox;
+        require(checkbox.isVisible() && checkbox.isChecked()
+            && checkbox.getSize().x>=checkbox.getMinimumSize().x
+            && checkbox.getSize().y>=checkbox.getMinimumSize().y,
+            "Vacancy rule checkbox is hidden, clipped or lost its default");
+        window.draw(Point(0,0));
+        checkbox.setChecked(false); window.onOK();
+        auto chosen=window.getGameOptions();
+        GameOptionsWindow reopened(chosen);
+        require(!reopened.unpoweredZonesVacateCheckbox.isChecked(),
+            "Vacancy rule selection did not survive Game Rules reopening");
+        SDL_Log("ZONE_POWER_RULES_UI_PASS: mod=%s viewport=%dx%d window=%dx%d minimum=%dx%d",
+            mod,getRendererWidth(),getRendererHeight(),window.getSize().x,window.getSize().y,
+            window.vbox.getMinimumSize().x,window.vbox.getMinimumSize().y);
+    }
+    require(ModManager::instance().setActiveMod(activeMod),"Cannot restore rule-window fixture content");
     SDL_Log("ZONE_POWER_PASS: legacy_floor=1 vacancy_empty_day=%d powered_trajectory_identical=1 zero_grid_stays_empty=1 regrowth=1 ui=1",emptiedDay);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=zone_power outcome=passed");
 }

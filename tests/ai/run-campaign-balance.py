@@ -729,7 +729,7 @@ if args.ffa_screenshot:
 if args.real_video and not args.viewport:
     args.viewport = '1440x900'
 if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe
-        or args.achievements_probe or args.real_video or args.ffa_screenshot):
+        or args.achievements_probe or args.zone_power_probe or args.real_video or args.ffa_screenshot):
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480
