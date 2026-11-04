@@ -330,6 +330,9 @@ struct QuantBotConfig {
     /// increases after a longer review instead of leaving them in the deadband.
     /// Default on; off preserves the previous smoothing policy. Hashed.
     bool policeFundingRecovery;
+    /// [General Behavior] DeviatedHarvesterEarlyReturn: earn captured cargo at
+    /// half capacity or T-10s, without overriding human/role claims. Default on; hashed.
+    bool deviatedHarvesterEarlyReturn;
     /// [Civ Wars] Strategy: experimental research-aware economy and generated-map logistics.
     /// Defaults off; opt-in requires two occupied opposing initial houses and Research Lab.
     /// Lane assumptions also require the map marker. Hashed and inert outside those rules.

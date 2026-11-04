@@ -371,6 +371,7 @@ QuantBotConfig::QuantBotConfig() {
     minMoneyForProduction = 500;                // Minimum money to produce units
     strategicSiteGuards = true;
     policeFundingRecovery = true;
+    deviatedHarvesterEarlyReturn = true;
     civWarsStrategy = false;                   // Experimental: mirrors did not meet the finishing gate.
     // Attack waves hunt without a formation: in the formation research (docs/formations.md,
     // "Formation research") plain engine-Hunt waves beat every formation shape.
@@ -633,6 +634,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
         iniFile.setBoolValue("General Behavior", "StrategicSiteGuards", strategicSiteGuards);
         iniFile.setBoolValue("General Behavior", "PoliceFundingRecovery", policeFundingRecovery);
+        iniFile.setBoolValue("General Behavior", "DeviatedHarvesterEarlyReturn", deviatedHarvesterEarlyReturn);
         iniFile.setBoolValue("Civ Wars", "Strategy", civWarsStrategy);
 
         // === FORCE CONCENTRATION ===
@@ -766,6 +768,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     minMoneyForProduction = iniFile.getIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
     strategicSiteGuards = iniFile.getBoolValue("General Behavior", "StrategicSiteGuards", strategicSiteGuards);
     policeFundingRecovery = iniFile.getBoolValue("General Behavior", "PoliceFundingRecovery", policeFundingRecovery);
+    deviatedHarvesterEarlyReturn = iniFile.getBoolValue("General Behavior", "DeviatedHarvesterEarlyReturn", deviatedHarvesterEarlyReturn);
     {
         const std::string shape = iniFile.getStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
         const int parsed = parseWaveFormation(shape, INT_MIN);
@@ -1112,6 +1115,7 @@ void QuantBotConfig::logSettings() const {
     SDL_Log("WaveFormation: %s", waveFormationName(waveFormation));
     SDL_Log("StrategicSiteGuards: %d", int(strategicSiteGuards));
     SDL_Log("PoliceFundingRecovery: %d", int(policeFundingRecovery));
+    SDL_Log("DeviatedHarvesterEarlyReturn: %d", int(deviatedHarvesterEarlyReturn));
     SDL_Log("%s", "");
 
     SDL_Log("=== ARMY RECOVERY (Custom Hard/Brutal, provisional) ===");
@@ -1249,6 +1253,7 @@ std::string QuantBotConfig::getConfigHash() const {
     };
     addNamed("strategicSiteGuards", strategicSiteGuards);
     addNamed("policeFundingRecovery", policeFundingRecovery);
+    addNamed("deviatedHarvesterEarlyReturn", deviatedHarvesterEarlyReturn);
     configStr += "|REC";
     addNamed("enabled", recovery.enabled);
     addNamed("windowMs", recovery.attritionWindowMs);

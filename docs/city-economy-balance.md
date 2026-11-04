@@ -97,6 +97,30 @@ shared with fixed-price research, and can be set in Game Rules, defaults or mod 
 Frozen 9882/MOD17 carries no scenery byte; its retired research-area field is consumed
 and ignored rather than changing its layout in place.
 
+### Unpowered zones (match rule `Unpowered Zones Vacate`, default on; MOD18, protocol 112)
+
+R/C/I lots use their owner's produced/required power, with positive generation required even
+when empty lots draw zero. Allied grids and the Rocket-Turrets Need Power setting do not
+power city lots. A shortage prevents growth and removes one population step each city day:
+C/I lose one density level; residential apartments lose eight residents, then the last
+eight individual houses leave one at a time. A level-1 residential lot empties in nine days;
+a full 40-resident lot takes twelve. Empty lots stay placed with zero dynamic power draw,
+zero residents/jobs and density zero. Non-zone Dune buildings retain their level-one floor.
+Sufficient power restores the ordinary growth gates; powered growth is unchanged.
+
+The city day is 78 cycles (1.248 simulated seconds) with a classic year or 156 cycles
+(2.496 seconds) with Slow City Year. No new random rolls, timers or saved per-lot state
+are needed. The zone panel and industrial animation use the same power predicate as growth.
+
+Select **Unpowered Zones Vacate** in the pregame **Game Rules** panel; defaults and mod
+`GameOptions.ini` use the same key. Earlier saves retain the old level-one floor.
+The unfrozen MOD18 final city-rules byte uses bit 0 for Mountain Scenery and bit 1 for this
+rule: MOD18 blocks written earlier with a plain 0/1 scenery bool still load vacancy off,
+and frozen MOD17 is unchanged. The same settings codec carries both bits over protocol 112.
+`city_zone_power` exercises the real engine and zone panel; `[zonepower]` covers grid edges
+and the settings fixtures cover hashing, INI and old/new wire/save round trips.
+
+
 
 ### Starport population (match rule `Starport Population`, default on; MOD16, protocol 111)
 

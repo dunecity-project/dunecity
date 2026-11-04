@@ -1,3 +1,43 @@
+## 2026-11-04 — Unpowered zones can become empty lots (OMP ZeroPowerZones, unreleased)
+
+- Power-starved decline explicitly stopped at level 1, and its fixed score -500
+  could not pass the separate level-1 vacancy threshold -1500. This was a real
+  simulation floor, not allied power or the rocket-turret power rule.
+- Hashed/default-on **Unpowered Zones Vacate** removes one population step per
+  city day down to zero for R/C/I lots; non-zone buildings keep their L1 floor.
+  Residential apartments lose eight residents, then houses leave one per day.
+  No generator means no 0/0 bootstrap/regrowth. Restored power resumes normal
+  growth. Zone status and industrial animation share the growth power test.
+- Earlier saves keep the rule off. MOD18's existing scenery byte is now city-rule
+  bits (bit0 scenery, bit1 vacancy), preserving both frozen MOD17 and earlier
+  MOD18 blocks without consuming the next record. Save9883/protocol112 unchanged.
+  Pregame Game Rules has the checkbox; there is no runtime rules editor.
+- Added grid-edge unit coverage, MOD18/legacy codec and menu/INI checks, real-engine
+  `city_zone_power` and per-lot `--zone-power-continuation saved|off|on` diagnostics.
+  `--zone-power-save` writes an explicit opted-in copy without modifying its source.
+
+## 2026-11-04 — QuantBot cashes in captured harvesters (OMP DeviatedHarvest, unreleased)
+
+- `[General Behavior] DeviatedHarvesterEarlyReturn` is a default-on, multiplayer-
+  hashed QuantBot switch. Enemy-origin captured harvesters work for their
+  temporary owner and return to its nearest refinery at half their own capacity,
+  or with any cargo and at most ten seconds of deviation remaining.
+- Reads the actual damage-shortenable timer in simulation cycles before the
+  safety manager's two-second cache. A read-only UnitBase accessor adds no saved
+  state or engine behaviour; no save/protocol bump. Rule OFF, ordinary workers
+  and a deviator without a refinery retain the previous policy.
+- Human-order leases and existing unitRole claims take priority. This is AI
+  policy, not an automatic return imposed on human-controlled harvesters.
+  The existing engine releases return bookings on reversion; a refinery already
+  unloading continues to earn its own physical delivery, then deploys the worker.
+- Deviator targeting already accepts enemy harvesters through the shared gas
+  eligibility policy. Ordinary target acquisition uses distance; harvesters are
+  not specially excluded or deprioritized. No targeting/valuation change added.
+- The harvester-safety engine fixture exercises an actual QuantBot Deviator
+  capture, half-load and T-10s returns/delivery, the OFF/ordinary/empty/no-refinery
+  cases, human/role ownership and reversion both on the road and inside a refinery.
+  HOWTOPLAY and the in-game help explain the AI-only behaviour.
+
 ## 2026-11-04 — Save a running match as a custom map (OMP SaveAsMap, unreleased)
 
 - Game menu **Save as Map** opens a named export dialog with **From the start**

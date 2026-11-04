@@ -34,6 +34,13 @@ is designed for it.
 City tools only work on **rock** tiles. Sand is for spice harvesting and
 combat as usual.
 
+QuantBot puts enemy harvesters captured by its Deviators to work for itself.
+With a refinery available, a borrowed worker returns to the nearest own
+refinery at half capacity, or with ten seconds of deviation remaining if it
+has any spice, whichever comes first. Human orders take priority; harvesters
+controlled by a human keep their usual behaviour. The refinery doing the
+unloading receives the spice income even if deviation expires inside it.
+
 ## 3. Lay down the backbone
 
 Before zoning, build the core infrastructure:

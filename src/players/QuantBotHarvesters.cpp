@@ -20,6 +20,46 @@
 #include "QuantBotInternal.h"
 
 bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache* spiceCache) {
+    // Captured workers have only a temporary earning window. Do this before the
+    // safety cache's two-second throttle, using the real (damage-shortenable)
+    // deviation clock rather than the capture episode's age. No new saved state.
+    if (botConfig().deviatedHarvesterEarlyReturn && harvester->getOwner()==getHouse()
+        && harvester->wasDeviated() && harvester->getDeviationEpisode().credits()
+        && harvester->isActive()) {
+        if (unitRole(harvester, {UnitRole::Human, UnitRole::Repair, UnitRole::Defence,
+                UnitRole::Wave, UnitRole::Escort, UnitRole::ColonyGuard}) != UnitRole::Free)
+            return true;
+        const StructureBase* refinery = nullptr;
+        FixPoint nearest = FixPt32_MAX;
+        for (const auto* structure : getStructureList()) {
+            if (structure->getOwner()!=getHouse() || structure->getHealth()<=0
+                || !structure->acceptsHarvesterDropoff()) continue;
+            const FixPoint distance = blockDistance(harvester->getLocation(),
+                structure->getClosestPoint(harvester->getLocation()));
+            if (distance < nearest) { nearest=distance; refinery=structure; }
+        }
+        // Without somewhere to cash in, retain the existing worker policy.
+        if (refinery) {
+            const FixPoint cargo = harvester->getAmountOfSpice();
+            const auto* target = dynamic_cast<const StructureBase*>(harvester->getTarget());
+            if (harvester->isReturning() && cargo>0 && target
+                && target->getOwner()==getHouse() && target->getHealth()>0
+                && target->acceptsHarvesterDropoff()) return true;
+            const bool due = cargo>0 && (cargo>=harvester->getSpiceCapacity()/2
+                || harvester->getDeviationTimeRemaining()<=MILLI2CYCLES(10000));
+            if (due) {
+                doMove2Object(harvester,refinery);
+                traceDecision("captured_harvester_return",AITelemetry::Record()
+                    .set("object",harvester->getObjectID()).set("refinery",refinery->getObjectID())
+                    .set("cargo",cargo.lround()).set("remaining_cycles",harvester->getDeviationTimeRemaining()));
+                return true;
+            }
+            // Deviating sets GUARD and clears the former owner's job. Put the
+            // borrowed worker to work; ordinary safety still chooses its field.
+            if (harvester->getAttackMode()==GUARD && !harvester->wasForced()
+                && !harvester->hasATarget()) doSetAttackMode(harvester,HARVEST);
+        }
+    }
     const Uint32 now = getGameCycleCount();
     auto& state = harvesterSafety[harvester->getObjectID()];
     const bool newHarvester = state.lastLocation.isInvalid();

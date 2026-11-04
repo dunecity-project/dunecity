@@ -156,6 +156,23 @@ TEST_CASE("Strategic site guards distinguish multiplayer configurations", "[ai][
     REQUIRE(guarded.getConfigHash() != legacy.getConfigHash());
 }
 
+TEST_CASE("Captured harvester return defaults on and round-trips both hashed states",
+          "[ai][config][harvester][deviation]") {
+    QuantBotConfig enabled, disabled;
+    REQUIRE(enabled.deviatedHarvesterEarlyReturn);
+    disabled.deviatedHarvesterEarlyReturn = false;
+    REQUIRE(enabled.getConfigHash() != disabled.getConfigHash());
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-deviated-harvester-test.ini";
+    QuantBotConfig restored;
+    for (const auto* expected : {&disabled, &enabled}) {
+        REQUIRE(expected->save(path.string()));
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.deviatedHarvesterEarlyReturn == expected->deviatedHarvesterEarlyReturn);
+        REQUIRE(restored.getConfigHash() == expected->getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Civ Wars strategy defaults off, round-trips both states and is multiplayer hashed", "[ai][config][civ-wars]") {
     QuantBotConfig enabled, disabled;
     REQUIRE_FALSE(disabled.civWarsStrategy);
