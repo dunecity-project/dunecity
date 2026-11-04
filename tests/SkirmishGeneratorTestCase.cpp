@@ -484,7 +484,7 @@ TEST_CASE("Random skirmish: last-used parameters survive the configuration file"
     p.credits = 7500; p.enemiesAllied = false; p.house = HOUSE_ORDOS;
     p.allySide = Side{"qBotHard", BaseSize::Large, 4, 3};
     p.enemySide = Side{"AIPlayerEasy", BaseSize::Outpost, kArmyRandom, kCityRandom};
-    INIFile config(false, "");
+    INIFile config(false, std::string());
     p.save(config);
     Params loaded;
     loaded.load(config);
@@ -499,7 +499,7 @@ TEST_CASE("Random skirmish: last-used parameters survive the configuration file"
     REQUIRE(loaded.enemySide.army == kArmyRandom); REQUIRE(loaded.enemySide.city == kCityRandom);
 
     // Corrupt values clamp instead of escaping into the generator.
-    INIFile bad(false, "");
+    INIFile bad(false, std::string());
     bad.setIntValue("Random Skirmish", "Map Size", 100);
     bad.setIntValue("Random Skirmish", "Tech Level", 42);
     bad.setIntValue("Random Skirmish", "Rock", 17);
@@ -1132,7 +1132,7 @@ TEST_CASE("Random skirmish: start catalogue is what every house can field", "[sk
 }
 
 TEST_CASE("Random skirmish: the multiplayer screen keeps its own choices", "[skirmish][generator][multiplayer]") {
-    INIFile config(false, "");
+    INIFile config(false, std::string());
     Params single = params(128, 1, 2, Mode::DuneCity, 7, 99);
     single.mod = "dunecity"; single.symmetric = false;
     single.save(config);
