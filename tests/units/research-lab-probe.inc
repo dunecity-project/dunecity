@@ -156,7 +156,7 @@ int runResearchLabProbe() {
                 originalState.writeSint32(house->getTechResearchTarget());
                 originalState.writeSint32(house->getTechResearchRemaining());
                 originalState.writeUint32(house->getTechResearchLabID());
-                const std::string encoded(reinterpret_cast<const char*>(originalState.getData()), originalState.getSize());
+                const std::string encoded(originalState.getData(), originalState.getDataLength());
                 researchRequire(bytes.find(encoded) != std::string::npos, "Load changed the serialized paid research timer");
             }
         }
