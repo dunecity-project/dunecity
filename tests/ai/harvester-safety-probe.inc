@@ -87,9 +87,14 @@ void runHarvesterSafetyProbe(Game& game) {
         currentGameMap->getTile(field)->setSpice(10000);
         borrowed->deploy(field);deviator->deploy(origin+Coord(5,3));
         borrowed->doSetAttackMode(STOP);borrowed->setVisible(VIS_ALL,true);
+        SDL_Log("DEVIATED_HARVEST_STOP_SETUP: worker=%u item=%u mode=%d STOP=%d ptr=%p source=%u ptr=%p",
+            borrowed->getObjectID(),borrowed->getItemID(),int(borrowed->getAttackMode()),int(STOP),
+            static_cast<void*>(borrowed),deviator->getObjectID(),static_cast<void*>(deviator));
         require(deviator->canAttack(borrowed),"Deviator targeting excludes harvesters");
         unitList.clear();unitList.push_back(borrowed);unitList.push_back(deviator);
+        SDL_Log("DEVIATED_HARVEST_STOP_LIST: mode=%d",int(borrowed->getAttackMode()));
         bot->doAttackObject(deviator,borrowed,true);
+        SDL_Log("DEVIATED_HARVEST_STOP_ORDER: mode=%d",int(borrowed->getAttackMode()));
         require(deviator->getTarget()==borrowed && deviator->wasForced(),
             "QuantBot Deviator order did not retain the fixture target");
         require(borrowed->getAttackMode()==STOP,"Capture target was not stopped");
