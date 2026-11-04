@@ -17,6 +17,24 @@
   runbook and the shared `dunecity-release` skill document all channels.
 - Added version identity regression coverage and real main-menu probe assertions
   that the rendered label and startup log agree. No release or publication.
+- Implementation commit: **`3b33573b`**. Shared `build-int` built successfully on
+  **mini**. A release configure with `-DDUNECITY_RELEASE_BUILD=ON` generated
+  `DUNECITY_DISPLAY_VERSION "1.0.864"`; restored OFF afterward, generating
+  `"1.0.864dev"`. Bundle short/build versions remain `1.0.864`, while its
+  `CFBundleGetInfoString` is `Dune City 1.0.864dev` (Finder UI not visually tested).
+- Cluster acceptance job **`20261104T170258-dev-version-da8d2a`**, source
+  `3b33573ba3ea`: **3/3 PASS**, all on **mini**:
+  `dunelegacy_tests` **1.9s**, `desktop_updater_security` **0.4s**,
+  `menu_navigation_probe` **482.1s** (640x480, 854x480, 1280x720). Total submission
+  wall time **9m32s**. Other hosts did not execute tests: observed Pro PAUSE file
+  and macOS daemon load, Air running DuneCity, PC only **1.79GB** available.
+- Viewed the **640x480** home screenshot: visible **`App v1.0.864dev`**, unclipped.
+  Its run log records `Starting DuneCity 1.0.864dev on Mac OS X` and
+  `MENU_VERSION_PASS: App v1.0.864dev`. Retained screenshot and acceptance JSON:
+  `/Users/stefan/Documents/projects/outputs/dev-version-20261104/`.
+  CTest logs: `~/.local/state/dunecity-queue/ctest/20261104T170258-dev-version-da8d2a/`.
+- Untested runtimes: Windows, Linux, browser, iOS/TestFlight and Android device.
+  No cross-platform runtime acceptance, installation or publication is claimed.
 
 ## 2026-11-04 — Release-suite probe compatibility repairs (OMP ReleaseTriage, unreleased)
 
