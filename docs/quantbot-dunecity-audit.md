@@ -128,6 +128,9 @@ not veto the infantry lane. Pending factories do not substitute for the Heavy
 Factory. The house needs positive forecast income, no opening-worker shortfall,
 a legal site and enough actual power for all queued consumers plus the new
 building. A priced future generator is not working generation.
+With TrooperSupport, that first legal, profitable Starport can claim protected
+savings even before its full cost fits the short forecast. This changes neither
+its population/build-list gates nor the actual cash required to queue it.
 
 The first missing legal WOR prerequisite can supply the lane instead; existing
 or pending WORs prevent duplicates. Positive income can select protected savings

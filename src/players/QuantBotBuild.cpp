@@ -2938,7 +2938,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 && !cityBootstrapNeeded(pass) && pass.cityZonesIncludingQueued>=4
                 && pass.itemCount[Structure_StarPort]==0 && pass.starportMarketAvailable
                 && pass.forecastTax>pass.forecastUpkeep
-                && pass.forecastFunding>=buildingCapitalCost(pass,Structure_StarPort)
+                && (pass.trooperSupport ? pass.forecastNetIncome>0
+                    : pass.forecastFunding>=buildingCapitalCost(pass,Structure_StarPort))
                 && campaignAvailableToBuild(builder,Structure_StarPort)) {
                 CapitalCandidate supplier;
                 supplier.builder=builder->getObjectID();supplier.item=Structure_StarPort;
