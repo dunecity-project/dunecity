@@ -337,6 +337,37 @@ learning is unchanged:
 - MacBook Pro and Air matched the mini, including QuadMass (`par2-*`).
 - Windows matched apart from the known ±0.1 s `end_s` (`par-win`).
 
+**Current strategy-fixture calibration (2026-11-05, unreleased).** The production
+comparison uses equal observed simulation time when either game conquers early;
+the Learned reference is replayed to that exact endpoint, not extended after
+victory. All primary parity, save/load, production, learning, Air and Infantry
+assertions remain. Other mixes retain their original three-seed positive mean.
+TrikeSwarm uses the complete twelve-seed corpus predeclared in
+`unit-route-comparison.md`: `486409243,11,22,33,44,55,66,77,88,99,111,122`.
+The nine additional seeds run the identical TankMass/TrikeSwarm game and Learned
+reference only. No seed is dropped; the existing positive-margin threshold and
+300-second CTest deadline are unchanged.
+
+Frozen same-native switch ablations isolate why the old triple moved in the
+combined candidate (`63956ef7`; Vanilla, where TrooperSupport is inactive):
+
+| Control | TrikeSwarm margins, primary / 11 / 22 (bps) | Mean (bps) |
+|---|---|---:|
+| Accepted defaults | +197 / +127 / −383 | −19.67 |
+| Only launcher spacing OFF | +72 / +241 / +276 | +196.33 |
+| Only early deviated-harvester return OFF | +197 / +127 / −383 | −19.67 |
+| Only funded classic production OFF | +197 / +127 / −383 | −19.67 |
+
+Thus the accepted launcher-spacing change, conditional on the other accepted
+defaults, changes this particular triple; neither of the other ablations does.
+The full predeclared TrikeSwarm mean is +379 bps. All ablations used native SHA256
+`ad9f8e9069af70c433ccabe4eadebef64ca31dca7e18ed0e8df185ec62e86f9e`,
+recorded effective config hashes, and took 34.4–34.8 seconds per three-seed
+section-3 measurement on the mini. Inputs, native logs and summaries are retained
+under `outputs/quant-troopers-20261104/strategy-ablate-{kite,deviated,funded}/`;
+the reproducible frozen driver is beside them. These are causal diagnostic
+measurements, not substitutes for the complete CTest or its platform time limit.
+
 ### 6.3 Experiments
 
 All of these are CY starts on the six bundled maps, Hard, all three house pairs, both sides, against BASE.
