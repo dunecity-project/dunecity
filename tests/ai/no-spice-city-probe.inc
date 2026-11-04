@@ -583,7 +583,7 @@ void runNoSpiceCityProbe(Game& game) {
         std::vector<TileState> terrain;
         for(int y=0;y<currentGameMap->getSizeY();++y)for(int x=0;x<currentGameMap->getSizeX();++x) {
             auto* tile=currentGameMap->getTile(x,y);
-            if(!tile->isRock() || tile->isMountain() || tile->hasAGroundObject())continue;
+            if(!tile->isRock() || tile->isMountain() || tile->hasAStructure())continue;
             terrain.push_back({tile,tile->getType(),tile->getOwner(),tile->isRoad()});
             bool future=false;
             for(const auto& plot:futurePlots) {
@@ -629,6 +629,9 @@ void runNoSpiceCityProbe(Game& game) {
                 require(bot->findPlaceLocation(Structure_ZoneIndustrial).isValid(),
                     "The unused future plot still withheld all demanded city growth");
             }
+            // Growth legality was checked with live demand above. Isolate the
+            // prerequisite's queue from the independent growth/capital ranking.
+            state.comValve=state.indValve=0;
             const Pass unlocked=decide(3000,10000);
             require(ordered(unlocked,Structure_LightFactory),"The unblocked prerequisite was not ordered");
             for(auto* structure:structureList)
