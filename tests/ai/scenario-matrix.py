@@ -36,6 +36,8 @@ soon as its rows are written. Scores are tests/ai/match_score.py placement score
 import argparse
 import configparser
 import csv
+import json
+import os
 import re
 import shutil
 import statistics
