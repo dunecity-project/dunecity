@@ -321,6 +321,19 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     chooseYardCoreEconomy(pass, turn, yardTurn);
     chooseYardCityOpening(pass, turn, yardTurn);
     chooseYardServicesAndRefineries(pass, turn, yardTurn);
+    // Spend the first-WOR allocation only after actual emergency choices. Its
+    // reserved full price/working cash must not become another cheap growth lot.
+    if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && !yardTurn.civicClaimsYard && capitalPending(pass)) {
+        const auto& capital = pass.capitalCandidates[pass.capitalChoice];
+        if (std::string_view(capital.kind)=="trooper_support"
+            && capital.builder==turn.pBuilder->getObjectID()) {
+            yardTurn.itemID = trooperInfrastructureItem(pass, turn.pBuilder, true);
+            yardTurn.structureRule = yardTurn.itemID==NONE_ID ? "save_first_wor"
+                : yardTurn.itemID==Structure_WOR ? "trooper_support" : "trooper_prerequisite";
+            yardTurn.skipRemainingStructureLogic = true;
+        }
+    }
     chooseYardProductionLanes(pass, turn, yardTurn);
     chooseYardMilitaryInfrastructure(pass, turn, yardTurn);
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
@@ -377,19 +390,6 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
         yardTurn.itemID=funded ? power.item : Uint32(NONE_ID);
         yardTurn.structureRule=funded ? "city_growth_power" : "save_city_growth_power";
         yardTurn.skipRemainingStructureLogic=true;
-    }
-
-    // Found the first paid infantry lane before protected repeat zoning can
-    // consume every yard turn. Power, urgent defence, essential civics and the
-    // completed heavy/economy opening still win; existing or queued WORs dedupe.
-    if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && !yardTurn.urgentProtection && !yardTurn.civicClaimsYard
-        && turn.pBuilder->getProductionQueueSize()==0) {
-        const Uint32 infantry = trooperInfrastructureItem(pass, turn.pBuilder);
-        if (infantry != NONE_ID) {
-            yardTurn.itemID = infantry;
-            yardTurn.structureRule = infantry == Structure_WOR ? "trooper_support" : "trooper_prerequisite";
-        }
     }
 
     // Honour the growth allocation in the actual yard decision,

@@ -68,7 +68,8 @@ struct World {
     ConstructionYard* yard = nullptr;
     std::string configHash;
 
-    World(const char* mod, bool enabled, HOUSETYPE house = HOUSE_HARKONNEN, int escortTanks = 40) {
+    World(const char* mod, bool enabled, HOUSETYPE house = HOUSE_HARKONNEN, int escortTanks = 40,
+          bool passiveOpponentImmortal = false) {
         require(currentGame == nullptr, "Two fixture worlds must not share the engine globals");
         getQuantBotConfig().force.trooperSupport = enabled;
         configHash = getQuantBotConfig().getConfigHash();
@@ -76,7 +77,7 @@ struct World {
         auto options = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
         options.fogOfWar = false;
         options.startWithExploredMap = true;
-        options.immortalHumanPlayer = false;
+        options.immortalHumanPlayer = passiveOpponentImmortal;
         options.instantBuild = false;
         options.concreteRequired = false;
         options.researchLab = false;
@@ -85,20 +86,21 @@ struct World {
         // The server-name overload creates a network game, not this offline observer.
         GameInitSettings init("trooper-support.ini", mapText(), true, options);
         init.randomSeed = static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SEED")));
-        init.setLocalSpectator(true);
+        init.setLocalSpectator(!passiveOpponentImmortal);
         const HOUSETYPE opposing = house == HOUSE_ATREIDES ? HOUSE_HARKONNEN : HOUSE_ATREIDES;
         GameInitSettings::HouseInfo defender(house, 1);
         defender.addPlayerInfo({"Trooper support QuantBot", "qBotHard"});
         init.addHouseInfo(defender);
         GameInitSettings::HouseInfo attacker(opposing, 2);
-        attacker.addPlayerInfo({"Trooper support strike pilot", HUMANPLAYERCLASS});
+        attacker.addPlayerInfo({passiveOpponentImmortal ? settings.general.playerName : "Trooper support strike pilot",
+                                HUMANPLAYERCLASS});
         init.addHouseInfo(attacker);
         game = std::make_unique<Game>();
         currentGame = game.get();
         game->bReplay = true;
         game->initGame(init);
-        require(game->gameType == GameType::CustomGame && game->isObserving()
-                && pLocalHouse && pLocalPlayer, "Offline fixture did not initialize its genuine observer view");
+        require(game->gameType == GameType::CustomGame && game->isObserving() == !passiveOpponentImmortal
+                && pLocalHouse && pLocalPlayer, "Offline fixture did not initialize its genuine local view");
         game->bReplay = false;
         game->initializeGameLoop();
         game->bPause = false;
@@ -106,6 +108,9 @@ struct World {
         owner = game->getHouse(house);
         enemy = game->getHouse(opposing);
         require(owner && enemy && game->gameType == GameType::CustomGame, "Fixture is not a real Custom game");
+        if (passiveOpponentImmortal)
+            require(pLocalHouse == enemy && game->localHumanImmortalityApplies(),
+                    "Full-builder passive opponent is not the genuinely immortal local Human");
         for (const auto& player : owner->getPlayerList())
             if (auto* candidate = dynamic_cast<QuantBot*>(player.get())) bot = candidate;
         for (const auto& player : enemy->getPlayerList())
@@ -222,7 +227,7 @@ struct World {
     Uint32 infrastructure(QuantBot::BuildPass& pass) {
         bot->planningBuilder = yard->getObjectID();
         bot->clearPlacementCache(false, true);
-        return bot->trooperInfrastructureItem(pass, yard);
+        return bot->trooperInfrastructureItem(pass, yard, true);
     }
 
     BuilderBase* wor() const {
@@ -352,9 +357,10 @@ inline void baselineGates() {
     {
         World world("vanilla", true);
         auto pass = world.plan();
-        require(world.configHash != offHash && world.infrastructure(pass) == Structure_WOR,
-                "ON failed to bypass the vanilla exclusion through its hashed config");
-        SDL_Log("TROOPER_SUPPORT_GATE: mod=vanilla enabled=1 wor_selected=1 config_hash=%s", world.configHash.c_str());
+        require(world.configHash != offHash && !pass.trooperSupport
+                && world.infrastructure(pass) == NONE_ID,
+                "DuneCity recruitment changed the classic content policy");
+        SDL_Log("TROOPER_SUPPORT_GATE: mod=vanilla enabled=1 active=0 wor_selected=0 config_hash=%s", world.configHash.c_str());
         world.spawn(world.enemy, Unit_Ornithopter, Coord(48, 24));
         auto classicAir = world.plan();
         require(classicAir.hostileAircraft == 0 && classicAir.trooperTarget == pass.trooperTarget,
@@ -543,7 +549,10 @@ inline void authority(World& world, const std::set<Uint32>& produced) {
 }
 
 inline void fullBuildStandingRecruitment() {
-    World world("dunecity", true, HOUSE_HARKONNEN, 0);
+    // This full-builder world has unrestricted normal military producers.
+    // Keep its passive Human opponent alive with the existing game option;
+    // the separate stock-health aircraft-kill world remains mortal.
+    World world("dunecity", true, HOUSE_HARKONNEN, 0, true);
     auto initial = world.plan();
     const int troopValue = world.game->objectData.data[Unit_Trooper][world.owner->getHouseID()].price;
     require(initial.militaryValue == 0 && initial.trooperCount == 0 && initial.trooperTarget == 6
@@ -553,7 +562,7 @@ inline void fullBuildStandingRecruitment() {
             && world.bot->trooperOrderAdmitted(initial, Unit_Trooper, troopValue),
             "Empty current army cannot bootstrap its standing troop contingent");
     SDL_Log("TROOPER_SUPPORT_BOOTSTRAP: starting_army_value=%d standing_floor=6 ordinary_quota_admits=0 "
-            "support_admits=1 initial_tanks=0 producer_scope=full_build",
+            "support_admits=1 initial_tanks=0 passive_opponent_immortal=1 producer_scope=full_build",
             initial.militaryValue);
 
     const int builtWorBefore = world.owner->getNumBuiltItems(Structure_WOR);
