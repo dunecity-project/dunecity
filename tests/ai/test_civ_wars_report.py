@@ -297,6 +297,30 @@ class SourceFingerprintTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'tracked.cpp'):
             self.fingerprint()
 
+    def test_tracked_symlink_and_windows_placeholder_have_identical_identity(self):
+        link = self.root / 'README'
+        link.symlink_to('tracked.cpp')
+        subprocess.run(['git', 'add', 'README'], cwd=self.root, check=True, capture_output=True)
+        unix = self.fingerprint()
+        link.unlink()
+        link.write_bytes(b'tracked.cpp')  # Git core.symlinks=false representation, mode remains 120000.
+        self.assertEqual(self.fingerprint(), unix)
+        link.write_bytes(b'another.cpp')
+        self.assertNotEqual(self.fingerprint(), unix)
+
+    def test_dangling_link_targets_are_identity_not_generated_output_contents(self):
+        link = self.root / 'generated-link'
+        link.symlink_to('actual-output/not-present.cpp')
+        baseline = self.fingerprint()
+        generated = self.output / 'not-present.cpp'
+        generated.write_text('host-only generated contents\n', encoding='utf-8')
+        self.assertEqual(self.fingerprint(), baseline)
+
+    def test_ordinary_source_line_endings_are_not_normalized(self):
+        baseline = self.fingerprint()
+        self.source.write_bytes(b'int source = 1;\r\n')
+        self.assertNotEqual(self.fingerprint(), baseline)
+
 
 if __name__ == '__main__':
     unittest.main()
