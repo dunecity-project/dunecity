@@ -12,6 +12,10 @@
 #include <GUI/dune/BuilderList.h>
 #include <structures/ConstructionYard.h>
 #include <misc/ZoomSteps.h>
+#include <cstring>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 void runControlsProbe(Game& game) {
     auto require=[](bool ok,const char* why) { if(!ok){SDL_Log("CONTROLS_FAIL: %s",why);throw std::runtime_error(why);} };
     auto commands=[&](CMDTYPE type) {
@@ -122,6 +126,40 @@ void runControlsProbe(Game& game) {
     const Coord originalCenter = screenborder->getCurrentCenter();
     const SDL_Rect mapArea = screenborder->getScreenRect();
     const Coord pointer(mapArea.x + mapArea.w/2 + 24, mapArea.y + mapArea.h/2 + 16);
+#ifdef __APPLE__
+    // sdl2-compat's SDL_PushEvent intentionally drops preciseX/Y when converting
+    // SDL2 to SDL3. Inject native wheel input into that same queue, as hardware
+    // does, rather than weakening the fractional-delta assertions.
+    // SDL3's stable event ABI: SDL_events.h (3.2+), 128-byte event union.
+    struct NativeWheel {
+        Uint32 type, reserved;
+        Uint64 timestamp;
+        Uint32 windowID, which;
+        float x, y;
+        Uint32 direction;
+        float mouseX, mouseY;
+        Sint32 integerX, integerY;
+    };
+    union NativeEvent { NativeWheel wheel; Uint8 padding[128]; };
+    static_assert(sizeof(NativeEvent)==128);
+    using NativePush = bool (*)(NativeEvent*);
+    NativePush nativePush=nullptr;
+    std::unique_ptr<void, decltype(&SDL_UnloadObject)> nativeLibrary(nullptr,SDL_UnloadObject);
+    SDL_version runtime{}; SDL_GetVersion(&runtime);
+    if(runtime.major==2 && runtime.minor==32 && runtime.patch>=50) {
+        for(Uint32 image=0;image<_dyld_image_count();++image) {
+            const char* path=_dyld_get_image_name(image);
+            if(path && (std::strstr(path,"/libSDL3") || std::strstr(path,"/SDL3.framework/"))) {
+                nativeLibrary.reset(SDL_LoadObject(path));
+                break;
+            }
+        }
+        require(nativeLibrary!=nullptr,"Cannot open native SDL3 wheel injector");
+        nativePush=reinterpret_cast<NativePush>(SDL_LoadFunction(nativeLibrary.get(),"SDL_PushEvent"));
+        require(nativePush!=nullptr,"Cannot resolve native SDL3 wheel injector");
+        SDL_Log("MOUSE_WHEEL_BACKEND: sdl2-compat; native SDL3 fractional event queue");
+    }
+#endif
     auto motion = [&](Coord p) {
         SDL_Event e{}; e.type=SDL_MOUSEMOTION; e.motion.x=p.x; e.motion.y=p.y;
         SDL_PushEvent(&e); game.doInput();
@@ -131,11 +169,21 @@ void runControlsProbe(Game& game) {
 #if SDL_VERSION_ATLEAST(2, 0, 18)
         e.wheel.preciseY=precise;
 #endif
-        SDL_PushEvent(&e); game.doInput();
-        if(precise != 0) SDL_Log("MOUSE_WHEEL_TRACE: precise=%f zoom=%d remainder=%f smooth=%d now=%u event=%u step=%u pointer=%d,%d inside=%d",
-            precise, game.zoomStep, screenborder->wheelRemainder, screenborder->wheelSmooth,
-            SDL_GetTicks(), screenborder->wheelLastEvent, screenborder->wheelLastStep,
-            drawnMouseX, drawnMouseY, screenborder->isScreenCoordInsideMap(drawnMouseX,drawnMouseY));
+#ifdef __APPLE__
+        if(precise!=0 && nativePush) {
+            NativeEvent native{};
+            native.wheel.type=SDL_MOUSEWHEEL;
+            native.wheel.windowID=SDL_GetWindowID(window);
+            native.wheel.y=precise;
+            native.wheel.mouseX=drawnMouseX;
+            native.wheel.mouseY=drawnMouseY;
+            require(nativePush(&native),"Native precise wheel event was rejected");
+        } else
+#endif
+        {
+            require(SDL_PushEvent(&e)==1,"SDL wheel event was rejected");
+        }
+        game.doInput();
     };
     auto middle = [&](Coord p, bool down) {
         SDL_Event e{}; e.type=down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
