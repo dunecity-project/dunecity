@@ -7,6 +7,7 @@
 #include <GUI/VBox.h>
 #include <House.h>
 #include <structures/ResearchLab.h>
+#include <algorithm>
 
 class ResearchLabInterface final : public DefaultStructureInterface {
 public:
@@ -54,7 +55,9 @@ protected:
             >= FixPoint(cost);
         research.setEnabled(canControl && owner->canStartTechResearch(objectID));
         if(active) {
-            const int percent = 100 - static_cast<int>(std::int64_t(owner->getTechResearchRemaining()) * 100 / duration);
+            // A legacy paid timer may exceed today's quote; its countdown stays exact.
+            const int percent = std::clamp(100 - static_cast<int>(
+                std::int64_t(owner->getTechResearchRemaining()) * 100 / duration), 0, 100);
             research.setStatus(std::to_string(percent) + " %");
             status.setText(_("Research in progress") + "\n" + timeText(owner->getTechResearchRemaining()) + _(" remaining"));
         } else {

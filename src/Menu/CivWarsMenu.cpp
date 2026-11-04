@@ -131,7 +131,7 @@ CivWarsMenu::CivWarsMenu(bool multiplayer, const SettingsClass::GameOptionsClass
     researchPaceBox.addEntry(_("Normal"), static_cast<int>(TechResearch::Pace::Normal));
     researchPaceBox.addEntry(_("Slow"), static_cast<int>(TechResearch::Pace::Slow));
     researchPaceBox.addEntry(_("Very slow"), static_cast<int>(TechResearch::Pace::VerySlow));
-    researchPaceBox.setTooltipText(_("Research price and duration scale with map size. Pace changes both."));
+    researchPaceBox.setTooltipText(_("Research cost and time: Fast 1/2, Normal 1x, Slow 2x, Very slow 4x."));
     selectCivData(researchPaceBox, static_cast<int>((rulesChosen ? rules : effectiveGameOptions).researchPace));
     addRow(1, multiplayer ? 0 : 5, _("Research Pace"), &researchPaceBox);
     setupLabel.setText(_("Starts: Yard, Research Lab, Refinery, Carryall, rocket turrets, power and a small city.\n"

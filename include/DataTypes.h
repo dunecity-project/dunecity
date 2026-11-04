@@ -326,7 +326,6 @@ public:
                     && (mountainScenery == goc.mountainScenery)
                     && (researchLab == goc.researchLab)
                     && (researchPace == goc.researchPace)
-                    && (researchMapArea == goc.researchMapArea)
                     && (trooperAntiAir == goc.trooperAntiAir)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
@@ -373,7 +372,6 @@ public:
             optStr += "/mountainScenery=" + std::to_string(mountainScenery);
             optStr += "/researchLab=" + std::to_string(researchLab);
             optStr += "/researchPace=" + std::to_string(static_cast<std::uint32_t>(researchPace));
-            optStr += "/researchMapArea=" + std::to_string(researchMapArea);
             optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
@@ -450,8 +448,6 @@ public:
         /// Optional Research Lab and per-house technology progression (levels 1-9).
         bool        researchLab;
         TechResearch::Pace researchPace = TechResearch::Pace::Normal;
-        /// Frozen from the initial map dimensions; hashed/saved, never a user preference.
-        std::uint32_t researchMapArea = TechResearch::kReferenceArea;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation

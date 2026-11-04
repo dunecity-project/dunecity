@@ -1,6 +1,16 @@
 // Included inside skirmish-probe.inc's fixture namespace; no production test hooks.
 #include "mountain-scenery-probe.inc"
 
+Uint32 civResearchWindow(int cost, int duration) {
+    // The original smoke allowed 600 credits over 430 seconds before its
+    // 50-second study: keep that allocation floor, not the obsolete price/time.
+    constexpr Uint32 referenceFunding = MILLI2CYCLES(430 * 1000);
+    constexpr int referenceCredits = 600;
+    const Uint32 funding = static_cast<Uint32>(
+        (std::uint64_t(referenceFunding) * cost + referenceCredits - 1) / referenceCredits);
+    return std::max<Uint32>(MILLI2CYCLES(480 * 1000), funding + duration);
+}
+
 void captureCivMap(const std::string& name) {
     const int width = currentGameMap->getSizeX(), height = currentGameMap->getSizeY();
     int viewWidth = 0, viewHeight = 0;
@@ -173,7 +183,7 @@ void runCivResearchGame(const GameInitSettings& init) {
     capture("zero-credits");
     skirmishRequire(!panel->research.isEnabled() && !pLocalHouse->canStartTechResearch(lab->getObjectID()),
                     "Zero-credit Civ Wars house unexpectedly offers research");
-    skirmishRequire(panel->status.getText() == "Needs 600 credits\nTime: 0:50",
+    skirmishRequire(panel->status.getText() == "Needs 1000 credits\nTime: 2:00",
                     "Unaffordable research does not explain its credit requirement");
     click(button.x, button.y);
     skirmishRequire(commands() == 0 && !pLocalHouse->isTechResearchActive(),
@@ -181,7 +191,8 @@ void runCivResearchGame(const GameInitSettings& init) {
     SDL_Log("CIV_HUMAN_RESEARCH: event=unaffordable cycle=%u house=%d credits=%d tech=%d button=%d,%d enabled=%d",
         game->getGameCycleCount(), pLocalHouse->getHouseID(), pLocalHouse->getCredits(), pLocalHouse->getTechLevel(),
         button.x, button.y, int(panel->research.isEnabled()));
-    const Uint32 limit = MILLI2CYCLES(480000);
+    const Uint32 limit = game->getGameCycleCount()
+        + civResearchWindow(pLocalHouse->getTechResearchCost(), pLocalHouse->techResearchCycles(2));
     while(game->getGameCycleCount() < limit && !pLocalHouse->canStartTechResearch(lab->getObjectID()))
         game->updateGameState();
     gui.updateObjectInterface();
@@ -217,10 +228,10 @@ void runCivResearchGame(const GameInitSettings& init) {
     while(game->getGameCycleCount() < limit) game->updateGameState();
     for(const auto& setup : init.getHouseInfoList()) {
         const auto* house = game->getHouse(setup.houseID);
-        SDL_Log("CIV_HUMAN_RESEARCH: event=eight_minutes cycle=%u house=%d credits=%d tech=%d target=%d",
+        SDL_Log("CIV_HUMAN_RESEARCH: event=research_window_end cycle=%u house=%d credits=%d tech=%d target=%d",
             game->getGameCycleCount(), house->getHouseID(), house->getCredits(),
             house->getTechLevel(), house->getTechResearchTarget());
-        skirmishRequire(house->getTechLevel() >= 2, "Human/AI Civ Wars house failed to research in eight minutes");
+        skirmishRequire(house->getTechLevel() >= 2, "Human/AI Civ Wars house missed its research allocation window");
     }
     endMatch(game);
 }
@@ -327,21 +338,14 @@ void runCivMatch(const std::string& name) {
         skirmishRequire(fullUpkeep == 325 && FixPoint(city.budget.getLastTaxRevenue()) > fullUpkeep + annualPower,
                         "Civilization Wars starting city does not cover full turret, police and power upkeep");
     }
-    // Preserve the reference test's minimum research savings rate, rather than
-    // requiring a dearer, longer first study to finish in the old eight minutes.
-    constexpr Uint32 referenceWindow = MILLI2CYCLES(480 * 1000);
-    constexpr int referenceCost = TechResearch::cost(2, TechResearch::kReferenceArea, TechResearch::Pace::Normal);
-    constexpr int referenceCycles = TechResearch::cycles(2, TechResearch::kReferenceArea, TechResearch::Pace::Normal);
     const auto* firstHouse = game->getHouse(result.houses.front().house);
     const int firstCost = firstHouse->getTechResearchCost();
     const int firstCycles = firstHouse->techResearchCycles(2);
-    const Uint32 fundingCycles = static_cast<Uint32>(
-        (std::uint64_t(referenceWindow - referenceCycles) * firstCost + referenceCost - 1) / referenceCost);
-    const Uint32 window = std::max(referenceWindow, fundingCycles + firstCycles);
+    const Uint32 window = civResearchWindow(firstCost, firstCycles);
     SDL_Log("SKIRMISH_SMOKE_BEGIN: Civilization Wars %dv%d window_cycles=%u first_cost=%d first_cycles=%d",
         params.teamSize, params.teamSize, window, firstCost, firstCycles);
     const Uint32 researchEnd = game->getGameCycleCount() + window;
-    const Uint32 end = std::max(researchEnd, MILLI2CYCLES(600 * 1000));
+    const Uint32 end = std::max<Uint32>(researchEnd, MILLI2CYCLES(600 * 1000));
     std::array<int, NUM_HOUSES> lastTech{}, lastTarget{};
     while(!game->finished && game->getGameCycleCount() < end) {
         game->updateGameState();
@@ -359,16 +363,16 @@ void runCivMatch(const std::string& name) {
         if(game->getGameCycleCount() == researchEnd)
             for(const auto& setup : result.houses)
                 skirmishRequire(game->getHouse(setup.house)->getTechLevel() >= 2,
-                                "Civ Wars QuantBot missed its original policy-scaled research deadline");
+                                "Civ Wars QuantBot missed its policy-derived research allocation window");
     }
     SDL_Log("SKIRMISH_SMOKE_END: cycle=%u target=%u finished=%d", game->getGameCycleCount(), end, game->finished ? 1 : 0);
     skirmishRequire(!game->finished && game->getGameCycleCount() == end && end >= MILLI2CYCLES(600 * 1000),
-                    "Civilization Wars did not reach ten minutes and its policy-scaled research window");
+                    "Civilization Wars did not reach ten minutes and its research allocation window");
     for(const auto& setup : result.houses) {
         const auto* house = game->getHouse(setup.house);
         skirmishRequire(house && house->isAlive() && house->getCityTaxReceipts() > 0,
                         "Civilization Wars house died or received no city tax income");
-        skirmishRequire(house->getTechLevel() >= 2, "Civ Wars QuantBot did not advance technology within its policy-scaled research window");
+        skirmishRequire(house->getTechLevel() >= 2, "Civ Wars QuantBot did not advance technology within its research allocation window");
     }
     captureCivMap(picture + "-played");
     captureGame(*game, picture + "-played-base", result.houses.front().start);

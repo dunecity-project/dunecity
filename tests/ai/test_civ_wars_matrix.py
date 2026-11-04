@@ -81,22 +81,6 @@ class CivWarsMatrixTests(unittest.TestCase):
         for forbidden in ('--scenario', '--custom-map', '--scenario-sides', '--roster', '--no-ai-telemetry'):
             self.assertNotIn(forbidden, command)
 
-    def test_research_baseline_is_frozen_in_identity_and_forwarded(self):
-        flags = ['--team-sizes', '1', '--pairs', 'hard:hard', '--arms', 'off', '--seeds', '138083612']
-        normal_args = arguments(*flags)
-        baseline_args = arguments(*flags, '--research-baseline')
-        normal = matrix['schedule'](normal_args)[0]
-        baseline = matrix['schedule'](baseline_args)[0]
-        self.assertNotEqual(normal['id'], baseline['id'])
-        self.assertNotEqual(normal['pair_id'], baseline['pair_id'])
-        self.assertFalse(normal['research_baseline'])
-        self.assertTrue(baseline['research_baseline'])
-        # Unit dispatch may reconstruct args separately; the frozen game owns this flag.
-        normal_command = matrix['command'](normal_args, Path('probe'), normal, Path('scratch/normal'))
-        baseline_command = matrix['command'](normal_args, Path('probe'), baseline, Path('scratch/reference'))
-        self.assertNotIn('--civ-research-baseline', normal_command)
-        self.assertIn('--civ-research-baseline', baseline_command)
-
     def test_transport_path_does_not_change_identity_but_bytes_do(self):
         with tempfile.TemporaryDirectory() as temporary:
             first, second = Path(temporary) / 'a.ini', Path(temporary) / 'b.ini'

@@ -1,3 +1,32 @@
+## 2026-11-04 — Fixed research prices and level-minute timing (OMP ResearchPace, unreleased)
+
+- Stefan rejected map scaling after `researchtooexpensive.dls` (9882, Normal,
+  256×256, Research Lab on) calculated level4 at11,501credits/11:10.880.
+  The approved replacement is **1000×(target−1) credits and target game minutes**:
+  level4=3000/4min, level9=8000/9min, full Normal chain36000/44min.
+  Fast½ / Normal1(default) / Slow2 / Very slow4 multiply both, identically on all maps.
+- Removed the research-area member, options equality/hash contribution, map binding
+  and obsolete same-build reference-area harness. House, UI and QuantBot savings/
+  forecasts share the level/pace-only policy. No population gate, active-timer
+  repricing, credit refund or change to the Research Lab's own building price.
+- Shared **9883/MOD18/protocol112** with Mountain Scenery. Installed9882/MOD17
+  is frozen at pace4+area4+damage1; read/ignore area, no scenery byte. New writes
+  pace4+damage1+scenery1. Official tagv1.0.864 defines save9879, but real installed
+  9882 saves still require exact compatibility; no in-place MOD17 rewrite.
+- Already-paid positive timers remain valid even above a new quote, including after
+  9883 resave/reload. Their exact countdown is retained; displayed progress clamps
+  to0–100. Engine fixtures explicitly round-trip an over-quote timer, compare64/160
+  map quotes/hash, check Slow's exact4-minute boundary and assert new prices.
+- Civ Wars fixtures keep the original83.72credits/min research-allocation floor:
+  `ceil(430sec-in-cycles×quotedCost/600)+quotedDuration`, minimum8min.
+  Normal first-step window is13:56.672 on every map. Human price/time status now
+  expects1000/2:00; all-AI cases preserve separate research milestones, ≥10min
+  play, full turret/police/power tax checks and640/1280 screenshots.
+- Exact input SHA256 `ba02944a414a1bc3a00c19fbe1c73fd91f7ab7bd4043fbb3149cc4fe87e89443`;
+  original immutable CivWars revision `37d5ce34…066f38` matches the retained verified
+  `outputs/research-save-20261103/exact-profile` cache. No content/hash bypass.
+  The older map-scaling entry below is historical and superseded by this policy.
+
 ## 2026-11-04 — Mouse wheel zoom and middle-button map grab (OMP MouseControls, unreleased)
 
 - Wheel over the game map now zooms in/out in every content family, anchored at
@@ -393,7 +422,7 @@
   `1345f662` refreshes active steps only; next steps read current modifiers.
   Native fixture exercises research/slow/expiry inside unchanged strict logs.
 
-## 2026-11-03 — Map-scaled Research Pace (OMP ResearchPace, unreleased)
+## 2026-11-03 — Map-scaled Research Pace (OMP ResearchPace, superseded 2026-11-04)
 
 - Stefan's `research.dls` is193×128,3v3,seed138083612,cycle112730 /
   **30:03.680**. Harkonnen/Ordos/Rebels are tech9; Fremen/Mercenary are tech8

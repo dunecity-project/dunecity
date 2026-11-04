@@ -216,13 +216,15 @@ House::House(InputStream& stream) : choam(this) {
         techResearchTarget = stream.readSint32();
         techResearchRemaining = stream.readSint32();
         techResearchLabID = stream.readUint32();
+        // Paid timers survive policy changes and resaves; today's quote is not
+        // an upper bound on an already-running study.
         if(researchedTechLevel < 1 || researchedTechLevel > 9
            || techResearchTarget < 0 || techResearchTarget > 9
            || techResearchRemaining < 0
            || (techResearchTarget == 0 && (techResearchRemaining != 0 || techResearchLabID != NONE_ID))
            || (techResearchTarget != 0
                && (techResearchTarget != researchedTechLevel + 1 || techResearchLabID == NONE_ID
-                   || techResearchRemaining == 0 || techResearchRemaining > techResearchCycles(techResearchTarget)))) {
+                   || techResearchRemaining == 0))) {
             THROW(std::runtime_error, "Invalid house technology research state");
         }
     }
@@ -779,15 +781,15 @@ int House::getTechLevel() const {
 }
 
 int House::getTechResearchCost() const {
-    if(!currentGame) return TechResearch::cost(getTechLevel() + 1, TechResearch::kReferenceArea, TechResearch::Pace::Normal);
+    if(!currentGame) return TechResearch::cost(getTechLevel() + 1, TechResearch::Pace::Normal);
     const auto& rules = currentGame->getGameInitSettings().getGameOptions();
-    return TechResearch::cost(getTechLevel() + 1, rules.researchMapArea, rules.researchPace);
+    return TechResearch::cost(getTechLevel() + 1, rules.researchPace);
 }
 
 int House::techResearchCycles(int target) const {
-    if(!currentGame) return TechResearch::cycles(target, TechResearch::kReferenceArea, TechResearch::Pace::Normal);
+    if(!currentGame) return TechResearch::cycles(target, TechResearch::Pace::Normal);
     const auto& rules = currentGame->getGameInitSettings().getGameOptions();
-    return TechResearch::cycles(target, rules.researchMapArea, rules.researchPace);
+    return TechResearch::cycles(target, rules.researchPace);
 }
 
 bool House::canStartTechResearch(Uint32 labObjectID) const {

@@ -74,7 +74,7 @@ unit changes neither a block nor the house average with Micropolis on, and still
 its block with it off. `structure_degradation_dunecity` checks damaged and repaired
 buildings through real effects scans with Damage Lowers Land Value both off and on.
 
-### Mountain scenery (match rule `Mountain Scenery`, default on; MOD17, protocol 111)
+### Mountain scenery (match rule `Mountain Scenery`, default on; MOD18, protocol 112)
 
 Mountain tiles, including Civilization Wars divider ridges, act like Micropolis forests:
 each contributes **15 raw terrain points**. Sources share the existing park-terrain grid
@@ -92,8 +92,10 @@ No mountain terrain bonus existed before this rule. Ordinary rock has no scenery
 Open sand/dunes retain their separate, stronger water-like effect: 40 raw points per
 unoccupied tile smoothed twice on the 2x2 grid, plus a direct 8-point falloff over 5 tiles.
 Switching Mountain Scenery off restores the former terrain calculation; earlier
-settings streams load it off. The option is saved/hashed in the existing unreleased MOD17
-extension (save 9882), and can be set in Game Rules, remembered defaults or mod rules.
+settings streams load it off. The option is saved/hashed in MOD18 (save 9883),
+shared with fixed-price research, and can be set in Game Rules, defaults or mod rules.
+Frozen 9882/MOD17 carries no scenery byte; its retired research-area field is consumed
+and ignored rather than changing its layout in place.
 
 
 ### Starport population (match rule `Starport Population`, default on; MOD16, protocol 111)

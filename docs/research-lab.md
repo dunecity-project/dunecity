@@ -25,32 +25,32 @@ prerequisites and factory/yard upgrades still apply).
 The Lab sidebar shows the actual quoted price and game-time duration, explains a disabled
 button (**Needs N credits**, **View only**, or **All technology unlocked**), and counts down
 the remaining time during research. A zero-credit Civ Wars start must earn the displayed
-up-front price: at Normal, 600 credits on 129×96 but 1,794 on 193×128. Research itself has
-no population threshold.
+up-front price: at Normal, **1,000 credits and two game minutes on every map**.
+Research itself has no population threshold.
 
-Cost and duration depend on the **target** level, the **initial map area**, and the
-**Research Pace** match rule (Fast / Normal / Slow / Very slow). The following are the base
-quotes: Normal on a map no larger than the 129×96 reference area.
+Cost and duration depend only on the **target** level (the level being reached) and the
+**Research Pace** match rule (Fast / Normal / Slow / Very slow). Normal quotes:
 
-| Target level | Credits | Game seconds |
+| Target level | Credits | Game minutes |
 |---|---:|---:|
-| 2 | 600 | 50 |
-| 3 | 900 | 60 |
-| 4 | 1,200 | 70 |
-| 5 | 1,500 | 80 |
-| 6 | 1,800 | 90 |
-| 7 | 2,100 | 100 |
-| 8 | 2,400 | 110 |
-| 9 | 2,700 | 120 |
+| 2 | 1,000 | 2 |
+| 3 | 2,000 | 3 |
+| 4 | 3,000 | 4 |
+| 5 | 4,000 | 5 |
+| 6 | 5,000 | 6 |
+| 7 | 6,000 | 7 |
+| 8 | 7,000 | 8 |
+| 9 | 8,000 | 9 |
+| **Full chain** | **36,000** | **44** |
 
-Base quotes are `300 * target` credits and `MILLI2CYCLES((30 + 10 * target) * 1000)` cycles.
-`include/TechResearch.h` applies `max(12384, 2 * initialArea - 12384) / 12384` and pace
-½ / 1 / 2 / 4 to both, rounding up once to whole credits/cycles. Small maps retain these
-values at Normal. The initial map area and pace are frozen, hashed match rules, shared by
-House payment/timing, this sidebar and QuantBot's reserve/forecast. This is deterministic
-integer simulation, independent of render rate and wall clock. See
-[Civilization Wars: research size and pace](civilization-wars.md#research-size-and-pace)
-for all four map-size tables, calibration and measured progression.
+`include/TechResearch.h` quotes `1000 * (target - 1)` credits and
+`MILLI2CYCLES(target * 60 * 1000)` cycles at Normal. Fast halves both; Slow doubles both;
+Very slow multiplies both by four. Map size has no effect. Quotes are integral even at
+Fast, using deterministic integer simulation independent of render rate and wall clock.
+House payment/timing, this sidebar and QuantBot's reserve/forecast share the policy.
+See [Civilization Wars: research cost and pace](civilization-wars.md#research-cost-and-pace)
+for the withdrawn map-scale rationale and saved-match compatibility.
+
 Research has no additional power requirement beyond the building's ordinary draw and does not
 pause for a power shortage. Losing **the lab performing the research** cancels it immediately,
 without a refund; another existing lab or a rebuilt lab can start that level again. Completed
@@ -85,19 +85,22 @@ Save 9881 introduced the researched level, target, remaining cycles and active l
 ID per house. Earlier saves initialize the per-house level from the saved match level and
 do not activate research. GameInitSettings MOD15 introduced `Research Lab` and `Trooper
 Anti-Air`; older streams load **both off** rather than adopting future new-game defaults.
-Save **9882 / MOD17** additionally records Research Pace and the frozen initial map area
-(alongside the Damage Lowers Land Value rule). Older saves load **Normal** and bind their
-initial map dimensions; completed tech and already-paid active timers are preserved.
-Subsequent starts use the scaled quote. The shared unreleased protocol remains 111.
+Save **9883 / MOD18 / protocol 112** now records Research Pace alongside the damage and
+Mountain Scenery rules, with no research-area field. Real **9882 / MOD17** saves retain
+their exact old pace(uint32), area(uint32), damage(bool) suffix: area is consumed and
+ignored, and scenery loads off. Older streams without pace use **Normal**.
+Completed tech and already-paid active timers are preserved, including timers longer
+than a new quote and a subsequent 9883 resave/reload. The remaining-time display stays
+exact; subsequent starts use the new cost/time, without refunds for past research.
 
 `tests/units/run-research-lab-probe.py --build-dir build-int --output-dir <results>` exercises the
 real engine's owner authorization, independent houses, build-list refresh, one-research limit,
 active-research save/load continuation, cancellation/rebuild, the level-9 cap and the off-state
 digest layout. It also runs a tech-1 DuneCity QuantBot custom game with no free lab and writes
 levels/cycles to CSV. Run through the shared cluster queue, not a second build tree. Command
-serialization, MOD17/older-marker migration, option hashes and research formula boundaries
-are covered in `dunelegacy_tests`; the skirmish/menu/gallery probes cover the Lab checkbox
-and Research Pace rule at 640×480.
+serialization, MOD18/frozen MOD17/older-marker migration, option hashes and formula
+boundaries are covered in `dunelegacy_tests`; the skirmish/menu/gallery probes cover
+the Lab checkbox and Research Pace rule at 640×480.
 
 The shared-spending probe also checks lab rebuilding alongside demanded city growth. Its
 two-yard house keeps both live yards in the planner's structure list: one can retain the

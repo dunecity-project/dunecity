@@ -242,14 +242,6 @@ int runCampaignBalanceProbe() {
     // The normal game capture limit is deliberately unchanged.
     if(std::getenv("BALANCE_CAPTURE_MIB"))
         AITelemetry::log().limit=std::stoull(std::getenv("BALANCE_CAPTURE_MIB"))*1024*1024;
-    if(civWars && std::getenv("BALANCE_CIV_RESEARCH_BASELINE")) {
-        // Isolate the old 300*N / 30+10*N schedule in this build, not another
-        // executable with unrelated AI changes. The overridden area is hashed.
-        auto rules = game->getGameInitSettings().getGameOptions();
-        rules.researchPace = TechResearch::Pace::Normal;
-        rules.researchMapArea = TechResearch::kReferenceArea;
-        game->gameInitSettings.setGameOptions(rules);
-    }
     game->bReplay = false;
     game->initializeGameLoop();
     // Headless: nothing reads the per-unit phase timing (DuneCity-Performance.log), and its

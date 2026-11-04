@@ -137,7 +137,6 @@ def schedule(args):
     """JSON-serializable games; IDs depend on input bytes, never a transported INI's path."""
     games = []
     options = options_digest(args)
-    research_baseline = bool(getattr(args, 'research_baseline', False))
     for team_size in dict.fromkeys(args.team_sizes):
         for pair in dict.fromkeys(args.pairs):
             first, second = pair.split(':')
@@ -147,8 +146,6 @@ def schedule(args):
                     pair_id = (f'civ-wars/{team_size}v{team_size}/{pair}/size{args.size}'
                                f'/worms{args.worms}/spice{args.spice}/min{args.minutes}'
                                f'/options-{options}/seed{seed}/swap{swap}')
-                    if research_baseline:
-                        pair_id += '/research-reference'
                     for arm in dict.fromkeys(args.arms):
                         strategy = {'left': 'right', 'right': 'left'}.get(arm, arm) if swap else arm
                         focal = (2 if swap else 1) if arm != 'right' else (1 if swap else 2)
@@ -156,8 +153,7 @@ def schedule(args):
                                           seed=seed, format=f'{team_size}v{team_size}', team_size=team_size,
                                           pair=pair, left=left, right=right, swap=swap, arm=arm,
                                           strategy=strategy, focal_team=focal, size=args.size, worms=args.worms,
-                                          spice=args.spice, minutes=args.minutes, options_input_sha256=options,
-                                          research_baseline=research_baseline))
+                                          spice=args.spice, minutes=args.minutes, options_input_sha256=options))
     return games
 
 
@@ -342,8 +338,6 @@ def command(args, binary, game, out):
            '--path-workers', '1']
     if getattr(args, 'game_options', None):
         cmd += ['--game-options', str(Path(args.game_options).resolve())]
-    if game.get('research_baseline', False):
-        cmd += ['--civ-research-baseline']
     return cmd
 
 
@@ -831,8 +825,6 @@ parser.add_argument('--jobs', type=positive, default=1, help='Standalone paralle
 parser.add_argument('--wall-timeout', type=positive, default=1800, help='Wall seconds per game')
 parser.add_argument('--scratch', help='Existing managed scratch root; default is a fresh leased scratch run')
 parser.add_argument('--game-options', type=Path, help='Transported INI overlay; exact content hash is part of every game ID')
-parser.add_argument('--research-baseline', action='store_true',
-                    help='Same-build pre-map-scaling research control; terrain unchanged, separate game IDs')
 parser.add_argument('--report', nargs='*', metavar='RESULTS', help='Report these directories, or --results if none given')
 parser.add_argument('--fresh', action='store_true', help='Remove the results directory before scheduling')
 args = parser.parse_args()

@@ -160,7 +160,7 @@ inline void reportSetup(Game& game, const std::string& left, const std::string& 
             "produced_scope=all_unit_build_notifications lost_scope=all_unit_decrements city_pop_scale=display "
             "islands_scope=live_yards_on_midpoint_rock reached_scope=distinct_ground_combat_on_enemy_end_rock "
             "waves_source=custom_wave_launch_changes waves_complete=0 research_cycle=post_update "
-            "research_pace=%u research_area=%u research_baseline=%d",
+            "research_pace=%u",
         init.getRandomSeed(), std::getenv("BALANCE_CIV_WARS"),
         std::getenv("BALANCE_CIV_SIZE") ? std::getenv("BALANCE_CIV_SIZE") : "0",
         std::getenv("BALANCE_CIV_WORMS") ? std::getenv("BALANCE_CIV_WORMS") : "1",
@@ -169,7 +169,7 @@ inline void reportSetup(Game& game, const std::string& left, const std::string& 
         rules.getHash().c_str(), static_cast<unsigned long long>(mapHash.value()),
         int(getQuantBotConfig().civWarsStrategy), strategy == "left" || strategy == "right" ? "test_only_unhashed" : "none",
         currentGameMap->getSizeX(), currentGameMap->getSizeY(), game.getGameCycleCount(),
-        static_cast<unsigned>(rules.researchPace), rules.researchMapArea, int(std::getenv("BALANCE_CIV_RESEARCH_BASELINE") != nullptr));
+        static_cast<unsigned>(rules.researchPace));
     // The existing performance runner's optional dump path works here too; the exact map hash
     // is always retained, without making each batch keep a copy of every generated map.
     if (const char* path = std::getenv("BALANCE_PERF_DUMP_MAP")) {

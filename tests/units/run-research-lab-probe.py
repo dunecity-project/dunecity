@@ -20,7 +20,7 @@ from probe_profile import copy_revisions, default_build_dir, discard_profile_ass
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=default_build_dir(root))
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--load-save', type=Path, help='Also load an old player save as Normal and resave after one real tick')
+parser.add_argument('--load-save', type=Path, help='Load an old player save, preserve paid timers, then resave/reload the current format')
 parser.add_argument('--save-profile', type=Path, help='Profile holding the exact Workshop revisions pinned by --load-save')
 args = parser.parse_args()
 if args.load_save and not args.load_save.is_file():
