@@ -214,6 +214,7 @@ struct QuantBot::BuildPass {
     bool trooperSupport{};
     int trooperTarget{};
     int trooperCount{};
+    int trooperReserveValue{};
     int hostileAircraft{};
     FixPoint tankPercent{};
     FixPoint siegePercent{};

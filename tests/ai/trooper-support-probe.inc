@@ -289,7 +289,15 @@ inline void availabilityAndBudgetGates(World& world) {
     blocked(world, capped, "city_wor_cash_reserve");
     capped = pass;
     capped.cashFlow.projectedCash = fundedCost - 1;
-    blocked(world, capped, "wor_projected_working_capital");
+    independent(capped, "parallel_queue_forecast_does_not_remove_first_wor");
+    capped = pass;
+    capped.money = 0;
+    capped.forecastNetIncome = 1;
+    require(world.bot->trooperInfrastructureItem(capped, world.yard, false) == Structure_WOR
+            && world.infrastructure(capped) == NONE_ID,
+            "Positive low income cannot reserve a first WOR before it is affordable");
+    SDL_Log("TROOPER_SUPPORT_FIRST_WOR_SAVINGS: spendable=0 forecast_net_income=1 "
+            "candidate_selected=1 unfunded_queue_rejected=1");
     capped = pass;
     capped.forecastNetIncome = 0;
     blocked(world, capped, "wor_no_stable_income");

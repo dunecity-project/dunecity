@@ -166,6 +166,20 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     // Every producer shares the same committed troop count and infantry budget.
     const bool supportTroop = pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(itemID);
     if (supportTroop && !trooperOrderAdmitted(pass, itemID, data[itemID][houseID].price)) return false;
+    // Per-type mix targets can each overshoot by a vehicle, and Starport bargains
+    // bypass those targets entirely. Keep the unmet troop floor's army slots and
+    // the next troop's cash available across every competing military producer.
+    if (pass.trooperSupport && pass.trooperReserveValue > 0 && !supportTroop
+        && QuantBotBuildPolicy::militaryItem(itemID)
+        && (int64_t(pass.militaryValue) + data[itemID][houseID].price + pass.trooperReserveValue > pass.lightBudget
+            || int64_t(quotedPrice) + std::min(pass.trooperReserveValue, data[Unit_Trooper][houseID].price) > pass.money)) {
+        if (pass.emitStatsLog && AITelemetry::log().enabled())
+            traceDecision("trooper_reserve_blocked", AITelemetry::Record()
+                .set("builder", turn.pBuilder->getObjectID()).set("item", itemID)
+                .set("military", pass.militaryValue).set("military_limit", pass.lightBudget)
+                .set("reserved_value", pass.trooperReserveValue).set("spendable", pass.money));
+        return false;
+    }
     if (cityInfantryItem(pass, itemID) && ((!pass.cityAntiAirInfantryDemand && !supportTroop)
         || (!supportTroop && !infantryQuotaAdmits(pass, data[itemID][houseID].price))
         || int64_t(quotedPrice) + pass.cityWorkingReserve > pass.money)) return false;
@@ -215,7 +229,12 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
         if (itemID != requestedItem) ++pass.itemCount[itemID];
-        if (supportTroop) pass.trooperCount += QuantBotBuildPolicy::rocketInfantrySize(itemID);
+        if (supportTroop) {
+            const int people = QuantBotBuildPolicy::rocketInfantrySize(itemID);
+            pass.trooperCount += people;
+            pass.trooperReserveValue = int(std::max<int64_t>(0,
+                int64_t(pass.trooperReserveValue) - int64_t(people) * data[Unit_Trooper][houseID].price));
+        }
         pass.cityPendingDisplayPopulation += QuantBotCityPolicy::displayPopulation(initialCityPopulation(itemID));
         if(DuneCity::isCityZoneStructure(itemID)) ++pass.cityZonesIncludingQueued;
         if (itemID>=Structure_FirstID && itemID<=Structure_LastID)

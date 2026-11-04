@@ -1928,6 +1928,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         + pass.cityWorkingReserve + std::max(0, data[Structure_ZoneResidential][houseID].price);
     const int fundedArmyValue = QuantBotBuildPolicy::fundedArmyTarget(pass.militaryValue, pass.militaryBudget, productionCash);
     int plannedInfantryValue = pass.infantryValue;
+    pass.trooperReserveValue = 0;
     // Reserve the actual standing/reactive mix, not just already-built infantry.
     // Otherwise vehicle factories consume each arriving credit before the WOR
     // can afford its first troop. An unavailable/pending producer claims nothing.
@@ -1937,8 +1938,9 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         && !getHouse()->isGroundUnitLimitReached()
         && int64_t(pass.militaryValue) + trooper.price <= pass.lightBudget) {
         const int missing = std::max(0, QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft) - pass.trooperCount);
+        pass.trooperReserveValue = int(std::min<int64_t>(INT_MAX, int64_t(missing) * trooper.price));
         plannedInfantryValue = int(std::min<int64_t>(INT_MAX,
-            int64_t(pass.infantryValue) + int64_t(missing) * trooper.price));
+            int64_t(pass.infantryValue) + pass.trooperReserveValue));
     }
     pass.vehiclePlanValue = std::max(0, fundedArmyValue - plannedInfantryValue);
     if (pass.emitStatsLog && AITelemetry::log().enabled()) {
@@ -1962,6 +1964,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             .set("trooper_support_floor", QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft))
             .set("infantry_value", pass.infantryValue).set("military_value", pass.militaryValue)
             .set("planned_infantry_value", plannedInfantryValue)
+            .set("trooper_reserved_value", pass.trooperReserveValue)
             .set("performance_exponent_milli",1500).set("performance_confidence_bps", performanceConfidenceBps).set("funded_army_value",fundedArmyValue)
             .set("vehicle_plan_value",pass.vehiclePlanValue).set("queued_military_value",pass.queuedMilitaryValue).set("mix_inputs", [&]() {
                 AITelemetry::Record inputs;
@@ -2064,8 +2067,10 @@ Uint32 QuantBot::trooperInfrastructureItem(BuildPass& pass, const BuilderBase* y
     const int64_t reserve = pass.citySimEnabled ? pass.cityWorCashReserve
         : std::max(pass.strategicReserveCost, pass.economyReserve);
     const int64_t fundedCost = buildingCapitalCost(pass, candidate) + reserve;
-    const int64_t funding = int64_t(pass.money) + (requireCash ? 0 : pass.forecastNetIncome);
-    if (funding < fundedCost || !findPlaceLocation(candidate).isValid()) return NONE_ID;
+    // Positive income qualifies the first WOR for protected savings even when
+    // this short forecast cannot yet fund it. Actual queueing keeps every cash
+    // and city working-capital check; repeat growth must not prevent saving.
+    if ((requireCash && pass.money < fundedCost) || !findPlaceLocation(candidate).isValid()) return NONE_ID;
     return candidate;
 }
 
