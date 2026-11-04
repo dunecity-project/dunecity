@@ -36,7 +36,7 @@ std::unique_ptr<Game> researchGame(bool enabled, bool ai = false, int mapSize = 
     params.mod = "dunecity";
     params.mode = Mode::DuneCity;
     params.seed = 20261102u;
-    params.credits = ai ? 20000 : 100000;
+    params.credits = 20000;
     params.allies = 0;
     params.enemies = 1;
     params.sandPercent = 65;
@@ -67,6 +67,8 @@ std::unique_ptr<Game> researchGame(bool enabled, bool ai = false, int mapSize = 
     game->initGame(init);
     game->bReplay = false;
     game->initializeGameLoop();
+    // Generator presets cap opening cash at 20k; fund the complete L2-L9 timing fixture.
+    if(!ai) game->getHouse(HOUSE_ATREIDES)->addUnstoredCredits(80000);
     researchRequire(game->techLevel == 1, "Fixture did not start at match tech 1");
     return game;
 }
