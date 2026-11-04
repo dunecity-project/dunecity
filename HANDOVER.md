@@ -233,6 +233,19 @@
   MENU_PROBE_PASS line.
 - Windows/MSVC export construction explicitly passes a `std::string` comment;
   `(false, "comment")` ambiguously competes with the `SDL_RWops*`/bool INI loader.
+- Final acceptance: pinned `5a5628fe`, job
+  `20261104T220921-map-export-full-menu-fit-c50c4b`: full menu **PASS 514.89s on mini**
+  at **640x480, 854x480 and 1280x720**. Each run has SAVE_AS_MAP_OK,
+  CAMPAIGN_MAPS_OK and exactly one MENU_PROBE_PASS. All four exported variants
+  load in the real editor/Custom Game and start playable matches. The Pro's
+  first attempt took **453.16s**, hitting the **420s per-process timeout** before
+  the successful mini retry; no assertion or timeout was relaxed.
+- Shared `dunelegacy_tests` **PASS (mini, 2s)** at `3494d932`, job
+  `20261104T212804-zone-power-unit-refresh-399b37`. The shared native Release build
+  passed at `54a62300` in 41.81s. Implementation is `54a62300`, corrections through
+  `1875b7c9`, with MSVC disambiguation `c6fb6cc9`.
+- Viewed 640x480 pause/start/current dialogs; PNGs, the four map files and retained
+  test evidence are under `../dunecity-results/save-as-map-20261104/`.
 
 ## 2026-11-04 — Fixed research prices and level-minute timing (OMP ResearchPace, unreleased)
 
