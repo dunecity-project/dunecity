@@ -526,6 +526,25 @@ void runNoSpiceCityProbe(Game& game) {
             const Pass shortCash=marketDecide(true,factoryPrice-1);
             require(!ordered(shortCash,Structure_HeavyFactory) && ordered(shortCash,Unit_Quad),
                 "An unaffordable first factory withheld working cash from ordinary imports");
+            state.comValve=state.indValve=1500;
+            const Pass zoningFirst=marketDecide(false,factoryPrice-1);
+            require(zoningFirst.zones>0,"Parallel-growth negative control did not bypass the factory bootstrap");
+            const Pass bootstrapFirst=marketDecide(true,factoryPrice-1);
+            require(bootstrapFirst.zones==0 && ordered(bootstrapFirst,Unit_Quad),
+                "Parallel zoning still consumed first-factory savings or ordinary imports lost their short-cash budget");
+            for(auto level:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+                bot->difficulty=level;
+                require(marketDecide(true,factoryPrice-1).zones>0,
+                    "First-factory bootstrap changed Easy/Medium's parallel growth allocation");
+            }
+            bot->difficulty=savedDifficulty;
+            factoryData.enabled=false;
+            for(const auto& yardLevel:yardLevels)yardLevel.first->updateBuildList();
+            require(marketDecide(true,factoryPrice-1).zones>0,
+                "Unavailable factory technology withheld parallel city growth");
+            factoryData.enabled=savedEnabled;
+            for(const auto& yardLevel:yardLevels)yardLevel.first->updateBuildList();
+            state.comValve=state.indValve=0;
             const int growthPower=house->getPowerRequirement()+std::max(0,factoryData.power)+24;
             const Pass lastPower=marketDecide(true,factoryPrice,growthPower-1);
             require(!ordered(lastPower,Structure_HeavyFactory),

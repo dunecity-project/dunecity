@@ -3203,6 +3203,22 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
 void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     planningBuilder=NONE_ID; clearPlacementCache(false,true);
     pass.capitalChoice = -1;
+    bool firstHeavyBootstrap=false;
+    if (botConfig().force.cityConstructionCapital && difficulty>=Difficulty::Hard
+        && pass.citySimEnabled && !pass.spiceEconomyViable && pass.cityYards>1
+        && pass.itemCount[Structure_HeavyFactory]==0 && pass.itemCount[Structure_StarPort]>0
+        && !builderOnly() && gameMode==GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && !cityBootstrapNeeded(pass) && pass.forecastTax>pass.forecastUpkeep
+        && !pass.defendingEconomy && !pass.airEngaged) {
+        for (const auto* builder:pass.capitalBuilders) {
+            if (builder->getItemID()!=Structure_ConstructionYard || builder->isUpgrading()
+                || builder->isOnHold() || builder->getProductionQueueSize()>0
+                || !campaignAvailableToBuild(builder,Structure_HeavyFactory)) continue;
+            planningBuilder=builder->getObjectID();clearPlacementCache(false,true);
+            if (findPlaceLocation(Structure_HeavyFactory).isValid()) { firstHeavyBootstrap=true; break; }
+        }
+        planningBuilder=NONE_ID;clearPlacementCache(false,true);
+    }
     // A fleet-ratio carryall plan is not active mining, repair or pickup work.
     // It must not indefinitely outrank a fully income-budgeted standing battery.
     // Keep actual transport work and every other safety/income priority intact.
@@ -3217,7 +3233,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     int withoutIdleTransport=-1;
     for (size_t i=0;i<pass.capitalCandidates.size();++i) {
         const auto& candidate=pass.capitalCandidates[i];
-        if (candidate.score<=0) continue;
+        if (candidate.score<=0 || (firstHeavyBootstrap && DuneCity::isCityZoneStructure(candidate.item))) continue;
         if (pass.capitalChoice<0 || candidate.score>pass.capitalCandidates[pass.capitalChoice].score)
             pass.capitalChoice=int(i);
         if (mayPreferBattery) {
@@ -3237,7 +3253,8 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         bool boundedClaim=false;
         for (size_t i=0;i<pass.capitalCandidates.size();++i) {
             const auto& candidate=pass.capitalCandidates[i];
-            if (candidate.score<=0 || std::string_view(candidate.kind)=="military") continue;
+            if (candidate.score<=0 || std::string_view(candidate.kind)=="military"
+                || (firstHeavyBootstrap && DuneCity::isCityZoneStructure(candidate.item))) continue;
             if (preferFundedBattery && idleTransport(candidate)) continue;
             boundedClaim |= std::string_view(candidate.reason)=="ground_threat"
                 || std::string_view(candidate.reason)=="early_rocket"
@@ -3273,11 +3290,12 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_upgrade")
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_prerequisite"));
     pass.cityGrowthProtected = false;
-    // With multiple yards, assign one to growth alongside routine investment.
-    // Crime protection keeps the winning allocation; growth resumes after its
-    // order is accepted. A lone opening yard retains its tech path.
+    // Parallel growth accompanies routine investment, not the first factory's
+    // existing bootstrap. Otherwise two yards zone every tax receipt away even
+    // though the ordinary opening rule is saving for a legal Heavy Factory.
     Uint32 dedicatedCityYard=NONE_ID;
-    if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1 && !pass.protectionCapital) {
+    if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1
+        && !pass.protectionCapital && !firstHeavyBootstrap) {
         for (const auto* builder:pass.capitalBuilders) {
             if (builder->getItemID()!=Structure_ConstructionYard || builder->isUpgrading()
                 || builder->isOnHold()) continue;
@@ -3303,7 +3321,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         }
         planningBuilder=NONE_ID;clearPlacementCache(false,true);
     }
-    if (!pass.cityGrowthProtected && pass.citySimEnabled
+    if (!pass.cityGrowthProtected && !firstHeavyBootstrap && pass.citySimEnabled
         && (getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=24
             || botConfig().force.cityGrowthPower)
         && pass.capitalChoice>=0 && pass.capitalCandidates[pass.capitalChoice].kind==std::string("military")) {
@@ -3351,6 +3369,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("city_growth_yards_busy",pass.cityGrowthYardsBusy)
             .set("city_growth_dedicated_yard",dedicatedCityYard)
             .set("city_growth_builder",pass.cityGrowthProtected ? pass.capitalCandidates[pass.capitalChoice].builder : NONE_ID)
+            .set("city_growth_waits_for_first_factory",firstHeavyBootstrap)
             .set("first_factory_capital",pass.firstFactoryCapital).set("first_factory_production_cost",pass.firstFactoryProduction)
             .set("existing_military_capacity",pass.existingMilitaryCapacity).set("military_value",pass.militaryValue)
             .set("military_target",militaryValueLimit).set("military_budget",pass.militaryBudget)

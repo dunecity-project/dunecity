@@ -264,7 +264,8 @@ struct QuantBotConfig {
         bool cityOpeningCapital;
         /// Protect Hard/Brutal's already affordable first heavy factory in a
         /// seeded tax city with a standing Starport from repeat military bargains.
-        /// Existing income, power and defence gates apply; never save below its quote.
+        /// A healthy multi-yard tax city retains the ordinary first-factory bootstrap
+        /// before parallel zoning. Only an affordable quote reserves other producers' cash.
         bool cityConstructionCapital;
         /// Reserve a missing production prerequisite before the factory/repair
         /// plot it unlocks, so future footprints cannot exclude their own supplier.

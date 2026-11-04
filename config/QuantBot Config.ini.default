@@ -359,7 +359,8 @@ CityPowerSizing=1
 # Military production and required power/supply are unchanged.
 CityOpeningCapital=1
 # Hard/Brutal: protect a seeded tax city's fully affordable first Heavy Factory from bargains.
-# Never save below the complete quote or change the existing MCV priority.
+# Healthy multi-yard tax cities keep the ordinary first-factory bootstrap ahead of zoning.
+# Only an affordable quote reserves military/market cash; MCV priorities are unchanged.
 CityConstructionCapital=1
 # Reserve the missing production prerequisite, not the unavailable factory it unlocks.
 # Prevent future factory/repair plots from excluding their own Light Factory.
