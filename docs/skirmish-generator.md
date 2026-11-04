@@ -43,9 +43,10 @@ Mod, house, AI and AI partner stay drop-downs.
     Default **75 / 20 / 5**. Sand includes dunes and any spice; Rock is ordinary buildable,
     passable rock; Mountain is impassable. Moving Sand or Rock trades the other first, preserving
     Mountain where possible; moving Mountain trades Rock first, then Sand. The selected control
-    always wins. Clean start cores/rims can force extra rock on crowded maps; connecting lanes
-    can limit mountains at extreme settings. The organic rock fields can overshoot their target
-    (the generator tests retain the existing +12-point tolerance). Spice only grows on the sand
+    always wins. Clean start cores, future building room and their rims can force extra rock on
+    crowded maps; connecting lanes can limit mountains at impossible extreme settings. Surplus
+    editor fields are eroded back to the existing +12-point tolerance without eroding required
+    start footprints. Spice only grows on the sand
     share, so zero sand also means no spice.
     Last-used keys are `Sand Percent`, `Rock Percent`, `Mountain Percent`. An old `Rock` index
     (15 / 25 / 35 / 50 / 65 / 80 / 90 / 100% **rock plus mountain**) migrates once: retain that
@@ -228,6 +229,9 @@ rock-plus-mountain mask and every sand/dune tile are unchanged in this reproduct
 hashes, phase counts, `before-after-80rock.png` (viewed, matched palette) and
 `terrain-verification.json`.
 
+This table records the terrain-version-2 mountain correction. Version 3's future-building-room
+policy below intentionally changes some coastlines as well.
+
 Corrected source `f0763fee78cd`, cluster job `20261104T020444-terrain-final-02e94e`:
 **35 generator cases / 3,322,285 assertions passed** (mini, 13.47 s) and the complete native
 skirmish probe passed (mini, 97.1 s), including multiplayer equal-state/save-load checks,
@@ -236,6 +240,66 @@ also matched macOS and Windows before repinning. The focused 640×480 terrain me
 passed in `20261104T012524-combined-full-2-cec93f` (mini, 14.34 s, exactly one pass marker);
 desert, city and multiplayer screenshots were viewed at actual minimum size.
 
+## Fair contiguous start rock (2026-11-04)
+
+The two reported 8-player 256×256 MCV-only maps exposed a separate problem: a clean starting
+8×8 core was enough to deploy a yard, but not a guarantee of room to build a base and city.
+In the embedded original saves, Atreides on seed **418379001** had only **266** connected
+ordinary-rock tiles; Sardaukar on seed **836308809** had **255**. Mountains do not count as
+usable building rock, and a large rock component elsewhere is not room beside this start.
+
+Measurement uses a four-neighbour ordinary-rock flood fill from each start, **clipped to that
+start's square home berth**, rather than crediting a continent reached by a narrow distant neck.
+All starts on a map receive the same berth side and floor:
+
+- Goal side **32 in City mode**, **24 in Vanilla**.
+- With map area `A`, ordinary-Rock percentage `R` and `H` houses, compute
+  `budget = floor(8*A*R/(900*H))`; clamp it to `goal²`, take the integer square root,
+  round the side down to even and keep a minimum side of 8.
+- Required connected ordinary rock is `ceil(0.75*side²)`. A solid compact square, with its
+  side rounded up to even, supplies that floor; it contains the start and lies in its berth.
+  Thus every local count is between 75% and 100% of the same area: minimum/maximum ≥75%.
+- At 256×256 / eight houses / Rock 20%, City gets a **32×32 berth, 768-tile floor and
+  28×28 solid reserve (784 tiles)**. A checked design allowance for a full factory/service
+  chain with eight turrets and reactor spacing is 282 tiles; six roaded R/C/I lots add 176,
+  total 458. This is a terrain/build-out allowance, not a promise of an unlimited city or of
+  768 empty tiles after selecting a prebuilt city.
+
+Where a small starting kit needs extra room, sufficiently separated unmirrored slots first
+search a small deterministic neighbourhood for denser natural rock. This consumes no plan RNG;
+mirrored slots and already-large starting kits stay put. Missing building room is then made
+solid, with a small organic feather, and protected from mountain painting. Actual starting
+cores retain their existing wider noisy rims. Ground and spice connectors remain protected.
+
+The unchanged version-2 baseline was frozen as `d07062484c7a`, native job
+`20261104T194355-start-rock-baseline-86ecbe`. Its 576-map matrix spans six sizes, 2/4/8 players,
+City/Vanilla, mirrored/free layouts, four terrain mixes and 16 distinct seeds:
+**1,192 of 2,688 starts** missed the planned floor, across **347 maps**; worst within-map
+minimum/maximum was **26.52%**. For eight-player City maps at 75/20/5 (four maps per size):
+
+| Size | Berth / floor | Before min | Before median | Before max | Worst min/max |
+|---|---:|---:|---:|---:|---:|
+| 64 | 8 / 48 | 64 | 64 | 64 | 100% |
+| 96 | 14 / 147 | 152 | 177 | 196 | 78.57% |
+| 128 | 18 / 243 | 181 | 263 | 314 | 62.63% |
+| 160 | 22 / 363 | 189 | 361 | 442 | 56.93% |
+| 192 | 28 / 588 | 219 | 409.5 | 638 | 34.33% |
+| 256 | 32 / 768 | 187 | 379 | 867 | 31.22% |
+
+That wider matrix also exposed six pre-existing mountain-quota shortfalls and 31 mirrored
+coverage overshoots beyond 12 points on sizes ≥128. Mirrored core rectangles were duplicated,
+and each already-mirrored lobe walk was repeated for every mirror image. Version 3 deduplicates
+the rectangles and walks each core orbit once. Unneeded editor-field surplus is shore-eroded
+without removing minimum start shapes. If protected ordinary rock leaves too few mountain
+candidates, remaining quota grows onto unprotected sand/dune coast instead of consuming
+building room, spice or connecting routes.
+
+Baseline settings, original-save measurements, per-map/per-start CSVs, exact generated INIs and
+labelled previews are retained in `outputs/fair-start-rock-20261104/`. The second reported
+save's baseline INI matches byte for byte, including its exact Workshop CivWars mod; the first
+save predates the version-2 mountain change, so its original terrain and current baseline are
+reported separately. The separate `CivWarsGenerator` is not changed.
+
 ## Generation
 - **Terrain** (`shapeRock`, `addSpice`, `addMountains`), modelled on the map editor's random map
   (`generateRandomMap`, which itself is unchanged):
@@ -243,19 +307,25 @@ desert, city and multiplayer screenshots were viewed at actual minimum size.
     blooms) with no spice. A binary search picks the smallest editor rock-field count that reaches
     combined Rock + Mountain target with everything below in place. Above the editor fields'
     reach, `growRock` grows outward in ragged seeded rings, mirrored where required.
+    Whole-field surplus above the existing 12-point allowance is removed from shallow shores,
+    retaining the zero-field minimum start shapes.
   - Scattered rock islands (one per 2,048 tiles, editor-style random walks).
   - Every start's clean core (the rectangle its base and city need) is rock, grown by a rim of
     irregular width: smooth value noise between 2 and 7 tiles, plus a tile of per-tile jitter,
     smoothed with the editor's fill-in rule, plus three editor-style rock lobes walked out from
     beyond the rim. The core is never the outline.
+    Mirrored core rectangles are unique and each lobe orbit is walked only once. Small kits
+    also receive the compact future-rock reserve described above, with a smaller feathered rim.
   - Mountains have an independent tile budget: selected map percentage × map area, rounded down
     to a whole mirrored group (at most three tiles below target). Seeded smooth value noise,
-    with a preference for deeper rock, chooses coherent patches from ordinary rock; there is no
-    unconditional depth-to-mountain conversion. No mountain comes within about three tiles of
-    a start's clean core. Three-tile-wide protected ground routes join the starts; a 0/1 BFS
-    then connects every spice tile through existing sand/spice while minimizing reserved rock.
-    Harvesting connectors need only one tile. A crowded/extreme request uses only eligible
-    rock rather than painting through those routes or levelling all mountains afterwards.
+    with a preference for deeper rock, first chooses coherent patches from ordinary rock.
+    If protected building/spice ground exhausts that layer, the remaining quota extends onto
+    unprotected sand/dunes, preferring existing geological coast. There is no unconditional
+    depth-to-mountain conversion. Actual clean cores keep their existing clearance, and the
+    full compact future reserve is mountain-free. Three-tile-wide protected ground routes
+    join the starts; a 0/1 BFS connects every spice tile through existing sand/spice while
+    minimizing reserved rock. Harvesting connectors need only one tile. An impossible crowded
+    request never paints through those protections or levels all mountains afterwards.
   - Spice fields grow like the editor's: random walks over sand and dunes that turn thick where
     they cross themselves, then the editor's fill-in passes for spice and thick spice, until the
     spice target is reached. The first field goes beside every start (toward the map centre),
@@ -268,6 +338,8 @@ desert, city and multiplayer screenshots were viewed at actual minimum size.
 - **Start positions**
   - Mirrored mode: point mirroring for 2 houses; otherwise both axes, from the corner and edge slots.
   - Normal mode: an evenly spaced square ring with a seeded offset.
+    If a small kit needs future room and slots are sufficiently separated, a bounded local
+    search prefers denser natural rock without changing the plan RNG or overlapping berths.
   - The player takes slot 0, allies the nearest slots, and enemies the rest.
   - Each start owns its core and two tiles around it (cores first): no other house builds,
     zones or parks there.
@@ -334,12 +406,12 @@ desert, city and multiplayer screenshots were viewed at actual minimum size.
 - **Save map** writes `<user>/maps/multiplayer/<N>P - <S>x<S> - Random <a>v<e>[ FFA] <Mode> T<tech> <seed>.ini`.
   The map shows up under Custom Game > MP User Maps and can be hosted (its houses are fixed; the
   multiplayer Random map's starts are open). A `[RANDOMSKIRMISH]` section records seed, map seed,
-  terrain version 2, Sand/Rock/Mountain shares, their `TerrainOptionsHash` (fixed-byte-order
+  terrain version 3, Sand/Rock/Mountain shares, their `TerrainOptionsHash` (fixed-byte-order
   FNV-1a), and the per-house plan; the loader ignores this provenance. The complete INI is already
   sent in `GameInitSettings` and embedded in saves, so the new map-only controls need no extra
-  game-options wire fields, protocol bump or save-version bump. Corrected mountain defaults
-  intentionally change newly generated maps for existing seeds; existing saves keep their
-  embedded terrain unchanged.
+  game-options wire fields, protocol bump or save-version bump. The mountain correction and
+  version-3 future-rock/quota fixes intentionally change newly generated maps for existing seeds;
+  existing saves keep their embedded terrain unchanged.
 - If a crowded map cannot fit everything (for example many houses on 64x64), the items that do not
   fit are skipped. They are counted in `HouseSetup::skipped`, and the screen reports them.
 
@@ -417,6 +489,11 @@ generated", and "random settings on army and city must apply equally to each pla
     budgeted mountains (including exact zero), monotonic controls, configuration migration,
     normalization, terrain-options hash, deterministic INI, clean cores and reachable spice.
     Spice share remains within 3 points of its target for every preset over three seeds.
+  - A 720-configuration future-rock sweep (six sizes, 2/4/8 houses, both modes, four mixes,
+    five seeds) checks the bounded independent flood-fill floor, a compact all-rock square,
+    minimum/maximum fairness, repeatable INI, clean/legal starts, spice/ground connectivity
+    and mirrored terrain. Budget scaling excludes mountain, and helper cases reject diagonal,
+    outside-berth, non-rock and invalid-start shortcuts.
   - Terrain looks like the editor's: longest straight rock edge at most 16 tiles, mountains and
     dunes present, every start's rim reaches at least 2 tiles past its core and changes width at
     least once per 8 edge tiles, and the core stays clean rock.
