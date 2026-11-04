@@ -355,8 +355,9 @@ void runControlsProbe(Game& game) {
         }
         game.unselectAll(game.selectedList);zone->demolish();game.pInterface->updateObjectInterface();
     }
-    game.onSkipMission();
-    auto* menu=dynamic_cast<InGameMenu*>(game.pInGameMenu.get());require(menu,"Missing pause menu");menu->processChildWindowOpenCloses();
+    game.onOptions();
+    auto* menu=dynamic_cast<InGameMenu*>(game.pInGameMenu.get());require(menu,"Missing pause menu");
+    menu->onSkipMission();menu->processChildWindowOpenCloses();
     auto* question=dynamic_cast<QstBox*>(menu->pChildWindow);
     require(question && question->button2.isActive() && commands(CMD_CAMPAIGN_SKIP)==0,"Skip was not safely confirmed");
     capture("skip-confirmation.bmp");
