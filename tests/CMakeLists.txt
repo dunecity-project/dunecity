@@ -480,7 +480,7 @@ if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/cross-platform-city-medium
             --scenario --mod dunecity --house harkonnen --local-spectator --seed 9101 --minutes 25
-            --capture-mib 256 --path-workers 1 --expect-digest c5b8f06c9e34f991
+            --capture-mib 256 --path-workers 1 --expect-digest 070bbafc6799818b
             --scenario-sides harkonnen:1:qBotMedium,atreides:2:qBotMedium
             --scenario-style city-construction-capital-off
             --skirmish size=160,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
@@ -488,7 +488,7 @@ if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/cross-platform-city-brutal
             --scenario --mod dunecity --house harkonnen --local-spectator --seed 9101 --minutes 25
-            --capture-mib 256 --path-workers 1 --expect-digest a2f6471233ccdaa0
+            --capture-mib 256 --path-workers 1 --expect-digest 2bc949df2bf759d8
             --scenario-sides harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal
             --skirmish size=96,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
         add_test(NAME tile_non_infantry_lookup COMMAND ${Python3_EXECUTABLE}

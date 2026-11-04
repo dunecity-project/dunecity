@@ -17,8 +17,24 @@
   Integrator decision: retain it as a strict measured-exhaustion regression, and
   add generator-next seed91875 as the unchanged completion check. No forced
   victory, resource injection, anti-air override or accepted-default rollback.
-- Before any repin, cross-platform city digests still require measured equality
-  on final runtime inputs; stale pin failures are not passing evidence.
+- `quantbot_custom_attack` and all11 scenario-smoke cases pass at `87bc458c`,
+  receipt `20261105T011643-suite-exhaustion-cutover-gates-1de3bf`.
+  Performance passes at `8dd835ac`, receipt
+  `20261105T005216-suite-rounded-cash-gates-0a17ad` (other failures in that earlier
+  diagnostic batch were subsequently corrected).
+- Same-source exhausted-dispatch OFF/ON audit at `87bc458c`:
+  `20261105T011638-suite-exhausted-final-off-f09dec` /
+  `20261105T011643-suite-exhausted-final-on-dad5cf`. Seed90866 has182 identical
+  checkpoints through cycle135750 (36.2min), first divergence136500; ON ends
+  with no idle-ready troops or unfunded repair holds. Seed91875 has all148
+  checkpoints and its29.25min QH victory identical, digest `6f622794c50664f6`.
+- City repins are measured, not inferred: Medium `070bbafc6799818b`, Brutal
+  `2bc949df2bf759d8`, final source `87bc458c`. Both setups, bot configs and all126
+  checkpoint digests match macOS/Windows. Mac receipt
+  `20261105T011751-suite-final-city-parity-measure-1bc7b8`; Windows receipt
+  `20261105T012455-suite-city-windows-87bc-7f1bc9-28c7f1`. Old-pin failures remain
+  explicit. The Windows Brutal raw trace was recovered from its receipt-owned
+  run after its collector produced an empty archive.
 
 ## 2026-11-04 — Fair contiguous rock for Random Skirmish starts (OMP TerrainMix, unreleased)
 

@@ -107,9 +107,17 @@ Pins must come from measured matching platform runs of the intended source and i
 
 The portable Ninja CTests `cross_platform_city_medium` and `cross_platform_city_brutal`
 pin the seed-9101, no-spice, yard-only cases at cycle 93,750: respectively
-`c5b8f06c9e34f991` (160, Medium, 1v1) and `a2f6471233ccdaa0` (96, Brutal, FFA4).
-Both were measured on macOS arm64 and Windows x64 at production source `f84cc5927e7d`,
-including the final default-off MoreRocketTurrets configuration.
+`070bbafc6799818b` (160, Medium, 1v1) and `2bc949df2bf759d8` (96, Brutal, FFA4).
+Both were measured on macOS arm64 and Windows x64 at final gameplay source
+`87bc458ce697221207c2bf71794bbe7c22ff82d4`, with TrooperSupport and
+ExhaustedArmyDispatch ON. In each case the setup/input hashes, every bot config
+hash and all **126** checkpoint digests match exactly, not just the final digest.
+Mac receipt: `20261105T011751-suite-final-city-parity-measure-1bc7b8`;
+Windows receipt: `20261105T012455-suite-city-windows-87bc-7f1bc9-28c7f1`.
+Those measurement jobs intentionally retain the old-pin mismatch failures.
+The Windows Brutal collector archive was empty; its receipt-owned
+`w2/build/cross-platform-city-brutal/run-fq00uaq2/run.log` supplied the complete
+matching raw trace before repinning.
 
 `dunecity-audit.py` retains the setup hashes, per-bot config hashes, executable SHA256
 and source commit/fingerprint in `games.csv` before successful profiles are discarded.
