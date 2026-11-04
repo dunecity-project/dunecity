@@ -117,7 +117,7 @@ static void signalHandler(int sig) {
     writeCrashLog("========================================\n");
     writeCrashLog("Signal: %d (%s)\n", sig, getSignalName(sig));
     writeCrashLog("Time: %s\n", getTimeStamp());
-    writeCrashLog("Version: %s\n", VERSION);
+    writeCrashLog("Version: %s\n", DUNECITY_DISPLAY_VERSION);
     writeCrashLog("Platform: %s\n", SDL_GetPlatform());
     writeCrashLog("\n");
     

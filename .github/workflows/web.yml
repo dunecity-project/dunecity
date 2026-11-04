@@ -40,6 +40,7 @@ jobs:
         env:
           BUILD_DIR: build-web
           JOBS: '4'
+          DUNECITY_RELEASE_BUILD: 'ON'
         run: ./tools/web/build-emscripten.sh
       - name: Package and publish website
         env:

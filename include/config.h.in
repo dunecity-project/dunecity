@@ -5,6 +5,10 @@
     #define VERSION "@PROJECT_VERSION@"
 #endif
 
+// VERSION and VERSIONSTRING are compatibility identifiers, never display labels.
+#cmakedefine01 DUNECITY_RELEASE_BUILD
+#define DUNECITY_DISPLAY_VERSION "@DUNECITY_DISPLAY_VERSION@"
+
 #ifndef PACKAGE
     #define PACKAGE "@PROJECT_NAME@"
 #endif

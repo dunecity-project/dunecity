@@ -9,6 +9,7 @@
 #   shell.js / shell.css (production browser shell)
 #
 # Requires: git, cmake, python3, node (for webrtc glue unit tests only).
+# Official publishing explicitly sets DUNECITY_RELEASE_BUILD=ON; local builds default OFF.
 #
 # Artifact sizes use tools/web/file-size-bytes.sh (portable wc -c) so the
 # script works on Linux CI and macOS dev machines.
@@ -21,6 +22,7 @@ EMSDK_ORIGIN="https://github.com/emscripten-core/emsdk.git"
 EMSDK_DIR="${EMSDK_DIR:-${ROOT}/.emsdk}"
 BUILD_DIR="${BUILD_DIR:-${ROOT}/build/emscripten}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
+DUNECITY_RELEASE_BUILD="${DUNECITY_RELEASE_BUILD:-OFF}"
 JOBS="${JOBS:-2}"
 FILE_SIZE="${ROOT}/tools/web/file-size-bytes.sh"
 
@@ -92,6 +94,7 @@ embuilder build sdl2 sdl2_mixer sdl2_ttf zlib
 # and unrelated files instead of recursively deleting BUILD_DIR.
 emcmake cmake -S "${ROOT}" -B "${BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+    -DDUNECITY_RELEASE_BUILD="${DUNECITY_RELEASE_BUILD}" \
     -DDUNECITY_BUILD_TESTS=OFF \
     -DDUNECITY_ENABLE_PCH=OFF
 

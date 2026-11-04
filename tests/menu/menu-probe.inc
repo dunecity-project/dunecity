@@ -1129,6 +1129,9 @@ int runMenuProbe() {
     }
     {
         MainMenu menu;
+        menuRequire(menu.modVersionLabel.getText() == std::string("App v") + DUNECITY_DISPLAY_VERSION,
+                    "Home does not display the configured release/development version");
+        SDL_Log("MENU_VERSION_PASS: %s", menu.modVersionLabel.getText().c_str());
         menuRequire(menu.campaignButton.isVisible() && menu.customButton.isVisible() && menu.randomSkirmishButton.isVisible()
             && menu.civWarsButton.isVisible() && menu.onlineButton.isVisible(), "Home play actions missing");
         menuRequire(menu.windowWidget.getWidgetPosition(&menu.civWarsButton).y

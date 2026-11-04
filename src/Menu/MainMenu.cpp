@@ -324,7 +324,7 @@ void MainMenu::refreshModVersionLabel()
             --bannerFontSize;
         activeModLabel.setTextFontSize(bannerFontSize);
         activeModLabel.setText(bannerText);
-        modVersionLabel.setText("App v" + std::string(VERSION));
+        modVersionLabel.setText("App v" + std::string(DUNECITY_DISPLAY_VERSION));
     } catch (const std::exception& e) {
         SDL_Log("MainMenu: setText failed: %s", e.what());
     }

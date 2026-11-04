@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.15)
 
 # Project name and version
 project(DuneCity VERSION 1.0.864 LANGUAGES C CXX)
+
+# Release optimizations do not make a build an official release. Keep the
+# numeric project version for packages, updates, saves and multiplayer matching.
+option(DUNECITY_RELEASE_BUILD "Display the official release version without a dev suffix" OFF)
+set(DUNECITY_DISPLAY_VERSION "${PROJECT_VERSION}")
+if(NOT DUNECITY_RELEASE_BUILD)
+    string(APPEND DUNECITY_DISPLAY_VERSION "dev")
+endif()
+message(STATUS "DuneCity display version: ${DUNECITY_DISPLAY_VERSION}")
 if(APPLE)
     enable_language(OBJCXX)
 endif()

@@ -19,6 +19,17 @@
     #define VERSION "1.0.864"
 #endif
 
+// Non-CMake builds also default to a development display label. Keep VERSION
+// and VERSIONSTRING numeric for save/mod pins, multiplayer and update checks.
+#ifndef DUNECITY_RELEASE_BUILD
+    #define DUNECITY_RELEASE_BUILD 0
+#endif
+#if DUNECITY_RELEASE_BUILD
+    #define DUNECITY_DISPLAY_VERSION VERSION
+#else
+    #define DUNECITY_DISPLAY_VERSION VERSION "dev"
+#endif
+
 #ifndef PACKAGE
     #define PACKAGE "dunecity"
 #endif

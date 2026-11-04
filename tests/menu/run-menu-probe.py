@@ -126,6 +126,14 @@ with scratch_dir('menu-probe') as scratch:
         text = logpath.read_text(errors="replace")
         results = [line for line in text.splitlines() if 'MENU_PROBE_PASS:' in line]
         if len(results) != 1: raise RuntimeError('Missing menu test result; see '+str(logpath))
+        if not args.retina_resolution and not args.terrain_mix and not args.tornie_family:
+            versions = [line.split('MENU_VERSION_PASS: ', 1)[1]
+                        for line in text.splitlines() if 'MENU_VERSION_PASS: ' in line]
+            if len(versions) != 1 or not versions[0].startswith('App v'):
+                raise RuntimeError('Missing main-menu display version; see '+str(logpath))
+            display_version = versions[0][len('App v'):]
+            if 'Starting DuneCity ' + display_version + ' on ' not in text:
+                raise RuntimeError('Startup log and main-menu version disagree; see '+str(logpath))
         if not args.retina_resolution and not args.terrain_mix:
             rows = [dict(field.split('=', 1) for field in line.split('TORNIE_MENU_PASS: ', 1)[1].split())
                     for line in text.splitlines() if 'TORNIE_MENU_PASS: ' in line]

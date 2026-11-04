@@ -277,7 +277,7 @@ void setVideoMode(int displayIndex)
         clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);
     }
 #endif
-    window = SDL_CreateWindow("DuneCity",
+    window = SDL_CreateWindow("DuneCity " DUNECITY_DISPLAY_VERSION,
                               SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex), SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
                               windowWidth, windowHeight,
                               videoFlags);
@@ -977,7 +977,7 @@ int main(int argc, char *argv[]) {
     // v1.0.512: build-stamp log so Stefan can verify the binary on disk
     // actually contains the v1.0.5xx fixes. If this line is missing from
     // the run log, the .exe is stale.
-    SDL_Log("DuneCity v%s — build stamp active", std::string(VERSION).c_str());
+    SDL_Log("DuneCity v%s — build stamp active", DUNECITY_DISPLAY_VERSION);
 
     // v1.0.514: install SIGSEGV/SIGABRT/SIGFPE handler so a fatal native
     // crash (nullptr deref, divide by zero, etc.) writes a diagnostic to
@@ -1014,7 +1014,7 @@ int main(int argc, char *argv[]) {
                 "  Check Dune City.log for the last SDL_Log lines before the\n"
                 "  crash — that is where the actionable diagnostic lives.\n"
                 "=============================\n",
-                sig, sigName, info->si_code, info->si_addr, VERSION);
+                sig, sigName, info->si_code, info->si_addr, DUNECITY_DISPLAY_VERSION);
             if(n > 0) {
                 // stderr
                 (void)!write(2, buf, n);
@@ -1153,7 +1153,7 @@ int main(int argc, char *argv[]) {
         installCrashHandlers(crashLogPath.c_str());
 #endif
 
-        SDL_Log("Starting DuneCity %s on %s", VERSION, SDL_GetPlatform());
+        SDL_Log("Starting DuneCity %s on %s", DUNECITY_DISPLAY_VERSION, SDL_GetPlatform());
 
         // First check for missing files
         std::vector<std::string> missingFiles = FileManager::getMissingFiles();

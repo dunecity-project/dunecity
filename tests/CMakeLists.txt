@@ -11,6 +11,7 @@ add_executable(dunelegacy_tests)
 target_sources(dunelegacy_tests
     PRIVATE
         WorkshopStoreTestCase.cpp
+        VersionTestCase.cpp
         SoundtrackPackTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/music/SoundtrackPack.cpp
         AchievementsTestCase/AchievementsTestCase.cpp
@@ -168,8 +169,8 @@ target_sources(dunelegacy_tests
 # Include directories
 target_include_directories(dunelegacy_tests
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
         ${CMAKE_BINARY_DIR}/include
+        ${CMAKE_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/src/enet  # For enet headers
         ${CMAKE_SOURCE_DIR}/src      # For audio/sounds.h and other src-level headers

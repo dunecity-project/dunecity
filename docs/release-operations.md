@@ -41,6 +41,33 @@ the portable ZIP remains available. Stable feeds and binaries are uploaded to a
 draft before publication. Do not replace assets in an already published release;
 use a new version. No update feed is emitted for `latest-dev`.
 
+## Development identity and official release opt-in
+
+Normal staging, local agent builds and non-release CI builds use
+`DUNECITY_RELEASE_BUILD=OFF` (the CMake default). Their runtime label is
+`<last release version>dev`, currently `1.0.864dev`; do not bump the numeric version
+just to identify development work. `CMAKE_BUILD_TYPE=Release` selects optimized
+code, not official release identity.
+
+Only an explicitly requested official build configures with
+`-DDUNECITY_RELEASE_BUILD=ON`, giving the plain runtime label (currently `1.0.864`).
+Apply that opt-in at each release channel's configure step:
+
+| Channel | Official release identity |
+|---|---|
+| macOS, Windows, Linux | Stable-tag release jobs and deliberate local official builds pass `-DDUNECITY_RELEASE_BUILD=ON` to CMake. `scripts/build.sh --release-build` is the explicit helper opt-in. Ordinary staging/PR/main builds remain OFF. |
+| Browser | The published stable-tag build and an authorized browser hotfix pass `-DDUNECITY_RELEASE_BUILD=ON` through `emcmake cmake` (or `scripts/package-web.ps1 -ReleaseBuild`). Ordinary web development/CI remains OFF. |
+| iOS device, IPA, TestFlight | Use `scripts/build-ios.sh --device --release-build` for a deliberate official device build. `--ipa` and `--testflight` are explicit distribution requests and select ON automatically. Normal simulator/device builds default to dev. |
+| Android | Official release APK builds pass `-DDUNECITY_RELEASE_BUILD=ON` to CMake (`scripts/package-android-apk.ps1 -BuildNative -BuildApk -ReleaseBuild`). Workflow package probes/candidates remain dev unless explicitly requested as official with both `android_package_probe=true` and `android_release_build=true`; a stable tag alone does not opt Android in. |
+
+CMake caches this option: when returning an official build tree to staging or
+agent work, explicitly reconfigure with `-DDUNECITY_RELEASE_BUILD=OFF`; do not make
+dev builds official merely because they use Release optimizations or reuse a tree.
+Keep `PROJECT_VERSION` and the `VERSION` macro numeric. Packaging/updater versions,
+protocol/save/mod compatibility metadata, `CFBundleShortVersionString` and iOS
+`CFBundleVersion` stay unchanged; the `dev` suffix belongs only to runtime display
+identity (and macOS Finder's long version/Get Info description).
+
 ## Release checklist: every channel (verified for 1.0.864, 2026-11-01)
 
 One release touches all of these; each is a separate gate. Report each one as verified,
@@ -189,7 +216,7 @@ For an authorized browser hotfix, build current committed source locally:
 
 ```sh
 source /path/to/emsdk/emsdk_env.sh
-emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DDUNECITY_BUILD_TESTS=OFF -DDUNECITY_ENABLE_PCH=OFF
+emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DDUNECITY_RELEASE_BUILD=ON -DDUNECITY_BUILD_TESTS=OFF -DDUNECITY_ENABLE_PCH=OFF
 cmake --build build-web --parallel 8
 python3 scripts/check-web-mods.py --build-root build-web
 python3 scripts/package-web.py --build-root build-web --play-root ../dunelegacy.com/website/play
@@ -255,11 +282,13 @@ simulators (iPhone and iPad), then build the exact committed release tree:
 
 ```sh
 agent-workspace run --project dunecity --owner OWNER --tests --wait -- nice -n 10 env JOBS=4 /bin/bash -c \
-  'scripts/build-ios.sh --device && /usr/libexec/PlistBuddy -c "Print :NSBluetoothAlwaysUsageDescription" build-ios-device/bin/dunecity.app/Info.plist && scripts/build-ios.sh --testflight'
+  'scripts/build-ios.sh --device --release-build && /usr/libexec/PlistBuddy -c "Print :NSBluetoothAlwaysUsageDescription" build-ios-device/bin/dunecity.app/Info.plist && scripts/build-ios.sh --testflight'
 ```
 
-The build number is the UTC time (`YYYYMMDD.HHMM`); App Store Connect shows it without the
-leading zero (`20261101.356`). After processing, use the App Store Connect API key
+`--testflight` (like `--ipa`) selects official release identity automatically;
+ordinary simulator/device builds do not. The `CFBundleVersion` build number remains
+the UTC time (`YYYYMMDD.HHMM`); App Store Connect shows it without the leading zero
+(`20261101.356`). After processing, use the App Store Connect API key
 (1Password `Agent-Operator`, "App Store Connect API key", read with `agent-op`) to set the
 en-US "What to Test" text, add the build to the **Public** group (public link
 https://testflight.apple.com/join/nsEVY7Eb) and submit it for Beta App Review. A missing
@@ -272,9 +301,11 @@ changes only after Apple approves the build for external testing.
 Android has its own version line (`android-version.json`, `net.dunecity.dune2r`, e.g.
 0.2.33 / 1000553 on engine 1.0.858) and is never the repository's Latest release.
 
-1. Candidate: `gh workflow run build.yml --ref BRANCH -f android_package_probe=true`, then download
-   `DuneCity-Android-Runner-Candidate`. The runner signs it with a throwaway debug key, so it
-   cannot be installed over a public APK.
+1. Official release candidate:
+   `gh workflow run build.yml --ref BRANCH -f android_package_probe=true -f android_release_build=true`,
+   then download `DuneCity-Android-Runner-Candidate`. The explicit release input selects
+   `-DDUNECITY_RELEASE_BUILD=ON`; omit it for ordinary dev package probes. The runner
+   signs it with a throwaway debug key, so it cannot be installed over a public APK.
 2. Re-sign it locally with the existing upgrade key (certificate SHA-256
    `a29825bfecef94665244e1963e3c7dc64eadb387ae52820a793d26e193c21b60`, DN "Android Debug").
    Use `zipalign -P 16`, then `apksigner sign` and `verify`. Compare every non-signature entry

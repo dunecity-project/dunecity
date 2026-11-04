@@ -1,3 +1,23 @@
+## 2026-11-04 — Development builds identify themselves as dev (OMP DevVersion, unreleased)
+
+- Normal CMake, staging and helper-script builds now display **1.0.864dev**.
+  `DUNECITY_RELEASE_BUILD=ON` is the explicit official-release opt-in; selecting
+  optimized `CMAKE_BUILD_TYPE=Release` alone does not remove the suffix.
+- `DUNECITY_DISPLAY_VERSION` drives the main-menu label, window title, startup
+  and crash diagnostics, feedback context and map-editor creation comment.
+  Finder's Get Info description uses the display version too.
+- Compatibility identifiers remain numeric: `PROJECT_VERSION`, `VERSION`,
+  `VERSIONSTRING`, network protocol/lobby matching, save header/version,
+  bundled-mod/workshop pins, desktop update comparisons, package versions,
+  browser `build.json`, Android versionCode/name and Apple short/build versions.
+  Machine-readable gameplay telemetry retains the numeric version.
+- Official stable-tag desktop/browser jobs pass the release flag. iOS
+  `--testflight`/`--ipa` select it; ordinary builds reset it OFF. Android requires
+  the explicit official-candidate input or packaging switch. Release helpers,
+  runbook and the shared `dunecity-release` skill document all channels.
+- Added version identity regression coverage and real main-menu probe assertions
+  that the rendered label and startup log agree. No release or publication.
+
 ## 2026-11-04 — Release-suite probe compatibility repairs (OMP ReleaseTriage, unreleased)
 
 - The five failures in full-suite job `20261104T062350-release-full-f84cc592-ac108b`
