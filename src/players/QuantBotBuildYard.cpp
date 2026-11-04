@@ -379,6 +379,19 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
         yardTurn.skipRemainingStructureLogic=true;
     }
 
+    // Found the first paid infantry lane before protected repeat zoning can
+    // consume every yard turn. Power, urgent defence, essential civics and the
+    // completed heavy/economy opening still win; existing or queued WORs dedupe.
+    if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && !yardTurn.urgentProtection && !yardTurn.civicClaimsYard
+        && turn.pBuilder->getProductionQueueSize()==0) {
+        const Uint32 infantry = trooperInfrastructureItem(pass, turn.pBuilder);
+        if (infantry != NONE_ID) {
+            yardTurn.itemID = infantry;
+            yardTurn.structureRule = infantry == Structure_WOR ? "trooper_support" : "trooper_prerequisite";
+        }
+    }
+
     // Honour the growth allocation in the actual yard decision,
     // not just the shared cash reserve. Previously this yard could
     // immediately spend the protected plot's budget on a service.
@@ -1488,15 +1501,6 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         && pass.money>=buildingCapitalCost(pass, Structure_RepairYard)+pass.cashBuffer
         && findPlaceLocation(Structure_RepairYard).isValid()) {
         yardTurn.itemID=Structure_RepairYard;yardTurn.structureRule="funded_repair_capacity";
-    }
-    // A useful rocket-infantry lane precedes the remaining optional factories;
-    // preceding economy, power, defence and first-heavy choices retain priority.
-    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
-        const Uint32 infantry = trooperInfrastructureItem(pass, turn.pBuilder);
-        if (infantry != NONE_ID) {
-            yardTurn.itemID = infantry;
-            yardTurn.structureRule = infantry == Structure_WOR ? "trooper_support" : "trooper_prerequisite";
-        }
     }
     // Fund combat-air capacity before optional ground-factory expansion.
     // Pending factories prevent duplicate lanes across parallel yards.

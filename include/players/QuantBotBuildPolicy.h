@@ -49,15 +49,16 @@ inline bool rocketInfantry(Uint32 item) {
 inline int rocketInfantrySize(Uint32 item) {
     return item == Unit_Troopers5 ? 5 : item == Unit_Troopers ? 3 : item == Unit_Trooper ? 1 : 0;
 }
-// The infantry share is still the spending ceiling. This smaller count target
-// gives those credits a purpose without taxing every opening or growing a wing
-// counter without bound: five rockets answer one ordinary ornithopter, while
-// a mature ground army keeps a small escort even after the visible wing leaves.
-inline int trooperSupportTarget(int armyValue, int hostileAircraft, int hostileArmourValue) {
-    const int escort = std::min(6, std::max(0, armyValue) / 2000);
+// A paid standing squad must not depend on already owning a large vehicle army.
+// Extra anti-armour troops retain the infantry share; the bounded anti-air floor
+// can answer a visible wing even when that current-army share is already full.
+inline constexpr int kStandingTroopers = 6;
+inline int trooperSupportFloor(int hostileAircraft) {
+    return std::max(kStandingTroopers, std::min(18, std::clamp(hostileAircraft, 0, 4) * 5));
+}
+inline int trooperSupportTarget(int hostileAircraft, int hostileArmourValue) {
     const int armour = int(std::min<int64_t>(9, (int64_t(std::max(0, hostileArmourValue)) + 599) / 600));
-    const int air = std::min(18, std::clamp(hostileAircraft, 0, 4) * 5);
-    return std::max({escort, armour, air});
+    return std::max(trooperSupportFloor(hostileAircraft), armour);
 }
 // Banked credits buy army past the configured cap (docs/ai-scenario-matrix.md, "Difficulty
 // ladder"): what lies above `reserve` raises the planning budget, by at most `maxPercent` of the

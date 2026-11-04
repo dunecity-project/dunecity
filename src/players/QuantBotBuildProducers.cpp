@@ -167,7 +167,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     const bool supportTroop = pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(itemID);
     if (supportTroop && !trooperOrderAdmitted(pass, itemID, data[itemID][houseID].price)) return false;
     if (cityInfantryItem(pass, itemID) && ((!pass.cityAntiAirInfantryDemand && !supportTroop)
-        || !infantryQuotaAdmits(pass, data[itemID][houseID].price)
+        || (!supportTroop && !infantryQuotaAdmits(pass, data[itemID][houseID].price))
         || int64_t(quotedPrice) + pass.cityWorkingReserve > pass.money)) return false;
     if (pass.citySimEnabled && itemID == Structure_WOR
         && ((!pass.cityAntiAirInfantryDemand && !pass.trooperSupport) || !troopContentExists(pass, turn.pBuilder)
