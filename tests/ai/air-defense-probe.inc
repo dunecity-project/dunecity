@@ -986,6 +986,12 @@ void runAirDefenseProbe(Game& game) {
         // inside the ordinary infantry quota (which counts queued orders and the
         // order being placed) and out of cash its working reserve does not need.
         {
+            // Keep the previous reactive policy's control arm explicit; the
+            // paid-production/real-air-kill fixture covers TrooperSupport on.
+            const auto savedTrooperConfig=bot->configOverride;
+            auto legacyTrooperConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
+            legacyTrooperConfig->force.trooperSupport=false;
+            bot->configOverride=legacyTrooperConfig;
             const bool savedCitySim=game.citySimEnabled_;
             const int savedTech=currentGame->techLevel;
             const auto savedLimit=bot->militaryValueLimit;
@@ -1288,6 +1294,7 @@ void runAirDefenseProbe(Game& game) {
             owner->numUnits=savedNumUnits;
             unitList=cityUnits;structureList=cityStructures;
             bot->difficulty=QuantBot::Difficulty::Brutal;
+            bot->configOverride=savedTrooperConfig;
         }
 
         // === Difficulty policy for autonomous aircraft ===
@@ -1593,7 +1600,7 @@ void runAirDefenseProbe(Game& game) {
         " reach holdable ground covering it through threatened approaches, fire in range without"
         " being force-moved, hold across ordinary unit passes and clear when the attack ends;"
         " deviated vehicles are not reserved for repair while our own damaged ones still are;"
-        " a city raises rocket infantry only for an observed hostile wing, inside one aggregate"
+        " with TrooperSupport off a city raises rocket infantry only for an observed hostile wing, inside one aggregate"
         " infantry quota that counts queued orders, out of cash its working and strategic"
         " reserves do not need, never on Easy, in support mode or in a campaign, founds"
         " the WOR only under that demand and only with real troop content, and leaves the"

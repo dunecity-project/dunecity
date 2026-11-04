@@ -326,6 +326,11 @@ inline void baselineGates() {
         require(world.configHash != offHash && world.infrastructure(pass) == Structure_WOR,
                 "ON failed to bypass the vanilla exclusion through its hashed config");
         SDL_Log("TROOPER_SUPPORT_GATE: mod=vanilla enabled=1 wor_selected=1 config_hash=%s", world.configHash.c_str());
+        world.spawn(world.enemy, Unit_Ornithopter, Coord(48, 24));
+        auto classicAir = world.plan();
+        require(classicAir.hostileAircraft == 0 && classicAir.trooperTarget == pass.trooperTarget,
+                "Classic non-tracking rockets were counted as useful moving-aircraft defence");
+        SDL_Log("TROOPER_SUPPORT_CAPABILITY: mod=vanilla visible_aircraft=1 effective_air_demand=0");
     }
     {
         World world("dunecity", false);
@@ -366,6 +371,13 @@ inline void observedDemand() {
     auto air = world.plan();
     require(air.hostileAircraft == 4 && air.trooperTarget == 18,
             "Observed wing did not reach, and stop at, the eighteen-trooper cap");
+    world.game->gameInitSettings.gameOptions.trooperAntiAir = false;
+    auto disabledAir = world.plan();
+    require(disabledAir.hostileAircraft == 0 && disabledAir.trooperTarget == armour.trooperTarget,
+            "Disabled tracking rockets still raised anti-air troop demand");
+    world.game->gameInitSettings.gameOptions.trooperAntiAir = true;
+    SDL_Log("TROOPER_SUPPORT_CAPABILITY: mod=dunecity anti_air_option=0 visible_aircraft=4 effective_air_demand=0 target=%d",
+            disabledAir.trooperTarget);
     SDL_Log("TROOPER_SUPPORT_DEMAND: escort=%d observed_armour=%d observed_aircraft=%d air_target=%d hard_cap=18",
             escort.trooperTarget, armour.trooperTarget, air.hostileAircraft, air.trooperTarget);
 }

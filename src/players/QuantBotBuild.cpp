@@ -1836,7 +1836,9 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     // launchers are genuinely producible, so it cannot become a standing tax.
     const int observedHostileAircraft = (autonomousCustomArmy() || pass.trooperSupport)
         ? visibleHostileAircraft() : 0;
-    pass.hostileAircraft = observedHostileAircraft;
+    // Only DuneCity's enabled tracking rockets answer moving aircraft.
+    pass.hostileAircraft = getGameInitSettings().getGameOptions().trooperAntiAir
+        && ModManager::instance().isDuneCityContentActive() ? observedHostileAircraft : 0;
     const bool launcherFloorAuthorised = observedHostileAircraft > 0 && available[2]
         && launcherProductionAvailable;
     const int launcherBpsBeforeFloor = pass.unitMix[2];
@@ -1895,7 +1897,8 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             pass.lightVehicleCount += pass.itemCount[item];
         }
     }
-    pass.trooperCount = pass.itemCount[Unit_Trooper] + 3 * pass.itemCount[Unit_Troopers];
+    pass.trooperCount = pass.itemCount[Unit_Trooper] + 3 * pass.itemCount[Unit_Troopers]
+        + (ModManager::instance().isTornieFamilyContentActive() ? 5 * pass.itemCount[Unit_Troopers5] : 0);
     int hostileArmourValue = 0;
     if (pass.trooperSupport) {
         for (const auto& [id, sighting] : enemySightings) {
@@ -1907,7 +1910,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
                 int64_t(hostileArmourValue) + sighting.value));
         }
         pass.trooperTarget = QuantBotBuildPolicy::trooperSupportTarget(
-            std::max(0, pass.militaryValue - pass.infantryValue), observedHostileAircraft, hostileArmourValue);
+            std::max(0, pass.militaryValue - pass.infantryValue), pass.hostileAircraft, hostileArmourValue);
     }
 
 
@@ -1988,7 +1991,7 @@ bool QuantBot::cityInfantryItem(BuildPass& pass, Uint32 item) {
 // Check troop content and its existing prerequisites; the new WOR supplies itself.
 // Its real build list still decides which offers can be queued once it exists.
 bool QuantBot::troopContentExists(BuildPass& pass, const BuilderBase* builder) {
-    const int houseID = ModManager::instance().isTornieFamilyContentActive()
+    const int houseID = pass.trooperSupport && ModManager::instance().isTornieFamilyContentActive()
         ? builder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     for (const Uint32 troop : {Unit_Trooper, Unit_Troopers}) {

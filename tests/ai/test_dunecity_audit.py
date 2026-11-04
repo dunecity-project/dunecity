@@ -242,14 +242,20 @@ class DuneCityAuditTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'CSV schema changed'):
                 audit['append'](out / 'games.csv', audit['GAME_FIELDS'], [])
 
-    def test_pairing_requires_same_build_map_options_and_off_on_styles(self):
+    def test_pairing_requires_same_source_map_options_and_off_on_styles(self):
         key = ('matrix/fixture', '0')
         old = {key: house_row()}
         new = {key: house_row()}
         previous = {'matrix/fixture': game_row('trooper-support-off')}
         current = {'matrix/fixture': game_row('trooper-support-on')}
         self.assertEqual(audit['trooper_pair_keys'](previous, current, old, new), ([key], {}))
-        for field in ('probe_sha256', 'source_commit', 'source_fingerprint', 'map_hash', 'options_hash',
+        other_probe = {'matrix/fixture': dict(current['matrix/fixture'], probe_sha256='other-native-probe')}
+        self.assertEqual(audit['trooper_pair_keys'](previous, other_probe, old, new), ([key], {}))
+        missing_probe = {'matrix/fixture': dict(current['matrix/fixture'], probe_sha256='')}
+        self.assertEqual(audit['trooper_pair_keys'](previous, missing_probe, old, new)[0], [])
+        missing_probe = {'matrix/fixture': dict(previous['matrix/fixture'], probe_sha256='')}
+        self.assertEqual(audit['trooper_pair_keys'](missing_probe, current, old, new)[0], [])
+        for field in ('source_commit', 'source_fingerprint', 'map_hash', 'options_hash',
                       'content_hash', 'object_data_hash', 'sides', 'style'):
             for value in ('', 'different'):
                 with self.subTest(field=field, value=value):
@@ -288,7 +294,7 @@ class DuneCityAuditTests(unittest.TestCase):
             with contextlib.redirect_stdout(output):
                 audit['trooper_comparison'](control, candidate)
             text = output.getvalue()
-            self.assertIn('2 verified house pairs', text)
+            self.assertIn('2 source-matched house pairs', text)
             for label in ('| hard | all | 1 |', '| brutal | all | 1 |', 'economy_stall',
                           'bankrupt_queue_empty', 'missing_starport', 'Dispatches mean', 'Kill-value mean',
                           'WOR built', 'Trooper queued', 'Enemy Ornithopter kills', 'Own elite losses'):

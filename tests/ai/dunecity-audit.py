@@ -578,9 +578,9 @@ def trooper_report(directories):
 
 
 def trooper_pair_keys(previous, current, old, new):
-    """The additional acceptance tables require actual same-build OFF/ON pairs."""
+    """Match OFF/ON source and rules; native equivalence needs cluster-parity receipts."""
     matched, rejected = [], defaultdict(int)
-    fingerprints = ('probe_sha256', 'source_commit', 'source_fingerprint', 'map_hash',
+    fingerprints = ('source_commit', 'source_fingerprint', 'map_hash',
                     'options_hash', 'content_hash', 'object_data_hash')
     settings = tuple(field for field in META if field not in ('id', 'variant', 'style')) + ('sides',)
     for key in sorted(old.keys() & new.keys()):
@@ -590,10 +590,11 @@ def trooper_pair_keys(previous, current, old, new):
             reason = 'incomplete_game'
         elif before.get('style') != 'trooper-support-off' or after.get('style') != 'trooper-support-on':
             reason = 'not_trooper_support_OFF_ON'
-        elif any(before.get(field, '') == '' or after.get(field, '') == '' for field in fingerprints):
+        elif any(before.get(field, '') == '' or after.get(field, '') == ''
+                 for field in fingerprints + ('probe_sha256',)):
             reason = 'missing_provenance'
         elif any(before[field] != after[field] for field in fingerprints):
-            reason = 'different_build_map_or_options'
+            reason = 'different_source_map_or_options'
         elif before.get('source_fingerprint_error') or after.get('source_fingerprint_error'):
             reason = 'source_fingerprint_error'
         elif any(before.get(field, '') != after.get(field, '') for field in settings):
@@ -647,9 +648,10 @@ def trooper_comparison(control, candidate):
     houses = [{(row['id'], row['house']): row for row in load([directory], 'houses.csv', ('id', 'house'))}
               for directory in (control, candidate)]
     keys, rejected = trooper_pair_keys(*games, *houses)
-    print(f'Trooper support same-build OFF -> ON: {len(keys)} verified house pairs; '
+    print(f'Trooper support same-source OFF -> ON: {len(keys)} source-matched house pairs; '
           f'excluded {sum(rejected.values())} ({json.dumps(rejected, sort_keys=True)}). '
-          'Probe/source/map/options/content/object-data fingerprints must match; AI config hashes may differ.')
+          'Source/map/options/content/object-data fingerprints must match; probe hashes remain receipts. '
+          'AI config hashes may differ; native equivalence requires external cluster-parity receipts.')
     groups = defaultdict(list, {(level, 'all'): [] for level in ('hard', 'brutal')})
     for key in keys:
         house = houses[0][key]
