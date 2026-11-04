@@ -156,13 +156,18 @@ but that separate floor prevented every heavy-allocation decision. Earlier
 classic fallback branches bought Harvesters below the AI cap even though the
 planned worker target was already exceeded.
 
-The hashed `FundedClassicProduction` candidate reuses the existing funded
-worker target and 500-credit heavy-production gate for Custom Brutal powered
-non-city games. It does not reclassify the economy, remove power requirements,
-discard queue commitments, change campaign helpers or alter city/vanilla
-execution. It defaults off while the matched historical and off/on outcomes
-are measured. The shared-spending Dune2R probe exercises actual low-cash queues,
-the surplus-worker negative control and unaffordable purchases in both arms.
+The first, Heavy-Factory-only experiment fixed the observed executor mismatch
+but did not restore strength: both arms won 0/7 saved-rules games within 60
+minutes. Fixing only the cash floor and surplus-worker fallback was insufficient.
+
+The hashed `FundedClassicProduction` candidate instead selects the existing
+funded spice-economy policy once, for the whole build pass: worker/refinery
+investment, factory and MCV capacity, and production use the same plan. Its
+scope is Custom Brutal, non-campaign, non-city games. Engine power requirements
+and existing queue commitments remain unchanged; city, campaign and already
+vanilla-funded games retain their policies. It defaults off while the matched
+outcomes are measured. The shared-spending Dune2R probe exercises actual
+low-cash queues, surplus workers and unaffordable purchases in both arms.
 
 ## CI
 

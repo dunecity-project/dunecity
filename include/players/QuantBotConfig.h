@@ -283,9 +283,9 @@ struct QuantBotConfig {
         /// production spending. One safe storage project at a time; use a buildable
         /// refinery for its vault when the cheaper Silo is not unlocked yet.
         bool storageCapacity;
-        /// Experimental, default off: Custom Brutal powered non-city games use
-        /// the funded worker target and heavy-production budget already selected
-        /// by the capital planner, not the legacy raw-cash floor/worker fallback.
+        /// Experimental, default off: powered non-city Custom Brutal games use
+        /// the established funded spice-economy plan for workers and production.
+        /// This does not disable engine power requirements.
         bool fundedClassicProduction;
     };
     ForceSettings force;

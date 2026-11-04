@@ -974,9 +974,6 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     constexpr auto& mixItems = kMixItems;
-    const bool fundedClassic = botConfig().force.fundedClassicProduction
-        && difficulty==Difficulty::Brutal && gameMode==GameMode::Custom
-        && !isCampaignGameType(currentGame->gameType) && !pass.citySimEnabled && !pass.vanillaEconomy;
     // Log HF status when idle with money (Custom mode diagnostics)
     if (gameMode == GameMode::Custom && pass.emitStatsLog) {
         logDebug("HF=%u: upgrading=%d queue=%d buildList=%d upgLv=%d/%d unitLimit=%d spendable=%d hold=%d military=%d/%d reserve=%d",
@@ -1057,7 +1054,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 doRepair(turn.pBuilder);
             }
         }
-        else if ((pass.citySimEnabled || pass.vanillaEconomy || fundedClassic) && !pass.orderedSpiceHarvester
+        else if ((pass.citySimEnabled || pass.vanillaEconomy) && !pass.orderedSpiceHarvester
             && factoryPrefersHarvester(pass, turn.pBuilder)
             && pass.itemCount[Unit_Harvester] < (pass.citySimEnabled ? pass.fundedHarvesterTarget : pass.spiceHarvesterTarget)
             && campaignAvailableToBuild(turn.pBuilder,Unit_Harvester) && !getHouse()->isGroundUnitLimitReached()
@@ -1092,8 +1089,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 pass.itemCount[Unit_MCV]++;
             }
         }
-        else if (gameMode == GameMode::Custom && !fundedClassic
-            && !pass.vanillaEconomy && !(currentGame && currentGame->isCitySimEnabled())
+        else if (gameMode == GameMode::Custom && !pass.vanillaEconomy && !(currentGame && currentGame->isCitySimEnabled())
             && campaignAvailableToBuild(turn.pBuilder,Unit_Harvester)
             && !getHouse()->isGroundUnitLimitReached()
             && pass.itemCount[Unit_Harvester] < pass.militaryValue / 1000
@@ -1102,7 +1098,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             // Classic-mode harvester expansion; city spice investment is handled above.
             if (produceItemWithLogging(pass, turn, Unit_Harvester, __LINE__)) pass.itemCount[Unit_Harvester]++;
         }
-        else if (!fundedClassic && !pass.vanillaEconomy && !(currentGame && currentGame->isCitySimEnabled())
+        else if (!pass.vanillaEconomy && !(currentGame && currentGame->isCitySimEnabled())
             && lastCalculatedSpice > 0
             && pass.itemCount[Unit_Harvester] < harvesterLimit
             && campaignAvailableToBuild(turn.pBuilder,Unit_Harvester)
@@ -1122,7 +1118,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 doRepair(turn.pBuilder);
             }
         }
-        else if (pass.money > (pass.citySimEnabled || pass.vanillaEconomy || fundedClassic ? 500 : 2000)
+        else if (pass.money > (pass.citySimEnabled || pass.vanillaEconomy ? 500 : 2000)
             && pass.militaryValue < pass.militaryBudget && !getHouse()->isGroundUnitLimitReached()) {
             // Every heavy mix slot is a candidate with its own learned share and
             // committed value - each special its own slot since 9868, so a house

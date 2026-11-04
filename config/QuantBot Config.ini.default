@@ -376,6 +376,6 @@ CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.
 # Bound storage projects to one in flight and the absolute credit ceiling.
 StorageCapacity=1
-# Experimental: align Custom Brutal powered non-city factories with the funded capital plan.
-# Preserve the old executor until the saved All-against-Atreides comparison passes.
+# Experimental: use the funded spice-economy plan for powered non-city Custom Brutal.
+# Preserve the old policy until the saved All-against-Atreides comparison passes.
 FundedClassicProduction=0
