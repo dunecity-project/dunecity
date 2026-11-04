@@ -37,16 +37,33 @@
 ## 2026-11-04 — Launcher kite moves two more tiles (OMP LauncherKite, unreleased)
 
 - QuantBot spacing now has independent hashed/saved INI value
-  `[Force Concentration] LauncherKiteExtraDistance` (0..2, provisional default2).
+  `[Force Concentration] LauncherKiteExtraDistance` (0..2, final default2/ON).
   OFF preserves the previous policy; ON increases the Launcher/EliteLauncher
   movement cap2→4 tiles and Hunt target gap enemy range+2→+4, never beyond
   launcher firing range. Other units, close-band trigger, human/service ownership,
   Hunt restoration and saboteur orders are unchanged. No save/protocol change.
-- Real-engine fixture pairs OFF/ON for both launcher types and Hard/Brutal,
-  using a tank that actually approaches, completed escape movement and landed
-  rocket damage; config hash/roundtrip/bounds and isolated audit styles included.
-  Mandatory regression and short paired audit receipts are pending, not claimed.
-- Details and final acceptance measurements: `docs/formations.md`, launcher spacing.
+- Production commit `7495ec73`; content/fixture completion `9e106339`
+  (intermediate fixes `d4fa298d`, `58b5e4f8`). Real-engine OFF/ON measurements:
+  **6→8 tiles exactly**, Launcher on DuneCity/Tornie and EliteLauncher on its
+  legal Tornie content, both Hard/Brutal. Every ON case lands a rocket from gap8
+  (4–7 damage,18–91cycles after movement). A passive scout gives equal visibility;
+  actors are fully unregistered between arms. Existing authority/force checks pass.
+- Fixture job `20261104T220858-launcher-kite-clean-pair-d117fc`: **2/2 PASS**,
+  Pro98.0/97.5s. Production-source job `20261104T213128-launcher-kite-candidate-eab8f2`:
+  **all8mandatory gates PASS** (unit1,271PASS/3skip; AAA vanilla/Dune2R,
+  scenario,FFA,custom,recovery,perf). Mini ran7; Pro ranperf. The extra strategy
+  probe failed Infantry-versus-Learned production; QuantTroopers owns the separately
+  identified standing-troop-cap interaction. Do not count that extra failure green.
+- Two independent16-game/arm cohorts,32games/96house pairs total: stalls11/95→13/95,
+  bankrupt32/96→32/96, nonempty dispatches/house0.8333→0.8646, winning houses6→12.
+  Launcher kiting actually occurred27/32games each arm (1,563/1,343 events).
+  Mean kill value5,624.9→5,407.4; Hard4,601.0→4,751.9; **Brutal6,648.8→6,062.9**,
+  lower in both cohorts. Mean game18.40→17.74min partly confounds raw kills.
+  Main explicitly accepted ON on the pooled, not-consistently-worse outcomes:
+  doubled wins, unchanged bankruptcy and more dispatches; no statistical gain claim.
+- Per arm:17games mini,13PC,2Pro; Air correctly held by Stefan's own game.
+  Evidence `outputs/launcher-kite-20261104/` (`fixture-pairs.json`,
+  `pooled-acceptance.json`, paired raw CSVs/telemetry); details `docs/formations.md`.
 
 ## 2026-11-04 — Restore funded classic Brutal production (OMP BrutalRegression, unreleased)
 

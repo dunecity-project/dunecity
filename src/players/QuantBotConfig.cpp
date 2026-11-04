@@ -365,7 +365,7 @@ QuantBotConfig::QuantBotConfig() {
     force.storageCapacity = true;
     force.fundedClassicProduction = true;
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
-    force.launcherKiteExtraDistance = 2; // Provisional ON; paired outcome gate decides the final default.
+    force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks

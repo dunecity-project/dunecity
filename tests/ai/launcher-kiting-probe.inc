@@ -190,10 +190,6 @@ void runLauncherKitingProbe(Game& game) {
                     int moveTicks=0;
                     while((artillery->getLocation()!=destination || artillery->isMoving())
                             && moveTicks++<1200) tick(1);
-                    SDL_Log("LAUNCHER_KITE_MOVE: difficulty=%d item=%u extra=%d at=%d,%d destination=%d,%d moving=%d health=%d mode=%d",
-                        int(difficulty),unsigned(item),extra,artillery->getX(),artillery->getY(),
-                        destination.x,destination.y,int(artillery->isMoving()),artillery->getHealth().lround(),
-                        int(artillery->getAttackMode()));
                     require(artillery->getLocation()==destination,
                         "Paired launcher did not complete its real spacing move");
                     const int endGap=gap(artillery,approaching);

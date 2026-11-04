@@ -584,7 +584,7 @@ non-launcher hunter may be given as an unforced attack (focus fire) but nothing 
 fixes the launcher's facing at the start of the escape section for both difficulties (a 180-degree turn
 costs two of its eight passes).
 
-**2026-11-04 launcher spacing candidate (unreleased).** Hashed and INI-round-tripped
+**2026-11-04 launcher spacing accepted ON (unreleased).** Hashed and INI-round-tripped
 `[Force Concentration] LauncherKiteExtraDistance=2` increases only Launcher/EliteLauncher
 spacing: the per-order movement cap is **2 → 4 tiles**, while the Hunt stand-off is
 `enemy weapon range + 2 → +4`, still capped at the launcher's own firing range.
@@ -595,8 +595,59 @@ AI state or protocol change is needed. The real-engine launcher probe now pairs
 both launcher types on Hard/Brutal against a genuinely approaching tank, completes
 the escape through pathfinding and requires an extra two tiles plus a landed rocket.
 `launcher-kite-off` / `launcher-kite-on` isolate the candidate for same-build audits.
-The initial default is provisional ON pending mandatory regressions and paired
-stall/bankruptcy/dispatch/kill acceptance; it is not a claimed accepted outcome.
+The final default is **2 (ON)** by the integrator's pooled-outcome decision below.
+
+Real-engine receipt `20261104T220858-launcher-kite-clean-pair-d117fc`, source
+`9e106339`, passed both CTests on the Pro (DuneCity98.0s, Tornie97.5s).
+Each arm starts with the same tank actually approaching to the unchanged five-tile
+close-band edge. A passive allied scout supplies equal vision beyond launcher sight;
+the real pathfinding move finishes before measuring the gap. Actors are fully
+unregistered between arms, not left as dead tile occupants. EliteLaunchers run with
+their legal Tornie content, never fabricated DuneCity products.
+
+| Content / unit | Difficulty | Final gap OFF → ON (tiles) | Rocket damage OFF → ON | ON cycles until hit after move |
+|---|---|---:|---:|---:|
+| DuneCity Launcher | Hard | 6 → 8 | 9 → 7 | 34 |
+| DuneCity Launcher | Brutal | 6 → 8 | 7 → 7 | 18 |
+| Tornie Launcher | Hard | 6 → 8 | 9 → 7 | 40 |
+| Tornie Launcher | Brutal | 6 → 8 | 4 → 4 | 91 |
+| Tornie EliteLauncher | Hard | 6 → 8 | 23 → 7 | 86 |
+| Tornie EliteLauncher | Brutal | 6 → 8 | 5 → 7 | 75 |
+
+The ordinary close-band/force-focus/human/service/other-unit regressions also pass.
+At production source `7495ec73`, all eight mandatory unit/AI/performance gates passed:
+unit suite (1,271 passed/3 skipped,13,338,419 assertions), vanilla and Dune2R AAA,
+scenario smoke, FFA dispatch, custom attack, army recovery and performance. Mini ran
+seven gates; Pro ran performance. The extra strategy probe failed its Infantry versus
+Learned production comparison; QuantTroopers owns the separately identified standing-
+troop-cap interaction. That extra failure is not represented as passing.
+
+**Paired audit:** source `7495ec73`,128×128, Medium base/small army, no prebuilt city,
+None/Medium spice,1v1/2v2,Hard/Brutal,20-minute cap. First seeds9101/148680876 and
+independent confirmation12345/76543 give32games/96house histories per arm. Inputs pair
+exactly; each arm ran17games on mini,13on Windows PC,2on Pro. Air was held by Stefan's
+own running game. Actual launcher kiting occurred in27/32games in both arms
+(1,563 OFF /1,343 ON recorded launcher events; one untyped ON kite excluded).
+
+| Pooled metric | OFF | ON |
+|---|---:|---:|
+| Economy-stall houses / exposed | 11/95 | 13/95 |
+| Bankrupt/empty-queue houses | 32/96 | 32/96 |
+| Nonempty dispatches per house | 0.8333 | 0.8646 |
+| Winning houses | 6 | 12 |
+| Mean final kill value | 5,624.9 | 5,407.4 |
+| Hard mean final kill value | 4,601.0 | 4,751.9 |
+| Brutal mean final kill value | 6,648.8 | 6,062.9 |
+| Mean game duration (minutes) | 18.40 | 17.74 |
+
+The initial48-house cohort had two extra stalls and bankrupt histories; the second
+cohort had equal stalls and two fewer bankrupt histories. The integrator explicitly
+accepted ON after pooling: wins doubled, bankruptcy stayed flat and dispatches rose,
+so the result is not consistently worse overall. **Brutal final kill value declined
+in both cohorts** (6,646.3→6,217.5 and6,651.3→5,908.3); shorter games partly confound
+raw totals, not proof that the decline is harmless. No statistical improvement claim.
+Evidence: `outputs/launcher-kite-20261104/{off,on}/`, `pooled-acceptance.json` and
+`fixture-pairs.json`; queue receipts retain the exact source and per-host logs.
 
 
 **Bundling made shippable.** Optional `[Force Concentration]` keys `Bundle` and `LaunchFromBundle`
