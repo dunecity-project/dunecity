@@ -127,6 +127,12 @@
 - Durable per-lot timing and receipts: `../outputs/purple-zero-power-20261104/`
   (`save-measurement.json`, `verification.json`, before/after/reload logs and both
   audit CSV sets). Native commits2cc8017b/13adb50d, textual-test removal3494d932.
+- Full-menu coverage exposed the added checkbox overflowing the family layout.
+  Commit5a5628fe removes family-only extra row gaps, keeping the430px crest-safe
+  frame. Focused regressiona8c854e2 uses a real640×480 renderer and draws/checks
+  both Game Rules layouts and off/reopen persistence. Pinned5a `city_zone_power`
+  passed84.9s[Pro]: DuneCity626×410/min544×369; Tornie626×430/min544×419.
+  Receipt `rules-ui-verification.json`, job20261104T220332-zone-power-minimum-ui-eaa583.
 
 ## 2026-11-04 — QuantBot cashes in captured harvesters (OMP DeviatedHarvest, unreleased)
 
