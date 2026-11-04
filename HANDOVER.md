@@ -151,6 +151,13 @@
   136 with the rule off, and152 beside a full3x3 mountain terrain block. The full
   combined unit run completed1264 passing cases/3skips; its only failed assertion
   was a second old protocol111 test pin, now corrected to112. No gameplay bypass.
+- After the pin correction (`7f1a31fd`), targeted source`54a62300275a` job
+  `20261104T190212-mountain-protocol112-research-mouse-981b23` passed the complete
+  unit suite on mini in1.84s: **1266 cases,3skips,13,331,285 assertions**. This includes
+  city-effects and exact frozenMOD17/newMOD18 wire/hash/truncation coverage.
+  ResearchLab also passed12.4s; the co-submitted mouse probe failed independently
+  and remains its owner's check, not a claimed3/3pass. Receipt:
+  `outputs/mountain-scenery-20261104/targeted-acceptance.json`.
 - Viewed640 standard/family Game Rules screenshots. Moving Remember for new games
   into the centred footer keeps the extra rule inside the430px family modal and
   away from corner crests. Evidence: `outputs/mountain-scenery-20261104/`.
