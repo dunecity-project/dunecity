@@ -387,5 +387,5 @@ StorageCapacity=1
 FundedClassicProduction=1
 # Experimental: WOR rocket infantry for observed air/armour and army escorts in Custom games.
 # Shares the existing infantry quota and protects economy/working capital; at most 18 troopers.
-# Default off until the paired Hard/Brutal outcome gate passes.
-TrooperSupport=0
+# Provisional ON for shared-candidate acceptance; revert unless its paired outcome gate passes.
+TrooperSupport=1

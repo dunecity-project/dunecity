@@ -294,7 +294,7 @@ struct QuantBotConfig {
         bool fundedClassicProduction;
         /// Custom games: bounded rocket infantry for observed aircraft/armour and
         /// army escorts, using the existing infantry share and economy reserves.
-        /// Experimental, off until the same-build outcome gate passes.
+        /// Experimental, provisionally on for shared-candidate acceptance only.
         bool trooperSupport;
     };
     ForceSettings force;

@@ -364,7 +364,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityStarportSupply = true;
     force.storageCapacity = true;
     force.fundedClassicProduction = true;
-    force.trooperSupport = false;
+    force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
