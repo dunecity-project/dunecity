@@ -641,7 +641,9 @@ inline void fullBuildStandingRecruitment() {
                 && done.trooperCount == expectedTarget && producer->getProductionQueueSize() == 0
                 && orders.people() == expectedTarget,
                 "Full build() did not complete exactly one paid WOR and its useful standing/reactive troops");
-        require(orders.quotaExempt > 0, "Full builder relied on an already large army instead of recruiting its standing bootstrap");
+        // Normal full turns can grow vehicles while urgent cover and the WOR
+        // complete. The isolated zero-army phase below separately requires
+        // actual paid quota-exempt orders, without racing those producers.
         SDL_Log("TROOPER_SUPPORT_FULL_TROOPS_COMPLETED: stage=%s cycle=%u wor_completed=1 troopers_completed=%d "
                 "target=%d effective_aircraft=%d weighted_queued=%d quota_exempt_orders=%d full_turns=%d "
                 "paid_progress=1 producer_scope=full_build",
@@ -678,10 +680,12 @@ inline void fullBuildStandingRecruitment() {
 }
 
 inline void productionAndAirDefence() {
-    World world("dunecity", true);
+    World world("dunecity", true, HOUSE_HARKONNEN, 0);
     availabilityAndBudgetGates(world);
     auto pass = world.plan();
     const int target = pass.trooperTarget;
+    require(pass.militaryValue == 0 && pass.trooperCount == 0 && target == 6,
+            "Focused standing bootstrap did not start with a genuinely empty army");
     const int builtWorBefore = world.owner->getNumBuiltItems(Structure_WOR);
     const int builtTroopsBefore = world.owner->getNumBuiltItems(Unit_Trooper);
     const Uint32 start = world.game->getGameCycleCount();
@@ -729,6 +733,8 @@ inline void productionAndAirDefence() {
     const int completed = world.owner->getNumBuiltItems(Unit_Trooper) - builtTroopsBefore;
     require(completed == target && orders.people() == completed && orders.singles > 0
             && (!squadOffer || orders.squads > 0), "Real troop completion differs from the bounded single/squad orders");
+    require(orders.quotaExempt > 0,
+            "The actual empty-army paid orders did not exercise the standing-quota exemption");
     auto atTarget = world.plan();
     world.bot->buildProducer(atTarget, producer);
     require(atTarget.trooperCount == target && producer->getProductionQueueSize() == 0,
@@ -739,8 +745,10 @@ inline void productionAndAirDefence() {
     require(static_cast<int>(produced.size()) == completed && world.owner->getNumItems(Structure_RocketTurret) == 0
             && world.owner->getNumItems(Unit_Launcher) == 0, "Air fixture has unproduced troopers or a competing AA weapon");
     SDL_Log("TROOPER_SUPPORT_TROOPERS_COMPLETED: cycle=%u troopers_completed=%d singles_queued=%d squads_queued=%d "
-            "weighted_queued=%d target=%d real_queue_completion=1 producer_scope=focused_yard_wor",
-            world.game->getGameCycleCount(), completed, orders.singles, orders.squads, orders.people(), target);
+            "weighted_queued=%d target=%d quota_exempt_orders=%d starting_army_value=0 "
+            "real_queue_completion=1 producer_scope=focused_yard_wor",
+            world.game->getGameCycleCount(), completed, orders.singles, orders.squads, orders.people(), target,
+            orders.quotaExempt);
 
     const auto rewardBefore = world.owner->getCombatReward(Unit_Trooper);
     const Uint32 producerID = producer->getObjectID();
