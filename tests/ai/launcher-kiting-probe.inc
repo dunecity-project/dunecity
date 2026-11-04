@@ -190,6 +190,10 @@ void runLauncherKitingProbe(Game& game) {
                     int moveTicks=0;
                     while((artillery->getLocation()!=destination || artillery->isMoving())
                             && moveTicks++<1200) tick(1);
+                    SDL_Log("LAUNCHER_KITE_MOVE: difficulty=%d item=%u extra=%d at=%d,%d destination=%d,%d moving=%d health=%d mode=%d",
+                        int(difficulty),unsigned(item),extra,artillery->getX(),artillery->getY(),
+                        destination.x,destination.y,int(artillery->isMoving()),artillery->getHealth().lround(),
+                        int(artillery->getAttackMode()));
                     require(artillery->getLocation()==destination,
                         "Paired launcher did not complete its real spacing move");
                     const int endGap=gap(artillery,approaching);
@@ -209,7 +213,16 @@ void runLauncherKitingProbe(Game& game) {
                     require(approaching->getHealth()<health && gap(artillery,approaching)>reach,
                         "Paired launcher failed to land a rocket while standing off");
                     bot->customWave.members.erase(artillery->getObjectID());
-                    retire(artillery); retire(approaching); retire(spotter);
+                    // Fully unregister actors before the next arm reuses these
+                    // tiles. Removing a zero-health unit only from unitList leaves
+                    // its tile occupancy and target handle alive in this fixture.
+                    for(auto* actor:{artillery,approaching,spotter}) {
+                        roster.erase(std::remove(roster.begin(),roster.end(),actor),roster.end());
+                        actor->setVisible(VIS_ALL,false); // No random death-spawn crew.
+                        actor->setHealth(0);
+                        actor->destroy();
+                    }
+                    publish();
                 }
             }
         }
