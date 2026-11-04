@@ -339,8 +339,67 @@
   Brutal stalls 6→2 and bankrupt queues 6→4, but dispatches fell 41→31. The 24-game
   paired ladder lost kill value (322380→266600 in Hard/Brutal) and a stronger-side
   win (8→7 of 12), so funding is not enabled by default. Evidence and exact case
-  identities: `outputs/sardaukar-not-colonizing-20261104/combined-audit-evidence.json`.
+  identities: `../outputs/sardaukar-not-colonizing-20261104/combined-audit-evidence.json`.
 
+
+- **Accepted defaults:** integrator approved **CityProductionPrerequisites ON**
+  and **CityFirstFactorySaving OFF**, after the independent-seed pooled review
+  below. Implementation `8cb479f5`; no saboteur orders or human-order leases changed.
+- Original saved state: **1405 credits / 2005 capacity**, **9320 population**
+  (above the 5000 Starport rule), **600 produced / 491 required power**. The 33
+  structures were CY/Radar/Refinery/Starport ×1, Windtrap ×6, Rocket ×2, Police ×2,
+  and R/C/I ×11/4/4; no LF, HF or MCV. Physical overlapping legal origins were
+  **46 (2×2 LF)** and **17 (3×2 HF)**. Forecast tax/upkeep was **1351/176 per
+  game minute**. The Air log bounds the last placement message to **309.8–312.3
+  game seconds** before the save; its corresponding rocket turret is present.
+- Final frozen native `35c3a7ca` (`90025b0c…22c4e`) continued the exact save for
+  **37500 cycles / 600 game seconds**. OFF stayed at 33 structures. A-only
+  reached **33/35/36/48/70** structures at **0/60/180/300/600 s**: first zoning
+  at 10.304 s; LF ordered/built **23.104/47.104 s**; Starport MCV ordered
+  **50.304 s for 630**, deployed **186.704 s at (249,166)**; HF ordered/built
+  **187.904/224.704 s**. A+B had the same final world digest
+  `70d2ccf3b9a7cfdb`; below-quote saving is not needed for this final save result.
+- **Pooled A-only vs OFF:** 144 games, zero harness errors, source `35c3a7ca`;
+  matrix seeds 9101/148680876 and independent 24017/77377, plus both-seat ladders
+  at 9101 and 24017. All per-pair map/content/object/options hashes matched.
+  Counts below are hit/exposed where applicable; B remained OFF in both arms.
+
+| Metric | OFF | A-only |
+|---|---:|---:|
+| Matrix Hard/Brutal economy stalls | 3/96 | 8/96 |
+| Matrix Hard/Brutal bankrupt empty queues | 42/96 | 42/96 |
+| Matrix Hard/Brutal missing Starport | 29/92 | 23/94 |
+| Matrix Hard/Brutal dispatches | 37 | 48 |
+| Matrix Hard/Brutal kill value | 776690 | 795640 |
+| Matrix Medium economy stalls | 2/48 | 3/48 |
+| Matrix Medium bankrupt empty queues | 18/48 | 19/48 |
+| Matrix Medium missing Starport | 14/44 | 8/45 |
+| Ladder Hard/Brutal economy stalls | 0/24 | 2/24 |
+| Ladder Hard/Brutal bankrupt empty queues | 7/24 | 9/24 |
+| Ladder Hard/Brutal missing Starport | 7/24 | 7/23 |
+| Ladder Hard/Brutal dispatches | 23 | 19 |
+| Ladder Hard/Brutal kill value | 277990 | 192460 |
+| Ladder stronger-side wins | 12/24 | 12/24 |
+| Ladder weaker-side wins | 3/24 | 2/24 |
+
+- This is **not an all-green point estimate**: ladder kills declined and stalls
+  rose. Hard/Brutal matrix bankruptcy deltas flipped **+4 / −4** across seed
+  sets; its stall discordance was 8 new-only / 3 old-only (house-paired exact
+  two-sided **p=0.227**, not a proof of equivalence or an FFA-cluster adjustment).
+  The integrator accepted the mixed result given flat pooled bankruptcy, better
+  matrix supply/combat, unchanged ladder wins and the repaired real save.
+- Final allocation fixture `a8e84774` passed all three pinned targets in job
+  `20261104T223838-sardaukar-owned-core-fixtures-141d8b`: vanilla **22.2 s**,
+  DuneCity **27.8 s**, Dune2R **27.4 s**. Both geometry modes retain rich
+  production/growth checks; A reserves no already-owned core copies, the actual
+  queued factory has a reserved site and ground access, and legacy plots retain
+  their footprint/access assertions. The generic baseline isolates proactive
+  TrooperSupport; its real full-build ON fixture is separate.
+- Complete provenance, both audit seed tables, save checkpoints and fixture
+  receipts: `../outputs/sardaukar-not-colonizing-20261104/accepted-expansion-evidence.json`.
+  The save runner reported checkout `1875b7c9`; every AI Python harness is
+  byte-identical to `35c3a7ca`, and the native binary is independently pinned
+  above. Generated summaries were not relabelled.
 
 ## 2026-11-04 — Civilization Wars rock lanes and defended sand-front cities (OMP CivWarsLayout, unreleased)
 
