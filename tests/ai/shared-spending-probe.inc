@@ -168,24 +168,41 @@ void runSharedSpendingProbe(Game& game) {
             setCrime(0);
             // The reported 100k opening must grow production before reaching
             // its six-yard target, while its dedicated yard still zones.
-            reset(100000,0);structureList.push_back(secondYard);
-            bot->militaryValueLimit=80000;
-            heavy->doProduceItem(Unit_Tank);
-            bot->build(1000);
-            require(hasZone(yard),"Rich production displaced the dedicated R/I/C yard");
-            require(count(secondYard,Structure_HeavyFactory)>0,
-                "Cash-funded factory expansion waited for the construction-yard target");
-            require(bot->cityProductionPlots.size()==2,"Did not preserve factory and repair plots on open rock");
-            for(const auto& entry:bot->reservedStructures) {
-                if (!DuneCity::isCityZoneStructure(entry.second.item)) continue;
-                const auto p=entry.second.location, size=getStructureSize(entry.second.item);
-                for(const auto& plot:bot->cityProductionPlots) {
-                    const auto extent=getStructureSize(plot.item);
-                    require(!CityPlacementPolicy::overlaps(p.x,p.y,size.x,size.y,
-                        plot.location.x-1,plot.location.y-1,extent.x+2,extent.y+2),
-                        "Zoning consumed a future production footprint or access");
+            const auto savedPlotConfig=bot->configOverride;
+            auto plotConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
+            bot->configOverride=plotConfig;
+            try {
+                for(bool prerequisites:{true,false}) {
+                    plotConfig->force.cityProductionPrerequisites=prerequisites;
+                    reset(100000,0);structureList.push_back(secondYard);
+                    bot->militaryValueLimit=80000;
+                    heavy->doProduceItem(Unit_Tank);
+                    bot->build(1000);
+                    require(hasZone(yard),"Rich production displaced the dedicated R/I/C yard");
+                    require(count(secondYard,Structure_HeavyFactory)>0,
+                        "Cash-funded factory expansion waited for the construction-yard target");
+                    // reset() exposes the standing heavy factory, but hides
+                    // the repair yard and its other prerequisite producers.
+                    // The new rule keeps only that missing goal; the legacy
+                    // control still protects both speculative production plots.
+                    require(bot->cityProductionPlots.size()==(prerequisites ? 1u : 2u),
+                        "Production reservations did not match the visible missing suppliers");
+                    if(prerequisites)
+                        require(bot->cityProductionPlots.front().item!=Structure_HeavyFactory,
+                            "A standing factory still reserved another speculative factory plot");
+                    for(const auto& entry:bot->reservedStructures) {
+                        if (!DuneCity::isCityZoneStructure(entry.second.item)) continue;
+                        const auto p=entry.second.location, size=getStructureSize(entry.second.item);
+                        for(const auto& plot:bot->cityProductionPlots) {
+                            const auto extent=getStructureSize(plot.item);
+                            require(!CityPlacementPolicy::overlaps(p.x,p.y,size.x,size.y,
+                                plot.location.x-1,plot.location.y-1,extent.x+2,extent.y+2),
+                                "Zoning consumed a future production footprint or access");
+                        }
+                    }
                 }
-            }
+            } catch(...) { bot->configOverride=savedPlotConfig;throw; }
+            bot->configOverride=savedPlotConfig;
             // With only two workers, ample runway must still unlock the MCV
             // that supplies parallel city construction; neither target waits
             // for the other to finish.
