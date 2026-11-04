@@ -301,12 +301,10 @@ void runExhaustedArmyProbe(Game& game) {
         require(house->hasCarryalls(),"Exhausted army automatic-repair control has no carryall");
 
         config->force.exhaustedArmyDispatch=false;reset();
-        for (auto* unit:{damaged,manual,defender}) {
-            unit->doRepair();
-            require(unit->getTarget()==yard && unit->goingToRepairYard,
-                "Exhausted army fixture did not establish a real repair-yard booking");
-        }
-        const auto humanRepair=order(manual),defenderRepair=order(defender),sabotageRepair=order(saboteur);
+        damaged->doRepair();
+        require(damaged->getTarget()==yard && damaged->goingToRepairYard,
+            "Exhausted army fixture did not establish a real repair-yard booking");
+        const auto humanOrder=order(manual),defenderOrder=order(defender),sabotageOrder=order(saboteur);
         bot->launchGroundHunt();
         require(damaged->getTarget()==yard && damaged->goingToRepairYard,
             "Legacy OFF cancelled an AI repair trip");
@@ -315,8 +313,8 @@ void runExhaustedArmyProbe(Game& game) {
         require(damaged->getTarget()!=yard && !damaged->goingToRepairYard
             && damaged->getAttackMode()==HUNT,
             "Exhausted dispatch did not cancel and launch an unaffordable AI repair trip");
-        require(order(manual)==humanRepair && order(defender)==defenderRepair
-            && order(saboteur)==sabotageRepair,
+        require(order(manual)==humanOrder && order(defender)==defenderOrder
+            && order(saboteur)==sabotageOrder,
             "Repair-trip release cancelled a human, defender or saboteur order");
         require(damaged->getHealth()<damaged->getMaxHealth()/2 && !damaged->wasForced()
             && damaged->isActive() && yard->isFree() && house->hasCarryalls(),
@@ -324,6 +322,20 @@ void runExhaustedArmyProbe(Game& game) {
         damaged->checkPos();
         require(damaged->getTarget()!=yard && !damaged->goingToRepairYard,
             "The engine immediately rebooked a released unaffordable AI repair");
+
+        // A real yard admits only one inbound booking. Exercise each protected
+        // traveller separately rather than asking one bay to book three units.
+        for (auto* protectedUnit:{manual,defender}) {
+            config->force.exhaustedArmyDispatch=false;reset();
+            protectedUnit->doRepair();
+            require(protectedUnit->getTarget()==yard && protectedUnit->goingToRepairYard,
+                "Protected repair traveller was never booked with the real yard");
+            const auto protectedOrder=order(protectedUnit);
+            config->force.exhaustedArmyDispatch=true;invalidate();
+            bot->launchGroundHunt();
+            require(order(protectedUnit)==protectedOrder && protectedUnit->goingToRepairYard,
+                "Exhausted dispatch cancelled a human or defender's repair trip");
+        }
 
         config->force.exhaustedArmyDispatch=false;reset();
         damaged->doRepair();damaged->setGettingRepaired();

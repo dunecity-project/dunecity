@@ -40,6 +40,10 @@ Every game is a real match played headless to its end by the balance probe:
   minutes, triggers and how many fired, win/lose flags, quota, city population),
   then the final state digest (`PROBE_DIGEST ... final=1`).
 
+For a natural-duration diagnostic, `--minutes 120` overrides only the selected
+run's cell limits. It does not change the ordinary matrix limits or winner
+assertions; use a separate results directory for the extended observation.
+
 The driver writes `games.csv` (one row per game; the win type of a campaign win: conquest or
 quota) and `houses.csv` (one row per house, with its `match_score` placement score: teams are entrants,
 a time-out is a negative draw). Games already in `games.csv` are skipped; failed games are retried on the

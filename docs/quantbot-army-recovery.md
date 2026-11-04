@@ -224,6 +224,7 @@ cargo, city tax income and developing lots. It compares actual campaign orders
 across switch states and protects human, defence and saboteur orders. Actual
 repair-yard trips and bay occupants exercise AI-only release, protected human
 and defender occupants, and the engine's automatic-repair no-rebooking rule.
+The single-bay traveller controls establish one real booking at a time.
 The actual repair-yard update proves both sides of the rounded-credit boundary
 for one and five missing health points.
 These fixture assertions describe coverage, not an unrun full-match or win-rate

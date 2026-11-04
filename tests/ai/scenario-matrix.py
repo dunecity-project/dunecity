@@ -294,6 +294,9 @@ def schedule(args):
     if args.shard:
         k, n = args.shard
         games = [g for i, g in enumerate(games) if i % n == k - 1]
+    if getattr(args, 'minutes', None) is not None:
+        for game in games:
+            game['minutes'] = args.minutes
     return games
 
 
@@ -966,6 +969,8 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--minutes', type=int, choices=range(1, 121),
+                    help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
 parser.add_argument('--game-options', type=Path,
                     help='Overlay this INI after each cell\'s own game options; use a distinct results '
