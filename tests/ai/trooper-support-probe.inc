@@ -80,7 +80,8 @@ struct World {
         options.researchLab = false;
         options.trooperAntiAir = true;
         options.maximumNumberOfHarvestersOverride = 8;
-        GameInitSettings init("trooper-support.ini", mapText(), "Trooper support", true, options);
+        // The server-name overload creates a network game, not this offline observer.
+        GameInitSettings init("trooper-support.ini", mapText(), true, options);
         init.randomSeed = static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SEED")));
         init.setLocalSpectator(true);
         const HOUSETYPE opposing = house == HOUSE_ATREIDES ? HOUSE_HARKONNEN : HOUSE_ATREIDES;
@@ -94,6 +95,8 @@ struct World {
         currentGame = game.get();
         game->bReplay = true;
         game->initGame(init);
+        require(game->gameType == GameType::CustomGame && game->isObserving()
+                && pLocalHouse && pLocalPlayer, "Offline fixture did not initialize its genuine observer view");
         game->bReplay = false;
         game->initializeGameLoop();
         game->bPause = false;
