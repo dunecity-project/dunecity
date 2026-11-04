@@ -1436,6 +1436,11 @@ void MapEditor::processInput() {
             drawnMouseY = std::max(0, std::min(mouse->y, settings.video.height-1));
         }
 
+        if(screenborder->handleMiddlePan(event, !pInterface->hasChildWindow())) {
+            bLeftMousePressed = false;
+            continue;
+        }
+
         if(pInterface->hasChildWindow()) {
             pInterface->handleInput(event);
         } else {
@@ -1606,26 +1611,35 @@ void MapEditor::processInput() {
                 } break;
 
                 case SDL_MOUSEWHEEL: {
-                    if (event.wheel.y != 0) {
-                        if(screenborder->isScreenCoordInsideMap(drawnMouseX, drawnMouseY) == true) {
-                            //if mouse is not over side bar
-                            int xpos = screenborder->screen2MapX(drawnMouseX);
-                            int ypos = screenborder->screen2MapY(drawnMouseY);
-
+                    if(screenborder->isScreenCoordInsideMap(drawnMouseX, drawnMouseY)) {
+                        // Shift+wheel retains the editor's unit-rotation shortcut.
+                        if(SDL_GetModState() & KMOD_SHIFT) {
                             for(const Unit& unit : units) {
-                                Coord position = unit.position;
-                                if((position.x == xpos) && (position.y == ypos)) {
-                                    if(event.wheel.y > 0) {
-                                        pInterface->onUnitRotateLeft(unit.id);
-                                    } else {
-                                        pInterface->onUnitRotateRight(unit.id);
-                                    }
+                                if(unit.position == Coord(screenborder->screen2MapX(drawnMouseX),
+                                                          screenborder->screen2MapY(drawnMouseY))) {
+                                    if(event.wheel.y > 0) pInterface->onUnitRotateLeft(unit.id);
+                                    else if(event.wheel.y < 0) pInterface->onUnitRotateRight(unit.id);
                                     break;
                                 }
                             }
+                            screenborder->resetMouseWheelZoom();
+                        } else {
+                            const int step = screenborder->mouseWheelZoom(event.wheel);
+                            const int next = std::clamp(currentZoomlevel + step, 0, static_cast<int>(NUM_ZOOMLEVEL) - 1);
+                            if(next != currentZoomlevel) {
+                                const Coord anchor(screenborder->screen2worldX(drawnMouseX), screenborder->screen2worldY(drawnMouseY));
+                                const Coord center = screenborder->getCurrentCenter();
+                                currentZoomlevel = next;
+                                screenborder->adjustScreenBorderToMapsize(map.getSizeX(), map.getSizeY());
+                                screenborder->setNewScreenCenter(center);
+                                const Coord moved(screenborder->screen2worldX(drawnMouseX), screenborder->screen2worldY(drawnMouseY));
+                                screenborder->setNewScreenCenter(screenborder->getCurrentCenter() + anchor - moved);
+                            }
                         }
-
-                        pInterface->handleMouseWheel(drawnMouseX,drawnMouseY,(event.wheel.y > 0));
+                    } else {
+                        screenborder->resetMouseWheelZoom();
+                        if(event.wheel.y != 0)
+                            pInterface->handleMouseWheel(drawnMouseX, drawnMouseY, event.wheel.y > 0);
                     }
                 } break;
 
@@ -1751,7 +1765,10 @@ void MapEditor::processInput() {
         }
     }
 
-    if((pInterface->hasChildWindow() == false) && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_FOCUS)) {
+    if(pInterface->hasChildWindow() && screenborder->isMousePanning())
+        screenborder->handleMiddlePan(SDL_Event{}, false);
+
+    if(!pInterface->hasChildWindow() && !screenborder->isMousePanning() && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_FOCUS)) {
         const Uint8 *keystate = SDL_GetKeyboardState(nullptr);
         scrollDownMode =  (drawnMouseY >= getRendererHeight()-1-SCROLLBORDER) || keystate[SDL_SCANCODE_DOWN];
         scrollLeftMode = (drawnMouseX <= SCROLLBORDER) || keystate[SDL_SCANCODE_LEFT];

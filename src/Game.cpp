@@ -3515,6 +3515,10 @@ case CursorMode_Heal: {
         }
     }
 
+    if(screenborder->isMousePanning() && (pInGameMenu || pInGameMentat
+       || pWaitingForOtherPlayers || pInterface->hasChildWindow())) {
+        screenborder->handleMiddlePan(SDL_Event{}, false);
+    }
     const bool touchPointer = pointerIsTouch();
     if((pInGameMenu == nullptr) && (pInGameMentat == nullptr) && (pWaitingForOtherPlayers == nullptr)
        && !pInterface->hasChildWindow()

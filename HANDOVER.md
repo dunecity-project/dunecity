@@ -1,3 +1,21 @@
+## 2026-11-04 — Mouse wheel zoom and middle-button map grab (OMP MouseControls, unreleased)
+
+- Wheel over the game map now zooms in/out in every content family, anchored at
+  the pointer, using the existing ten zoom steps and limits. Sidebar/menu wheel
+  routing stays ahead of map zoom; fractional trackpad deltas accumulate with a
+  150 ms smooth-gesture zoom interval instead of racing through every level.
+- Middle mouse over the map grabs it: map pixels follow the pointer at current
+  zoom, bounded by map edges. Release, focus loss or opening a modal ends the
+  grab; the cursor is hidden while grabbed. No unit command is sent. Edge
+  scrolling pauses during a grab and otherwise retains its existing behaviour.
+- The shared viewport input also supports middle-drag in the editor. Editor
+  wheel zoom uses its three existing levels; unit rotation is Shift+wheel.
+- `mouse_controls_probe` injects real SDL events through Game::doInput, checks
+  zoom direction/limits/pointer anchor, trackpad accumulation, a real sidebar
+  build list, drag pixel displacement at all ten zooms, release/focus/map bounds,
+  unchanged selection and no commands; captures mouse-zoom-before/after.bmp.
+- Local presentation only: no simulation, protocol, configuration or save change.
+
 ## 2026-11-04 — Production plots cannot exclude their own prerequisite (OMP SardaukarExpand, unreleased)
 
 - `notcolonizingsadukar.dls` loads at cycle **145097**. Sardaukar is a Brutal

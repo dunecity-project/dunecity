@@ -19,6 +19,7 @@
 #include <FileClasses/GFXManager.h>
 #include <globals.h>
 #include <Game.h>
+#include <ScreenBorder.h>
 #include <ObjectManager.h>
 #include <units/UnitBase.h>
 #include <structures/StructureBase.h>
@@ -39,6 +40,7 @@ bool autoCursorHasPhysicalMouse = true;
 #endif
 
 bool shouldShowCursor() {
+    if(screenborder && screenborder->isMousePanning()) return false;
     if (settings.video.cursorVisibility == 1) {
         return false;
     }

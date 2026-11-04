@@ -8,6 +8,10 @@
 #include <GUI/ObjectInterfaces/UnitInterface.h>
 #include <GUI/ObjectInterfaces/ZoneStructureInterface.h>
 #include <GUI/ObjectInterfaces/MultiUnitInterface.h>
+#include <GUI/ObjectInterfaces/BuilderInterface.h>
+#include <GUI/dune/BuilderList.h>
+#include <structures/ConstructionYard.h>
+#include <misc/ZoomSteps.h>
 void runControlsProbe(Game& game) {
     auto require=[](bool ok,const char* why) { if(!ok){SDL_Log("CONTROLS_FAIL: %s",why);throw std::runtime_error(why);} };
     auto commands=[&](CMDTYPE type) {
@@ -113,6 +117,120 @@ void runControlsProbe(Game& game) {
     toggle(game.pInterface->movementPathsButton);game.pInterface->updateObjectInterface();
     require(settings.general.showMovementPaths,"Empty sidebar path toggle failed");
     capture("sidebar-empty.bmp");
+    // Real SDL events through Game::doInput, on the ordinary (non-Dune2R) map.
+    const int originalZoom = game.zoomStep;
+    const Coord originalCenter = screenborder->getCurrentCenter();
+    const SDL_Rect mapArea = screenborder->getScreenRect();
+    const Coord pointer(mapArea.x + mapArea.w/2 + 24, mapArea.y + mapArea.h/2 + 16);
+    auto motion = [&](Coord p) {
+        SDL_Event e{}; e.type=SDL_MOUSEMOTION; e.motion.x=p.x; e.motion.y=p.y;
+        SDL_PushEvent(&e); game.doInput();
+    };
+    auto wheel = [&](int y, float precise=0) {
+        SDL_Event e{}; e.type=SDL_MOUSEWHEEL; e.wheel.y=y;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+        e.wheel.preciseY=precise;
+#endif
+        SDL_PushEvent(&e); game.doInput();
+    };
+    auto middle = [&](Coord p, bool down) {
+        SDL_Event e{}; e.type=down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+        e.button.button=SDL_BUTTON_MIDDLE; e.button.x=p.x; e.button.y=p.y;
+        SDL_PushEvent(&e); game.doInput();
+    };
+    auto totalCommands = [&]() {
+        size_t count=0; for(const auto& slot:game.cmdManager.timeslot) count+=slot.size(); return count;
+    };
+    select();
+    screenborder->setNewScreenCenter(Coord(currentGameMap->getSizeX()*TILESIZE/2,
+                                            currentGameMap->getSizeY()*TILESIZE/2));
+    currentGameMap->viewMap(pLocalHouse->getHouseID(),
+        Coord(currentGameMap->getSizeX()/2,currentGameMap->getSizeY()/2),24);
+    game.setZoomStep(4,pointer.x,pointer.y,false);
+    motion(pointer);
+    const Coord anchor(screenborder->screen2worldX(pointer.x),screenborder->screen2worldY(pointer.y));
+    capture("mouse-zoom-before.bmp");
+    wheel(1); require(game.zoomStep==5,"Map wheel up did not zoom exactly one step");
+    const Coord anchored(screenborder->screen2worldX(pointer.x),screenborder->screen2worldY(pointer.y));
+    require(std::abs(anchor.x-anchored.x)<=4 && std::abs(anchor.y-anchored.y)<=4,"Wheel zoom lost mouse anchor");
+    capture("mouse-zoom-after.bmp");
+    wheel(-1); require(game.zoomStep==4,"Map wheel down did not zoom exactly one step");
+    for(int i=0;i<ZoomSteps::kCount+2;++i) wheel(1);
+    require(game.zoomStep==ZoomSteps::kCount-1,"Wheel zoom did not clamp at maximum");
+    for(int i=0;i<ZoomSteps::kCount+2;++i) wheel(-1);
+    require(game.zoomStep==0,"Wheel zoom did not clamp at minimum");
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+    screenborder->resetMouseWheelZoom();
+    wheel(0,.25f); wheel(0,.25f); wheel(0,.25f);
+    require(game.zoomStep==0,"Fractional trackpad input zoomed before one notch accumulated");
+    wheel(0,.25f);
+    require(game.zoomStep==1,"Fractional trackpad input failed to accumulate");
+    for(int i=0;i<20;++i) wheel(0,.25f);
+    require(game.zoomStep==1,"One high-resolution swipe jumped multiple zoom levels");
+    screenborder->resetMouseWheelZoom();
+#endif
+    const size_t commandsBeforePan=totalCommands();
+    for(int step=0;step<ZoomSteps::kCount;++step) {
+        game.setZoomStep(step,pointer.x,pointer.y,false);
+        screenborder->setNewScreenCenter(Coord(currentGameMap->getSizeX()*TILESIZE/2,
+                                                currentGameMap->getSizeY()*TILESIZE/2));
+        motion(pointer);
+        const Coord center=screenborder->getCurrentCenter();
+        const Coord end=pointer+Coord(-24,18);
+        const Coord expected=center+Coord(screenborder->screen2worldX(pointer.x)-screenborder->screen2worldX(end.x),
+                                          screenborder->screen2worldY(pointer.y)-screenborder->screen2worldY(end.y));
+        middle(pointer,true);
+        require(screenborder->isMousePanning(),"Middle button did not grab map");
+        require(SDL_ShowCursor(SDL_QUERY)==SDL_DISABLE,"Grabbed map did not hide cursor");
+        motion(end);
+        require(screenborder->getCurrentCenter()==expected,"Middle drag did not follow cursor at current zoom");
+        middle(end,false);
+        require(!screenborder->isMousePanning(),"Middle release did not end grab");
+        motion(pointer);
+        require(screenborder->getCurrentCenter()==expected,"Motion after release still panned");
+    }
+    middle(pointer,true);
+    motion(Coord(100000,100000));
+    require(screenborder->getTopLeftCorner()==Coord(0,0),"Middle drag escaped map bounds");
+    SDL_Event focus{}; focus.type=SDL_WINDOWEVENT; focus.window.event=SDL_WINDOWEVENT_FOCUS_LOST;
+    SDL_PushEvent(&focus); game.doInput();
+    require(!screenborder->isMousePanning(),"Focus loss left map grabbed");
+    require(totalCommands()==commandsBeforePan && game.selectedList.count(unit->getObjectID()),
+            "Middle dragging issued a command or changed selection");
+    // A real, overflowing Construction Yard list must keep receiving wheel input.
+    for(int item=ItemID_FirstID;item<=ItemID_LastID;++item) {
+        auto& data=game.objectData.data[item][pLocalHouse->getHouseID()];
+        if(data.builder!=Structure_ConstructionYard) continue;
+        data.techLevel=1; data.upgradeLevel=0; data.prerequisiteStructuresSet.reset();
+    }
+    for(int dy=0;dy<3;++dy) for(int dx=0;dx<3;++dx)
+        currentGameMap->getTile(origin.x+5+dx,origin.y+4+dy)->setType(Terrain_Rock);
+    auto* yard=dynamic_cast<ConstructionYard*>(pLocalHouse->placeStructure(
+        NONE_ID,Structure_ConstructionYard,origin.x+5,origin.y+4,true,true));
+    require(yard,"Missing wheel sidebar fixture"); yard->updateBuildList();
+    game.unselectAll(game.selectedList); game.selectedList={yard->getObjectID()}; yard->setSelected(true);
+    game.pInterface->updateObjectInterface();
+    auto* builder=dynamic_cast<BuilderInterface*>(game.pInterface->pObjectContainer);
+    require(builder && builder->pBuilderList,"Missing sidebar production list");
+    builder->update();
+    auto* list=builder->pBuilderList;
+    require(yard->getBuildListSize()>list->getNumButtons(list->getSize().y),"Sidebar wheel fixture is not scrollable");
+    const int sidebarZoom=game.zoomStep;
+    bool scrolled=false;
+    for(int y=mapArea.y+180;y<getRendererHeight()-30 && !scrolled;y+=12) {
+        motion(Coord(mapArea.x+mapArea.w+40,y)); wheel(-1);
+        scrolled=list->currentListPos>0;
+    }
+    require(scrolled && game.zoomStep==sidebarZoom,"Sidebar wheel stopped scrolling or zoomed the map");
+    wheel(1); require(list->currentListPos==0,"Sidebar wheel up failed to restore first row");
+    middle(Coord(mapArea.x+mapArea.w+40,mapArea.y+180),true);
+    require(!screenborder->isMousePanning(),"Middle click in sidebar grabbed map");
+    middle(pointer,false);
+    motion(pointer);
+    game.setZoomStep(originalZoom,pointer.x,pointer.y,false);
+    screenborder->setNewScreenCenter(originalCenter);
+    select(); game.pInterface->updateObjectInterface();
+    SDL_Log("MOUSE_CONTROLS_PASS: wheel +/- one step, clamps, mouse anchor, trackpad debounce, sidebar scroll, all-zoom drag pixels, release/focus/bounds, no commands");
     settings.general.wasdCamera=true;select();
     SDL_KeyboardEvent key{};key.type=SDL_KEYDOWN;key.keysym.sym=SDLK_a;
     game.handleKeyInput(key);require(game.currentCursorMode==Game::CursorMode_Normal,"WASD A activated attack");

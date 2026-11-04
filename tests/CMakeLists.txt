@@ -805,6 +805,10 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-rts-controls-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/rts-controls-probe)
         set_tests_properties(rts_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        add_test(NAME mouse_controls_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --controls-probe --no-ai-telemetry
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/mouse-controls-probe)
+        set_tests_properties(mouse_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # Smooth unit motion at 2 ms game speed through the real main loop and frame pacing:
         # simulated (and drawn) units never stand still mid-step, keep justStoppedMoving on a
         # chained step or jump a tile, per cycle and per rendered frame, and a unit whose carryall

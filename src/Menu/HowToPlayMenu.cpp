@@ -69,6 +69,13 @@ static const char* kHowToPlayBody =
     "city-builder skirmish on a big rock map, or a hybrid where you\n"
     "defend the colony while it grows.\n"
     "\n"
+    "MOUSE CAMERA CONTROLS (GAME AND MAP EDITOR)\n"
+    "- Wheel up/down over the map: zoom in/out at the pointer.\n"
+    "- Hold middle mouse (button 3) and drag: the map follows the\n"
+    "  cursor. Drag left to move the view right. Release to stop.\n"
+    "- Sidebars, lists and menus keep their wheel scrolling.\n"
+    "- In the editor, Shift+wheel over a unit rotates it.\n"
+    "\n"
     "MORE\n"
     "- Full guide: https://dunelegacy.com/dune-city.html\n"
     "- Source / issues: https://github.com/svan058/dunecity\n";

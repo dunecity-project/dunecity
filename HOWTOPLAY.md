@@ -122,6 +122,21 @@ You can play a **pure city-builder** skirmish on a big rock map, or a
 **hybrid** where you defend the colony while it grows. The simulation
 runs the same way in both modes.
 
+## Mouse camera controls
+
+- Over the map, **wheel up** zooms in and **wheel down** zooms out, one step
+  per notch, anchored at the pointer. Zoom stops at the available limits.
+  High-resolution trackpad gestures accumulate small deltas and limit rapid zooms.
+- Hold **middle mouse button (mouse 3)** over the map and drag to grab it.
+  The map follows the cursor: dragging left moves the view right. Movement
+  follows the current zoom and stops at map edges. Release to stop panning;
+  the cursor is hidden during the grab. This never orders selected units.
+- Wheels over sidebars, lists and menus still scroll those controls. Arrow-key
+  and edge scrolling, minimap clicks and touch controls are unchanged.
+- The map editor supports the same wheel zoom and middle-drag controls, using
+  its three existing zoom levels. **Shift+wheel** over a unit rotates it.
+
+
 ---
 
 ## Hard constraints worth knowing
