@@ -172,6 +172,36 @@
   capture, half-load and T-10s returns/delivery, the OFF/ordinary/empty/no-refinery
   cases, human/role ownership and reversion both on the road and inside a refinery.
   HOWTOPLAY and the in-game help explain the AI-only behaviour.
+- Final fixture source `646335f564026ba577e4edf89455c817e224121a`,
+  cluster job `20261104T221812-ctest-ce3b5c`: **4/4 PASS** on mini.
+  `dunelegacy_tests`: 1,271 cases / 13,338,419 assertions passed, 3 skipped
+  (2.15 s); harvester-safety Vanilla/DuneCity/Dune2R: 27.61/24.80/27.60 s.
+  All three engine runs measured the same capture (82 cycles), 350-spice
+  half-load delivery (1,841 cycles = 29.456 s, 5,659 deviation cycles left),
+  10-spice deadline delivery (330 cycles = 5.280 s, 295 cycles left), and
+  mid-unload-expiry release (401 cycles = 6.416 s). T-10s is exactly 625 cycles.
+  A ten-second *return-order* lead cannot promise a distant/large load finishes
+  unloading; the expired-return/unload cases explicitly cover that boundary.
+- Fixture preconditions were corrected, not engine rules: `setGuardPoint` turns
+  STOP into GUARD on spice, so the real gas capture uses stationary bare sand
+  and ordinary seven-tile weapon range before introducing its harvest field.
+  Temporary address/mode diagnostics were removed.
+- Short same-source OFF/ON audit `35c3a7ca9c07a3e150c73dc6a96b263e6b410114`:
+  4 paired 128x128/Medium-spice FFA games, Hard/Brutal, seeds 9101/148680876,
+  20 minutes; 16 paired houses. All final digests, army/kill values and detector
+  counts matched. Both difficulties' mean score stayed -0.25; all games timed
+  out (4/4 each arm). No strategic improvement is claimed from this small,
+  invariant sample. Per-bot hashes OFF `225083b722df99e6`, ON `2f4aee9d962f608f`;
+  measured total game wall 217.683/201.309 s (mixed hosts/load, not a speed gate).
+  Evidence: `outputs/deviated-harvest-20261104/{off,on}`; queue jobs
+  `20261104T211707-deviated-harvest-{off-9fda3b,on-424712}`.
+- Mandatory AI/performance gates passed in the shared `35c3a7ca9c07` cohort
+  `20261104T211358-all-candidates-regressions-27d5b1`: All-against-Atreides
+  6/6 seeds within 40 minutes (136.81 s mini), scenario matrix smoke (60.25 s
+  mini), FFA army deployment (134.25 s mini), performance (216.34 s Pro).
+  This earlier union had unrelated failures and the then-unfixed capture fixture;
+  it is not described as an all-green union. The final four focused checks above
+  include the corrected fixture and now-green unit umbrella.
 
 ## 2026-11-04 — Save a running match as a custom map (OMP SaveAsMap, unreleased)
 
