@@ -26,6 +26,13 @@ A single seed only re-pins chance. The 1.0.847 stuck army still fails every seed
 never leave, so at least one of 9101, 9103 and 9105 has to finish someone; each did in both builds
 of that sweep except 9101 with the change.
 
+The deadline is minute 35 since TrooperSupport (2026-11-05, runtime 846c1336): defending houses
+now field WOR troopers, so 9103 first eliminated a house at 30.3 and 9105 at 30.6 minutes while
+every deploy check passed (19 waves, four by minute 8, largest 70). Controlled OFF/ON on 9105:
+Ordos died at 21.2 OFF and survived to 30.6 ON with 14200 army value at minute 20 versus 0
+(HANDOVER, docs/quantbot-dunecity-audit.md). The stuck-army failure this guards against never
+eliminates anyone within 45 minutes, so minute 35 still catches it.
+
   run-ffa-army-deploys.py --build-dir build --output-dir build/ffa-army-deploys
 """
 import argparse
@@ -117,7 +124,7 @@ def main():
     parser.add_argument('--wave-members', type=int, default=30)
     parser.add_argument('--reserve-value', type=int, default=5000)
     parser.add_argument('--inside-minutes', type=int, default=6)
-    parser.add_argument('--eliminated-minutes', type=float, default=30.0)
+    parser.add_argument('--eliminated-minutes', type=float, default=35.0)
     parser.add_argument('--wall-timeout', type=int, default=1500)
     args = parser.parse_args()
     seeds = [int(s) for s in args.seeds.split(',') if s.strip()]

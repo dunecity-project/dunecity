@@ -951,9 +951,13 @@ label, one game per seed), `army.csv` and an army-deployment report table.
 **Regression test** `quantbot_ffa_army_deploys` (`tests/ai/run-ffa-army-deploys.py`, mandatory, AGENTS.md):
 rs160-dunecity, four QuantBot Brutal; fails without a 30+ unit wave by minute 8 or with a house's idle
 reserve 80%+ inside its base for more than 6 minutes in a row (both on seed 9101), or when none of seeds
-9101, 9103 and 9105 (played three at a time) has a house eliminated by minute 30. Since 2026-10-22 the
-elimination check spans three seeds: one seed finishing by minute 30 is chance (a 12-seed sweep: 6/12 v
-5/12 before/after the city-airplane change, which moved 9101 itself from 26.9 to none). Fixed code (60-minute calibration run, seed 9101): first wave at minute 1.3 (66 units by minute 8),
+9101, 9103 and 9105 (played three at a time) has a house eliminated by minute 35 (minute 30 until
+2026-11-05). Since 2026-10-22 the elimination check spans three seeds: one seed finishing by minute 30
+is chance (a 12-seed sweep: 6/12 v 5/12 before/after the city-airplane change, which moved 9101 itself
+from 26.9 to none). TrooperSupport (2026-11-05) moved the first eliminations to 30.3 (9103) and 30.6
+minutes (9105) with every deploy check passing; OFF/ON on 9105, Ordos dies at 21.2 OFF and holds with
+WOR troopers ON (army 14,200 v 0 at minute 20), so the deadline moved to 35, which a stuck army (no
+elimination in 45) still fails. Fixed code (60-minute calibration run, seed 9101): first wave at minute 1.3 (66 units by minute 8),
 longest inside stretch 1 minute, eliminations at 22.3 and 27.4 minutes, ~10 minutes wall for 60
 game minutes. Probe `quantbot_force_concentration` section 7 adds: two enemy houses' two tanks each on
 different teams do not outnumber our two (sum 1,200 v strongest team 600), allied they do; city
