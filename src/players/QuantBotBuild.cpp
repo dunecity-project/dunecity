@@ -3203,7 +3203,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
 void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     planningBuilder=NONE_ID; clearPlacementCache(false,true);
     pass.capitalChoice = -1;
-    bool firstHeavyBootstrap=false;
+    pass.cityFirstFactoryBootstrap=false;
     if (botConfig().force.cityProductionPrerequisites && botConfig().force.cityConstructionCapital
         && difficulty>=Difficulty::Hard
         && pass.citySimEnabled && !pass.spiceEconomyViable && pass.cityYards>1
@@ -3216,7 +3216,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
                 || builder->isOnHold() || builder->getProductionQueueSize()>0
                 || !campaignAvailableToBuild(builder,Structure_HeavyFactory)) continue;
             planningBuilder=builder->getObjectID();clearPlacementCache(false,true);
-            if (findPlaceLocation(Structure_HeavyFactory).isValid()) { firstHeavyBootstrap=true; break; }
+            if (findPlaceLocation(Structure_HeavyFactory).isValid()) { pass.cityFirstFactoryBootstrap=true; break; }
         }
         planningBuilder=NONE_ID;clearPlacementCache(false,true);
     }
@@ -3234,7 +3234,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     int withoutIdleTransport=-1;
     for (size_t i=0;i<pass.capitalCandidates.size();++i) {
         const auto& candidate=pass.capitalCandidates[i];
-        if (candidate.score<=0 || (firstHeavyBootstrap && DuneCity::isCityZoneStructure(candidate.item))) continue;
+        if (candidate.score<=0 || (pass.cityFirstFactoryBootstrap && DuneCity::isCityZoneStructure(candidate.item))) continue;
         if (pass.capitalChoice<0 || candidate.score>pass.capitalCandidates[pass.capitalChoice].score)
             pass.capitalChoice=int(i);
         if (mayPreferBattery) {
@@ -3255,7 +3255,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         for (size_t i=0;i<pass.capitalCandidates.size();++i) {
             const auto& candidate=pass.capitalCandidates[i];
             if (candidate.score<=0 || std::string_view(candidate.kind)=="military"
-                || (firstHeavyBootstrap && DuneCity::isCityZoneStructure(candidate.item))) continue;
+                || (pass.cityFirstFactoryBootstrap && DuneCity::isCityZoneStructure(candidate.item))) continue;
             if (preferFundedBattery && idleTransport(candidate)) continue;
             boundedClaim |= std::string_view(candidate.reason)=="ground_threat"
                 || std::string_view(candidate.reason)=="early_rocket"
@@ -3296,7 +3296,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     // though the ordinary opening rule is saving for a legal Heavy Factory.
     Uint32 dedicatedCityYard=NONE_ID;
     if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1
-        && !pass.protectionCapital && !firstHeavyBootstrap) {
+        && !pass.protectionCapital && !pass.cityFirstFactoryBootstrap) {
         for (const auto* builder:pass.capitalBuilders) {
             if (builder->getItemID()!=Structure_ConstructionYard || builder->isUpgrading()
                 || builder->isOnHold()) continue;
@@ -3322,7 +3322,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         }
         planningBuilder=NONE_ID;clearPlacementCache(false,true);
     }
-    if (!pass.cityGrowthProtected && !firstHeavyBootstrap && pass.citySimEnabled
+    if (!pass.cityGrowthProtected && !pass.cityFirstFactoryBootstrap && pass.citySimEnabled
         && (getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=24
             || botConfig().force.cityGrowthPower)
         && pass.capitalChoice>=0 && pass.capitalCandidates[pass.capitalChoice].kind==std::string("military")) {
@@ -3370,7 +3370,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("city_growth_yards_busy",pass.cityGrowthYardsBusy)
             .set("city_growth_dedicated_yard",dedicatedCityYard)
             .set("city_growth_builder",pass.cityGrowthProtected ? pass.capitalCandidates[pass.capitalChoice].builder : NONE_ID)
-            .set("city_growth_waits_for_first_factory",firstHeavyBootstrap)
+            .set("city_growth_waits_for_first_factory",pass.cityFirstFactoryBootstrap)
             .set("first_factory_capital",pass.firstFactoryCapital).set("first_factory_production_cost",pass.firstFactoryProduction)
             .set("existing_military_capacity",pass.existingMilitaryCapacity).set("military_value",pass.militaryValue)
             .set("military_target",militaryValueLimit).set("military_budget",pass.militaryBudget)

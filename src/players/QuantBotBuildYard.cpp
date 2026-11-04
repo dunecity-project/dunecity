@@ -2240,6 +2240,8 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     // An idle yard does not wait for a dearer project while it can
     // afford a demanded plot. This also covers deduplication, failed
     // placement and saving rules that set skipRemainingStructureLogic.
+    // The capital chooser's bounded first-factory bootstrap is not idle:
+    // replacing its saving rule here would spend every receipt on zoning.
     int selectedCost=yardTurn.itemID!=NONE_ID ? purchasePrice(turn.pBuilder,yardTurn.itemID) : 0;
     if (selectedPlaceLocation.isValid())
         for (const auto& foundation:foundationOrders(turn.pBuilder,yardTurn.itemID,selectedPlaceLocation))
@@ -2247,6 +2249,7 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     if (yardTurn.isCitySim && !turn.pBuilder->isUpgrading() && !turn.pBuilder->isOnHold()
         && turn.pBuilder->getProductionQueueSize()==0
         && !(pass.protectionCapital && capitalPending(pass))
+        && !pass.cityFirstFactoryBootstrap
         && !yardTurn.serviceSavingHold
         // An installment-funded growth-cap project is deliberately short
         // of its full price. That is not "cannot afford it": replacing it
