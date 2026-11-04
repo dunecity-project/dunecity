@@ -262,10 +262,10 @@ struct QuantBotConfig {
         /// existing four-minute working-capital forecast. Viable spice economies
         /// retain their normal budgets; military and required recovery are unchanged.
         bool cityOpeningCapital;
-        /// Protect Hard/Brutal's already affordable first heavy factory in a
-        /// seeded tax city with a standing Starport from repeat military bargains.
-        /// A healthy multi-yard tax city retains the ordinary first-factory bootstrap
-        /// before parallel zoning. Only an affordable quote reserves other producers' cash.
+        /// Protect Hard/Brutal's affordable first heavy factory in a seeded tax
+        /// city with a standing Starport. With CityProductionPrerequisites, a
+        /// settled multi-yard city may also save when forecast net income covers
+        /// the full founded quote plus queued debt; seed and recovery gates remain.
         bool cityConstructionCapital;
         /// Reserve a missing production prerequisite before the factory/repair
         /// plot it unlocks, so future footprints cannot exclude their own supplier.

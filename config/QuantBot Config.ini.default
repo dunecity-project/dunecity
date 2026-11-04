@@ -358,9 +358,9 @@ CityPowerSizing=1
 # Viable spice economies retain normal budgets; only optional MCVs/producer upgrades are gated.
 # Military production and required power/supply are unchanged.
 CityOpeningCapital=1
-# Hard/Brutal: protect a seeded tax city's fully affordable first Heavy Factory from bargains.
-# Healthy multi-yard tax cities keep the ordinary first-factory bootstrap ahead of zoning.
-# Only an affordable quote reserves military/market cash; MCV priorities are unchanged.
+# Hard/Brutal: protect a seeded tax city's first Heavy Factory from bargains.
+# Below-quote saving also requires CityProductionPrerequisites, multiple yards,
+# and forecast net income covering the founded quote plus queued debt.
 CityConstructionCapital=1
 # Reserve the missing production prerequisite, not the unavailable factory it unlocks.
 # Prevent future factory/repair plots from excluding their own Light Factory.

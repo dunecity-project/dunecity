@@ -83,13 +83,15 @@
   so missing core production also kept the colonisation gate closed.
 - Hashed/default-on **CityProductionPrerequisites** reserves the first missing
   prerequisite instead, sharing one plot when both future buildings need it.
-  Existing factory funding, placement safety, market and colony rules remain.
-- The first save continuation exposed a second allocation loop after settlement:
-  both yards repeatedly zoned while the ordinary opening rule tried to save for
-  the first Heavy Factory. **CityConstructionCapital** now preserves that
-  bootstrap before parallel zoning in healthy, seeded, Hard/Brutal tax cities
-  with multiple yards and a legal idle supplier. Military/import cash below the
-  factory quote, power/defence, Easy/Medium and unavailable technology are unchanged.
+  Existing placement safety, market and colony rules remain.
+- The continuations exposed a second allocation loop after settlement: zoning,
+  power and imports repeatedly spent receipts before the first Heavy Factory's
+  full quote accumulated. **CityConstructionCapital** now uses its ordinary
+  shared reservation below that quote only with **CityProductionPrerequisites**
+  in a seeded Hard/Brutal tax city with multiple yards, a standing Starport and
+  legal available technology, when forecast net income covers the founded quote
+  plus queued debt. Existing seed, power and defence gates remain; single-yard,
+  weak-income, Easy/Medium and viable-spice budgets are unchanged.
 - Added real-engine negative-control coverage for legal-but-reserved light sites,
   reopened zoning, all four difficulties and the subsequent affordable Heavy
   Factory, plus config load/save/hash coverage. Save investigation logging can
