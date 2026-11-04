@@ -1,3 +1,19 @@
+## 2026-11-04 — Production plots cannot exclude their own prerequisite (OMP SardaukarExpand, unreleased)
+
+- `notcolonizingsadukar.dls` loads at cycle **145097**. Sardaukar is a Brutal
+  full-role bot with a standing Starport but no Light/Heavy Factory. Its two
+  future Heavy Factory/Repair Yard plots excluded the Light Factory both require,
+  and all demanded zoning sites. The survey still reported four free footprints,
+  so missing core production also kept the colonisation gate closed.
+- Hashed/default-on **CityProductionPrerequisites** reserves the first missing
+  prerequisite instead, sharing one plot when both future buildings need it.
+  Existing factory funding, placement safety, market and colony rules remain.
+- Added real-engine negative-control coverage for legal-but-reserved light sites,
+  reopened zoning, all four difficulties and the subsequent affordable Heavy
+  Factory, plus config load/save/hash coverage. Save investigation logging can
+  distinguish physical legal origins from AI reservations without advancing a
+  planner (`BALANCE_BUILD_SITE_AUDIT=HOUSE` on a performance continuation).
+
 ## 2026-11-04 — Civilization Wars rock lanes and defended sand-front cities (OMP CivWarsLayout, unreleased)
 
 - Every lane now has a mirrored, continuous three-tile buildable rock strip joining

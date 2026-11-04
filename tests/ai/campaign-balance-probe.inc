@@ -488,6 +488,63 @@ int runCampaignBalanceProbe() {
             for (const auto& player : info.playerInfoList)
                 SDL_Log("GAME_PERF_SETUP: house=%d team=%d player=%s class=%s", static_cast<int>(info.houseID), info.team,
                     player.playerName.c_str(), player.playerClass.c_str());
+        // Save investigations need physical legal origins separately from the
+        // AI's reserved plots. This opt-in snapshot does not advance the game
+        // or run a planner before the measured continuation.
+        if (const char* auditHouse=std::getenv("BALANCE_BUILD_SITE_AUDIT")) {
+            const int h=std::stoi(auditHouse);
+            if (const auto* house=game->getHouse(h)) {
+                AITelemetry::Record row,sites,market,players,builders,items;
+                const QuantBot* bot=nullptr;
+                for (const auto& player:house->getPlayerList())
+                    if (const auto* q=dynamic_cast<const QuantBot*>(player.get())) {
+                        bot=q;
+                        const auto& f=q->botConfig().force;
+                        players.set(std::to_string(q->getPlayerID()),AITelemetry::Record()
+                            .set("difficulty",int(q->difficulty)).set("role",int(q->role))
+                            .set("config_hash",q->botConfig().getConfigHash())
+                            .set("CityGrowthPower",f.cityGrowthPower).set("CityPowerSizing",f.cityPowerSizing)
+                            .set("CityOpeningCapital",f.cityOpeningCapital).set("CityConstructionCapital",f.cityConstructionCapital)
+                            .set("CityProductionPrerequisites",f.cityProductionPrerequisites)
+                            .set("ThreatTurrets",f.threatTurrets).set("MoreRocketTurrets",f.moreRocketTurrets)
+                            .set("CityStarportSupply",f.cityStarportSupply).set("StorageCapacity",f.storageCapacity));
+                    }
+                for (Uint32 item:{Structure_LightFactory,Structure_HeavyFactory,Structure_ZoneCommercial}) {
+                    const Coord size=getStructureSize(item);
+                    int live=0,traffic=0;
+                    for (int y=0;y<=currentGameMap->getSizeY()-size.y;++y)
+                        for (int x=0;x<=currentGameMap->getSizeX()-size.x;++x) {
+                            live+=currentGameMap->okayToPlaceStructure(x,y,size.x,size.y,false,house,false,item);
+                            traffic+=bot && bot->placeableAmongOwnUnits(x,y,size.x,size.y,item);
+                        }
+                    sites.set(getItemNameByID(item),AITelemetry::Record().set("width",size.x).set("height",size.y)
+                        .set("legal_origins_live",live).set("legal_origins_own_traffic_allowed",traffic));
+                }
+                for (Uint32 item=ItemID_FirstID;item<=ItemID_LastID;++item)
+                    if (const int count=house->getNumItems(item)) items.set(getItemNameByID(item),count);
+                for (const auto* structure:structureList) if (structure->getOwner()==house && structure->isABuilder()) {
+                    const auto* builder=static_cast<const BuilderBase*>(structure);
+                    builders.set(std::to_string(builder->getObjectID()),AITelemetry::Record()
+                        .set("item",getItemNameByID(builder->getItemID())).set("queue",builder->getProductionQueueSize())
+                        .set("upgrade",builder->getCurrentUpgradeLevel()).set("upgrading",builder->isUpgrading())
+                        .set("hold",builder->isOnHold()).set("heavy_available",builder->isAvailableToBuild(Structure_HeavyFactory))
+                        .set("mcv_available",builder->isAvailableToBuild(Unit_MCV)));
+                }
+                for (const auto& offer:house->getChoam().availableItems)
+                    market.set(getItemNameByID(offer.itemID),AITelemetry::Record().set("stock",offer.num).set("price",offer.price));
+                row.set("cycle",game->getGameCycleCount()).set("house",h).set("credits",house->getCredits())
+                    .set("starting_credits",house->getStartingCredits().lround()).set("city_credits",house->getCityCredits().lround())
+                    .set("capacity",house->getCapacity()).set("power_produced",house->getProducedPower())
+                    .set("power_required",house->getPowerRequirement()).set("starport_population_rule",options.starportPopulation)
+                    .set("players",players).set("builders",builders).set("items",items).set("market",market).set("sites",sites);
+                if (const auto* sim=game->getCitySimulation()) {
+                    const auto& state=sim->getHouseState(h);
+                    row.set("display_population",state.getTotalPop()*20).set("annual_tax",state.budget.getLastTaxRevenue())
+                        .set("annual_police",state.lastPoliceExpense);
+                }
+                SDL_Log("BUILD_SITE_AUDIT: %s",row.json().c_str());
+            }
+        }
         // The map text a match was started from (a Random Skirmish save carries its generated map).
         if (const char* mapOut = std::getenv("BALANCE_PERF_DUMP_MAP"))
             std::ofstream(mapOut, std::ios::binary) << setup.getFiledata();

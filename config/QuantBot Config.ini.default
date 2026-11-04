@@ -361,6 +361,9 @@ CityOpeningCapital=1
 # Hard/Brutal: protect a seeded tax city's fully affordable first Heavy Factory from bargains.
 # Never save below the complete quote or change the existing MCV priority.
 CityConstructionCapital=1
+# Reserve the missing production prerequisite, not the unavailable factory it unlocks.
+# Prevent future factory/repair plots from excluding their own Light Factory.
+CityProductionPrerequisites=1
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
 # Experimental 3-rocket baseline (4 for Hard+ at 16 structures), with a full income budget.

@@ -2130,7 +2130,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         if (pass.emitStatsLog) logDebug("PRODUCTION: CY=%u no site for item=%u", turn.pBuilder->getObjectID(), yardTurn.itemID);
         if (pass.emitStatsLog) traceDecision("construction_rejected", AITelemetry::Record()
             .set("builder", turn.pBuilder->getObjectID()).set("item", yardTurn.itemID)
-            .set("rule", yardTurn.structureRule).set("reason", "no_site"));
+            .set("rule", yardTurn.structureRule).set("reason", "no_site")
+            .set("placement",placementScoreDetails[yardTurn.itemID]));
         yardTurn.itemID = NONE_ID;
     }
     if (yardTurn.isCitySim && yardTurn.itemID != NONE_ID

@@ -141,8 +141,8 @@ struct QuantBotConfig {
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
-    /// CityPowerSizing, CityOpeningCapital, CityConstructionCapital, ThreatTurrets,
-    /// MoreRocketTurrets, CityStarportSupply, StorageCapacity; optional keys, hashed for multiplayer.
+    /// CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
+    /// ThreatTurrets, MoreRocketTurrets, CityStarportSupply, StorageCapacity; optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -265,6 +265,9 @@ struct QuantBotConfig {
         /// seeded tax city with a standing Starport from repeat military bargains.
         /// Existing income, power and defence gates apply; never save below its quote.
         bool cityConstructionCapital;
+        /// Reserve a missing production prerequisite before the factory/repair
+        /// plot it unlocks, so future footprints cannot exclude their own supplier.
+        bool cityProductionPrerequisites;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;

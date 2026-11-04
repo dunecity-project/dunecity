@@ -467,6 +467,22 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
         planningCityProductionPlots=true;
         for (Uint32 item:{Structure_HeavyFactory,Structure_RepairYard}) {
             if (!data[item][houseID].enabled || data[item][houseID].techLevel>getHouse()->getTechLevel()) continue;
+            if (botConfig().force.cityProductionPrerequisites) {
+                // Reserve the next missing link, not two future buildings that
+                // cannot exist without it. On the Sardaukar save, the heavy and
+                // repair plots excluded every site for their Light Factory.
+                for (int depth=0; depth<Structure_LastID; ++depth) {
+                    Uint32 missing=NONE_ID;
+                    for (Uint32 prerequisite=Structure_FirstID; prerequisite<=Structure_LastID; ++prerequisite)
+                        if (data[item][houseID].prerequisiteStructuresSet[prerequisite]
+                            && pass.itemCount[prerequisite]==0) { missing=prerequisite; break; }
+                    if (missing==NONE_ID) break;
+                    item=missing;
+                }
+                if (!data[item][houseID].enabled || data[item][houseID].techLevel>getHouse()->getTechLevel()
+                    || std::any_of(cityProductionPlots.begin(),cityProductionPlots.end(),
+                        [item](const auto& plot) { return plot.item==item; })) continue;
+            }
             clearPlacementCache(false);
             const Coord site=findPlaceLocation(item);
             if (site.isValid()) cityProductionPlots.push_back({item,site});

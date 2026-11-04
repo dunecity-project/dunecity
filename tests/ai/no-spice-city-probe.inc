@@ -556,6 +556,102 @@ void runNoSpiceCityProbe(Game& game) {
         restore();
     }
 
+    // notcolonizingsadukar.dls: two future 3x2 plots occupied the only
+    // production space, but both needed the Light Factory they excluded.
+    // Drive the real reservation/search/queue paths on the same two patches.
+    {
+        const auto savedConfig=bot->configOverride;
+        const auto savedState=state;
+        const auto savedDifficulty=bot->difficulty;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        config->force.storageCapacity=false;
+        config->force.moreRocketTurrets=false;
+        bot->configOverride=config;
+        state.taxBaseEighths=4096;state.resPop=500;
+        state.resValve=0;state.comValve=state.indValve=1500;
+        auto planPlots=[&](bool enabled) {
+            config->force.cityProductionPrerequisites=enabled;
+            bot->builderPlaceLocations.clear();bot->reservedStructures.clear();
+            bot->resetBuildPass();
+            QuantBot::BuildPass pass(0);
+            bot->planBuildInventory(pass);bot->planBuildBudget(pass);
+        };
+        planPlots(false);
+        const auto futurePlots=bot->cityProductionPlots;
+        require(futurePlots.size()==2,"Prerequisite fixture needs the two future production plots");
+        struct TileState { Tile* tile; int type; int owner; bool road; };
+        std::vector<TileState> terrain;
+        for(int y=0;y<currentGameMap->getSizeY();++y)for(int x=0;x<currentGameMap->getSizeX();++x) {
+            auto* tile=currentGameMap->getTile(x,y);
+            if(!tile->isRock() || tile->isMountain() || tile->hasAGroundObject())continue;
+            terrain.push_back({tile,tile->getType(),tile->getOwner(),tile->isRoad()});
+            bool future=false;
+            for(const auto& plot:futurePlots) {
+                const Coord size=getStructureSize(plot.item),at=plot.location;
+                future|=x>=at.x&&x<at.x+size.x&&y>=at.y&&y<at.y+size.y;
+            }
+            if(!future)tile->setType(Terrain_Sand);
+        }
+        BuilderBase* light=nullptr;
+        auto restore=[&]() {
+            for(auto* structure:structureList)
+                if(structure->getOwner()==house && structure->isABuilder())
+                    cancelOrders(static_cast<BuilderBase*>(structure));
+            if(light)light->destroy();
+            for(const auto& tile:terrain) {
+                tile.tile->setType(tile.type);tile.tile->setOwner(tile.owner);tile.tile->setRoad(tile.road);
+            }
+            bot->configOverride=savedConfig;state=savedState;bot->difficulty=savedDifficulty;
+            bot->cityProductionPlots.clear();bot->clearPlacementCache();
+            bot->rockSurveyCycle=std::numeric_limits<Uint32>::max();
+        };
+        try {
+            planPlots(false);
+            int rawLightSites=0;
+            const Coord size=getStructureSize(Structure_LightFactory);
+            for(int y=0;y<=currentGameMap->getSizeY()-size.y;++y)
+                for(int x=0;x<=currentGameMap->getSizeX()-size.x;++x)
+                    rawLightSites+=currentGameMap->okayToPlaceStructure(x,y,size.x,size.y,false,house,false,Structure_LightFactory);
+            require(rawLightSites>0 && bot->findPlaceLocation(Structure_LightFactory).isInvalid(),
+                "Prerequisite negative control did not exclude a physically legal Light Factory");
+            require(bot->findPlaceLocation(Structure_ZoneIndustrial).isInvalid(),
+                "Prerequisite negative control left the cramped city's growth space available");
+            Coord lightSite=Coord::Invalid();
+            for(auto level:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,
+                            QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
+                bot->difficulty=level;
+                planPlots(true);
+                require(bot->cityProductionPlots.size()==1
+                    && bot->cityProductionPlots.front().item==Structure_LightFactory,
+                    "Future production plots did not share their one missing prerequisite");
+                lightSite=bot->findPlaceLocation(Structure_LightFactory);
+                require(lightSite.isValid(),"A future factory still excluded its own Light Factory");
+                require(bot->findPlaceLocation(Structure_ZoneIndustrial).isValid(),
+                    "The unused future plot still withheld all demanded city growth");
+            }
+            const Pass unlocked=decide(3000,10000);
+            require(ordered(unlocked,Structure_LightFactory),"The unblocked prerequisite was not ordered");
+            for(auto* structure:structureList)
+                if(structure->getOwner()==house && structure->isABuilder())
+                    cancelOrders(static_cast<BuilderBase*>(structure));
+            light=static_cast<BuilderBase*>(house->placeStructure(NONE_ID,Structure_LightFactory,
+                lightSite.x,lightSite.y,true,true));
+            require(light!=nullptr,"Prerequisite fixture failed to place its funded Light Factory");
+            for(auto* structure:structureList)
+                if(structure->getOwner()==house && structure->isABuilder())
+                    static_cast<BuilderBase*>(structure)->updateBuildList();
+            planPlots(true);
+            require(bot->findPlaceLocation(Structure_HeavyFactory).isValid(),
+                "The prerequisite consumed both future factory footprints");
+            const Pass heavy=decide(3000,10000);
+            require(ordered(heavy,Structure_HeavyFactory),"The unlocked affordable Heavy Factory was not ordered");
+            SDL_Log("CITY_PRODUCTION_PREREQUISITES_PASS: off blocks %d legal light sites; on unlocks light/growth on all difficulties, then heavy",rawLightSites);
+        } catch (...) {
+            restore();throw;
+        }
+        restore();
+    }
+
     // The right-sized generator alone was insufficient in Random Skirmish
     // 96/None/T9 seed 9101: 900 went to an optional MCV and another 900 to
     // factory upgrades before tax covered upkeep. Exercise the actual queue
