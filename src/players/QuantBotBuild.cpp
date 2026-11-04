@@ -3204,7 +3204,8 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     planningBuilder=NONE_ID; clearPlacementCache(false,true);
     pass.capitalChoice = -1;
     bool firstHeavyBootstrap=false;
-    if (botConfig().force.cityConstructionCapital && difficulty>=Difficulty::Hard
+    if (botConfig().force.cityProductionPrerequisites && botConfig().force.cityConstructionCapital
+        && difficulty>=Difficulty::Hard
         && pass.citySimEnabled && !pass.spiceEconomyViable && pass.cityYards>1
         && pass.itemCount[Structure_HeavyFactory]==0 && pass.itemCount[Structure_StarPort]>0
         && !builderOnly() && gameMode==GameMode::Custom && !isCampaignGameType(currentGame->gameType)
