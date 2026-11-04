@@ -278,6 +278,17 @@ inline void availabilityAndBudgetGates(World& world) {
     require(!world.bot->trooperOrderAdmitted(capped, Unit_Trooper, data[Unit_Trooper][house].price),
             "Infrastructure test's satisfied contingent still admits an extra troop");
     independent(capped, "useful_target_satisfied_but_first_wor_missing");
+    {
+        auto palace = pass;
+        palace.strategicReserveItem = Structure_Palace;
+        palace.strategicReserveCost = data[Structure_Palace][house].price;
+        world.bot->planUnitMix(palace);
+        require(palace.cityWorCashReserve == pass.cityWorCashReserve,
+                "Optional Palace reserve still taxes the first WOR's protected cash");
+        palace.money = static_cast<int>(world.bot->buildingCapitalCost(palace, Structure_WOR) + palace.cityWorCashReserve);
+        require(world.infrastructure(palace) == Structure_WOR,
+                "Funded first WOR still waits for optional Palace cash");
+    }
     capped = pass;
     capped.itemCount[Structure_WOR] = 1;
     blocked(world, capped, "existing_or_pending_wor");
@@ -699,8 +710,8 @@ inline void fullBuildStandingRecruitment() {
     completeContingent("effective_wing");
 }
 
-inline void productionAndAirDefence() {
-    World world("dunecity", true, HOUSE_HARKONNEN, 0);
+inline void productionAndAirDefence(HOUSETYPE house) {
+    World world("dunecity", true, house, 0, house != HOUSE_HARKONNEN);
     availabilityAndBudgetGates(world);
     auto pass = world.plan();
     const int target = pass.trooperTarget;
@@ -769,6 +780,9 @@ inline void productionAndAirDefence() {
             "real_queue_completion=1 producer_scope=focused_yard_wor",
             world.game->getGameCycleCount(), completed, orders.singles, orders.squads, orders.people(), target,
             orders.quotaExempt);
+    SDL_Log("TROOPER_SUPPORT_RECRUITABLE_HOUSE: house=%d wor_built=1 troopers_built=%d real_paid_orders=1",
+            int(house), completed);
+    if (house != HOUSE_HARKONNEN) return;
 
     const auto rewardBefore = world.owner->getCombatReward(Unit_Trooper);
     const Uint32 producerID = producer->getObjectID();
@@ -853,7 +867,8 @@ void runTrooperSupportProbe() {
     TrooperSupportProbe::baselineGates();
     TrooperSupportProbe::observedDemand();
     TrooperSupportProbe::fullBuildStandingRecruitment();
-    TrooperSupportProbe::productionAndAirDefence();
+    for (const HOUSETYPE house : {HOUSE_HARKONNEN, HOUSE_ORDOS, HOUSE_FREMEN, HOUSE_SARDAUKAR, HOUSE_MERCENARY})
+        TrooperSupportProbe::productionAndAirDefence(house);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=trooper_support outcome=passed producer_scope=full_build_and_focused_yard_wor "
-            "full_build_wor=1 full_build_standing=6 full_build_air_cap=18");
+            "full_build_wor=1 full_build_standing=6 full_build_air_cap=18 recruitable_houses=5");
 }

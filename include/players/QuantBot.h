@@ -1758,6 +1758,7 @@ private:
     bool cityInfantryItem(BuildPass& pass, Uint32 item);
     bool troopContentExists(BuildPass& pass, const BuilderBase* builder);
     bool trooperOrderAdmitted(BuildPass& pass, Uint32 item, int value);
+    Uint32 supportTrooperOrder(BuildPass& pass, const BuilderBase* builder, int money, int target);
     Uint32 trooperInfrastructureItem(BuildPass& pass, const BuilderBase* yard, bool requireCash);
     static int purchasePrice(const BuilderBase* builder, Uint32 item);
     QuantBotFoundationPolicy::Plan foundationPlan(const BuilderBase* builder, Uint32 item, Coord site, const std::vector<Uint32>& clearedZones = std::vector<Uint32>{});

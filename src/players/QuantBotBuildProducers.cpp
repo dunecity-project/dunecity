@@ -166,13 +166,12 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     // Every producer shares the same committed troop count and infantry budget.
     const bool supportTroop = pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(itemID);
     if (supportTroop && !trooperOrderAdmitted(pass, itemID, data[itemID][houseID].price)) return false;
-    // Per-type mix targets can each overshoot by a vehicle, and Starport bargains
-    // bypass those targets entirely. Keep the unmet troop floor's army slots and
-    // the next troop's cash available across every competing military producer.
+    // Keep the unmet floor's army slots across every military producer. Its
+    // real cash is allocated to the WOR by the shared capital supplier, ahead
+    // of repeat growth as well as competing military purchases.
     if (pass.trooperSupport && pass.trooperReserveValue > 0 && !supportTroop
         && QuantBotBuildPolicy::militaryItem(itemID)
-        && (int64_t(pass.militaryValue) + data[itemID][houseID].price + pass.trooperReserveValue > pass.lightBudget
-            || int64_t(quotedPrice) + std::min(pass.trooperReserveValue, data[Unit_Trooper][houseID].price) > pass.money)) {
+        && int64_t(pass.militaryValue) + data[itemID][houseID].price + pass.trooperReserveValue > pass.lightBudget) {
         if (pass.emitStatsLog && AITelemetry::log().enabled())
             traceDecision("trooper_reserve_blocked", AITelemetry::Record()
                 .set("builder", turn.pBuilder->getObjectID()).set("item", itemID)
@@ -833,32 +832,49 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
     }
 }
 
+Uint32 QuantBot::supportTrooperOrder(BuildPass& pass, const BuilderBase* builder, int money, int target) {
+    if (builder->isUpgrading() || builder->getProductionQueueSize() > 0
+        || getHouse()->isGroundUnitLimitReached()) return NONE_ID;
+    const int houseID = ModManager::instance().isTornieFamilyContentActive()
+        ? builder->getTechnologyHouseID() : getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    Uint32 item = NONE_ID;
+    int bestPrice = 0, bestSize = 0;
+    for (const Uint32 candidate : {Unit_Trooper, Unit_Troopers}) {
+        const int size = QuantBotBuildPolicy::rocketInfantrySize(candidate);
+        if (pass.trooperCount + size > target || !campaignAvailableToBuild(builder, candidate)
+            || !trooperOrderAdmitted(pass, candidate, data[candidate][houseID].price)) continue;
+        const int price = purchasePrice(builder, candidate);
+        if (price > money) continue;
+        if (item == NONE_ID || int64_t(price) * bestSize < int64_t(bestPrice) * size
+            || (int64_t(price) * bestSize == int64_t(bestPrice) * size && size > bestSize)) {
+            item = candidate; bestPrice = price; bestSize = size;
+        }
+    }
+    return item;
+}
+
 void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     if (pass.trooperSupport) {
-        if (turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0
-            || getHouse()->isGroundUnitLimitReached()) return;
-        Uint32 item = NONE_ID;
-        int bestPrice = 0, bestSize = 0;
-        for (const Uint32 candidate : {Unit_Trooper, Unit_Troopers}) {
-            if (!campaignAvailableToBuild(turn.pBuilder, candidate)
-                || !trooperOrderAdmitted(pass, candidate, data[candidate][houseID].price)) continue;
-            const int price = purchasePrice(turn.pBuilder, candidate);
-            const int size = QuantBotBuildPolicy::rocketInfantrySize(candidate);
-            if (price > pass.money - (pass.citySimEnabled ? pass.cityWorkingReserve : 0)) continue;
-            if (item == NONE_ID || int64_t(price) * bestSize < int64_t(bestPrice) * size
-                || (int64_t(price) * bestSize == int64_t(bestPrice) * size && size > bestSize)) {
-                item = candidate; bestPrice = price; bestSize = size;
-            }
-        }
+        const bool floorSupplier = turn.capitalSupplier
+            && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "trooper_recruitment";
+        const int64_t reserve = floorSupplier ? pass.cityWorCashReserve
+            : (pass.citySimEnabled ? pass.cityWorkingReserve : 0);
+        const int target = floorSupplier
+            ? std::min(pass.trooperTarget, QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft))
+            : pass.trooperTarget;
+        const Uint32 item = supportTrooperOrder(pass, turn.pBuilder,
+            int(std::max<int64_t>(0, int64_t(pass.money) - reserve)), target);
         if (item != NONE_ID && produceItemWithLogging(pass, turn, item, __LINE__,
                 pass.hostileAircraft > 0 ? "trooper_anti_air" : "trooper_army_support")) {
             ++pass.itemCount[item];
-            pass.infantryCount += bestSize;
+            pass.infantryCount += QuantBotBuildPolicy::rocketInfantrySize(item);
             pass.infantryValue += data[item][houseID].price;
             pass.militaryValue += data[item][houseID].price;
+            if (floorSupplier) pass.capitalConsumed = true;
         }
         return;
     }
