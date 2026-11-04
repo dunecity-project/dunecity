@@ -8,6 +8,7 @@
 #include <Tile.h>
 #include <structures/StructureBase.h>
 #include <units/UnitBase.h>
+#include <sand.h>
 
 #include <cmath>
 #include <filesystem>
