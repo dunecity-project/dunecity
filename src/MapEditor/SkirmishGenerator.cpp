@@ -917,7 +917,7 @@ void trimExcessRock(MapData& map, const TerrainSpec& spec, uint32_t mapSeed, int
         return a.order != b.order ? a.order < b.order : a.index < b.index;
     });
     for(const Edge& edge : edges) {
-        if(rock - group < limit) break;
+        if(rock <= limit) break;
         for(int image = 0; image < group; ++image) {
             const Coord at = mirror->getCoord(Coord(edge.index % size, edge.index / size), image);
             map(at.x, at.y) = Terrain_Sand;
