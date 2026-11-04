@@ -379,3 +379,7 @@ StorageCapacity=1
 # Experimental: use the funded spice-economy plan for powered non-city Custom Brutal.
 # Preserve the old policy until the saved All-against-Atreides comparison passes.
 FundedClassicProduction=0
+# Experimental: WOR rocket infantry for observed air/armour and army escorts in Custom games.
+# Shares the existing infantry quota and protects economy/working capital; at most 18 troopers.
+# Default off until the paired Hard/Brutal outcome gate passes.
+TrooperSupport=0

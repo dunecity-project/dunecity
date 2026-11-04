@@ -142,7 +142,8 @@ struct QuantBotConfig {
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
     /// CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
-    /// ThreatTurrets, MoreRocketTurrets, CityStarportSupply, StorageCapacity, FundedClassicProduction;
+    /// ThreatTurrets, MoreRocketTurrets, CityStarportSupply, StorageCapacity, FundedClassicProduction,
+    /// TrooperSupport;
     /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -287,6 +288,10 @@ struct QuantBotConfig {
         /// the established funded spice-economy plan for workers and production.
         /// This does not disable engine power requirements.
         bool fundedClassicProduction;
+        /// Custom games: bounded rocket infantry for observed aircraft/armour and
+        /// army escorts, using the existing infantry share and economy reserves.
+        /// Experimental, off until the same-build outcome gate passes.
+        bool trooperSupport;
     };
     ForceSettings force;
 

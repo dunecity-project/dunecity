@@ -335,6 +335,27 @@ TEST_CASE("Funded classic production defaults off and is loaded saved and hashed
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Trooper support defaults off and is independently loaded saved and hashed", "[ai][production][troopers][config]") {
+    QuantBotConfig config;
+    REQUIRE_FALSE(config.force.trooperSupport);
+    const auto disabledHash = config.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-trooper-support-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nTrooperSupport=true\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE(config.force.trooperSupport);
+    REQUIRE(config.getConfigHash() != disabledHash);
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.force.trooperSupport);
+    REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    REQUIRE(restored.force.moreRocketTurrets == QuantBotConfig{}.force.moreRocketTurrets);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("More rocket turrets defaults off and is independent loaded saved and hashed", "[ai][defence][config]") {
     QuantBotConfig config;
     REQUIRE_FALSE(config.force.moreRocketTurrets);
