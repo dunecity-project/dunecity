@@ -2059,6 +2059,13 @@ Uint32 QuantBot::trooperInfrastructureItem(BuildPass& pass, const BuilderBase* y
     const auto& spec = currentGame->objectData.data[Structure_WOR][technology];
     if (!spec.enabled || spec.builder != int(yard->getItemID())
         || spec.techLevel > getHouse()->getTechLevel()) return NONE_ID;
+    // Imports are part of the established production core when the house has
+    // their technology and a real catalogue. Saving for infantry must not defer
+    // its first operational Starport (or treat a still-pending one as income).
+    const auto& port = currentGame->objectData.data[Structure_StarPort][technology];
+    if (pass.starportMarketAvailable && port.enabled && port.price > 0
+        && port.builder == int(yard->getItemID()) && port.techLevel <= getHouse()->getTechLevel()
+        && getHouse()->getNumItems(Structure_StarPort) == 0) return NONE_ID;
     Uint32 candidate = Structure_WOR;
     for (int prerequisite = Structure_FirstID; prerequisite <= Structure_LastID; ++prerequisite)
         if (spec.prerequisiteStructuresSet[prerequisite]

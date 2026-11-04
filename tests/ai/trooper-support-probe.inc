@@ -311,6 +311,14 @@ inline void availabilityAndBudgetGates(World& world) {
     blocked(world, capped, "no_standing_heavy_factory_despite_pending_factory_and_air");
     world.owner->numItem[Structure_HeavyFactory] = heavyFactories;
     capped = pass;
+    const int starports = world.owner->numItem[Structure_StarPort];
+    world.owner->numItem[Structure_StarPort] = 0;
+    capped.itemCount[Structure_StarPort] = 1;
+    blocked(world, capped, "no_standing_starport_despite_pending_port");
+    capped.starportMarketAvailable = false;
+    independent(capped, "absent_import_catalogue_does_not_remove_wor");
+    world.owner->numItem[Structure_StarPort] = starports;
+    capped = pass;
     capped.committedPowerDemand = world.owner->getProducedPower() - world.owner->getPowerRequirement();
     blocked(world, capped, "power_headroom_already_committed");
     capped = pass;
