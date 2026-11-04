@@ -116,6 +116,24 @@ R/I opening of every house alive at the end, still requires more than 100 banked
 of every house with a starting yard, reports defeated houses (`defeated` in
 `income-receipt.json`), and fails if no surviving city was checked. Withdrawals stay off.
 
+## Saved Dune2R setup (2026-11-04)
+
+`worseaiallagainstatreides.dls` is a different content/rules combination from the
+original vanilla gate: **Dune2R, city mode disabled**, Atreides QuantBot Brutal
+against four AI Player Hard houses, observed locally. Its map bytes match the
+bundled map. The save is at cycle 111,308 (29.68 minutes), with seed 1702260251.
+Its rules have fog and powered rocket turrets enabled, unlike the original
+fixture. `tests/ai/all-against-atreides-dune2r-options.ini` records those saved
+rules explicitly, including rules that are inert outside city mode.
+
+The scenario matrix's `aaa/qb-v-4ah-saved/Dune2R` cell uses the original six
+fixed seeds plus this saved seed. `--economy-samples` retains the existing
+read-only economy diagnostics, `--attack-events` retains attack/defence events,
+and every scenario now keeps per-minute credits, army, harvesters and structure
+samples before deleting its disposable profile. `games.csv` records the source
+commit and simulation-source fingerprint. `--check` applies the matrix's
+per-game expectations to selected full-tier cells as well as smoke runs.
+
 ## CI
 
 Not in the CI Linux job. The harness relinks the macOS app bundle

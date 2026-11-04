@@ -56,8 +56,9 @@ import match_score  # noqa: E402
 MP = root / 'data/maps/multiplayer'
 AAA_MAP = root / 'data/maps/singleplayer/5P - 128x128 - All against Atreides.ini'
 AAA_OPTIONS = root / 'tests/ai/all-against-atreides-options.ini'
-# quantbot_all_against_atreides's seeds (run-all-against-atreides.py DEFAULT_SEEDS).
-AAA_SEEDS = (1756374161, 906213928, 41562270, 1841712204, 1430976924, 1804669015)
+AAA_DUNE2R_OPTIONS = root / 'tests/ai/all-against-atreides-dune2r-options.ini'
+# The mandatory six seeds, followed by Stefan's 2026-11-04 saved regression.
+AAA_SEEDS = (1756374161, 906213928, 41562270, 1841712204, 1430976924, 1804669015, 1702260251)
 HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5,
                  'neutral': 6, 'rebels': 7}
 # Houses for N players, in this order (the 7th and 8th custom-game houses last).
@@ -69,10 +70,18 @@ DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
 CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
-               'city_pop', 'win_type', 'digest', 'wall_s', 'error')
+               'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'source_commit', 'source_fingerprint')
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
+SAMPLE_FIELDS = ('id', 'category', 'cell', 'seed', 'minute', 'cycle', 'house', 'team', 'alive', 'credits',
+                 'army_value', 'army_units', 'harvesters', 'structures', 'factories', 'kill_value', 'loss_value',
+                 'power', 'need', 'population', 'tax', 'demand', 'built', 'structures_lost', 'base_hp', 'yards',
+                 'yard_level', 'queue', 'upgrading', 'waiting', 'fronts', 'gun', 'rocket', 'radar', 'starport',
+                 'heavy', 'ix', 'fighters', 'moving', 'targeting', 'enemies', 'enemy_value', 'covered_enemies',
+                 'spice', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
+                 'police_funding', 'army_target', 'spent_total', 'power_spent', 'police_charged', 'storage_lost')
+WAVE_FIELDS = ('id', 'category', 'cell', 'seed', 'house', 'event', 'cycle', 'members', 'value')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20
 # Full-tier seeds per long ladder cell (short cells: half). Each seed is played twice with the houses
@@ -164,6 +173,8 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
     # Stefan's 40-minute rule is for his vanilla setup; in DuneCity Atreides must win within the cap.
     aaa('qb-v-4ah', 'dunecity', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_OPTIONS, minutes=60,
         expect=('wins', 2), full=6)
+    aaa('qb-v-4ah-saved', 'Dune2R', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_DUNE2R_OPTIONS,
+        minutes=60, expect=('wins', 2), full=7)
     aaa('reverse-qm-v-4qh', 'vanilla', ['QH', 'QM', 'QH', 'QH', 'QH'], options=AAA_OPTIONS, minutes=60,
         expect=('loses', 2), smoke=1, full=6)
     # 4. Campaign (built per mission in schedule()).
@@ -360,7 +371,9 @@ def command(args, binary, game, out):
     cmd = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
            '--prebuilt-probe', str(binary), '--output-dir', str(out), '--scenario', '--mod', game['mod'],
            '--seed', str(game['seed']), '--minutes', str(game['minutes']), '--capture-mib', '256',
-           '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--no-ai-telemetry']
+           '--wall-timeout', str(args.wall_timeout), '--path-workers', '1']
+    if not getattr(args, 'attack_events', False):
+        cmd += ['--no-ai-telemetry']
     if getattr(args, 'style', None):
         cmd += ['--scenario-style', args.style]
     options_path = game.get('options')
@@ -400,13 +413,18 @@ def play(args, scratch, binary, game):
     out = scratch / f'g{abs(hash(game["id"])) % 10**10}'
     shutil.rmtree(out, ignore_errors=True)
     started = time.time()
-    outcome = subprocess.run(command(args, binary, game, out), cwd=root, capture_output=True, text=True)
+    env = dict(os.environ)
+    if getattr(args, 'economy_samples', False):
+        env['BALANCE_DUNECITY_AUDIT'] = '1'
+    outcome = subprocess.run(command(args, binary, game, out), cwd=root, capture_output=True, text=True, env=env)
     wall = round(time.time() - started)
     log = out / 'run.log'
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []
     result = next((parse(l, 'SCENARIO_RESULT:') for l in lines if 'SCENARIO_RESULT:' in l), {})
     houses = [parse(l, 'SCENARIO_HOUSE:') for l in lines if 'SCENARIO_HOUSE:' in l]
     digest = next((parse(l, 'PROBE_DIGEST:').get('digest', '') for l in lines if 'PROBE_DIGEST:' in l and 'final=1' in l), '')
+    summary_path = out / 'summary.json'
+    summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
     campaign = game['kind'] == 'campaign'
     code_of = {HOUSE_NUMBERS[h]: code for h, _, code in game['sides'] if h in HOUSE_NUMBERS}
     row = {'id': game['id'], 'category': game['category'], 'cell': game['cell'], 'seed': game['seed'],
@@ -420,7 +438,9 @@ def play(args, scratch, binary, game):
            'win_flags': result.get('win_flags', ''), 'quota': result.get('quota', ''),
            'city_pop': result.get('city_pop', ''),
            'win_type': win_type(result, houses, campaign), 'digest': digest, 'wall_s': wall,
-           'error': '' if outcome.returncode == 0 and result else f'rc={outcome.returncode}'}
+           'error': '' if outcome.returncode == 0 and result else f'rc={outcome.returncode}',
+           'source_commit': summary.get('sourceCommit', ''),
+           'source_fingerprint': summary.get('sourceFingerprint', '')}
     winner = result.get('winner_team', '')
     row['winner'] = '+'.join(sorted({code_of.get(int(h['house']), '?') for h in houses if h['team'] == winner})) \
         if winner not in ('', '0', '-1') and not campaign else ''
@@ -449,6 +469,25 @@ def play(args, scratch, binary, game):
                            'place': p.place if p else '', 'score': round(p.score, 4) if p else '',
                            'drawn': int(p.drawn) if p else '', 'start': h.get('start', ''),
                            'crush_kills': h.get('crush_kills', '')})
+    samples = {}
+    for line in lines:
+        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:'):
+            if marker in line:
+                sample = parse(line, marker)
+                sample.update(json.loads(sample.pop('economy', '{}')))
+                samples.setdefault((sample['house'], sample['cycle']), {}).update(sample)
+    metadata = {key: game[key] for key in ('id', 'category', 'cell', 'seed')}
+    append(results / 'samples.csv', SAMPLE_FIELDS, [dict(metadata, **sample) for sample in samples.values()])
+    if getattr(args, 'attack_events', False):
+        events = next(out.rglob('events.jsonl'), None)
+        waves = []
+        if events:
+            for line in events.open(errors='replace'):
+                event = json.loads(line)
+                if event['event'] in ('ground_hunt', 'defence_response', 'base_scramble', 'army_recall'):
+                    waves.append(dict(metadata, house=event['house'], event=event['event'], cycle=event['cycle'],
+                                      members=event['data'].get('members', ''), value=event['data'].get('value', '')))
+        append(results / 'waves.csv', WAVE_FIELDS, waves)
     append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, False)
@@ -492,7 +531,7 @@ def run(args):
                     print(f'[{count}/{len(todo)} {round(time.time() - started)} s] {row["id"]} -> '
                           f'{row["outcome"] or "?"} {row["winner"]} ({row["minutes"]} min, {row["wall_s"]} s wall)'
                           f'{" " + row["error"] if row["error"] else ""}', flush=True)
-    if args.tier == 'smoke':
+    if args.tier == 'smoke' or getattr(args, 'check', False):
         sys.exit(0 if smoke_checks(args, results) else 1)
 
 
@@ -926,6 +965,11 @@ parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled 
 parser.add_argument('--jobs', type=int, default=3, help='Games played in parallel')
 parser.add_argument('--wall-timeout', type=int, default=1800, help='Wall seconds per game')
 parser.add_argument('--fresh', action='store_true', help='Delete --results first (ctest)')
+parser.add_argument('--check', action='store_true', help='Enforce per-game expectations for the selected full-tier cells')
+parser.add_argument('--economy-samples', action='store_true',
+                    help='Retain read-only city economy diagnostics in samples.csv')
+parser.add_argument('--attack-events', action='store_true',
+                    help='Retain ground attack and defence events in waves.csv before deleting each profile')
 parser.add_argument('--list', action='store_true', help='Print the scheduled games and exit')
 parser.add_argument('--report', dest='report_dirs', nargs='+', metavar='RESULTS',
                     help='Print the summary table of these results directories')
