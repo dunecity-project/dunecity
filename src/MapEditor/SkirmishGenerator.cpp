@@ -55,7 +55,7 @@ constexpr int kMaxCityRows = 8;     ///< city blocks across the base-to-edge axi
 constexpr int kNoiseCell = 6;       ///< lattice spacing of the rim noise
 constexpr int kCoreClearance = 2;   ///< no mountain this close to a start's clean core
 constexpr int kBlastGap = 5;        ///< footprint distance a reactor keeps from protected buildings
-constexpr uint32_t kTerrainVersion = 2u;
+constexpr uint32_t kTerrainVersion = 3u;
 
 int ceilDiv(int a, int b) { return (a + b - 1) / b; }
 int isqrt(int value) { int r = 0; while((r + 1) * (r + 1) <= value) ++r; return r; }
@@ -364,12 +364,72 @@ int fillExactly(int remaining, const std::vector<int>& prices, const std::vector
 int startRockBerthSide(const Params& params, int houses) {
     const int goal = params.mode == Mode::DuneCity ? kCityStartRockBerthSide : kVanillaStartRockBerthSide;
     const int budget = 8 * params.mapSize * params.mapSize * params.rockPercent / (900 * std::max(1, houses));
-    return std::max(8, std::min(goal, isqrt(budget)) & ~1);
+    return std::max(8, isqrt(std::min(goal * goal, budget)) & ~1);
 }
 
 Rect rockBerthAt(int size, const Coord& center, int side) {
     return {std::clamp(center.x - side / 2, 0, size - side),
             std::clamp(center.y - side / 2, 0, size - side), side, side};
+}
+
+/// Prefer dense natural geology within a small legal shift of each perimeter slot. The
+/// sampled field count is only a location heuristic; the later compact reserve and terrain
+/// budget provide the guarantees. Mirrored slots and crowded starting kits keep their layout.
+void preferNaturalRockStarts(const Params& params, int coreWidth, int coreHeight, int berthSide,
+                             std::vector<Coord>& centers) {
+    const int land = params.rockPercent + params.mountainPercent;
+    if(params.symmetric || centers.size() < 2 || land == 0 || land == 100) return;
+    const int size = params.mapSize, radius = std::max(2, (berthSide / 4) & ~1);
+    int separation = size;
+    for(size_t i = 0; i < centers.size(); ++i) for(size_t j = i + 1; j < centers.size(); ++j)
+        separation = std::min(separation, std::max(std::abs(centers[i].x - centers[j].x),
+                                                  std::abs(centers[i].y - centers[j].y)));
+    const int left = kMargin + coreWidth / 2, right = size - 1 - kMargin - coreWidth / 2;
+    const int top = kMargin + coreHeight / 2, bottom = size - 1 - kMargin - coreHeight / 2;
+    if(separation < berthSide + 2 * radius || left > right || top > bottom) return;
+    const MapData natural = generateRandomMap(size, size, static_cast<int>(params.seed),
+                                             std::clamp((land + 2) / 3, 1, 64), 0, MirrorModeNone);
+    const int stride = size + 1;
+    std::vector<int> prefix(stride * stride, 0);
+    for(int y = 0; y < size; ++y) {
+        int row = 0;
+        for(int x = 0; x < size; ++x) {
+            row += natural(x, y) == Terrain_Rock;
+            prefix[(y + 1) * stride + x + 1] = prefix[y * stride + x + 1] + row;
+        }
+    }
+    const auto intersects = [](const Rect& a, const Rect& b) {
+        return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    };
+    for(size_t slot = 0; slot < centers.size(); ++slot) {
+        const Coord original = centers[slot];
+        Coord best = original;
+        int bestRock = -1, bestMove = INT_MAX;
+        for(int dy = -radius; dy <= radius; dy += 2) for(int dx = -radius; dx <= radius; dx += 2) {
+            const Coord at(original.x + dx, original.y + dy);
+            if(at.x < left || at.x > right || at.y < top || at.y > bottom || natural(at.x, at.y) != Terrain_Rock) continue;
+            const Rect berth = rockBerthAt(size, at, berthSide);
+            bool separate = true;
+            for(size_t other = 0; other < centers.size(); ++other) {
+                if(other == slot) continue;
+                if((std::abs(at.x - centers[other].x) < coreWidth + 4
+                    && std::abs(at.y - centers[other].y) < coreHeight + 4)
+                   || intersects(berth, rockBerthAt(size, centers[other], berthSide))) {
+                    separate = false;
+                    break;
+                }
+            }
+            if(!separate) continue;
+            const int x1 = berth.x + berth.w, y1 = berth.y + berth.h;
+            const int rock = prefix[y1 * stride + x1] - prefix[berth.y * stride + x1]
+                           - prefix[y1 * stride + berth.x] + prefix[berth.y * stride + berth.x];
+            const int movement = dx * dx + dy * dy;
+            if(rock > bestRock || (rock == bestRock && movement < bestMove)) {
+                best = at; bestRock = rock; bestMove = movement;
+            }
+        }
+        centers[slot] = best;
+    }
 }
 
 struct TerrainSpec {
@@ -379,15 +439,20 @@ struct TerrainSpec {
     Spice spice = Spice::Medium;
     MirrorMode mirror = MirrorModeNone;
     std::vector<Rect> cores;        ///< every start's clean rock, mirror images included
+    std::vector<Rect> expansions;   ///< compact future building room, never painted with mountains
     std::vector<Coord> centers;     ///< start centres in ring order
 };
 
-int rockPercent(const MapData& map) {
+int geologicalRockTiles(const MapData& map) {
     int rock = 0;
     for(int y = 0; y < map.getSizeY(); ++y)
         for(int x = 0; x < map.getSizeX(); ++x)
             if(map(x, y) == Terrain_Rock || map(x, y) == Terrain_Mountain) ++rock;
-    return rock * 100 / (map.getSizeX() * map.getSizeY());
+    return rock;
+}
+
+int rockPercent(const MapData& map) {
+    return geologicalRockTiles(map) * 100 / (map.getSizeX() * map.getSizeY());
 }
 
 int spiceTiles(const MapData& map) {
@@ -562,6 +627,14 @@ MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
                [&](int x, int y, TERRAINTYPE t) { return rimZone[y * size + x] && isSandTile(t); });
     // Lobes: editor-style rock walks out from beyond every rim, so no start is a rounded box.
     for(const Rect& r : spec.cores) {
+        // The walk paints all mirror images itself: do it once per physical core orbit,
+        // rather than multiplying the lobes again for every mirrored start.
+        bool canonical = true;
+        for(int image = 1; image < mirror->getSize(); ++image) {
+            const Coord at = mirror->getCoord(Coord(r.x, r.y), image, Coord(r.w, r.h));
+            if(at.y * size + at.x < r.y * size + r.x) { canonical = false; break; }
+        }
+        if(!canonical) continue;
         for(int lobe = 0; lobe < 3; ++lobe) {
             const int along = static_cast<int>(random.rand(0, 2 * (r.w + r.h) - 1));
             const int reach = kRimMax - 1;
@@ -571,6 +644,25 @@ MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
                      : Coord(r.x + r.w - 1 + reach, r.y + along - 2 * r.w - r.h);
             walk(random, size, at, (r.w + r.h) * 2, [&](int x, int y) { paintMirrored(map, *mirror, x, y, Terrain_Rock, onSand); });
         }
+    }
+
+    // Future room is a solid connected block, not a thin tendril that cannot fit a factory.
+    // A small noisy feather hides its square edge without the wide old-core rim's land cost.
+    const uint32_t expansionSeed = mix(mapSeed, 0xB017Du);
+    for(const Rect& r : spec.expansions) {
+        for(int y = r.y; y < r.y + r.h; ++y) for(int x = r.x; x < r.x + r.w; ++x) map(x, y) = Terrain_Rock;
+        const int maximumRim = std::min(3, std::max(0, (r.w - 12) / 2));
+        if(maximumRim == 0) continue;
+        const int minimumRim = std::max(0, maximumRim - 2);
+        for(int y = std::max(0, r.y - maximumRim); y < std::min(size, r.y + r.h + maximumRim); ++y)
+            for(int x = std::max(0, r.x - maximumRim); x < std::min(size, r.x + r.w + maximumRim); ++x) {
+                if(r.contains(x, y) || !isSandTile(map(x, y))) continue;
+                const int canonical = canonicalIndex(*mirror, size, x, y);
+                const int jitter = static_cast<int>(mix(expansionSeed, static_cast<uint32_t>(canonical)) % 3) - 1;
+                const int rim = std::clamp(valueNoise(expansionSeed, canonical % size, canonical / size, minimumRim, maximumRim)
+                                           + jitter * c2, minimumRim * c2, maximumRim * c2);
+                if(distanceToRect2(r, x, y) * c2 * c2 <= rim * rim) map(x, y) = Terrain_Rock;
+            }
     }
 
     return map;
@@ -604,6 +696,8 @@ void addSpice(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
         const int dx = middle.x - s.x, dy = middle.y - s.y, length = std::max(1, octagonal(dx, dy));
         int reach = 0;
         for(const Rect& r : spec.cores)
+            if(r.contains(s.x, s.y)) reach = std::max(reach, (r.w + r.h) / 4 + kRimMax + 6);
+        for(const Rect& r : spec.expansions)
             if(r.contains(s.x, s.y)) reach = std::max(reach, (r.w + r.h) / 4 + kRimMax + 6);
         reach = std::min(reach, length);
         seeds.emplace_back(s.x + dx * reach / length, s.y + dy * reach / length);
@@ -684,6 +778,11 @@ void addMountains(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
             for(int x = std::max(0, core.x - kCoreClearance - 1); x < std::min(size, core.x + core.w + kCoreClearance + 1); ++x)
                 if(distanceToRect2(core, x, y) <= 2 * kCoreClearance * kCoreClearance) protect(x, y, 3);
     }
+    // These rectangles already include every mirror image and overlap their start's core.
+    // They are ordinary-rock building room, not an additional wide no-mountain buffer.
+    for(const Rect& r : spec.expansions)
+        for(int y = r.y; y < r.y + r.h; ++y) for(int x = r.x; x < r.x + r.w; ++x)
+            protectedGround[y * size + x] |= 3;
     if(spec.spice != Spice::None && spiceTiles(map) > 0) {
         // Reuse passable sand/spice instead of reserving a wide straight spoke for every
         // field tile. A multi-source 0/1 BFS minimizes the rock needed to join each field
@@ -724,26 +823,35 @@ void addMountains(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
     const auto depth = rockDepth(map);
     struct Candidate { int score, index; };
     std::vector<Candidate> candidates;
-    candidates.reserve(area / mirror->getSize());
+    const int group = mirror->getSize();
+    candidates.reserve(area / group);
     const uint32_t mountainSeed = mix(mapSeed, 0x3A55u);
-    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
-        const int index = y * size + x;
-        if(map(x, y) != Terrain_Rock || protectedGround[index] || canonicalIndex(*mirror, size, x, y) != index) continue;
-        const int score = valueNoise(mountainSeed, x, y, 0, 1024)
-                        + std::min(depth[index], 12) * kNoiseCell * kNoiseCell * 16;
-        candidates.push_back({score, index});
-    }
-    std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
-        return a.score != b.score ? a.score > b.score : a.index < b.index;
-    });
+    const auto geological = [](TERRAINTYPE t) { return t == Terrain_Rock || t == Terrain_Mountain; };
     int painted = 0;
-    for(const Candidate& candidate : candidates) {
-        // A mirror group is indivisible: stay within the budget rather than breaking symmetry.
-        if(painted + mirror->getSize() > target) break;
-        for(int image = 0; image < mirror->getSize(); ++image) {
-            const Coord at = mirror->getCoord(Coord(candidate.index % size, candidate.index / size), image);
-            map(at.x, at.y) = Terrain_Mountain;
-            ++painted;
+    for(bool coast : {false, true}) {
+        if(painted + group > target) break;
+        candidates.clear();
+        for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
+            const int index = y * size + x;
+            if(protectedGround[index] || canonicalIndex(*mirror, size, x, y) != index) continue;
+            if(coast ? !isSandTile(map(x, y)) : map(x, y) != Terrain_Rock) continue;
+            int score = valueNoise(mountainSeed, x, y, 0, 1024);
+            if(coast) score += side4(map, x, y, geological) * 1025 * kNoiseCell * kNoiseCell;
+            else score += std::min(depth[index], 12) * kNoiseCell * kNoiseCell * 16;
+            candidates.push_back({score, index});
+        }
+        std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
+            return a.score != b.score ? a.score > b.score : a.index < b.index;
+        });
+        for(const Candidate& candidate : candidates) {
+            // A mirror group is indivisible. If protected building/spice ground used up the
+            // existing rock, grow geological coast instead; never reclaim a protected tile.
+            if(painted + group > target) break;
+            for(int image = 0; image < group; ++image) {
+                const Coord at = mirror->getCoord(Coord(candidate.index % size, candidate.index / size), image);
+                map(at.x, at.y) = Terrain_Mountain;
+                ++painted;
+            }
         }
     }
 }
@@ -782,6 +890,42 @@ void growRock(MapData& map, const TerrainSpec& spec, uint32_t mapSeed, int targe
     }
 }
 
+/// Whole editor fields can overshoot the requested coverage. Erode only their surplus,
+/// retaining the complete seed's zero-field start cores, organic rims and future reserves.
+void trimExcessRock(MapData& map, const TerrainSpec& spec, uint32_t mapSeed, int rock) {
+    const int size = spec.size, area = size * size;
+    int limit = std::min(area, (spec.landPercent + 12) * area / 100);
+    if(rock <= limit) return;
+    const MapData mandatory = shapeRock(spec, mapSeed, 0);
+    const auto mirror = MapMirror::createMapMirror(spec.mirror, size, size);
+    const int group = mirror->getSize();
+    const auto depth = rockDepth(map);
+    struct Edge { int depth, index; uint32_t order; };
+    std::vector<Edge> edges;
+    edges.reserve(rock / group);
+    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
+        const int index = y * size + x;
+        if(map(x, y) != Terrain_Rock || mandatory(x, y) == Terrain_Rock
+           || canonicalIndex(*mirror, size, x, y) != index) continue;
+        edges.push_back({depth[index], index, mix(mapSeed ^ 0xE20DEu, static_cast<uint32_t>(index))});
+    }
+    // Crowded starting kits may make the request impossible; preserve those mandatory
+    // footprints instead of destroying the bases or quietly making their quota smaller.
+    limit = std::max(limit, rock - static_cast<int>(edges.size()) * group);
+    std::sort(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
+        if(a.depth != b.depth) return a.depth < b.depth;
+        return a.order != b.order ? a.order < b.order : a.index < b.index;
+    });
+    for(const Edge& edge : edges) {
+        if(rock - group < limit) break;
+        for(int image = 0; image < group; ++image) {
+            const Coord at = mirror->getCoord(Coord(edge.index % size, edge.index / size), image);
+            map(at.x, at.y) = Terrain_Sand;
+        }
+        rock -= group;
+    }
+}
+
 /// Smallest editor rock-field count reaching the combined rock + mountain target (rock grows
 /// further for the high settings), then spice and the independently budgeted mountain layer.
 MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
@@ -793,7 +937,9 @@ MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
         if(rockPercent(shapeRock(spec, mapSeed, mid)) >= target) hi = mid; else lo = mid + 1;
     }
     MapData map = shapeRock(spec, mapSeed, lo);
-    if(rockPercent(map) < target) growRock(map, spec, mapSeed, target);
+    const int rock = geologicalRockTiles(map), area = spec.size * spec.size;
+    if(rock * 100 < target * area) growRock(map, spec, mapSeed, target);
+    else if(rock * 100 > (target + 12) * area) trimExcessRock(map, spec, mapSeed, rock);
     addSpice(map, spec, mapSeed);
     addMountains(map, spec, mapSeed);
     return map;
@@ -1731,6 +1877,9 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
     }
     const int houses = static_cast<int>(plans.size());
     const int rockBerthSide = startRockBerthSide(params, houses);
+    const int minimumStartRock = ceilDiv(rockBerthSide * rockBerthSide * kStartRockFairnessPercent, 100);
+    const int neededSide = isqrt(minimumStartRock - 1) + 1;
+    const int expansionSide = neededSide + (neededSide & 1);
 
     // The player's start is never the cramped one: as much rock as the largest start.
     for(const Plan& plan : plans) {
@@ -1782,6 +1931,9 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
             slotCenters.push_back(c);
         }
     }
+    if(std::any_of(plans.begin(), plans.end(), [&](const Plan& plan) {
+        return plan.width < expansionSide || plan.height < expansionSide;
+    })) preferNaturalRockStarts(params, maxW, maxH, rockBerthSide, slotCenters);
     // The player takes slot 0, allies the slots nearest to it, enemies the rest; multiplayer
     // starts keep the slot order.
     std::vector<int> order(houses - 1);
@@ -1801,6 +1953,7 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
     spec.spice = params.spice;
     spec.mirror = mirror;
     spec.centers = slotCenters;
+    spec.expansions.reserve(houses * (params.symmetric ? (houses == 2 ? 2 : 4) : 1));
     std::vector<Rect> plateaus(houses);
     for(int i = 0; i < houses; ++i) {
         const Plan& plan = plans[i];
@@ -1812,17 +1965,38 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
         plans[i].setup.plateau = r;
         plans[i].setup.start = c;
         plans[i].setup.rockBerth = rockBerthAt(size, c, rockBerthSide);
-        plans[i].setup.minimumRock = ceilDiv(rockBerthSide * rockBerthSide * kStartRockFairnessPercent, 100);
+        plans[i].setup.minimumRock = minimumStartRock;
+        const Rect& berth = plans[i].setup.rockBerth;
+        const Rect expansion{std::clamp(c.x - expansionSide / 2, berth.x, berth.x + berth.w - expansionSide),
+                             std::clamp(c.y - expansionSide / 2, berth.y, berth.y + berth.h - expansionSide),
+                             expansionSide, expansionSide};
+        if(!r.contains(expansion.x, expansion.y) || !r.contains(expansion.x + expansion.w - 1, expansion.y + expansion.h - 1))
+            spec.expansions.push_back(expansion);
     }
     // Symmetric maps carve every mirror image of every start, so empty images are fair
     // expansion sites and the terrain stays exactly mirrored.
     if(params.symmetric) {
         const auto images = MapMirror::createMapMirror(mirror, size, size);
+        spec.cores.reserve(houses * images->getSize());
+        const auto appendUnique = [](std::vector<Rect>& rectangles, const Rect& rectangle) {
+            if(std::none_of(rectangles.begin(), rectangles.end(), [&](const Rect& r) {
+                return r.x == rectangle.x && r.y == rectangle.y && r.w == rectangle.w && r.h == rectangle.h;
+            })) rectangles.push_back(rectangle);
+        };
         for(const Rect& r : plateaus)
             for(int m = 0; m < images->getSize(); ++m) {
                 const Coord c = images->getCoord(Coord(r.x, r.y), m, Coord(r.w, r.h));
-                spec.cores.push_back(Rect{c.x, c.y, r.w, r.h});
+                appendUnique(spec.cores, Rect{c.x, c.y, r.w, r.h});
             }
+        const size_t originals = spec.expansions.size();
+        for(size_t i = 0; i < originals; ++i) {
+            const Rect r = spec.expansions[i];
+            for(int m = 0; m < images->getSize(); ++m) {
+                const Coord at = images->getCoord(Coord(r.x, r.y), m, Coord(r.w, r.h));
+                const Rect image{at.x, at.y, r.w, r.h};
+                appendUnique(spec.expansions, image);
+            }
+        }
     } else {
         spec.cores = plateaus;
     }

@@ -249,6 +249,132 @@ uint64_t terrainDigest(const MapData& map) {
     return fnv1a(tiles);
 }
 
+struct LocalStartRock { int tiles = 0; int compactSide = 0; };
+
+/// Independent terrain inspection: neither the public flood nor generator quota diagnostics
+/// decide which tiles belong to this component or whether full building footprints fit.
+LocalStartRock inspectStartRock(const MapData& map, const Coord& start, const Rect& berth) {
+    std::vector<unsigned char> reached(berth.w * berth.h, 0);
+    std::vector<Coord> pending;
+    pending.reserve(reached.size());
+    pending.push_back(start);
+    reached[(start.y - berth.y) * berth.w + start.x - berth.x] = 1;
+    for(size_t i = 0; i < pending.size(); ++i) {
+        const Coord tile = pending[i];
+        for(const Coord& step : {Coord(-1, 0), Coord(1, 0), Coord(0, -1), Coord(0, 1)}) {
+            const int x = tile.x + step.x, y = tile.y + step.y;
+            if(x < berth.x || y < berth.y || x >= berth.x + berth.w || y >= berth.y + berth.h) continue;
+            const int key = (y - berth.y) * berth.w + x - berth.x;
+            if(reached[key] || map(x, y) != Terrain_Rock) continue;
+            reached[key] = 1;
+            pending.emplace_back(x, y);
+        }
+    }
+    LocalStartRock rock;
+    rock.tiles = static_cast<int>(pending.size());
+    // Largest completely ordinary-rock square, restricted to the start's component.
+    // A winding one-tile corridor cannot masquerade as room for a future base or city.
+    std::vector<int> squares(berth.w + 1, 0);
+    for(int y = 0; y < berth.h; ++y) {
+        int diagonal = 0;
+        for(int x = 0; x < berth.w; ++x) {
+            const int above = squares[x + 1];
+            squares[x + 1] = reached[y * berth.w + x] ? 1 + std::min({above, squares[x], diagonal}) : 0;
+            diagonal = above;
+            rock.compactSide = std::max(rock.compactSide, squares[x + 1]);
+        }
+    }
+    return rock;
+}
+
+void requireFairStartRock(const Result& r, Mode mode) {
+    REQUIRE_FALSE(r.houses.empty());
+    const Rect& first = r.houses.front().rockBerth;
+    const int goal = mode == Mode::DuneCity ? kCityStartRockBerthSide : kVanillaStartRockBerthSide;
+    REQUIRE(first.w >= 8);
+    REQUIRE(first.w <= goal);
+    REQUIRE(first.w % 2 == 0);
+    const int area = first.w * first.w;
+    const int floor = (area * kStartRockFairnessPercent + 99) / 100;
+    int smallest = area, largest = 0;
+    for(const HouseSetup& h : r.houses) {
+        const Rect& b = h.rockBerth;
+        INFO("house " << h.house << " start " << h.start.x << "," << h.start.y
+             << " berth " << b.x << "," << b.y << " " << b.w << "x" << b.h << " floor " << h.minimumRock);
+        REQUIRE(b.w == first.w);
+        REQUIRE(b.h == first.w);
+        REQUIRE(b.x >= 0);
+        REQUIRE(b.y >= 0);
+        REQUIRE(b.x + b.w <= r.map.getSizeX());
+        REQUIRE(b.y + b.h <= r.map.getSizeY());
+        REQUIRE(b.contains(h.start.x, h.start.y));
+        REQUIRE(r.map(h.start.x, h.start.y) == Terrain_Rock);
+        REQUIRE(h.minimumRock == floor);
+        const LocalStartRock rock = inspectStartRock(r.map, h.start, b);
+        CAPTURE(rock.tiles, rock.compactSide);
+        REQUIRE(contiguousBuildableRock(r.map, h.start, b) == rock.tiles);
+        REQUIRE(rock.tiles >= floor);
+        REQUIRE(rock.tiles <= area);
+        REQUIRE(rock.compactSide * rock.compactSide >= floor);
+        smallest = std::min(smallest, rock.tiles);
+        largest = std::max(largest, rock.tiles);
+    }
+    REQUIRE(smallest * 100 >= largest * kStartRockFairnessPercent);
+}
+
+Params expansionParams(int size, int players, Mode mode, uint32_t seed) {
+    Params p = params(size, 0, players - 1, mode, 9, seed);
+    p.mod = mode == Mode::DuneCity ? "dunecity" : "vanilla";
+    p.enemiesAllied = false;
+    for(Side* side : {&p.playerSide, &p.allySide, &p.enemySide}) {
+        side->base = BaseSize::None;
+        side->army = 0;
+        side->city = 0;
+    }
+    return p;
+}
+
+void requireRepeatableStartRock(const Result& a, const Result& b) {
+    REQUIRE(a.ini == b.ini);
+    REQUIRE(terrainDigest(a.map) == terrainDigest(b.map));
+    REQUIRE(a.mapSeed == b.mapSeed);
+    REQUIRE(a.attempts == b.attempts);
+    REQUIRE(a.flattenedMountains == b.flattenedMountains);
+    REQUIRE(a.houses.size() == b.houses.size());
+    for(size_t i = 0; i < a.houses.size(); ++i) {
+        const HouseSetup& h = a.houses[i];
+        const HouseSetup& repeated = b.houses[i];
+        REQUIRE(h.house == repeated.house);
+        REQUIRE(h.start.x == repeated.start.x);
+        REQUIRE(h.start.y == repeated.start.y);
+        REQUIRE(h.rockBerth.x == repeated.rockBerth.x);
+        REQUIRE(h.rockBerth.y == repeated.rockBerth.y);
+        REQUIRE(h.rockBerth.w == repeated.rockBerth.w);
+        REQUIRE(h.rockBerth.h == repeated.rockBerth.h);
+        REQUIRE(h.minimumRock == repeated.minimumRock);
+    }
+}
+
+void requireMirroredStartRock(const Result& r, int players) {
+    const int size = r.map.getSizeX();
+    bool pointMirrored = true, axisMirrored = true;
+    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
+        pointMirrored = pointMirrored && r.map(x, y) == r.map(size - 1 - x, size - 1 - y);
+        if(players > 2) axisMirrored = axisMirrored && r.map(x, y) == r.map(size - 1 - x, y);
+    }
+    REQUIRE(pointMirrored);
+    REQUIRE(axisMirrored);
+    for(const HouseSetup& h : r.houses) {
+        const Rect& b = h.rockBerth;
+        REQUIRE(std::any_of(r.houses.begin(), r.houses.end(), [&](const HouseSetup& other) {
+            return other.rockBerth.x == size - b.x - b.w && other.rockBerth.y == size - b.y - b.h;
+        }));
+        if(players > 2) REQUIRE(std::any_of(r.houses.begin(), r.houses.end(), [&](const HouseSetup& other) {
+            return other.rockBerth.x == size - b.x - b.w && other.rockBerth.y == b.y;
+        }));
+    }
+}
+
 } // namespace
 
 TEST_CASE("Random skirmish: pinned seeds give the same map on every platform", "[skirmish][generator][determinism]") {
@@ -592,6 +718,125 @@ TEST_CASE("Random skirmish: explicit terrain shares control Sand Rock and Mounta
     }
 }
 
+TEST_CASE("Random skirmish: buildable rock flood counts only bounded orthogonal ordinary rock",
+          "[skirmish][generator][terrain][rockfairness]") {
+    MapData map(12, 9);
+    for(int y = 0; y < 9; ++y) for(int x = 0; x < 12; ++x) map(x, y) = Terrain_Sand;
+    for(int y = 2; y <= 4; ++y) {
+        for(int x = 2; x <= 4; ++x) map(x, y) = Terrain_Rock;
+        for(int x = 6; x <= 8; ++x) map(x, y) = Terrain_Rock;
+    }
+    // Both 3x3 patches connect through this seven-tile row, but only outside the berth.
+    for(int x = 2; x <= 8; ++x) map(x, 1) = Terrain_Rock;
+    map(5, 5) = Terrain_Rock;    // diagonal contact with both patches is not connectivity
+    const Coord start(3, 3);
+    const Rect berth{2, 2, 7, 6};
+    for(TERRAINTYPE blocker : {Terrain_Mountain, Terrain_Sand, Terrain_Dunes, Terrain_Spice, Terrain_ThickSpice,
+                              Terrain_SpiceBloom, Terrain_SpecialBloom, Terrain_GreenSpiceBloom, Terrain_RedSpiceBloom}) {
+        CAPTURE(blocker);
+        for(int y = 2; y <= 4; ++y) map(5, y) = blocker;
+        REQUIRE(contiguousBuildableRock(map, start, berth) == 9);
+        REQUIRE(contiguousBuildableRock(map, Coord(6, 3), berth) == 9);
+        REQUIRE(contiguousBuildableRock(map, Coord(5, 5), berth) == 1);
+        REQUIRE(contiguousBuildableRock(map, Coord(5, 3), berth) == 0);
+        REQUIRE(contiguousBuildableRock(map, Coord(2, 1), berth) == 0);
+        REQUIRE(contiguousBuildableRock(map, start, Rect{0, 0, 12, 9}) == 25);
+    }
+    MapData edge(5, 3);
+    for(int y = 0; y < 3; ++y) for(int x = 0; x < 5; ++x) edge(x, y) = Terrain_Rock;
+    REQUIRE(contiguousBuildableRock(edge, Coord(0, 0), Rect{-2, -2, 9, 7}) == 15);
+    REQUIRE(contiguousBuildableRock(edge, Coord(-1, 0), Rect{-2, -2, 9, 7}) == 0);
+    REQUIRE(contiguousBuildableRock(edge, Coord(5, 0), Rect{-2, -2, 9, 7}) == 0);
+    REQUIRE(contiguousBuildableRock(edge, Coord(0, 0), Rect{0, 0, 0, 3}) == 0);
+    REQUIRE(contiguousBuildableRock(edge, Coord(0, 0), Rect{0, 0, 5, 0}) == 0);
+}
+
+TEST_CASE("Random skirmish: seed sweep gives every MCV compact fair future expansion rock",
+          "[skirmish][generator][terrain][determinism][rockfairness]") {
+    const std::array<uint32_t, 5> seeds{418379001u, 836308809u, 1u, 7101u, 4000000000u};
+    const std::array<int, 3> mixes[] = {{75, 20, 5}, {50, 45, 5}, {50, 20, 30}, {90, 5, 5}};
+    for(Mode mode : {Mode::Vanilla, Mode::DuneCity}) for(int size : kMapSizes) for(int players : {2, 4, 8})
+        for(const auto& shares : mixes) for(size_t seedIndex = 0; seedIndex < seeds.size(); ++seedIndex) {
+            Params p = expansionParams(size, players, mode, seeds[seedIndex]);
+            setTerrainShares(p, shares[0], shares[1], shares[2]);
+            // The two reported FFA failures stay unmirrored; other fixed seeds cover mirrors.
+            p.symmetric = seedIndex >= 2 && seedIndex % 2 == 0;
+            p.spice = seedIndex == 3 ? Spice::None : Spice::Medium;
+            const Catalogue& c = mode == Mode::DuneCity ? city() : vanilla();
+            const Result r = generate(p, c);
+            INFO("seed " << p.seed << " size " << size << " players " << players
+                 << " city mode " << (mode == Mode::DuneCity) << " mirrored " << p.symmetric
+                 << " Sand/Rock/Mountain " << shares[0] << "/" << shares[1] << "/" << shares[2]);
+            REQUIRE(static_cast<int>(r.houses.size()) == players);
+            REQUIRE_FALSE(r.flattenedMountains);
+            requireFairStartRock(r, mode);
+            requireCleanConnected(r);
+            requireLegal(r, c);
+            for(const HouseSetup& h : r.houses)
+                REQUIRE(std::count_if(r.units.begin(), r.units.end(), [&](const Placement& unit) {
+                    return unit.house == h.house && unit.item == Unit_MCV && h.plateau.contains(unit.x, unit.y);
+                }) == 1);
+            if(p.symmetric) requireMirroredStartRock(r, players);
+            const TerrainCounts counts = terrainCounts(r.map);
+            const int area = size * size;
+            // Crowded small maps retain the existing forced-core share exception.
+            // Ordinary-sized MCV-only starts must still leave the terrain controls intact.
+            if(size >= 128) {
+                REQUIRE(std::abs(counts.sand * 100 - p.sandPercent * area) <= 12 * area + 300);
+                REQUIRE(std::abs(counts.rock * 100 - p.rockPercent * area) <= 12 * area + 300);
+            }
+            REQUIRE(std::abs(counts.mountain - p.mountainPercent * area / 100) <= 3);
+            int spice = 0;
+            for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) spice += isSpiceTile(r.map(x, y));
+            if(p.spice == Spice::None) REQUIRE(spice == 0);
+            else REQUIRE(spice > 0);
+            requireRepeatableStartRock(r, generate(p, c));
+        }
+}
+
+TEST_CASE("Random skirmish: expansion berths reach mode goals and scale with usable ordinary rock",
+          "[skirmish][generator][terrain][rockfairness]") {
+    REQUIRE(kStartRockFairnessPercent == 75);
+    REQUIRE(kCityStartRockBerthSide == 32);
+    REQUIRE(kVanillaStartRockBerthSide == 24);
+    for(Mode mode : {Mode::Vanilla, Mode::DuneCity}) for(uint32_t seed : {418379001u, 836308809u}) {
+        const Catalogue& c = mode == Mode::DuneCity ? city() : vanilla();
+        const int goal = mode == Mode::DuneCity ? 32 : 24;
+        const Result normal = generate(expansionParams(256, 8, mode, seed), c);
+        CAPTURE(seed, mode == Mode::DuneCity);
+        REQUIRE(normal.houses.size() == 8);
+        requireFairStartRock(normal, mode);
+        for(const HouseSetup& h : normal.houses) {
+            REQUIRE(h.rockBerth.w == goal);
+            REQUIRE(h.rockBerth.h == goal);
+            REQUIRE(h.minimumRock == (mode == Mode::DuneCity ? 768 : 432));
+        }
+        auto sideFor = [&](int size, int players, int rock, int mountain) {
+            Params p = expansionParams(size, players, mode, seed);
+            setTerrainShares(p, 100 - rock - mountain, rock, mountain);
+            const Result r = generate(p, c);
+            CAPTURE(size, players, rock, mountain);
+            REQUIRE(static_cast<int>(r.houses.size()) == players);
+            requireFairStartRock(r, mode);
+            requireCleanConnected(r);
+            requireLegal(r, c);
+            return r.houses.front().rockBerth.w;
+        };
+        const int spacious = sideFor(256, 2, 20, 5);
+        const int small = sideFor(64, 2, 20, 5);
+        const int crowded = sideFor(64, 8, 20, 5);
+        const int lowRock = sideFor(256, 8, 5, 5);
+        REQUIRE(spacious == goal);
+        REQUIRE(small < spacious);
+        REQUIRE(crowded <= small);
+        REQUIRE(crowded < goal);
+        REQUIRE(lowRock < goal);
+        REQUIRE(sideFor(256, 8, 20, 30) == goal);    // mountains do not enlarge the usable-rock budget
+        REQUIRE(sideFor(96, 8, 0, 0) == 8);
+        REQUIRE(sideFor(96, 8, 0, 100) == 8);
+    }
+}
+
 TEST_CASE("Random skirmish: pure Sand and Mountain requests retain legal connected starts", "[skirmish][generator][terrain]") {
     for(Mode mode : {Mode::Vanilla, Mode::DuneCity}) for(bool symmetric : {false, true}) for(bool mountains : {false, true}) {
         Params p = params(96, 1, 2, mode, 8, 20261103u);
@@ -616,6 +861,7 @@ TEST_CASE("Random skirmish: pure Sand and Mountain requests retain legal connect
         REQUIRE_FALSE(r.flattenedMountains);
         requireCleanConnected(r);
         requireLegal(r, c);
+        requireFairStartRock(r, mode);
         if(symmetric) for(int y = 0; y < 96; ++y) for(int x = 0; x < 96; ++x)
             REQUIRE(r.map(x, y) == r.map(95 - x, 95 - y));
     }
@@ -1193,6 +1439,7 @@ TEST_CASE("Random skirmish: random configurations stay legal, connected and keep
         requireLegal(r, c);
         REQUIRE_FALSE(r.flattenedMountains);
         requireCleanConnected(r);
+        requireFairStartRock(r, p.mode);
         if(p.mountainPercent == 0) REQUIRE(terrainCounts(r.map).mountain == 0);
     }
 }
@@ -1374,6 +1621,7 @@ TEST_CASE("Random skirmish: multiplayer maps have equal open starts the lobby as
         REQUIRE(r.ini == generate(p, houses).ini);
         REQUIRE(r.name.find(std::to_string(k.starts) + " starts") != std::string::npos);
         requireLegal(r, starts);
+        requireFairStartRock(r, k.mode);
 
         // Every start is open, numbered in order and holds exactly what start 1 holds.
         // Wall wings beside turrets stop where the rock does, so walls are the one terrain-shaped extra.
