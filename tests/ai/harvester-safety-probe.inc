@@ -84,17 +84,15 @@ void runHarvesterSafetyProbe(Game& game) {
         auto* deviator=owner->createUnit(Unit_Deviator);
         require(borrowed && deviator,"Failed deviation fixture creation");
         const Coord field=origin+Coord(3,3);
-        currentGameMap->getTile(field)->setSpice(10000);
-        borrowed->deploy(field);deviator->deploy(origin+Coord(5,3));
+        // setGuardPoint restarts a stopped worker on spice. Keep this capture
+        // stationary on bare sand, and give the rocket its normal ranged shot.
+        currentGameMap->getTile(oldField)->setType(Terrain_Sand);
+        currentGameMap->getTile(field)->setType(Terrain_Sand);
+        borrowed->deploy(field);deviator->deploy(origin+Coord(10,3));
         borrowed->doSetAttackMode(STOP);borrowed->setVisible(VIS_ALL,true);
-        SDL_Log("DEVIATED_HARVEST_STOP_SETUP: worker=%u item=%u mode=%d STOP=%d ptr=%p source=%u ptr=%p",
-            borrowed->getObjectID(),borrowed->getItemID(),int(borrowed->getAttackMode()),int(STOP),
-            static_cast<void*>(borrowed),deviator->getObjectID(),static_cast<void*>(deviator));
         require(deviator->canAttack(borrowed),"Deviator targeting excludes harvesters");
         unitList.clear();unitList.push_back(borrowed);unitList.push_back(deviator);
-        SDL_Log("DEVIATED_HARVEST_STOP_LIST: mode=%d",int(borrowed->getAttackMode()));
         bot->doAttackObject(deviator,borrowed,true);
-        SDL_Log("DEVIATED_HARVEST_STOP_ORDER: mode=%d",int(borrowed->getAttackMode()));
         require(deviator->getTarget()==borrowed && deviator->wasForced(),
             "QuantBot Deviator order did not retain the fixture target");
         require(borrowed->getAttackMode()==STOP,"Capture target was not stopped");
@@ -102,14 +100,9 @@ void runHarvesterSafetyProbe(Game& game) {
         while(borrowed->getOwner()!=owner && game.gameCycleCount-captureStart<MILLI2CYCLES(120000)) {
             game.processObjects();++game.gameCycleCount;
         }
-        SDL_Log("DEVIATED_HARVEST_CAPTURE_STATE: worker=%u owner=%d mode=%d at=%d,%d "
-            "deviator=%u active=%d target=%u forced=%d at=%d,%d primary=%d bullets=%zu",
-            borrowed->getObjectID(),borrowed->getOwner()->getHouseID(),int(borrowed->getAttackMode()),
-            borrowed->getLocation().x,borrowed->getLocation().y,deviator->getObjectID(),int(deviator->isActive()),
-            deviator->getTarget() ? deviator->getTarget()->getObjectID() : NONE_ID,int(deviator->wasForced()),
-            deviator->getLocation().x,deviator->getLocation().y,deviator->primaryWeaponTimer,bulletList.size());
         require(borrowed->wasDeviated() && borrowed->getOwner()==owner,
             "QuantBot's real Deviator did not capture enemy worker");
+        currentGameMap->getTile(field)->setSpice(10000);
         bot->doSetAttackMode(deviator,STOP);unitList.remove(deviator);
         SDL_Log("DEVIATED_HARVEST_CAPTURE: elapsed_cycles=%u",game.gameCycleCount-captureStart);
         const auto savedConfig=bot->configOverride;
