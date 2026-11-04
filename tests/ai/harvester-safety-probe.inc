@@ -108,6 +108,8 @@ void runHarvesterSafetyProbe(Game& game) {
             if(!borrowed->isActive()) {
                 borrowed->setAmountOfSpice(0);refinery->update();
             }
+            currentGameMap->removeObjectFromMap(borrowed->getObjectID());
+            borrowed->deploy(field);
             borrowed->deviate(owner,deviator->getObjectID());
             borrowed->setTarget(nullptr);borrowed->setAmountOfSpice(cargo);
             borrowed->doSetAttackMode(HARVEST);borrowed->doMove2Pos(field,false);
@@ -165,6 +167,12 @@ void runHarvesterSafetyProbe(Game& game) {
             config->deviatedHarvesterEarlyReturn=true;
             reset(borrowed->getSpiceCapacity()/2,deadline);borrowed->deviate(enemy);inspect();
             require(!borrowed->isReturning(),"Non-deviated worker used captured return rule");
+            worker->setAmountOfSpice(worker->getSpiceCapacity()/2);
+            auto& ordinaryState=bot->harvesterSafety[worker->getObjectID()];
+            ordinaryState.nextCheck=std::numeric_limits<Uint32>::max();ordinaryState.controlled=false;
+            bot->manageHarvesterSafety(worker);
+            require(worker->getOwner()==owner && !worker->wasDeviated() && !worker->isReturning(),
+                "Ordinary own worker used captured return rule");
             reset(borrowed->getSpiceCapacity()/2,deadline);
             bot->onHumanUnitOrder(borrowed->getObjectID());inspect();
             require(!borrowed->isReturning(),"Captured return replaced human order lease");
