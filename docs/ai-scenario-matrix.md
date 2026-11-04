@@ -44,6 +44,27 @@ For a natural-duration diagnostic, `--minutes 120` overrides only the selected
 run's cell limits. It does not change the ordinary matrix limits or winner
 assertions; use a separate results directory for the extended observation.
 
+### Genuine exhaustion regression
+
+The mixed-difficulty vanilla FFA keeps seed **90866** as an explicit exhaustion
+check, not a winner check. At runtime `cf05f6b7` it still had two surviving houses
+after **120 natural game minutes** (receipt
+`20261105T010832-suite-90866-natural-120-1acf45`, digest `32f5b20f27feaa01`).
+Accepted switch arms changed which side could finish: launcher-kite OFF gave QM
+a 46.96-minute win, while deviated-harvester early-return OFF gave QB a
+35.94-minute win. These are different accepted trajectories, not evidence for
+disabling either default.
+
+The case passes only with a complete per-house engine audit: the production
+`exhaustedArmyEconomy()` predicate must prove cash below the cheapest enabled
+unit, no reachable harvestable spice, no pending cargo or possible tax income;
+there must be no idle raid-ready combat units and no unaffordable offensive
+repair trips or contained repair holds. Existing damaged-air, human, defence
+and saboteur authority remains intact. Missing audit evidence fails the case.
+The next seed from the same generator, **91875**, is also in smoke and keeps the
+unchanged FFA-must-finish, elimination and sortie assertions. Every other seed
+keeps its existing completion requirement; draw scoring is unchanged.
+
 The driver writes `games.csv` (one row per game; the win type of a campaign win: conquest or
 quota) and `houses.csv` (one row per house, with its `match_score` placement score: teams are entrants,
 a time-out is a negative draw). Games already in `games.csv` are skipped; failed games are retried on the

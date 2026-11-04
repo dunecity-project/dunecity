@@ -366,12 +366,18 @@ void runExhaustedArmyProbe(Game& game) {
             for (int tick=0;tick<=missing;++tick) yard->updateStructureSpecificStuff();
             require((damaged->getHealth()==damaged->getMaxHealth())==funded,
                 "Actual repair progress disagreed with the cash-to-finish boundary");
-            if (!funded)
+            if (!funded) {
                 require(yard->getContainedRepairUnit()==damaged && !damaged->isActive(),
                     "The underfunded repair control did not actually stall in its bay");
-            bot->releaseExhaustedArmyRepairs();
-            require(yard->isFree() && damaged->isActive(),
-                "The real fractional-cash repair hold was not released when it could not finish");
+                bot->releaseExhaustedArmyRepairs();
+                require(yard->isFree() && damaged->isActive(),
+                    "The real fractional-cash repair hold was not released when it could not finish");
+            } else if (yard->getContainedRepairUnit()==damaged) {
+                // A paid repair may still await its legitimately booked carryall.
+                require(!bot->declinesUnfundedRepair(damaged),
+                    "A completed funded repair was mistaken for an unpaid hold");
+                yard->deployRepairUnit();
+            }
             house->startingCredits=0;
         }
 

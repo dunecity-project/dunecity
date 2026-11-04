@@ -580,11 +580,33 @@ int runCampaignBalanceProbe() {
     if (outcome == "time_limit") {
         for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game->getHouse(h))
             for (const auto& player : house->getPlayerList())
-                if (const auto* bot = dynamic_cast<const QuantBot*>(player.get()))
-                    SDL_Log("CAMPAIGN_ENDGAME_AUDIT: house=%d exhausted=%d credits_raw=%lld spice=%d",
+                if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
+                    int idleReady = 0, heldRepairs = 0;
+                    for (const auto* unit : unitList) {
+                        if (!bot->campaignCombatUnit(unit)) continue;
+                        const auto* target = unit->getTarget();
+                        if (unit->isActive() && bot->declinesUnfundedRepair(unit) && target
+                            && target->getOwner() == house && target->getItemID() == Structure_RepairYard)
+                            ++heldRepairs;
+                        // Damaged aircraft are not raid-ready under the existing air policy.
+                        // Ground troops, including damaged ones released by exhaustion, are.
+                        if (unit->isActive() && (!unit->isAFlyingUnit() || !unit->isBadlyDamaged())
+                            && !unit->isMoving() && !unit->hasATarget()
+                            && bot->unitRole(unit,{QuantBot::UnitRole::Human,QuantBot::UnitRole::Repair,
+                                QuantBot::UnitRole::BaseDefence,QuantBot::UnitRole::LiveDefence,
+                                QuantBot::UnitRole::Defence,QuantBot::UnitRole::Wave,
+                                QuantBot::UnitRole::Escort,QuantBot::UnitRole::ColonyGuard})
+                                == QuantBot::UnitRole::Free) ++idleReady;
+                    }
+                    for (const auto* building : structureList)
+                        if (building->getOwner() == house)
+                            if (const auto* occupant = building->getContainedRepairUnit();
+                                occupant && bot->declinesUnfundedRepair(occupant)) ++heldRepairs;
+                    SDL_Log("CAMPAIGN_ENDGAME_AUDIT: house=%d exhausted=%d credits_raw=%lld spice=%d idle_ready=%d held_repairs=%d",
                         h, bot->exhaustedArmyEconomy(),
                         static_cast<long long>((house->getStartingCredits()+house->getEarnedCredits()).getRawValue()),
-                        bot->lastCalculatedSpice);
+                        bot->lastCalculatedSpice, idleReady, heldRepairs);
+                }
         for (const auto* unit:unitList) {
             const auto* target=unit->getTarget();
             const auto* candidate=unit->findTarget();

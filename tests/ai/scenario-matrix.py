@@ -74,7 +74,7 @@ DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
 CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
-               'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'source_commit', 'source_fingerprint')
+               'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint')
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
@@ -141,7 +141,9 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
     s('2p-small-smallarmy', 'vanilla', ffa('QH', 'AH'), skirmish_spec(64, 'small', 2), expect=('wins', 1))
     s('2p-medium-noarmy', 'dunecity', ffa('QB', 'QM'), skirmish_spec(96, 'medium', 0), expect=('wins', 1))
     s('3p-ffa-mcv-smallarmy', 'vanilla', ffa('QH', 'QM', 'AH'), skirmish_spec(128, 'none', 2))
-    s('4p-ffa-medium-smallarmy', 'vanilla', ffa('QB', 'QH', 'QM', 'QE'), skirmish_spec(128, 'medium', 2), smoke=1)
+    # 90866 still draws after a measured 120 minutes with accepted gameplay:
+    # audit genuine exhaustion, and retain completion coverage on generated seed 91875.
+    s('4p-ffa-medium-smallarmy', 'vanilla', ffa('QB', 'QH', 'QM', 'QE'), skirmish_spec(128, 'medium', 2), smoke=2)
     s('4p-ffa-small-largearmy', 'dunecity', ffa('QH', 'QM', 'AH', 'AM'), skirmish_spec(128, 'small', 5))
     s('2v2-fortress-largearmy', 'vanilla', team_slots(['QH', 'QH'], ['QE', 'QE']), skirmish_spec(128, 'fortress', 5),
       expect=('wins', 1))
@@ -282,7 +284,10 @@ def schedule(args):
             continue
         seeds = aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
         for index, seed in enumerate(seeds):
-            games.append(match_game(cell, index, seed))
+            game = match_game(cell, index, seed)
+            if game['id'] == 'skirmish/4p-ffa-medium-smallarmy/vanilla/90866':
+                game['expect'] = ('exhausted',)
+            games.append(game)
             if cell['repeat'] and index == 0 and args.tier == 'smoke':
                 games.append(dict(match_game(cell, index, seed), id=match_game(cell, index, seed)['id'] + '#replay'))
             if cell['both_sides'] and args.tier == 'full':
@@ -430,6 +435,8 @@ def play(args, scratch, binary, game):
     result = next((parse(l, 'SCENARIO_RESULT:') for l in lines if 'SCENARIO_RESULT:' in l), {})
     houses = [parse(l, 'SCENARIO_HOUSE:') for l in lines if 'SCENARIO_HOUSE:' in l]
     digest = next((parse(l, 'PROBE_DIGEST:').get('digest', '') for l in lines if 'PROBE_DIGEST:' in l and 'final=1' in l), '')
+    endgame_audit = {row['house']: row for line in lines if 'CAMPAIGN_ENDGAME_AUDIT:' in line
+                     for row in [parse(line, 'CAMPAIGN_ENDGAME_AUDIT:')]}
     summary_path = out / 'summary.json'
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
     campaign = game['kind'] == 'campaign'
@@ -446,6 +453,7 @@ def play(args, scratch, binary, game):
            'city_pop': result.get('city_pop', ''),
            'win_type': win_type(result, houses, campaign), 'digest': digest, 'wall_s': wall,
            'error': '' if outcome.returncode == 0 and result else f'rc={outcome.returncode}',
+           'endgame_audit': json.dumps(endgame_audit, sort_keys=True, separators=(',', ':')),
            'source_commit': summary.get('sourceCommit', ''),
            'source_fingerprint': summary.get('sourceFingerprint', '')}
     winner = result.get('winner_team', '')
@@ -564,6 +572,12 @@ def expectation(game_row):
         return None
     if expect[0] == 'campaign_won':
         return game_row['outcome'] == 'won'
+    if expect[0] == 'exhausted':
+        audit = json.loads(game_row.get('endgame_audit') or '{}')
+        expected_houses = {str(HOUSE_NUMBERS[side.split(':')[0]]) for side in game_row['sides'].split()}
+        return (game_row['outcome'] == 'time_limit' and set(audit) == expected_houses
+                and all(row.get('exhausted') == '1' and row.get('idle_ready') == '0'
+                        and row.get('held_repairs') == '0' for row in audit.values()))
     team = expect[1]
     if expect[0] == 'wins':
         within = float(expect[2]) if len(expect) > 2 else None
@@ -589,8 +603,10 @@ def flags(game, houses):
                 h['sortie_minutes'] == '0' and h['kill_value'] == '0' for h in partner):
             out.append('partner idle')
         return out
-    if game['winner_team'] == '0':
+    if game['winner_team'] == '0' and game['expect'] != 'exhausted':
         out.append('time-out')
+    if game['expect'] == 'exhausted' and expectation(game) is not True:
+        out.append('not a genuine audited exhaustion')
     if len(houses) > 2 and game['eliminations'] == '0':
         out.append('nobody eliminated')
     for h in houses:
@@ -652,7 +668,7 @@ def smoke_checks(args, results):
                 if game['outcome'] != 'won' and float(game['minutes']) < 5:
                     problems.append('campaign ended before 5 minutes without a win')
             else:
-                if game['winner_team'] == '0':
+                if game['winner_team'] == '0' and game['expect'] != 'exhausted':
                     problems.append('nobody won (time-out)')
                 if len(hs) > 2 and game['eliminations'] == '0':
                     problems.append('nobody eliminated')

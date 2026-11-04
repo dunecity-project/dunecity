@@ -1,3 +1,25 @@
+## 2026-11-05 — Staging suite triage (OMP SuiteTriage, unreleased)
+
+- Civ Wars' failure classifier mistook normal occupied-refinery rerouting for
+  an invalid placement (`364cafcd`); `72087318` distinguishes occupied position/tile
+  failures without weakening game/research assertions.
+- Police-budget and city-growth failures came from first-WOR precedence
+  (`ccf17d92`, TrooperSupport ON). QuantTroopers' `dcbbe185` restores actual first
+  rocket-cover priority; both unchanged probes pass at `f1be627a` in receipt
+  `20261105T002947-suite-endgame-gates-bc892e`, as does Civ Wars.
+- Custom armies exhausted of reachable spice, income and unit funding could wait
+  forever for six units/3,000 value, a repair yard or unaffordable repairs.
+  `f1be627a` adds hashed default-ON `ExhaustedArmyDispatch`; `8dd835ac` matches
+  `House::payCredits`' rounded-credit debit gate and avoids authority scans outside
+  exhaustion. Campaign/manual/defence/saboteur authority stays unchanged.
+- Natural FFA seed90866 still draws at120 minutes: `cf05f6b7`, receipt
+  `20261105T010832-suite-90866-natural-120-1acf45`, digest `32f5b20f27feaa01`.
+  Integrator decision: retain it as a strict measured-exhaustion regression, and
+  add generator-next seed91875 as the unchanged completion check. No forced
+  victory, resource injection, anti-air override or accepted-default rollback.
+- Before any repin, cross-platform city digests still require measured equality
+  on final runtime inputs; stale pin failures are not passing evidence.
+
 ## 2026-11-04 — Fair contiguous rock for Random Skirmish starts (OMP TerrainMix, unreleased)
 
 - Bare-MCV starts previously guaranteed only their 8×8 core, not future base/city room.
