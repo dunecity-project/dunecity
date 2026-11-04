@@ -117,12 +117,33 @@
 - Marker remains `[CIVILIZATIONWARS] Version=1`: saved maps embed exact terrain,
   buildings and worm positions; saved worms capture and serialize actual origin
   coordinates, never reconstructing slots from the current generator. Old maps
-  and saves therefore retain their existing layout/origins. No option/save bump.
+  and saves therefore retain their existing layout/origins. The layout itself adds
+  no option or save field; the separate research/scenery changes use 9883/MOD18.
 - Generator acceptance now checks exact 15/10 counts, front/back placement,
   coverage, all rock strips/margins and six unbroken sand channels. Engine probes
   retain the original research deadlines, continue every all-QuantBot match to at
   least ten minutes, check actual tax against full police/turret/power costs, and
   capture overview plus front/rear base views at 640x480 and 1280x720.
+- Layout implementation **`d6541e96`**; combined native build passed before cluster
+  acceptance. On **mini**, source **`ade2e8b79d28`**, job
+  **`20261104T180249-combined-full-12497d74-66d0e7`**: all three Civ Wars checks
+  passed — generator **30 cases / 37,803,797 assertions (2.82s)**, gameplay probe
+  **86.17s**, human research probe **19.08s**. These are the Civ Wars results, not
+  a claim that the entire combined suite passed.
+- All-QuantBot **1v1, 2v2 and 3v3**, each at **640x480 and 1280x720**, reached
+  **cycle 52606 / 14:01.696** with the strict load/played-log checks passing.
+  All starting bases loaded **15 turrets (10 front, 5 core/flank), 6 windtraps,
+  600/533 power**, one normal Harvester gift and one permanent Carryall.
+  Initial full annual costs are **325 police/turrets + 132–134 power**; actual
+  tax is **486–490 (1v1), 466–493 (2v2), 497–501 (3v3)**. No reduced AI police
+  funding was used to satisfy the full-cost assertion.
+- Viewed 1v1/3v3 loaded overviews at both sizes, front/rear close-ups at640,
+  whole-base close-ups at1280, and played1280 base views. Rock strips, ridge
+  margins, turret fronts/core, R/C sand frontage and rear Dune/I are visible.
+  Overview legend: white turrets, green R, blue C, yellow I; other buildings
+  retain house colours. Worm permanent-slot/save/load fixtures pass at both sizes.
+- Screenshots, six game logs, generated INI maps, three CTest receipts and measured
+  `acceptance.json`: **`/Users/stefan/Documents/projects/outputs/civ-wars-layout-20261104/`**.
 
 ## 2026-11-04 — Mountains are forest scenery (OMP MountainLandValue, unreleased)
 

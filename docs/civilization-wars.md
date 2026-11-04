@@ -264,5 +264,16 @@ CivWars uses the next hexadecimal token slot.
   online generator-to-player setup flow. `ui_gallery_probe` renders and lints the play,
   Spectate and online map screens, including 640×480 desert corner-crest clearance.
 
-Runtime evidence and screenshots for the implementation are recorded in the unreleased
-HANDOVER entry and `/Users/stefan/Documents/projects/outputs/civ-wars/`.
+Runtime evidence and screenshots for the original implementation are recorded in the
+unreleased HANDOVER entry and `/Users/stefan/Documents/projects/outputs/civ-wars/`.
+
+The 2026-11-04 layout acceptance is retained in
+`/Users/stefan/Documents/projects/outputs/civ-wars-layout-20261104/acceptance.json`
+and its neighbouring PNGs/logs/INI maps. On combined source `ade2e8b79d28`, the three
+Civ Wars tests passed on the mini: generator 30 cases / 37,803,797 assertions,
+gameplay probe 86.17s, human research probe 19.08s. All-QuantBot 1v1/2v2/3v3 at both
+640×480 and 1280×720 reached 14:01.696; every base loaded 15 turrets (10 front),
+six windtraps and 600/533 power. Full annual upkeep/power was covered by actual tax.
+Viewed 1v1/3v3 overviews and base close-ups show the strips, ridge margins and
+front/back layout. The diagnostic overview uses white turret marks, green R,
+blue C and yellow I; actual in-game base screenshots sit beside those previews.
