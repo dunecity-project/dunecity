@@ -134,6 +134,12 @@ samples before deleting its disposable profile. `games.csv` records the source
 commit and simulation-source fingerprint. `--check` applies the matrix's
 per-game expectations to selected full-tier cells as well as smoke runs.
 
+Single-key `brutal-aaa-*-off` play styles isolate new switch defaults in that
+saved setup. Existing audit/capital off styles cover StorageCapacity,
+CityPowerSizing, CityOpeningCapital, CityConstructionCapital and
+CityProductionPrerequisites. The default-off Civ Wars and MoreRocketTurrets
+experiments are not enabled in the control.
+
 ## CI
 
 Not in the CI Linux job. The harness relinks the macOS app bundle
