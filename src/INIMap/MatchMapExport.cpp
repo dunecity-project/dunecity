@@ -402,7 +402,7 @@ std::string currentMap(const Game& game, const INIFile& source) {
         placement.location = occupancy.place(*placement.unit, anchor);
     }
 
-    INIFile result(false, "Current match exported as an editable map, not a saved game.");
+    INIFile result(false, std::string("Current match exported as an editable map, not a saved game."));
     // Whitelist descriptive fields instead of copying executable scenario/startup sections.
     // Research, production queues, AI teams, timeout and scheduled reinforcements start afresh.
     copyKeys(source, result, "BASIC", {"Name", "Description", "Author", "License", "LosePicture", "WinPicture", "BriefPicture"});

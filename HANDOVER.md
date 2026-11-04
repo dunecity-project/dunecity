@@ -26,6 +26,8 @@
   exercises safe names, confirmed/cancelled overwrite, spectator/campaign policy
   and 640x480 control/crest geometry. It emits SAVE_AS_MAP_OK, not an additional
   MENU_PROBE_PASS line.
+- Windows/MSVC export construction explicitly passes a `std::string` comment;
+  `(false, "comment")` ambiguously competes with the `SDL_RWops*`/bool INI loader.
 
 ## 2026-11-04 — Fixed research prices and level-minute timing (OMP ResearchPace, unreleased)
 
