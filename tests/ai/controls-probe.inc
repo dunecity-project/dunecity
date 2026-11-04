@@ -127,9 +127,9 @@ void runControlsProbe(Game& game) {
     const SDL_Rect mapArea = screenborder->getScreenRect();
     const Coord pointer(mapArea.x + mapArea.w/2 + 24, mapArea.y + mapArea.h/2 + 16);
 #ifdef __APPLE__
-    // sdl2-compat's SDL_PushEvent intentionally drops preciseX/Y when converting
-    // SDL2 to SDL3. Inject native wheel input into that same queue, as hardware
-    // does, rather than weakening the fractional-delta assertions.
+    // sdl2-compat's SDL_PushEvent drops preciseX/Y and integer tick fields when
+    // converting SDL2 to SDL3. Inject complete native wheel input into that same
+    // queue, as hardware does, rather than weakening precision/sidebar assertions.
     // SDL3's stable event ABI: SDL_events.h (3.2+), 128-byte event union.
     struct NativeWheel {
         Uint32 type, reserved;
@@ -170,14 +170,15 @@ void runControlsProbe(Game& game) {
         e.wheel.preciseY=precise;
 #endif
 #ifdef __APPLE__
-        if(precise!=0 && nativePush) {
+        if(nativePush) {
             NativeEvent native{};
             native.wheel.type=SDL_MOUSEWHEEL;
             native.wheel.windowID=SDL_GetWindowID(window);
-            native.wheel.y=precise;
+            native.wheel.y=precise!=0 ? precise : static_cast<float>(y);
+            native.wheel.integerY=y;
             native.wheel.mouseX=drawnMouseX;
             native.wheel.mouseY=drawnMouseY;
-            require(nativePush(&native),"Native precise wheel event was rejected");
+            require(nativePush(&native),"Native wheel event was rejected");
         } else
 #endif
         {
