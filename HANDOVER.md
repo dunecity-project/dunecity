@@ -50,8 +50,10 @@
   see the shared scenery baseline. Infantry do not remove mountain scenery.
 - Ordinary rock remains neutral. Existing sand/dunes retain raw40, twice-smoothed
   2x2 terrain plus direct8/radius5 water-like bonuses. Empty undeveloped land stays0.
-- Appends one boolean to unreleased MOD17/save9882; protocol111 is unchanged. Older
-  settings load scenery off. Game Rules, remembered defaults and mod rules carry it.
+- Uses **MOD18/save9883/protocol112**, shared with fixed-price research. Frozen
+  MOD17/save9882 reads its exact pace4+area4+damage1 suffix with no scenery byte;
+  the retired area is consumed/ignored, and scenery stays OFF in existing saves.
+  New MOD18 writes pace4+damage1+scenery1. Game Rules, defaults and mod rules carry it.
 - Added no-mountain/adjacent/rule-off unit coverage, dense ridge weighting/range,
   hashed/wire/legacy/truncation coverage and Game Rules persistence/viewport checks.
 

@@ -17,8 +17,8 @@ constexpr std::size_t Mod13Bytes = 1;
 constexpr std::size_t Mod14Bytes = 1;
 constexpr std::size_t Mod15Bytes = 2;
 constexpr std::size_t Mod16Bytes = 1;
-constexpr std::size_t Mod17Bytes = 10;
-constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes + Mod15Bytes + Mod16Bytes + Mod17Bytes;
+constexpr std::size_t CurrentResearchBytes = 6; // MOD18: pace4 + damage1 + scenery1
+constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes + Mod15Bytes + Mod16Bytes + CurrentResearchBytes;
 struct ActiveTestMod {
     explicit ActiveTestMod(const std::string& name) { ModManager::instance().setActiveMod(name); }
     ~ActiveTestMod() { ModManager::instance().setActiveMod("vanilla"); }
@@ -87,7 +87,7 @@ TEST_CASE("Original damage is a shared rule preserved by setup, saves and campai
 
     SECTION("MOD5 defaults the new rule off without consuming following save bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("HDOM");
+        const auto marker = bytes.rfind("IDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '5';
         // Everything MOD5 does not know about: the MOD6 rule byte, MOD7's count plus one
@@ -123,7 +123,7 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
     SECTION("MOD7 and older default the rule on without consuming following bytes") {
         const char older = GENERATE('4', '5', '6', '7');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("HDOM");
+        const auto marker = bytes.rfind("IDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1;                // MOD14 through MOD8
@@ -165,7 +165,7 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("MOD8 streams keep the rule off without consuming following bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("HDOM");
+        const auto marker = bytes.rfind("IDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '8';
         bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD14 through MOD9, which MOD8 does not own
@@ -217,7 +217,7 @@ TEST_CASE("The planned-construction rules participate in match identity and save
         // A save or replay recorded before the rules existed must replay with the legacy behaviour.
         const char older = GENERATE('8', '9');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("HDOM");
+        const auto marker = bytes.rfind("IDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         bytes.resize(bytes.size() - PostMod11Bytes - (older == '8' ? 4 : 3));
@@ -231,7 +231,7 @@ TEST_CASE("The planned-construction rules participate in match identity and save
 
     SECTION("an announced MOD10 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("HDOM");
+        const auto marker = bytes.rfind("IDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
         bytes.resize(bytes.size() - PostMod11Bytes - 2);   // MOD14..MOD11 and the missing last MOD10 byte
@@ -267,7 +267,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
         mod10.setGameOptions(planned);
         OMemoryStream mod10Out; mod10Out.open(); mod10.save(mod10Out);
         std::string bytes(mod10Out.getData(), mod10Out.getDataLength());
-        const auto marker = bytes.rfind("HDOM");
+        const auto marker = bytes.rfind("IDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
         bytes.resize(bytes.size() - PostMod11Bytes);
@@ -282,7 +282,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
 
     SECTION("an announced MOD11 byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("HDOM");
+        const auto marker = bytes.rfind("IDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'B';
         bytes.resize(bytes.size() - PostMod11Bytes - 1);
@@ -341,7 +341,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("every marker before MOD7 means 1x and leaves the following bytes alone") {
         const char older = GENERATE('!', '2', '3', '4', '5', '6');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("HDOM");
+        const auto marker = bytes.rfind("IDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         // Strip what that older marker cannot account for, so the tail is unambiguous.
@@ -672,7 +672,7 @@ TEST_CASE("Legacy MOD3 remains readable and truncated MOD14 fails closed", "[wor
     auto original = makeCoop(false, true);
     OMemoryStream out; out.open(); original.save(out);
     std::string bytes(reinterpret_cast<const char*>(out.getData()), out.getDataLength());
-    const auto marker = bytes.find("HDOM");
+    const auto marker = bytes.find("IDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("old graphics marker") {
         bytes[marker] = '3';
@@ -796,10 +796,10 @@ TEST_CASE("MOD12 is append-only and every announced rule byte is required",
     const auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("HDOM");
+    const auto marker = encoded.rfind("IDOM");
     REQUIRE(marker != std::string::npos);
     encoded[marker] = 'C';
-    encoded.resize(encoded.size() - Mod13Bytes - Mod14Bytes - Mod15Bytes - Mod16Bytes - Mod17Bytes); // Released MOD12 layout.
+    encoded.resize(encoded.size() - Mod13Bytes - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes); // Released MOD12 layout.
     SECTION("a MOD11 stream consumes none of the six new fields") {
         auto bytes = encoded;
         REQUIRE(bytes[marker] == 'C');
@@ -836,10 +836,10 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
     auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("HDOM");
+    const auto marker = encoded.rfind("IDOM");
     REQUIRE(marker != std::string::npos);
     encoded[marker] = 'D';
-    encoded.resize(encoded.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - Mod17Bytes); // Released MOD13 layout.
+    encoded.resize(encoded.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes); // Released MOD13 layout.
 
     SECTION("both switch states round-trip without consuming following bytes") {
         const bool enabled = GENERATE(false, true);
@@ -891,7 +891,7 @@ TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when 
     auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     const std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("HDOM");
+    const auto marker = encoded.rfind("IDOM");
     REQUIRE(marker != std::string::npos);
 
     SECTION("both switch states round-trip without consuming following bytes") {
@@ -909,7 +909,7 @@ TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when 
     SECTION("a released MOD13 stream keeps every old field and reads the new rule off") {
         auto bytes = encoded;
         bytes[marker] = 'D';
-        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - Mod17Bytes);
+        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes);
         bytes.append("tail");
         IMemoryStream input(bytes.data(), bytes.size());
         GameInitSettings restored(input);
@@ -926,7 +926,7 @@ TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when 
     }
     SECTION("truncating the MOD14 byte is an error, not a legacy save") {
         auto bytes = encoded;
-        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - Mod17Bytes);
+        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes);
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
@@ -952,7 +952,7 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
-    const auto marker = encoded.rfind("HDOM");
+    const auto marker = encoded.rfind("IDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("all combinations round-trip without consuming the next record") {
         saved.writeUint32(0xabcdef01u);
@@ -964,7 +964,7 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
     SECTION("released MOD14 streams retain their rules and default both mechanics off") {
         auto bytes = encoded;
         bytes[marker] = 'E';
-        bytes.resize(bytes.size() - Mod15Bytes - Mod16Bytes - Mod17Bytes);
+        bytes.resize(bytes.size() - Mod15Bytes - Mod16Bytes - CurrentResearchBytes);
         bytes.append("tail");
         IMemoryStream input(bytes.data(), bytes.size());
         GameInitSettings restored(input);
@@ -980,7 +980,7 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
         const int missing = GENERATE(1, 2);
         auto bytes = encoded;
         bytes[marker] = 'F';
-        bytes.resize(bytes.size() - Mod16Bytes - Mod17Bytes - missing);
+        bytes.resize(bytes.size() - Mod16Bytes - CurrentResearchBytes - missing);
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
@@ -1000,7 +1000,7 @@ TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams r
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
-    const auto marker = encoded.rfind("HDOM");
+    const auto marker = encoded.rfind("IDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("both states round-trip without consuming the next record") {
         saved.writeUint32(0xabcdef01u);
@@ -1012,7 +1012,7 @@ TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams r
     SECTION("a MOD15 stream keeps its rules and has no Starport requirement") {
         auto bytes = encoded;
         bytes[marker] = 'F';
-        bytes.resize(bytes.size() - Mod16Bytes - Mod17Bytes);
+        bytes.resize(bytes.size() - Mod16Bytes - CurrentResearchBytes);
         bytes.append("tail");
         IMemoryStream input(bytes.data(), bytes.size());
         GameInitSettings restored(input);
@@ -1025,85 +1025,56 @@ TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams r
     SECTION("the announced MOD16 byte is required") {
         auto bytes = encoded;
         bytes[marker] = 'G';
-        bytes.resize(bytes.size() - Mod16Bytes - Mod17Bytes);
+        bytes.resize(bytes.size() - Mod16Bytes - CurrentResearchBytes);
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
 }
 
-TEST_CASE("Research scale preserves small maps and rounds every map and pace once",
+TEST_CASE("Research prices and durations depend only on target and selected pace",
           "[research][policy]") {
     using namespace TechResearch;
-    const int target = GENERATE(2, 3, 4, 5, 6, 7, 8, 9);
-    SECTION("Normal never slows an area at or below the reference") {
-        const std::uint32_t area = GENERATE(0u, 1u, 4096u, 12383u, 12384u);
-        REQUIRE(cost(target, area, Pace::Normal) == 300 * target);
-        REQUIRE(cycles(target, area, Pace::Normal) == MILLI2CYCLES((30 + 10 * target) * 1000));
-    }
-    SECTION("all four paces use the exact same rational scale for cost and cycles") {
-        const auto pace = GENERATE(Pace::Fast, Pace::Normal, Pace::Slow, Pace::VerySlow);
-        const std::uint32_t area = GENERATE(12384u, 12385u, 18032u, 24704u, 40800u, 147456u);
-        const std::uint64_t numerator = std::max<std::uint64_t>(12384, 2 * std::uint64_t(area) - 12384);
-        const std::uint64_t units = std::uint64_t(1) << static_cast<unsigned>(pace);
-        REQUIRE(cost(target, area, pace) == (300 * target * numerator * units + 24767) / 24768);
-        REQUIRE(cycles(target, area, pace)
-            == (MILLI2CYCLES((30 + 10 * target) * 1000) * numerator * units + 24767) / 24768);
-    }
+    const int target = GENERATE(2,3,4,5,6,7,8,9);
+    const auto pace = GENERATE(Pace::Fast,Pace::Normal,Pace::Slow,Pace::VerySlow);
+    const int units = 1 << static_cast<unsigned>(pace);
+    REQUIRE(cost(target,pace) == 1000 * (target-1) * units / 2);
+    REQUIRE(cycles(target,pace) == MILLI2CYCLES(target * 60000) * units / 2);
 }
 
-TEST_CASE("Normal research prices and times match every Civilization Wars size",
+TEST_CASE("Normal research has fixed thousand-credit steps and minute durations",
           "[research][civwars][policy]") {
     using namespace TechResearch;
-    const std::array<std::uint32_t, 4> areas{{129u * 96u, 161u * 112u, 193u * 128u, 255u * 160u}};
-    const int prices[4][8] = {
-        {600,900,1200,1500,1800,2100,2400,2700},
-        {1148,1721,2295,2869,3442,4016,4590,5163},
-        {1794,2691,3588,4485,5382,6279,7176,8073},
-        {3354,5031,6707,8384,10061,11738,13414,15091}
-    };
-    const int durations[4][8] = {
-        {3125,3750,4375,5000,5625,6250,6875,7500},
-        {5976,7171,8366,9561,10756,11951,13146,14342},
-        {9343,11212,13080,14949,16817,18686,20554,22423},
-        {17467,20960,24453,27946,31439,34933,38426,41919}
-    };
-    for(std::size_t map = 0; map < areas.size(); ++map)
-        for(int target = 2; target <= 9; ++target) {
-            CAPTURE(map, target);
-            REQUIRE(cost(target, areas[map], Pace::Normal) == prices[map][target - 2]);
-            REQUIRE(cycles(target, areas[map], Pace::Normal) == durations[map][target - 2]);
-        }
-    REQUIRE(cost(2, 12385, Pace::Normal) == 601);
-    REQUIRE(cycles(2, 12385, Pace::Normal) == 3126);
-    REQUIRE(cycles(2, 24704, Pace::VerySlow) == 37371); // Round once, not four times after Normal.
-    REQUIRE(cost(1, 24704, Pace::Normal) == 0);
-    REQUIRE(cost(10, 24704, Pace::Normal) == 0);
-    REQUIRE(cycles(10, 24704, Pace::Normal) == 0);
-    REQUIRE(mapArea(193, 128) == 24704);
-    REQUIRE(mapArea(-1, 128) == 0);
-    REQUIRE(mapArea(std::numeric_limits<int>::max(), std::numeric_limits<int>::max())
-        == std::numeric_limits<std::uint32_t>::max());
-    REQUIRE(cost(9, std::numeric_limits<std::uint32_t>::max(), Pace::VerySlow) == std::numeric_limits<int>::max());
-    REQUIRE(cycles(9, std::numeric_limits<std::uint32_t>::max(), Pace::VerySlow) == std::numeric_limits<int>::max());
+    int totalCost = 0, totalCycles = 0;
+    for(int target=2;target<=9;++target) {
+        REQUIRE(cost(target,Pace::Normal) == 1000 * (target-1));
+        REQUIRE(cycles(target,Pace::Normal) == MILLI2CYCLES(target * 60000));
+        totalCost += cost(target,Pace::Normal);
+        totalCycles += cycles(target,Pace::Normal);
+    }
+    REQUIRE(cost(4,Pace::Normal) == 3000);
+    REQUIRE(cycles(4,Pace::Normal) == 15000);
+    REQUIRE(cost(9,Pace::Normal) == 8000);
+    REQUIRE(cycles(9,Pace::Normal) == 33750);
+    REQUIRE(totalCost == 36000);
+    REQUIRE(totalCycles == 165000);
+    for(int invalid : {-1,0,1,10,std::numeric_limits<int>::max()}) {
+        REQUIRE(cost(invalid,Pace::Normal) == 0);
+        REQUIRE(cycles(invalid,Pace::Normal) == 0);
+    }
     REQUIRE(sanitize(-1) == Pace::Normal);
     REQUIRE(sanitize(4) == Pace::Normal);
     REQUIRE_FALSE(isValid(4));
 }
 
-TEST_CASE("MOD17 research pace and map area and land value rules are hashed saved rules",
+TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
           "[research][citybudget][network][save]") {
     using namespace TechResearch;
     SettingsClass::GameOptionsClass defaults;
     REQUIRE(defaults.researchPace == Pace::Normal);
-    REQUIRE(defaults.researchMapArea == kReferenceArea);
     REQUIRE_FALSE(defaults.damageLowersLandValue);
     REQUIRE(defaults.mountainScenery);
     auto changed = defaults;
     changed.researchPace = Pace::Fast;
-    REQUIRE(changed != defaults);
-    REQUIRE(changed.getHash() != defaults.getHash());
-    changed = defaults;
-    changed.researchMapArea = 24704;
     REQUIRE(changed != defaults);
     REQUIRE(changed.getHash() != defaults.getHash());
     changed = defaults;
@@ -1114,60 +1085,80 @@ TEST_CASE("MOD17 research pace and map area and land value rules are hashed save
     changed.mountainScenery = false;
     REQUIRE(changed != defaults);
     REQUIRE(changed.getHash() != defaults.getHash());
-    auto original = makeCoop(false, true);
+    auto original = makeCoop(false,true);
     auto options = original.getGameOptions();
-    options.researchPace = GENERATE(Pace::Fast, Pace::Normal, Pace::Slow, Pace::VerySlow);
-    options.researchMapArea = GENERATE(kReferenceArea, 24704u);
-    options.damageLowersLandValue = GENERATE(false, true);
-    options.mountainScenery = GENERATE(false, true);
+    options.researchPace = GENERATE(Pace::Fast,Pace::Normal,Pace::Slow,Pace::VerySlow);
+    options.damageLowersLandValue = GENERATE(false,true);
+    options.mountainScenery = GENERATE(false,true);
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
-    const std::string encoded(saved.getData(), saved.getDataLength());
-    const auto marker = encoded.rfind("HDOM");
+    const std::string encoded(saved.getData(),saved.getDataLength());
+    const auto marker = encoded.rfind("IDOM");
     REQUIRE(marker != std::string::npos);
-    SECTION("every pace and field round-trips without consuming the next record") {
+    SECTION("every field round-trips without consuming the next record") {
         saved.writeUint32(0xabcdef01u);
-        IMemoryStream input(saved.getData(), saved.getDataLength());
+        IMemoryStream input(saved.getData(),saved.getDataLength());
         GameInitSettings restored(input);
         REQUIRE(restored.getGameOptions() == options);
         REQUIRE(restored.getGameOptions().getHash() == options.getHash());
         REQUIRE(input.readUint32() == 0xabcdef01u);
     }
-    SECTION("MOD16 keeps its complete prefix and defaults to Normal and damage off") {
+    SECTION("MOD17 reads its exact nine-byte suffix and ignores its obsolete area") {
+        const Uint32 area = GENERATE(0u,12384u,24704u,40800u);
+        // Keep the complete old prefix and pace; replace MOD18's two rule bytes
+        // with the released MOD17 area4 + damage1. There was no scenery byte.
+        auto bytes = encoded;
+        bytes[marker] = 'H';
+        bytes.resize(bytes.size()-2);
+        for(int shift=0;shift<32;shift+=8) bytes.push_back(static_cast<char>(area >> shift));
+        bytes.push_back(static_cast<char>(options.damageLowersLandValue));
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(),bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.mountainScenery = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("MOD16 keeps its prefix and defaults to Normal and both terrain rules off") {
         auto bytes = encoded;
         bytes[marker] = 'G';
-        bytes.resize(bytes.size() - Mod17Bytes);
+        bytes.resize(bytes.size()-CurrentResearchBytes);
         bytes.append("tail");
-        IMemoryStream input(bytes.data(), bytes.size());
+        IMemoryStream input(bytes.data(),bytes.size());
         GameInitSettings restored(input);
         auto expected = options;
         expected.researchPace = Pace::Normal;
-        expected.researchMapArea = kReferenceArea;
         expected.damageLowersLandValue = false;
         expected.mountainScenery = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
-        const auto hashBeforeMap = restored.getGameOptions().getHash();
-        restored.setResearchMapSize(193, 128);
-        REQUIRE(restored.getGameOptions().researchMapArea == 24704);
-        REQUIRE(restored.getGameOptions().getHash() != hashBeforeMap);
     }
-    SECTION("every announced MOD17 byte is required") {
-        const int missing = GENERATE(1,2,3,4,5,6,7,8,9,10);
+    SECTION("every frozen MOD17 suffix byte remains required") {
+        const int missing = GENERATE(1,2,3,4,5,6,7,8,9);
         auto bytes = encoded;
-        bytes.resize(bytes.size() - missing);
-        IMemoryStream input(bytes.data(), bytes.size());
+        bytes[marker] = 'H';
+        bytes.resize(bytes.size()-2);
+        bytes.append(4,'\0');
+        bytes.push_back(static_cast<char>(options.damageLowersLandValue));
+        bytes.resize(bytes.size()-missing);
+        IMemoryStream input(bytes.data(),bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
-    SECTION("unknown wire pace and zero area are refused instead of normalized") {
-        const bool invalidPace = GENERATE(false, true);
+    SECTION("every announced MOD18 byte is required") {
+        const int missing = GENERATE(1,2,3,4,5,6);
         auto bytes = encoded;
-        const auto offset = bytes.size() - Mod17Bytes + (invalidPace ? 0 : 4);
-        for(std::size_t i = 0; i < 4; ++i) bytes[offset + i] = invalidPace ? static_cast<char>(0xff) : 0;
-        IMemoryStream input(bytes.data(), bytes.size());
+        bytes.resize(bytes.size()-missing);
+        IMemoryStream input(bytes.data(),bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
-        options.researchPace = invalidPace ? static_cast<Pace>(99) : Pace::Normal;
-        options.researchMapArea = invalidPace ? kReferenceArea : 0;
+    }
+    SECTION("unknown wire pace is refused instead of normalized") {
+        auto bytes = encoded;
+        const auto offset = bytes.size()-CurrentResearchBytes;
+        for(std::size_t i=0;i<4;++i) bytes[offset+i] = static_cast<char>(0xff);
+        IMemoryStream input(bytes.data(),bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+        options.researchPace = static_cast<Pace>(99);
         original.setGameOptions(options);
         OMemoryStream rejected; rejected.open();
         REQUIRE_THROWS(original.save(rejected));

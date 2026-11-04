@@ -338,10 +338,6 @@ void Game::initializeSpatialGrid(int mapWidth, int mapHeight) {
         return;
     }
 
-    // New-map and save-map allocation share this initial geometry boundary. Research
-    // never rescales from the changing economy, roster, visibility or live objects.
-    gameInitSettings.setResearchMapSize(mapWidth, mapHeight);
-
     try {
         spatialGrid = std::make_unique<SpatialGrid>(mapWidth, mapHeight, kSpatialGridCellSize);
     } catch(const std::exception& ex) {
@@ -3181,6 +3177,11 @@ void Game::doInput()
             }*/
         }
 
+        if(screenborder->handleMiddlePan(event, mapTouchEnabled)) {
+            selectionMode = false;
+            continue;
+        }
+
         if(pNetworkManager && pNetworkManager->lateJoinPaused() && event.type!=SDL_QUIT && dynamic_cast<JoinProgressWindow*>(pInGameMenu.get())==nullptr) continue;
         if(pInGameMenu != nullptr) {
             pInGameMenu->handleInput(event);
@@ -3225,13 +3226,14 @@ void Game::doInput()
                 } break;
 
                 case SDL_MOUSEWHEEL: {
-                    if (event.wheel.y != 0) {
-                        const bool wheelHandled = pInterface->handleMouseWheel(
-                            drawnMouseX, drawnMouseY, event.wheel.y > 0);
-                        // The wheel zooms only in Dune2R; elsewhere it stays free for lists.
-                        if(!wheelHandled && dune2RContentActive()) {
-                            setZoomStep(zoomStep + (event.wheel.y > 0 ? 1 : -1), drawnMouseX, drawnMouseY, true);
-                        }
+                    const bool wheelHandled = event.wheel.y != 0 && pInterface->handleMouseWheel(
+                        drawnMouseX, drawnMouseY, event.wheel.y > 0);
+                    if(!wheelHandled && mapTouchEnabled
+                       && screenborder->isScreenCoordInsideMap(drawnMouseX, drawnMouseY)) {
+                        const int step = screenborder->mouseWheelZoom(event.wheel);
+                        if(step) setZoomStep(zoomStep + step, drawnMouseX, drawnMouseY, true);
+                    } else {
+                        screenborder->resetMouseWheelZoom();
                     }
                 } break;
 
@@ -3516,6 +3518,7 @@ case CursorMode_Heal: {
     const bool touchPointer = pointerIsTouch();
     if((pInGameMenu == nullptr) && (pInGameMentat == nullptr) && (pWaitingForOtherPlayers == nullptr)
        && !pInterface->hasChildWindow()
+       && !screenborder->isMousePanning()
        && (touchPointer || (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_FOCUS))) {
 
         const Uint8 *keystate = SDL_GetKeyboardState(nullptr);

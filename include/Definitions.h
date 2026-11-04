@@ -208,7 +208,8 @@
 //       house). GameInitSettings MOD14 appends the Micropolis land value rule.
 // 9881: Per-house Research Lab state and generated Civ Wars worm origins.
 // 9882: GameInitSettings MOD17 appends research pace, frozen map area and damage land value.
-#define SAVEGAMEVERSION     9882
+// 9883: MOD18 drops obsolete research map area and adds mountain scenery; MOD17/9882 stays frozen.
+#define SAVEGAMEVERSION     9883
 /// First save with the integrated Tornie 1.0.546 state (independent of upstream save versions).
 #define SAVEGAMEVERSION_TORNIE546 9878
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
@@ -225,6 +226,8 @@
 #define SAVEGAMEVERSION_RESEARCH_LAB 9881
 /// First save with map-scaled Research Pace and damage-sensitive city land value rules.
 #define SAVEGAMEVERSION_RESEARCH_PACE 9882
+/// First save with fixed-size research and the Mountain Scenery rule (MOD18).
+#define SAVEGAMEVERSION_MOUNTAIN_SCENERY 9883
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

@@ -346,7 +346,9 @@
 //      MOD17 hashes/saves Research Pace, initial map area and opt-in damage-sensitive land value.
 //      QuantBot's hashed PoliceFundingRecovery restores small affordable police-budget increases.
 //      Generated Civ Wars prioritizes required per-house research independently of the experimental strategy.
-#define NETWORK_PROTOCOL_VERSION            111
+// 112: MOD18 replaces frozen MOD17's map-area field with Mountain Scenery (save 9883).
+//      Research uses fixed prices/durations rather than map size.
+#define NETWORK_PROTOCOL_VERSION            112
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

@@ -186,7 +186,7 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     researchPaceDropDownBox.addEntry(_("Slow"), static_cast<int>(TechResearch::Pace::Slow));
     researchPaceDropDownBox.addEntry(_("Very slow"), static_cast<int>(TechResearch::Pace::VerySlow));
     researchPaceDropDownBox.setSelectedItem(static_cast<int>(gameOptions.researchPace));
-    researchPaceDropDownBox.setTooltipText(_("Research price and duration scale with map size. Pace changes both."));
+    researchPaceDropDownBox.setTooltipText(_("Research cost and time: Fast 1/2, Normal 1x, Slow 2x, Very slow 4x."));
     researchPaceHBox.addWidget(&researchPaceDropDownBox);
     vboxLeft.addWidget(&researchPaceHBox, 24);
     vboxLeft.addWidget(VSpacer::create(ruleGap));
@@ -297,14 +297,14 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxRight.addWidget(VSpacer::create(ruleGap));
 
     rememberDefaults.setText(_("Remember for new games"));
-    vboxRight.addWidget(&rememberDefaults, 22);
-
-    vboxRight.addWidget(VSpacer::create(ruleGap));
 
     okbutton.setText(_("OK"));
     okbutton.setOnClick(std::bind(&GameOptionsWindow::onOK, this));
     okHBox.addWidget(Spacer::create());
-    okHBox.addWidget(&okbutton, 200);
+    // Keep both controls between the corner crests, without another rules row.
+    okHBox.addWidget(&rememberDefaults, 190);
+    okHBox.addWidget(HSpacer::create(10));
+    okHBox.addWidget(&okbutton, 150);
     okHBox.addWidget(Spacer::create());
 
 

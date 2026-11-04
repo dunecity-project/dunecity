@@ -50,6 +50,7 @@ constexpr Uint32 GAMEINIT_MOD14_MARKER = 0x4D4F4445; // MODE: Micropolis land va
 constexpr Uint32 GAMEINIT_MOD15_MARKER = 0x4D4F4446; // MODF: per-house research and trooper anti-air
 constexpr Uint32 GAMEINIT_MOD16_MARKER = 0x4D4F4447; // MODG: Starport city population requirement
 constexpr Uint32 GAMEINIT_MOD17_MARKER = 0x4D4F4448; // MODH: research pace/map area and damage land value
+constexpr Uint32 GAMEINIT_MOD18_MARKER = 0x4D4F4449; // MODI: fixed research pace and mountain scenery
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -253,7 +254,6 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.micropolisLandValue = false;
     gameOptions.researchLab = false;
     gameOptions.researchPace = TechResearch::Pace::Normal;
-    gameOptions.researchMapArea = TechResearch::kReferenceArea;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.trooperAntiAir = false;
@@ -264,10 +264,12 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     Uint32 modMarker = 0;
     try {
         modMarker = stream.readUint32();
-        const bool hasResearchPace = modMarker == GAMEINIT_MOD17_MARKER;
+        const bool hasMountainScenery = modMarker == GAMEINIT_MOD18_MARKER;
+        const bool hasLegacyResearchArea = modMarker == GAMEINIT_MOD17_MARKER;
+        const bool hasResearchPace = hasLegacyResearchArea || hasMountainScenery;
         const bool hasStarportPopulation = modMarker == GAMEINIT_MOD16_MARKER || hasResearchPace;
         const bool hasResearchOptions = modMarker == GAMEINIT_MOD15_MARKER || hasStarportPopulation;
-        // MOD15..17 append their rules to the complete MOD14 prefix.
+        // MOD15..18 share the complete MOD14 prefix.
         if(hasResearchOptions) modMarker = GAMEINIT_MOD14_MARKER;
         if (isKnownModMarker(modMarker)) {
             modName = stream.readString();
@@ -369,12 +371,12 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             }
             if(hasResearchPace) {
                 const Uint32 pace = stream.readUint32();
-                gameOptions.researchMapArea = stream.readUint32();
-                if(!TechResearch::isValid(pace) || gameOptions.researchMapArea == 0)
-                    throw std::runtime_error("Invalid research pace or map area.");
+                if(hasLegacyResearchArea) stream.readUint32(); // frozen MOD17 area; no longer affects research
+                if(!TechResearch::isValid(pace))
+                    throw std::runtime_error("Invalid research pace.");
                 gameOptions.researchPace = static_cast<TechResearch::Pace>(pace);
                 gameOptions.damageLowersLandValue = stream.readBool();
-                gameOptions.mountainScenery = stream.readBool();
+                if(hasMountainScenery) gameOptions.mountainScenery = stream.readBool();
             }
         }
     } catch (InputStream::eof&) {
@@ -467,8 +469,8 @@ GameInitSettings::~GameInitSettings() {
 }
 
 void GameInitSettings::save(OutputStream& stream) const {
-    if(!TechResearch::isValid(static_cast<Uint32>(gameOptions.researchPace)) || gameOptions.researchMapArea == 0)
-        THROW(std::runtime_error, "GameInitSettings::save(): invalid research pace or map area.");
+    if(!TechResearch::isValid(static_cast<Uint32>(gameOptions.researchPace)))
+        THROW(std::runtime_error, "GameInitSettings::save(): invalid research pace.");
     if(houseInfoList.size() > static_cast<std::size_t>(CustomGamePlayerPolicy::maxPlayers(isTornieFamilyMatch())))
         THROW(std::runtime_error, "GameInitSettings::save(): too many house rows.");
     stream.writeSint8(static_cast<Sint8>(gameType));
@@ -504,7 +506,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD17_MARKER);
+    stream.writeUint32(GAMEINIT_MOD18_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -563,9 +565,8 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.trooperAntiAir);
     // MOD16: older streams keep the Starport without a population requirement.
     stream.writeBool(gameOptions.starportPopulation);
-    // MOD17: old settings read Normal; initial map loading binds their actual area.
+    // MOD18 preserves pace/damage, drops obsolete area, and adds mountain scenery.
     stream.writeUint32(static_cast<Uint32>(gameOptions.researchPace));
-    stream.writeUint32(gameOptions.researchMapArea);
     stream.writeBool(gameOptions.damageLowersLandValue);
     stream.writeBool(gameOptions.mountainScenery);
 }
