@@ -194,6 +194,115 @@ normal WOR remains unavailable. The Harkonnen case retains the actual enemy
 Ornithopter attack and lethal-hit checks.
 
 
+### Final paired measurement and explicit ON decision
+
+The final runtime candidate is `846c1336924fa88b24d533c7ed063849bba53a96`.
+Stefan explicitly chose **TrooperSupport ON knowing it is unproven**; Main
+confirmed that decision on2026-11-05. This is not an assertion that all acceptance
+gates passed. The missing-Starport increase and the unchanged FFA deadline failure
+remain disclosed below; neither detector nor test was weakened.
+
+The same-source OFF/ON run contains160 games,240 matched house pairs, no game
+errors and no source/map/options/content/object-data exclusions. Windows pairs
+are retained. The matrix uses96/128 maps, none/low/medium spice,1v1/FFA4,
+Hard/Brutal, seeds9101 and148680876,30 minutes. The adjacent-difficulty ladder
+uses128 none/medium maps, both seats and the same seeds,45 minutes. FFA6 uses128
+none/medium maps, Hard/Brutal and both seeds,30 minutes. All start with the Medium
+base, army2 and city0. `supplier-{matrix,ladder,factions}-{off,on}/` under
+`outputs/quant-troopers-20261104/` retains CSVs and native evidence.
+
+These are raw paired-house totals, not independent-house significance tests.
+The Hard/Brutal rows omit the ladder's additional Medium/Easy houses; all-house
+totals below include them.
+
+| Cohort | Difficulty | Pairs | Stall hits OFF→ON | Bankrupt hits | Missing-SP hits | Dispatches | Kill value | Paid troops | Own Orni losses | Enemy Orni kills | Trooper Orni kills |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Matrix | Hard |72|6→6|12→10|8→15|81→73|1189950→1154240|0→497|201→185|184→169|11→22|
+| Matrix | Brutal |72|6→11|16→18|7→16|106→119|1165720→1140690|0→379|217→190|202→163|17→26|
+| Ladder | Hard |16|2→3|4→4|4→5|42→38|470120→368330|0→68|91→53|65→45|17→7|
+| Ladder | Brutal |8|1→2|1→3|1→2|31→27|204670→155190|0→20|34→20|29→11|2→6|
+| FFA6 | Hard |24|5→6|9→10|8→7|19→22|344220→331520|0→155|56→45|55→43|3→0|
+| FFA6 | Brutal |24|6→7|11→10|7→7|28→23|359130→316590|0→127|33→48|33→44|3→5|
+
+Across every difficulty, paid troops increase0→1431, exact Trooper enemy-Orni
+kills67→93, original-house Orni losses732→618, and enemy-Orni kills638→544.
+OFF crews can already shoot aircraft; the OFF Trooper-AA total is not zero.
+Losses and opposing-team lethal callbacks are different counters, not a forced
+identity or a claim that every destroyed aircraft was killed by a trooper.
+
+| ON house | WOR-built houses / all houses | Completed/delivered troopers |
+|---|---:|---:|
+| Harkonnen |45/80|866|
+| Ordos |16/32|269|
+| Sardaukar |15/32|214|
+| Fremen |4/8|48|
+| Mercenary |2/8|34|
+| Atreides, ordinary WOR unavailable |0/80|0|
+
+Excluding only ordinary Atreides technology, overall adoption is82/160
+(51.25%); the low/medium-spice funded cohort is81/96 (84.4%). None-spice is
+only1/64, with no completed paid troops. **The requested clear majority across
+all legal houses is not established.** Do not substitute the funded-cohort rate
+for the all-house result.
+
+One actual no-spice counterexample is a funding limit rather than an unavailable
+WOR: matrix96/none/1v1/Hard9101 selects its first WOR, founded cost464 plus400
+working/next-zone cash, but wins at25.31 minutes with505 credits and224 net
+income per four minutes. Another~6.4 minutes of saving would be needed even before
+construction. Positive income alone does not mean it can finish the purchase
+before the game ends.
+
+Game-cluster uncertainty, not point-estimate declines, owns the combat gate.
+Matrix Hard dispatch delta is−0.094 per game,95%[−0.344,+0.135],
+sign better/worse/tied5/11/8,p2=.2101. Matrix Brutal kill-value delta is
++490.104 per equally weighted game,95%[−1908.125,+3255.729], sign10/14/0,
+p2=.5413; differing match sizes explain why raw house-weighted totals can decline
+while the game-weighted mean rises. Neither is a supported combat regression.
+
+**Open issue for the next build: missing Starports.** Matrix hits/exposed rise
+15/109→31/111: Hard8/58→15/58 and Brutal7/51→16/53. The Brutal conditional
+game-rate delta is+.108,95%[+.025,+.192], sign0 better/5 worse,p2=.0625.
+Exposure changes make the report's guardrail **unmeasured**, not passed. The
+positive interval must not be hidden by the nonsignificant sign test. The
+TrooperSupport-only profitable-first-SP saving qualification is included in this
+candidate; these numbers are after that change.
+
+#### Pinned engine gates and unchanged FFA failure
+
+Receipt `20261105T054156-quant-supplier-final-gates-0f3d65`, source846c1336,
+is **17/18 passed**, not a full acceptance pass. Both AAA regressions, unit/config
+hash/roundtrip tests, custom attack, army recovery, performance,12-seed strategy,
+trooper support, air defence, no-spice income/city, growth installments, city growth,
+police budget/placement, civic priority and scenario matrix pass. The real paid
+WOR+troop/air-kill fixture passes on Pro in186.8 seconds; the scenario's QB beats QE
+at31.66 minutes including its replay. Performance takes229.7 seconds on Pro.
+
+`quantbot_ffa_army_deploys` fails on both mini and Pro with its original three
+seeds and30-minute threshold: no elimination on9101, Sardaukar dies30.303
+minutes on9103, Ordos30.633 on9105. The deployment assertions pass:19 waves,
+four by minute8, largest70 units, at most one consecutive sampled minute with
+80% of the reserve inside. No seed, threshold, army assertion or victory condition
+was changed.
+
+The exact same-source FFA control uses the same160/Fortress/20000-army/40000-city
+setup, game options and seeds, `default@trooper-support-{off,on}`. In9105 OFF,
+Ordos dies21.218 minutes and Atreides27.538; ON Ordos survives30.633. At minute20
+Ordos ON has14200 army value,43 units and320 structures versus OFF0,0,53.
+Its final kill value is102900 versus41200. It orders a WOR at5.42 minutes and
+21 ordinary Trooper orders beginning10.14, versus neither OFF. These are measured
+survival/production differences, not the old idle-garrison stall or proof that
+every extra kill came from troops. Evidence is in
+`population-ffa-{off,on}-cause/`, receipts
+`20261105T044345-quant-population-ffa-off-cause-90b233` and
+`20261105T044435-quant-population-ffa-on-cause-b334c7`.
+
+The extra replenishment-core veto in `d2d41b0f` made canonical QB-v-QE time out.
+The SP-saving change alone did not cure it (`22de4547`); the veto and its now-unused
+helper were removed in846c1336 rather than stacking more rules. The final canonical
+win above is the measured result after that rollback. Main owns the FFA test
+decision and final full-suite/reinstall; no release or Air validation is claimed
+here. The Air was unreachable during this cluster acceptance.
+
 ### Initial paired measurement and priority correction
 
 The first candidate (`35c3a7ca`, 72 games per arm) was **not an adequate recruitment

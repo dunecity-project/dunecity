@@ -385,9 +385,9 @@ StorageCapacity=1
 # Fund Custom Brutal powered non-city production with the established spice policy.
 # Campaigns, engine power requirements and unit-mix learning are unchanged.
 FundedClassicProduction=1
-# Experimental: WOR rocket infantry for observed air/armour and army escorts in Custom games.
-# Shares the existing infantry quota and protects economy/working capital; at most 18 troopers.
-# Provisional ON for shared-candidate acceptance; revert unless its paired outcome gate passes.
+# DuneCity-content Custom games: WOR rocket infantry for air/armour and army escorts.
+# Six standing; reactive air floor up to18. Infantry strategy retains its existing quota.
+# ON at Stefan's direction despite unproven adoption/Starport acceptance; see HANDOVER.
 TrooperSupport=1
 # Launchers back off two extra tiles (0 = old spacing, bounded to 0..2).
 # Hunt stand-off remains inside firing range; other unit types are unchanged.

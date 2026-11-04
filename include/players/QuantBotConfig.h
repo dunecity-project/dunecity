@@ -293,9 +293,9 @@ struct QuantBotConfig {
         /// funded spice policy for workers, production and capacity, not campaigns.
         /// Engine power requirements and the existing mix learning remain unchanged.
         bool fundedClassicProduction;
-        /// Custom games: bounded rocket infantry for observed aircraft/armour and
-        /// army escorts, using the existing infantry share and economy reserves.
-        /// Experimental, provisionally on for shared-candidate acceptance only.
+        /// DuneCity-content Custom games: bounded rocket infantry for aircraft,
+        /// armour and escorts, using existing infantry shares/economy reserves.
+        /// Default ON at Stefan's direction despite unproven acceptance; see HANDOVER.
         bool trooperSupport;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.

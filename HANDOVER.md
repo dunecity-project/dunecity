@@ -1,3 +1,56 @@
+## 2026-11-05 — QuantBot WOR and troopers (OMP QuantTroopers, unreleased)
+
+- **TrooperSupport stays ON at Stefan's explicit direction knowing it is
+  unproven**, confirmed by Main. Do not describe this as an all-green acceptance
+  or silently turn it OFF based on the earlier provisional comment.
+- DuneCity-content Custom games only; ordinary Vanilla/Classic/Dune2R/campaign
+  recruitment is unchanged. One legal WOR follows actual Heavy Factory/core
+  production, positive income and real power including queued consumers. A
+  population-locked Starport does not veto it; first legal profitable-SP saving
+  is protected under the switch. Six standing troops, armour demand up to9 and
+  reactive aircraft floor up to18 use existing army/defence/unitRole systems.
+  Infantry strategy retains its quota; free crew and pending squads count.
+- Runtime846c1336 includes the actual-power/generic-service-bypass correction
+  for the installed10cc315a WOR blackout, protected first-WOR and floor-order
+  capital allocation before optional Palace/repeat growth, funded infantry
+  headroom, and the existing human-lease guard in retreat. Saboteur orders are
+  never changed. No new saved state, save/protocol bump or victory rule.
+- Final same-source OFF/ON audit:160 games/240 house pairs, no errors or
+  fingerprint exclusions, PC pairs retained. **Adoption84.4% funded low/medium
+  spice (81/96),51.25% overall legal non-At houses (82/160), none-spice1/64.**
+  Paid troops0→1431; exact Trooper Orni kills67→93; own Orni losses732→618;
+  enemy Orni kills638→544. The all-legal clear-majority target is not established.
+- **Open issue for the next build: missing Starports15/109→31/111 in the
+  matrix.** Hard8→15, Brutal7→16; Brutal conditional game-rate CI[+.025,+.192],
+  sign0 better/5 worse,p2=.0625. Exposure changes leave the guardrail unmeasured,
+  not passed. Keep this visible despite the explicit ON decision.
+- Pinned846 named gates: **17/18 PASS**, receipt
+  `20261105T054156-quant-supplier-final-gates-0f3d65`. Paid WOR+6 troops as all five
+  recruitable houses plus a genuine Harkonnen Trooper lethal hit on an attacking
+  Orni passes (Pro186.8s); config hash/roundtrip, both AAA gates, strategy,
+  recovery, performance, city/police/civic/growth/air/no-spice probes pass.
+  Scenario11/11 passes, including QB-v-QE31.66m and replay. Performance Pro229.7s.
+- **Unchanged mandatory FFA fails its30m elimination condition on mini+Pro**:
+  seed9101 none,9103 Sardaukar30.303m,9105 Ordos30.633m. Deployment is healthy:
+  19 waves, four by8m, largest70; reserve-inside stretches≤1 minute. Exact FFA
+  OFF/ON9105: Ordos dies21.218m OFF versus30.633m ON; at20m its army/structures
+  are0/53 OFF versus14200/320 ON, final kill value41200→102900. ON orders a WOR
+  and21 Trooper orders, OFF neither. Main decides the FFA test; it was not loosened.
+- d2d41b0f's replenishment-core veto caused canonical timeouts; SP saving alone
+  did not fix them.846c1336 removes that veto/helper per Main, retaining SP
+  saving. No additional priority rule was stacked.
+- Strategy calibration keeps all primary assertions, other mixes' original
+  three-seed means and the strict positive/300s gate. TrikeSwarm uses the full
+  predeclared12-seed mean(+379bps); frozen ablations attribute its old triple to
+  accepted launcher spacing, not troopers (Vanilla). Three isolated processes
+  and scheduler weight3 give a Pro pass237.0s at2899cf2a; current846 Mini68.9s.
+  Three subprocess lifecycle tests and16 audit-contract tests passed.
+- Full tables, house counts, causal logs and immutable receipts:
+  `docs/quantbot-dunecity-audit.md`; outputs
+  `quant-troopers-20261104/supplier-{matrix,ladder,factions}-{off,on}/` and
+  `population-ffa-{off,on}-cause/`. Main owns final full suite and Air reinstall;
+  Air was unreachable, so no post-fix Air/deployment verification is claimed.
+
 ## 2026-11-05 — Staging suite triage (OMP SuiteTriage, unreleased)
 
 - Civ Wars' failure classifier mistook normal occupied-refinery rerouting for

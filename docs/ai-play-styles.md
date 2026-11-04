@@ -368,6 +368,17 @@ under `outputs/quant-troopers-20261104/strategy-ablate-{kite,deviated,funded}/`;
 the reproducible frozen driver is beside them. These are causal diagnostic
 measurements, not substitutes for the complete CTest or its platform time limit.
 
+The canonical runner uses three isolated native processes (`--strategy-workers 3`
+in the CMake registration), never
+concurrent worlds sharing the engine's globals. Each seed retains its own profile
+and log. Failure or timeout terminates and reaps the other active children.
+The cluster scheduler accounts for this CTest as weight3. The complete gate
+passed on the Pro in237.0 seconds at `2899cf2a`, receipt
+`20261105T033725-quant-strategy-accounted-three-b81e4d`, inside its unchanged
+300-second deadline. Three subprocess lifecycle tests cover concurrency, failure
+cleanup and timeout cleanup; these pass independently of native game outcomes.
+
+
 ### 6.3 Experiments
 
 All of these are CY starts on the six bundled maps, Hard, all three house pairs, both sides, against BASE.
