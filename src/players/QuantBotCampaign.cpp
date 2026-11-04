@@ -250,7 +250,7 @@ bool QuantBot::reserveDamagedUnitForRepair(const UnitBase* unit) const {
     // Easy/Medium campaign troops cannot recover at home without a repair yard.
     // Keep them available for combat instead of withdrawing and excluding them
     // from every later wave. Explicit retreat/manual orders remain protected.
-    return unit->isBadlyDamaged()
+    return unit->isBadlyDamaged() && !declinesUnfundedRepair(unit)
         && !(currentGame && isCampaignGameType(currentGame->gameType)
             && (difficulty==Difficulty::Easy || difficulty==Difficulty::Medium) && !getHouse()->hasRepairYard());
 }

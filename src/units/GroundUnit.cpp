@@ -25,11 +25,14 @@
 #include <SoundPlayer.h>
 
 #include <players/HumanPlayer.h>
+#include <players/QuantBot.h>
 
 #include <structures/RepairYard.h>
 #include <units/Carryall.h>
 #include <units/HarvesterHelpers.h>
 #include <units/UnitMovementPolicy.h>
+
+#include <algorithm>
 
 GroundUnit::GroundUnit(House* newOwner) : UnitBase(newOwner) {
 
@@ -119,7 +122,12 @@ void GroundUnit::checkPos() {
             && UnitOrderPolicy::mayAutoRepair(attackMode) // a holding unit stays where it was put
             && !forced ) { // Stefan - Allow units with targets to be picked up for repairs
 
-        doRepair();
+        const bool unfunded = std::any_of(owner->getPlayerList().begin(), owner->getPlayerList().end(),
+            [&](const auto& player) {
+                const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+                return bot && bot->declinesUnfundedRepair(this);
+            });
+        if (!unfunded) doRepair();
 
     }
 

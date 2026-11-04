@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
 
 // QuantBot strategies (docs/ai-play-styles.md, "Strategies"): the pick is a pure function of the
@@ -421,6 +422,68 @@ TEST_CASE("Launcher extra kite distance is independently loaded saved bounded an
         REQUIRE(restored.force.trooperSupport == QuantBotConfig{}.force.trooperSupport);
     }
     std::filesystem::remove(path);
+}
+
+TEST_CASE("Exhausted army dispatch defaults on and independently round-trips both hashed states",
+          "[ai][army][recovery][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.exhaustedArmyDispatch);
+    REQUIRE(defaults.force.launcherKiteExtraDistance == 2);
+    REQUIRE(defaults.force.trooperSupport);
+    REQUIRE(defaults.deviatedHarvesterEarlyReturn);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-exhausted-army-test.ini";
+    const auto savedPath = std::filesystem::temp_directory_path() / "quantbot-exhausted-army-saved-test.ini";
+    const auto savedBytes = [&](const QuantBotConfig& config) {
+        REQUIRE(config.save(savedPath.string()));
+        std::ifstream ini(savedPath, std::ios::binary);
+        REQUIRE(ini.good());
+        return std::string(std::istreambuf_iterator<char>(ini), std::istreambuf_iterator<char>());
+    };
+
+    for (const bool customized : {false, true}) {
+        QuantBotConfig baseline = defaults;
+        if (customized) {
+            baseline.force.waveReadinessPercent = 83;
+            baseline.force.launcherKiteExtraDistance = 1;
+            baseline.force.trooperSupport = false;
+            baseline.deviatedHarvesterEarlyReturn = false;
+        }
+        QuantBotConfig config = baseline;
+        const auto enabledHash = baseline.getConfigHash();
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\n";
+        }
+        REQUIRE(config.applyOverrides(path.string()));
+        REQUIRE(config.force.exhaustedArmyDispatch);
+        REQUIRE(config.getConfigHash() == enabledHash);
+
+        for (const bool enabled : {false, true, false}) {
+            QuantBotConfig expected = baseline;
+            expected.force.exhaustedArmyDispatch = enabled;
+            const auto expectedBytes = savedBytes(expected);
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\nExhaustedArmyDispatch="
+                    << (enabled ? "true" : "false") << '\n';
+            }
+            REQUIRE(config.applyOverrides(path.string()));
+            REQUIRE(config.force.exhaustedArmyDispatch == enabled);
+            REQUIRE((config.getConfigHash() == enabledHash) == enabled);
+            REQUIRE(config.getConfigHash() == expected.getConfigHash());
+            // A one-key override must preserve every other serialized option byte.
+            REQUIRE(savedBytes(config) == expectedBytes);
+
+            QuantBotConfig restored;
+            restored.force.exhaustedArmyDispatch = !enabled;
+            REQUIRE(restored.applyOverrides(savedPath.string()));
+            REQUIRE(restored.force.exhaustedArmyDispatch == enabled);
+            REQUIRE(restored.getConfigHash() == expected.getConfigHash());
+            REQUIRE(savedBytes(restored) == expectedBytes);
+        }
+    }
+    std::filesystem::remove(path);
+    std::filesystem::remove(savedPath);
 }
 
 TEST_CASE("More rocket turrets defaults off and is independent loaded saved and hashed", "[ai][defence][config]") {

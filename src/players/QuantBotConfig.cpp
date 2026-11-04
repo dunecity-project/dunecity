@@ -366,6 +366,7 @@ QuantBotConfig::QuantBotConfig() {
     force.fundedClassicProduction = true;
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
     force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
+    force.exhaustedArmyDispatch = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -682,6 +683,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
         iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
         iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
+        iniFile.setBoolValue("Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -824,6 +826,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.trooperSupport = iniFile.getBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
     force.launcherKiteExtraDistance = std::clamp(iniFile.getIntValue(
         "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
+    force.exhaustedArmyDispatch = iniFile.getBoolValue(
+        "Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1123,6 +1127,7 @@ void QuantBotConfig::logSettings() const {
     SDL_Log("StrategicSiteGuards: %d", int(strategicSiteGuards));
     SDL_Log("PoliceFundingRecovery: %d", int(policeFundingRecovery));
     SDL_Log("DeviatedHarvesterEarlyReturn: %d", int(deviatedHarvesterEarlyReturn));
+    SDL_Log("ExhaustedArmyDispatch: %d", int(force.exhaustedArmyDispatch));
     SDL_Log("%s", "");
 
     SDL_Log("=== ARMY RECOVERY (Custom Hard/Brutal, provisional) ===");
@@ -1325,6 +1330,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("fundedClassicProduction", force.fundedClassicProduction);
     addNamed("trooperSupport", force.trooperSupport);
     addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
+    addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);
     configStr += "|/FORCE|";
     addNamed("civWarsStrategy", civWarsStrategy);
     configStr += "|STRATEGY";

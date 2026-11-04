@@ -392,3 +392,7 @@ TrooperSupport=1
 # Launchers back off two extra tiles (0 = old spacing, bounded to 0..2).
 # Hunt stand-off remains inside firing range; other unit types are unchanged.
 LauncherKiteExtraDistance=2
+# Custom noncampaign armies release rebuild-only dispatch/repair holds only when
+# reachable spice, affordable units, income and pending cargo are all exhausted.
+# Manual orders, defence and saboteur ownership are unchanged; 0 keeps legacy holds.
+ExhaustedArmyDispatch=1

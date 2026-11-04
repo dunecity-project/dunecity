@@ -73,6 +73,48 @@ distant enemy does not trigger retreat. The scan uses nearby tile occupants;
 workers, aircraft, human orders, repair and ordinary posted defence contacts
 retain their existing handling.
 
+## Exhausted Custom economies
+
+`[Force Concentration] ExhaustedArmyDispatch=true` is a default-on, hashed
+QuantBot switch (`force.exhaustedArmyDispatch`). It removes rebuild-only waits
+when a Custom army cannot replenish itself. Setting it to `false` retains the
+legacy minimum-wave, repair-yard and repair-reservation behaviour; no seed,
+match timeout or victory condition changes with this switch.
+
+The conservative exhaustion gate requires an active, non-builder-only Custom
+controller outside a campaign, with the switch enabled, and all of the following:
+
+- No harvestable spice reachable by an owned harvester or refinery/dropoff
+  region, including the existing carryall route. A zero periodic resource
+  survey is the no-spice observation; a positive survey is not exhaustion merely
+  because one field is inaccessible.
+- Actual starting and earned credit balances, before rounding, below the
+  cheapest enabled, positive-price, current-tech nonambient unit. Existing
+  builder offers, including Starport quotes, can lower that conservative funding
+  boundary. Cash sufficient for even that cheapest purchase keeps normal pacing.
+- No positive cargo in an owned Harvester or Rebel Harvester, including cargo
+  still on its way home.
+- No possible city tax income: a positive tax rate with either an existing tax
+  base or any owned R/C/I lot inhibits the bypass. Developing lots are protected
+  even before the census reports taxable population; a currently empty wallet
+  is not proof that a city cannot recover.
+
+When these conditions hold, the ordinary Custom whole-army selector may send
+its remaining available ground troops below the six-unit/3,000-credit main-wave
+floor, and `attack()` does not wait for an unaffordable missing repair yard.
+This is not permission to override a tactical withdrawal, emergency defence,
+campaign timing or a human command. Easy's existing standing-army share remains
+its own launch path.
+
+The same gate releases only AI-owned repair work that cannot finish under the
+yard's per-point charging rule: `cash <= (ceil(missing health)-1) * UNIT_REPAIRCOST`.
+Any positive partial last charge still heals the last point. The gate makes damaged
+combat troops available, cancels repair-yard travel and releases unaffordable AI yard occupants;
+the engine's automatic repair decision uses the same owner check so it cannot
+immediately rebook them. Human orders, saboteurs, live/base/posted defenders,
+colony guards and colonist escorts keep their orders and repair authority.
+Campaign repair and dispatch paths are unchanged, even in an empty economy.
+
 ## Whole-army base defence
 
 In Custom Hard/Brutal games, a real attack on any owned building, including a
@@ -169,6 +211,18 @@ include the 80% boundary, minor raids, recovery/resumption, old-save migration,
 ordinary save and scoped observer AI continuation, legal battery sites, and actual
 movement of a large recalled army. Changes to saved state and multiplayer
 behaviour require explicit format/protocol gates.
+
+`quantbot_custom_attack` contains same-runtime OFF/ON/OFF exhausted-economy
+coverage through the actual `exhaustedArmyEconomy()` predicate,
+`declinesUnfundedRepair()`/repair reservation owner, `launchGroundHunt()` and
+`attack()` paths. Its controls retain legacy holds for reachable spice, exact
+cheapest-unit funding (with a fractional-shortfall boundary), pending harvester
+cargo, city tax income and developing lots. It compares actual campaign orders
+across switch states and protects human, defence and saboteur orders. Actual
+repair-yard trips and bay occupants exercise AI-only release, protected human
+and defender occupants, and the engine's automatic-repair no-rebooking rule.
+These fixture assertions describe coverage, not an unrun full-match or win-rate
+certification.
 
 `quantbot_whole_army_dispatch` checks whole-army building defence for both Hard
 and Brutal in all three postures, including a reserve 47 tiles away, remote

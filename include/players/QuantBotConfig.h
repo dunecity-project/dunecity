@@ -143,7 +143,8 @@ struct QuantBotConfig {
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
     /// CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
-    /// StorageCapacity, FundedClassicProduction, TrooperSupport;
+    /// StorageCapacity, FundedClassicProduction, TrooperSupport, LauncherKiteExtraDistance,
+    /// ExhaustedArmyDispatch;
     /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -299,6 +300,10 @@ struct QuantBotConfig {
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.
         int launcherKiteExtraDistance;
+        /// Default on: Custom noncampaign armies can dispatch without rebuild-only
+        /// holds once reachable spice, affordable units and all income/cargo are exhausted.
+        /// Manual orders, defence and saboteur ownership remain authoritative.
+        bool exhaustedArmyDispatch;
     };
     ForceSettings force;
 

@@ -107,6 +107,9 @@ public:
     /// only by the in-range aircraft candidate filter, which both need for the same
     /// out-of-range release, not by launcher spacing or wave tracking.
     bool managesAutonomousRocketHunt(const UnitBase* unit) const;
+    /// Shared by automatic repair and the AI reservation: an exhausted economy
+    /// cannot finish this AI-owned repair. Explicit human and defence claims win.
+    bool declinesUnfundedRepair(const UnitBase* unit) const;
     void onScriptedReinforcement(const UnitBase* unit);
     void finishTelemetry() override;
     void onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) override;
@@ -1280,6 +1283,12 @@ private:
     /// starting army able to launch, no wave yet) at most its own threshold share of Medium's
     /// limit on this map (docs/ai-scenario-matrix.md, "Difficulty ladder").
     int reachableAttackThreshold(int required) const;
+    bool exhaustedArmyEconomy() const;
+    void releaseExhaustedArmyRepairs();
+    // Derived within one simulation cycle; no orders, RNG or persisted state.
+    mutable Uint32 exhaustedEconomyCycle = std::numeric_limits<Uint32>::max();
+    mutable int64_t exhaustedEconomyCredits = -1;
+    mutable bool exhaustedEconomyResult = false;
     /// Bundling waits until the house could attack: its military value reaches the house
     /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
     /// losses - the reserve keeps to the home rally and defends the base.
