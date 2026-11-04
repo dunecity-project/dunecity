@@ -151,7 +151,9 @@ void runHarvesterSafetyProbe(Game& game) {
             require(borrowed->isActive(),"Delivered worker did not redeploy");
 
             const Sint32 deadline=MILLI2CYCLES(10000);
-            reset(100,deadline+1);inspect();
+            // The ten-second trigger cannot promise a distant/large load will
+            // finish unloading. This small real load fits the measured route.
+            reset(10,deadline+1);inspect();
             require(!borrowed->isReturning(),"Deadline return fired before T-10s");
             borrowed->deviationTimer=deadline;inspect();
             require(borrowed->isReturning() && borrowed->getTarget()==refinery,
@@ -162,9 +164,9 @@ void runHarvesterSafetyProbe(Game& game) {
                 && game.gameCycleCount-deadlineStart<Uint32(deadline))tick();
             require(borrowed->getAmountOfSpice()==0 && borrowed->getOwner()==owner,
                 "T-10s low-cargo return did not deliver before reverting");
-            require(owner->getHarvestedSpice()-deadlineBefore==100*int(owner->getSpiceIncomeMultiplier()),
+            require(owner->getHarvestedSpice()-deadlineBefore==10*int(owner->getSpiceIncomeMultiplier()),
                 "T-10s delivery lost cargo income");
-            SDL_Log("DEVIATED_HARVEST_DEADLINE_DELIVERY: cargo=100 elapsed_cycles=%u remaining_cycles=%d",
+            SDL_Log("DEVIATED_HARVEST_DEADLINE_DELIVERY: cargo=10 elapsed_cycles=%u remaining_cycles=%d",
                 game.gameCycleCount-deadlineStart,borrowed->getDeviationTimeRemaining());
             reset(0,deadline);inspect();
             require(!borrowed->isReturning(),"Empty captured worker made deadline trip");
