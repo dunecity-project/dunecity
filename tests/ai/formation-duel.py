@@ -27,6 +27,8 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from historical_profile import finish_game, scratch_dir
+
 root = Path(__file__).resolve().parents[2]
 # 'none' is the control: plain engine-Hunt waves without a formation (WaveFormation=None).
 # The control and the five kept shapes (the research rounds also played combined, line, wedge, vee, diamond).
@@ -151,7 +153,7 @@ def play(args, scratch, binary, key):
     else:
         append(results / 'waves.csv', KEY + ('shape',) + WAVE_FIELDS, waves)
         append(results / 'games.csv', GAME_FIELDS, [row])
-    shutil.rmtree(out, ignore_errors=True)
+    finish_game(scratch, out, bool(row['error']))
     return row
 
 
