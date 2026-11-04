@@ -63,6 +63,34 @@
 - Added grid-edge unit coverage, MOD18/legacy codec and menu/INI checks, real-engine
   `city_zone_power` and per-lot `--zone-power-continuation saved|off|on` diagnostics.
   `--zone-power-save` writes an explicit opted-in copy without modifying its source.
+- Real save: SHA256 `6717d421…5d7c`, 9882/MOD17, cycle108288/day694.
+  Purple is **Rebels/house7/color7**: produced0/required749, 83 unpowered L1
+  lots (44R/23C/16I), aggregate lot population743. Other houses' live grids did
+  not power any of those lots. The original save is unchanged.
+- Same frozen source35c3a7ca/probe90025b0c continuation, five additional game
+  minutes =120 city days: OFF left all69 surviving lots at L1; ON took all83
+  original lots to L0 at the next scan (+134cycles/2.144s), and emptied the last
+  44 residential house stacks at day703 (+1382cycles/**22.112s**, nine scans).
+  All69 surviving lots remained empty after five minutes; later lot loss was
+  combat, not removal by the vacancy rule.
+- Opted-in copy: `../outputs/purple-zero-power-20261104/save/purple zero power - zones vacate.dls`
+  (SHA256 `965c73cf…31ed9`). Reloaded as9883 with saved_rule1 and no override,
+  then continued one minute successfully. Old installed9882 builds need the
+  patched build to read this copy; setting new-game defaults does not alter an old save.
+- `city_zone_power` passed9.27s[mini], including identical powered off/on
+  trajectories, restored-power regrowth, empty0/0 persistence, live sidebar and
+  rendered owner-specific red/green Power Grid overlay. Removed an obsolete
+  source-text assertion instead of re-pinning it; pinned3494d932 umbrella unit/
+  codec tests passed2.0s[mini].
+- Six twelve-minute no-spice 96×96 QuantBot games (Medium/Hard/Brutal, seed9101,
+  OFF/ON, mini+Pro+Windows PC): paired simulation digests, six house histories
+  and78 minute samples per arm are identical. Power-deficit flags0/6 each,
+  minimum sampled surplus116; all six houses added generation400→500 and grew
+  their cities. Two economy-stall and one empty-bankruptcy flags were unchanged
+  per arm, not newly introduced. Air was held by Stefan's running game.
+- Durable per-lot timing and receipts: `../outputs/purple-zero-power-20261104/`
+  (`save-measurement.json`, `verification.json`, before/after/reload logs and both
+  audit CSV sets). Native commits2cc8017b/13adb50d, textual-test removal3494d932.
 
 ## 2026-11-04 — QuantBot cashes in captured harvesters (OMP DeviatedHarvest, unreleased)
 
