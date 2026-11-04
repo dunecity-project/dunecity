@@ -109,6 +109,24 @@
   New MOD18 writes pace4+damage1+scenery1. Game Rules, defaults and mod rules carry it.
 - Added no-mountain/adjacent/rule-off unit coverage, dense ridge weighting/range,
   hashed/wire/legacy/truncation coverage and Game Rules persistence/viewport checks.
+- Shared native build passed on `ade2e8b7`; combined cluster job
+  `20261104T180249-combined-full-12497d74-66d0e7` passed the real Civ Wars probe
+  (mini86.17s), research probe (mini19.08s), generator tests (mini2.82s), game-command
+  regression (mini15.6s) and menu navigation (mini602.1s). On the actual generated
+  129x96 ridge, a test residential lot at(47,24) measured **132 OFF /147 ON**,
+  terrain contribution15, identically at640x480 and1280x720. The ridge is untouched;
+  nearby non-mountain tiles are rock only in this fixture to isolate sand's bonus.
+- Unit scenery cases cover136 without a mountain,137 with one adjacent mountain,
+  136 with the rule off, and152 beside a full3x3 mountain terrain block. The full
+  combined unit run completed1264 passing cases/3skips; its only failed assertion
+  was a second old protocol111 test pin, now corrected to112. No gameplay bypass.
+- Viewed640 standard/family Game Rules screenshots. Moving Remember for new games
+  into the centred footer keeps the extra rule inside the430px family modal and
+  away from corner crests. Evidence: `outputs/mountain-scenery-20261104/`.
+- Stefan's original9882 `notcolonizingsadukar.dls` loaded, resaved9883 and reloaded
+  atcycle145097 with sceneryOFF. MOD18 suffix`010000000000` confirms Normal/damage0/
+  scenery0; this is load compatibility, not a claim of byte-identical derived city
+  state. Receipt: `outputs/sardaukar-not-colonizing-20261104/compatibility.json`.
 
 ## 2026-11-04 — Development builds identify themselves as dev (OMP DevVersion, unreleased)
 
