@@ -101,12 +101,13 @@ that opposing houses in one game are independent. Mixed-host loop timings are di
 AI building-placement CPU and frame/FPS gates come from the mandatory performance tests, not these
 noisy numbers. No-formation remains the control; saboteur orders and human-order leases are untouched.
 
-## Rocket-infantry support (2026-11-04, unreleased candidate)
+## Rocket-infantry support (2026-11-05, unreleased candidate)
 
 `[Force Concentration] TrooperSupport` is an independent multiplayer-hashed
-Custom-game switch, provisionally **on** in the shared candidate.
-`trooper-support-off` and `trooper-support-on` compare the same native build.
-Campaign recruitment and all combat-order authority are unchanged.
+**DuneCity-content Custom-game** switch, default **on** in the shared candidate
+at Stefan's request. `trooper-support-off` and `trooper-support-on` compare the
+same native build. Classic, Vanilla and Dune2R recruitment keep their previous
+policy even with the switch on; campaign-mode recruitment is unchanged.
 
 The old ordinary Custom vanilla yard policy deliberately skipped both Barracks
 and WOR unless the bot played the Infantry strategy. City games had a narrower
@@ -120,14 +121,21 @@ difficulty quota remains the infantry budget, not ten additional independent
 shares or a new saved mix slot.
 
 With the switch on, one WOR is desirable per legal house even when existing
-troopers already satisfy its target. A completed Heavy Factory, power, no opening-
-worker shortfall, positive forecast income, and the full founded price plus the
-existing reserves must be available. Projected cash must cover that purchase too.
-The first missing legal WOR prerequisite can supply the lane instead. Existing
-and pending WORs, including Tornie-family Worfinery production, prevent duplicates.
-The first lane precedes protected repeat city growth and optional factories;
-power, urgent protection and required civics retain priority. Placement, technology,
-house build lists, foundations and working/next-zone cash are never bypassed.
+troopers already satisfy its target. It follows an actual completed Heavy Factory
+and, where its technology and import catalogue exist, an operational Starport.
+Pending factories do not substitute for either. The house needs positive forecast
+income, no opening-worker shortfall, a legal site and enough actual power for
+all queued consumers plus the new building. A priced future generator is not
+working generation.
+
+The first missing legal WOR prerequisite can supply the lane instead; existing
+or pending WORs prevent duplicates. Positive income can select protected savings
+before the short forecast covers the purchase. Actual queueing still requires the
+founded building price and existing strategic/economy, city-working and next-zone
+cash. It does not demand a full-parallel-production cash forecast. The first lane
+precedes repeat growth and optional factories, but actual core protection, power
+recovery and required civics retain priority. It uses its dedicated funding path,
+not the generic protected-service shortcut that could occupy a recovery yard.
 
 The ordinary mix keeps **six standing troopers**, or the greater of remembered
 armour demand (one per 600 credits, at most nine) and effective visible aircraft
@@ -141,9 +149,17 @@ ceiling rather than being clipped to the ordinary mix's small escort count.
 All orders still obey cash, military-value and engine unit caps. Real troops,
 including existing crew, and pending single/three/five-man offers count together;
 several producers cannot each claim a fresh allowance. The WOR chooses an enabled
-affordable ordinary offer, preferring lower price per deployed trooper. Existing
-army, base/harvester-defence and unitRole systems own their orders. No controller,
-saboteur order, human-order lease, save state or protocol field is added.
+affordable ordinary offer, preferring lower price per deployed trooper. An
+operational WOR reserves its missing floor's military-cap space and next troop's
+cash against all other military producers, including Starport bargains. Only
+genuinely funded headroom is charged as unbuilt infantry in the vehicle plan;
+unfunded future troops are not treated as an already-existing army.
+
+Existing army, base/harvester-defence and unitRole systems own troop orders.
+The real-engine fixture also exposed and corrected a pre-existing retreat path
+that ignored human leases: `retreatAllUnits()` now uses the existing
+`humanControls()` guard. Saboteurs remain excluded. No controller, new saved
+state or protocol field is added.
 
 ### Initial paired measurement and priority correction
 

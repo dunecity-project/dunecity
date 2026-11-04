@@ -314,6 +314,7 @@ inline void availabilityAndBudgetGates(World& world) {
     const int starports = world.owner->numItem[Structure_StarPort];
     world.owner->numItem[Structure_StarPort] = 0;
     capped.itemCount[Structure_StarPort] = 1;
+    capped.starportMarketAvailable = true; // This control tests an existing catalogue, not the fresh world's empty one.
     blocked(world, capped, "no_standing_starport_despite_pending_port");
     capped.starportMarketAvailable = false;
     independent(capped, "absent_import_catalogue_does_not_remove_wor");

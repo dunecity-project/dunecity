@@ -44,6 +44,67 @@ sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import copy_revisions, discard_profile_assets, prune_runs  # noqa: E402
 
 
+def run_strategy_processes(command, runs, workers, timeout):
+    """Independent native processes; every run owns its profile, cwd and log.
+
+    The canonical CTest reserves three scheduler slots. Failed or timed-out
+    children stop and reap their siblings before the exception reaches CTest.
+    """
+    import concurrent.futures
+    import threading
+    lock = threading.Lock()
+    active = set()
+    stopping = False
+
+    def run(case):
+        case['cwd'].mkdir(parents=True, exist_ok=True)
+        with case['log'].open('w') as log:
+            with lock:
+                if stopping:
+                    raise RuntimeError('Strategy batch cancelled after another seed failed')
+                process = subprocess.Popen(command, cwd=case['cwd'], env=case['env'],
+                                           stdout=log, stderr=subprocess.STDOUT)
+                active.add(process)
+            try:
+                try:
+                    code = process.wait(timeout=timeout)
+                except BaseException:
+                    process.kill()
+                    process.wait()
+                    raise
+                if code:
+                    raise subprocess.CalledProcessError(code, command)
+            finally:
+                with lock:
+                    active.discard(process)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = []
+        try:
+            for case in runs:
+                futures.append(pool.submit(run, case))
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
+        except BaseException:
+            with lock:
+                stopping = True
+                siblings = list(active)
+            for process in siblings:
+                try:
+                    process.terminate()
+                except ProcessLookupError:
+                    pass
+            for process in siblings:
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            for future in futures:
+                future.cancel()
+            raise
+
+
 def windows_argv(command):
     """Split a Windows command line exactly as the MSVC runtime does."""
     from ctypes import wintypes
@@ -274,6 +335,8 @@ parser.add_argument('--strategy-margin-seeds', default='11,22',
 parser.add_argument('--strategy-trike-margin-seeds', default='',
                     help='Further predeclared TrikeSwarm calibration seeds; play its unchanged TankMass opponent '
                          'and Learned reference only, extending that mix mean without repeating unrelated games')
+parser.add_argument('--strategy-workers', type=int, choices=range(1, 4), default=1,
+                    help='Independent strategy seed processes (CTest uses 3 and reserves 3 cluster slots)')
 parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192, 256),
                     help='Formation duel: a generated mirrored Random Skirmish 1v1 of this size, Fortress bases and '
                          '20,000-credit armies, two QuantBots (--enemy-difficulty) until one is eliminated')
@@ -818,9 +881,25 @@ if args.scenario:
 if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
 env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
-with (out/'run.log').open('w') as log:
-    subprocess.run([str(binary),'--window','--showlog'],cwd=out,env=env,
-                   stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
+if args.strategy_probe:
+    extra_seeds = [int(seed) for seed in args.strategy_margin_seeds.split(',') if seed.strip()]
+    trike_seeds = [int(seed) for seed in args.strategy_trike_margin_seeds.split(',') if seed.strip()]
+    all_seeds = [args.seed] + extra_seeds + trike_seeds
+    if len(set(all_seeds)) != len(all_seeds):
+        raise ValueError('Strategy seeds must be distinct for independent samples and isolated profiles')
+    strategy_runs = [dict(cwd=out, env=env, log=out/'run.log')]
+    for extra, trikes_only in [(seed, False) for seed in extra_seeds] + [(seed, True) for seed in trike_seeds]:
+        profile = out/f'profile-seed{extra}'
+        atexit.register(discard_profile_assets, profile)
+        strategy_runs.append(dict(cwd=out/f'strategy-seed{extra}', log=out/f'run-seed{extra}.log',
+            env=dict(env, DUNECITY_USERDIR=str(profile), BALANCE_SEED=str(extra), BALANCE_STRATEGY_SECTIONS='3',
+                     BALANCE_STRATEGY_MARGIN_ONLY='1', BALANCE_STRATEGY_TRIKES_ONLY=str(int(trikes_only)))))
+    run_strategy_processes([str(binary), '--window', '--showlog'], strategy_runs,
+                           args.strategy_workers, args.wall_timeout)
+else:
+    with (out/'run.log').open('w') as log:
+        subprocess.run([str(binary),'--window','--showlog'],cwd=out,env=env,
+                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
 run_lines = (out/'run.log').read_text(errors='replace').splitlines()
 results = [line for line in run_lines if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')
@@ -883,18 +962,8 @@ if args.strategy_probe:
                 if only_mix is None or fields['mix'] == only_mix:
                     margins[fields['mix']].append(int(fields['margin_bps']))
     read_margins(out/'run.log')
-    extra_seeds = [int(seed) for seed in args.strategy_margin_seeds.split(',') if seed.strip()]
-    trike_seeds = [int(seed) for seed in args.strategy_trike_margin_seeds.split(',') if seed.strip()]
     for extra, trikes_only in [(seed, False) for seed in extra_seeds] + [(seed, True) for seed in trike_seeds]:
-        profile = out/f'profile-seed{extra}'
-        atexit.register(discard_profile_assets, profile)
-        extra_log = out/f'run-seed{extra}.log'
-        with extra_log.open('w') as log:
-            subprocess.run([str(binary),'--window','--showlog'],cwd=out,
-                           env=dict(env,DUNECITY_USERDIR=str(profile),BALANCE_SEED=str(extra),BALANCE_STRATEGY_SECTIONS='3',
-                                    BALANCE_STRATEGY_MARGIN_ONLY='1', BALANCE_STRATEGY_TRIKES_ONLY=str(int(trikes_only))),
-                           stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
-        read_margins(extra_log, 'TrikeSwarm' if trikes_only else None)
+        read_margins(out/f'run-seed{extra}.log', 'TrikeSwarm' if trikes_only else None)
     seeds = 1 + len(extra_seeds)
     weak = []
     for mix, values in sorted(margins.items()):

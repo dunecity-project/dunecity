@@ -1089,6 +1089,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --strategy-probe --repeatable
             --mod vanilla --seed 486409243 --no-ai-telemetry --path-workers 1
             --strategy-margin-seeds 11,22 --strategy-trike-margin-seeds 33,44,55,66,77,88,99,111,122
+            --strategy-workers 3
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 64x64 - Four Chambers.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/strategy-probe)
         set_tests_properties(quantbot_strategy PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
