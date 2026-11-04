@@ -125,20 +125,31 @@
   so missing core production also kept the colonisation gate closed.
 - Hashed/default-on **CityProductionPrerequisites** reserves the first missing
   prerequisite instead, sharing one plot when both future buildings need it.
+  Already standing/queued suppliers no longer reserve another speculative plot:
+  exact-digest Medium replays showed second-HF plots excluding every demanded
+  zone despite 124–196 free rock tiles and no need for another production line.
   Existing placement safety, market and colony rules remain.
-- The continuations exposed a second allocation loop after settlement: zoning,
-  power and imports repeatedly spent receipts before the first Heavy Factory's
-  full quote accumulated. **CityConstructionCapital** now uses its ordinary
-  shared reservation below that quote only with **CityProductionPrerequisites**
-  in a seeded Hard/Brutal tax city with multiple yards, a standing Starport and
-  legal available technology, when forecast net income covers the founded quote
-  plus queued debt. Existing seed, power and defence gates remain; single-yard,
-  weak-income, Easy/Medium and viable-spice budgets are unchanged.
+- The continuations exposed a separate allocation loop: zoning, power and imports
+  repeatedly spent receipts before the first Heavy Factory's full quote accumulated.
+  Independent hashed **CityFirstFactorySaving**, experimental/default **off**, lets
+  **CityConstructionCapital** reserve below that quote only in a seeded Hard/Brutal
+  multi-yard tax city with a standing Starport, available technology and enough
+  forecast net income for the founded quote plus queued debt. Ordinary affordable
+  protection remains on; seed/power/defence, single-yard and weak-income gates remain.
 - Added real-engine negative-control coverage for legal-but-reserved light sites,
   reopened zoning, all four difficulties and the subsequent affordable Heavy
   Factory, plus config load/save/hash coverage. Save investigation logging can
   distinguish physical legal origins from AI reservations without advancing a
   planner (`BALANCE_BUILD_SITE_AUDIT=HOUSE` on a performance continuation).
+- Pre-split source `6aa02856` passed all eight mandatory AI/performance regressions.
+  Its 600-second save control stayed at 33 structures; geometry+saving reached 70,
+  ordered the Starport MCV at 50.304 s (deployed 183.504 s), and ordered/built the
+  Heavy Factory at 187.904/223.104 s. The combined 48-game matrix improved Hard/
+  Brutal stalls 6→2 and bankrupt queues 6→4, but dispatches fell 41→31. The 24-game
+  paired ladder lost kill value (322380→266600 in Hard/Brutal) and a stronger-side
+  win (8→7 of 12), so funding is not enabled by default. Evidence and exact case
+  identities: `outputs/sardaukar-not-colonizing-20261104/combined-audit-evidence.json`.
+
 
 ## 2026-11-04 — Civilization Wars rock lanes and defended sand-front cities (OMP CivWarsLayout, unreleased)
 

@@ -512,6 +512,7 @@ int runCampaignBalanceProbe() {
                             .set("CityGrowthPower",f.cityGrowthPower).set("CityPowerSizing",f.cityPowerSizing)
                             .set("CityOpeningCapital",f.cityOpeningCapital).set("CityConstructionCapital",f.cityConstructionCapital)
                             .set("CityProductionPrerequisites",f.cityProductionPrerequisites)
+                            .set("CityFirstFactorySaving",f.cityFirstFactorySaving)
                             .set("ThreatTurrets",f.threatTurrets).set("MoreRocketTurrets",f.moreRocketTurrets)
                             .set("CityStarportSupply",f.cityStarportSupply).set("StorageCapacity",f.storageCapacity));
                     }

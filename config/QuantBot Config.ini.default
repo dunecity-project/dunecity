@@ -361,13 +361,16 @@ CityPowerSizing=1
 # Viable spice economies retain normal budgets; only optional MCVs/producer upgrades are gated.
 # Military production and required power/supply are unchanged.
 CityOpeningCapital=1
-# Hard/Brutal: protect a seeded tax city's first Heavy Factory from bargains.
-# Below-quote saving also requires CityProductionPrerequisites, multiple yards,
-# and forecast net income covering the founded quote plus queued debt.
+# Hard/Brutal: protect a seeded tax city's already affordable first Heavy Factory.
+# Below-quote saving requires the separate opt-in CityFirstFactorySaving.
 CityConstructionCapital=1
-# Reserve the missing production prerequisite, not the unavailable factory it unlocks.
-# Prevent future factory/repair plots from excluding their own Light Factory.
+# Reserve the first missing production prerequisite, not the factory it unlocks.
+# Standing or queued suppliers do not reserve another speculative plot.
 CityProductionPrerequisites=1
+# Experimental: below-quote first-HF saving in seeded Hard/Brutal multi-yard tax cities.
+# Requires forecast net income covering the founded quote plus queued debt.
+# Default off: the combined geometry/saving trial failed combat and ladder gates.
+CityFirstFactorySaving=0
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
 # Experimental 3-rocket baseline (4 for Hard+ at 16 structures), with a full income budget.

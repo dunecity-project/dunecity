@@ -312,6 +312,33 @@ TEST_CASE("City production prerequisites default on and are loaded saved and has
     std::filesystem::remove(path);
 }
 
+TEST_CASE("City first-factory saving is opt-in and independently loaded saved and hashed", "[ai][city][config]") {
+    QuantBotConfig config;
+    REQUIRE(config.force.cityProductionPrerequisites);
+    REQUIRE_FALSE(config.force.cityFirstFactorySaving);
+    const auto disabledHash = config.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-first-factory-saving-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCityFirstFactorySaving=true\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE(config.force.cityFirstFactorySaving);
+    REQUIRE(config.force.cityProductionPrerequisites);
+    REQUIRE(config.getConfigHash() != disabledHash);
+    const auto enabledHash = config.getConfigHash();
+    config.force.cityProductionPrerequisites = false;
+    REQUIRE(config.getConfigHash() != enabledHash);
+    config.force.cityProductionPrerequisites = true;
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.force.cityFirstFactorySaving);
+    REQUIRE(restored.force.cityProductionPrerequisites);
+    REQUIRE(restored.getConfigHash() == enabledHash);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Storage capacity defaults on and is loaded saved and hashed", "[ai][city][config][storage]") {
     QuantBotConfig config;
     REQUIRE(config.force.storageCapacity);

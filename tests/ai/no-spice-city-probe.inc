@@ -523,14 +523,18 @@ void runNoSpiceCityProbe(Game& game) {
             const Pass legacy=marketDecide(false,factoryPrice);
             require(ordered(legacy,Unit_Quad) && !ordered(legacy,Structure_HeavyFactory),
                 "First-factory negative control did not divert affordable factory cash into imports");
-            config->force.cityProductionPrerequisites=false;
+            config->force.cityFirstFactorySaving=false;
             const Pass shortCash=marketDecide(true,factoryPrice-1);
             require(!ordered(shortCash,Structure_HeavyFactory) && ordered(shortCash,Unit_Quad),
                 "An unaffordable first factory withheld working cash from ordinary imports");
-            config->force.cityProductionPrerequisites=true;
+            config->force.cityFirstFactorySaving=true;
             const Pass saving=marketDecide(true,factoryPrice-1);
             require(!ordered(saving,Structure_HeavyFactory) && port->getProductionQueueSize()==0,
                 "A solvent multi-yard city spent its first-factory savings on imports");
+            config->force.cityProductionPrerequisites=false;
+            require(marketDecide(true,factoryPrice-1).zones==0 && port->getProductionQueueSize()==0,
+                "The independent first-factory saving switch required the geometry switch");
+            config->force.cityProductionPrerequisites=true;
             const auto allStructures=structureList;
             for (auto* structure:allStructures)
                 if (structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard
@@ -691,6 +695,14 @@ void runNoSpiceCityProbe(Game& game) {
                 "The prerequisite consumed both future factory footprints");
             const Pass heavy=decide(3000,10000);
             require(ordered(heavy,Structure_HeavyFactory),"The unlocked affordable Heavy Factory was not ordered");
+            planPlots(false);
+            require(std::any_of(bot->cityProductionPlots.begin(),bot->cityProductionPlots.end(),
+                [](const auto& plot) { return plot.item==Structure_HeavyFactory; }),
+                "Queued-factory negative control did not reserve another speculative factory plot");
+            planPlots(true);
+            require(std::none_of(bot->cityProductionPlots.begin(),bot->cityProductionPlots.end(),
+                [](const auto& plot) { return plot.item==Structure_HeavyFactory; }),
+                "A queued Heavy Factory still reserved another speculative factory plot");
             SDL_Log("CITY_PRODUCTION_PREREQUISITES_PASS: off blocks %d legal light sites; on unlocks light/growth on all difficulties, then heavy",rawLightSites);
         } catch (...) {
             restore();throw;

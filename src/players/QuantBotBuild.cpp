@@ -468,6 +468,9 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
         for (Uint32 item:{Structure_HeavyFactory,Structure_RepairYard}) {
             if (!data[item][houseID].enabled || data[item][houseID].techLevel>getHouse()->getTechLevel()) continue;
             if (botConfig().force.cityProductionPrerequisites) {
+                // A standing or queued supplier has already claimed its space.
+                // Reserving its next copy can exclude every demanded city lot.
+                if (pass.itemCount[item]>0) continue;
                 // Reserve the next missing link, not two future buildings that
                 // cannot exist without it. On the Sardaukar save, the heavy and
                 // repair plots excluded every site for their Light Factory.
@@ -3266,7 +3269,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // A settled, solvent multi-yard city can fund this one missing
             // supplier inside the ordinary forecast. Without the bounded
             // claim, imports repeatedly spend its receipts before the quote.
-            const bool fundedBootstrap=botConfig().force.cityProductionPrerequisites && pass.cityYards>1
+            const bool fundedBootstrap=botConfig().force.cityFirstFactorySaving && pass.cityYards>1
                 && pass.forecastNetIncome>=candidate.price+candidate.foundationCost+pass.queuedProductionCost;
             if (fundedBootstrap) candidate.reason="funded_first_heavy_bootstrap";
             else { candidate.score=0;candidate.reason="first_heavy_not_affordable"; }

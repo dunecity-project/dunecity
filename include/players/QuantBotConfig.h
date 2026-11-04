@@ -142,8 +142,8 @@ struct QuantBotConfig {
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
     /// CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
-    /// ThreatTurrets, MoreRocketTurrets, CityStarportSupply, StorageCapacity, FundedClassicProduction,
-    /// TrooperSupport;
+    /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
+    /// StorageCapacity, FundedClassicProduction, TrooperSupport;
     /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -264,13 +264,17 @@ struct QuantBotConfig {
         /// retain their normal budgets; military and required recovery are unchanged.
         bool cityOpeningCapital;
         /// Protect Hard/Brutal's affordable first heavy factory in a seeded tax
-        /// city with a standing Starport. With CityProductionPrerequisites, a
-        /// settled multi-yard city may also save when forecast net income covers
-        /// the full founded quote plus queued debt; seed and recovery gates remain.
+        /// city with a standing Starport. CityFirstFactorySaving optionally
+        /// permits forecast-funded saving; seed, power and recovery gates remain.
         bool cityConstructionCapital;
         /// Reserve a missing production prerequisite before the factory/repair
         /// plot it unlocks, so future footprints cannot exclude their own supplier.
+        /// Standing or queued suppliers do not reserve another speculative plot.
         bool cityProductionPrerequisites;
+        /// Experimental/default off: a seeded Hard/Brutal multi-yard tax city
+        /// may save below its first heavy factory's quote when forecast net
+        /// income covers the founded quote plus all queued production debt.
+        bool cityFirstFactorySaving;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;
