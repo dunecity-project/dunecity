@@ -359,22 +359,22 @@ TEST_CASE("Storage capacity defaults on and is loaded saved and hashed", "[ai][c
     std::filesystem::remove(path);
 }
 
-TEST_CASE("Funded classic production defaults off and is loaded saved and hashed", "[ai][production][config]") {
+TEST_CASE("Funded classic production defaults on and is loaded saved and hashed", "[ai][production][config]") {
     QuantBotConfig config;
-    REQUIRE_FALSE(config.force.fundedClassicProduction);
-    const auto disabledHash = config.getConfigHash();
+    REQUIRE(config.force.fundedClassicProduction);
+    const auto enabledHash = config.getConfigHash();
     const auto path = std::filesystem::temp_directory_path() / "quantbot-funded-classic-production-test.ini";
     {
         std::ofstream ini(path);
-        ini << "[Force Concentration]\nFundedClassicProduction=true\n";
+        ini << "[Force Concentration]\nFundedClassicProduction=false\n";
     }
     REQUIRE(config.applyOverrides(path.string()));
-    REQUIRE(config.force.fundedClassicProduction);
-    REQUIRE(config.getConfigHash() != disabledHash);
+    REQUIRE_FALSE(config.force.fundedClassicProduction);
+    REQUIRE(config.getConfigHash() != enabledHash);
     REQUIRE(config.save(path.string()));
     QuantBotConfig restored;
     REQUIRE(restored.applyOverrides(path.string()));
-    REQUIRE(restored.force.fundedClassicProduction);
+    REQUIRE_FALSE(restored.force.fundedClassicProduction);
     REQUIRE(restored.getConfigHash() == config.getConfigHash());
     std::filesystem::remove(path);
 }

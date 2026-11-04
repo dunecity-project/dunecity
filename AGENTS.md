@@ -125,6 +125,13 @@ ctest --test-dir build -R 'quantbot_all_against_atreides|quantbot_scenario_matri
 40 game minutes on every seed (about 3.5 minutes wall, three games at a time). Do not raise the limit
 or drop a seed to make a change pass; see `docs/quantbot-all-against-atreides.md`.
 
+The sibling `quantbot_all_against_atreides_dune2r` uses the saved **Dune2R,
+non-city** setup, not the vanilla fixture. It requires wins within 40 game minutes
+on all seven fixed seeds, including 906213928 and the saved seed 1702260251.
+The same regex above runs both Atreides gates. It uses three games at a time and
+a 600-second wall limit; do not replace it with vanilla results or force a test
+style that hides a broken default.
+
 `quantbot_scenario_matrix` is the smoke tier of the AI scenario matrix (`docs/ai-scenario-matrix.md`):
 one fast game per kind - a 4-house Random Skirmish free-for-all, a Construction Yard only duel
 (replayed to the same final digest), the reverse All against Atreides (Medium against four Hard must

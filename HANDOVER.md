@@ -1,3 +1,37 @@
+## 2026-11-04 — Restore funded classic Brutal production (OMP BrutalRegression, unreleased)
+
+- `worseaiallagainstatreides.dls` is a detached spectator of **Atreides QuantBot
+  Brutal versus four AI Player Hard**, Dune2R with city mode OFF, seed1702260251.
+  It is not the vanilla regression fixture or a human-versus-four-Brutal game.
+- Powered non-city production skipped the established funded spice policy:
+  shared queue reservations met legacy raw-cash floors, cap-only worker buying
+  and separate capacity rules. The save has99Harvesters,35110combat value versus
+  120710enemy, six idle Heavy Factories and another buying a Harvester.
+- Hashed/default-ON `FundedClassicProduction` reuses the existing funded spice
+  policy consistently for CustomBrutal non-campaign/non-city production and
+  worker/refinery/factory/MCV capacity. Real power rules and mix learning are
+  preserved; city/campaign/vanilla policies and human-order authority are not
+  changed. No saboteur-order, victory or save-migration changes.
+- Same frozen6aa02856 binary: OFF0W/4L/3T versus ON7W/0L/0T on seven seeds;
+  wins29.79–35.29min. Native864 is already0W/6L/1T. The rejected HF-only fix is
+  0W/7 both arms. No historical first-bad commit is claimed.
+- Matched original-save+60s restores one Launcher, suppresses the extra Harvester
+  order, retains6CY versus3 and finishes with27750combat value versus26000.
+  It does not prove an eventual save victory or greater total minute output.
+- Final-policy paired city audit16games/arm,48Hard/Brutal houses: matching inputs,
+  binary/source fingerprints and state digests; scores, armies, attacks, power,
+  detectors and storage losses all identical.
+- Adds mandatory `quantbot_all_against_atreides_dune2r`: seven fixed seeds,
+  including906213928/1702260251, all wins within40game-min, three concurrently,
+  600s wall timeout and no forced style. Worst measured35.29 leaves4.71min
+  margin. Original vanilla6×40 gate unchanged; real queue tests fence non-Brutal
+  difficulties. Shared CMake wiring also includes the consented harvester-safety
+  probes for vanilla/DuneCity/Dune2R.
+- Evidence: `outputs/worse-all-v-atreides-20261104/` games/samples/waves,
+  `funded-policy-save-{comparison,provenance}.json`,
+  `full-policy-city-comparison.txt`. Snapshot/runtime verification is recorded
+  in the shared candidate receipts; this entry does not assert an unrun suite.
+
 ## 2026-11-04 — Unpowered zones can become empty lots (OMP ZeroPowerZones, unreleased)
 
 - Power-starved decline explicitly stopped at level 1, and its fixed score -500

@@ -542,12 +542,20 @@ void runSharedSpendingProbe(Game& game) {
                     if(enabled)require(combatQueued(),
                         "Rejected surplus worker swallowed affordable heavy combat production");
                 }
+                for (const auto otherDifficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard}) {
+                    bot->difficulty=otherDifficulty;
+                    reset(1000,0);structureList.remove(yard);
+                    bot->build(10000);
+                    require(heavy->getProductionQueueSize()==0,
+                        "Funded classic production changed a non-Brutal powered economy");
+                }
+                bot->difficulty=QuantBot::Difficulty::Brutal;
                 reset(200,10000);structureList.remove(yard);
                 bot->build(10000);
                 require(heavy->getProductionQueueSize()==0,
                     "Funded classic production bypassed the actual purchase price");
-                SDL_Log("FUNDED_CLASSIC_PRODUCTION_PASS: real off/on low-cash combat, surplus workers, purchase budget");
-            } catch (...) {bot->configOverride=savedConfig;throw;}
+                SDL_Log("FUNDED_CLASSIC_PRODUCTION_PASS: real off/on low-cash combat, surplus workers, purchase budget, Brutal-only scope");
+            } catch (...) {bot->difficulty=QuantBot::Difficulty::Brutal;bot->configOverride=savedConfig;throw;}
             bot->configOverride=savedConfig;
         }
         SDL_Log("SHARED_SPENDING_PASS: exact worker reserve, simultaneous construction, depletion, scarce credits (%s)",game.isCitySimEnabled()?"city":"vanilla");

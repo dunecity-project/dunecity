@@ -288,9 +288,9 @@ struct QuantBotConfig {
         /// production spending. One safe storage project at a time; use a buildable
         /// refinery for its vault when the cheaper Silo is not unlocked yet.
         bool storageCapacity;
-        /// Experimental, default off: powered non-city Custom Brutal games use
-        /// the established funded spice-economy plan for workers and production.
-        /// This does not disable engine power requirements.
+        /// Default on: powered non-city Custom Brutal games use the established
+        /// funded spice policy for workers, production and capacity, not campaigns.
+        /// Engine power requirements and the existing mix learning remain unchanged.
         bool fundedClassicProduction;
         /// Custom games: bounded rocket infantry for observed aircraft/armour and
         /// army escorts, using the existing infantry share and economy reserves.

@@ -149,6 +149,12 @@ digest, reverse All against Atreides, Hard v Easy both sides, a 2v2 multiplayer 
 1/4/9) must pass every check. Never raise the limit or remove seeds to get a change through
 (`docs/quantbot-all-against-atreides.md`, `docs/ai-scenario-matrix.md`).
 
+That regex also runs `quantbot_all_against_atreides_dune2r`: the saved powered,
+non-city Dune2R setup must win on seven fixed seeds within 40 game minutes,
+including 906213928 and 1702260251. Its three-at-a-time run has a 600-second wall
+limit. It tests the shipped default, without a forced play-style override;
+passing the original vanilla test is not a substitute.
+
 They must also pass `ctest --test-dir build -R '^quantbot_ffa_army_deploys$'`: four QuantBot Brutal
 houses in a generated 4P 160x160 DuneCity free-for-all must launch a wave of 30+ units by minute 8,
 never keep an idle reserve 80%+ inside their own base for more than 6 minutes in a row, and

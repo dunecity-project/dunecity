@@ -835,7 +835,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             set_tests_properties(projectile_${projectile_probe}_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         endforeach()
         foreach(ai_mod IN ITEMS vanilla dunecity Dune2R)
-            foreach(ai_probe IN ITEMS air-defense shared-spending stats)
+            foreach(ai_probe IN ITEMS air-defense shared-spending stats harvester-safety)
                 add_test(NAME quantbot_${ai_probe}_${ai_mod} COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --${ai_probe}-probe --repeatable
                     --level 9 --mod ${ai_mod} --build-dir ${CMAKE_BINARY_DIR}
@@ -1119,6 +1119,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-all-against-atreides.py --jobs 3 --win-minutes 40
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/all-against-atreides)
         set_tests_properties(quantbot_all_against_atreides PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
+        # Saved Dune2R rules are a separate mandatory gate: powered, non-city, no human.
+        # The funded policy wins all seven in 29.79-35.29 min; 40 keeps a 4.71-min margin.
+        # Test defaults, not a forced ON style. Keep this addition below ten real minutes.
+        add_test(NAME quantbot_all_against_atreides_dune2r COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/scenario-matrix.py --tier full
+            --cells "^aaa/qb-v-4ah-saved/Dune2R$" --check --fresh --jobs 3
+            --economy-samples --attack-events --build-dir ${CMAKE_BINARY_DIR}
+            --results ${CMAKE_BINARY_DIR}/all-against-atreides-dune2r)
+        set_tests_properties(quantbot_all_against_atreides_dune2r PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): four QuantBot Brutal
         # houses in generated 4P 160x160 DuneCity free-for-alls (Fortress starts, 20,000-credit
         # armies, 40,000 cities, Stefan's game options), seeds 9101, 9103, 9105 three at a time.

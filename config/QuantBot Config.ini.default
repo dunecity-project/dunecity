@@ -382,9 +382,9 @@ CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.
 # Bound storage projects to one in flight and the absolute credit ceiling.
 StorageCapacity=1
-# Experimental: use the funded spice-economy plan for powered non-city Custom Brutal.
-# Preserve the old policy until the saved All-against-Atreides comparison passes.
-FundedClassicProduction=0
+# Fund Custom Brutal powered non-city production with the established spice policy.
+# Campaigns, engine power requirements and unit-mix learning are unchanged.
+FundedClassicProduction=1
 # Experimental: WOR rocket infantry for observed air/armour and army escorts in Custom games.
 # Shares the existing infantry quota and protects economy/working capital; at most 18 troopers.
 # Default off until the paired Hard/Brutal outcome gate passes.

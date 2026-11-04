@@ -363,7 +363,7 @@ QuantBotConfig::QuantBotConfig() {
     force.moreRocketTurrets = false; // Opt-in: the final paired count-gain gate was not met.
     force.cityStarportSupply = true;
     force.storageCapacity = true;
-    force.fundedClassicProduction = false;
+    force.fundedClassicProduction = true;
     force.trooperSupport = false;
 
     // === GENERAL AI BEHAVIOR ===

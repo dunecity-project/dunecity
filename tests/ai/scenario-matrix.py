@@ -176,7 +176,7 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
     aaa('qb-v-4ah', 'dunecity', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_OPTIONS, minutes=60,
         expect=('wins', 2), full=6)
     aaa('qb-v-4ah-saved', 'Dune2R', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_DUNE2R_OPTIONS,
-        minutes=60, expect=('wins', 2), full=7)
+        minutes=40, expect=('wins', 2), full=7)
     aaa('reverse-qm-v-4qh', 'vanilla', ['QH', 'QM', 'QH', 'QH', 'QH'], options=AAA_OPTIONS, minutes=60,
         expect=('loses', 2), smoke=1, full=6)
     # 4. Campaign (built per mission in schedule()).
