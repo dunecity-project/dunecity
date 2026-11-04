@@ -136,8 +136,8 @@ missions do not offer it.
   types, concrete/roads, surviving buildings and units, houses, teams and credits.
   Health is rounded to the map format's 1/256 steps. Unit facing and supported
   attack modes, wind-trap upgrades and map-supported city-zone density are kept.
-  Units in transports, contained in buildings or off-map, and aircraft crossing
-  buildings, are placed on nearby legal tiles that the map loader can represent.
+  Units in transports, contained in buildings or off-map are placed on nearby
+  legal tiles that the map loader can represent.
 
 Enter a map name and press **Save**. Replacing an existing file requires
 confirmation. Maps appear under **Custom Game → MP User Maps** (more than

@@ -16,7 +16,7 @@
   original map bytes. No simulation, protocol or savegame format change.
 - This is a new scenario, not a savegame: research, queues, paths/targets, cargo,
   exact spice/zone populations, fog, statistics and reinforcements reset.
-  Contained/off-map units and aircraft over buildings move to legal map tiles.
+  Contained/off-map units move to legal map tiles; aircraft keep valid overlaps.
   Native worms stay native; native crime units are omitted. Normal fresh-map
   road-ring and first-refinery harvester rules still apply. HOWTOPLAY and the
   in-game help explain these format boundaries.

@@ -247,14 +247,17 @@ Snapshot changeCurrent(Game& game) {
         infantry.angle = soldier->getAngle(); infantry.mode = soldier->getAttackMode();
         result.units.push_back(infantry);
     }
-    // A live aircraft can cross a building, but House::placeUnit rejects that
-    // overlap on a fresh map. Export must relocate it, not silently lose it.
+    // Units load before structures, so an aircraft crossing a building must keep
+    // its position without preventing that building from loading afterward.
     auto* aircraft = owner->createUnit(Unit_Ornithopter, true);
     menuRequire(aircraft != nullptr, "Save as Map fixture could not create an aircraft");
     aircraft->deploy(windAt);
     aircraft->setHealth(aircraft->getMaxHealth() / 2);
     menuRequire(aircraft->isActive() && aircraft->getLocation() == windAt,
                 "Save as Map fixture aircraft is not crossing its live structure");
+    auto flight = expect(*aircraft);
+    flight.angle = aircraft->getAngle(); flight.mode = aircraft->getAttackMode();
+    result.units.push_back(flight);
     for(int h = 0; h < NUM_PLAYER_HOUSES; ++h) if(auto* house = game.getHouse(h)) {
         // Test-only balance mutation: exercise all three spendable credit buckets.
         house->storedCredits = 100 + h;
@@ -614,6 +617,14 @@ void verifyAvailability(const GameInitSettings& randomInit) {
     menuRequire(RandomSkirmish::activateMod("vanilla"), "Cannot activate campaign export visibility fixture");
     {
         GameInitSettings campaign(HOUSE_ATREIDES, effectiveGameOptions, 1);
+        // Match the real campaign menu: the scenario constructor does not add controllers.
+        for(int h = 0; h < NUM_HOUSES; ++h) if(isHouseAvailable(static_cast<HOUSETYPE>(h))) {
+            GameInitSettings::HouseInfo house(static_cast<HOUSETYPE>(h), h == HOUSE_ATREIDES ? 1 : 2);
+            house.addPlayerInfo({h == HOUSE_ATREIDES ? settings.general.playerName
+                                                    : getHouseNameByNumber(static_cast<HOUSETYPE>(h)),
+                                 h == HOUSE_ATREIDES ? "HumanPlayer" : "qBotEasy"});
+            campaign.addHouseInfo(house);
+        }
         Match match(campaign);
         menuRequire(!MatchMapExport::available(*match.game), "Campaign incorrectly permits Save as Map");
         InGameMenu pause(false, getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3));

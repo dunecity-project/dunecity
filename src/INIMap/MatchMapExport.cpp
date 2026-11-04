@@ -251,14 +251,12 @@ public:
     bool accepts(const UnitBase& unit, int x, int y) const {
         if(!map_.tileExists(x, y)) return false;
         const Cell& cell = cells_[index(x, y)];
-        // Scenario placement rejects a ground structure even for air/worm layers.
-        if(cell.structure) return false;
         if(unit.isAFlyingUnit()) return !isOrnithopterUnit(unit.getItemID()) || !cell.air;
         if(isSandwormUnit(unit.getItemID())) {
             const int terrain = map_.getTile(x, y)->getType();
             return !cell.underground && terrain != Terrain_Rock && terrain != Terrain_Slab && terrain != Terrain_Mountain;
         }
-        if(cell.vehicle) return false;
+        if(cell.structure || cell.vehicle) return false;
         if(unit.isInfantry())
             return cell.infantry < NUM_INFANTRY_PER_TILE
                 && (cell.infantry == 0 || cell.infantryTeam == unit.getOwner()->getTeamID());
