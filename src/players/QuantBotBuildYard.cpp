@@ -1489,8 +1489,8 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         && findPlaceLocation(Structure_RepairYard).isValid()) {
         yardTurn.itemID=Structure_RepairYard;yardTurn.structureRule="funded_repair_capacity";
     }
-    // One useful rocket-infantry lane precedes optional factory expansion, not
-    // the opening economy, power, defence, Starport or mandatory production core.
+    // A useful rocket-infantry lane precedes the remaining optional factories;
+    // preceding economy, power, defence and first-heavy choices retain priority.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
         const Uint32 infantry = trooperInfrastructureItem(pass, turn.pBuilder);
         if (infantry != NONE_ID) {

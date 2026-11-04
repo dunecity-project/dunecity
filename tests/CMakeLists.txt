@@ -843,6 +843,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
             endforeach()
         endforeach()
+        # Real QuantBot orders and paid completion, then ordinary infantry SmallRockets
+        # defeat a hostile aircraft; the fixture explicitly compares the hashed switch.
+        add_test(NAME quantbot_trooper_support COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --trooper-support-probe --repeatable
+            --mod dunecity --no-ai-telemetry --path-workers 1 --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/trooper-support-probe)
+        set_tests_properties(quantbot_trooper_support PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
         # and saved partner state through the live Harkonnen level-9 fixture.
         foreach(pressure_mod IN ITEMS vanilla dunecity)
@@ -945,6 +952,12 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/city-growth-probe)
         set_tests_properties(quantbot_city_growth PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        add_test(NAME city_zone_power COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --zone-power-probe --repeatable
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/zone-power-probe)
+        set_tests_properties(city_zone_power PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         # A city map with no usable spice must seed demanded R/C/I out of its
         # starting grant, including the storage needed to bank its tax. Optional
         # port technology and transport must leave this budget intact.

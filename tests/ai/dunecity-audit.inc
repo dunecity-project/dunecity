@@ -57,7 +57,13 @@ inline void sample(Game& game) {
         if (!bot) continue;
         const auto grid = FfaArmy::baseGrid(house);
         int fighters = 0, moving = 0, targeting = 0, enemies = 0, enemyValue = 0, coveredEnemies = 0;
+        int trooperLive = 0, ornithopterLive = 0, eliteOrnithopterLive = 0;
         for (const auto* unit : unitList) {
+            if (unit->getOwner() == house && unit->getHealth() > 0) {
+                trooperLive += int(unit->getItemID() == Unit_Trooper);
+                ornithopterLive += int(unit->getItemID() == Unit_Ornithopter);
+                eliteOrnithopterLive += int(unit->getItemID() == Unit_EliteOrnithopter);
+            }
             if (!FfaArmy::groundFighter(unit)) continue;
             if (unit->getOwner() == house) {
                 ++fighters;
@@ -85,14 +91,21 @@ inline void sample(Game& game) {
         }
         int queue = 0, upgrading = 0, waiting = 0, structureHP = 0, structuresLost = 0;
         int yardLevel = -1;
+        int wor = 0, trooperSingleQueued = 0, trooperSquadsQueued = 0, trooperSquads5Queued = 0;
         std::string fronts;
         for (const auto* structure : structureList) {
             if (structure->getOwner() != house || structure->getHealth() <= 0) continue;
+            wor += int(structure->getItemID() == Structure_WOR);
             structureHP += structure->getHealth().lround();
             if (const auto* builder = dynamic_cast<const BuilderBase*>(structure)) {
                 queue += builder->getProductionQueueSize();
                 upgrading += int(builder->isUpgrading());
                 waiting += int(builder->isWaitingToPlace());
+                for (const auto& order : builder->getProductionQueue()) {
+                    trooperSingleQueued += int(order.itemID == Unit_Trooper);
+                    trooperSquadsQueued += int(order.itemID == Unit_Troopers);
+                    trooperSquads5Queued += int(order.itemID == Unit_Troopers5);
+                }
                 if (structure->getItemID() == Structure_ConstructionYard)
                     yardLevel = std::max(yardLevel, builder->getCurrentUpgradeLevel());
                 if (builder->getProductionQueueSize() || builder->isUpgrading())
@@ -128,6 +141,24 @@ inline void sample(Game& game) {
                 house->getNumBuiltItems(Structure_HeavyFactory), house->getNumItems(Structure_IX),
                 house->getNumBuiltItems(Structure_IX), fighters, moving, targeting, enemies, enemyValue,
                 coveredEnemies, bot->lastCalculatedSpice);
+        // BuilderBase expands a squad into 3 (or 5) Unit_Trooper objects before
+        // informWasBuilt is called for each single. Never multiply that ledger
+        // again. Queue entries still describe products, so expand only those.
+        // Losses follow the engine's original-house ledger; live units follow
+        // their present owner. Killed-items is the lethal damagerOwner's ledger
+        // by victim type, including friendly splash, NOT enemy-only AA kills.
+        SDL_Log("DUNECITY_TROOPERS: minute=%d cycle=%u house=%d wor=%d wor_built=%d"
+                " trooper_live=%d trooper_queued=%d trooper_single_queued=%d trooper_squads_queued=%d"
+                " trooper_squads5_queued=%d trooper_built=%d ornithopter_live=%d elite_ornithopter_live=%d"
+                " ornithopter_built=%d elite_ornithopter_built=%d ornithopter_lost=%d elite_ornithopter_lost=%d"
+                " ornithopter_killed=%d elite_ornithopter_killed=%d",
+                minute, game.getGameCycleCount(), house->getHouseID(), wor, house->getNumBuiltItems(Structure_WOR),
+                trooperLive, trooperSingleQueued + 3 * trooperSquadsQueued + 5 * trooperSquads5Queued,
+                trooperSingleQueued, trooperSquadsQueued, trooperSquads5Queued, house->getNumBuiltItems(Unit_Trooper),
+                ornithopterLive, eliteOrnithopterLive, house->getNumBuiltItems(Unit_Ornithopter),
+                house->getNumBuiltItems(Unit_EliteOrnithopter), house->getNumLostItems(Unit_Ornithopter),
+                house->getNumLostItems(Unit_EliteOrnithopter), house->getNumKilledItems(Unit_Ornithopter),
+                house->getNumKilledItems(Unit_EliteOrnithopter));
         // Retain source-separated balances and the existing accounting ledger
         // before disposable game profiles are removed. Read-only, probe-only;
         // the cumulative spending/loss fields need --attack-events telemetry.

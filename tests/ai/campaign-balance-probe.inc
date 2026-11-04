@@ -68,6 +68,8 @@
 #include <FileClasses/INIFile.h>
 #include "../AchievementsTestCase/AchievementRuntimeProbe.inc"
 #include "tornie-campaign-audit.inc"
+#include "trooper-support-probe.inc"
+#include "zone-power-probe.inc"
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -130,6 +132,10 @@ int runCampaignBalanceProbe() {
     }
     if(std::getenv("BALANCE_ACHIEVEMENTS_PROBE")) {
         runAchievementRuntimeProbe();
+        return MENU_QUIT_DEFAULT;
+    }
+    if(std::getenv("BALANCE_TROOPER_SUPPORT_PROBE")) {
+        runTrooperSupportProbe();
         return MENU_QUIT_DEFAULT;
     }
     GameInitSettings init(humanHouse, settings.gameOptions, level);
@@ -326,6 +332,14 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_CITY_GROWTH_PROBE")) {
         runCityGrowthProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_ZONE_POWER_PROBE")) {
+        runZonePowerProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_ZONE_POWER_CONTINUATION")) {
+        runZonePowerContinuation(*game,minutes);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_NO_SPICE_CITY_PROBE")) {

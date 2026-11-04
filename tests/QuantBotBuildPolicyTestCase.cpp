@@ -80,6 +80,8 @@ TEST_CASE("Rocket infantry support follows observed threats and bounded army esc
         std::numeric_limits<int>::max(),std::numeric_limits<int>::max()) == 18);
     REQUIRE(rocketInfantrySize(Unit_Trooper) == 1);
     REQUIRE(rocketInfantrySize(Unit_Troopers) == 3);
+    REQUIRE(rocketInfantrySize(Unit_Troopers5) == 5);
+    REQUIRE(rocketInfantry(Unit_Troopers5));
     REQUIRE(rocketInfantrySize(Unit_Soldier) == 0);
     REQUIRE_FALSE(rocketInfantry(Unit_Saboteur));
 }

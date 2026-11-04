@@ -44,10 +44,10 @@ inline int fundedArmyTarget(int committed, int limit, int spendable) {
 }
 
 inline bool rocketInfantry(Uint32 item) {
-    return item == Unit_Trooper || item == Unit_Troopers;
+    return item == Unit_Trooper || item == Unit_Troopers || item == Unit_Troopers5;
 }
 inline int rocketInfantrySize(Uint32 item) {
-    return item == Unit_Troopers ? 3 : item == Unit_Trooper ? 1 : 0;
+    return item == Unit_Troopers5 ? 5 : item == Unit_Troopers ? 3 : item == Unit_Trooper ? 1 : 0;
 }
 // The infantry share is still the spending ceiling. This smaller count target
 // gives those credits a purpose without taxing every opening or growing a wing

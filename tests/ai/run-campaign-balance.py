@@ -230,12 +230,20 @@ parser.add_argument('--recovery-probe', action='store_true',
 parser.add_argument('--battery-clearance-probe', action='store_true',
                     help='Verify crowded-city rocket batteries replace eligible R/I/C lots through real production')
 parser.add_argument('--air-defense-probe', action='store_true')
+parser.add_argument('--trooper-support-probe', action='store_true',
+                    help='Verify QuantBot WOR and troop queue completion, bounded support and real anti-air defence')
 parser.add_argument('--police-placement-probe', action='store_true')
 parser.add_argument('--police-budget-probe', action='store_true')
 parser.add_argument('--police-reinforcement-probe', action='store_true',
                     help='Verify police reinforcements follow the selected unit limit, not a police-local ceiling')
 parser.add_argument('--city-growth-probe', action='store_true',
                     help='Verify continuous city growth while proactive defence/supplier goals are unmet')
+parser.add_argument('--zone-power-probe', action='store_true',
+                    help='Verify city zone vacancy, power restoration, status and legacy-rule compatibility')
+parser.add_argument('--zone-power-continuation', choices=('saved','off','on'),
+                    help='Observe every zone while continuing --load-save for --minutes additional minutes')
+parser.add_argument('--zone-power-save', type=Path,
+                    help='With --zone-power-continuation on: write a current-version opted-in save before continuing')
 parser.add_argument('--no-spice-city-probe', action='store_true',
                     help='Verify a city map with no usable spice seeds demanded R/C/I out of its '
                          'starting grant instead of refinery/port/transport capital, across power '
@@ -737,6 +745,7 @@ if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args
     (profile/'Dune City.ini').write_text(f'[Video]\nPhysical Width = {width}\nPhysical Height = {height}\nWidth = {width}\nHeight = {height}\nInterface Height = {interface_height}\nFullscreen = false\n[General]\nPlay Intro = false\n')
 if args.city_placement_probe: env['BALANCE_CITY_PLACEMENT_PROBE'] = '1'
 if args.opening_economy_probe: env['BALANCE_OPENING_ECONOMY_PROBE'] = '1'
+if args.trooper_support_probe: env['BALANCE_TROOPER_SUPPORT_PROBE'] = '1'
 if args.growth_installment_probe or args.civic_priority_probe:
     env['BALANCE_GROWTH_INSTALLMENT_PROBE'] = '1'
 if args.civic_priority_probe: env['BALANCE_CIVIC_PRIORITY_ONLY'] = '1'
@@ -755,6 +764,9 @@ if args.police_placement_probe: env['BALANCE_POLICE_PLACEMENT_PROBE'] = '1'
 if args.police_budget_probe: env['BALANCE_POLICE_BUDGET_PROBE'] = '1'
 if args.police_reinforcement_probe: env['BALANCE_POLICE_REINFORCEMENT_PROBE'] = '1'
 if args.city_growth_probe: env['BALANCE_CITY_GROWTH_PROBE'] = '1'
+if args.zone_power_probe: env['BALANCE_ZONE_POWER_PROBE'] = '1'
+if args.zone_power_continuation: env['BALANCE_ZONE_POWER_CONTINUATION'] = args.zone_power_continuation
+if args.zone_power_save: env['BALANCE_ZONE_POWER_SAVE'] = str(args.zone_power_save.resolve())
 if args.no_spice_city_probe: env['BALANCE_NO_SPICE_CITY_PROBE'] = '1'
 if args.mcv_deployment_probe: env['BALANCE_MCV_DEPLOYMENT_PROBE'] = '1'
 if args.custom_attack_probe: env['BALANCE_CUSTOM_ATTACK_PROBE'] = '1'
