@@ -667,9 +667,10 @@ inline std::vector<size_t> leadSlots(Mix mix, const Production& p) {
 /// One up-to-12-minute game per mix is one trajectory of the whole fight. If conquest ends
 /// either game sooner, Section 3 compares both at that same observed cycle, replaying the
 /// Learned reference when needed. The probe logs each margin (check=lead_margin), and
-/// run-campaign-balance.py requires the strict positive mean over the twelve seeds predeclared
-/// in docs/unit-route-comparison.md: 486409243, 11, 22, 33, 44, 55, 66, 77, 88, 99, 111, 122.
-/// The original three-seed runner option remains available for paired switch attribution.
+/// run-campaign-balance.py retains each mix's original strict positive three-seed mean.
+/// TrikeSwarm uses the twelve seeds predeclared in docs/unit-route-comparison.md:
+/// 486409243, 11, 22, 33, 44, 55, 66, 77, 88, 99, 111, 122. Its extra seeds play
+/// the identical TankMass/TrikeSwarm pair and Learned reference, not unrelated profiles.
 /// Over that calibration corpus a single game's
 /// margin was below 1 bps in 6 of 84 checks on 1.0.852 and 4 of 84 with the protocol 95 movement fix,
 /// so a one-seed check failed on 5 and 3 of the 12 seeds; the three-seed mean failed in 5 and 8 of
@@ -855,7 +856,10 @@ int runQuantBotStrategyProbe() {
             const std::vector<std::pair<Mix, Mix>> games = {
                 {Mix::QuadMass, Mix::Artillery}, {Mix::TankMass, Mix::TrikeSwarm}, {Mix::Specials, Mix::Air}, {Mix::Infantry, Mix::Counter},
                 {Mix::Tuned, Mix::Bounded}};
+            const char* trikeOnly = std::getenv("BALANCE_STRATEGY_TRIKES_ONLY");
+            const bool trikeCalibration = trikeOnly && std::strcmp(trikeOnly, "1") == 0;
             for (const auto& [mixH, mixA] : games) {
+                if (trikeCalibration && mixA != Mix::TrikeSwarm) continue;
                 const GameResult played = playProduction(harkonnen, atreides,
                     {{harkonnen, fixedStrategy(mixH)}, {atreides, fixedStrategy(mixA)}},
                     mapSeed, seed, learned.observedEndCycle, 9, true);

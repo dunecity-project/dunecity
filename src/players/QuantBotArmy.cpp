@@ -3466,7 +3466,8 @@ void QuantBot::retreatAllUnits() {
 				&& !QuantBotInternal::harvesterItem(pUnit->getItemID())
 				&& pUnit->getItemID() != Unit_MCV
 				&& pUnit->getItemID() != Unit_Frigate
-                        && pUnit->getItemID() != Unit_Saboteur) {
+                        && pUnit->getItemID() != Unit_Saboteur
+                        && !humanControls(pUnit)) {
 
 				doSetAttackMode(pUnit, RETREAT);
 			}
