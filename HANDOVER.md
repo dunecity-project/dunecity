@@ -1,3 +1,29 @@
+## 2026-11-04 — Civilization Wars rock lanes and defended sand-front cities (OMP CivWarsLayout, unreleased)
+
+- Every lane now has a mirrored, continuous three-tile buildable rock strip joining
+  both team ends to its central island, plus one-tile rock margins on both sides of
+  each seven-tile mountain divider. The 7x7 island cores remain; the smallest map's
+  island height is eleven tiles to preserve two open sand/worm/spice channels per lane.
+- Every player base, including each team seat, starts with exactly **15 rocket
+  turrets: 10 front and 5 core/flank**. Front allocation is 4/3/3 across a 1v1
+  player's mouths; 5/5 for the upper 2v2 seat and 10 for the lower; 10 per 3v3 lane.
+  Mouth centres remain clear, Yard/Lab retain overlapping coverage, and windtraps
+  account for all fifteen turrets with at least ten percent spare power.
+- Mature R/C lots now form the sand-facing front edge. Industry and Dune
+  infrastructure sit behind them, with a twelve-tile R/I gap, connected frontage
+  roads and clear Refinery side/bottom exits. Sand does add land value: existing
+  raw40/twice-smoothed terrain plus direct8/radius5 water-like bonuses. Pollution,
+  crime, centre distance and other amenities still affect the final value.
+- Marker remains `[CIVILIZATIONWARS] Version=1`: saved maps embed exact terrain,
+  buildings and worm positions; saved worms capture and serialize actual origin
+  coordinates, never reconstructing slots from the current generator. Old maps
+  and saves therefore retain their existing layout/origins. No option/save bump.
+- Generator acceptance now checks exact 15/10 counts, front/back placement,
+  coverage, all rock strips/margins and six unbroken sand channels. Engine probes
+  retain the original research deadlines, continue every all-QuantBot match to at
+  least ten minutes, check actual tax against full police/turret/power costs, and
+  capture overview plus front/rear base views at 640x480 and 1280x720.
+
 ## 2026-11-04 — Mountains are forest scenery (OMP MountainLandValue, unreleased)
 
 - **Mountain Scenery** is a default-on hashed/saved Game Rules option. Mountains and

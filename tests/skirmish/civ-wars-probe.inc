@@ -1,10 +1,17 @@
 // Included inside skirmish-probe.inc's fixture namespace; no production test hooks.
+#include "mountain-scenery-probe.inc"
+
 void captureCivMap(const std::string& name) {
-    const int scale = 4, width = currentGameMap->getSizeX(), height = currentGameMap->getSizeY();
-    auto image = sdl2::surface_ptr(SDL_CreateRGBSurfaceWithFormat(0, width * scale, height * scale, 32, SDL_PIXELFORMAT_RGBA32));
+    const int width = currentGameMap->getSizeX(), height = currentGameMap->getSizeY();
+    int viewWidth = 0, viewHeight = 0;
+    SDL_GetRendererOutputSize(renderer, &viewWidth, &viewHeight);
+    const int scale = std::max(1, std::min((viewWidth - 32) / width, (viewHeight - 32) / height));
+    const int left = (viewWidth - width * scale) / 2, top = (viewHeight - height * scale) / 2;
+    auto image = sdl2::surface_ptr(SDL_CreateRGBSurfaceWithFormat(0, viewWidth, viewHeight, 32, SDL_PIXELFORMAT_RGBA32));
     skirmishRequire(image != nullptr, "Cannot create Civilization Wars overview");
+    SDL_FillRect(image.get(), nullptr, SDL_MapRGB(image->format, 24, 22, 20));
     auto paint = [&](int x, int y, int w, int h, Uint32 colour) {
-        SDL_Rect r{x * scale, y * scale, w * scale, h * scale};
+        SDL_Rect r{left + x * scale, top + y * scale, w * scale, h * scale};
         SDL_FillRect(image.get(), &r, colour);
     };
     for(int y = 0; y < height; ++y) for(int x = 0; x < width; ++x) {
@@ -18,7 +25,14 @@ void captureCivMap(const std::string& name) {
     }
     for(const auto* structure : structureList) {
         const auto at = structure->getLocation(), size = structure->getStructureSize();
-        const auto colour = RGBA2SDL(getHouseColorRGB(structure->getOwner()->getHouseID(), 1));
+        auto colour = RGBA2SDL(getHouseColorRGB(structure->getOwner()->getHouseID(), 1));
+        switch(structure->getItemID()) {
+            case Structure_RocketTurret: colour = SDL_Color{255, 255, 255, 255}; break;
+            case Structure_ZoneResidential: colour = SDL_Color{80, 225, 110, 255}; break;
+            case Structure_ZoneCommercial: colour = SDL_Color{80, 165, 255, 255}; break;
+            case Structure_ZoneIndustrial: colour = SDL_Color{255, 215, 65, 255}; break;
+            default: break;
+        }
         paint(at.x, at.y, size.x, size.y, SDL_MapRGB(image->format, colour.r, colour.g, colour.b));
     }
     const auto path = probeOut(name + "-overview.png");
@@ -248,6 +262,9 @@ void runCivMatch(const std::string& name) {
     std::ofstream(probeOut(name + ".ini"), std::ios::binary) << result.ini;
     auto init = CivWars::makeInit(result, effectiveGameOptions, params);
     auto game = startMatch(init);
+    int viewWidth = 0, viewHeight = 0;
+    SDL_GetRendererOutputSize(renderer, &viewWidth, &viewHeight);
+    const std::string picture = name + "-" + std::to_string(viewWidth) + "x" + std::to_string(viewHeight);
     skirmishRequire(game->techLevel == 1 && game->isCitySimEnabled() && game->isObserving()
                     && game->getGameInitSettings().isCivilizationWars(), "Civilization Wars match did not load its fixed mode");
     skirmishRequire(init.getGameOptions().originalUnitDamage, "Civ Wars AI game lost original unit damage");
@@ -267,6 +284,13 @@ void runCivMatch(const std::string& name) {
         skirmishRequire(actual[Structure_ResearchLab] == 1 && actual[Structure_Refinery] == 1
                         && actual[Structure_ConstructionYard] == 1 && actual[Structure_PoliceStation] == 1,
                         "Civilization Wars starting kit is incomplete");
+        int frontTurrets = 0;
+        for(const auto* structure : structureList) if(structure->getOwner() == house && structure->getItemID() == Structure_RocketTurret) {
+            const int x = structure->getLocation().x;
+            frontTurrets += std::min(x, result.map.getSizeX() - 1 - x) == result.map.getSizeX() / 4 - 1;
+        }
+        skirmishRequire(actual[Structure_RocketTurret] == 15 && frontTurrets == 10,
+                        "Every Civilization Wars base requires fifteen turrets, ten at the front");
         int harvesters = 0, carriers = 0;
         for(const auto* unit : unitList) if(unit->getOwner() == house) {
             harvesters += unit->getItemID() == Unit_Harvester;
@@ -277,13 +301,17 @@ void runCivMatch(const std::string& name) {
         skirmishRequire(house->getPlayerList().size() == 1
                         && dynamic_cast<const QuantBot*>(house->getPlayerList().front().get()),
                         "Civilization Wars smoke does not have QuantBot on every seat");
-        SDL_Log("SKIRMISH_PROBE: civ house=%d team=%d power=%d/%d turrets=%d windtraps=%d harvester=%d permanent-carryall=%d",
+        SDL_Log("SKIRMISH_PROBE: civ house=%d team=%d power=%d/%d turrets=%d front=%d core-flank=%d windtraps=%d harvester=%d permanent-carryall=%d",
             setup.house, setup.team, house->getProducedPower(), house->getPowerRequirement(),
-            actual[Structure_RocketTurret], actual[Structure_WindTrap], harvesters, carriers);
+            actual[Structure_RocketTurret], frontTurrets, actual[Structure_RocketTurret] - frontTurrets,
+            actual[Structure_WindTrap], harvesters, carriers);
     }
-    captureCivMap(name + "-loaded");
-    captureGame(*game, name + "-base", result.houses.front().start);
-    captureGame(*game, name + "-lanes", Coord(result.map.getSizeX() / 2, result.map.getSizeY() / 2));
+    captureCivMap(picture + "-loaded");
+    const int baseEnd = result.map.getSizeX() / 4, baseY = result.houses.front().start.y + 1;
+    captureGame(*game, picture + "-base", Coord(baseEnd - 16, baseY));
+    captureGame(*game, picture + "-base-front", Coord(baseEnd - 6, baseY));
+    captureGame(*game, picture + "-base-rear", Coord(baseEnd - 21, baseY));
+    captureGame(*game, picture + "-lanes", Coord(result.map.getSizeX() / 2, result.map.getSizeY() / 2));
     auto* sim = game->getCitySimulation();
     while(sim->lastProcessedDay_ < 2 || sim->pendingGrowthPhase_) game->updateGameState();
     for(const auto& setup : result.houses) {
@@ -292,11 +320,12 @@ void runCivMatch(const std::string& name) {
         for(const auto* structure : structureList)
             if(structure->getOwner()->getHouseID() == setup.house)
                 fullUpkeep += DuneCity::getPoliceAnnualCost(structure->getItemID());
-        SDL_Log("SKIRMISH_PROBE: civ initial-income house=%d population=%d annual-tax=%d annual-upkeep=%d paid-upkeep=%d land-value=%d",
+        const int annualPower = (game->getHouse(setup.house)->getPowerRequirement() + 3) / 4;
+        SDL_Log("SKIRMISH_PROBE: civ initial-income house=%d population=%d annual-tax=%d annual-upkeep=%d annual-power=%d paid-upkeep=%d land-value=%d",
             setup.house, city.getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier,
-            city.budget.getLastTaxRevenue(), fullUpkeep.lround(), city.lastPoliceExpense, city.avgLandValue);
-        skirmishRequire(fullUpkeep > 0 && FixPoint(city.budget.getLastTaxRevenue()) > fullUpkeep,
-                        "Civilization Wars starting city does not cover turret and police upkeep");
+            city.budget.getLastTaxRevenue(), fullUpkeep.lround(), annualPower, city.lastPoliceExpense, city.avgLandValue);
+        skirmishRequire(fullUpkeep == 325 && FixPoint(city.budget.getLastTaxRevenue()) > fullUpkeep + annualPower,
+                        "Civilization Wars starting city does not cover full turret, police and power upkeep");
     }
     // Preserve the reference test's minimum research savings rate, rather than
     // requiring a dearer, longer first study to finish in the old eight minutes.
@@ -311,7 +340,8 @@ void runCivMatch(const std::string& name) {
     const Uint32 window = std::max(referenceWindow, fundingCycles + firstCycles);
     SDL_Log("SKIRMISH_SMOKE_BEGIN: Civilization Wars %dv%d window_cycles=%u first_cost=%d first_cycles=%d",
         params.teamSize, params.teamSize, window, firstCost, firstCycles);
-    const Uint32 end = game->getGameCycleCount() + window;
+    const Uint32 researchEnd = game->getGameCycleCount() + window;
+    const Uint32 end = std::max(researchEnd, MILLI2CYCLES(600 * 1000));
     std::array<int, NUM_HOUSES> lastTech{}, lastTarget{};
     while(!game->finished && game->getGameCycleCount() < end) {
         game->updateGameState();
@@ -326,17 +356,23 @@ void runCivMatch(const std::string& name) {
             lastTech[setup.house] = tech;
             lastTarget[setup.house] = target;
         }
+        if(game->getGameCycleCount() == researchEnd)
+            for(const auto& setup : result.houses)
+                skirmishRequire(game->getHouse(setup.house)->getTechLevel() >= 2,
+                                "Civ Wars QuantBot missed its original policy-scaled research deadline");
     }
     SDL_Log("SKIRMISH_SMOKE_END: cycle=%u target=%u finished=%d", game->getGameCycleCount(), end, game->finished ? 1 : 0);
-    skirmishRequire(!game->finished && game->getGameCycleCount() == end, "Civilization Wars did not reach its policy-scaled research window");
+    skirmishRequire(!game->finished && game->getGameCycleCount() == end && end >= MILLI2CYCLES(600 * 1000),
+                    "Civilization Wars did not reach ten minutes and its policy-scaled research window");
     for(const auto& setup : result.houses) {
         const auto* house = game->getHouse(setup.house);
         skirmishRequire(house && house->isAlive() && house->getCityTaxReceipts() > 0,
                         "Civilization Wars house died or received no city tax income");
         skirmishRequire(house->getTechLevel() >= 2, "Civ Wars QuantBot did not advance technology within its policy-scaled research window");
     }
-    captureCivMap(name + "-played");
-    captureGame(*game, name + "-played-base", result.houses.front().start);
+    captureCivMap(picture + "-played");
+    captureGame(*game, picture + "-played-base", result.houses.front().start);
     if(params.teamSize == 1) runCivWarsWormRespawnProbe(game, probeOut("civ-worm-sleep.dls"));
+    if(params.teamSize == 1) runMountainSceneryProbe(*game);
     endMatch(game);
 }

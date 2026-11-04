@@ -14,14 +14,19 @@ added here.
 - **Size:** 129×96, 161×112, 193×128 or 255×160. Odd widths are deliberate: an odd number of
   worms needs an actual centre tile, rather than a centre line between two tiles.
 - Each end is an all-rock plateau, roughly a quarter of the map's width. Three horizontal
-  sand lanes connect them. Two **seven-tile-thick** mountain ridges run continuously across
-  the middle, from one plateau to the other (previously three tiles). The ridges do not cut
-  the plateaus: teammates can change lanes behind their front. These are normal Dune
-  mountains: vehicles cannot cross, infantry can.
-- A larger buildable rock island sits halfway along each lane, with a guaranteed **7×7**
-  core and sand routes around it. Seeded outlines span 19–23 tiles horizontally and 11–13
-  vertically. Spice fields and some blooms grow on lane sand, never over the rock ends or
-  the islands. The Spice slider ranges from None to Very high.
+  lanes connect them. A continuous **three-tile-wide buildable rock strip** runs down each
+  lane from each team's plateau to the widened central island. It is ordinary, passable
+  rock: there are no starting structures on the strips or in the lane-mouth centre.
+- Two **seven-tile-thick** mountain ridges run continuously across the middle, from one
+  plateau to the other, with a **one-tile rock margin on both sides**. They do not cut the
+  plateaus: teammates can change lanes behind their front. These are normal Dune mountains:
+  vehicles cannot cross, infantry can.
+- A larger buildable rock island widens each strip halfway along the lane, with a guaranteed
+  **7×7** core. Seeded outlines span 19–23 tiles horizontally and 11–13 vertically (11 on
+  129×96, preserving worm clearance). **Two continuous sand channels per lane** pass around
+  its shoulders, between the strip/island and the ridges. Spice fields and blooms remain on
+  lane sand, never over rock ends, strips, margins or islands. The Spice slider ranges from
+  None to Very high.
 - The seed changes ridge wiggle, island outlines and spice patterns. Every terrain tile,
   starting position, building footprint, road, foundation, aircraft and worm origin is
   mirrored left-to-right. **New** rolls another seed; **Keep this seed** retains it for the
@@ -42,20 +47,32 @@ Every player starts with **0 credits** and **tech level 1**, with:
 - one Construction Yard;
 - one built **Research Lab**, available to rebuild from level 1;
 - one Refinery and one permanent Carryall;
-- two rocket turrets at each lane mouth that seat covers;
-- **two additional core rocket turrets**, covering both the Construction Yard and Research
-  Lab against early ornithopters;
+- **fifteen rocket turrets per player's base**, including **ten at the sand-facing front**
+  and **five covering the core/flanks**; at least two core turrets cover both Yard and Lab;
+  the ten front turrets are divided over that player's owned mouths (4/3/3 in 1v1, 5/5 for
+  the upper 2v2 seat and ten for the lower seat, ten on each 3v3 player's own lane);
 - windtraps sufficient for the entire kit, including all turrets, the lab and developed zones,
   with spare capacity;
 - three mature Residential lots, one Commercial lot, one Industrial lot and one Police
-  Station, with road access and an industrial/residential buffer. This is a small tax base,
-  intended to cover the starting police/turret upkeep and leave a small income.
+  Station, with road access and a twelve-tile industrial/residential buffer. All R/C lots
+  occupy the sand-facing front edge; Yard, Lab, Refinery, Police, Windtraps and Industry are
+  further back. Roads stay behind the R/C frontage, and the Refinery's side/bottom exits
+  remain clear. The engine probe checks that actual annual tax covers the full starting
+  police/turret upkeep **and** annual power costs, not the AI's reduced funding settings.
 
 **No extra harvester is written to `[UNITS]`.** The engine's existing first-Refinery rule
 (`House::placeStructure`) gives a preplaced Refinery a free Harvester, delivered by a temporary,
 non-owned Carryall, even at tech level 1. This delivery aircraft is distinct from the permanent
 starting Carryall. The normal buildable Harvester requires a Heavy Factory, which is not a
 tech-1 building; new Refineries also retain their normal Harvester grant.
+
+**Sand really does improve nearby land value.** In `CitySimulation::runEffectsScans`, open
+sand contributes `kSandTerrainRawBonus = 40` per tile to the terrain map, which is smoothed
+twice, plus an independent `kSandLandValueBonus = 8` falloff stamp reaching five tiles.
+These are positive contributions relative to otherwise identical rock surroundings, not a
+guarantee that any sand-adjacent tile beats every rear tile: city-centre distance, pollution,
+crime, damage and park/turret bonuses also affect the result. Putting R/C at the front gives
+those private lots the sand amenity while keeping industrial pollution further away.
 
 The generated match uses the **CivWars** mod and enables Research Lab, respawning sandworms,
 trooper anti-air, city effects and **Original Unit Damage**. This is a match-local choice:
@@ -229,7 +246,8 @@ Raw checkpoint fields, offsets and hashes are in
 **Worms / lane** is **0–10**, default 1: up to **30** starting worms in total. Each lane
 gets the same count. Two-worm pairs are mirrored about the vertical centre column; an odd
 unpaired worm starts on that column. All origins are distinct sand tiles outside the
-central islands. Changing only the worm count never changes the terrain.
+central islands and strips, with a clear surrounding sand neighbourhood. Changing only the
+worm count never changes the terrain.
 
 Ordinary sandworm respawn picks random positions across the whole map. Generated Civilization
 Wars maps instead carry `[CIVILIZATIONWARS]` with `Version=1`. An untamed worm's first valid
@@ -237,7 +255,11 @@ deployment on such a map records a permanent origin. After defeat or its usual t
 it sleeps as usual, then wakes at **that same origin**. If ground or another underground unit
 occupies the tile, it takes another nap and retries that slot; it never falls back to map-wide
 random placement. The slot survives movement and saving/loading. The shared 9881 save format
-stores it; older worm records read no extra fields.
+stores it; older worm records read no extra fields. The layout update retains marker
+`Version=1`: it identifies this permanent-slot **policy**, not a recipe for reconstructing
+terrain or slots from a seed. Saved INI maps carry their exact terrain/buildings/worm
+placements, and saves carry each worm's actual origin coordinates. Neither is regenerated
+with the current layout; existing maps and saved origins therefore remain unchanged.
 
 This preserves per-lane, mirrored **spawn slots**, not synchronized combat waves: worms move
 normally and individual defeat/eating events retain their normal randomized sleep duration.
@@ -288,19 +310,23 @@ CivWars uses the next hexadecimal token slot.
   active-save continuation, cancellation/rebuild and QuantBot. Its optional `--load-save`
   exercises a real old player save, Normal migration and a one-tick 9882 resave.
 - `civilization_wars_tests`: seeded generator matrices for all team counts, all sizes and all
-  worm counts, including exact mirroring, building footprints/power, lane connectivity and
-  separation, islands, roster and map serialization; mode-marker/cache/wire-format unit tests.
+  worm counts, including exact mirroring, building footprints/power, front/back zoning,
+  fifteen turrets per base (ten front), coverage, lane connectivity/separation, continuous
+  strips and ridge margins, both sand channels, islands, roster and map serialization;
+  mode-marker/cache/wire-format unit tests.
 - `civilization_wars_probe`: real menus, persisted seed, ten-worm choice at 640×480,
-  generic-start lobby and guest settings; all-AI games for each team size, including
-  Easy/Medium/Hard/Brutal/Defend and Builder controllers; positive starting budget and
-  per-house research progression; worm defeat, eating, occupied-slot retry, legacy RNG
-  and sleeping save/load behavior. Its reference smoke window remains eight game minutes.
+  generic-start lobby and guest settings; all-AI games for each team size at 640×480 and
+  1280×720, including Easy/Medium/Hard/Brutal/Defend and Builder controllers; positive
+  full-cost starting budget and per-house research progression; worm defeat, eating,
+  occupied-slot retry, legacy RNG and sleeping save/load behavior. Every game reaches at
+  least ten minutes. Its **research deadline** still uses the original eight-minute reference.
   For dearer/slower research, the funding portion `(8 min − reference tech-2 duration)`
   scales by `quoted tech-2 cost / reference cost`, rounded up to cycles, then adds the
   actual quoted duration. This preserves the same minimum research allocation,
-  83.72 credits/game-minute, rather than adding arbitrary grace. At Normal the windows
-  after the initial city checkpoint are 8:00.000 (129×96), 15:18.352 (161×112), and
-  23:55.200 (193×128). The observed 161×112 regression was not a funding stall: all four
+  83.72 credits/game-minute, rather than adding arbitrary grace. At Normal the research
+  windows after the initial city checkpoint are 8:00.000 (129×96), 15:18.352 (161×112), and
+  23:55.200 (193×128); the smallest match then continues to ten minutes. The observed
+  161×112 regression was not a funding stall: all four
   houses had paid 1,148 credits and started by 7:29.616; their 5,976-cycle study's last
   scheduled completion was 9:05.232, beyond the obsolete eight-minute assertion.
 - `civilization_wars_research_probe`: actual Civ Wars Start button, real human SDL Lab

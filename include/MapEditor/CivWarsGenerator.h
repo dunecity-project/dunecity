@@ -52,7 +52,8 @@ struct Params {
 /**
  * Fixed tech-1, zero-credit DuneCity starts: Yard, Research Lab, Refinery (its
  * loader supplies the harvester), Carryall, three mature R lots, one C and one I,
- * police, road access and windtraps with at least ten percent spare power.
+ * police, fifteen rocket turrets (ten front, five core/flank), road access and
+ * windtraps with at least ten percent spare power. R/C faces sand; Dune/I is rear.
  * Building footprints, foundations, roads, aircraft and worm origins mirror
  * exactly. The caller enables the Research Lab and respawning-sandworm options.
  * Every serialized map carries the exact [CIVILIZATIONWARS] Version=1 marker.

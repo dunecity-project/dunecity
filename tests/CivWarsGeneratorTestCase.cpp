@@ -255,7 +255,7 @@ void requireSetup(const Result& r, const CivParams& params, const Catalogue& c, 
         const int seat = static_cast<int>(index) % params.teamSize;
         INFO("house=" << h.house << " seat=" << seat);
         std::map<int, int> counts;
-        std::vector<Placement> homes, industries, coreTurrets;
+        std::vector<Placement> homes, industries, coreTurrets, turrets;
         const Placement* yard = nullptr;
         const Placement* lab = nullptr;
         int required = 0, produced = 0, taxBase = 0, upkeep = 0;
@@ -269,7 +269,8 @@ void requireSetup(const Result& r, const CivParams& params, const Catalogue& c, 
             if(p.item == Structure_PoliceStation) upkeep += 100;
             if(p.item == Structure_RocketTurret) {
                 upkeep += 15;
-                if(std::min(p.x, width - 1 - p.x) != end - 2) coreTurrets.push_back(p);
+                turrets.push_back(p);
+                if(std::min(p.x, width - 1 - p.x) != end - 1) coreTurrets.push_back(p);
             }
             if(DuneCity::isCityZoneStructure(p.item)) {
                 required += DuneCity::getZonePower(p.item, p.level);
@@ -279,6 +280,12 @@ void requireSetup(const Result& r, const CivParams& params, const Catalogue& c, 
                 required += std::max(0, power);
                 produced += std::max(0, -power);
             }
+            const Coord footprint = c.sizes[p.item];
+            const int baseX = index < static_cast<std::size_t>(params.teamSize) ? p.x : width - p.x - footprint.x;
+            if(p.item == Structure_ZoneResidential || p.item == Structure_ZoneCommercial)
+                REQUIRE(baseX == end - 4);
+            else if(p.item != Structure_RocketTurret)
+                REQUIRE(baseX + footprint.x <= end - 7);
             const auto role = DuneCity::getStructureCityRole(p.item);
             if(role != DuneCity::CityRole::None) {
                 const auto want = role == DuneCity::CityRole::Residential ? DuneCity::CityRole::Commercial
@@ -295,30 +302,37 @@ void requireSetup(const Result& r, const CivParams& params, const Catalogue& c, 
         REQUIRE(counts[Structure_ZoneCommercial] == 1);
         REQUIRE(counts[Structure_ZoneIndustrial] == 1);
         REQUIRE(counts[Structure_WindTrap] > 0);
-        REQUIRE(coreTurrets.size() == 2);
+        REQUIRE(coreTurrets.size() == 5);
         REQUIRE(yard != nullptr);
         REQUIRE(lab != nullptr);
-        for(const Placement& turret : coreTurrets) {
-            REQUIRE(coversCore(turret, *yard, c));
-            REQUIRE(coversCore(turret, *lab, c));
-        }
+        REQUIRE(std::count_if(coreTurrets.begin(), coreTurrets.end(), [&](const Placement& turret) {
+            return coversCore(turret, *yard, c) && coversCore(turret, *lab, c);
+        }) >= 2);
+        for(const Placement& building : r.structures) if(building.house == h.house)
+            REQUIRE(std::any_of(turrets.begin(), turrets.end(), [&](const Placement& turret) {
+                return coversCore(turret, building, c);
+            }));
         int mouths = 0;
+        for(int lane = 0; lane < 3; ++lane) mouths += ownerSeat(params.teamSize, lane) == seat;
+        int mouth = 0;
         for(int lane = 0; lane < 3; ++lane) if(ownerSeat(params.teamSize, lane) == seat) {
-            ++mouths;
-            const int x = index < static_cast<std::size_t>(params.teamSize) ? end - 2 : width - end + 1;
-            for(int dy : {-3, 3}) {
-                const int y = laneCentre(height, lane) + dy;
+            const int count = 10 / mouths + (mouth++ < 10 % mouths);
+            const int x = index < static_cast<std::size_t>(params.teamSize) ? end - 1 : width - end;
+            for(int i = 0; i < count; ++i) {
+                const int y = laneCentre(height, lane) + (i & 1 ? 1 : -1) * (3 + 2 * (i / 2));
                 REQUIRE(std::count_if(r.structures.begin(), r.structures.end(), [&](const Placement& p) {
                     return p.house == h.house && p.item == Structure_RocketTurret && p.x == x && p.y == y;
                 }) == 1);
             }
         }
-        REQUIRE(counts[Structure_RocketTurret] == 2 + 2 * mouths);
+        REQUIRE(counts[Structure_RocketTurret] == 15);
+        REQUIRE(turrets.size() - coreTurrets.size() == 10);
         REQUIRE(produced - required >= required / 10 + 1);
-        // At deliberately modest land value 80, mature private tax still pays
-        // police, ALL turrets, and eight 15-second power charges per slow year.
-        // The parent engine fixture additionally measures actual loaded income.
-        REQUIRE(DuneCity::computeAnnualTaxRevenue(taxBase, 7, 80) > upkeep + (required + 3) / 4);
+        // The loaded-engine fixture measures real sand-front land value and
+        // requires tax to cover all fifteen turrets, police AND power. Keep the
+        // exact full-funding inputs here rather than assuming old rear-lot value.
+        REQUIRE(upkeep == 325);
+        REQUIRE(taxBase == 384);
         REQUIRE(std::count_if(r.units.begin(), r.units.end(), [&](const Placement& p) { return p.house == h.house; }) == 1);
         REQUIRE(h.skipped == 0);
         REQUIRE(h.armyBudget == 0);
@@ -356,6 +370,7 @@ void requireSetup(const Result& r, const CivParams& params, const Catalogue& c, 
 void requireLanesIslandsAndWorms(const Result& r, const CivParams& params, const Occupancy& occupied) {
     const int width = r.map.getSizeX(), height = r.map.getSizeY(), end = width / 4, middle = width / 2;
     bool ridgesContinuous = true;
+    std::vector<char> expectedRock(width * height, 0);
     std::array<int, 2> previous{{-1, -1}};
     for(int x = end; x < width - end; ++x) {
         std::array<int, 2> rows{{-1, -1}};
@@ -366,6 +381,8 @@ void requireLanesIslandsAndWorms(const Result& r, const CivParams& params, const
             if(runs < 2) rows[runs] = top;
             ridgesContinuous = ridgesContinuous && y - top + 1 == 7;
             ++runs;
+            ridgesContinuous = ridgesContinuous && r.map(x, top - 1) == Terrain_Rock && r.map(x, y + 1) == Terrain_Rock;
+            expectedRock[occupied.index(x, top - 1)] = expectedRock[occupied.index(x, y + 1)] = 1;
         }
         ridgesContinuous = ridgesContinuous && runs == 2;
         for(int ridge = 0; ridge < 2; ++ridge) {
@@ -403,7 +420,6 @@ void requireLanesIslandsAndWorms(const Result& r, const CivParams& params, const
     }
     REQUIRE(regions == 3);
     std::set<int> islandRegions;
-    int islandRock = 0;
     for(int lane = 0; lane < 3; ++lane) {
         const int cy = laneCentre(height, lane);
         REQUIRE(islandRegions.insert(region[occupied.index(middle, cy)]).second);
@@ -413,21 +429,36 @@ void requireLanesIslandsAndWorms(const Result& r, const CivParams& params, const
         for(int x = end - 1; x <= width - end; ++x) clearLane = clearLane
             && r.map(x, cy) != Terrain_Mountain && occupied.building[occupied.index(x, cy)] == -1;
         REQUIRE(clearLane);
+        for(int x = end; x < width - end; ++x) for(int dy = -1; dy <= 1; ++dy) {
+            REQUIRE(r.map(x, cy + dy) == Terrain_Rock);
+            REQUIRE(occupied.building[occupied.index(x, cy + dy)] == -1);
+            expectedRock[occupied.index(x, cy + dy)] = 1;
+        }
         for(int dy = -3; dy <= 3; ++dy) for(int dx = -3; dx <= 3; ++dx) REQUIRE(r.map(middle + dx, cy + dy) == Terrain_Rock);
         std::vector<Coord> queue{{middle, cy}};
         std::set<std::pair<int, int>> seen{{middle, cy}};
-        bool sandMoat = true;
+        bool sandShoulders = true;
         for(std::size_t i = 0; i < queue.size(); ++i) {
             const Coord p = queue[i];
+            expectedRock[occupied.index(p.x, p.y)] = 1;
             for(int dy = -1; dy <= 1; ++dy) for(int dx = -1; dx <= 1; ++dx) {
                 const Coord n(p.x + dx, p.y + dy);
-                if(!r.map.isInsideMap(n.x, n.y)) { sandMoat = false; continue; }
-                if(r.map(n.x, n.y) != Terrain_Rock) { sandMoat = sandMoat && r.map(n.x, n.y) == Terrain_Sand; continue; }
+                if(!r.map.isInsideMap(n.x, n.y)) { sandShoulders = false; continue; }
+                if(r.map(n.x, n.y) != Terrain_Rock) {
+                    if(std::abs(n.x - middle) <= 11)
+                        sandShoulders = sandShoulders && r.map(n.x, n.y) == Terrain_Sand;
+                    continue;
+                }
+                // Bound only the widened island, not its new continuous spine.
+                if(std::abs(n.x - middle) > 11 || std::abs(n.y - cy) > 6) {
+                    sandShoulders = sandShoulders && std::abs(n.y - cy) <= 1;
+                    continue;
+                }
                 if(dx != 0 && dy != 0) continue;
                 if(seen.insert({n.x, n.y}).second) queue.push_back(n);
             }
         }
-        REQUIRE(sandMoat);
+        REQUIRE(sandShoulders);
         REQUIRE(queue.size() >= 89);
         REQUIRE(queue.size() <= 23 * 13);
         for(Coord p : queue) {
@@ -435,11 +466,42 @@ void requireLanesIslandsAndWorms(const Result& r, const CivParams& params, const
             REQUIRE(p.x < width - end - 2);
             REQUIRE(region[occupied.index(p.x, p.y)] == region[occupied.index(middle, cy)]);
         }
-        islandRock += static_cast<int>(queue.size());
     }
-    int centralRock = 0;
-    for(int y = 0; y < height; ++y) for(int x = end; x < width - end; ++x) centralRock += r.map(x, y) == Terrain_Rock;
-    REQUIRE(centralRock == islandRock); // Exactly three islands, no stray rock bridges.
+    // Exactly the three spines/island widenings and both sides of each ridge:
+    // no stray rock may silently cut a spice or worm corridor.
+    for(int y = 0; y < height; ++y) for(int x = end; x < width - end; ++x)
+        REQUIRE((r.map(x, y) == Terrain_Rock) == bool(expectedRock[occupied.index(x, y)]));
+
+    std::vector<int> sandRegion(width * height, -1);
+    int sandRegions = 0;
+    for(int y = 0; y < height; ++y) for(int x = end; x < width - end; ++x) {
+        const int origin = occupied.index(x, y);
+        auto sandPassable = [&](int tx, int ty) {
+            return tx >= end && tx < width - end && ty >= 0 && ty < height
+                && r.map(tx, ty) != Terrain_Rock && r.map(tx, ty) != Terrain_Mountain;
+        };
+        if(sandRegion[origin] >= 0 || !sandPassable(x, y)) continue;
+        std::vector<Coord> queue{{x, y}};
+        sandRegion[origin] = sandRegions;
+        bool reachesLeft = false, reachesRight = false;
+        for(std::size_t i = 0; i < queue.size(); ++i) {
+            const Coord p = queue[i];
+            reachesLeft = reachesLeft || p.x == end;
+            reachesRight = reachesRight || p.x == width - end - 1;
+            for(Coord d : {Coord(-1, 0), Coord(1, 0), Coord(0, -1), Coord(0, 1)}) {
+                const Coord n(p.x + d.x, p.y + d.y);
+                if(!sandPassable(n.x, n.y)) continue;
+                const int next = occupied.index(n.x, n.y);
+                if(sandRegion[next] >= 0) continue;
+                sandRegion[next] = sandRegions;
+                queue.push_back(n);
+            }
+        }
+        REQUIRE(reachesLeft);
+        REQUIRE(reachesRight);
+        ++sandRegions;
+    }
+    REQUIRE(sandRegions == 6); // Two unbroken sand channels per lane.
 
     REQUIRE(r.worms.size() == static_cast<std::size_t>(3 * params.wormsPerLane));
     std::array<int, 3> counts{}, centres{};

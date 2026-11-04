@@ -27,8 +27,8 @@ using SkirmishGenerator::Role;
 using SkirmishGenerator::kSpicePercent;
 constexpr const char* kSection = "Civilization Wars";
 constexpr int kLanes = 3;
-constexpr int kMouthTurrets = 2;
-constexpr int kCoreTurrets = 2;
+constexpr int kFrontTurrets = 10;
+constexpr int kCoreTurrets = 5;
 constexpr int kCityLevel = ZoneStartLevel::kMaxLevel;
 
 uint32_t mix(uint32_t seed, uint32_t value) {
@@ -50,9 +50,11 @@ struct Island {
     int ry;
 };
 
-Island islandShape(uint32_t seed, int lane) {
+Island islandShape(uint32_t seed, int lane, int height) {
+    // The smallest lanes need an eleven-row island to retain a clear sand
+    // channel between its shoulders and the new ridge-side rock margins.
     return {9 + static_cast<int>(mix(seed, 100u + lane) % 3),
-            5 + static_cast<int>(mix(seed, 200u + lane) % 2)};
+            std::min(5 + static_cast<int>(mix(seed, 200u + lane) % 2), height / 6 - 11)};
 }
 
 // The bounded, linearly interpolated ridge moves at most one row per column.
@@ -78,6 +80,8 @@ void makeTerrain(Result& result, const Params& params) {
         const int y = ridgeY(params.seed, x, width, height, ridge);
         for(int dy = -3; dy <= 3; ++dy)
             map(x, y + dy) = map(width - 1 - x, y + dy) = Terrain_Mountain;
+        for(int dy : {-4, 4})
+            map(x, y + dy) = map(width - 1 - x, y + dy) = Terrain_Rock;
     }
     // Half the map is sand: twice the normal share there keeps the familiar spice
     // presets. Coarse seeded fields, with a little edge noise, remain nested as the
@@ -96,9 +100,9 @@ void makeTerrain(Result& result, const Params& params) {
 
     for(int lane = 0; lane < kLanes; ++lane) {
         const int cy = laneY(height, lane);
-        const Island shape = islandShape(params.seed, lane);
-        // A plain-sand moat keeps the buildable 7x7 island core distinct from both
-        // team ends and the ridges, even with Very High spice and blooms.
+        const Island shape = islandShape(params.seed, lane, height);
+        // Plain sand around the island shoulders keeps both worm/spice channels
+        // open. The lane's narrow rock spine joins its core to both team ends.
         for(int dy = -shape.ry - 2; dy <= shape.ry + 2; ++dy)
             for(int dx = -shape.rx - 2; dx <= shape.rx + 2; ++dx) map(middle + dx, cy + dy) = Terrain_Sand;
         for(int dy = -shape.ry; dy <= shape.ry; ++dy) for(int dx = -shape.rx; dx <= shape.rx; ++dx) {
@@ -111,13 +115,16 @@ void makeTerrain(Result& result, const Params& params) {
         // Reserve every possible permanent origin, not only this worm count's
         // subset: changing worms never changes the generated terrain or the kit.
         const int sign = mix(params.seed, 300u + lane) & 1u ? 1 : -1;
-        const int wormY = cy + sign * (shape.ry + 3);
+        const int wormY = cy + sign * (shape.ry + 2);
         map(middle, wormY) = Terrain_Sand;
         for(int pair = 0; pair < kMaxWormsPerLane / 2; ++pair) {
             const int x = end + (pair + 1) * (middle - end) / (kMaxWormsPerLane / 2 + 1);
             map(x, wormY) = map(width - 1 - x, wormY) = Terrain_Sand;
         }
     }
+    for(int lane = 0; lane < kLanes; ++lane)
+        for(int x = end; x <= middle; ++x) for(int dy = -1; dy <= 1; ++dy)
+            map(x, laneY(height, lane) + dy) = map(width - 1 - x, laneY(height, lane) + dy) = Terrain_Rock;
 }
 
 struct RequiredItem { int item; Coord size; };
@@ -143,14 +150,14 @@ void requireKit(const Catalogue& catalogue) {
 // Plan against the least favourable house, including every lobby-selectable
 // house in multiplayer. Opposing seats therefore have identical windtrap counts
 // even when their factions have different configured power rules.
-int windtrapsFor(int mouths, const Catalogue& catalogue) {
+int windtrapsFor(const Catalogue& catalogue) {
     int draw = 3 * DuneCity::getZonePower(Structure_ZoneResidential, kCityLevel)
         + DuneCity::getZonePower(Structure_ZoneCommercial, kCityLevel)
         + DuneCity::getZonePower(Structure_ZoneIndustrial, kCityLevel);
     for(int item : {Structure_ConstructionYard, Structure_ResearchLab, Structure_Refinery, Structure_PoliceStation, Structure_RocketTurret}) {
         int worst = 0;
         for(int house : catalogue.houses) worst = std::max(worst, catalogue.rule(item, house).power);
-        draw += worst * (item == Structure_RocketTurret ? kCoreTurrets + kMouthTurrets * mouths : 1);
+        draw += worst * (item == Structure_RocketTurret ? kCoreTurrets + kFrontTurrets : 1);
     }
     int supply = 0;
     for(int house : catalogue.houses) {
@@ -160,7 +167,7 @@ int windtrapsFor(int mouths, const Catalogue& catalogue) {
     }
     const int needed = draw + draw / 10 + 1;
     const int traps = (needed + supply - 1) / supply;
-    if(traps > 10) throw std::invalid_argument("Civilization Wars starting-kit power does not fit the rock end");
+    if(traps > 15) throw std::invalid_argument("Civilization Wars starting-kit power does not fit the rock end");
     return traps;
 }
 
@@ -181,38 +188,43 @@ void addKit(Result& result, const Params& params, const Catalogue& catalogue, in
     };
     auto road = [&](int x, int y) { pair(result.tiles, Structure_Road, shift + x, y); };
 
-    // R -> C -> I districts share their top and bottom frontage roads. The last
-    // R footprint ends at x=11 and I begins at x=20: nine clear tiles exceed the
-    // existing IndustrialBuffer. Every directed R/C/I trip is at most 20 roads.
-    for(int x : {3, 6, 9}) building(Structure_ZoneResidential, shift + x, cy - 5, kCityLevel);
-    building(Structure_ZoneCommercial, shift + 13, cy - 5, kCityLevel);
-    building(Structure_ZoneIndustrial, shift + 20, cy - 5, kCityLevel);
-    building(Structure_PoliceStation, shift + 13, cy - 2);
-    building(Structure_ConstructionYard, shift + 22, cy - 2);
-    building(Structure_ResearchLab, shift + 25, cy - 2);
-    building(Structure_Refinery, shift + 20, cy + 4);
-    building(Structure_RocketTurret, shift + 21, cy + 1);
-    building(Structure_RocketTurret, shift + 28, cy - 4);
+    // All R/C lots face the sand, with a shared rear frontage. Industry and
+    // Dune infrastructure sit behind them; the twelve-tile R/I gap exceeds
+    // IndustrialBuffer and every directed R/C/I trip remains within 20 roads.
+    for(int dy : {-5, -2, 1}) building(Structure_ZoneResidential, end - 4, cy + dy, kCityLevel);
+    building(Structure_ZoneCommercial, end - 4, cy + 4, kCityLevel);
+    building(Structure_ZoneIndustrial, shift + 14, cy + 1, kCityLevel);
+    building(Structure_PoliceStation, shift + 21, cy + 1);
+    building(Structure_ConstructionYard, shift + 18, cy - 2);
+    building(Structure_ResearchLab, shift + 21, cy - 2);
+    building(Structure_Refinery, shift + 18, cy + 5);
+    for(Coord at : {Coord(17, -4), Coord(24, -4), Coord(17, 2), Coord(24, 4), Coord(6, 1)})
+        building(Structure_RocketTurret, shift + at.x, cy + at.y);
 
     int mouths = 0;
+    for(int lane = 0; lane < kLanes; ++lane) mouths += laneOwner(params.teamSize, lane) == seat;
+    int mouth = 0;
     for(int lane = 0; lane < kLanes; ++lane) if(laneOwner(params.teamSize, lane) == seat) {
-        ++mouths;
-        for(int dy : {-3, 3}) building(Structure_RocketTurret, end - 2, laneY(height, lane) + dy);
+        const int count = kFrontTurrets / mouths + (mouth++ < kFrontTurrets % mouths);
+        // Alternating shoulders leave the centre of every mouth unobstructed,
+        // even when a single owned lane receives all ten front turrets.
+        for(int i = 0; i < count; ++i) {
+            const int dy = (i & 1 ? 1 : -1) * (3 + 2 * (i / 2));
+            building(Structure_RocketTurret, end - 1, laneY(height, lane) + dy);
+        }
     }
-    const int traps = windtrapsFor(mouths, catalogue);
+    const int traps = windtrapsFor(catalogue);
+    constexpr int trapRows[] = {-5, -2, 5};
     for(int i = 0; i < traps; ++i)
-        building(Structure_WindTrap, shift + 3 + 3 * (i % 5), cy + 1 + 3 * (i / 5));
+        building(Structure_WindTrap, shift + 3 + 3 * (i % 5), cy + trapRows[i / 5]);
 
-    for(int x = 2; x <= 22; ++x) road(x, cy - 6);
-    for(int x = 2; x <= 29; ++x) road(x, cy - 3);
-    for(int y = cy - 5; y <= cy + 3; ++y) {
-        if(y != cy - 3) road(2, y);
-        if(y != cy - 3 && y != cy + 3) road(18, y);
-    }
-    // The top refinery frontage joins the city through x=18. Its entire bottom
-    // exit row and both side exits remain free of buildings and road overlays.
-    for(int x = 18; x <= 29; ++x) road(x, cy + 3);
-    pair(result.units, Unit_Carryall, shift + 26, cy + 6);
+    for(int y = cy - 6; y <= cy + 6; ++y) road(27, y);
+    for(int x = 13; x < 27; ++x) road(x, cy);
+    for(int y = cy + 1; y <= cy + 4; ++y) road(23, y);
+    // Only the refinery's top frontage has roads. Its bottom and both side
+    // exits stay completely clear for the normal first-refinery harvester.
+    for(int x = 18; x < 23; ++x) road(x, cy + 4);
+    pair(result.units, Unit_Carryall, shift + 23, cy + 7);
 }
 
 char terrainChar(TERRAINTYPE terrain) {
@@ -379,7 +391,7 @@ SkirmishGenerator::Result generate(const Params& requested, const SkirmishGenera
         h.role = params.multiplayer ? Role::Open : side ? Role::Enemy : seat ? Role::Ally : Role::Human;
         h.playerClass = params.multiplayer ? "" : side ? params.enemyClass : seat ? params.allyClass : "HumanPlayer";
         const int cy = seatY(dimensions.y, params.teamSize, seat);
-        const int leftX = dimensions.x / 4 - 9;
+        const int leftX = dimensions.x / 4 - 13;
         h.start = Coord(side ? dimensions.x - 1 - leftX : leftX, cy - 1);
         const int top = seat * dimensions.y / params.teamSize, bottom = (seat + 1) * dimensions.y / params.teamSize;
         h.plateau = {side ? dimensions.x - dimensions.x / 4 : 0, top, dimensions.x / 4, bottom - top};
@@ -393,7 +405,7 @@ SkirmishGenerator::Result generate(const Params& requested, const SkirmishGenera
     result.worms.reserve(kLanes * params.wormsPerLane);
     for(int lane = 0; lane < kLanes; ++lane) {
         const int sign = mix(params.seed, 300u + lane) & 1u ? 1 : -1;
-        const int y = laneY(dimensions.y, lane) + sign * (islandShape(params.seed, lane).ry + 3);
+        const int y = laneY(dimensions.y, lane) + sign * (islandShape(params.seed, lane, dimensions.y).ry + 2);
         const int end = dimensions.x / 4, middle = dimensions.x / 2;
         if(params.wormsPerLane & 1) result.worms.push_back({HOUSE_FREMEN, Unit_Sandworm, middle, y});
         for(int pair = 0; pair < params.wormsPerLane / 2; ++pair) {

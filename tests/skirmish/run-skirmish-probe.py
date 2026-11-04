@@ -29,7 +29,8 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/skirmis
   render       whole-map pictures (4 px per tile) and terrain measurements of map-editor random
                maps and of generated maps; --render-save adds the map a saved match started from
   civ-menu     Civilization Wars settings, remembered seed, generic multiplayer starts/lobby/wire rules
-  civ-1v1      fixed starting kit and positive city income, eight game minutes with QuantBot on every seat
+  civ-1v1      fixed kit, fifteen turrets/base (ten front), positive full-cost city income,
+               original research deadline and at least ten game minutes with all QuantBot seats
   civ-2v2      the same four-house match and mirrored lane setup
   civ-3v3      the same six-house match and one lane per player
   civ-research human selected from Civ Wars menu: zero-credit rejection, normal-income enablement,
@@ -127,7 +128,7 @@ startup_noise = re.compile(r'Error loading|Warning: could not|libpng', re.IGNORE
 
 summary = []
 for case in args.cases.split(','):
-    sizes = ((640, 480), (1280, 720)) if case in ('menu', 'civ-menu', 'civ-research') else ((1024, 768),)
+    sizes = ((640, 480), (1280, 720)) if case in ('menu', 'civ-menu', 'civ-research', 'civ-1v1', 'civ-2v2', 'civ-3v3') else ((1024, 768),)
     for width, height in sizes:
         label = case if len(sizes) == 1 else f'{case}-{width}'
         profile = work / ('profile-' + label) / 'profile'
