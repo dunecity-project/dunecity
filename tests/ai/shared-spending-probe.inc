@@ -94,6 +94,12 @@ void runSharedSpendingProbe(Game& game) {
         game.objectData.data[Structure_RocketTurret][HOUSE_HARKONNEN].enabled=false;
         yard->updateBuildList();secondYard->updateBuildList();
     }
+    const auto originalSharedConfig=bot->configOverride;
+    auto sharedConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
+    // This is the generic economic-allocation baseline. The full-build
+    // trooper fixture separately checks proactive WOR and paid troops ON.
+    sharedConfig->force.trooperSupport=false;
+    bot->configOverride=sharedConfig;
     try {
         reset(price,1000000);bot->build(10000);
         require(count(heavy,Unit_Harvester)==1,"Next worthwhile worker lost its exact purchase budget");
@@ -170,9 +176,6 @@ void runSharedSpendingProbe(Game& game) {
             // its six-yard target, while its dedicated yard still zones.
             const auto savedPlotConfig=bot->configOverride;
             auto plotConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
-            // This compares generic factory/growth allocation, not the separate
-            // proactive WOR purchase covered by the full-build trooper fixture.
-            plotConfig->force.trooperSupport=false;
             bot->configOverride=plotConfig;
             try {
                 for(bool prerequisites:{true,false}) {
@@ -184,16 +187,22 @@ void runSharedSpendingProbe(Game& game) {
                     require(hasZone(yard),"Rich production displaced the dedicated R/I/C yard");
                     require(count(secondYard,Structure_HeavyFactory)>0,
                         "Cash-funded factory expansion waited for the construction-yard target");
-                    // reset() exposes the standing heavy factory, but hides
-                    // the repair yard and its other prerequisite producers.
-                    // The new rule keeps only that missing goal; the legacy
-                    // control still protects both speculative production plots.
-                    require(bot->cityProductionPlots.size()==(prerequisites ? 1u : 2u),
-                        "Production reservations did not match the visible missing suppliers");
-                    if(prerequisites)
-                        require(bot->cityProductionPlots.front().item!=Structure_HeavyFactory,
-                            "A standing factory still reserved another speculative factory plot");
+                    // Inventory counts the actual house, including producers
+                    // hidden from this allocation fixture's active list. Both
+                    // core suppliers already stand, so only the legacy control
+                    // may reserve speculative copies.
+                    require(bot->cityProductionPlots.size()==(prerequisites ? 0u : 2u),
+                        "Production reservations did not match the owned core suppliers");
+                    bool checkedQueuedFactory=false;
                     for(const auto& entry:bot->reservedStructures) {
+                        if(entry.second.item==Structure_HeavyFactory) {
+                            const auto previousBuilder=bot->planningBuilder;
+                            bot->planningBuilder=entry.first;
+                            const bool accessible=bot->preservesGroundAccess(entry.second.item,entry.second.location);
+                            bot->planningBuilder=previousBuilder;
+                            require(accessible,"Zoning blocked the queued factory's ground access");
+                            checkedQueuedFactory=true;
+                        }
                         if (!DuneCity::isCityZoneStructure(entry.second.item)) continue;
                         const auto p=entry.second.location, size=getStructureSize(entry.second.item);
                         for(const auto& plot:bot->cityProductionPlots) {
@@ -203,6 +212,7 @@ void runSharedSpendingProbe(Game& game) {
                                 "Zoning consumed a future production footprint or access");
                         }
                     }
+                    require(checkedQueuedFactory,"The funded factory had no reserved placement site");
                 }
             } catch(...) { bot->configOverride=savedPlotConfig;throw; }
             bot->configOverride=savedPlotConfig;
@@ -579,7 +589,8 @@ void runSharedSpendingProbe(Game& game) {
             bot->configOverride=savedConfig;
         }
         SDL_Log("SHARED_SPENDING_PASS: exact worker reserve, simultaneous construction, depletion, scarce credits (%s)",game.isCitySimEnabled()?"city":"vanilla");
-    }catch(...){structureList=saved;throw;}
+    }catch(...){bot->configOverride=originalSharedConfig;structureList=saved;throw;}
+    bot->configOverride=originalSharedConfig;
     structureList=saved;
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=shared-spending outcome=passed");
 }
