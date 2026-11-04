@@ -121,21 +121,23 @@ difficulty quota remains the infantry budget, not ten additional independent
 shares or a new saved mix slot.
 
 With the switch on, one WOR is desirable per legal house even when existing
-troopers already satisfy its target. It follows an actual completed Heavy Factory
-and, where its technology and import catalogue exist, an operational Starport.
-Pending factories do not substitute for either. The house needs positive forecast
-income, no opening-worker shortfall, a legal site and enough actual power for
-all queued consumers plus the new building. A priced future generator is not
-working generation.
+troopers already satisfy its target. It follows an actual completed Heavy Factory.
+An enabled, catalogue-backed Starport keeps priority once population permits it
+or its order is pending; a population-locked, currently unavailable Starport does
+not veto the infantry lane. Pending factories do not substitute for the Heavy
+Factory. The house needs positive forecast income, no opening-worker shortfall,
+a legal site and enough actual power for all queued consumers plus the new
+building. A priced future generator is not working generation.
 
 The first missing legal WOR prerequisite can supply the lane instead; existing
 or pending WORs prevent duplicates. Positive income can select protected savings
 before the short forecast covers the purchase. Actual queueing still requires the
-founded building price and existing strategic/economy, city-working and next-zone
-cash. It does not demand a full-parallel-production cash forecast. The first lane
-precedes repeat growth and optional factories, but actual core protection, power
-recovery and required civics retain priority. It uses its dedicated funding path,
-not the generic protected-service shortcut that could occupy a recovery yard.
+founded building price and required economy/production, city-working and next-zone
+cash. An optional Palace reserve yields to this bounded lane. It does not demand
+a full-parallel-production cash forecast. The first lane precedes repeat growth
+and optional factories, but actual core protection, power recovery and required
+civics retain priority. It uses its dedicated funding path, not the generic
+protected-service shortcut that could occupy a recovery yard.
 
 The ordinary mix keeps **six standing troopers**, or the greater of remembered
 armour demand (one per 600 credits, at most nine) and effective visible aircraft
@@ -150,9 +152,14 @@ All orders still obey cash, military-value and engine unit caps. Real troops,
 including existing crew, and pending single/three/five-man offers count together;
 several producers cannot each claim a fresh allowance. The WOR chooses an enabled
 affordable ordinary offer, preferring lower price per deployed trooper. An
-operational WOR reserves its missing floor's military-cap space and next troop's
-cash against all other military producers, including Starport bargains. Only
-genuinely funded headroom is charged as unbuilt infantry in the vehicle plan;
+operational WOR reserves its missing floor's military-cap space across all
+military producers, including Starport bargains. A real, legal next floor order
+also competes as a protected capital supplier: repeat zoning and the optional
+Palace cannot consume its cash first. Opening workers, first transport, required
+civics, bootstrap cash, power and urgent cover remain ahead. The selected WOR
+retains city-working and next-zone cash and buys only through the standing/reactive
+floor; additional anti-armour troops remain ordinary quota-limited production.
+Only genuinely funded headroom is charged as unbuilt infantry in the vehicle plan;
 unfunded future troops are not treated as an already-existing army.
 
 Existing army, base/harvester-defence and unitRole systems own troop orders.
@@ -160,6 +167,29 @@ The real-engine fixture also exposed and corrected a pre-existing retreat path
 that ignored human leases: `retreatAllUnits()` now uses the existing
 `humanControls()` guard. Saboteurs remain excluded. No controller, new saved
 state or protocol field is added.
+
+### Why a military-only reserve was insufficient
+
+The pinned `ae08f5e3` DuneCity audit supplied two concrete funding counterexamples:
+
+- A surviving no-spice Harkonnen house had an operational Heavy Factory and
+  Starport, positive four-minute income492 and actual power600/470 at cycle152025.
+  Its first-WOR candidate still required2864 credits because an optional Palace
+  claimed2000 on top of the founded building and400 working/next-zone cash.
+- In FFA6 Hard, seed9101, Sardaukar bought its WOR at17.26 minutes but never
+  ordered a troop. Late passes had an idle powered WOR, a troop target9–18,
+  military value0–800 against a50000 cap, and only131–288 credits. The yard
+  repeatedly bought100-credit zones while the WOR needed its first100-credit
+  troop plus working cash and could additionally be charged Palace savings.
+
+The `862fc8b8` cutover uses the existing capital-supplier allocation for a genuine
+next floor order, not an imaginary army or a second order controller. Its first-WOR
+and floor-order buffers omit only the optional Palace reserve; other protected
+requirements remain. The real-engine fixture additionally pays for a WOR and six
+troopers separately as Harkonnen, Ordos, Fremen, Sardaukar and Mercenary. Atreides'
+normal WOR remains unavailable. The Harkonnen case retains the actual enemy
+Ornithopter attack and lethal-hit checks.
+
 
 ### Initial paired measurement and priority correction
 

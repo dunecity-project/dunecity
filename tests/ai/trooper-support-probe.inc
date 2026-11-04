@@ -82,6 +82,7 @@ struct World {
         options.concreteRequired = false;
         options.researchLab = false;
         options.trooperAntiAir = true;
+        options.starportPopulation = true;
         options.maximumNumberOfHarvestersOverride = 8;
         // The server-name overload creates a network game, not this offline observer.
         GameInitSettings init("trooper-support.ini", mapText(), true, options);
@@ -327,6 +328,19 @@ inline void availabilityAndBudgetGates(World& world) {
     capped.itemCount[Structure_StarPort] = 1;
     capped.starportMarketAvailable = true; // This control tests an existing catalogue, not the fresh world's empty one.
     blocked(world, capped, "no_standing_starport_despite_pending_port");
+    capped.itemCount[Structure_StarPort] = 0;
+    require(!world.owner->meetsStarportPopulation(), "Population-locked Starport control is already unlocked");
+    independent(capped, "population_locked_starport_does_not_remove_wor");
+    auto& cityState = world.game->getCitySimulation()->getHouseStateMut(house);
+    const int oldPopulation = cityState.resPop;
+    cityState.resPop = DuneCity::kStarportPopulation;
+    world.yard->updateBuildList();
+    require(world.owner->meetsStarportPopulation()
+            && world.bot->campaignAvailableToBuild(world.yard, Structure_StarPort),
+            "Unlocked Starport control is not a genuine legal offer");
+    blocked(world, capped, "legal_starport_keeps_core_priority");
+    cityState.resPop = oldPopulation;
+    world.yard->updateBuildList();
     capped.starportMarketAvailable = false;
     independent(capped, "absent_import_catalogue_does_not_remove_wor");
     world.owner->numItem[Structure_StarPort] = starports;
