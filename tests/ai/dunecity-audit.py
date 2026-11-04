@@ -9,6 +9,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import shutil
 import statistics
@@ -41,17 +42,22 @@ TROOPER_FIELDS = ('wor', 'wor_built', 'trooper_live', 'trooper_queued', 'trooper
                   'elite_ornithopter_lost', 'ornithopter_killed', 'elite_ornithopter_killed')
 # Stable engine item IDs (include/data.h); lethal_damage names the victim type.
 ENEMY_AIR_FIELDS = {35: 'enemy_ornithopter_kills', 80: 'enemy_elite_ornithopter_kills'}
+TROOPER_ITEM = 44
+TROOPER_ENEMY_AIR_FIELDS = {item: 'trooper_' + field for item, field in ENEMY_AIR_FIELDS.items()}
+AIR_COUNT_FIELDS = tuple(ENEMY_AIR_FIELDS.values()) + tuple(TROOPER_ENEMY_AIR_FIELDS.values())
+AIR_ATTRIBUTION_FIELDS = ('air_kill_attribution_complete', 'air_kill_unknown_attribution')
 GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes',
                       'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error', 'config_hash', 'options_hash',
                       'map_hash', 'content_hash', 'object_data_hash', 'ai_config_hashes', 'probe_sha256',
                       'source_commit', 'source_fingerprint', 'source_fingerprint_error',
-                      'air_kill_telemetry', 'air_kill_telemetry_reasons', 'capture_mib')
+                      'air_kill_telemetry', 'air_kill_telemetry_reasons', 'air_kill_attribution',
+                      'air_kill_unknown_attribution', 'capture_mib', 'diagnostics')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
                        'score', 'drawn', 'won', 'flags') + tuple(
     field for detector in DETECTORS for field in (detector, 'eligible_' + detector, 'first_' + detector)
-) + TROOPER_FIELDS + ('air_kill_telemetry',) + tuple(ENEMY_AIR_FIELDS.values())
+) + TROOPER_FIELDS + ('air_kill_telemetry',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
 CYCLES_PER_MINUTE = 3750  # The engine's 16 ms fixed simulation tick.
 SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_value', 'army_units', 'harvesters',
                  'structures', 'factories', 'kill_value', 'loss_value', 'power', 'need', 'population', 'tax', 'demand',
@@ -62,11 +68,12 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'yard_storage', 'police_funding', 'army_target', 'unit_limit', 'spice_multiplier', 'sale_credits',
                  'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
                  'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost'
-) + TROOPER_FIELDS + ('air_kills_complete',) + tuple(ENEMY_AIR_FIELDS.values())
+) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags',)
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 AIR_KILL_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'attacker', 'victim_house', 'object', 'item',
-                          'enemy', 'capture_complete')
+                          'enemy', 'capture_complete', 'attacker_item', 'attacker_source', 'attacker_firing_house',
+                          'attacker_attribution', 'source_enemy', 'attribution_complete')
 lock = threading.Lock()
 
 
@@ -100,15 +107,16 @@ def parse(line, marker):
 
 
 def air_kill_capture(out, houses, final_cycle, enabled):
-    """Retain actual lethal callbacks, never assign an opponent's losses as kills.
+    """Retain actual lethal callbacks and distinguish stream from source completeness.
 
-    House::getNumKilledItems is victim-typed but includes friendly splash. The
-    existing ObjectBase::handleDamage callback supplies the lethal damagerOwner
-    even after its firing object has disappeared. Filter victim/attacker teams
-    here; only a complete capture establishes an exact count, including zero.
+    Existing enemy_* counts follow lethal damagerOwner, including a dead shooter's
+    shot. Trooper counts instead require the natural source item and firing house
+    from the shared damage provenance (never its possibly-Deviator reward bucket).
+    Unknown source attribution is retained, not guessed from a live object/army.
+    One unknown air callback conservatively censors game-wide exact Trooper totals.
     """
     if not enabled:
-        return dict(status='disabled', reasons='', events=[])
+        return dict(status='disabled', reasons='', attribution='disabled', unknown_attribution='', events=[])
     paths = sorted((out / 'profile').rglob('events.jsonl'))
     teams = {int(house['house']): int(house['team']) for house in houses}
     reasons, events = [], []
@@ -158,9 +166,20 @@ def air_kill_capture(out, houses, final_cycle, enabled):
                             reasons.append('unknown_combat_house')
                         elif attacker_house >= 0:
                             enemy = int(teams[victim] != teams[attacker_house])
+                        source_item = int(data.get('attacker_item', -1))
+                        source = int(data.get('attacker_source', -1))
+                        firing_house = int(data.get('attacker_firing_house', -1))
+                        attribution = data.get('attacker_attribution', 'unknown')
+                        source_enemy = int(teams[victim] != teams[firing_house]) if (
+                            victim in teams and firing_house in teams) else ''
+                        attributed = source_item >= 0 and source == attacker and firing_house in teams \
+                            and attribution in ('snapshot', 'direct')
                         events.append(dict(session=session, seq=seq, cycle=cycle, house=attacker_house,
                                            attacker=attacker, victim_house=victim, object=object_id,
-                                           item=int(data['item']), enemy=enemy))
+                                           item=int(data['item']), enemy=enemy, attacker_item=source_item,
+                                           attacker_source=source, attacker_firing_house=firing_house,
+                                           attacker_attribution=attribution, source_enemy=source_enemy,
+                                           attribution_complete=int(attributed)))
                 except (ValueError, TypeError, KeyError):
                     reasons.append('malformed_records')
         if started != 1 or ended != 1 or summaries != 1:
@@ -174,23 +193,35 @@ def air_kill_capture(out, houses, final_cycle, enabled):
     complete = not reasons
     for event in events:
         event['capture_complete'] = int(complete)
-    return dict(status='complete' if complete else 'capture_limit' if limited else
-                'missing' if not paths else 'incomplete',
-                reasons=','.join(dict.fromkeys(reasons)), events=events)
+    status = 'complete' if complete else 'capture_limit' if limited else 'missing' if not paths else 'incomplete'
+    unknown = sum(not event['attribution_complete'] for event in events)
+    return dict(status=status, reasons=','.join(dict.fromkeys(reasons)), events=events,
+                attribution=('unknown' if unknown else 'complete') if complete else status,
+                unknown_attribution=unknown if paths else '')
 
 
 def add_air_kill_samples(samples, capture):
-    cycles = defaultdict(list)
+    cycles, unknown = defaultdict(list), []
     for event in capture['events']:
         if event['enemy'] == 1:
             cycles[(event['house'], ENEMY_AIR_FIELDS[event['item']])].append(event['cycle'])
+        if not event['attribution_complete']:
+            unknown.append(event['cycle'])
+        elif event['source_enemy'] == 1 and event['attacker_item'] == TROOPER_ITEM:
+            cycles[(event['attacker_firing_house'], TROOPER_ENEMY_AIR_FIELDS[event['item']])].append(event['cycle'])
+    unknown.sort()
     for values in cycles.values():
         values.sort()
     complete = capture['status'] == 'complete'
     for sample in samples:
-        sample['air_kills_complete'] = int(complete)
-        for field in ENEMY_AIR_FIELDS.values():
-            sample[field] = bisect_right(cycles[(int(sample['house']), field)], int(sample['cycle'])) if complete else ''
+        cycle, house = int(sample['cycle']), int(sample['house'])
+        missing = bisect_right(unknown, cycle)
+        source_complete = complete and missing == 0
+        sample.update(air_kills_complete=int(complete), air_kill_attribution_complete=int(source_complete),
+                      air_kill_unknown_attribution=missing if complete else '')
+        for field in AIR_COUNT_FIELDS:
+            measured = source_complete if field in TROOPER_ENEMY_AIR_FIELDS.values() else complete
+            sample[field] = bisect_right(cycles[(house, field)], cycle) if measured else ''
 
 
 def metadata(game):
@@ -293,7 +324,7 @@ def command(args, binary, game, out):
            '--capture-mib', str(getattr(args, 'capture_mib', 256)),
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--house', game['sides'][0][0],
            '--scenario-sides', sides, '--local-spectator', '--skirmish', game['skirmish']]
-    if not args.attack_events:
+    if not (args.attack_events or getattr(args, 'keep_telemetry', False)):
         cmd += ['--no-ai-telemetry']
     if args.game_options:
         cmd += ['--game-options', str(args.game_options)]
@@ -302,8 +333,22 @@ def command(args, binary, game, out):
     return cmd
 
 
+def retain_telemetry(results, out):
+    """Copy only durable diagnostics before ordinary managed-profile cleanup."""
+    relative = Path('diagnostics') / out.name
+    destination = results / relative
+    paths = [out / 'run.log', out / 'summary.json'] + sorted((out / 'profile').rglob('events.jsonl'))
+    for source in paths:
+        if source.is_file():
+            target = destination / source.relative_to(out)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    return relative.as_posix()
+
+
 def play(args, scratch, binary, game):
     out = scratch / ('g' + hashlib.sha256(game['id'].encode()).hexdigest()[:12])
+    telemetry = args.attack_events or getattr(args, 'keep_telemetry', False)
     probe_sha256 = hashlib.sha256(Path(binary).read_bytes()).hexdigest()
     started = time.monotonic()
     process = subprocess.run(command(args, binary, game, out), cwd=root, capture_output=True, text=True,
@@ -329,15 +374,20 @@ def play(args, scratch, binary, game):
                 merged[(int(data['house']), int(data['cycle']))].update(data)
     samples = [dict(metadata(game), **data) for _, data in sorted(merged.items())]
     capture = air_kill_capture(out, final, max((int(sample['cycle']) for sample in samples), default=0),
-                               args.attack_events)
+                               telemetry)
     add_air_kill_samples(samples, capture)
+    # A projectile may kill after its firing house was eliminated. Final-house
+    # totals consume the whole capture, not only that house's last live sample.
+    air_cycle = max((int(event['cycle']) for event in capture['events']), default=0)
+    air_final = {int(house['house']): dict(house=house['house'], cycle=air_cycle) for house in final}
+    add_air_kill_samples(list(air_final.values()), capture)
     missing = any('power' not in sample for sample in samples)
     error = '' if process.returncode == 0 and result and samples and not missing else f'rc={process.returncode};incomplete={int(missing)}'
     row = dict(metadata(game), sides=','.join(f'{h}:{t}:{d}' for h, t, d in game['sides']),
                map_seed=generated.get('map_seed', ''), terrain_attempts=generated.get('attempts', ''),
                skipped=generated.get('skipped', ''), outcome=result.get('outcome', ''), winner_team=result.get('winner_team', ''),
                minutes=result.get('minutes', ''), loop_ms=timing.get('loop_ms', ''),
-               wall_s=round(time.monotonic() - started, 3), digest=digest, attack_telemetry=int(args.attack_events), error=error)
+               wall_s=round(time.monotonic() - started, 3), digest=digest, attack_telemetry=int(telemetry), error=error)
     row.update({field: setup.get(field, '') for field in (
         'config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
     row.update(ai_config_hashes=','.join(f'{item["house"]}:{item["config_hash"]}' for item in configs),
@@ -345,7 +395,8 @@ def play(args, scratch, binary, game):
                source_fingerprint=summary.get('sourceFingerprint', ''),
                source_fingerprint_error=summary.get('sourceFingerprintError', ''))
     row.update(air_kill_telemetry=capture['status'], air_kill_telemetry_reasons=capture['reasons'],
-               capture_mib=getattr(args, 'capture_mib', 256))
+               air_kill_attribution=capture['attribution'], air_kill_unknown_attribution=capture['unknown_attribution'],
+               capture_mib=getattr(args, 'capture_mib', 256), diagnostics='')
     results = Path(args.results)
     if error:
         (results / f'failed-{out.name}.txt').write_text(game['id'] + '\n' + process.stdout[-4000:] + '\n'
@@ -362,7 +413,7 @@ def play(args, scratch, binary, game):
         difficulty_of = {HOUSE_IDS[h]: d for h, _, d in game['sides']}
         attacks = defaultdict(list)
         attack_rows = []
-        if args.attack_events:
+        if telemetry:
             for event in summary['attacks']:
                 if int(event['data']['members']) <= 0:
                     continue
@@ -380,20 +431,23 @@ def play(args, scratch, binary, game):
                 'army_value', 'army_units', 'sortie_minutes')}, **detectors,
                 score=round(scores[number].score, 4), drawn=int(scores[number].drawn),
                 won=int(house['team'] == result.get('winner_team')), difficulty=difficulty_of[number],
-                attack_telemetry=int(args.attack_events),
-                attack_count=len(attacks[number]) if args.attack_events else '',
+                attack_telemetry=int(telemetry),
+                attack_count=len(attacks[number]) if telemetry else '',
                 first_attack_minute=min(attacks[number]) if attacks[number] else '',
                 air_kill_telemetry=capture['status'],
-                **{key: last.get(key, '') for key in TROOPER_FIELDS + tuple(ENEMY_AIR_FIELDS.values())},
-                **{key: last.get(key, '') if args.attack_events or key == 'storage_full_cycles' else ''
+                **{key: last.get(key, '') for key in TROOPER_FIELDS},
+                **{key: air_final[number][key] for key in AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS},
+                **{key: last.get(key, '') if telemetry or key == 'storage_full_cycles' else ''
                    for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost')},
                 flags='/'.join(d for d in DETECTORS if detectors[d])))
         append(results / 'samples.csv', SAMPLE_FIELDS, samples)
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
-        if args.attack_events:
+        if telemetry:
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
             append(results / 'air-kills.csv', AIR_KILL_FIELDS,
                    [dict(metadata(game), **event) for event in capture['events']])
+        if getattr(args, 'keep_telemetry', False):
+            row['diagnostics'] = retain_telemetry(results, out)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, bool(error))
     return row
@@ -421,7 +475,8 @@ def run(args):
                          ('air-kills.csv', AIR_KILL_FIELDS)):
         require_schema(results / name, fields)
     done = {r['id'] for r in read(results / 'games.csv') if not r['error']
-            and (not args.attack_events or r.get('attack_telemetry') == '1')}
+            and (not (args.attack_events or args.keep_telemetry) or r.get('attack_telemetry') == '1')
+            and (not args.keep_telemetry or r.get('diagnostics') and (results / r['diagnostics']).is_dir())}
     todo = [game for game in schedule(args) if game['id'] not in done]
     print(f'{len(todo)} games to play ({len(done)} complete)', flush=True)
     if todo:
@@ -547,34 +602,62 @@ def storage_report(directories, allowed=None, label='Storage'):
           '(capacity-loss ticks excluded)')
 
 
+def measured_air_metric(row, field):
+    if field in AIR_COUNT_FIELDS and row.get('air_kill_telemetry') != 'complete':
+        return False
+    return field not in TROOPER_ENEMY_AIR_FIELDS.values() or row.get('air_kill_attribution_complete') == '1'
+
+
+def support_cell(rows, field):
+    values = [int(row[field]) for row in rows if row.get(field, '') != '' and measured_air_metric(row, field)]
+    if not values:
+        return 'unmeasured'
+    cell = f'{statistics.mean(values):.2f} ({len(values)}/{len(rows)})'
+    if field == 'wor_built':
+        built = sum(value > 0 for value in values)
+        cell += f'; built>0 {built}/{len(values)} ({100 * built / len(values):.1f}%)'
+    if field in ('wor_built', 'trooper_built') or field in TROOPER_ENEMY_AIR_FIELDS.values():
+        cell += f'; total {sum(values)}'
+    return cell
+
+
 def trooper_report(directories):
-    completed = {row['id'] for row in load(directories, 'games.csv', ('id',)) if not row['error']}
+    games = [row for row in load(directories, 'games.csv', ('id',)) if not row['error']]
+    completed = {row['id'] for row in games}
     groups = defaultdict(list)
     for row in load(directories, 'houses.csv', ('id', 'house')):
         if row['id'] in completed:
             groups[(row['difficulty'], row['spice_level'])].append(row)
     print('Troopers/air: final live counts and cumulative engine ledgers; means show measured house counts. '
-          'Trooper built is engine-completed/delivered singles after squad expansion, not strictly WOR-trained; '
-          'queued counts single-equivalents.')
+          'WOR built>0 is the percentage of measured house histories that ever completed a WOR. '
+          'Trooper built totals are engine-completed/delivered singles after squad expansion, not strictly '
+          'WOR-trained; queued counts single-equivalents.')
     tables = (
         (('wor', 'WOR live'), ('wor_built', 'WOR built'), ('trooper_live', 'Trooper live'),
          ('trooper_queued', 'Trooper queued'), ('trooper_built', 'Trooper built')),
         (('ornithopter_lost', 'Own Ornithopter losses'), ('elite_ornithopter_lost', 'Own elite losses'),
          ('enemy_ornithopter_kills', 'Enemy Ornithopter kills'), ('enemy_elite_ornithopter_kills', 'Enemy elite kills')),
+        (('trooper_enemy_ornithopter_kills', 'Trooper enemy Ornithopter kills'),
+         ('trooper_enemy_elite_ornithopter_kills', 'Trooper enemy elite kills')),
     )
     for table in tables:
         print()
         print('| Difficulty | Spice | ' + ' | '.join(label for _, label in table) + ' |')
         print('|---|---|' + '---|' * len(table))
         for (difficulty, spice), rows in sorted(groups.items()):
-            cells = []
-            for field, _ in table:
-                values = [int(row[field]) for row in rows if row.get(field, '') != ''
-                          and (field not in ENEMY_AIR_FIELDS.values() or row.get('air_kill_telemetry') == 'complete')]
-                cells.append(f'{statistics.mean(values):.2f} ({len(values)}/{len(rows)})' if values else 'unmeasured')
+            cells = [support_cell(rows, field) for field, _ in table]
             print(f'| {difficulty} | {spice} | ' + ' | '.join(cells) + ' |')
+    attributed = [row for row in games if row.get('air_kill_attribution') == 'complete']
+    unknown = [row for row in games if row.get('air_kill_telemetry') == 'complete'
+               and row.get('air_kill_unknown_attribution', '') != '']
+    print(f'Air source attribution: {len(attributed)}/{len(games)} complete games; '
+          f'{sum(int(row["air_kill_unknown_attribution"]) for row in unknown)} observed unknown-source callbacks '
+          f'in {len(unknown)}/{len(games)} complete streams (count games once, not once per house).')
     print('Enemy kills require complete lethal_damage callbacks and opposing teams; raw *_killed house ledgers '
-          'in CSVs include friendly splash and are not the enemy-kill metric. Missing history stays unmeasured.')
+          'include friendly splash. Trooper kills require natural attacker_item and firing-house attribution, '
+          'not reward_item or the shooter at impact. Any unknown air source censors exact Trooper totals '
+          'game-wide; air_kill_unknown_attribution is a game-wide running count, not additive across houses. '
+          'Missing history stays unmeasured.')
 
 
 def trooper_pair_keys(previous, current, old, new):
@@ -608,26 +691,54 @@ def trooper_pair_keys(previous, current, old, new):
     return matched, dict(rejected)
 
 
+def clustered_guardrail(pairs, direction, complete=True):
+    """One observation per game: bootstrap game deltas and exact two-sided sign test."""
+    if not pairs:
+        return 'unmeasured', 'unmeasured'
+    deltas = [after - before for before, after in pairs]
+    low, high = match_score.bootstrap(deltas, 9101)
+    better = sum(direction * delta > 0 for delta in deltas)
+    worse = sum(direction * delta < 0 for delta in deltas)
+    nonzero = better + worse
+    pvalue = min(1.0, 2 * sum(math.comb(nonzero, k) for k in range(min(better, worse) + 1))
+                 / 2 ** nonzero) if nonzero else 1.0
+    mean = statistics.mean(deltas)
+    state = 'unmeasured' if not complete else 'regression supported' if worse > better and pvalue <= 0.05 \
+        else 'inconclusive' if direction * mean < 0 else 'no supported regression'
+    point = 'decrease' if mean < 0 else 'increase' if mean > 0 else 'unchanged'
+    return (f'game-mean delta {mean:+.3f}, 95% [{low:+.3f}, {high:+.3f}]; '
+            f'sign better/worse/tied {better}/{worse}/{len(pairs)-nonzero}, p2={pvalue:.4f}, '
+            f'{len(pairs)} games; point estimate {point}; {state}'), state
+
+
 def paired_metric(keys, old, new, field, direction=None, telemetry=False):
-    values = []
+    values, by_game = [], defaultdict(list)
     for key in keys:
         rows = (old[key], new[key])
-        if any(row.get(field, '') == '' for row in rows):
+        if any(row.get(field, '') == '' or not measured_air_metric(row, field) for row in rows):
             continue
-        if (telemetry or field in ENEMY_AIR_FIELDS.values()) and any(
-                row.get('air_kill_telemetry') != 'complete' for row in rows):
+        if telemetry and any(row.get('air_kill_telemetry') != 'complete'
+                             or row.get('attack_telemetry') != '1' for row in rows):
             continue
-        if telemetry and any(row.get('attack_telemetry') != '1' for row in rows):
-            continue
-        values.append(tuple(float(row[field]) for row in rows))
+        pair = tuple(float(row[field]) for row in rows)
+        values.append(pair)
+        by_game[key[0]].append(pair)
     if not values:
         return 'unmeasured', 'unmeasured'
     before, after = (statistics.mean(pair[side] for pair in values) for side in (0, 1))
-    state = 'unmeasured'
-    if direction is not None and len(values) == len(keys):
-        state = 'not worse' if direction * (after - before) >= 0 else 'worse'
     cell = f'{before:.2f} -> {after:.2f} ({after-before:+.2f}; {len(values)}/{len(keys)} pairs)'
-    return cell + (f'; {state}' if direction is not None else ''), state
+    if field == 'wor_built':
+        cell += '; built>0 ' + ' -> '.join(
+            f'{sum(pair[side] > 0 for pair in values)}/{len(values)} '
+            f'({100 * sum(pair[side] > 0 for pair in values) / len(values):.1f}%)' for side in (0, 1))
+    if field in ('wor_built', 'trooper_built') or field in TROOPER_ENEMY_AIR_FIELDS.values():
+        cell += '; totals ' + ' -> '.join(f'{sum(pair[side] for pair in values):.0f}' for side in (0, 1))
+    if direction is None:
+        return cell, 'unmeasured'
+    game_pairs = [tuple(statistics.mean(pair[side] for pair in group) for side in (0, 1))
+                  for group in by_game.values()]
+    evidence, state = clustered_guardrail(game_pairs, direction, len(values) == len(keys))
+    return cell + '; ' + evidence, state
 
 
 def paired_detector(keys, old, new, detector):
@@ -636,10 +747,19 @@ def paired_detector(keys, old, new, detector):
                        for row in (old[key], new[key]) for field in fields):
         return 'unmeasured', 'unmeasured'
     counts = [tuple(sum(int(source[key][field]) for key in keys) for field in fields) for source in (old, new)]
-    state = 'unmeasured'
-    if all(exposed for _, exposed in counts):
-        state = 'not worse' if counts[1][0] * counts[0][1] <= counts[0][0] * counts[1][1] else 'worse'
-    return f'{counts[0][0]}/{counts[0][1]} -> {counts[1][0]}/{counts[1][1]}; {state}', state
+    by_game = defaultdict(list)
+    for key in keys:
+        by_game[key[0]].append(key)
+    pairs, complete = [], True
+    for group in by_game.values():
+        game_counts = [tuple(sum(int(source[key][field]) for key in group) for field in fields)
+                       for source in (old, new)]
+        if all(exposed for _, exposed in game_counts):
+            pairs.append(tuple(hit / exposed for hit, exposed in game_counts))
+        elif any(hit or exposed for hit, exposed in game_counts):
+            complete = False  # Exposure vanished in one arm; never call that an improvement.
+    evidence, state = clustered_guardrail(pairs, -1, complete)
+    return f'{counts[0][0]}/{counts[0][1]} -> {counts[1][0]}/{counts[1][1]}; {evidence}', state
 
 
 def trooper_comparison(control, candidate):
@@ -658,9 +778,12 @@ def trooper_comparison(control, candidate):
         if house['difficulty'] in ('hard', 'brutal'):
             groups[(house['difficulty'], house['spice_level'])].append(key)
             groups[(house['difficulty'], 'all')].append(key)
-    print('Guardrails: detector hit/exposed rates must not increase; dispatch and kill-value means must not decrease. '
-          'Dispatches remain nonempty ground_hunt events and require a complete callback capture here. '
-          'Unmeasured is not a passing gate; paired outcome scores above are a separate acceptance input.')
+    print('Guardrails: point-estimate decreases in dispatch/kill value or increases in detector rates are '
+          'not automatic failures. Game means/rates are equally weighted independent clusters; 95% bootstrap '
+          'intervals describe magnitude and exact two-sided paired game sign p<=0.05 identifies consistently '
+          'adverse regression. Houses within a game are not independent. No supported regression is not '
+          'proof of equivalence; unmeasured is not a passing gate. Dispatches remain nonempty ground_hunt '
+          'events and require a complete callback capture. Outcome scores are a separate acceptance input.')
     print()
     print('| Difficulty | Spice | Pairs | economy_stall | bankrupt_queue_empty | missing_starport | Dispatches mean | Kill-value mean | Guardrails |')
     print('|---|---|---|---|---|---|---|---|---|')
@@ -670,18 +793,23 @@ def trooper_comparison(control, candidate):
         cells += [paired_metric(paired, *houses, 'attack_count', direction=1, telemetry=True),
                   paired_metric(paired, *houses, 'kill_value', direction=1)]
         states = [state for _, state in cells]
-        verdict = 'worse' if 'worse' in states else 'unmeasured' if 'unmeasured' in states else 'not worse'
+        verdict = next((state for state in ('regression supported', 'unmeasured', 'inconclusive') if state in states),
+                       'no supported regression')
         print(f'| {difficulty} | {spice} | {len(paired)} | ' + ' | '.join(cell for cell, _ in cells) + f' | {verdict} |')
     tables = (
         (('wor', 'WOR live'), ('wor_built', 'WOR built'), ('trooper_live', 'Trooper live'),
          ('trooper_queued', 'Trooper queued'), ('trooper_built', 'Trooper built')),
         (('ornithopter_lost', 'Own Ornithopter losses'), ('elite_ornithopter_lost', 'Own elite losses'),
          ('enemy_ornithopter_kills', 'Enemy Ornithopter kills'), ('enemy_elite_ornithopter_kills', 'Enemy elite kills')),
+        (('trooper_enemy_ornithopter_kills', 'Trooper enemy Ornithopter kills'),
+         ('trooper_enemy_elite_ornithopter_kills', 'Trooper enemy elite kills')),
     )
     print('Support and AA: paired final-house means OFF -> ON (delta; measured/verified pairs). '
           'Own losses use House original-owner loss counters; enemy kills use opposing-team lethal callbacks, '
           'never enemy total losses. Live counts are observed at each game end, not equal-time checkpoints.')
-    print('Trooper built is the engine completed/delivered single counter, not a WOR-only training counter.')
+    print('WOR built>0 gives OFF/ON completed-WOR house percentages; completed/delivered Trooper and exact '
+          'Trooper-AA totals accompany means. Unknown source callbacks censor exact Trooper totals; '
+          'the raw per-source air-kills.csv rows and game-wide unknown counts remain available.')
     for table in tables:
         print()
         print('| Difficulty | Spice | ' + ' | '.join(label for _, label in table) + ' |')
@@ -808,6 +936,10 @@ parser.add_argument('--game-options', type=Path)
 parser.add_argument('--style', help='QuantBot switch overlay from tests/ai/play-styles/ (same-build A/B)')
 parser.add_argument('--attack-events', action='store_true',
                     help='Enable existing AI telemetry, retain exact ground dispatches in waves.csv, and report passivity metrics')
+parser.add_argument('--keep-telemetry', action='store_true',
+                    help='For selected successful games, enable telemetry and copy raw run.log, summary.json '
+                         'and events.jsonl to results/diagnostics/<gamehash>/ before normal scratch cleanup; '
+                         'default off (target games with --seeds/--sizes/--formats/--difficulties)')
 parser.add_argument('--list', action='store_true')
 parser.add_argument('--report', nargs='+', type=Path, dest='report_dirs')
 parser.add_argument('--compare', nargs=2, type=Path, metavar=('CONTROL', 'CANDIDATE'))

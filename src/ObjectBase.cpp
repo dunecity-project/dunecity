@@ -311,6 +311,12 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
         }
     }
     
+    // Resolve once for both diagnostics and the existing reward ledger. Projectile
+    // snapshots outlive their shooter; legacy shots explicitly forbid a live guess.
+    const auto credit = damagerOwner != nullptr && damage != 0
+        && !provenance.known() && provenance.allowsLiveLookup()
+        ? DeviationReward::liveProvenance(currentGame->getObjectManager().getObject(damagerID), damagerOwner)
+        : provenance;
     const FixPoint healthBefore = getHealth();
     if(damage >= 0) {
         FixPoint newHealth = getHealth();
@@ -322,6 +328,11 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                 AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1, "lethal_damage",
                     AITelemetry::Record().set("object", objectID).set("item", itemID)
                         .set("attacker", damagerID).set("attacker_house", damagerOwner ? damagerOwner->getHouseID() : -1)
+                        .set("attacker_item", credit.sourceItemID != NONE_ID ? Sint32(credit.sourceItemID) : -1)
+                        .set("attacker_source", credit.sourceObjectID)
+                        .set("attacker_firing_house", credit.beneficiaryHouse)
+                        .set("attacker_attribution", std::string(provenance.known() ? "snapshot"
+                            : credit.known() ? "direct" : "unknown"))
                         .set("damage", damage).set("x", location.x).set("y", location.y));
             setHealth(0);
 
@@ -338,12 +349,6 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
     }
 
     if (damagerOwner != nullptr && damage != 0) {
-        ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
-        // Attribution belongs to the moment the shot left the weapon. A shooter that died,
-        // reverted to its original house or was recaptured in the meantime no longer decides
-        // which learning bucket its shot pays.
-        const auto credit = provenance.known() || !provenance.allowsLiveLookup()
-            ? provenance : DeviationReward::liveProvenance(pDamager, damagerOwner);
         // The reward goes to the house that owned the shot when it was fired, which is not
         // always the house the engine damages on behalf of: an armed Devastator that reverts
         // mid-fuse explodes under its original owner but still pays its captor. Simulation

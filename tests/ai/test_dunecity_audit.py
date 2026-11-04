@@ -38,8 +38,19 @@ def callbacks():
         ('game_summary', -1, 100, dict(houses={house['house']: house for house in HOUSES})),
         ('session_end', -1, 100, {}),
     ]
+    for name, _, _, data in records:
+        if name == 'lethal_damage' and data['attacker_house'] >= 0:
+            data.update(attacker_item=audit['TROOPER_ITEM'], attacker_source=data['attacker'],
+                        attacker_firing_house=data['attacker_house'], attacker_attribution='snapshot')
     return [dict(schema_version=1, session='fixture', seq=seq, cycle=cycle, house=house, event=name, data=data)
             for seq, (name, house, cycle, data) in enumerate(records, 1)]
+
+
+def known_callbacks():
+    events = callbacks()
+    events[4]['data'].update(attacker=103, attacker_house=1, attacker_item=32, attacker_source=103,
+                             attacker_firing_house=1, attacker_attribution='direct')
+    return events
 
 
 def write_capture(directory, events):
@@ -54,7 +65,8 @@ def game_row(style, **extra):
                style=style, sides='harkonnen:1:hard,atreides:2:brutal', error='', probe_sha256='same-probe',
                source_commit='same-source', source_fingerprint='same-fingerprint', source_fingerprint_error='',
                map_hash='same-map', options_hash='same-options', content_hash='same-content',
-               object_data_hash='same-object-data')
+               object_data_hash='same-object-data', air_kill_telemetry='complete',
+               air_kill_attribution='complete', air_kill_unknown_attribution='0')
     row.update(extra)
     return row
 
@@ -63,8 +75,9 @@ def house_row(house='0', difficulty='hard', **extra):
     row = dict(id='matrix/fixture', house=house, team=str(int(house) + 1), difficulty=difficulty,
                spice_level='none', economy_stall='0', eligible_economy_stall='1', bankrupt_queue_empty='0',
                eligible_bankrupt_queue_empty='1', missing_starport='0', eligible_missing_starport='1',
-               attack_count='3', attack_telemetry='1', air_kill_telemetry='complete', kill_value='1000')
-    row.update({field: '0' for field in audit['TROOPER_FIELDS'] + tuple(audit['ENEMY_AIR_FIELDS'].values())})
+               attack_count='3', attack_telemetry='1', air_kill_telemetry='complete', kill_value='1000',
+               air_kill_attribution_complete='1', air_kill_unknown_attribution='0')
+    row.update({field: '0' for field in audit['TROOPER_FIELDS'] + audit['AIR_COUNT_FIELDS']})
     row.update(extra)
     return row
 
@@ -77,6 +90,14 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertEqual(command[command.index('--capture-mib') + 1], '512')
         self.assertNotIn('--no-ai-telemetry', command)
         self.assertEqual(audit['parser'].parse_args([]).capture_mib, 256)
+        self.assertFalse(audit['parser'].parse_args([]).keep_telemetry)
+        retained = audit['parser'].parse_args(['--keep-telemetry'])
+        self.assertFalse(retained.attack_events)  # Retention itself enables the existing logger.
+        self.assertNotIn('--no-ai-telemetry', audit['command'](
+            retained, Path('unused-probe'), audit['schedule'](retained)[0], Path('unused-output')))
+        ordinary = audit['parser'].parse_args([])
+        self.assertIn('--no-ai-telemetry', audit['command'](
+            ordinary, Path('unused-probe'), audit['schedule'](ordinary)[0], Path('unused-output')))
 
     def test_play_retains_metrics_and_actual_ladder_house_levels_without_a_game(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -88,7 +109,7 @@ class DuneCityAuditTests(unittest.TestCase):
             args = audit['parser'].parse_args([
                 '--results', str(results), '--sizes', '96', '--spice', 'none', '--formats', '1v1',
                 '--mode', 'ladder', '--seeds', '9101', '--style', 'trooper-support-on',
-                '--attack-events', '--capture-mib', '512'])
+                '--keep-telemetry', '--capture-mib', '512'])
             game = audit['schedule'](args)[0]
             cycle = 30 * audit['CYCLES_PER_MINUTE']
 
@@ -123,19 +144,38 @@ class DuneCityAuditTests(unittest.TestCase):
                     sourceCommit='fixture', sourceFingerprint='fingerprint', sourceFingerprintError='',
                     attacks=[dict(house=0, cycle=37500, data=dict(members=0, value=0)),
                              dict(house=0, cycle=75000, data=dict(members=3, value=900))])))
-                events = callbacks()
-                events[2]['data']['attacker_house'] = 0  # Friendly splash, no third playing house needed.
+                events = known_callbacks()
+                events[2]['data'].update(attacker_house=0, attacker_firing_house=0)  # Friendly splash.
                 events[-2]['cycle'] = events[-1]['cycle'] = cycle
                 write_capture(out, events)
+                assets = out / 'profile/mods/disposable'
+                assets.mkdir(parents=True)
+                (assets / 'not-diagnostic.bin').write_bytes(b'must not be retained')
                 return types.SimpleNamespace(returncode=0, stdout='', stderr='')
 
+            cleanup = audit['finish_game']
+
+            def finish(scratch, out, failed):
+                diagnostics = results / 'diagnostics' / out.name
+                self.assertFalse(failed)
+                self.assertEqual((diagnostics / 'run.log').read_bytes(), (out / 'run.log').read_bytes())
+                self.assertEqual((diagnostics / 'summary.json').read_bytes(), (out / 'summary.json').read_bytes())
+                self.assertEqual((diagnostics / 'profile/ai-decisions/fixture/events.jsonl').read_bytes(),
+                                 (out / 'profile/ai-decisions/fixture/events.jsonl').read_bytes())
+                self.assertFalse((diagnostics / 'profile/mods').exists())
+                cleanup(scratch, out, failed)
+
             with patch.object(audit['subprocess'], 'run', side_effect=simulate) as launched:
-                with patch.dict(audit, finish_game=lambda *unused: None):
+                with patch.dict(audit, finish_game=finish):
                     row = audit['play'](args, top, binary, game)
             self.assertEqual(launched.call_count, 1)  # This was a fixture callback, never a process.
             self.assertEqual(row['error'], '')
             self.assertEqual(row['air_kill_telemetry'], 'complete')
             self.assertEqual(row['capture_mib'], 512)
+            self.assertEqual(row['air_kill_attribution'], 'complete')
+            self.assertEqual(row['air_kill_unknown_attribution'], 0)
+            self.assertTrue((results / row['diagnostics'] / 'run.log').is_file())
+            self.assertFalse((top / Path(row['diagnostics']).name).exists())
             houses = {house['house']: house for house in audit['read'](results / 'houses.csv')}
             self.assertEqual([houses[house]['difficulty'] for house in ('0', '1')], ['brutal', 'hard'])
             self.assertEqual(houses['0']['trooper_built'], '8')
@@ -143,8 +183,15 @@ class DuneCityAuditTests(unittest.TestCase):
             self.assertEqual(houses['0']['ornithopter_killed'], '17')
             self.assertEqual(houses['0']['enemy_ornithopter_kills'], '1')
             self.assertEqual(houses['1']['enemy_elite_ornithopter_kills'], '1')
+            self.assertEqual(houses['0']['trooper_enemy_ornithopter_kills'], '1')
+            self.assertEqual(houses['1']['trooper_enemy_elite_ornithopter_kills'], '1')
+            self.assertEqual(houses['0']['air_kill_attribution_complete'], '1')
             self.assertEqual([houses[house]['attack_count'] for house in ('0', '1')], ['1', '0'])
             self.assertEqual(len(audit['read'](results / 'air-kills.csv')), 4)
+            kill = audit['read'](results / 'air-kills.csv')[0]
+            self.assertEqual((kill['attacker_item'], kill['attacker_source'], kill['attacker_firing_house']),
+                             ('44', '100', '0'))
+            self.assertEqual(kill['attribution_complete'], '1')
             self.assertEqual(len(audit['read'](results / 'waves.csv')), 1)
 
     def test_enemy_air_kills_use_exact_attacker_house_and_victim_team(self):
@@ -153,6 +200,8 @@ class DuneCityAuditTests(unittest.TestCase):
             write_capture(out, callbacks())
             capture = audit['air_kill_capture'](out, HOUSES, 100, True)
         self.assertEqual(capture['status'], 'complete')
+        self.assertEqual(capture['attribution'], 'unknown')
+        self.assertEqual(capture['unknown_attribution'], 1)
         self.assertEqual([event['enemy'] for event in capture['events']], [1, 0, 1, ''])
         self.assertEqual([event['house'] for event in capture['events']], [0, 2, 1, -1])
         self.assertEqual(capture['events'][0]['attacker'], 100)
@@ -163,6 +212,73 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertEqual([row['enemy_ornithopter_kills'] for row in samples], [0, 1, 1, 0, 0])
         self.assertEqual([row['enemy_elite_ornithopter_kills'] for row in samples], [0, 0, 0, 1, 0])
         self.assertEqual(samples[2]['ornithopter_killed'], '17')  # Raw engine credits are not enemy kills.
+        self.assertEqual([row['trooper_enemy_ornithopter_kills'] for row in samples], [0, 1, '', '', ''])
+        self.assertEqual([row['air_kill_attribution_complete'] for row in samples], [1, 1, 0, 0, 0])
+        self.assertEqual(samples[2]['air_kill_unknown_attribution'], 1)
+
+    def test_natural_source_and_firing_house_survive_dead_or_recaptured_shooters(self):
+        events = known_callbacks()
+        # A borrowed Trooper pays a Deviator bucket, and engine damage ownership
+        # can differ from its firing beneficiary. Neither changes the natural source.
+        events[1]['data'].update(attacker_house=1, reward_item=29)
+        # Conversely a non-Trooper paying a Trooper bucket is never Trooper AA.
+        events[3]['data'].update(attacker_item=32, reward_item=audit['TROOPER_ITEM'])
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            write_capture(out, events)
+            capture = audit['air_kill_capture'](out, HOUSES, 100, True)
+        self.assertEqual(capture['attribution'], 'complete')
+        self.assertEqual(capture['unknown_attribution'], 0)
+        first = capture['events'][0]
+        self.assertEqual((first['house'], first['enemy'], first['attacker_firing_house'], first['source_enemy']),
+                         (1, 0, 0, 1))
+        self.assertEqual((first['attacker'], first['attacker_source'], first['attacker_item']), (100, 100, 44))
+        samples = [dict(house=str(house), cycle='100') for house in range(3)]
+        audit['add_air_kill_samples'](samples, capture)
+        self.assertEqual(samples[0]['trooper_enemy_ornithopter_kills'], 1)
+        self.assertEqual(samples[1]['trooper_enemy_elite_ornithopter_kills'], 0)
+        self.assertTrue(all(row['air_kill_attribution_complete'] == 1 for row in samples))
+
+    def test_old_missing_item_mismatched_source_and_unknown_house_are_not_guessed(self):
+        variants = []
+        legacy = known_callbacks()
+        for event in legacy:
+            for field in ('attacker_item', 'attacker_source', 'attacker_firing_house', 'attacker_attribution'):
+                event['data'].pop(field, None)
+        variants.append((legacy, 4))
+        for fields in (dict(attacker_item=-1, reward_item=44), dict(attacker_source=999),
+                       dict(attacker_firing_house=-2), dict(attacker_attribution='unknown')):
+            events = known_callbacks()
+            events[1]['data'].update(fields)
+            variants.append((events, 1))
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            for events, unknown in variants:
+                with self.subTest(events=events):
+                    write_capture(out, events)
+                    capture = audit['air_kill_capture'](out, HOUSES, 100, True)
+                    self.assertEqual(capture['status'], 'complete')  # Stream integrity is distinct.
+                    self.assertEqual(capture['attribution'], 'unknown')
+                    self.assertEqual(capture['unknown_attribution'], unknown)
+                    sample = dict(house='0', cycle='100')
+                    audit['add_air_kill_samples']([sample], capture)
+                    self.assertEqual(sample['enemy_ornithopter_kills'], 1)
+                    self.assertEqual(sample['trooper_enemy_ornithopter_kills'], '')
+                    self.assertEqual(sample['air_kill_attribution_complete'], 0)
+
+    def test_complete_stream_with_no_air_callbacks_establishes_exact_zero(self):
+        events = [event for event in callbacks() if event['event'] != 'lethal_damage']
+        for seq, event in enumerate(events, 1):
+            event['seq'] = seq
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            write_capture(out, events)
+            capture = audit['air_kill_capture'](out, HOUSES, 100, True)
+        sample = dict(house='0', cycle='100')
+        audit['add_air_kill_samples']([sample], capture)
+        self.assertEqual(capture['attribution'], 'complete')
+        self.assertEqual(sample['air_kill_attribution_complete'], 1)
+        self.assertEqual(sample['trooper_enemy_ornithopter_kills'], 0)
 
     def test_missing_disabled_limited_and_short_captures_are_not_zero_kills(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -184,7 +300,9 @@ class DuneCityAuditTests(unittest.TestCase):
             sample = dict(house='0', cycle='100')
             audit['add_air_kill_samples']([sample], capture)
             self.assertEqual(sample['air_kills_complete'], 0)
-            for field in audit['ENEMY_AIR_FIELDS'].values():
+            self.assertEqual(sample['air_kill_attribution_complete'], 0)
+            self.assertEqual(sample['air_kill_unknown_attribution'], '')
+            for field in audit['AIR_COUNT_FIELDS']:
                 self.assertEqual(sample[field], '')
         self.assertTrue(all(event['capture_complete'] == 0 for event in limited['events']))
 
@@ -227,7 +345,8 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertEqual(row['trooper_built'], '8')
         self.assertEqual(row['wor_built'], '2')
         self.assertEqual(row['enemy_ornithopter_kills'], '')
-        for field in audit['TROOPER_FIELDS'] + tuple(audit['ENEMY_AIR_FIELDS'].values()):
+        self.assertEqual(row['trooper_enemy_ornithopter_kills'], '')
+        for field in audit['TROOPER_FIELDS'] + audit['AIR_COUNT_FIELDS'] + audit['AIR_ATTRIBUTION_FIELDS']:
             self.assertIn(field, audit['HOUSE_FIELDS'])
             self.assertIn(field, audit['SAMPLE_FIELDS'])
 
@@ -268,10 +387,10 @@ class DuneCityAuditTests(unittest.TestCase):
         key = ('matrix/fixture', '0')
         old = {key: house_row()}
         new = {key: house_row(attack_count='4', kill_value='1100')}
-        self.assertEqual(audit['paired_detector']([key], old, new, 'economy_stall')[1], 'not worse')
-        self.assertEqual(audit['paired_metric']([key], old, new, 'attack_count', 1, True)[1], 'not worse')
+        self.assertEqual(audit['paired_detector']([key], old, new, 'economy_stall')[1], 'no supported regression')
+        self.assertEqual(audit['paired_metric']([key], old, new, 'attack_count', 1, True)[1], 'no supported regression')
         new[key]['economy_stall'] = '1'
-        self.assertEqual(audit['paired_detector']([key], old, new, 'economy_stall')[1], 'worse')
+        self.assertEqual(audit['paired_detector']([key], old, new, 'economy_stall')[1], 'inconclusive')
         new[key]['eligible_economy_stall'] = '0'
         self.assertEqual(audit['paired_detector']([key], old, new, 'economy_stall')[1], 'unmeasured')
         new[key]['air_kill_telemetry'] = 'capture_limit'
@@ -280,6 +399,35 @@ class DuneCityAuditTests(unittest.TestCase):
         del new[key]['enemy_ornithopter_kills']
         self.assertEqual(audit['paired_metric']([key], old, new, 'enemy_ornithopter_kills'),
                          ('unmeasured', 'unmeasured'))
+        new[key]['air_kill_telemetry'] = 'complete'
+        new[key]['air_kill_attribution_complete'] = '0'
+        self.assertEqual(audit['paired_metric']([key], old, new, 'trooper_enemy_ornithopter_kills'),
+                         ('unmeasured', 'unmeasured'))
+
+    def test_sign_guardrail_clusters_houses_and_does_not_fail_tiny_point_decreases(self):
+        old = {('one-game', str(house)): house_row(kill_value='1000') for house in range(6)}
+        new = {key: dict(row, kill_value='999') for key, row in old.items()}
+        evidence, state = audit['paired_metric'](list(old), old, new, 'kill_value', direction=1)
+        self.assertEqual(state, 'inconclusive')
+        self.assertIn('1 games', evidence)
+        self.assertIn('p2=1.0000', evidence)  # Six houses are still only one independent sign.
+        self.assertIn('point estimate decrease', evidence)
+        old = {(f'game-{game}', '0'): house_row(kill_value='1000') for game in range(6)}
+        new = {key: dict(row, kill_value='999', economy_stall='1') for key, row in old.items()}
+        evidence, state = audit['paired_metric'](list(old), old, new, 'kill_value', direction=1)
+        self.assertEqual(state, 'regression supported')
+        self.assertIn('6 games', evidence)
+        self.assertIn('p2=0.0312', evidence)
+        self.assertEqual(audit['paired_detector'](list(old), old, new, 'economy_stall')[1], 'regression supported')
+
+    def test_support_cells_report_completed_histories_totals_and_missing_denominators(self):
+        rows = [house_row(wor_built='0', trooper_built='3'), house_row(wor_built='2', trooper_built='7'),
+                house_row(wor_built='', trooper_built='', trooper_enemy_ornithopter_kills='',
+                          air_kill_attribution_complete='0')]
+        self.assertIn('built>0 1/2 (50.0%)', audit['support_cell'](rows, 'wor_built'))
+        self.assertIn('total 2', audit['support_cell'](rows, 'wor_built'))
+        self.assertIn('total 10', audit['support_cell'](rows, 'trooper_built'))
+        self.assertIn('(2/3)', audit['support_cell'](rows, 'trooper_enemy_ornithopter_kills'))
 
     def test_paired_report_has_hard_brutal_guardrails_and_aa_tables(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -289,7 +437,10 @@ class DuneCityAuditTests(unittest.TestCase):
             for directory, style in ((control, 'trooper-support-off'), (candidate, 'trooper-support-on')):
                 audit['append'](directory / 'games.csv', audit['GAME_FIELDS'], [game_row(style)])
                 audit['append'](directory / 'houses.csv', audit['HOUSE_FIELDS'], [
-                    house_row(), house_row(house='1', difficulty='brutal')])
+                    house_row(wor_built='1' if style.endswith('-on') else '0',
+                              trooper_built='6' if style.endswith('-on') else '0',
+                              trooper_enemy_ornithopter_kills='2' if style.endswith('-on') else '0'),
+                    house_row(house='1', difficulty='brutal')])
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
                 audit['trooper_comparison'](control, candidate)
@@ -297,13 +448,15 @@ class DuneCityAuditTests(unittest.TestCase):
             self.assertIn('2 source-matched house pairs', text)
             for label in ('| hard | all | 1 |', '| brutal | all | 1 |', 'economy_stall',
                           'bankrupt_queue_empty', 'missing_starport', 'Dispatches mean', 'Kill-value mean',
-                          'WOR built', 'Trooper queued', 'Enemy Ornithopter kills', 'Own elite losses'):
+                          'WOR built', 'Trooper queued', 'Enemy Ornithopter kills', 'Own elite losses',
+                          'Trooper enemy Ornithopter kills', 'built>0 0/1 (0.0%) -> 1/1 (100.0%)',
+                          'totals 0 -> 6', 'totals 0 -> 2', 'two-sided paired game sign'):
                 self.assertIn(label, text)
-            self.assertIn('not worse', text)
+            self.assertIn('no supported regression', text)
             for directory in (control, candidate):
                 rows = audit['read'](directory / 'houses.csv')
                 for row in rows:
-                    for field in audit['TROOPER_FIELDS'] + tuple(audit['ENEMY_AIR_FIELDS'].values()):
+                    for field in audit['TROOPER_FIELDS'] + audit['AIR_COUNT_FIELDS']:
                         row[field] = ''
                 (directory / 'houses.csv').unlink()
                 audit['append'](directory / 'houses.csv', audit['HOUSE_FIELDS'], rows)

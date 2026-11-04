@@ -147,6 +147,8 @@ inline void sample(Game& game) {
         // Losses follow the engine's original-house ledger; live units follow
         // their present owner. Killed-items is the lethal damagerOwner's ledger
         // by victim type, including friendly splash, NOT enemy-only AA kills.
+        // Exact Trooper AA is derived separately from lethal_damage's natural
+        // attacker_item/firing-house provenance, never from a Deviator reward bucket.
         SDL_Log("DUNECITY_TROOPERS: minute=%d cycle=%u house=%d wor=%d wor_built=%d"
                 " trooper_live=%d trooper_queued=%d trooper_single_queued=%d trooper_squads_queued=%d"
                 " trooper_squads5_queued=%d trooper_built=%d ornithopter_live=%d elite_ornithopter_live=%d"

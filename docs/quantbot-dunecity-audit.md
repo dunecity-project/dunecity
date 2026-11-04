@@ -104,7 +104,7 @@ noisy numbers. No-formation remains the control; saboteur orders and human-order
 ## Rocket-infantry support (2026-11-04, unreleased candidate)
 
 `[Force Concentration] TrooperSupport` is an independent multiplayer-hashed
-Custom-game switch. Its initial default is **off pending the paired outcome gate**;
+Custom-game switch, provisionally **on** in the shared candidate.
 `trooper-support-off` and `trooper-support-on` compare the same native build.
 Campaign recruitment and all combat-order authority are unchanged.
 
@@ -119,31 +119,71 @@ technology. The learned ten-slot vehicle/air mix excludes infantry; its separate
 difficulty quota remains the infantry budget, not ten additional independent
 shares or a new saved mix slot.
 
-With the switch on, one useful WOR lane precedes optional factory expansion
-after the existing economy, power, defence and mandatory-production choices.
-The first missing legal WOR prerequisite can supply that lane instead; pending
-prerequisites/WORs count, including Tornie-family Worfinery production. A house
-must have power, have no opening-worker shortfall, and already have a Heavy
-Factory or see a hostile aircraft. Normal construction placement, founded cost,
-economy reserves and city working/next-zone cash still apply.
+With the switch on, one WOR is desirable per legal house even when existing
+troopers already satisfy its target. A completed Heavy Factory, power, no opening-
+worker shortfall, positive forecast income, and the full founded price plus the
+existing reserves must be available. Projected cash must cover that purchase too.
+The first missing legal WOR prerequisite can supply the lane instead. Existing
+and pending WORs, including Tornie-family Worfinery production, prevent duplicates.
+The first lane precedes protected repeat city growth and optional factories;
+power, urgent protection and required civics retain priority. Placement, technology,
+house build lists, foundations and working/next-zone cash are never bypassed.
 
-The target is the largest of a small army escort (one trooper per 2,000 credits
-of non-infantry army, at most six), remembered enemy armour (one per 600 credits,
-at most nine), and visible hostile aircraft (five per aircraft, at most eighteen).
-Every order must also fit the **aggregate existing infantry quota** and ordinary
-military budget. Singles/squads consume one/three troop places and their complete
-queue prices; several producers cannot each claim a fresh allowance. The WOR
-chooses an affordable enabled ordinary troop offer, preferring the lower price
-per deployed trooper and a full squad only when its complete cost/quota fits.
-When no further useful allowance remains it stops ordering; existing troops keep
-the ordinary army, base/harvester-defence and unitRole systems.
+The ordinary mix keeps **six standing troopers**, or the greater of remembered
+armour demand (one per 600 credits, at most nine) and effective visible aircraft
+demand (five per aircraft, at most eighteen). Aircraft raise that floor only with
+DuneCity content and the real `TrooperAntiAir` option enabled. Orders through the
+standing/reactive floor do not require an already-large vehicle army's infantry
+percentage. Extra anti-armour recruitment keeps that percentage ceiling. The
+explicit Infantry strategy retains its own existing percentage and military-budget
+ceiling rather than being clipped to the ordinary mix's small escort count.
 
-No controller, saboteur order, human-order lease, save state or protocol field is
-added. The focused real-engine fixture reports its scope explicitly: normal yard
-selection/foundations/payment/queue completion and WOR troop production, followed
-by real SmallRocket combat, not a claim that a controlled fixture measures full
-game outcome priorities. Ordinary paired audit games supply that independent
-evidence.
+All orders still obey cash, military-value and engine unit caps. Real troops,
+including existing crew, and pending single/three/five-man offers count together;
+several producers cannot each claim a fresh allowance. The WOR chooses an enabled
+affordable ordinary offer, preferring lower price per deployed trooper. Existing
+army, base/harvester-defence and unitRole systems own their orders. No controller,
+saboteur order, human-order lease, save state or protocol field is added.
+
+### Initial paired measurement and priority correction
+
+The first candidate (`35c3a7ca`, 72 games per arm) was **not an adequate recruitment
+result**: only 3/144 matrix ON houses built WORs (3/96 non-Atreides houses), with
+24 completed/delivered troopers; no ladder ON house built one. Its archived real
+128/medium/1v1 game, seed148680876, contains 118 `unit_mix` records and no WOR order.
+Both houses have positive income in all 1,125 capital plans each. Harkonnen's early
+orders buy suppliers/workers, and later city growth/coverage keeps taking the yard.
+The Atreides control also meets the old troop target in 29/59 mix records, but its
+ordinary WOR technology is unavailable independently of that target.
+
+All Mac/PC pairs are included below. The historical v1 source hashes differed
+only because Windows materialized tracked `README` as a nine-byte symlink
+placeholder; all 12,588 tracked input files matched the index. Both actual hosts
+recomputed the same logical-symlink v2 hash `b6520a95…a99031`. Historical CSVs were
+not rewritten. Receipts: `outputs/source-fingerprint-35c3-20261104-{diff,v2-proof}.json`.
+
+| Initial cohort | House pairs | Mean dispatches OFF→ON | Mean kill value OFF→ON | Own ordinary-air losses OFF→ON | Enemy ordinary-air kills OFF→ON | ON WOR houses / delivered troopers |
+|---|---:|---:|---:|---:|---:|---:|
+| Matrix Hard | 72 | 1.125→1.125 | 16,793.47→16,888.19 | 212→212 | 188→189 | 2 / 18 |
+| Matrix Brutal | 72 | 1.431→1.444 | 16,186.25→15,932.78 | 182→187 | 167→171 | 1 / 6 |
+| Ladder Hard | 16 | 2.375→2.375 | 29,567.50→28,365.00 | 104→85 | 62→60 | 0 / 0 |
+| Ladder Brutal | 8 | 3.875→3.875 | 25,733.75→25,733.75 | 33→33 | 25→25 | 0 / 0 |
+
+No elite-air kills/losses occurred in those rows. These enemy-air kills are **all
+shooters**, not asserted Trooper kills: historical lethal events lack the physical
+attacker item. Matrix Hard's game-cluster kill signs are 2 better/2 worse/20 tied;
+Brutal's are 1/3/20 (two-sided sign p=0.625). Thus point decreases alone do not
+establish an outcome regression. Economy-stall/missing-Starport flagged-house
+counts are unchanged in those four rows; matrix Brutal bankruptcy falls17→16,
+and the other three bankruptcy counts are unchanged.
+
+Commit `ccf17d92` corrects the late-priority/current-army/count-coupling failure:
+fund the first legal WOR before repeat growth, seed a standing squad without
+needing a pre-existing large army, and preserve the explicit Infantry strategy.
+The real-engine fixture separately covers complete normal `build()` planner
+turns, paid WOR/trooper completion and bounded recruitment, then an isolated
+SmallRocket combat case. Outcome acceptance must use the corrected candidate's
+paired games, not relabel the initial low-recruitment cohort as that result.
 
 ## Storage capacity: income outgrows the first vault (2026-11-03)
 

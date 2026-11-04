@@ -1,9 +1,9 @@
-// Private balance executable only. This is a focused production/weapon fixture,
-// not a claim about whole-game construction priorities (the paired audit owns that).
-// The real planner selects the infrastructure; its normal foundation, acceptance,
-// payment, placement and WOR producer paths run against real engine objects. No
-// troop is scenario-created, no queue/progress is filled by the fixture, and no
-// produced troop receives a fixture attack/move/mode order before the air fight.
+// Private balance executable only. Full build() turns must found exactly one WOR
+// and bootstrap paid standing troops from an empty army; the paired audit still
+// owns whole-game outcome claims. A separate focused yard/WOR world isolates the
+// produced troops' real aircraft kill from competing launchers/turrets. No troop
+// is scenario-created, no queue/progress is filled by the fixture, and no produced
+// troop receives a fixture attack/move/mode order before that air fight.
 #include <Bullet.h>
 #include <Command.h>
 #include <Game.h>
@@ -16,6 +16,7 @@
 #include <players/PlayerFactory.h>
 #include <players/QuantBot.h>
 #include <players/QuantBotBuildPass.h>
+#include <players/QuantBotBuildPolicy.h>
 #include <players/QuantBotConfig.h>
 #include <structures/ConstructionYard.h>
 #include <structures/ZoneStructure.h>
@@ -67,7 +68,7 @@ struct World {
     ConstructionYard* yard = nullptr;
     std::string configHash;
 
-    World(const char* mod, bool enabled, HOUSETYPE house = HOUSE_HARKONNEN) {
+    World(const char* mod, bool enabled, HOUSETYPE house = HOUSE_HARKONNEN, int escortTanks = 40) {
         require(currentGame == nullptr, "Two fixture worlds must not share the engine globals");
         getQuantBotConfig().force.trooperSupport = enabled;
         configHash = getQuantBotConfig().getConfigHash();
@@ -76,6 +77,7 @@ struct World {
         options.fogOfWar = false;
         options.startWithExploredMap = true;
         options.immortalHumanPlayer = false;
+        options.instantBuild = false;
         options.concreteRequired = false;
         options.researchLab = false;
         options.trooperAntiAir = true;
@@ -114,8 +116,8 @@ struct World {
         require(bot && pilot && yard && game->getPlayerByID(pilot->getPlayerID()) == pilot,
                 "Missing registered production bot, yard or genuine enemy pilot");
 
-        // Controlled initial mature economy and a non-AA escort army. These are
-        // scenario assets, NOT the WOR/troopers whose production is asserted.
+        // Controlled initial mature economy and optional non-AA escort army.
+        // These are scenario assets, NOT the WOR/troopers whose production is asserted.
         for (int x = 4; x <= 32; x += 4) place(Structure_WindTrap, Coord(x, 4));
         place(Structure_Radar, Coord(12, 8));
         place(Structure_LightFactory, Coord(16, 8));
@@ -154,7 +156,7 @@ struct World {
             auto* worker = spawn(owner, Unit_Harvester, Coord(34 + i % 2, 24 + i / 2));
             worker->doSetAttackMode(HARVEST);
         }
-        for (int i = 0; i < 40; ++i) spawn(owner, Unit_Tank, Coord(3 + i % 10, 38 + i / 10));
+        for (int i = 0; i < escortTanks; ++i) spawn(owner, Unit_Tank, Coord(3 + i % 10, 38 + i / 10));
         yard->curUpgradeLev = yard->getMaxUpgradeLevel(); // The initial mature yard's legal capacity.
         yard->updateBuildList();
         game->gameCycleCount = MILLI2CYCLES(300000);
@@ -231,7 +233,7 @@ struct World {
     }
 
     void tick() {
-        bot->buildTimer = INT_MAX; // Focused producer passes below, not competing AA purchases.
+        bot->buildTimer = INT_MAX; // Measured full/focused turns run explicitly, never a hidden extra builder pass.
         bot->attackTimer = INT_MAX; // This is base defence, not an outbound attack-wave fixture.
         game->negotiatedBudget = 15000;
         game->carryOverTokens = 0;
@@ -248,29 +250,53 @@ inline void blocked(World& world, QuantBot::BuildPass pass, const char* cause) {
 
 inline void availabilityAndBudgetGates(World& world) {
     auto pass = world.plan();
-    require(pass.trooperSupport && pass.trooperTarget > 0 && world.infrastructure(pass) == Structure_WOR,
-            "Funded mature city has no legal WOR opportunity");
-    require(world.owner->hasPower() && !world.bot->openingWorkersNeeded(pass), "Positive fixture is not mature and powered");
+    require(pass.trooperSupport && pass.trooperTarget == 6 && world.infrastructure(pass) == Structure_WOR,
+            "Funded mature city has no legal standing-WOR opportunity");
+    require(world.owner->hasPower() && !world.bot->openingWorkersNeeded(pass) && pass.forecastNetIncome > 0,
+            "Positive fixture is not mature, powered and earning income");
     auto& data = world.game->objectData.data;
     const int house = world.owner->getHouseID();
+    auto independent = [&](QuantBot::BuildPass capped, const char* cause) {
+        require(world.infrastructure(capped) == Structure_WOR, cause);
+        SDL_Log("TROOPER_SUPPORT_INFRASTRUCTURE_INDEPENDENT: cause=%s wor_selected=1 target=%d committed=%d",
+                cause, capped.trooperTarget, capped.trooperCount);
+    };
     auto capped = pass;
     capped.infantryValue = capped.militaryValue;
-    blocked(world, capped, "infantry_quota");
+    independent(capped, "infantry_quota_does_not_remove_first_wor");
     capped = pass;
     capped.lightBudget = capped.militaryValue;
-    blocked(world, capped, "military_value_cap");
+    independent(capped, "military_value_cap_does_not_remove_first_wor");
     capped = pass;
     capped.trooperCount = capped.trooperTarget;
-    blocked(world, capped, "useful_troop_target");
+    capped.itemCount[Unit_Trooper] = capped.trooperCount;
+    require(!world.bot->trooperOrderAdmitted(capped, Unit_Trooper, data[Unit_Trooper][house].price),
+            "Infrastructure test's satisfied contingent still admits an extra troop");
+    independent(capped, "useful_target_satisfied_but_first_wor_missing");
     capped = pass;
-    capped.money = static_cast<int>(world.bot->buildingCapitalCost(capped, Structure_WOR) + capped.cityWorCashReserve - 1);
+    capped.itemCount[Structure_WOR] = 1;
+    blocked(world, capped, "existing_or_pending_wor");
+    capped = pass;
+    const int64_t fundedCost = world.bot->buildingCapitalCost(capped, Structure_WOR) + capped.cityWorCashReserve;
+    capped.money = static_cast<int>(fundedCost - 1);
     require(capped.cityWorCashReserve >= capped.cityWorkingReserve && capped.cityWorkingReserve > 0,
             "City WOR test has no working reserve to protect");
     blocked(world, capped, "city_wor_cash_reserve");
     capped = pass;
-    capped.itemCount[Structure_HeavyFactory] = 0;
-    capped.hostileAircraft = 0;
-    blocked(world, capped, "opening_without_heavy_factory_or_air");
+    capped.cashFlow.projectedCash = fundedCost - 1;
+    blocked(world, capped, "wor_projected_working_capital");
+    capped = pass;
+    capped.forecastNetIncome = 0;
+    blocked(world, capped, "wor_no_stable_income");
+    capped = pass;
+    // No engine tick occurs while the completed-count control is changed. A
+    // pending HF and an observed wing must not substitute for a standing HF.
+    const int heavyFactories = world.owner->numItem[Structure_HeavyFactory];
+    world.owner->numItem[Structure_HeavyFactory] = 0;
+    capped.itemCount[Structure_HeavyFactory] = 1;
+    capped.hostileAircraft = 4;
+    blocked(world, capped, "no_standing_heavy_factory_despite_pending_factory_and_air");
+    world.owner->numItem[Structure_HeavyFactory] = heavyFactories;
     capped = pass;
     capped.itemCount[Unit_Harvester] = 0;
     capped.fundedHarvesterTarget = std::max(1, capped.fundedHarvesterTarget);
@@ -362,11 +388,10 @@ inline void baselineGates() {
 inline void observedDemand() {
     World world("dunecity", true);
     auto escort = world.plan();
-    require(escort.trooperTarget > 0 && escort.trooperTarget <= 6 && escort.hostileAircraft == 0,
-            "Peaceful escort demand is not bounded by six");
+    require(escort.trooperTarget == 6 && escort.hostileAircraft == 0,
+            "Peaceful standing contingent is not exactly six");
     for (int i = 0; i < 18; ++i) world.spawn(world.enemy, Unit_Tank, Coord(44 + i % 6, 36 + i / 6));
-    world.bot->dangerUpdated = UINT32_MAX;
-    world.bot->refreshTacticalDanger();
+    world.bot->updateEnemySightings();
     auto armour = world.plan();
     require(armour.trooperTarget > escort.trooperTarget && armour.trooperTarget <= 9,
             "Real observed armour did not create bounded useful troop demand");
@@ -381,17 +406,17 @@ inline void observedDemand() {
     world.game->gameInitSettings.gameOptions.trooperAntiAir = true;
     SDL_Log("TROOPER_SUPPORT_CAPABILITY: mod=dunecity anti_air_option=0 visible_aircraft=4 effective_air_demand=0 target=%d",
             disabledAir.trooperTarget);
-    SDL_Log("TROOPER_SUPPORT_DEMAND: escort=%d observed_armour=%d observed_aircraft=%d air_target=%d hard_cap=18",
+    SDL_Log("TROOPER_SUPPORT_DEMAND: escort=%d standing_floor=6 observed_armour=%d observed_aircraft=%d air_target=%d hard_cap=18",
             escort.trooperTarget, armour.trooperTarget, air.hostileAircraft, air.trooperTarget);
 }
 
 struct Orders {
-    int singles = 0, squads = 0;
+    int singles = 0, squads = 0, quotaExempt = 0;
     int people() const { return singles + 3 * squads; }
 };
 
 inline void recordOrder(World& world, BuilderBase* producer, int before, int committedBefore,
-                        const QuantBot::BuildPass& pass, Orders& orders) {
+                        const QuantBot::BuildPass& pass, Orders& orders, const char* scope = "focused_yard_wor") {
     if (producer->getProductionQueueSize() == before) return;
     require(before == 0 && producer->getProductionQueueSize() == 1, "WOR inserted more than one ordinary order");
     const Uint32 item = producer->getCurrentProducedItem();
@@ -400,19 +425,25 @@ inline void recordOrder(World& world, BuilderBase* producer, int before, int com
     if (people == 3) ++orders.squads; else ++orders.singles;
     require(pass.trooperCount == committedBefore + people && pass.trooperCount <= pass.trooperTarget,
             "Single/squad acceptance did not book one/three people inside the shared target");
-    require(int64_t(pass.infantryValue) * 100 <= int64_t(pass.militaryValue) * pass.infantryPercent,
-            "Accepted troop order exceeded the existing infantry quota");
+    const int floor = std::max(6, std::min(18, std::clamp(pass.hostileAircraft, 0, 4) * 5));
+    const bool withinQuota = int64_t(pass.infantryValue) * 100 <= int64_t(pass.militaryValue) * pass.infantryPercent;
+    require(withinQuota || pass.trooperCount <= floor, "Extra anti-armour order exceeded the aggregate infantry quota");
+    require(pass.militaryValue <= pass.lightBudget, "Standing/reactive exemption exceeded the normal military cap");
+    if (!withinQuota) ++orders.quotaExempt;
     require(pass.money >= pass.cityWorkingReserve, "Accepted troop order spent the city working reserve");
-    SDL_Log("TROOPER_SUPPORT_ORDER: cycle=%u item=%s people=%d committed=%d target=%d "
-            "infantry_value=%d army_value=%d quota_percent=%d spendable_after=%d city_working_reserve=%d",
+    SDL_Log("TROOPER_SUPPORT_ORDER: cycle=%u item=%s people=%d committed=%d target=%d floor=%d quota_exempt=%d "
+            "infantry_value=%d army_value=%d quota_percent=%d spendable_after=%d city_working_reserve=%d producer_scope=%s",
             world.game->getGameCycleCount(), item == Unit_Troopers ? "Troopers" : "Trooper", people,
-            pass.trooperCount, pass.trooperTarget, pass.infantryValue, pass.militaryValue,
-            pass.infantryPercent, pass.money, pass.cityWorkingReserve);
+            pass.trooperCount, pass.trooperTarget, floor, int(!withinQuota), pass.infantryValue, pass.militaryValue,
+            pass.infantryPercent, pass.money, pass.cityWorkingReserve, scope);
 }
 
 inline void producerCaps(World& world, BuilderBase* producer, Orders& orders) {
     auto baseline = world.plan();
     require(producer->isAvailableToBuild(Unit_Trooper), "Completed legal WOR has no real single Trooper offer");
+    const int house = world.owner->getHouseID();
+    const int value = world.game->objectData.data[Unit_Trooper][house].price;
+    const int squadValue = world.game->objectData.data[Unit_Troopers][house].price;
     const int price = QuantBot::purchasePrice(producer, Unit_Trooper);
     auto reject = [&](QuantBot::BuildPass pass, const char* cause) {
         QuantBot::BuilderTurn turn(pass.money);
@@ -420,15 +451,35 @@ inline void producerCaps(World& world, BuilderBase* producer, Orders& orders) {
         turn.pStructure = producer;
         world.bot->buildWOR(pass, turn);
         require(producer->getProductionQueueSize() == 0, cause);
-        SDL_Log("TROOPER_SUPPORT_CONSTRAINT: cause=%s troop_queued=0 spendable=%d city_working_reserve=%d",
-                cause, pass.money, pass.cityWorkingReserve);
+        SDL_Log("TROOPER_SUPPORT_CONSTRAINT: cause=%s troop_queued=0 committed=%d target=%d effective_aircraft=%d "
+                "spendable=%d city_working_reserve=%d",
+                cause, pass.trooperCount, pass.trooperTarget, pass.hostileAircraft, pass.money, pass.cityWorkingReserve);
     };
     auto pass = baseline;
     pass.money = pass.cityWorkingReserve + price - 1;
     reject(pass, "troop_cash_and_city_working_reserve");
     pass = baseline;
     pass.infantryValue = pass.militaryValue;
-    reject(pass, "troop_infantry_quota");
+    require(!world.bot->infantryQuotaAdmits(pass, value) && world.bot->trooperOrderAdmitted(pass, Unit_Trooper, value),
+            "Current-army quota still forbids the first standing contingent");
+    pass.trooperCount = 6;
+    pass.trooperTarget = 9;
+    pass.hostileAircraft = 0;
+    reject(pass, "extra_armour_above_six_infantry_quota");
+    pass = baseline;
+    pass.infantryValue = pass.militaryValue;
+    pass.trooperCount = 6;
+    pass.trooperTarget = 18;
+    pass.hostileAircraft = 4;
+    require(!world.bot->infantryQuotaAdmits(pass, squadValue)
+            && world.bot->trooperOrderAdmitted(pass, Unit_Troopers, squadValue),
+            "Current-army quota still forbids the effective wing's reactive floor");
+    pass.trooperCount = 17;
+    require(world.bot->trooperOrderAdmitted(pass, Unit_Trooper, value)
+            && !world.bot->trooperOrderAdmitted(pass, Unit_Troopers, squadValue),
+            "Reactive floor did not admit exactly one of its last eighteen slots");
+    pass.trooperCount = 18;
+    reject(pass, "troop_reactive_eighteen_cap_satisfied");
     pass = baseline;
     pass.lightBudget = pass.militaryValue;
     reject(pass, "troop_military_value_cap");
@@ -437,8 +488,7 @@ inline void producerCaps(World& world, BuilderBase* producer, Orders& orders) {
     reject(pass, "troop_useful_target_satisfied");
     pass = baseline;
     pass.trooperTarget = pass.trooperCount + 2;
-    require(!world.bot->trooperOrderAdmitted(pass, Unit_Troopers,
-                world.game->objectData.data[Unit_Troopers][world.owner->getHouseID()].price),
+    require(!world.bot->trooperOrderAdmitted(pass, Unit_Troopers, squadValue),
             "A three-person squad fitted into two remaining support slots");
     pass.trooperTarget = pass.trooperCount + 1;
     const int committed = pass.trooperCount;
@@ -490,6 +540,132 @@ inline void authority(World& world, const std::set<Uint32>& produced) {
     require(saboteur->getAttackMode() == HUNT, "Ordinary checkAllUnits intercepted independent saboteur Hunt");
     SDL_Log("TROOPER_SUPPORT_AUTHORITY: registered_human_command=1 human_role=Human lease_preserved=1 "
             "forced_saboteur_preserved=1 independent_saboteur_hunt=1 cycles=10");
+}
+
+inline void fullBuildStandingRecruitment() {
+    World world("dunecity", true, HOUSE_HARKONNEN, 0);
+    auto initial = world.plan();
+    const int troopValue = world.game->objectData.data[Unit_Trooper][world.owner->getHouseID()].price;
+    require(initial.militaryValue == 0 && initial.trooperCount == 0 && initial.trooperTarget == 6
+            && initial.hostileAircraft == 0 && world.infrastructure(initial) == Structure_WOR,
+            "Full-builder world is not an empty army with a funded standing-WOR opportunity");
+    require(!world.bot->infantryQuotaAdmits(initial, troopValue)
+            && world.bot->trooperOrderAdmitted(initial, Unit_Trooper, troopValue),
+            "Empty current army cannot bootstrap its standing troop contingent");
+    SDL_Log("TROOPER_SUPPORT_BOOTSTRAP: starting_army_value=%d standing_floor=6 ordinary_quota_admits=0 "
+            "support_admits=1 initial_tanks=0 producer_scope=full_build",
+            initial.militaryValue);
+
+    const int builtWorBefore = world.owner->getNumBuiltItems(Structure_WOR);
+    const int builtTroopsBefore = world.owner->getNumBuiltItems(Unit_Trooper);
+    const Uint32 start = world.game->getGameCycleCount();
+    int fullTurns = 0;
+    int expectedTarget = 6;
+    bool worQueued = false, worCompleted = false, worPaid = false, troopPaid = false;
+    Orders orders;
+    auto observe = [&]() {
+        int committedWors = world.owner->getNumItems(Structure_WOR);
+        for (const auto* structure : structureList) {
+            const auto* builder = dynamic_cast<const BuilderBase*>(structure);
+            if (!builder || structure->getOwner() != world.owner) continue;
+            for (const auto& entry : builder->getBuildList())
+                if (entry.itemID == Structure_WOR) committedWors += entry.num;
+            if (builder->getProductionProgress() <= 0) continue;
+            if (builder->getCurrentProducedItem() == Structure_WOR) worPaid = true;
+            if (builder->getItemID() == Structure_WOR
+                && (builder->getCurrentProducedItem() == Unit_Trooper || builder->getCurrentProducedItem() == Unit_Troopers))
+                troopPaid = true;
+        }
+        require(committedWors <= 1, "Full builder duplicated the main house's existing/pending WOR");
+        require(world.owner->getNumBuiltItems(Unit_Trooper) - builtTroopsBefore <= expectedTarget,
+                "Full builder completed troops beyond its standing/reactive target");
+        if (!worCompleted && world.wor()) {
+            worCompleted = true;
+            require(worQueued && worPaid, "Full builder's WOR completion lacks its ordinary paid queue");
+            SDL_Log("TROOPER_SUPPORT_FULL_WOR_COMPLETED: cycle=%u wor_completed=1 elapsed_cycles=%u full_turns=%d "
+                    "producer_scope=full_build",
+                    world.game->getGameCycleCount(), world.game->getGameCycleCount() - start, fullTurns);
+        }
+    };
+    auto fullTurn = [&]() {
+        auto before = world.plan();
+        auto* producer = world.wor();
+        const int queueBefore = producer ? producer->getProductionQueueSize() : 0;
+        // All producers, normal priorities, queue acceptance and placement run.
+        // Neither WOR nor troop orders are inserted by this fixture.
+        world.bot->build(world.bot->militaryUnitValue());
+        ++fullTurns;
+        auto after = world.plan();
+        require(after.trooperTarget == expectedTarget && after.trooperCount <= expectedTarget,
+                "Full builder's committed count escaped the live standing/reactive demand");
+        if (!worQueued && world.owner->getNumItems(Structure_WOR) == 0 && after.itemCount[Structure_WOR] == 1) {
+            worQueued = true;
+            SDL_Log("TROOPER_SUPPORT_FULL_WOR_QUEUED: cycle=%u target=%d current_army_value=%d full_turns=%d "
+                    "cash=%d producer_scope=full_build queue_insertion=normal_build",
+                    world.game->getGameCycleCount(), after.trooperTarget, after.militaryValue, fullTurns, world.owner->getCredits());
+        }
+        if (auto* liveProducer = world.wor())
+            recordOrder(world, liveProducer, queueBefore, before.trooperCount, after, orders, "full_build");
+        observe();
+    };
+    auto step = [&]() {
+        if (world.game->getGameCycleCount() % 25 == 0) fullTurn();
+        observe();
+        world.tick();
+        observe();
+    };
+    auto completeContingent = [&](const char* stage) {
+        troopPaid = false;
+        const Uint32 deadline = world.game->getGameCycleCount() + MILLI2CYCLES(300000);
+        while (world.game->getGameCycleCount() < deadline) {
+            auto* producer = world.wor();
+            if (producer && world.owner->getNumBuiltItems(Unit_Trooper) - builtTroopsBefore == expectedTarget
+                && producer->getProductionQueueSize() == 0) break;
+            step();
+        }
+        auto done = world.plan();
+        auto* producer = world.wor();
+        require(producer && worCompleted && worPaid && troopPaid
+                && world.owner->getNumBuiltItems(Structure_WOR) == builtWorBefore + 1
+                && world.owner->getNumItems(Structure_WOR) == 1
+                && world.owner->getNumBuiltItems(Unit_Trooper) - builtTroopsBefore == expectedTarget
+                && done.trooperCount == expectedTarget && producer->getProductionQueueSize() == 0
+                && orders.people() == expectedTarget,
+                "Full build() did not complete exactly one paid WOR and its useful standing/reactive troops");
+        require(orders.quotaExempt > 0, "Full builder relied on an already large army instead of recruiting its standing bootstrap");
+        SDL_Log("TROOPER_SUPPORT_FULL_TROOPS_COMPLETED: stage=%s cycle=%u wor_completed=1 troopers_completed=%d "
+                "target=%d effective_aircraft=%d weighted_queued=%d quota_exempt_orders=%d full_turns=%d "
+                "paid_progress=1 producer_scope=full_build",
+                stage, world.game->getGameCycleCount(), expectedTarget, done.trooperTarget, done.hostileAircraft,
+                orders.people(), orders.quotaExempt, fullTurns);
+        const Uint32 holdEnd = world.game->getGameCycleCount() + MILLI2CYCLES(30000);
+        while (world.game->getGameCycleCount() < holdEnd) {
+            step();
+            require(world.wor() && world.wor()->getProductionQueueSize() == 0 && orders.people() == expectedTarget,
+                    "Continued full builder turns ordered unnecessary troops after satisfying the contingent");
+        }
+        require(world.owner->getNumBuiltItems(Structure_WOR) == builtWorBefore + 1
+                && world.owner->getNumItems(Structure_WOR) == 1,
+                "Continued full builder turns replaced or duplicated the completed WOR");
+        SDL_Log("TROOPER_SUPPORT_FULL_CAP_HELD: stage=%s target=%d wor_completed=1 troop_queued=0 "
+                "hold_ms=30000 full_turns=%d producer_scope=full_build",
+                stage, expectedTarget, fullTurns);
+    };
+    fullTurn();
+    completeContingent("standing");
+
+    // A real, visible wing loiters by its distant human-owned base. The full
+    // builder may make other AA here; only the separate killing-blow world below
+    // excludes it. No fixture order is ever sent to the produced troops.
+    for (int i = 0; i < 4; ++i) {
+        auto* bird = world.spawn(world.enemy, Unit_Ornithopter, Coord(52 + 4 * (i % 2), 54 + 4 * (i / 2)));
+        Command(world.pilot->getPlayerID(), CMD_UNIT_SETMODE, bird->getObjectID(), HOLD).executeCommand();
+    }
+    expectedTarget = 18;
+    auto wing = world.plan();
+    require(wing.hostileAircraft == 4 && wing.trooperTarget == 18 && wing.trooperCount == 6,
+            "Live effective wing did not raise the existing standing contingent to the bounded reactive floor");
+    completeContingent("effective_wing");
 }
 
 inline void productionAndAirDefence() {
@@ -634,6 +810,8 @@ void runTrooperSupportProbe() {
     getQuantBotConfig().strategy.fixedTempo = QuantBotStrategy::Tempo::Base;
     TrooperSupportProbe::baselineGates();
     TrooperSupportProbe::observedDemand();
+    TrooperSupportProbe::fullBuildStandingRecruitment();
     TrooperSupportProbe::productionAndAirDefence();
-    SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=trooper_support outcome=passed producer_scope=focused_yard_wor");
+    SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=trooper_support outcome=passed producer_scope=full_build_and_focused_yard_wor "
+            "full_build_wor=1 full_build_standing=6 full_build_air_cap=18");
 }
