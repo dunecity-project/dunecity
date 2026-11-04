@@ -53,6 +53,10 @@ enum class Role { Human, Ally, Enemy, Open };
 constexpr std::array<int, 6> kMapSizes{64, 96, 128, 160, 192, 256};
 /// Terrain sliders use percentages in five-point steps, summing to 100.
 constexpr int kTerrainStep = 5;
+/// Local expansion room: every start uses the same square berth and ordinary-rock quota.
+constexpr int kStartRockFairnessPercent = 75;
+constexpr int kCityStartRockBerthSide = 32;
+constexpr int kVanillaStartRockBerthSide = 24;
 /// Target share (percent) of spice terrain (thick spice and blooms included) per Spice choice.
 /// Very high matches the map editor's default random map (7 fields, about 24%).
 constexpr std::array<int, 5> kSpicePercent{0, 6, 12, 18, 24};
@@ -225,6 +229,8 @@ struct HouseSetup {
     Coord start;
     Rect plateau;
     int skipped = 0;            ///< planned items that did not fit (crowded map)
+    Rect rockBerth;             ///< local area used to assess connected future building room
+    int minimumRock = 0;        ///< ordinary-rock quota within rockBerth, independent of the starting kit
 };
 
 struct Result {
@@ -259,6 +265,9 @@ std::vector<int> armyTypes(int house, int techLevel, const Catalogue& catalogue)
 std::vector<int> buyArmy(int budget, int house, int techLevel, const Catalogue& catalogue, Random& random);
 /// True if every coordinate is reachable from the first by ground (mountains block).
 bool groundConnected(const MapData& map, const std::vector<Coord>& points);
+/// Four-neighbour ordinary rock connected to @a start inside @a bounds (clipped to the map).
+/// Mountains, sand, dunes and spice do not count; an invalid/non-rock start returns zero.
+int contiguousBuildableRock(const MapData& map, const Coord& start, const Rect& bounds);
 /// Displayed city population @a house reports for @a placements (zones at their level,
 /// other city-role buildings at their initial occupancy).
 int displayedPopulation(const std::vector<Placement>& placements, int house);

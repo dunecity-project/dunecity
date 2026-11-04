@@ -4,6 +4,7 @@
 // editor's and with a played save.
 
 struct PictureObject { int item = ItemID_Invalid; int house = HOUSE_INVALID; int x = 0, y = 0, w = 1, h = 1; bool unit = false; };
+struct PictureStart { int house = HOUSE_INVALID; Coord at; Rect rockBerth; };
 
 /// Neutral whole-map description: terrain plus tile flags plus objects.
 struct MapPicture {
@@ -11,6 +12,7 @@ struct MapPicture {
     std::vector<int> terrain;
     std::vector<char> road, slab, wall;
     std::vector<PictureObject> objects;
+    std::vector<PictureStart> starts;
     void resize(int s) { size = s; terrain.assign(s * s, Terrain_Sand); road.assign(s * s, 0); slab.assign(s * s, 0); wall.assign(s * s, 0); }
 };
 
@@ -34,6 +36,7 @@ MapPicture pictureOf(const Result& result, const Catalogue& catalogue) {
         picture.objects.push_back({p.item, p.house, p.x, p.y, d.x, d.y, false});
     }
     for(const Placement& u : result.units) picture.objects.push_back({u.item, u.house, u.x, u.y, 1, 1, true});
+    for(const HouseSetup& h : result.houses) picture.starts.push_back({h.house, h.start, h.rockBerth});
     return picture;
 }
 
@@ -196,6 +199,34 @@ void renderPicture(const MapPicture& p, const std::string& name) {
         fill(o.x * k + 1, o.y * k + 1, o.w * k - 2, o.h * k - 2, r, g, b);
         if(o.item == Structure_ConstructionYard) fill(o.x * k + 3, o.y * k + 3, o.w * k - 6, o.h * k - 6, 255, 255, 255);
     }
+    // The coloured rectangle is the bounded rock berth, not the whole connected continent.
+    // Draw starts last so MCVs, roads and buildings cannot hide the measurement coordinates.
+    for(const PictureStart& start : p.starts) {
+        const Uint8* c = start.house >= 0 && start.house < NUM_HOUSES ? houseColor[start.house] : houseColor[6];
+        const Rect& berth = start.rockBerth;
+        const int x = berth.x * k, y = berth.y * k, w = berth.w * k, h = berth.h * k;
+        fill(x - 1, y - 1, w + 2, 3, 0, 0, 0);
+        fill(x - 1, y + h - 2, w + 2, 3, 0, 0, 0);
+        fill(x - 1, y - 1, 3, h + 2, 0, 0, 0);
+        fill(x + w - 2, y - 1, 3, h + 2, 0, 0, 0);
+        fill(x, y, w, 1, c[0], c[1], c[2]);
+        fill(x, y + h - 1, w, 1, c[0], c[1], c[2]);
+        fill(x, y, 1, h, c[0], c[1], c[2]);
+        fill(x + w - 1, y, 1, h, c[0], c[1], c[2]);
+        const int sx = start.at.x * k + k / 2, sy = start.at.y * k + k / 2;
+        fill(sx - 6, sy - 2, 13, 5, 0, 0, 0);
+        fill(sx - 2, sy - 6, 5, 13, 0, 0, 0);
+        fill(sx - 5, sy, 11, 1, 255, 255, 255);
+        fill(sx, sy - 5, 1, 11, 255, 255, 255);
+        const std::string text = "H" + std::to_string(start.house) + " (" + std::to_string(start.at.x) + "," + std::to_string(start.at.y) + ")";
+        auto label = pFontManager->createSurfaceWithText(text, 0xFFFFFFFFu, 12);
+        skirmishRequire(label != nullptr, "Could not draw a start label");
+        SDL_Rect dest{std::clamp(sx + 9, 0, std::max(0, surface->w - label->w - 4)),
+                      std::clamp(sy - label->h - 5, 0, std::max(0, surface->h - label->h - 4)), label->w, label->h};
+        fill(dest.x - 2, dest.y - 2, dest.w + 4, dest.h + 4, 0, 0, 0);
+        fill(dest.x - 2, dest.y - 2, 2, dest.h + 4, c[0], c[1], c[2]);
+        skirmishRequire(SDL_BlitSurface(label.get(), nullptr, surface.get(), &dest) == 0, "Could not blit a start label");
+    }
     const std::string path = probeOut(name + ".png");
     skirmishRequire(SavePNG(surface.get(), path.c_str()) == 0, "Could not write " + path);
     SDL_Log("SKIRMISH_RENDER: %s %s", path.c_str(), measure(p).c_str());
@@ -270,14 +301,223 @@ MapPicture pictureOfSavedMap(const std::string& path) {
     return picture;
 }
 
+void startRockCsvString(std::ostream& out, const std::string& value) {
+    out << '"';
+    for(char c : value) { if(c == '"') out << '"'; out << c; }
+    out << '"';
+}
+
+/// Measurement only: a failing local floor is a CSV fact, never a baseline assertion.
+class StartRockMeasurements {
+public:
+    explicit StartRockMeasurements(const std::string& tag)
+        : tag(tag), maps(probeOut(tag + "-start-rock-maps.csv"), std::ios::binary),
+          starts(probeOut(tag + "-start-rock-starts.csv"), std::ios::binary) {
+        skirmishRequire(maps.good() && starts.good(), "Could not open the start-rock CSVs");
+        const char* settings = "tag,case,seed,map_seed,mode,mod,size,players,tech_level,requested_house,"
+            "allies,enemies,enemies_allied,mirrored,mirror_mode,sand_target_percent,rock_target_percent,"
+            "mountain_target_percent,spice_index,worms,credits,research_lab,"
+            "player_base,player_army,player_city,player_ai,ally_base,ally_army,ally_city,ally_ai,"
+            "enemy_base,enemy_army,enemy_city,enemy_ai,terrain_options_hash,attempts,flattened_mountains";
+        maps << settings << ",sand_tiles,dune_tiles,ordinary_rock_tiles,mountain_tiles,spice_tiles,other_tiles,"
+            "sand_family_percent,ordinary_rock_percent,mountain_percent,mountain_error_pp,spice_percent,"
+            "ordinary_rock_components,largest_ordinary_rock_component,berth_width_min,berth_width_max,"
+            "berth_height_min,berth_height_max,minimum_rock_min,minimum_rock_max,"
+            "local_min,local_median,local_max,local_spread,fairness_min_over_max_percent,imbalance_percent,starts_below_minimum\n";
+        starts << settings << ",start_index,house,house_name,team,start_x,start_y,berth_x,berth_y,berth_width,"
+            "berth_height,berth_area,minimum_rock,contiguous_ordinary_rock,global_ordinary_rock_component,"
+            "local_coverage_percent,below_minimum\n";
+    }
+
+    void record(const std::string& name, const Params& params, const Result& result, const Catalogue& catalogue) {
+        const int size = result.map.getSizeX(), area = size * size;
+        int sand = 0, dunes = 0, rock = 0, mountain = 0, spice = 0;
+        for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
+            const int t = result.map(x, y);
+            sand += t == Terrain_Sand; dunes += t == Terrain_Dunes; rock += t == Terrain_Rock;
+            mountain += t == Terrain_Mountain; spice += pictureSpice(t);
+        }
+        // Label global 4-neighbour ordinary-rock bodies once, rather than flood-filling the
+        // same continent separately for every start. Mountains never count as buildable.
+        std::vector<int> componentArea(area, 0), queue;
+        queue.reserve(rock);
+        int components = 0, largest = 0;
+        const std::array<Coord, 4> directions{{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}};
+        for(int i = 0; i < area; ++i) {
+            if(componentArea[i] || result.map(i % size, i / size) != Terrain_Rock) continue;
+            ++components;
+            queue.clear();
+            queue.push_back(i);
+            componentArea[i] = -1;
+            for(size_t cursor = 0; cursor < queue.size(); ++cursor) {
+                const int at = queue[cursor];
+                for(const Coord& d : directions) {
+                    const int x = at % size + d.x, y = at / size + d.y;
+                    if(x < 0 || y < 0 || x >= size || y >= size) continue;
+                    const int next = y * size + x;
+                    if(componentArea[next] || result.map(x, y) != Terrain_Rock) continue;
+                    componentArea[next] = -1;
+                    queue.push_back(next);
+                }
+            }
+            const int count = static_cast<int>(queue.size());
+            largest = std::max(largest, count);
+            for(int at : queue) componentArea[at] = count;
+        }
+
+        std::array<int, NUM_HOUSES> local{}, ordered{};
+        const size_t count = result.houses.size();
+        skirmishRequire(count > 0 && count <= local.size(), "Start-rock measurement has an invalid house count");
+        int below = 0, minWidth = size, maxWidth = 0, minHeight = size, maxHeight = 0;
+        int minRequired = area, maxRequired = 0;
+        for(size_t i = 0; i < count; ++i) {
+            const HouseSetup& h = result.houses[i];
+            local[i] = ordered[i] = contiguousBuildableRock(result.map, h.start, h.rockBerth);
+            below += local[i] < h.minimumRock;
+            minWidth = std::min(minWidth, h.rockBerth.w); maxWidth = std::max(maxWidth, h.rockBerth.w);
+            minHeight = std::min(minHeight, h.rockBerth.h); maxHeight = std::max(maxHeight, h.rockBerth.h);
+            minRequired = std::min(minRequired, h.minimumRock); maxRequired = std::max(maxRequired, h.minimumRock);
+        }
+        std::sort(ordered.begin(), ordered.begin() + count);
+        const int minimum = ordered[0], maximum = ordered[count - 1];
+        const double median = (ordered[(count - 1) / 2] + ordered[count / 2]) / 2.0;
+        const double fairness = maximum ? 100.0 * minimum / maximum : 0.0;
+        const double imbalance = maximum ? 100.0 * (maximum - minimum) / maximum : 0.0;
+        std::ostringstream settings;
+        startRockCsvString(settings, tag); settings << ','; startRockCsvString(settings, name);
+        settings << ',' << params.seed << ',' << result.mapSeed << ','
+                 << (params.mode == Mode::DuneCity ? "DuneCity" : "Vanilla") << ',';
+        startRockCsvString(settings, params.mod);
+        settings << ',' << size << ',' << count << ',' << params.techLevel << ',' << params.house << ','
+                 << params.allies << ',' << params.enemies << ',' << params.enemiesAllied << ',' << params.symmetric << ','
+                 << (params.symmetric ? (count == 2 ? "point" : "both") : "none") << ','
+                 << params.sandPercent << ',' << params.rockPercent << ',' << params.mountainPercent << ','
+                 << static_cast<int>(params.spice) << ',' << params.worms << ',' << params.credits << ',' << params.researchLab;
+        for(const Side* side : {&params.playerSide, &params.allySide, &params.enemySide}) {
+            settings << ',' << static_cast<int>(side->base) << ',' << side->army << ',' << side->city << ',';
+            startRockCsvString(settings, side->playerClass);
+        }
+        settings << ','; startRockCsvString(settings, params.terrainHash());
+        settings << ',' << result.attempts << ',' << result.flattenedMountains;
+        const std::string prefix = settings.str();
+        maps << prefix << ',' << sand << ',' << dunes << ',' << rock << ',' << mountain << ',' << spice << ','
+             << area - sand - dunes - rock - mountain - spice << ','
+             << 100.0 * (sand + dunes + spice) / area << ',' << 100.0 * rock / area << ','
+             << 100.0 * mountain / area << ',' << 100.0 * mountain / area - params.mountainPercent << ','
+             << 100.0 * spice / area << ',' << components << ',' << largest << ','
+             << minWidth << ',' << maxWidth << ',' << minHeight << ',' << maxHeight << ','
+             << minRequired << ',' << maxRequired << ',' << minimum << ',' << median << ',' << maximum << ','
+             << maximum - minimum << ',' << fairness << ',' << imbalance << ',' << below << '\n';
+        for(size_t i = 0; i < count; ++i) {
+            const HouseSetup& h = result.houses[i];
+            const Rect& berth = h.rockBerth;
+            const int berthArea = berth.w * berth.h;
+            const int global = result.map.isInsideMap(h.start.x, h.start.y) ? componentArea[h.start.y * size + h.start.x] : 0;
+            starts << prefix << ',' << i << ',' << h.house << ',';
+            startRockCsvString(starts, catalogue.houseNames[h.house]);
+            starts << ',' << h.team << ',' << h.start.x << ',' << h.start.y << ',' << berth.x << ',' << berth.y << ','
+                   << berth.w << ',' << berth.h << ',' << berthArea << ',' << h.minimumRock << ',' << local[i] << ','
+                   << global << ',' << (berthArea ? 100.0 * local[i] / berthArea : 0.0) << ','
+                   << (local[i] < h.minimumRock) << '\n';
+        }
+        SDL_Log("SKIRMISH_RENDER_START_ROCK: %s size=%d players=%zu seed=%u mirror=%d min=%d median=%.1f max=%d fairness=%.3f%% below=%d",
+                name.c_str(), size, count, params.seed, params.symmetric, minimum, median, maximum, fairness, below);
+    }
+
+    void finish() {
+        maps.flush(); starts.flush();
+        skirmishRequire(maps.good() && starts.good(), "Could not write the start-rock CSVs");
+    }
+
+private:
+    std::string tag;
+    std::ofstream maps, starts;
+};
+
+Params reportedStartRockParams(uint32_t seed) {
+    // Extracted from both supplied saves' embedded INIs and serialized mod headers.
+    // Atreides: legacy Rock=65 is combined land, migrated to 35/60/5; 3000 credits,
+    // dunecity/a4212b3437b811b7, Random human resolves to Mercenary with qBotBrutal.
+    // Sardaukar: explicit 40/40/20, 1000 credits, eight worms; its actual mod is
+    // ws-37d5ce34.../9addf5f78f6e678a (Civilization Wars, Base Mod=dunecity), not
+    // BASIC's generic Mod=dunecity. Use bundled CivWars, as for the 80rock case.
+    // Keep house Random: forcing the saved human identity would remove an RNG draw.
+    const bool sardaukar = seed == 836308809u;
+    Params p;
+    p.mapSize = 256; p.seed = seed; p.house = HOUSE_INVALID;
+    p.allies = 0; p.enemies = 7; p.enemiesAllied = false;
+    p.mode = Mode::DuneCity; p.mod = sardaukar ? "CivWars" : "dunecity"; p.techLevel = 9;
+    p.sandPercent = sardaukar ? 40 : 35; p.rockPercent = sardaukar ? 40 : 60; p.mountainPercent = sardaukar ? 20 : 5;
+    p.spice = Spice::None; p.worms = sardaukar ? 8 : 0; p.symmetric = false;
+    p.credits = sardaukar ? 1000 : 3000;
+    p.playerSide = p.allySide = p.enemySide = Side{"qBotBrutal", BaseSize::None, 0, 0};
+    return p;
+}
+
+void renderStartRockMeasurements(const std::string& tag, StartRockMeasurements& measurements) {
+    // These self-contained fixtures need neither the original saves nor a workshop download
+    // at runtime. --render-tag baseline/current changes filenames, never generation settings.
+    for(uint32_t seed : {418379001u, 836308809u}) {
+        const Params p = reportedStartRockParams(seed);
+        skirmishRequire(RandomSkirmish::activateMod(p.mod), "Reported start-rock mod did not activate");
+        const Catalogue catalogue = RandomSkirmish::loadCatalogue(p.mode);
+        const Result result = SkirmishGenerator::generate(p, catalogue);
+        skirmishRequire(result.houses.size() == 8, "Reported start-rock fixture did not produce eight players");
+        skirmishRequire(result.houses.front().house == (seed == 418379001u ? HOUSE_MERCENARY : HOUSE_HARKONNEN),
+                        "Reported start-rock fixture changed its Random human house");
+        const std::string name = "reported-seed" + std::to_string(seed);
+        measurements.record(name, p, result, catalogue);
+        const std::string stem = tag + "-generated-" + name;
+        std::ofstream ini(probeOut(stem + ".ini"), std::ios::binary);
+        ini << result.ini;
+        ini.close();
+        skirmishRequire(ini.good(), "Could not write the reported start-rock map INI");
+        renderPicture(pictureOf(result, catalogue), stem);
+    }
+
+    // 576 pure-generation samples: 6 sizes x 3 player counts x 2 modes x 2 mirror
+    // states x 8 samples. Each cell samples every mix twice and the matrix uses all
+    // 16 fixed seeds. Only the two reported fixtures get PNGs/INIs, keeping I/O bounded
+    // within the existing native render timeout; no live matches are started here.
+    constexpr std::array<uint32_t, 16> seeds{{418379001u, 836308809u, 20261104u, 20261013u,
+        488631365u, 1u, 2u, 3u, 7u, 11u, 42u, 101u, 65537u, 0x12345678u, 0x87654321u, 0xffffffffu}};
+    constexpr std::array<std::array<int, 3>, 4> mixes{{{{90, 5, 5}}, {{75, 20, 5}}, {{20, 75, 5}}, {{50, 20, 30}}}};
+    constexpr std::array<int, 3> players{{2, 4, 8}};
+    for(int mode = 0; mode < 2; ++mode) {
+        const std::string mod = mode ? "dunecity" : "vanilla";
+        const Mode cityMode = mode ? Mode::DuneCity : Mode::Vanilla;
+        skirmishRequire(RandomSkirmish::activateMod(mod), "Start-rock matrix mod did not activate");
+        const Catalogue catalogue = RandomSkirmish::loadCatalogue(cityMode);
+        for(size_t size = 0; size < kMapSizes.size(); ++size) for(size_t player = 0; player < players.size(); ++player)
+            for(bool mirrored : {false, true}) for(int sample = 0; sample < 8; ++sample) {
+                const auto& mix = mixes[(sample + size + player + mode) % mixes.size()];
+                Params p;
+                p.mapSize = kMapSizes[size];
+                p.seed = seeds[(sample + 8 * mirrored + 3 * size + 5 * player + 7 * mode) % seeds.size()];
+                p.house = HOUSE_INVALID; p.allies = 0; p.enemies = players[player] - 1; p.enemiesAllied = false;
+                p.mode = cityMode; p.mod = mod; p.techLevel = 9; p.symmetric = mirrored;
+                p.sandPercent = mix[0]; p.rockPercent = mix[1]; p.mountainPercent = mix[2];
+                p.spice = Spice::Medium;
+                p.playerSide = Side{"", BaseSize::None, 0, 0};
+                p.allySide = p.enemySide = Side{"qBotMedium", BaseSize::None, 0, 0};
+                const Result result = SkirmishGenerator::generate(p, catalogue);
+                const std::string name = "matrix-" + std::to_string(p.mapSize) + "-" + std::to_string(players[player])
+                    + "p-" + mod + (mirrored ? "-mirrored" : "-free") + "-sample" + std::to_string(sample);
+                measurements.record(name, p, result, catalogue);
+            }
+    }
+}
+
 void runRender() {
     const std::string tag = std::getenv("SKIRMISH_RENDER_TAG") ? std::getenv("SKIRMISH_RENDER_TAG") : "current";
+    StartRockMeasurements startRock(tag);
     for(int seed : {1, 2}) renderPicture(pictureOf(generateRandomMap(128, 128, seed)), "editor-random-128-seed" + std::to_string(seed));
     for(const auto& [name, params] : {std::pair<std::string, Params>{"stefan-dunecity", caseParams("stefan-128")}, {"vanilla-2v2", vanilla2v2Params()}}) {
         skirmishRequire(RandomSkirmish::activateMod(params.mod), "Render mod did not activate");
         const Catalogue catalogue = RandomSkirmish::loadCatalogue(params.mode);
         const Result result = SkirmishGenerator::generate(params, catalogue);
         renderPicture(pictureOf(result, catalogue), tag + "-generated-" + name);
+        startRock.record(name, params, result, catalogue);
     }
     // The 80rock.dls reproduction: Random Skirmish with the CivWars mod, not the separate
     // Civilization Wars lane generator. Preserve its seed/start kit while varying geology.
@@ -294,6 +534,7 @@ void runRender() {
         params.playerSide = Side{"qBotHard", BaseSize::None, 0, 0};
         params.allySide = params.enemySide = Side{"qBotHard", BaseSize::None, 0, 0};
         const Result result = SkirmishGenerator::generate(params, catalogue);
+        startRock.record("terrain-mix-" + std::to_string(size) + "-land" + std::to_string(land), params, result, catalogue);
         int sand = 0, dunes = 0, rock = 0, mountain = 0, spice = 0;
         for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
             const auto t = result.map(x, y);
@@ -310,6 +551,8 @@ void runRender() {
             std::ofstream(probeOut(tag + "-generated-80rock.ini"), std::ios::binary) << result.ini;
         }
     }
+    renderStartRockMeasurements(tag, startRock);
+    startRock.finish();
     if(const char* save = std::getenv("SKIRMISH_RENDER_SAVE"))
         renderPicture(pictureOfSavedMap(save), "saved-" + getBasename(save, true));
 }

@@ -55,6 +55,7 @@ constexpr int kMaxCityRows = 8;     ///< city blocks across the base-to-edge axi
 constexpr int kNoiseCell = 6;       ///< lattice spacing of the rim noise
 constexpr int kCoreClearance = 2;   ///< no mountain this close to a start's clean core
 constexpr int kBlastGap = 5;        ///< footprint distance a reactor keeps from protected buildings
+constexpr uint32_t kTerrainVersion = 2u;
 
 int ceilDiv(int a, int b) { return (a + b - 1) / b; }
 int isqrt(int value) { int r = 0; while((r + 1) * (r + 1) <= value) ++r; return r; }
@@ -357,6 +358,19 @@ int fillExactly(int remaining, const std::vector<int>& prices, const std::vector
 }
 
 // ---- Terrain ------------------------------------------------------------------------------
+
+/// A 75% floor uses at most two-thirds of the requested ordinary rock before rounding;
+/// the remainder stays available for natural terrain. An MCV's existing 8x8 core is the floor.
+int startRockBerthSide(const Params& params, int houses) {
+    const int goal = params.mode == Mode::DuneCity ? kCityStartRockBerthSide : kVanillaStartRockBerthSide;
+    const int budget = 8 * params.mapSize * params.mapSize * params.rockPercent / (900 * std::max(1, houses));
+    return std::max(8, std::min(goal, isqrt(budget)) & ~1);
+}
+
+Rect rockBerthAt(int size, const Coord& center, int side) {
+    return {std::clamp(center.x - side / 2, 0, size - side),
+            std::clamp(center.y - side / 2, 0, size - side), side, side};
+}
 
 struct TerrainSpec {
     int size = 128;
@@ -1150,7 +1164,7 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
     line("[RANDOMSKIRMISH]");
     line("Seed=" + std::to_string(params.seed));
     line("MapSeed=" + std::to_string(result.mapSeed));
-    line("TerrainVersion=2");
+    line("TerrainVersion=" + std::to_string(kTerrainVersion));
     line("Sand=" + std::to_string(params.sandPercent));
     line("Rock=" + std::to_string(params.rockPercent));
     line("Mountain=" + std::to_string(params.mountainPercent));
@@ -1301,7 +1315,7 @@ std::string Params::terrainHash() const {
     const auto terrain = normalizedTerrain(sandPercent, rockPercent, mountainPercent);
     uint64_t hash = 14695981039346656037ull;
     // Fixed byte order, not a compiler's representation or a locale-sensitive formatter.
-    for(uint32_t value : {2u, static_cast<uint32_t>(terrain[0]), static_cast<uint32_t>(terrain[1]), static_cast<uint32_t>(terrain[2])})
+    for(uint32_t value : {kTerrainVersion, static_cast<uint32_t>(terrain[0]), static_cast<uint32_t>(terrain[1]), static_cast<uint32_t>(terrain[2])})
         for(int shift = 0; shift < 32; shift += 8) { hash ^= (value >> shift) & 0xffu; hash *= 1099511628211ull; }
     char text[17];
     std::snprintf(text, sizeof(text), "%016llx", static_cast<unsigned long long>(hash));
@@ -1513,6 +1527,31 @@ bool groundConnected(const MapData& map, const std::vector<Coord>& points) {
     });
 }
 
+int contiguousBuildableRock(const MapData& map, const Coord& start, const Rect& bounds) {
+    if(bounds.w <= 0 || bounds.h <= 0 || !map.isInsideMap(start.x, start.y)
+       || !bounds.contains(start.x, start.y) || map(start.x, start.y) != Terrain_Rock) return 0;
+    const int x0 = std::max(0, bounds.x), y0 = std::max(0, bounds.y);
+    const int x1 = std::min(map.getSizeX(), bounds.x + bounds.w);
+    const int y1 = std::min(map.getSizeY(), bounds.y + bounds.h);
+    const int width = x1 - x0, height = y1 - y0;
+    std::vector<char> seen(width * height, 0);
+    std::vector<int> queue;
+    queue.reserve(width * height);
+    const int first = (start.y - y0) * width + start.x - x0;
+    seen[first] = 1;
+    queue.push_back(first);
+    for(size_t at = 0; at < queue.size(); ++at) {
+        const int x = x0 + queue[at] % width, y = y0 + queue[at] / width;
+        for(const Coord step : {Coord(1,0), Coord(0,1), Coord(-1,0), Coord(0,-1)}) {
+            const int nx = x + step.x, ny = y + step.y;
+            if(nx < x0 || nx >= x1 || ny < y0 || ny >= y1 || map(nx, ny) != Terrain_Rock) continue;
+            const int next = (ny - y0) * width + nx - x0;
+            if(!seen[next]) { seen[next] = 1; queue.push_back(next); }
+        }
+    }
+    return static_cast<int>(queue.size());
+}
+
 /// Every start reaches spice by ground within three times the distance its own field was
 /// seeded at (addSpice: (w + h) / 4 + kRimMax + 6 toward the middle). That seed lands on rock
 /// or behind a massif on some maps, and the start then has no field of its own at all (7P
@@ -1691,6 +1730,7 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
             addPlan(pool[allies + i], Role::Enemy, params.enemiesAllied ? 2 : 2 + i, &params.enemySide);
     }
     const int houses = static_cast<int>(plans.size());
+    const int rockBerthSide = startRockBerthSide(params, houses);
 
     // The player's start is never the cramped one: as much rock as the largest start.
     for(const Plan& plan : plans) {
@@ -1771,6 +1811,8 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
         plateaus[i] = r;
         plans[i].setup.plateau = r;
         plans[i].setup.start = c;
+        plans[i].setup.rockBerth = rockBerthAt(size, c, rockBerthSide);
+        plans[i].setup.minimumRock = ceilDiv(rockBerthSide * rockBerthSide * kStartRockFairnessPercent, 100);
     }
     // Symmetric maps carve every mirror image of every start, so empty images are fair
     // expansion sites and the terrain stays exactly mirrored.
