@@ -532,10 +532,9 @@ void runNoSpiceCityProbe(Game& game) {
             require(!ordered(saving,Structure_HeavyFactory) && port->getProductionQueueSize()==0,
                 "A solvent multi-yard city spent its first-factory savings on imports");
             const auto allStructures=structureList;
-            structureList.erase(std::remove_if(structureList.begin(),structureList.end(),[&](const auto* structure) {
-                return structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard
-                    && structure!=yard;
-            }),structureList.end());
+            for (auto* structure:allStructures)
+                if (structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard
+                    && structure!=yard) structureList.remove(structure);
             Pass singleYard;
             try { singleYard=marketDecide(true,factoryPrice-1); }
             catch (...) { structureList=allStructures;throw; }
