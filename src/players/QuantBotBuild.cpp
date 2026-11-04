@@ -2053,30 +2053,25 @@ bool QuantBot::trooperOrderAdmitted(BuildPass& pass, Uint32 item, int value) {
         && int64_t(pass.militaryValue) + value <= pass.lightBudget;
 }
 
-bool QuantBot::trooperCoreReady(BuildPass& pass, const BuilderBase* builder) {
-    if (getHouse()->getNumItems(Structure_HeavyFactory) == 0) return false;
-    const int technology = ModManager::instance().isTornieFamilyContentActive()
-        ? builder->getTechnologyHouseID() : getHouse()->getHouseID();
-    const auto& port = currentGame->objectData.data[Structure_StarPort][technology];
-    // Neither infrastructure nor its protected recruitment may displace the
-    // first legally offered/pending Starport. Population-locked imports wait.
-    return !pass.starportMarketAvailable || !port.enabled || port.price <= 0
-        || port.builder != Structure_ConstructionYard || port.techLevel > getHouse()->getTechLevel()
-        || getHouse()->getNumItems(Structure_StarPort) > 0
-        || (pass.itemCount[Structure_StarPort] == 0 && !getHouse()->meetsStarportPopulation());
-}
-
 Uint32 QuantBot::trooperInfrastructureItem(BuildPass& pass, const BuilderBase* yard, bool requireCash) {
     if (!pass.trooperSupport || pass.itemCount[Structure_WOR] > 0
         || (ModManager::instance().isTornieFamilyContentActive() && pass.itemCount[Structure_Worfinery] > 0)
         || !getHouse()->hasPower() || openingWorkersNeeded(pass)
-        || !trooperCoreReady(pass, yard)
+        || getHouse()->getNumItems(Structure_HeavyFactory) == 0
         || pass.forecastNetIncome <= 0 || !troopContentExists(pass, yard)) return NONE_ID;
     const int technology = ModManager::instance().isTornieFamilyContentActive()
         ? yard->getTechnologyHouseID() : getHouse()->getHouseID();
     const auto& spec = currentGame->objectData.data[Structure_WOR][technology];
     if (!spec.enabled || spec.builder != int(yard->getItemID())
         || spec.techLevel > getHouse()->getTechLevel()) return NONE_ID;
+    // An offered/pending import supplier keeps priority. A population-locked
+    // Starport is not a legal core purchase yet and must not veto useful
+    // infantry for the entire low-income game.
+    const auto& port = currentGame->objectData.data[Structure_StarPort][technology];
+    if (pass.starportMarketAvailable && port.enabled && port.price > 0
+        && port.builder == int(yard->getItemID()) && port.techLevel <= getHouse()->getTechLevel()
+        && getHouse()->getNumItems(Structure_StarPort) == 0
+        && (pass.itemCount[Structure_StarPort] > 0 || getHouse()->meetsStarportPopulation())) return NONE_ID;
     Uint32 candidate = Structure_WOR;
     for (int prerequisite = Structure_FirstID; prerequisite <= Structure_LastID; ++prerequisite)
         if (spec.prerequisiteStructuresSet[prerequisite]
@@ -2792,8 +2787,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         && pass.civicStructuralNeed == 0 && pass.civicReserveCost == 0 && cityBootstrapReserve(pass) == 0) {
         const int floor = QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft);
         for (const auto* builder : pass.capitalBuilders) {
-            if (builder->getItemID() != Structure_WOR || builder->isOnHold()
-                || !trooperCoreReady(pass, builder)) continue;
+            if (builder->getItemID() != Structure_WOR || builder->isOnHold()) continue;
             const Uint32 item = supportTrooperOrder(pass, builder, INT_MAX, floor);
             if (item == NONE_ID) continue;
             CapitalCandidate infantry;
