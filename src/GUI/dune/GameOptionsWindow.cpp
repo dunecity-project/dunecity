@@ -79,8 +79,9 @@ void DamageRulesCheckbox::drawOverlay(Point) {
 GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGameOptions)
  : Window(50, 50, 626, ModManager::instance().isTornieFamilyContentActive() ? 430 : 410), gameOptions(initialGameOptions) {
 
-    // Keep the longest rules columns between the corner crests at 640x480.
-    constexpr int ruleGap = 2;
+    // Family rules need the intrinsic checkbox padding, but no extra row gaps,
+    // to keep every control inside the same crest-safe 430px frame at 640x480.
+    const int ruleGap = ModManager::instance().isTornieFamilyContentActive() ? 0 : 2;
 
     setWindowWidget(&vbox);
     vbox.addWidget(VSpacer::create(6));
