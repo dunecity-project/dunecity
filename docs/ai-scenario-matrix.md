@@ -44,8 +44,9 @@ The driver writes `games.csv` (one row per game; the win type of a campaign win:
 quota) and `houses.csv` (one row per house, with its `match_score` placement score: teams are entrants,
 a time-out is a negative draw). Games already in `games.csv` are skipped; failed games are retried on the
 next run; a crashed game's last log lines go to `failed-*.txt`. A smoke timeout keeps its
-complete engine log in `timeout-*.log`, including the final unit/target audit, before the
-ordinary game-directory cleanup. The timeout still fails the same winner assertion.
+complete engine log in `timeout-*.log`, including the final unit/target, exact cargo,
+repair-owner and containment audits, before ordinary game-directory cleanup.
+The timeout still fails the same winner assertion.
 With `--attack-events`, raw logs for every result instead live under
 `diagnostics/<game>/run.log`, so same-source A/B runs can compare their complete
 `PROBE_DIGEST` prefix before the first changed endgame decision.

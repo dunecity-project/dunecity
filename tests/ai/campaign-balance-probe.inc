@@ -5,6 +5,7 @@
 #include <sand.h>
 #include <mod/ModManager.h>
 #include <players/QuantBotConfig.h>
+#include <units/HarvesterHelpers.h>
 #include <memory>
 #include <cstdlib>
 #include <fstream>
@@ -577,9 +578,29 @@ int runCampaignBalanceProbe() {
         level, game->getGameInitSettings().getRandomSeed(), percent, partner.c_str(), enemy.c_str(), game->getGameCycleCount(),
         outcome.c_str());
     if (outcome == "time_limit") {
+        for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game->getHouse(h))
+            for (const auto& player : house->getPlayerList())
+                if (const auto* bot = dynamic_cast<const QuantBot*>(player.get()))
+                    SDL_Log("CAMPAIGN_ENDGAME_AUDIT: house=%d exhausted=%d credits_raw=%lld spice=%d",
+                        h, bot->exhaustedArmyEconomy(),
+                        static_cast<long long>((house->getStartingCredits()+house->getEarnedCredits()).getRawValue()),
+                        bot->lastCalculatedSpice);
         for (const auto* unit:unitList) {
             const auto* target=unit->getTarget();
             const auto* candidate=unit->findTarget();
+            const QuantBot* controller = nullptr;
+            for (const auto& player : unit->getOwner()->getPlayerList())
+                if (const auto* bot = dynamic_cast<const QuantBot*>(player.get()); bot && !bot->builderOnly()) {
+                    controller = bot;
+                    break;
+                }
+            SDL_Log("CAMPAIGN_REPAIR_AUDIT: id=%u cargo_raw=%lld reserved=%d unfunded=%d role=%d",
+                unit->getObjectID(), static_cast<long long>(harvesterGetAmountOfSpice(unit).getRawValue()),
+                controller && controller->reserveDamagedUnitForRepair(unit),
+                controller && controller->declinesUnfundedRepair(unit),
+                controller ? int(controller->unitRole(unit,{QuantBot::UnitRole::Human,QuantBot::UnitRole::Defence,
+                    QuantBot::UnitRole::BaseDefence,QuantBot::UnitRole::LiveDefence,QuantBot::UnitRole::Escort,
+                    QuantBot::UnitRole::ColonyGuard})) : -1);
             SDL_Log("CAMPAIGN_TARGET_AUDIT: id=%u attack_pos=%d find_timer=%d pending=%d candidate=%u candidate_item=%u",
                 unit->getObjectID(),unit->attackPos.isValid(),unit->findTargetTimer,int(unit->pendingTargetRequest),
                 candidate?candidate->getObjectID():NONE_ID,candidate?candidate->getItemID():NONE_ID);
@@ -590,10 +611,12 @@ int runCampaignBalanceProbe() {
                 unit->getGuardPoint().x,unit->getGuardPoint().y,target?target->getObjectID():NONE_ID,
                 target?target->getItemID():NONE_ID,target?target->getLocation().x:-1,target?target->getLocation().y:-1);
         }
-        for (const auto* building:structureList)
-            SDL_Log("CAMPAIGN_BUILDING_AUDIT: house=%d item=%u hp=%d/%d pos=%d,%d",
+        for (const auto* building:structureList) {
+            const auto* occupant = building->getContainedRepairUnit();
+            SDL_Log("CAMPAIGN_BUILDING_AUDIT: house=%d item=%u hp=%d/%d pos=%d,%d occupant=%u",
                 building->getOwner()->getHouseID(),building->getItemID(),building->getHealth().lround(),building->getMaxHealth(),
-                building->getLocation().x,building->getLocation().y);
+                building->getLocation().x,building->getLocation().y,occupant?occupant->getObjectID():NONE_ID);
+        }
     }
     game.reset();
     currentGame = nullptr;
