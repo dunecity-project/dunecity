@@ -31,7 +31,8 @@ of one game that must reproduce its final state digest; ctest scenario_matrix_sm
 (the whole matrix, enough games per cell for intervals). --shard K/N plays every N-th game, so a
 full run splits across machines; --report reads one or more results directories and prints the
 summary table. Games already in games.csv are skipped; each game's run directory is deleted as
-soon as its rows are written. Scores are tests/ai/match_score.py placement scores.
+soon as its rows are written. Smoke timeouts retain their engine log in timeout-*.log
+before cleanup. Scores are tests/ai/match_score.py placement scores.
 """
 import argparse
 import configparser
@@ -453,6 +454,8 @@ def play(args, scratch, binary, game):
         append(results / 'games.csv', GAME_FIELDS, [row])
         finish_game(scratch, out, True)
         return row
+    if args.tier == 'smoke' and row['outcome'] == 'time_limit':
+        (results / f'timeout-{out.name}.log').write_text('\n'.join(lines) + '\n')
     # Placement scores (match_score): teams are entrants; in a campaign only the partner's side counts.
     ids = [int(h['house']) for h in houses]
     eliminated = {int(h['house']): float(h['eliminated_s']) for h in houses if h['alive'] == '0'}
