@@ -90,10 +90,19 @@ void runHarvesterSafetyProbe(Game& game) {
         require(deviator->canAttack(borrowed),"Deviator targeting excludes harvesters");
         unitList.clear();unitList.push_back(borrowed);unitList.push_back(deviator);
         bot->doAttackObject(deviator,borrowed,true);
+        require(deviator->getTarget()==borrowed && deviator->wasForced(),
+            "QuantBot Deviator order did not retain the fixture target");
+        require(borrowed->getAttackMode()==STOP,"Capture target was not stopped");
         const Uint32 captureStart=game.gameCycleCount;
         while(borrowed->getOwner()!=owner && game.gameCycleCount-captureStart<MILLI2CYCLES(120000)) {
             game.processObjects();++game.gameCycleCount;
         }
+        SDL_Log("DEVIATED_HARVEST_CAPTURE_STATE: worker=%u owner=%d mode=%d at=%d,%d "
+            "deviator=%u active=%d target=%u forced=%d at=%d,%d primary=%d bullets=%zu",
+            borrowed->getObjectID(),borrowed->getOwner()->getHouseID(),int(borrowed->getAttackMode()),
+            borrowed->getLocation().x,borrowed->getLocation().y,deviator->getObjectID(),int(deviator->isActive()),
+            deviator->getTarget() ? deviator->getTarget()->getObjectID() : NONE_ID,int(deviator->wasForced()),
+            deviator->getLocation().x,deviator->getLocation().y,deviator->primaryWeaponTimer,bulletList.size());
         require(borrowed->wasDeviated() && borrowed->getOwner()==owner,
             "QuantBot's real Deviator did not capture enemy worker");
         bot->doSetAttackMode(deviator,STOP);unitList.remove(deviator);
