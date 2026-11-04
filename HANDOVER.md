@@ -1,3 +1,39 @@
+## 2026-11-04 — Fair contiguous rock for Random Skirmish starts (OMP TerrainMix, unreleased)
+
+- Bare-MCV starts previously guaranteed only their 8×8 core, not future base/city room.
+  The reported original Atreides island had 266 ordinary-rock tiles; Sardaukar had 255.
+  Mountain and distant continents are not counted as usable home building room.
+- Terrain v3 gives every start the same bounded berth/floor: goal 32×32 City / 24×24
+  Vanilla, scaled by map size, house count and ordinary-Rock budget. At 256/8P/Rock 20%,
+  City has floor 768 and a solid 28×28 reserve. Small kits prefer denser nearby natural
+  rock before filling missing room; existing large kits and mirrored slots stay put.
+- Seed 418379001 local min/median/max: 271/672.5/934 → 935/968/999.
+  Seed 836308809: 255/494.5/598 → 840/885.5/916. Atreides: 266 original → 935 final;
+  Sardaukar: 255 → 882. Both retain requested mountain quotas, including 20% in the
+  second. Its total ordinary rock falls 27,774 → 26,620 while home room improves.
+- Matched 576 maps / 2,688 starts: below-floor 1,192 → 0; maps below 75% fairness 146 → 0;
+  worst fairness 26.52 → 84.18%, median 95.22 → 100%. Mountain deficits beyond 3 tiles: 6 → 0.
+  All 384 maps ≥128 stay within 12 points + 3 rounding tiles of ordinary-rock/sand targets.
+  Existing core/rim precedence remains explicit on 34 tiny crowded maps only
+  (64/4P: 8; 64/8P: 18; 96/8P: 8), not a relaxed fairness/connectivity/mountain check.
+- Fixed duplicated mirrored cores/repeated mirrored lobe walks, excess editor-field
+  coast and protected-ground mountain shortfalls. A real seed 1 /128/4P mirrored upper-
+  cap off-by-group error was corrected without changing test tolerances.
+- TerrainOptionsHash/provenance is now version 3; new seed maps intentionally change.
+  Embedded saved terrain and separate CivWarsGenerator stay untouched; no extra
+  save/protocol fields. Current 160×160 80rock still has 1,280 mountains vs 6,544 original
+  (80.44% fewer), with working Sand/Rock/Mountain controls.
+- Green: 38 cases / 15,482,702 assertions, mini 51.8s, source 11b03883,
+  job 20261104T214643-start-rock-v3-repinned-cd7eb8. Complete native skirmish probe:
+  PASS 156.9s, generator 76cb1cb6, job 20261104T213114-start-rock-cap-corrected-e10b70.
+  Civ Wars units: PASS 3.6s at 35c3a7ca. All 30 terrain/INI pairs matched Mac mini/Pro and
+  Windows/MSVC at 76cb1cb6 before repin 11b03883; Windows measurement kept the old
+  golden failures explicit rather than claiming a passing suite.
+- Both before/after 256 previews, current 80rock and native 640 setup were viewed.
+  Full per-start/settings/terrain evidence: outputs/fair-start-rock-20261104/final76/;
+  Windows source/binary/command fence: outputs/terrain-v3-windows-76cb1cb6-20261104/.
+  Policy, before/after tables and exact receipts: docs/skirmish-generator.md.
+
 ## 2026-11-04 — Launcher kite moves two more tiles (OMP LauncherKite, unreleased)
 
 - QuantBot spacing now has independent hashed/saved INI value

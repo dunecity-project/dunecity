@@ -277,14 +277,14 @@ City/Vanilla, mirrored/free layouts, four terrain mixes and 16 distinct seeds:
 **1,192 of 2,688 starts** missed the planned floor, across **347 maps**; worst within-map
 minimum/maximum was **26.52%**. For eight-player City maps at 75/20/5 (four maps per size):
 
-| Size | Berth / floor | Before min | Before median | Before max | Worst min/max |
-|---|---:|---:|---:|---:|---:|
-| 64 | 8 / 48 | 64 | 64 | 64 | 100% |
-| 96 | 14 / 147 | 152 | 177 | 196 | 78.57% |
-| 128 | 18 / 243 | 181 | 263 | 314 | 62.63% |
-| 160 | 22 / 363 | 189 | 361 | 442 | 56.93% |
-| 192 | 28 / 588 | 219 | 409.5 | 638 | 34.33% |
-| 256 | 32 / 768 | 187 | 379 | 867 | 31.22% |
+| Size | Berth / floor | Before min / median / max | Final min / median / max | Worst min/max, before → final |
+|---|---:|---:|---:|---:|
+| 64 | 8 / 48 | 64 / 64 / 64 | 64 / 64 / 64 | 100% → 100% |
+| 96 | 14 / 147 | 152 / 177 / 196 | 196 / 196 / 196 | 78.57% → 100% |
+| 128 | 18 / 243 | 181 / 263 / 314 | 266 / 282 / 309 | 62.63% → 87.38% |
+| 160 | 22 / 363 | 189 / 361 / 442 | 427 / 460.5 / 484 | 56.93% → 94.66% |
+| 192 | 28 / 588 | 219 / 409.5 / 638 | 712 / 741 / 761 | 34.33% → 94.68% |
+| 256 | 32 / 768 | 187 / 379 / 867 | 844 / 901.5 / 992 | 31.22% → 89.11% |
 
 That wider matrix also exposed six pre-existing mountain-quota shortfalls and 31 mirrored
 coverage overshoots beyond 12 points on sizes ≥128. Mirrored core rectangles were duplicated,
@@ -299,6 +299,57 @@ labelled previews are retained in `outputs/fair-start-rock-20261104/`. The secon
 save's baseline INI matches byte for byte, including its exact Workshop CivWars mod; the first
 save predates the version-2 mountain change, so its original terrain and current baseline are
 reported separately. The separate `CivWarsGenerator` is not changed.
+
+Corrected generator source **`76cb1cb6fe9a`**, final native capture
+`20261104T213114-start-rock-cap-corrected-e10b70`, gives these same-settings results:
+
+| Reported seed / Sand-Rock-Mountain | Baseline local min / median / max | Final local min / median / max | Fairness, before → final |
+|---|---:|---:|---:|
+| 418379001 / 35-60-5 | 271 / 672.5 / 934 | 935 / 968 / 999 | 29.01% → 93.59% |
+| 836308809 / 40-40-20 | 255 / 494.5 / 598 | 840 / 885.5 / 916 | 42.64% → 91.70% |
+
+All sixteen reported starts have a 32×32 berth and floor768. Specifically, Atreides goes
+**original266 → baseline271 → final935**; Sardaukar **255 → 255 → 882**. The second map
+achieves this while ordinary rock decreases from 27,774 to 26,620 tiles: the fix redistributes
+usable room instead of merely raising the global rock percentage.
+
+Across all 576 matched matrix maps, below-floor starts fall **1,192→0**, maps below 75%
+fairness **146→0**, worst fairness **26.52→84.18%**, and median fairness **95.22→100%**.
+Mountain deficits beyond the indivisible three-tile allowance fall **6→0**; the largest final
+deficit is three tiles, including the 144 high-mountain samples. All 384 maps of size≥128
+honour ordinary-rock and sand-family targets within 12 percentage points plus three rounding
+tiles. The existing minimum-core/rim precedence still overrides those targets on **34 tiny,
+crowded maps**: eight 64/4P, eighteen 64/8P and eight 96/8P. This is not a relaxed fairness,
+connectivity or mountain-quota check.
+
+The initial v3 capture found a genuine mirrored upper-cap boundary error, not a bad golden:
+128/4P Vanilla, seed 1, 75/20/5 retained 6,064 geological tiles above its integer upper cap 6,062.
+Together with the 816-tile rounded mountain quota that left 5,248 ordinary tiles, just beyond
+the existing allowance. Erosion now stops **at or below the upper cap**, preserving mandatory
+shapes; the full 720-configuration sweep passes without changing its tolerance. All eighteen
+large-map candidate rounding exceptions disappear in the final matrix.
+
+The original 160×160 `80rock` fixture still has **1,280 mountains (5%) versus 6,544 (25.56%)**
+in the supplied legacy map: **80.44% fewer**. Its v3 counts are Sand3,820 / Dunes1,049 /
+ordinary Rock19,451 / Mountain1,280 / Spice0; unlike the historical v2 table above, future
+building room intentionally changes some sand/coast tiles.
+
+Acceptance receipts:
+- **38 generator cases / 15,482,702 assertions passed**, mini51.8s, source`11b038839ffd`,
+  job`20261104T214643-start-rock-v3-repinned-cd7eb8`.
+- **Complete native skirmish probe passed**, mini156.9s, corrected source`76cb1cb6fe9a`,
+  including strict played smoke logs, multiplayer equal-state/save-load checks, both setup
+  sizes and the complete 598-map render/evidence run (576 matrix +20 references +2 reported).
+- Unchanged **Civ Wars generator units passed**, mini3.6s, source`35c3a7ca9c07`,
+  job`20261104T211938-start-rock-civwars-pins-e9e58f`.
+- All **30 measured terrain/INI pairs matched exactly on Mac mini, MacBook Pro and Windows/MSVC**
+  at source`76cb1cb6fe9a` before repinning. Windows measurement intentionally ran the old-v2
+  golden case and recorded its expected mismatches, not a passing Windows suite.
+  Provenance/output: `outputs/terrain-v3-windows-76cb1cb6-20261104/windows-pins.{json,txt,log}`.
+- `outputs/fair-start-rock-20261104/final76/` contains final per-map/per-start comparisons,
+  all16 reported factions' original/baseline/final coordinates and areas, exact INIs,
+  both labelled before/after previews, the current80rock preview and native640×480 setup.
+  These images were viewed. `candidate35/` is separately labelled diagnostic, not final proof.
 
 ## Generation
 - **Terrain** (`shapeRock`, `addSpice`, `addMountains`), modelled on the map editor's random map
