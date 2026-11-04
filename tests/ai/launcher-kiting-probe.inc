@@ -171,6 +171,11 @@ void runLauncherKitingProbe(Game& game) {
                     getQuantBotConfig().force.launcherKiteExtraDistance=extra;
                     auto* artillery=spawn(owner,item,Coord(20,12));
                     auto* approaching=spawn(enemy,Unit_Tank,Coord(20+band+2,12));
+                    // Weapon range exceeds a launcher's sight. The same passive
+                    // scout spots the approached tank in both arms, so the firing
+                    // check measures spacing, not losing vision at the longer gap.
+                    auto* spotter=spawn(owner,Unit_Quad,Coord(20+band,15));
+                    spotter->doSetAttackMode(STOP);
                     artillery->doSetAttackMode(STOP);
                     approaching->doAttackObject(artillery,true);
                     publish();
@@ -199,13 +204,15 @@ void runLauncherKitingProbe(Game& game) {
                     while(approaching->getHealth()>=health && fireTicks<1200) {
                         tick(1); ++fireTicks;
                     }
+                    SDL_Log("LAUNCHER_KITE_PAIR: difficulty=%d item=%u extra=%d approach=%d end=%d move_ticks=%d fire_ticks=%d damage=%d fire_gap=%d mode=%d target=%u visible=%d",
+                        int(difficulty),unsigned(item),extra,band,endGap,moveTicks,fireTicks,
+                        (health-approaching->getHealth()).lround(),gap(artillery,approaching),
+                        int(artillery->getAttackMode()),unsigned(artillery->getTarget() ? artillery->getTarget()->getObjectID() : NONE_ID),
+                        int(approaching->isVisible(owner->getTeamID())));
                     require(approaching->getHealth()<health && gap(artillery,approaching)>reach,
                         "Paired launcher failed to land a rocket while standing off");
-                    SDL_Log("LAUNCHER_KITE_PAIR: difficulty=%d item=%u extra=%d approach=%d end=%d move_ticks=%d fire_ticks=%d damage=%d",
-                        int(difficulty),unsigned(item),extra,band,endGap,moveTicks,fireTicks,
-                        (health-approaching->getHealth()).lround());
                     bot->customWave.members.erase(artillery->getObjectID());
-                    retire(artillery); retire(approaching);
+                    retire(artillery); retire(approaching); retire(spotter);
                 }
             }
         }

@@ -389,3 +389,6 @@ FundedClassicProduction=1
 # Shares the existing infantry quota and protects economy/working capital; at most 18 troopers.
 # Provisional ON for shared-candidate acceptance; revert unless its paired outcome gate passes.
 TrooperSupport=1
+# Launchers back off two extra tiles (0 = old spacing, bounded to 0..2).
+# Hunt stand-off remains inside firing range; other unit types are unchanged.
+LauncherKiteExtraDistance=2
