@@ -7685,12 +7685,10 @@ void Game::drawCityOverlay(int x1, int y1, int x2, int y2) {
 
     switch (currentCityOverlay_) {
         case DuneCity::CityOverlayMode::PowerGrid: {
-            // The per-tile city power grid (CitySimulation::getPowerGridMap)
-            // is stubbed — every cell reads 0.  Instead, show a simple
-            // house-level power status: green overlay on zone/conductive tiles
-            // when the house has power, red when it doesn't.
-            bool housePower = pLocalHouse->hasPower();
-            uint8_t level = housePower ? 200 : 200;
+            // Until a per-tile grid exists, zones use their owning house's
+            // live growth predicate. Roads retain the viewed-house fallback.
+            const bool housePower = pLocalHouse->hasPower();
+            constexpr uint8_t level = 200;
             int rOn = 0, gOn = 255, bOn = 0;     // green = powered
             int rOff = 255, gOff = 0, bOff = 0;  // red   = no power
             const auto& powerMap = citySimulation_->getPowerGridMap();
@@ -7700,7 +7698,9 @@ void Game::drawCityOverlay(int x1, int y1, int x2, int y2) {
                     if (!currentGameMap->tileExists(x, y)) continue;
                     Tile* t = currentGameMap->getTile(x, y);
                     if (t->hasCityZone() || t->isRoad()) {
-                        if (housePower)
+                        const auto* zone = dynamic_cast<const ZoneStructure*>(t->getNonInfantryGroundObject());
+                        const bool powered = zone ? zone->hasCityPower() : housePower;
+                        if (powered)
                             drawOverlayBlock(x, y, blockSize, level, rOn, gOn, bOn, rOn, gOn, bOn);
                         else
                             drawOverlayBlock(x, y, blockSize, level, rOff, gOff, bOff, rOff, gOff, bOff);

@@ -108,6 +108,31 @@ void runZonePowerProbe(Game& game) {
         require(zone->getZonePowerDraw()==0,"Empty lot retained dynamic power demand");
         status(zone,false);
     }
+    auto overlay = [&](bool expected) {
+        House* other=nullptr;
+        for (int h=0;h<NUM_HOUSES && !other;++h)
+            if (auto* candidate=game.getHouse(h); candidate && candidate!=house) other=candidate;
+        require(other!=nullptr,"Power overlay fixture needs a second house");
+        const int otherPower=other->producedPower;
+        other->producedPower=expected ? 0 : 10000;
+        auto* keepLocal=pLocalHouse;
+        pLocalHouse=other;
+        const auto at=zones.front()->getLocation();
+        screenborder->setNewScreenCenter(Coord((at.x+1)*TILESIZE,(at.y+1)*TILESIZE));
+        game.currentCityOverlay_=DuneCity::CityOverlayMode::PowerGrid;
+        SDL_SetRenderDrawColor(renderer,0,0,0,255); SDL_RenderClear(renderer);
+        game.drawCityOverlay(at.x,at.y,at.x+1,at.y+1);
+        SDL_Rect point{screenborder->world2screenX(at.x*TILESIZE+TILESIZE/2),
+            screenborder->world2screenY(at.y*TILESIZE+TILESIZE/2),1,1};
+        Uint32 pixel=0;
+        const int read=SDL_RenderReadPixels(renderer,&point,SDL_PIXELFORMAT_ARGB8888,&pixel,sizeof(pixel));
+        pLocalHouse=keepLocal;
+        other->producedPower=otherPower;
+        require(read==0,"Cannot sample the city power overlay");
+        const int red=(pixel>>16)&255,green=(pixel>>8)&255;
+        require(expected ? green>red : red>green,"Zone overlay follows the observer's power instead of its owner");
+    };
+    overlay(false);
     // No 0/0 bootstrap when the final resident releases the last power demand.
     const int keepRequirement=house->powerRequirement;
     house->powerRequirement=0;
@@ -121,6 +146,7 @@ void runZonePowerProbe(Game& game) {
         require(population(zone)>0,"Power restoration did not permit regrowth");
         status(zone,true);
     }
+    overlay(true);
     SDL_Log("ZONE_POWER_PASS: legacy_floor=1 vacancy_empty_day=%d powered_trajectory_identical=1 zero_grid_stays_empty=1 regrowth=1 ui=1",emptiedDay);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=zone_power outcome=passed");
 }
