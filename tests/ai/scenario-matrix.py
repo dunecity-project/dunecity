@@ -176,7 +176,7 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
     aaa('qb-v-4ah', 'dunecity', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_OPTIONS, minutes=60,
         expect=('wins', 2), full=6)
     aaa('qb-v-4ah-saved', 'Dune2R', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_DUNE2R_OPTIONS,
-        minutes=40, expect=('wins', 2), full=7)
+        minutes=40, expect=('wins', 2, 40), full=7)
     aaa('reverse-qm-v-4qh', 'vanilla', ['QH', 'QM', 'QH', 'QH', 'QH'], options=AAA_OPTIONS, minutes=60,
         expect=('loses', 2), smoke=1, full=6)
     # 4. Campaign (built per mission in schedule()).
@@ -531,13 +531,20 @@ def run(args):
                 for count, future in enumerate(as_completed(futures), 1):
                     row = future.result()
                     print(f'[{count}/{len(todo)} {round(time.time() - started)} s] {row["id"]} -> '
-                          f'{row["outcome"] or "?"} {row["winner"]} ({row["minutes"]} min, {row["wall_s"]} s wall)'
+                          f'{outcome_label(row)} {row["winner"]} ({row["minutes"]} min, {row["wall_s"]} s wall)'
                           f'{" " + row["error"] if row["error"] else ""}', flush=True)
     if args.tier == 'smoke' or getattr(args, 'check', False):
         sys.exit(0 if smoke_checks(args, results) else 1)
 
 
 # ---- Checks and report ------------------------------------------------------------------
+
+def outcome_label(row):
+    # A detached spectator can have a raw "lost" outcome when another team wins.
+    if row['category'] != 'campaign' and row['winner_team'] not in ('', '0', '-1'):
+        return f'team {row["winner_team"]} won'
+    return row['outcome'] or '?'
+
 
 def expectation(game_row):
     """True / False if the game has an expected result, None otherwise."""
@@ -629,7 +636,7 @@ def smoke_checks(args, results):
         else:
             if expectation(game) is False:
                 problems.append(f'expected {game["expect"]}, got winner team {game["winner_team"]} '
-                                f'({game["outcome"]}, {game["minutes"]} min)')
+                                f'({outcome_label(game)}, {game["minutes"]} min)')
             if game['category'] == 'campaign':
                 if game['outcome'] != 'won' and float(game['minutes']) < 5:
                     problems.append('campaign ended before 5 minutes without a win')
@@ -646,7 +653,7 @@ def smoke_checks(args, results):
             if original and original['digest'] != game['digest']:
                 problems.append(f'replay diverged: final digest {game["digest"]} != {original["digest"]}')
         ok &= not problems
-        print(f'  {"PASS" if not problems else "FAIL"} {gid}: {game["outcome"]} {game["winner"]} '
+        print(f'  {"PASS" if not problems else "FAIL"} {gid}: {outcome_label(game)} {game["winner"]} '
               f'{game["minutes"]} min{"; " + "; ".join(problems) if problems else ""}')
     expected = len(schedule(args))
     if len(games) != expected:

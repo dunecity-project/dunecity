@@ -221,6 +221,14 @@ and `full-policy-city-comparison.txt`. Frozen binary SHA256:
 The Dune2R shared-spending probe checks actual low-cash queues, surplus workers,
 unaffordable purchases and unchanged Easy/Medium/Hard execution.
 
+The fresh default-policy CTest on combined source `35c3a7ca` passed all seven
+seeds in **128.8 seconds wall**, with the same worst win of 35.29 game minutes.
+The canonical eight AI/performance regressions also passed on that source.
+Spectator matches are reported by the winning team: their raw engine `outcome`
+can be `lost` for the detached local seat even when team 2 wins. Acceptance uses
+the actual `winner_team` and an explicit 40-minute expectation, not that local
+seat's result.
+
 ## CI
 
 Not in the CI Linux job. The harness relinks the macOS app bundle
