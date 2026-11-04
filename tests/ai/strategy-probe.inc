@@ -523,6 +523,7 @@ struct GameResult {
     std::vector<std::string> digests;   ///< once a game minute and at the end
     std::string bots;
     long long wallMs = 0;
+    Uint32 observedEndCycle = 0;  ///< Actual terminal/window cycle, for equal-exposure comparisons.
 };
 
 /// Plays a Fortress 1v1 at \a techLevel to \a endCycle, each house with \a strategies (none = the global
@@ -606,6 +607,7 @@ inline GameResult playProduction(int first, int second, const std::map<int, Quan
             + owner->getNumBuiltItems(Unit_Trooper) + owner->getNumBuiltItems(Unit_Troopers);
     }
     result.bots = std::to_string(hashOf(botBytes(*botOf(*game, first)))) + " " + std::to_string(hashOf(botBytes(*botOf(*game, second))));
+    result.observedEndCycle = game->getGameCycleCount();
     result.digests.push_back(GameStateDigest::describe(game->computeStateDigest()));
     end(game);
     result.wallMs = millisecondsSince(wall);
@@ -655,9 +657,11 @@ inline std::vector<size_t> leadSlots(Mix mix, const Production& p) {
 /// the Atreides configured mix already has 35% launchers. The largest-share slot is not asserted:
 /// Starport ornithopters and the mobile anti-air floor's launchers are bought outside the mix and can
 /// outweigh a lead slot.
-/// One 12-minute game per mix is one trajectory of the whole fight, so the probe only logs each
-/// margin (check=lead_margin) and run-campaign-balance.py requires the mean over three seeds to be
-/// positive (--strategy-margin-seeds). Over twelve seeds (486409243, 11, 22, ... 122) a single game's
+/// One up-to-12-minute game per mix is one trajectory of the whole fight. If conquest ends
+/// either game sooner, Section 3 compares both at that same observed cycle, replaying the
+/// Learned reference when needed. The probe logs each margin (check=lead_margin), and
+/// run-campaign-balance.py requires the mean over three seeds to be positive
+/// (--strategy-margin-seeds). Over twelve seeds (486409243, 11, 22, ... 122) a single game's
 /// margin was below 1 bps in 6 of 84 checks on 1.0.852 and 4 of 84 with the protocol 95 movement fix,
 /// so a one-seed check failed on 5 and 3 of the 12 seeds; the three-seed mean failed in 5 and 8 of
 /// 220 seed triples, with every mix's twelve-seed mean +534..+1482 bps (HANDOVER, "Unit movement").
@@ -796,7 +800,8 @@ int runQuantBotStrategyProbe() {
         const int harkonnen = HOUSE_HARKONNEN, atreides = HOUSE_ATREIDES;
         // The Learned game every mix game is compared with: both houses Fixed:Learned,Base (1.0.846).
         const GameResult learned = playProduction(harkonnen, atreides,
-            {{harkonnen, fixedStrategy(Mix::Learned)}, {atreides, fixedStrategy(Mix::Learned)}}, mapSeed, seed, endCycle);
+            {{harkonnen, fixedStrategy(Mix::Learned)}, {atreides, fixedStrategy(Mix::Learned)}},
+            mapSeed, seed, endCycle, 9, true);
         for (const auto& [house, production] : learned.houses) {
             logProduction("learned_reference", production, nullptr, learned.wallMs);
             require(production.strategy == Choice{} && production.inert, "The shipped default did not play Learned/Base");
@@ -814,7 +819,8 @@ int runQuantBotStrategyProbe() {
             onlyLearned.tempoWeights = {};
             onlyLearned.tempoWeights[size_t(Tempo::Base)] = 1;
             const GameResult explicitly = playProduction(harkonnen, atreides,
-                {{harkonnen, fixedStrategy(Mix::Learned)}, {atreides, onlyLearned}}, mapSeed, seed, endCycle);
+                {{harkonnen, fixedStrategy(Mix::Learned)}, {atreides, onlyLearned}},
+                mapSeed, seed, learned.observedEndCycle);
             for (const int house : {harkonnen, atreides}) {
                 const Production& a = learned.houses.at(house);
                 const Production& b = explicitly.houses.at(house);
@@ -836,14 +842,34 @@ int runQuantBotStrategyProbe() {
             // Tuned plays the probe's [Unit Ratios Tuned] (Harkonnen: 45% tanks), Bounded its draw.
             const auto shippedTuned = getQuantBotConfig().tunedRatios;
             getQuantBotConfig().tunedRatios[harkonnen][0] = {45, 15, 15, 15, 0, 0, 0, 0, 0, 10};
+            const auto tunedForComparison = getQuantBotConfig().tunedRatios;
             const std::vector<std::pair<Mix, Mix>> games = {
                 {Mix::QuadMass, Mix::Artillery}, {Mix::TankMass, Mix::TrikeSwarm}, {Mix::Specials, Mix::Air}, {Mix::Infantry, Mix::Counter},
                 {Mix::Tuned, Mix::Bounded}};
             for (const auto& [mixH, mixA] : games) {
                 const GameResult played = playProduction(harkonnen, atreides,
-                    {{harkonnen, fixedStrategy(mixH)}, {atreides, fixedStrategy(mixA)}}, mapSeed, seed, endCycle);
-                checkMix(mixH, played.houses.at(harkonnen), learned.houses.at(harkonnen), played.wallMs);
-                checkMix(mixA, played.houses.at(atreides), learned.houses.at(atreides), played.wallMs);
+                    {{harkonnen, fixedStrategy(mixH)}, {atreides, fixedStrategy(mixA)}},
+                    mapSeed, seed, learned.observedEndCycle, 9, true);
+                const GameResult* reference = &learned;
+                GameResult matchedReference;
+                if (played.observedEndCycle < learned.observedEndCycle) {
+                    // Preserve the reference's complete configuration as well as
+                    // its clock; Tuned's probe-only ratios belong to the mix game.
+                    getQuantBotConfig().tunedRatios = shippedTuned;
+                    matchedReference = playProduction(harkonnen, atreides,
+                        {{harkonnen, fixedStrategy(Mix::Learned)}, {atreides, fixedStrategy(Mix::Learned)}},
+                        mapSeed, seed, played.observedEndCycle);
+                    getQuantBotConfig().tunedRatios = tunedForComparison;
+                    reference = &matchedReference;
+                }
+                require(reference->observedEndCycle == played.observedEndCycle,
+                        "Strategy and Learned production have unequal measurement windows");
+                SDL_Log("STRATEGY_PROBE: check=matched_production_window mix_h=%d mix_a=%d requested_cycle=%u "
+                        "observed_cycle=%u reference_cycle=%u reference_replayed=%d",
+                        int(mixH), int(mixA), endCycle, played.observedEndCycle, reference->observedEndCycle,
+                        int(reference != &learned));
+                checkMix(mixH, played.houses.at(harkonnen), reference->houses.at(harkonnen), played.wallMs);
+                checkMix(mixA, played.houses.at(atreides), reference->houses.at(atreides), played.wallMs);
             }
             getQuantBotConfig().tunedRatios = shippedTuned;
         }
