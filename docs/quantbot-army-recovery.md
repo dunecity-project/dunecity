@@ -113,6 +113,14 @@ corridors retain priority. Battery construction is spread across passes.
 Destroyed hostile buildings count as kills in the attrition trade, at their
 purchase price, so assaulting a turret-defended base is not by itself a bad trade.
 
+A city's due, buildable first-cover rocket takes priority over founding its
+first WOR for standing trooper support. Extra overlap on already covered core
+assets still shares construction with growth; losing a refinery's only
+covering turret restores the first-cover priority immediately. The existing
+`quantbot_police_budget` and `quantbot_city_growth` probes preserve these
+distinctions after core suppliers are present, without disabling
+`TrooperSupport` or pre-filling its missing supplier.
+
 In DuneCity Custom Hard/Brutal games, a battery that has no usable free site can
 replace an owned residential, commercial or industrial lot on the observed
 enemy side of its construction colony. Free ground wins, including ground that

@@ -256,6 +256,8 @@ CivWars uses the next hexadecimal token slot.
   eight minutes. With the new Normal first step this is **13:56.672 on every map**;
   each research milestone is still asserted separately from the ten-minute minimum.
   The deadline follows cost/time policy, not arbitrary extra grace or map area.
+  The played-game log check rejects invalid or occupied placement diagnostics and
+  engine errors, not normal refinery-queue rerouting when another harvester is unloading.
 - `civilization_wars_research_probe`: actual Civ Wars Start button, real human SDL Lab
   selection and Research click, zero-credit feedback, normal-income enablement, queued
   command and completed tech level; 640×480 and 1280×720 screenshots. Its diagnostic

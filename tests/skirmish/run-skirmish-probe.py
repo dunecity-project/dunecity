@@ -121,8 +121,9 @@ with (work / 'build.log').open('w') as log:
     subprocess.run(['nice', '-n', '10'] + menu_compile, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
     subprocess.run(['nice', '-n', '10'] + link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 
-# Engine lines that mean a generated map or match is broken.
-problem = re.compile(r'invalid|occupied|error|exception|failed|cannot|unknown', re.IGNORECASE)
+# Engine diagnostics that mean a generated map or match is broken. Occupied
+# positions/tiles are invalid placements; a busy refinery is normal gameplay.
+problem = re.compile(r'invalid|occupied\s+(?:position|tile)|error|exception|failed|cannot|unknown', re.IGNORECASE)
 # Pre-existing startup lines unrelated to the match (mod/asset discovery in an empty profile).
 startup_noise = re.compile(r'Error loading|Warning: could not|libpng', re.IGNORECASE)
 
