@@ -128,11 +128,6 @@ void runLauncherKitingProbe(Game& game) {
             [owner->getHouseID()].weaponrange;
         require(launcherRange>2,"Fixture launcher has no stand-off range to keep");
 
-        // The launcher under test and one closing enemy tank, out in the open
-        // well away from the base so nothing else can explain a move.
-        auto* launcher=spawn(owner,Unit_Launcher,Coord(20,20));
-        auto* closer=spawn(enemy,Unit_Tank,Coord(22,20));
-        publish();
         bot->dangerUpdated=std::numeric_limits<Uint32>::max();
         bot->refreshTacticalDanger();
         bot->squadRallyLocation=origin+Coord(4,5);
@@ -140,7 +135,7 @@ void runLauncherKitingProbe(Game& game) {
         bot->protectedRally=origin+Coord(4,5);
         bot->militaryValueLimit=1;
 
-        const int reach=std::max(1,closer->getWeaponRange());
+        const int reach=std::max(1,currentGame->objectData.data[Unit_Tank][enemy->getHouseID()].weaponrange);
         const int band=std::min(reach+1,launcherRange/2+1);
         SDL_Log("LAUNCHER_KITE_DIAG: launcher_range=%d tank_reach=%d close_band=%d",
             launcherRange,reach,band);
@@ -166,6 +161,8 @@ void runLauncherKitingProbe(Game& game) {
         for(const auto difficulty:{QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
             bot->difficulty=difficulty;
             for(const Uint32 item:{Uint32(Unit_Launcher),Uint32(Unit_EliteLauncher)}) {
+                // Elite units are real Tornie products, not legal DuneCity items.
+                if(item==Unit_EliteLauncher && !ModManager::instance().isTornieFamilyContentActive()) continue;
                 int oldGap=0;
                 for(const int extra:{0,2}) {
                     getQuantBotConfig().force.launcherKiteExtraDistance=extra;
@@ -217,6 +214,20 @@ void runLauncherKitingProbe(Game& game) {
             }
         }
         getQuantBotConfig().force.launcherKiteExtraDistance=savedKiteExtra;
+        // The Tornie invocation covers the paired distance/firing contract for
+        // both real launcher products. Existing authority/force regressions below
+        // keep their original DuneCity content and fresh, undamaged actors.
+        if(ModManager::instance().isTornieFamilyContentActive()) {
+            getQuantBotConfig().force.respectServiceOwnership=savedServiceOwnership;
+            cleanupStructures(); unitList=savedUnits;
+            SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=launcher_kiting outcome=passed");
+            return;
+        }
+        auto* launcher=spawn(owner,Unit_Launcher,Coord(20,20));
+        auto* closer=spawn(enemy,Unit_Tank,Coord(22,20));
+        publish();
+        bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+        bot->refreshTacticalDanger();
 
         UnitBase* focusVictim=nullptr;      // Section 2b's damaged tank, parked off-stage between uses.
         int sectionOnePose=-1;              // The launcher's facing when section 1 first starts.
