@@ -300,7 +300,6 @@ struct QuantBot::BuildPass {
     int capitalChoice{};
     bool protectionCapital{};
     bool cityGrowthProtected{};
-    bool cityFirstFactoryBootstrap{};
     bool capitalConsumed{};
     int capitalOrderedCost{};
     AITelemetry::Record capitalOrders{};

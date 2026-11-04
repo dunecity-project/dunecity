@@ -523,15 +523,40 @@ void runNoSpiceCityProbe(Game& game) {
             const Pass legacy=marketDecide(false,factoryPrice);
             require(ordered(legacy,Unit_Quad) && !ordered(legacy,Structure_HeavyFactory),
                 "First-factory negative control did not divert affordable factory cash into imports");
+            config->force.cityProductionPrerequisites=false;
             const Pass shortCash=marketDecide(true,factoryPrice-1);
             require(!ordered(shortCash,Structure_HeavyFactory) && ordered(shortCash,Unit_Quad),
                 "An unaffordable first factory withheld working cash from ordinary imports");
+            config->force.cityProductionPrerequisites=true;
+            const Pass saving=marketDecide(true,factoryPrice-1);
+            require(!ordered(saving,Structure_HeavyFactory) && port->getProductionQueueSize()==0,
+                "A solvent multi-yard city spent its first-factory savings on imports");
+            const auto allStructures=structureList;
+            structureList.erase(std::remove_if(structureList.begin(),structureList.end(),[&](const auto* structure) {
+                return structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard
+                    && structure!=yard;
+            }),structureList.end());
+            Pass singleYard;
+            try { singleYard=marketDecide(true,factoryPrice-1); }
+            catch (...) { structureList=allStructures;throw; }
+            structureList=allStructures;
+            require(ordered(singleYard,Unit_Quad),
+                "A single-yard opening lost its existing below-quote import budget");
+            const int strongTaxBase=state.taxBaseEighths;
+            const int upkeep=house->getPowerRequirement()/8+DuneCity::annualPerMinute(state.lastPoliceExpense);
+            int weakTaxBase=1;
+            while (weakTaxBase<strongTaxBase && DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(
+                weakTaxBase,sim->getCityTax(HOUSE_HARKONNEN),state.avgLandValue))<=upkeep) ++weakTaxBase;
+            state.taxBaseEighths=weakTaxBase;
+            require(ordered(marketDecide(true,factoryPrice-1),Unit_Quad),
+                "A city whose forecast cannot fund the first factory lost its working cash");
+            state.taxBaseEighths=strongTaxBase;
             state.comValve=state.indValve=1500;
             const Pass zoningFirst=marketDecide(false,factoryPrice-1);
             require(zoningFirst.zones>0,"Parallel-growth negative control did not bypass the factory bootstrap");
             const Pass bootstrapFirst=marketDecide(true,factoryPrice-1);
-            require(bootstrapFirst.zones==0 && ordered(bootstrapFirst,Unit_Quad),
-                "Parallel zoning still consumed first-factory savings or ordinary imports lost their short-cash budget");
+            require(bootstrapFirst.zones==0 && port->getProductionQueueSize()==0,
+                "Parallel zoning or imports still consumed a funded first-factory bootstrap");
             for(auto level:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
                 bot->difficulty=level;
                 require(marketDecide(true,factoryPrice-1).zones>0,
