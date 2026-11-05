@@ -63,7 +63,7 @@ def write_capture(directory, events):
 def game_row(style, **extra):
     row = dict(id='matrix/fixture', seed='9101', size='96', spice_level='none', format='1v1',
                difficulty='hard-v-brutal', variant=style, base='medium', army='2', city='0', limit='30',
-               style=style, sides='harkonnen:1:hard,atreides:2:brutal', error='', probe_sha256='same-probe',
+               style=style, initial_tech='9', sides='harkonnen:1:hard,atreides:2:brutal', error='', probe_sha256='same-probe',
                source_commit='same-source', source_fingerprint='same-fingerprint', source_fingerprint_error='',
                map_hash='same-map', options_hash='same-options', content_hash='same-content',
                object_data_hash='same-object-data', air_kill_telemetry='complete',
@@ -84,6 +84,20 @@ def house_row(house='0', difficulty='hard', **extra):
 
 
 class DuneCityAuditTests(unittest.TestCase):
+    def test_initial_technology_changes_the_real_skirmish_without_colliding_with_default_ids(self):
+        options = ['--sizes', '96', '--spice', 'medium', '--formats', '1v1',
+                   '--difficulties', 'hard', '--seeds', '9101']
+        default = audit['schedule'](audit['parser'].parse_args(options))[0]
+        explicit = audit['schedule'](audit['parser'].parse_args(options + ['--tech', '9']))[0]
+        low = audit['schedule'](audit['parser'].parse_args(options + ['--tech', '1']))[0]
+        self.assertEqual(default, explicit)
+        self.assertEqual(default['id'], 'matrix/medium-a2-c0/96/medium/1v1/hard/30m/9101')
+        self.assertEqual(low['id'], default['id'] + '/t1')
+        self.assertIn('tech=1,', low['skirmish'])
+        self.assertIn('tech=9,', default['skirmish'])
+        self.assertEqual(audit['metadata'](low)['initial_tech'], 1)
+        self.assertEqual(audit['metadata'](default)['initial_tech'], 9)
+
     def test_optional_six_house_audit_covers_every_faction_without_changing_defaults(self):
         args = audit['parser'].parse_args([
             '--sizes', '128', '--spice', 'medium', '--formats', 'ffa6',

@@ -38,7 +38,7 @@ SPICE = {'none': 0, 'low': 1, 'medium': 2}
 DETECTORS = ('economy_stall', 'power_deficit', 'no_ground_defence', 'missing_starport', 'missing_radar',
              'missing_heavy_factory', 'missing_ix', 'idle_under_attack', 'unused_credits',
              'bankrupt_queue_empty', 'early_no_fight', 'zero_harvesters', 'storage_full')
-META = ('id', 'seed', 'size', 'spice_level', 'format', 'difficulty', 'variant', 'base', 'army', 'city', 'limit', 'style')
+META = ('id', 'seed', 'size', 'spice_level', 'format', 'difficulty', 'variant', 'base', 'army', 'city', 'limit', 'style', 'initial_tech')
 TROOPER_FIELDS = ('wor', 'wor_built', 'trooper_live', 'trooper_queued', 'trooper_single_queued',
                   'trooper_squads_queued', 'trooper_squads5_queued', 'trooper_built', 'ornithopter_live',
                   'elite_ornithopter_live', 'ornithopter_built', 'elite_ornithopter_built', 'ornithopter_lost',
@@ -551,6 +551,8 @@ def schedule(args):
                                      for i, (house, team) in enumerate(zip(houses, teams))]
                             difficulty = '-v-'.join(levels)
                             cell = f'{args.mode}/{args.base}-a{args.army}-c{args.city}/{size}/{spice}/{fmt}/{difficulty}/{args.minutes}m/{seed}'
+                            if args.tech != 9:
+                                cell += f'/t{args.tech}'
                             mod = getattr(args, 'mod', 'dunecity')
                             if mod != 'dunecity':
                                 cell = f'{mod}/{cell}'
@@ -558,10 +560,10 @@ def schedule(args):
                                 cell += '/swap'
                             games.append(dict(id=cell, seed=seed, size=size, spice_level=spice, format=fmt,
                                               difficulty=difficulty, variant=args.variant, sides=sides, base=args.base, army=args.army,
-                                              city=args.city, limit=args.minutes, style=args.style or 'default', mod=mod,
+                                              city=args.city, limit=args.minutes, style=args.style or 'default', mod=mod, initial_tech=args.tech,
                                               minutes=args.minutes, skirmish=f'size={size},base={args.base},army={args.army},'
                                               f'city={args.city},spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
-                                              f'tech=9,credits=3000,seed={seed}'))
+                                              f'tech={args.tech},credits=3000,seed={seed}'))
     return games
 
 
@@ -1359,6 +1361,8 @@ parser.add_argument('--seeds', nargs='+', type=int, default=[9101, 148680876])
 parser.add_argument('--minutes', type=int, default=30)
 parser.add_argument('--mod', choices=('dunecity', 'Dune2R', 'vanilla'), default='dunecity',
                     help='Content family; classic games have a distinct id prefix, with identical audit telemetry')
+parser.add_argument('--tech', type=int, choices=range(1, 10), default=9,
+                    help='Initial house technology; non-9 runs have distinct ids and recorded initial_tech metadata')
 parser.add_argument('--base', choices=('cy', 'small', 'medium', 'large', 'fortress'), default='medium')
 parser.add_argument('--army', type=int, choices=range(7), default=2)
 parser.add_argument('--city', type=int, choices=range(6), default=0)

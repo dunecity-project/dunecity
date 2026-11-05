@@ -865,6 +865,9 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
             endforeach()
         endforeach()
+        add_test(NAME quantbot_dunecity_audit_parser COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_dunecity_audit.py)
+        set_tests_properties(quantbot_dunecity_audit_parser PROPERTIES TIMEOUT 60)
         # A paired real-engine regression: no instant completion or fixture orders
         # for the HF/technology being asserted; each difficulty keeps its own
         # defensive floor, and current/queued composition never uses a huge cap.
