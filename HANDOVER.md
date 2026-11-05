@@ -1,33 +1,53 @@
 ## 2026-11-05 — QuantBot technology savings (OMP TechSaving, unreleased)
 
-- Candidate hashed `TechSavings`, initially **OFF**: exact saved net-income
-  buckets for production/economy/military (safe30/35/35%, threatened15/20/65%),
-  integrated with the existing capital planner. Full accepted commitments are
-  charged once; unspent allocations persist, emergencies borrow with debt.
-- Unit selection compares actual owned-plus-queued replacement-value shares,
-  not cap/cash-funded future slots. All factories/imports share the next
-  composition choice; ordinary standing troopers lose their quota bypass,
-  observed-air response remains. No unit orders or human/saboteur authority
-  are changed by this production cutover.
-- Below-quote tech holds require six owned ground fighters and wave/threat
-  value, stable income/power and four-minute funding; only the production
-  allocation is withheld. Opening workers, power, base defence and the first
-  legal Starport retain priority. CityFirstFactorySaving remains OFF.
-- Save **9884** adds only QuantBot ledger state;9882/9883 read their original
-  byte layouts and begin with zero balances. Protocol **113** is required:
-  multiplayer save transfer and observer snapshots carry the serialized AI.
-- OFF-arm counterfactual placement scans are now audit-only rather than
-  ordinary telemetry work; this removes new diagnostic work from normal
-  performance runs. Empty unused ledgers leave OFF lockstep digests unchanged;
-  nonempty ledger state is covered. Frozen city digest expectations are retained.
-- Historical CSV baseline measured before implementation: TrooperSupport's
-  `funded-matrix`48game/144house OFF→ON at862fc8b changes stalls12/135→13/135,
-  bankrupt28/144→27/144,missing-SP15/109→16/109,dispatch1.30→1.22,kills16359→15677.
-  Its sampled IX timing is survivor-observed only (40@21.45m→53@19.98m);
-  preplaced HF is not an unlock-time result. Old CSVs lack exact categorized
-  spend, full current-v-target mix and legal four-minute diversion events.
-  New audit instrumentation records those explicitly; no candidate acceptance
-  or verification result is claimed in this initial implementation note.
+- Hashed `TechSavings` remains **OFF** unless paired outcomes support adoption.
+  Exact saved net-income allocations are production/economy/military
+  30/35/35% when safe, 15/20/65% under observed pressure. Full accepted
+  commitments charge once; unspent balances persist and emergency debt is
+  repaid from real receipts. No forecast money is spendable.
+- Unit selection uses current owned-plus-queued replacement-value shares,
+  never the military cap/cash-funded future quota. Every factory/import shares
+  the next composition choice. Ordinary standing troopers obey the existing
+  infantry quota; reactive AA remains. Rejected optional economic growth
+  cannot monopolize an otherwise funded military producer turn.
+- `8a2e9bf1` fixes the measured first-supplier/army-floor cycle and
+  receipt-capacity/Economy-debt trap, retaining exact balances. Only a fully
+  funded first-supplier/necessary initial research chain may precede the
+  floor; optional tech still requires dispatch-capable defence. Existing
+  generator sizing avoids oversized bootstrap debt. Cheap emergency bypass
+  now requires unmet local ground defence, not just any pressure/aircraft;
+  covering turrets count, distant armies do not. No human/saboteur orders,
+  unitRole authority or save-order migration changed.
+- `4bcefd69` closes overdue/wealth-driven first-tech and optional HF/HTF
+  upgrade paths outside the exact fully funded project. Custom Medium ON
+  permits one first Repair Yard. Adequately defended/air-only pressure keeps
+  threatened shares without freezing growth; actual missing reactive-AA
+  troops retain capital precedence. Ordinary standing floors still yield.
+- Save **9884** adds only QuantBot ledger state;9882/9883 load zero,
+  uninitialized ledgers. Protocol **113** is required because multiplayer
+  base saves and observer snapshots carry serialized AI; supplemental
+  observer-runtime layout is unchanged. Empty unused ledgers are hash-neutral.
+- Historical latest TrooperSupport supplier-matrix OFF→ON:
+  missing-SP15/109→31/111, matched game-rateΔ+.0983 (95%+.0385,+.1624;
+  worse8/better0). This is not a FundedClassicProduction ablation. Historical
+  retained raw games are different-seed subsets, not causal quote comparisons.
+- Rejected initial8a trial:48arms/576 successful logical games, two seeds.
+  City ON dispatch/kills collapse; classic dispatch/kills also adverse.
+  Its OFF acceptance vectors are unmeasured, not zero. Corrected69 raw:
+  18complete streams/4451cheap orders; expanded69 has288 original native
+  games/960houses/41450cheap orders exactly reconciled. All four seed blocks
+  remain adverse for dispatch/kills; city researchOFF HF0/192 ON versus101/192
+  OFF. Exclude144 callback replays;3failedfinalizers are NOT GREEN.
+  All research-ON production audits were actuallyT9; they do not prove
+  research acquisition.
+- Verification receipts:69 corrected four regression paths4/4 (including
+  Pro performance/frozen city digests);6f producer compatibility14/14.
+  Source85 native build/private full-Game9882+9883 roundtrips PASS, including
+  signed subcredit ledger state and600+60cycles. Private saves stay outside
+  the repo. Real T1/bootstrap/debt/local-defence cases are registered in the
+  engine fixture; no unobserved full-suite result is claimed here.
+- Evidence root: `../outputs/tech-saving-20261105/`; current gameplay/fixture
+  pin `4bcefd69`. Earlier verification is not its final acceptance. No deployment.
 
 ## 2026-11-05 — QuantBot WOR and troopers (OMP QuantTroopers, unreleased)
 

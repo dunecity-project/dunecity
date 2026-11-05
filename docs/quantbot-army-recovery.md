@@ -33,17 +33,47 @@ Below-quote technology saving requires six owned ground fighters, at least
 the larger of 3,000 credits, the existing wave minimum and 1.5 times observed
 local ground threat, stable income/power, and a four-minute funded quote.
 Losing that dispatch-capable defence releases the hold for replenishment.
+The first SP/HF prerequisite chain, first legal LF and research needed to
+reach that first combat capability can precede the army floor when the
+Production allocation already funds the full quote and working cash remains.
+This bounded exception avoids requiring fighters from a forbidden first
+factory; optional progression retains the normal floor.
+
+First HF/Repair/High-Tech/IX/Palace/Lab orders and optional HF/High-Tech upgrades
+must match the active, fully funded project, including its builder and
+operation. Legacy overdue/wealth thresholds cannot buy a different technology
+ahead of it. Custom Medium ON can build one first Repair Yard through the same
+planning/admission predicate; OFF, campaign and repeat replacement caps remain.
+Bucket allocations persist even without an active plan; the army floor
+controls the capital hold rather than creating or deleting those allocations.
+
+The existing storage forecast can release a physical receipt-capacity
+constraint even while Economy owes bootstrap debt. The paid capacity still
+charges Economy; no debt is erased or forecast income invented. Existing
+generator sizing avoids borrowing for an oversized reactor when a windtrap
+suffices. A bucket-rejected yard choice yields to funded work in another
+bucket instead of monopolizing the construction turn.
 
 Unit selection also changes: target ratios are compared with the replacement
 value of units actually owned plus accepted queue commitments, not with the
 military limit or unspent money. The next indivisible vehicle minimizes the
 whole current mix's basis-point error; every factory and Starport shares that
 decision and updates it after acceptance. There is no routine cheap-unit
-capacity-fill fallback. An active base/economy threat may buy immediately
-affordable defenders instead of waiting for a desired expensive unit, with
-its own explicit emergency decision label. Ordinary standing troopers obey
-the existing-army infantry quota; an observed hostile wing retains reactive
-anti-air exceptions.
+capacity-fill fallback. A cap-rejected or unfunded optional MCV, harvester,
+carryall or upgrade cannot consume a factory turn ahead of an otherwise
+legal, funded composition order.
+
+Emergency composition bypass requires an actual local ground-defence
+shortfall: nearby health-weighted ground troops and covering turrets are
+compared with the existing 1.5-times threat requirement. A distant army
+cannot satisfy local defence. Air-only pressure still changes income shares
+and permits explicit anti-air responses, but does not authorize arbitrary
+cheap ground replenishment. Ordinary standing troopers obey the existing-army
+infantry quota; an observed hostile wing retains reactive anti-air exceptions.
+Adequate local cover and air-only contact do not globally freeze funded
+progression: the threatened income shares remain, but an actual unmet ground
+deficit is the safety veto. A genuine reactive-AA troop shortage keeps its
+capital precedence; an ordinary unobserved standing floor still yields to tech.
 
 Save 9884 stores the exact integer bucket balances and committed-wealth
 baseline. Saves 9882/9883 retain their frozen settings and load an empty,
@@ -55,6 +85,58 @@ The audit harness opts into counterfactual OFF-arm feasibility searches with
 extra placement searches. Both logged arms record live existing-plus-queued
 composition. An unused all-zero ledger is neutral in the lockstep digest, so
 the default OFF arm retains its established simulation fingerprints.
+
+### Measured rejected trial and compatibility
+
+The initial `8a8239a5` factorial trial contains 576 successful logical games
+(48 arms, two seeds), including independent TrooperSupport and
+FundedClassicProduction OFF controls. It was rejected, not promoted: city
+dispatches and kills fell to zero, and both classics had adverse dispatch/kill
+signals. Its OFF acceptance-time composition mirror was defective; permanent
+composition samples, spending, timings and outcomes remain usable.
+
+Corrected `69d5f5c4` raw diagnostics contain 18 complete streams, one seed
+across all three difficulties/content families, 4,451 certified cheap orders
+and 108 exact house-level spending reconciliations. City ON completed no
+HF/IX/Starport in its 18 house histories. The diagnosed cycle was a 3,000-value
+army floor blocking the first 420-credit LF while a 2,250-value army could not
+grow without it; Economy debt plus a physical cash cap also blocked receipts.
+The bounded bootstrap/storage and local-emergency corrections are in
+`8a2e9bf1`. These rejected-trial observations are not confirmation results for
+that later policy.
+
+The expanded `69d5f5c4` four-seed trial confirms rejection: 288 original native
+games, 960 houses, 224,259 accepted quotes and 41,450 cheap orders reconcile to
+whole raw streams and native sidecars. Hard/Brutal research-OFF matched
+equal-game dispatch means were:
+
+| Content | OFF | ON | ON minus OFF, exploratory 95% game interval |
+| --- | ---: | ---: | ---: |
+| DuneCity | 1.125 | 0 | -1.125 [-1.651, -0.641] |
+| Dune2R | 4.281 | 1.885 | -2.396 [-3.115, -1.760] |
+| Vanilla | 3.771 | 1.698 | -2.073 [-3.063, -1.208] |
+
+All four independent seed blocks had adverse dispatch/kill signals; games and
+houses within a seed are not independent replications. City research-OFF
+completed HF/IX/SP counts were 101/55/168 out of 192 OFF histories versus
+0/6/6 ON. These are observed achievements, not zero-imputed completion times.
+The report separately records death and administrative censoring, conditional
+unit-price coverage, paid money and gross income. It excludes 144 callback
+replay attempts; three failed finalizers remain explicit infrastructure
+failures, not a globally green receipt.
+
+`4bcefd69` adds the planned-technology admission, bounded Medium Repair Yard
+and adequately-defended-pressure corrections described above. Earlier rejected
+trials do not establish adoption for this later source; the default stays OFF.
+
+Source `85ca5918` passed the approved local full-Game 9882/9883 load, 600-cycle
+advance, signed/subcredit ledger save9884 roundtrip, and 60 further cycles.
+Private fixtures and re-saves are not committed. Receipts and reproducible
+analysis are under `../outputs/tech-saving-20261105/`, including
+`final-analysis-8a8239a5/`, `final-raw-analysis-69d5f5c4-certified/`,
+`expanded-analysis-69d5f5c4/compact-summary.txt` and
+`private-save-roundtrip-85ca5918/receipt.json`.
+
 
 ## Dispatch and the military limit
 
