@@ -36,7 +36,11 @@ int QuantBot::recentFactoryLossCount() const {
 bool QuantBot::canAddRepairYard(int includingQueued) const {
     return (currentGame && currentGame->isCitySimEnabled())
         || difficulty != Difficulty::Medium
-        || includingQueued < initialItemCount[Structure_RepairYard];
+        || includingQueued < initialItemCount[Structure_RepairYard]
+        // The savings ladder funds one real repair/technology prerequisite on
+        // Medium too. This is not permission for repeat capacity or campaigns.
+        || (includingQueued == 0 && currentGame && botConfig().force.techSavings
+            && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType) && !builderOnly());
 }
 
 bool QuantBot::civWarsRules() const {
@@ -2880,24 +2884,51 @@ bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgra
     if (!pass.techSavings || cost <= 0) return true;
     const auto bucket = upgrade ? QuantBotSpendingPolicy::Bucket::Production
         : QuantBotBuildPolicy::spendingBucket(item);
-    const auto* recoveryFactory = upgrade && item == Structure_HeavyFactory
+    const auto* producer = upgrade && (item == Structure_HeavyFactory || item == Structure_HighTechFactory)
         ? dynamic_cast<const BuilderBase*>(getObject(planningBuilder)) : nullptr;
-    const bool constructionRecovery = recoveryFactory
+    const auto& data = currentGame->objectData.data;
+    const int house = getHouse()->getHouseID();
+    const bool constructionRecovery = producer && item == Structure_HeavyFactory
         && (pass.itemCount[Structure_ConstructionYard] == 0 || pass.rockExpansionNeeded || pass.colonisationNeeded)
-        && recoveryFactory->getCurrentUpgradeLevel()
-            < currentGame->objectData.data[Unit_MCV][getHouse()->getHouseID()].upgradeLevel;
+        && producer->getCurrentUpgradeLevel() < data[Unit_MCV][house].upgradeLevel;
+    auto unlocks = [&](Uint32 unit) {
+        const auto& spec = data[unit][house];
+        if (!producer || producer->getItemID() != item || !spec.enabled || spec.builder != int(item)
+            || spec.techLevel > getHouse()->getTechLevel()
+            || producer->getCurrentUpgradeLevel() >= spec.upgradeLevel
+            || spec.upgradeLevel > producer->getMaxUpgradeLevel()) return false;
+        for (Uint32 prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+            if (isStructure(prerequisite) && spec.prerequisiteStructuresSet[prerequisite]
+                && getHouse()->getNumItems(prerequisite) == 0) return false;
+        return true;
+    };
+    const bool requiredProducerUnlock = (item == Structure_HeavyFactory
+            && openingFleetIncomplete(pass) && unlocks(Unit_Harvester))
+        || (item == Structure_HighTechFactory && needsFirstTransport(pass) && unlocks(Unit_Carryall));
     const bool emergency = upgrade ? item == Structure_ConstructionYard || constructionRecovery
         : spendingEmergency(pass, item);
-    const bool ownsProject = item == pass.techCandidate.item
-        || (upgrade && planningBuilder == pass.techCandidate.builder);
+    const bool ownsProject = pass.techResearch ? item == pass.techCandidate.item
+        : planningBuilder == pass.techCandidate.builder
+            && (upgrade ? pass.techUpgrade : !pass.techUpgrade && item == pass.techCandidate.item);
+    const bool firstTechnology = !upgrade
+        && (item == Structure_HeavyFactory || item == Structure_RepairYard || item == Structure_HighTechFactory
+            || item == Structure_IX || item == Structure_Palace || item == Structure_ResearchLab)
+        && getHouse()->getNumItems(item) == 0;
+    const bool governedUpgrade = upgrade && (item == Structure_HeavyFactory || item == Structure_HighTechFactory);
+    // Legacy overdue/wealth rules must not spend a different first technology
+    // or upgrade while this one-project plan is saving or waiting for stability.
+    const bool plannedTechnology = !(firstTechnology || governedUpgrade) || requiredProducerUnlock
+        || (!upgrade && item == Structure_HighTechFactory && needsFirstTransport(pass))
+        || (ownsProject && pass.techSavingActive && pass.techCandidateIndex >= 0 && !pass.techResearch);
     const int protectedProduction = pass.techSavingActive && !pass.capitalConsumed && !ownsProject
-        && bucket == QuantBotSpendingPolicy::Bucket::Production ? pass.techCandidate.cost : 0;
+        && !requiredProducerUnlock && bucket == QuantBotSpendingPolicy::Bucket::Production ? pass.techCandidate.cost : 0;
     const bool admitted = emergency
-        || int64_t(spendingLedger.available(bucket)) >= int64_t(cost) + protectedProduction;
+        || (plannedTechnology && int64_t(spendingLedger.available(bucket)) >= int64_t(cost) + protectedProduction);
     if (!admitted && pass.emitStatsLog && AITelemetry::log().enabled())
         traceDecision("income_bucket_hold", AITelemetry::Record().set("item", item).set("cost", cost)
             .set("bucket", QuantBotSpendingPolicy::bucketName(bucket))
-            .set("available", spendingLedger.available(bucket)).set("emergency", emergency));
+            .set("available", spendingLedger.available(bucket)).set("emergency", emergency)
+            .set("reason", plannedTechnology ? "income_bucket_savings" : "unplanned_technology"));
     return admitted;
 }
 
@@ -2985,7 +3016,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
         && getHouse()->hasPower()
         && (!(pass.citySimEnabled || pass.powerRules)
             || getHouse()->getProducedPower() >= getHouse()->getPowerRequirement() + pass.committedPowerDemand)
-        && !threatened && pass.dangerousCrimeProperties == 0
+        && !pass.militaryEmergency && pass.dangerousCrimeProperties == 0
         && getHouse()->getNumItems(Structure_ConstructionYard) > 0;
     const bool stable = incomeReady && !openingWorkersNeeded(pass)
         && !(needsFirstTransport(pass) && pass.carryallBuildAvailable);
@@ -3879,6 +3910,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     // actual safety and first-Starport savings keep their existing priority.
     if (pass.techSavingActive && pass.techCandidateIndex >= 0
         && (!pass.protectionCapital || (pass.capitalChoice >= 0
+            && !(pass.airEngaged && pass.hostileAircraft > 0 && pass.trooperCount < pass.trooperTarget)
             && (std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "trooper_support"
                 || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "trooper_recruitment")))) {
         pass.capitalChoice = pass.techCandidateIndex;

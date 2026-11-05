@@ -352,6 +352,10 @@ struct World {
         state.prevResPop = state.resPop;
         state.prevComPop = state.comPop;
         state.prevIndPop = state.indPop;
+        // The builders' mature catalogues were initialized before this
+        // physical census. Re-evaluate their population-gated offers now,
+        // rather than relying on a future House threshold-transition tick.
+        owner->updateBuildLists();
     }
 
     StructureBase* place(Uint32 item) {
@@ -756,7 +760,12 @@ inline void paidTechnologyProgression(const char* mod, const char* playerClass, 
     PaidProduction evidence(world);
     int firstHfCycle = -1, launcherCycle = -1, ixCycle = -1, palaceCycle = -1;
     bool upgradeQueued = false;
-    while (world.game->getGameCycleCount() < deadline) {
+    const auto technologyComplete = [&] {
+        return firstHfCycle >= 0 && launcherCycle >= 0 && ixCycle >= 0 && palaceCycle >= 0
+            && evidence.completed(Structure_RepairYard) && evidence.completed(Structure_HighTechFactory)
+            && upgradeQueued && !evidence.paidUpgrades.empty();
+    };
+    while (world.game->getGameCycleCount() < deadline && !technologyComplete()) {
         evidence.step();
         auto* heavy = world.producer(Structure_HeavyFactory);
         const int elapsed = int(world.game->getGameCycleCount() - start);
@@ -773,11 +782,8 @@ inline void paidTechnologyProgression(const char* mod, const char* playerClass, 
                 require(world.owner->getNumItems(item) + world.queued(item) <= 1,
                         "Parallel technology planning duplicated an existing or pending first supplier");
         }
-        if (firstHfCycle >= 0 && launcherCycle >= 0 && ixCycle >= 0 && palaceCycle >= 0) break;
     }
-    if (firstHfCycle < 0 || launcherCycle < 0 || ixCycle < 0 || palaceCycle < 0
-        || !evidence.completed(Structure_RepairYard) || !evidence.completed(Structure_HighTechFactory)
-        || !upgradeQueued || evidence.paidUpgrades.empty()) {
+    if (!technologyComplete()) {
         const auto pass = world.observePlan();
         const auto& ledger = world.bot->getSpendingLedger();
         SDL_Log("TECH_SAVING_PROGRESSION_BLOCKED: first_hf=%d launcher=%d ix=%d palace=%d repair=%d hightech=%d "
@@ -793,9 +799,7 @@ inline void paidTechnologyProgression(const char* mod, const char* playerClass, 
                 static_cast<long long>(ledger.balance[0]), static_cast<long long>(ledger.balance[1]),
                 static_cast<long long>(ledger.balance[2]));
     }
-    require(firstHfCycle >= 0 && launcherCycle >= 0 && ixCycle >= 0 && palaceCycle >= 0
-            && evidence.completed(Structure_RepairYard) && evidence.completed(Structure_HighTechFactory)
-            && upgradeQueued && !evidence.paidUpgrades.empty(),
+    require(technologyComplete(),
             "Stable real income did not complete the first HF, paid upgrades and legal advanced technology in bounded time");
     require(world.owner->getHarvestedSpice() > incomeBefore,
             "Low-cash progression completed without observing any genuine spice delivery income");
@@ -893,9 +897,20 @@ inline void realUnlockStopsCheapReplenishment(const char* mod, const char* playe
 inline void protectedFirstStarport(const char* mod, const char* playerClass) {
     World world(mod, playerClass, true, Stage::FirstStarport);
     world.cash(world.price(Structure_StarPort) - 1);
-    require(world.owner->meetsStarportPopulation() && world.yard->isAvailableToBuild(Structure_StarPort)
+    if (world.game->isCitySimEnabled()) {
+        const auto& state = world.game->getCitySimulation()->getHouseState(world.owner->getHouseID());
+        SDL_Log("TECH_SAVING_FIRST_STARPORT_PREMISE: mod=%s difficulty=%s raw_population=%d "
+                "display_population=%d required_population=%d population_legal=%d catalogue_legal=%d",
+                mod, playerClass, state.getTotalPop(),
+                state.getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier,
+                DuneCity::kStarportPopulation, int(world.owner->meetsStarportPopulation()),
+                int(world.yard->isAvailableToBuild(Structure_StarPort)));
+    }
+    require(world.owner->meetsStarportPopulation(),
+            "First-port fixture's actual physical city is below the required displayed population");
+    require(world.yard->isAvailableToBuild(Structure_StarPort)
             && world.owner->getNumItems(Structure_StarPort) == 0,
-            "First-port fixture is not a genuinely legal missing Starport");
+            "First-port fixture's legal missing Starport is absent from the refreshed yard catalogue");
     PaidProduction evidence(world);
     const Uint32 deadline = world.game->getGameCycleCount() + MILLI2CYCLES(300000);
     while (!evidence.completed(Structure_StarPort) && world.game->getGameCycleCount() < deadline) evidence.step();
@@ -1430,19 +1445,44 @@ inline void onlyUnmetLocalGroundDefenceBorrows(const char* mod, const char* play
                     "Distant-army control accidentally supplied local mobile defence");
         seedExhaustedMilitary(world);
         world.bot->updateEnemySightings();
-        const auto pass = world.observePlan();
+        auto pass = world.observePlan();
+        const int techQuote = world.bot->buildingCapitalCost(pass, Structure_HeavyFactory);
+        require(world.yard->isAvailableToBuild(Structure_HeavyFactory) && techQuote > 0
+                && world.bot->getSpendingLedger().available(QuantBotSpendingPolicy::Bucket::Production) >= techQuote
+                && world.owner->getCredits() >= techQuote + pass.techWorkingReserve,
+                "Local-defence technology control is not a genuinely legal fully funded first HF");
         require(pass.defendingEconomy && pass.readyGroundUnits >= 6
                 && pass.readyGroundValue >= pass.defenceMinimumValue
                 && pass.incomeShares == QuantBotSpendingPolicy::Shares{1500, 2000, 6500}
                 && pass.militaryEmergency == !local,
                 "Military emergency used global army/air pressure instead of the actual unmet local ground defence");
+        require(pass.techSavingActive == local
+                && (!local || (pass.techCandidate.item == Structure_HeavyFactory
+                               && !pass.techUpgrade && !pass.techResearch)),
+                "Covered perpetual contact froze funded technology, or an actual local deficit retained its optional tech hold");
         for (int i = 0; i < 5; ++i) world.build();
+        bool technologyPaid = false;
         if (local) {
             require(world.queuedLight() == 0 && world.bot->getSpendingLedger().balance[2] == 0,
                     "Strong local defence authorized unlimited non-AA cheap borrowing from an empty Military wallet");
+            require(world.queued(Structure_HeavyFactory) == 1,
+                    "Strong local defence and a funded Production wallet did not admit the planned legal first HF");
+            for (int i = 0; i < 100 && !technologyPaid; ++i) {
+                world.tick();
+                technologyPaid = world.yard->getCurrentProducedItem() == Structure_HeavyFactory
+                    && world.yard->getProductionProgress() > 0;
+            }
+            require(technologyPaid, "Funded technology under strong local defence never received actual engine payment");
+            world.bot->updateEnemySightings();
+            const auto ongoing = world.observePlan();
+            require((ongoing.defendingEconomy || ongoing.groundThreatAsset.isValid()) && !ongoing.militaryEmergency
+                    && ongoing.incomeShares == QuantBotSpendingPolicy::Shares{1500, 2000, 6500},
+                    "Strong-local funded technology lost its actual ongoing-contact premise before receiving payment");
         } else {
             require(world.queuedLight() > 0 && world.bot->getSpendingLedger().balance[2] < 0,
                     "A huge distant army blocked affordable local emergency reinforcement and its exact borrowed charge");
+            require(world.queued(Structure_HeavyFactory) == 0,
+                    "Funded optional technology retained the yard while actual local ground defence was insufficient");
             bool paid = false;
             for (int i = 0; i < 100 && !paid; ++i) {
                 world.tick();
@@ -1452,9 +1492,11 @@ inline void onlyUnmetLocalGroundDefenceBorrows(const char* mod, const char* play
         }
         SDL_Log("TECH_SAVING_LOCAL_EMERGENCY: mod=%s difficulty=%s local_army=%d "
                 "attackers=18 defenders=60 globally_above_floor=1 military_wallet_initial=0 "
-                "military_emergency=%d cheap_queued=%d military_raw=%lld",
+                "military_emergency=%d cheap_queued=%d military_raw=%lld tech_plan_active=%d "
+                "tech_quote=%d tech_paid=%d optional_tech_held=%d",
                 mod, playerClass, int(local), int(pass.militaryEmergency), world.queuedLight(),
-                static_cast<long long>(world.bot->getSpendingLedger().balance[2]));
+                static_cast<long long>(world.bot->getSpendingLedger().balance[2]),
+                int(pass.techSavingActive), techQuote, int(technologyPaid), int(!local));
     }
 }
 
@@ -1471,14 +1513,21 @@ inline void airOnlyPressureBorrowsOnlyAntiAir(const char* mod, const char* playe
             && pass.readyGroundUnits >= 6 && pass.readyGroundValue >= pass.defenceMinimumValue
             && pass.incomeShares == QuantBotSpendingPolicy::Shares{1500, 2000, 6500},
             "Air-only pressure incorrectly became a ground military emergency or lost its threatened receipts/AA floor");
+    require(pass.techSavingActive && pass.techCandidate.item == Structure_HeavyFactory
+            && !pass.techUpgrade && !pass.techResearch
+            && world.bot->getSpendingLedger().available(QuantBotSpendingPolicy::Bucket::Production) >= pass.techCost
+            && world.owner->getCredits() >= pass.techCost + pass.techWorkingReserve,
+            "Actual army floor and funded technology remained unreachable under air-only pressure");
     for (int i = 0; i < 5; ++i) world.build();
     require(world.queuedLight() == 0
             && world.queued(Unit_Trooper) + world.queued(Unit_Troopers) > 0
             && world.bot->getSpendingLedger().balance[2] < 0,
             "Air-only pressure borrowed for ordinary cheap units or starved explicit reactive anti-air infantry");
-    bool paid = false;
-    for (int i = 0; i < 100 && !paid; ++i) {
+    bool paid = false, technologyPaid = false;
+    for (int i = 0; i < 100 && (!paid || !technologyPaid); ++i) {
         world.tick();
+        technologyPaid |= world.yard->getCurrentProducedItem() == Structure_HeavyFactory
+            && world.yard->getProductionProgress() > 0;
         for (const auto* structure : structureList) {
             const auto* factory = dynamic_cast<const BuilderBase*>(structure);
             if (!factory || factory->getOwner() != world.owner || factory->getProductionProgress() <= 0) continue;
@@ -1487,8 +1536,25 @@ inline void airOnlyPressureBorrowsOnlyAntiAir(const char* mod, const char* playe
         }
     }
     require(paid, "Preserved air-only reactive infantry floor did not receive actual engine payment");
+    // A genuine reactive AA capital order may win the yard first. Preserve
+    // that urgent payment window, then require bounded funded progression
+    // under the same live aircraft, rather than demanding an HF override.
+    const Uint32 techDeadline = world.game->getGameCycleCount() + MILLI2CYCLES(90000);
+    while (!technologyPaid && world.game->getGameCycleCount() < techDeadline) {
+        if (world.game->getGameCycleCount() % 25 == 0) world.build();
+        world.tick();
+        technologyPaid = world.yard->getCurrentProducedItem() == Structure_HeavyFactory
+            && world.yard->getProductionProgress() > 0;
+    }
+    require(technologyPaid, "Funded first HF under air-only pressure never received actual engine payment");
+    world.bot->updateEnemySightings();
+    const auto ongoing = world.observePlan();
+    require(ongoing.airEngaged && !ongoing.militaryEmergency
+            && ongoing.incomeShares == QuantBotSpendingPolicy::Shares{1500, 2000, 6500},
+            "Air-only funded technology lost its actual ongoing-air premise before receiving payment");
     SDL_Log("TECH_SAVING_AIR_ONLY: mod=%s difficulty=%s ground_emergency=0 threatened_bps=1500,2000,6500 "
-            "military_wallet_initial=0 ordinary_cheap_queued=0 anti_air_borrowed=1 anti_air_paid=1",
+            "military_wallet_initial=0 ordinary_cheap_queued=0 anti_air_borrowed=1 anti_air_paid=1 "
+            "funded_first_hf_queued=1 funded_first_hf_paid=1 ongoing_air=1",
             mod, playerClass);
 }
 
