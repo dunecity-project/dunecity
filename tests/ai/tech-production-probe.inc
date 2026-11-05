@@ -14,6 +14,7 @@
 #include <mod/ModManager.h>
 #include <players/HumanPlayer.h>
 #include <Network/NetworkPacketTypes.h>
+#include <players/AIDecisionLog.h>
 #include <players/QuantBot.h>
 #include <players/QuantBotBuildPass.h>
 #include <players/QuantBotBuildPolicy.h>
@@ -52,10 +53,11 @@ constexpr std::array<Uint32, 10> vehicles = {
     Unit_Tank, Unit_SiegeTank, Unit_Launcher, Unit_Devastator, Unit_SonicTank,
     Unit_Deviator, Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad
 };
-constexpr std::array<Uint32, 12> technology = {
+constexpr std::array<Uint32, 17> technology = {
     Structure_StarPort, Structure_HeavyFactory, Structure_RepairYard,
     Structure_HighTechFactory, Structure_IX, Structure_Palace, Structure_LightFactory,
-    Structure_ResearchLab, Structure_WindTrap, Structure_Refinery, Structure_Silo, Structure_NuclearPlant
+    Structure_ResearchLab, Structure_WindTrap, Structure_Refinery, Structure_Silo, Structure_NuclearPlant,
+    Structure_ZoneResidential, Structure_ZoneCommercial, Structure_ZoneIndustrial, Structure_Stadium, Structure_Airport
 };
 
 inline bool light(Uint32 item) {
@@ -85,7 +87,7 @@ inline std::string mapText(HOUSETYPE side, int techLevel = 9) {
 
 enum class Stage { Progression, FirstHeavy, Advanced, FirstStarport, FirstPalace, Complete,
                    NaturalOpening, NaturalResearch };
-enum class Army { Empty, BelowValueFloor, ReadyLight, TinyMixed, TinyTank };
+enum class Army { Empty, ReadyLight, TinyMixed, TinyTank };
 
 struct World {
     std::unique_ptr<Game> game;
@@ -136,6 +138,14 @@ struct World {
         game->initializeGameLoop();
         game->bPause = false;
         game->frameTiming.unitPhases = false;
+        // The native spend account is updated only while the decision stream is
+        // open. A >=1MiB cap keeps it open after routine capture is exhausted,
+        // so fractional installment evidence survives even long City cases.
+        const char* profile = std::getenv("DUNECITY_USERDIR");
+        require(profile && *profile && AITelemetry::log().start(
+                    std::string(profile) + "/ai-decisions/",
+                    AITelemetry::Record().set("probe", "simple_tech_saving"), 1024ull * 1024),
+                "Cannot open the private fixture's native economy accounting stream");
         owner = game->getHouse(side);
         enemy = game->getHouse(opposite);
         require(owner && enemy && game->gameType == GameType::CustomGame,
@@ -226,7 +236,7 @@ struct World {
             place(Structure_RepairYard);
             place(Structure_HighTechFactory);
         }
-        if (stage != Stage::Progression && stage != Stage::Advanced) {
+        if (stage != Stage::Progression && stage != Stage::Advanced && stage != Stage::FirstStarport) {
             place(Structure_IX);
             if (stage != Stage::FirstPalace) place(Structure_Palace);
         }
@@ -265,7 +275,6 @@ struct World {
             }
         };
         if (army == Army::ReadyLight) seedArmy(Unit_Quad, 18);
-        if (army == Army::BelowValueFloor) seedArmy(Unit_Trooper, 6);
         if (army == Army::TinyMixed) { seedArmy(Unit_Tank, 1); seedArmy(Unit_Quad, 2); }
         if (army == Army::TinyTank) seedArmy(Unit_Tank, 1);
 
@@ -349,7 +358,6 @@ struct World {
         state.comPop = state.prevComPop = commercial;
         state.indPop = state.prevIndPop = industrial;
         state.taxBaseEighths = taxBase;
-        state.resValve = state.comValve = state.indValve = 0;
         state.policeFundingPercent = 100;
         // Recount actual structures, roads, land value, crime and tax base at
         // the mature scenario clock. No synthetic res800/tax8000 can disappear
@@ -435,10 +443,19 @@ struct World {
     }
 
     void closeMilitaryMarket() {
-        // A genuine empty import catalogue makes the local LF the only legal
-        // vehicle supplier; sold-out-but-listed heavy offers are not that case.
+        // A genuinely empty military catalogue cannot substitute a purchased
+        // heavy import for measured local factory production.
         owner->getChoam().availableItems.clear();
         if (auto* port = producer(Structure_StarPort)) port->updateBuildList();
+    }
+
+    int64_t spentQ32() const {
+        const auto& log = AITelemetry::log();
+        require(log.enabled(), "Native economy accounting stopped before payment evidence was complete");
+        const auto house = log.economy.find(owner->getHouseID());
+        if (house == log.economy.end()) return 0;
+        const auto spent = house->second.find("spent_total");
+        return spent == house->second.end() ? 0 : spent->second;
     }
 
     QuantBot::BuildPass observePlan() {
@@ -458,6 +475,8 @@ struct World {
         bot->planOpeningProduction(pass);
         bot->planDefenceCoverage(pass);
         bot->planTechSavings(pass);
+        bot->planCapitalCandidates(pass);
+        bot->chooseCapitalPlan(pass);
         return pass;
     }
 

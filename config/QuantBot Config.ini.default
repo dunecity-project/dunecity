@@ -392,8 +392,8 @@ FundedClassicProduction=1
 # Six standing; reactive air floor up to18. Infantry strategy retains its existing quota.
 # ON at Stefan's direction despite unproven adoption/Starport acceptance; see HANDOVER.
 TrooperSupport=1
-# Stateless existing-composition/technology experiment; paired outcomes rejected adoption.
-# Default OFF. No saved budget, save-format change or protocol change.
+# Existing army composition; economy-first tech installments, no military hold.
+# Default OFF pending paired outcomes. No saved budget or format/protocol change.
 SimpleTechSavings=0
 # Launchers back off two extra tiles (0 = old spacing, bounded to 0..2).
 # Hunt stand-off remains inside firing range; other unit types are unchanged.

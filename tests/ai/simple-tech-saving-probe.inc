@@ -4,6 +4,7 @@
 // the human full-credit start rule, with no extra AI reserve. No saved wallet.
 #include <chrono>
 #include <cstring>
+#include <dunecity/ResidentialPopulation.h>
 
 namespace SimpleTechSavingProbe {
 
@@ -68,7 +69,6 @@ struct Case {
     int population = 0;
     int readyUnits = 0;
     int readyValue = 0;
-    int minimum = 0;
     Uint32 candidate = NONE_ID;
     int quote = 0;
     bool active = false;
@@ -94,12 +94,12 @@ struct Case {
                 "cycle=%u elapsed_cycles=%u wall_ms=%lld observations=%d no_income_observations=%d "
                 "blackout_observations=%d crime_observations=%d local_emergency_observations=%d "
                 "cash=%d forecast_income=%d population=%d power=%d/%d ready_units=%d ready_value=%d "
-                "defence_minimum=%d candidate=%u quote=%d saving_active=%d full_turns=%d config_hash=%s",
+                "candidate=%u quote=%d saving_active=%d full_turns=%d config_hash=%s",
                 name, mod, playerClass, outcome, int(world.bot->botConfig().force.simpleTechSavings),
                 world.game->getGameCycleCount(), world.game->getGameCycleCount() - startCycle,
                 static_cast<long long>(wall), observations, noIncome, blackout, crime, localEmergency,
                 world.owner->getCredits(), forecast, population, world.owner->getProducedPower(),
-                world.owner->getPowerRequirement(), readyUnits, readyValue, minimum, candidate, quote,
+                world.owner->getPowerRequirement(), readyUnits, readyValue, candidate, quote,
                 int(active), world.fullTurns, world.configHash.c_str());
     }
 
@@ -125,6 +125,10 @@ struct Case {
                         && choice.cost == pass.techCandidate.cost,
                     "Simple project was not the same choice consumed by the shared capital planner");
         }
+        if (pass.techFundingPriority)
+            require(pass.techSavingActive && pass.techCandidateIndex >= 0
+                        && pass.capitalChoice == pass.techCandidateIndex,
+                    "Feasible or in-flight technology claimed capital owned by an earlier economic or defensive choice");
         ++observations;
         noIncome += pass.forecastNetIncome <= 0;
         blackout += !world.owner->hasPower();
@@ -132,9 +136,9 @@ struct Case {
         localEmergency += pass.militaryEmergency;
         forecast = pass.forecastNetIncome;
         population = pass.ownTotalPop;
-        readyUnits = pass.readyGroundUnits;
-        readyValue = pass.readyGroundValue;
-        minimum = pass.defenceMinimumValue;
+        const auto ready = TechProductionProbe::actualGroundReadiness(world);
+        readyUnits = ready.first;
+        readyValue = ready.second;
         candidate = pass.techCandidate.item;
         quote = pass.techCandidate.cost;
         active = pass.techSavingActive;
@@ -168,6 +172,52 @@ inline void addMatureYard(World& world) {
     yard->curUpgradeLev = yard->getMaxUpgradeLevel();
     yard->updateBuildList();
     world.game->gameInitSettings.gameOptions.maximumNumberOfConstructionYardsOverride = 2;
+}
+
+inline void secureInitialCityCore(World& world) {
+    if (!world.game->isCitySimEnabled()) return;
+    // These are labelled, physically placed scenario assets, not paid bot
+    // production. A raw count of eight turrets does not establish coverage of
+    // an extra yard or every economic asset. Clear that real competing need
+    // before a case claims to test an economy-cleared technology start.
+    world.bot->planningBuilder = world.yard->getObjectID();
+    for (;;) {
+        world.bot->cityTurretSearch.reset();
+        world.bot->clearPlacementCache();
+        int defence = 0;
+        const Coord site = world.bot->findCityTurretPlaceLocation(Structure_RocketTurret, &defence);
+        if (defence <= 0) break;
+        require(site.isValid(), "Initial core has a real coverage need but no legal scenario emplacement");
+        world.placeAt(Structure_RocketTurret, site);
+    }
+}
+
+inline void completeInitialEconomicAssets(World& world) {
+    // A technology-start case begins after the finite income/service opening,
+    // not by masking its demand. All additions here are labelled scenario
+    // assets; later asserted projects still have to be paid by the real bot.
+    for (;;) {
+        auto pass = world.observePlan();
+        if (CityEconomyInvestmentPolicy::processingCapacityNeeded(pass.itemCount[Structure_Refinery],
+                pass.itemCount[Unit_Harvester], world.bot->workerAnnualIncome(pass), pass.bayAnnualIncome)) {
+            world.place(Structure_Refinery);
+            continue;
+        }
+        if (pass.civicStructuralNeed != 0) {
+            const Uint32 civic = pass.civicStructuralNeed & DuneCity::NeedStadium
+                ? Structure_Stadium : Structure_Airport;
+            require(contentReachable(world, civic),
+                    "Mature technology-start setup has an unreachable required civic");
+            world.place(civic);
+            continue;
+        }
+        if (world.bot->needsFirstTransport(pass) && pass.carryallBuildAvailable) {
+            world.spawn(world.owner, Unit_Carryall, Coord(18 + world.owner->getNumItems(Unit_Carryall), 34));
+            continue;
+        }
+        break;
+    }
+    if (world.game->isCitySimEnabled()) world.initializePhysicalCity();
 }
 
 inline void composition(const char* mod, const char* playerClass, bool queuedControl,
@@ -232,15 +282,18 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
                     "Overweight cheap share has no genuinely legal higher-value next HF unit");
             selected = vehicles[next];
             selectedBuiltBefore = world.owner->getNumBuiltItems(selected);
-            world.bot->planCapitalCandidates(plan);
-            bool sawLightFactory = false;
-            for (const auto& choice : plan.capitalCandidates)
-                if (choice.item == Structure_LightFactory && std::strcmp(choice.kind, "production") == 0) {
-                    sawLightFactory = true;
-                    require(choice.score == 0 && std::strcmp(choice.reason, "light_mix_satisfied") == 0,
-                            "Factory expansion ignored the already-overweight owned-plus-queued cheap share");
-                }
-            require(sawLightFactory, "Composition case did not exercise the real factory-capacity chooser");
+            const Uint32 nextFactory = data[selected][world.owner->getHouseID()].builder;
+            bool sawLightFactory = false, sawHeavyFactory = false;
+            for (const auto& choice : plan.capitalCandidates) {
+                if (std::strcmp(choice.kind, "production") != 0) continue;
+                sawLightFactory |= choice.item == Structure_LightFactory;
+                sawHeavyFactory |= choice.item == Structure_HeavyFactory;
+                if (choice.item == Structure_LightFactory || choice.item == Structure_HeavyFactory)
+                    require(choice.item == nextFactory || choice.score == 0,
+                            "Next-factory admission disagrees with the owned-plus-accepted-queue next combat unit");
+            }
+            require(sawLightFactory && sawHeavyFactory,
+                    "Composition case did not exercise both real ground factory-capacity choices");
         }
         PaidProduction evidence(world);
         world.build();
@@ -307,6 +360,8 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
         return;
     }
     addMatureYard(world); // One first copy, not an independent project per yard.
+    completeInitialEconomicAssets(world);
+    secureInitialCityCore(world);
     BuilderBase* heavy = world.producer(Structure_HeavyFactory);
     int beforeLevel = 0;
     int initialQuote = world.price(item);
@@ -341,13 +396,16 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
     world.cash(initialCash);
     world.bot->militaryValueLimit = 6000;
     Case run(world, name, mod, playerClass);
-    const auto initial = world.observePlan();
-    require(initial.techSavings && initial.techSavingActive
+    auto initial = world.observePlan();
+    require(initial.techSavings && initial.techSavingActive && initial.techFundingPriority
+                && initial.capitalChoice == initial.techCandidateIndex
                 && initial.techCandidate.item == item && initial.techCandidate.cost == initialQuote
                 && initial.techUpgrade == upgrade && !initial.techResearch
                 && initial.strategicReserveCost == 0 && !initial.militaryEmergency
+                && initial.civicStructuralNeed == 0 && initial.civicReserveCost == 0
+                && !world.bot->openingWorkersNeeded(initial)
                 && (initial.techUpgrade || initial.techCandidate.site.isValid()),
-            "Safe control did not select its actual next legal project independently of a full quote or extra reserve");
+            "Technology-start setup still has an earlier economic, civic, power or defensive capital owner");
     BuilderBase* projectBuilder = nullptr;
     for (auto* structure : structureList)
         if (structure->getOwner() == world.owner && structure->getObjectID() == initial.techCandidate.builder)
@@ -355,6 +413,7 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
     require(projectBuilder && (!upgrade || projectBuilder == heavy),
             "Selected installment project has no actual matching engine builder");
     const auto receiptsBefore = world.owner->getHarvestedSpice() + world.owner->getCityTaxReceipts();
+    const int64_t spentBefore = world.spentQ32();
     PaidProduction evidence(world);
     world.build();
     evidence.observe();
@@ -370,13 +429,10 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
         require(evidence.paidTechnology.count(item) == 0
                     && world.owner->getCredits() >= 0 && world.owner->getCredits() <= initialCash,
                 "New installment structure was granted progress or invented credits at acceptance");
+        if (goal == Project::Starport)
+            require(world.queued(Structure_IX) == 0 && world.queued(Structure_Palace) == 0,
+                    "Discretionary technology bypassed the first legal population-qualified Starport");
     }
-    auto noQueuedCombat = [&] {
-        return world.vehicleValue(true) == world.vehicleValue(false)
-            && world.infantryValue(true) == world.infantryValue(false);
-    };
-    if (upgrade && !startFunded)
-        require(noQueuedCombat(), "Ordinary units consumed the real minimum's surplus while a needed upgrade was saving");
     for (int i = 0; i < 5; ++i) world.build();
     require(upgrade ? heavy->isUpgrading() == startFunded : world.queued(item) == 1,
             "Repeated full passes bypassed the upgrade cash gate or duplicated/cancelled its structure project");
@@ -386,61 +442,56 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
             ? heavy->getCurrentUpgradeLevel() > beforeLevel && evidence.paidUpgrades.count(heavy->getObjectID()) != 0
             : evidence.completed(item) && world.owner->getNumItems(item) == 1;
     };
-    bool observedCashPayment = false;
+    bool observedEnginePayment = false;
     bool upgradeStartedWithRealCash = upgrade && startFunded;
     while (world.game->getGameCycleCount() < end && !complete()) {
         const int cashBefore = world.owner->getCredits();
+        const int64_t spentAtTick = world.spentQ32();
         const FixPoint progressBefore = upgrade ? heavy->getUpgradeProgress() : projectBuilder->getProductionProgress();
         const bool upgradeWaiting = upgrade && !heavy->isUpgrading()
             && heavy->getCurrentUpgradeLevel() == beforeLevel;
         const bool buildDue = world.game->getGameCycleCount() % 25 == 0;
         const int upgradeCostBefore = upgradeWaiting ? heavy->getUpgradeCost() : 0;
-        bool safeUpgradeWait = false;
-        if (upgradeWaiting && buildDue) {
-            const auto ongoing = world.observePlan();
-            safeUpgradeWait = !ongoing.militaryEmergency && ongoing.dangerousCrimeProperties == 0
-                && world.owner->hasPower() && ongoing.readyGroundUnits >= 6
-                && ongoing.readyGroundValue >= ongoing.defenceMinimumValue;
-        }
         run.step(evidence);
         if (upgradeWaiting && heavy->isUpgrading()) {
             require(buildDue && cashBefore >= upgradeCostBefore,
                     "Needed upgrade began without the same real full-credit gate as a human");
             upgradeStartedWithRealCash = true;
         }
-        if (safeUpgradeWait && !heavy->isUpgrading())
-            require(noQueuedCombat(), "Routine military purchases prevented needed upgrade cash from accumulating above the safe minimum");
         const bool paid = upgrade ? evidence.paidUpgrades.count(heavy->getObjectID()) != 0
             : evidence.paidTechnology.count(item) != 0;
         const FixPoint progressAfter = upgrade ? heavy->getUpgradeProgress() : projectBuilder->getProductionProgress();
-        observedCashPayment |= paid && (progressAfter > progressBefore || complete())
-            && world.owner->getCredits() < cashBefore;
+        observedEnginePayment |= paid && (progressAfter > progressBefore || complete())
+            && world.spentQ32() > spentAtTick;
         for (const Uint32 unique : {Structure_IX, Structure_Palace, Structure_StarPort})
             require(world.owner->getNumItems(unique) + world.queued(unique) <= 1,
                     "Parallel yards duplicated a one-off or first Starport during installment construction");
-        if (goal == Project::HeavyFactory && world.owner->getNumItems(item) == 0) {
+        if (goal == Project::HeavyFactory && world.owner->getNumItems(item) == 0)
             require(world.queued(item) <= 1, "Parallel yards independently started the same first heavy factory");
-            if (world.game->getGameCycleCount() % 25 == 0) {
-                const auto ongoing = world.observePlan();
-                if (!ongoing.militaryEmergency && ongoing.readyGroundUnits >= 6
-                    && ongoing.readyGroundValue >= ongoing.defenceMinimumValue)
-                    require(world.queuedLight() == 0,
-                            "Routine cheap replenishment exceeded the real defence floor while first HF installments needed income");
-            }
-        }
+        if ((goal == Project::HeavyFactory || goal == Project::IX) && !complete())
+            require(world.queued(Structure_LightFactory) == 0,
+                    "A buildable first HF or IX was replaced by discretionary light-factory filler");
+        if (goal == Project::Starport && world.owner->getNumItems(item) == 0)
+            require(world.queued(Structure_IX) == 0 && world.queued(Structure_Palace) == 0,
+                    "Discretionary technology jumped ahead of the still-pending first Starport");
     }
-    run.finish(complete() && observedCashPayment && (!upgrade || upgradeStartedWithRealCash)
+    const int64_t spent = world.spentQ32() - spentBefore;
+    run.finish(complete() && observedEnginePayment && spent >= FixPoint(initialQuote).getRawValue()
+                   && (!upgrade || upgradeStartedWithRealCash)
                    && world.owner->getHarvestedSpice() + world.owner->getCityTaxReceipts() > receiptsBefore,
-               "Selected project did not receive ordinary cash-paid installments and bounded income-funded completion");
+               "Selected project did not receive real engine-paid installments and bounded income-funded completion");
     SDL_Log("SIMPLE_TECH_SAVING_INSTALLMENTS: case=%s mod=%s difficulty=%s item=%u quote=%d initial_cash=%d "
             "zero_cash=%d exact_quote=%d upgrade_human_gate=%d parallel_yards=2 real_receipts=1 "
-            "cash_payment=1 paid_completed=1 stateless_policy=1",
+            "engine_payment=1 spent_total_q32=%lld paid_completed=1 stateless_policy=1",
             name, mod, playerClass, item, initial.techCandidate.cost, initialCash,
-            int(cashMode == StartCash::Zero), int(cashMode == StartCash::ExactQuote), int(upgrade));
+            int(cashMode == StartCash::Zero), int(cashMode == StartCash::ExactQuote), int(upgrade),
+            static_cast<long long>(spent));
 }
 
 inline void boundedProgression(const char* mod, const char* playerClass) {
     World world(mod, playerClass, true, Stage::Progression);
+    completeInitialEconomicAssets(world);
+    secureInitialCityCore(world);
     std::set<Uint32> required;
     for (const Uint32 item : {Structure_HeavyFactory, Structure_RepairYard, Structure_HighTechFactory,
                              Structure_IX, Structure_Palace})
@@ -498,6 +549,9 @@ inline void exactOpeningWorker(const char* mod, const char* playerClass) {
     const int price = int(offer->price);
     world.cash(price);
     Case run(world, "exact_opening_worker", mod, playerClass);
+    auto plan = world.observePlan();
+    require(world.bot->openingWorkersNeeded(plan) && !plan.techFundingPriority,
+            "Discretionary technology retained the capital needed by a real missing opening worker");
     PaidProduction evidence(world);
     world.build();
     evidence.observe();
@@ -509,6 +563,81 @@ inline void exactOpeningWorker(const char* mod, const char* playerClass) {
                "Exactly paid opening-worker import never delivered a real worker through ordinary engine cycles");
     SDL_Log("SIMPLE_TECH_SAVING_OPENING_WORKER: mod=%s difficulty=%s exact_quote=%d paid=1 delivered=1 stateless_policy=1",
             mod, playerClass, price);
+}
+
+enum class EconomicNeed { Refinery, IndustrialSeed, Stadium };
+
+inline void economicPriority(const char* mod, const char* playerClass, EconomicNeed need) {
+    World world(mod, playerClass, true, Stage::Advanced);
+    const bool city = need != EconomicNeed::Refinery;
+    const Uint32 item = need == EconomicNeed::Refinery ? Structure_Refinery
+        : need == EconomicNeed::IndustrialSeed ? Structure_ZoneIndustrial : Structure_Stadium;
+    const char* name = need == EconomicNeed::Refinery ? "needed_refinery_before_tech"
+        : need == EconomicNeed::IndustrialSeed ? "needed_industrial_seed_before_tech" : "needed_stadium_before_tech";
+    if ((city && !world.game->isCitySimEnabled()) || !contentReachable(world, item)) {
+        notApplicable(name, mod, playerClass, city && !world.game->isCitySimEnabled()
+            ? "not_city_content" : "content_or_prerequisite_not_enabled_at_actual_tech", item);
+        return;
+    }
+    if (need != EconomicNeed::Refinery) completeInitialEconomicAssets(world);
+    // Remove only labelled initial assets to create the actual economic
+    // shortfall. The bot's rules, demand flags and research defaults stay intact.
+    std::vector<StructureBase*> initial;
+    for (auto* structure : structureList)
+        if (structure->getOwner() == world.owner && structure->getItemID() == item)
+            initial.push_back(structure);
+    const size_t keep = need == EconomicNeed::Refinery ? 1 : 0;
+    require(initial.size() > keep, "Economic priority setup has no initial asset to withhold");
+    for (size_t i = keep; i < initial.size(); ++i) {
+        initial[i]->setVisible(VIS_ALL, false);
+        initial[i]->destroy();
+    }
+    if (need == EconomicNeed::Stadium) {
+        for (;;) {
+            for (auto* structure : structureList)
+                if (structure->getOwner() == world.owner && structure->getItemID() == Structure_ZoneResidential)
+                    static_cast<ZoneStructure*>(structure)->setResidentialPopulation(
+                        DuneCity::ResidentialPopulation::fromDensity(3));
+            world.initializePhysicalCity();
+            if (world.observePlan().civicStructuralNeed & DuneCity::NeedStadium) break;
+            world.place(Structure_ZoneResidential);
+        }
+    } else if (world.game->isCitySimEnabled()) {
+        world.initializePhysicalCity();
+    }
+    secureInitialCityCore(world);
+    world.cash(world.price(item));
+    world.bot->militaryValueLimit = 6000;
+    Case run(world, name, mod, playerClass);
+    auto plan = world.observePlan();
+    require(world.owner->hasPower() && !plan.militaryEmergency,
+            "Economic priority setup accidentally measures blackout or a live enemy instead");
+    if (need == EconomicNeed::Refinery)
+        require(CityEconomyInvestmentPolicy::processingCapacityNeeded(plan.itemCount[Structure_Refinery],
+                    plan.itemCount[Unit_Harvester], world.bot->workerAnnualIncome(plan), plan.bayAnnualIncome),
+                "Withheld refinery did not create a real processing-capacity shortfall");
+    else if (need == EconomicNeed::IndustrialSeed)
+        require(plan.itemCount[item] == 0 && world.bot->chooseCityZone(plan, world.yard, true, true) == item,
+                "Missing industrial seed is not a real legal economic choice");
+    else
+        require((plan.civicStructuralNeed & DuneCity::NeedStadium) && plan.civicReserveCost > 0
+                    && world.yard->isAvailableToBuild(item),
+                "Physical residential population did not create a legal demanded Stadium");
+    require(!plan.techFundingPriority,
+            "A merely feasible discretionary project took this pass from its earlier needed economy or service");
+    const int before = world.owner->getNumBuiltItems(item);
+    const int64_t spentBefore = world.spentQ32();
+    PaidProduction evidence(world);
+    world.build();
+    evidence.observe();
+    require(world.queued(item) == 1 && world.queued(Structure_IX) == 0 && world.queued(Structure_Palace) == 0,
+            "Discretionary technology displaced the actual demanded economic or civic order");
+    const Uint32 end = world.game->getGameCycleCount() + MILLI2CYCLES(300000);
+    while (world.game->getGameCycleCount() < end && world.owner->getNumBuiltItems(item) == before)
+        run.step(evidence);
+    run.finish(evidence.completed(item) && evidence.paidTechnology.count(item)
+                   && world.spentQ32() - spentBefore >= FixPoint(world.price(item)).getRawValue(),
+               "Protected economic or civic order did not really pay, complete and get placed");
 }
 
 inline void realPowerRecovery(const char* mod, const char* playerClass) {
@@ -545,10 +674,11 @@ inline void realPowerRecovery(const char* mod, const char* playerClass) {
     run.finish(complete(), "Protected generation was not really paid, placed and sufficient to recover actual power");
 }
 
-inline void defensiveMinimum(const char* mod, const char* playerClass, bool distantArmy) {
+inline void defensiveReinforcement(const char* mod, const char* playerClass, bool distantArmy) {
     World world(mod, playerClass, true, Stage::FirstHeavy,
                 distantArmy ? Army::ReadyLight : Army::Empty, 8, false, HOUSE_HARKONNEN, 3,
                 distantArmy ? 0 : -1);
+    constexpr int distantDefenders = 60;
     world.closeMilitaryMarket(); // No heavy import can substitute for the measured local LF lane.
     if (distantArmy) {
         StructureBase* asset = nullptr;
@@ -563,7 +693,8 @@ inline void defensiveMinimum(const char* mod, const char* playerClass, bool dist
         for (auto* tank : attackers)
             Command(world.pilot->getPlayerID(), CMD_UNIT_ATTACKOBJECT, tank->getObjectID(),
                     asset->getObjectID()).executeCommand();
-        const auto defenders = TechProductionProbe::spawnGroundBand(world, world.owner, Unit_SiegeTank, 60, center, 25, 64);
+        const auto defenders = TechProductionProbe::spawnGroundBand(world, world.owner, Unit_SiegeTank,
+            distantDefenders, center, 25, 64);
         for (const auto* defender : defenders)
             require(blockDistance(defender->getLocation(), center) > 24,
                     "Distant-army control accidentally supplied local mobile cover");
@@ -574,19 +705,21 @@ inline void defensiveMinimum(const char* mod, const char* playerClass, bool dist
         world.yard->doProduceItem(Structure_WindTrap);
     }
     world.cash(3000);
-    Case run(world, distantArmy ? "unmet_local_defence" : "opening_defence_floor", mod, playerClass);
+    Case run(world, distantArmy ? "unmet_local_defence" : "opening_combat_lane", mod, playerClass);
     const auto plan = world.observePlan();
+    const auto ready = TechProductionProbe::actualGroundReadiness(world);
+    require(!plan.advancedGroundAvailable,
+            "Local-light control unexpectedly has an available advanced ground production choice");
     if (distantArmy)
-        require(plan.defendingEconomy && plan.militaryEmergency && !plan.techSavingActive
-                    && plan.readyGroundUnits >= 6 && plan.readyGroundValue >= plan.defenceMinimumValue,
-                "A large distant army hid the actual local shortfall or retained optional technology savings");
+        require(plan.defendingEconomy && plan.militaryEmergency && !plan.techFundingPriority
+                    && ready.first >= distantDefenders && ready.second > 0,
+                "A large distant army hid the actual threatened economy or retained discretionary technology funding");
     else
-        require(plan.readyGroundUnits == 0 && plan.readyGroundValue < plan.defenceMinimumValue,
-                "Opening-defence control accidentally meets its real defensive minimum");
+        require(ready.first == 0, "Opening-combat control unexpectedly owns a ready ground army");
     PaidProduction evidence(world);
     world.build();
     evidence.observe();
-    require(world.queuedLight() > 0, "Simple technology project starved an affordable real defensive minimum");
+    require(world.queuedLight() > 0, "No-advanced-supplier control lost its affordable local combat lane");
     bool paid = false;
     const Uint32 end = world.game->getGameCycleCount() + MILLI2CYCLES(10000);
     while (world.game->getGameCycleCount() < end && !paid) {
@@ -766,9 +899,13 @@ void runSimpleTechSavingProbe(const char* mod, const char* playerClass) {
     }
     SimpleTechSavingProbe::boundedProgression(mod, playerClass);
     SimpleTechSavingProbe::exactOpeningWorker(mod, playerClass);
+    for (const auto need : {SimpleTechSavingProbe::EconomicNeed::Refinery,
+                            SimpleTechSavingProbe::EconomicNeed::IndustrialSeed,
+                            SimpleTechSavingProbe::EconomicNeed::Stadium})
+        SimpleTechSavingProbe::economicPriority(mod, playerClass, need);
     SimpleTechSavingProbe::realPowerRecovery(mod, playerClass);
-    SimpleTechSavingProbe::defensiveMinimum(mod, playerClass, false);
-    SimpleTechSavingProbe::defensiveMinimum(mod, playerClass, true);
+    SimpleTechSavingProbe::defensiveReinforcement(mod, playerClass, false);
+    SimpleTechSavingProbe::defensiveReinforcement(mod, playerClass, true);
     SimpleTechSavingProbe::freshCity(mod, playerClass);
     SimpleTechSavingProbe::actualT1Research(mod, playerClass);
     const auto wall = std::chrono::duration_cast<std::chrono::milliseconds>(

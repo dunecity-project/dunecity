@@ -6,28 +6,47 @@ Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 
 ## Stateless technology experiment and save compatibility
 
-`[Force Concentration] SimpleTechSavings` remains hashed and **OFF**. Its current
-unshipped behavior is unchanged by the ledger removal: existing-owned plus
-accepted-queue composition, ordinary installment construction, and the existing
-technology/defence funding gate remain experimental. Campaign, human-order,
-saboteur and unit-role authority are unchanged. Factory/yard upgrades still use
-the same engine admission and full-credit start rule as human players.
+`[Force Concentration] SimpleTechSavings` is hashed and **OFF**. The current
+unreleased iteration combines existing-owned plus accepted-queue composition
+with economy-first, ordinary installment construction. A military limit is a
+ceiling, never the denominator that entitles cheap units to an opening quota.
+The next unit/factory moves the existing value composition toward its target;
+legal advanced ground production disables cheap emergency/affordability filler.
+Standing infantry uses the existing army share. Independent reactive rocket
+infantry remains available when a legal advanced launcher cannot supply it.
 
-The rejected income-ledger experiment has been removed, not retained as an OFF
-alternative: no `TechSavings` option/hash key, factorial styles, saved balances,
-debt/shares arithmetic or ledger-only fixtures remain. The nine old ledger tests
-are retired with that implementation, including its three failing City cases.
-The surviving helper and Simple fixtures use no ledger APIs or compatibility alias.
+There is no threat-sized military hold while a tech item builds. Factories keep
+their ordinary purchasing, economic working cash and real production commitments.
+A selected legal tech structure may start at zero credits and pays through the
+same engine installments as a human order. Its yard first visits real power,
+storage, city seed/service, worker/refining and first-Starport selectors; needed
+economic capital owns the shared planner before optional tech. Positive repeat
+zoning is not an endless tech veto, and other yards retain their normal growth
+fallback. Upgrades retain the full live-credit rule and normal quote debit in
+the AI's planning cash; the engine grants no AI exemption. Required Research Lab
+progression keeps its independent ordinary investment path. Campaign, human-order,
+saboteur and unit-role authority are unchanged.
 
-Current saves are **9883**, and the network protocol is **112**, matching the
-installed format. The QuantBot block no longer appends the experimental33 bytes;
-its ordinary 9882/9883 layout is restored. Simple needs no saved runtime state.
-Multiplayer saves/observer base snapshots therefore need no ledger-specific wire
-bump; the existing supplemental observer layout is unchanged. Interim unshipped
-9884 files are not a supported format. Synthetic engine fixtures load both9882
-and9883 QuantBot blocks, resave/reload9883, check following-record alignment and
-verify that toggling Simple alone adds no serialized bytes. Private saves remain
-outside the repository.
+Removal-only commit `3710464d` retired the rejected income-ledger experiment,
+not merely disabled it: no `TechSavings` option/hash key, factorial styles,
+saved balances, debt/share arithmetic or ledger-only fixtures remain. The nine
+old ledger tests are retired with that implementation. The stateless helpers
+and Simple fixtures use no ledger API or compatibility alias.
+
+Current saves are **9883** and protocol **112**, matching the installed format.
+The experimental 33-byte QuantBot tail and its digest contribution are gone;
+the ordinary 9882/9883 layout is restored. Simple needs no saved runtime state,
+so multiplayer saves/observer base snapshots need no additional wire bump.
+The existing supplemental observer layout is unchanged. Interim unshipped 9884
+files are unsupported. Synthetic engine fixtures load both 9882 and 9883 bot
+blocks, resave/reload 9883, check following-record alignment and verify that
+Simple OFF/ON alone adds no serialized bytes. Private saves stay outside Git.
+
+At `3710464d` the full pinned suite was **159/165**: only the six already-known
+Simple City/Vanilla fixtures failed. Ledger retirement does not receive credit
+for fixing those policy/payment-evidence failures. The new iteration's outcomes
+and real-save results must be attributed to their own pinned source, not to the
+historical cohorts below.
 
 ### Measured rejection, not adoption
 

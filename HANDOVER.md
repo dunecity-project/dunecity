@@ -58,10 +58,18 @@
   reload with following-record checks, plus byte-identical serialization when
   Simple alone is toggled. Existing9863/9878 prefix fixtures no longer subtract
   a nonexistent ledger tail. Full-Game private probes are separate evidence.
-- `SimpleTechSavings` stays **OFF**, and its policy behavior is deliberately
-  unchanged in this removal-only commit. The requested economy-first/no-unit-
-  hold iteration is separate. Human upgrade admission and ordinary commands
-  are unchanged; no human/saboteur/unitRole authority changes.
+- Removal-only commit `3710464d` keeps the installed 9883/112 format; its full
+  pinned suite was159/165, with only the six already-known Simple City/Vanilla
+  fixture failures. The separate final economy-first policy remains OFF.
+- Current Simple selection uses existing-owned plus accepted queues, not cap
+  headroom; legal advanced ground choices disable cheap filler. Standing troop
+  quota/reservations use existing army value; reactive AA remains if the legal
+  advanced launcher cannot supply that role. No threat-sized unit hold remains.
+- Real power/storage, demanded city seeds/civics, profitable workers/refining and
+  first-Starport capital stay ahead. The selected tech building uses ordinary
+  zero-upfront installments only after those selectors; upgrades keep the human
+  full-credit rule and ordinary planning quote debit. Repeat zoning does not
+  veto technology forever; spare yards keep normal growth. No saved state added.
 - Canonical `5f2bdb16`288-game/four-seed trial rejects adoption: city researchOFF
   HF/IX/SP101/55/168→178/77/80 per192 houses; researchON24/23/36→42/21/21 per48.
   Pooled H/B dispatch3.5816→1.8793, kills43309→19963; all six cells/four seed

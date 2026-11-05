@@ -231,6 +231,8 @@ struct QuantBot::BuildPass {
     int vehiclePlanValue{};
     bool techSavings{}; // Stateless owned-composition and installment policy.
     bool techFundingPriority{};
+    bool techProjectPending{};
+    bool advancedGroundAvailable{};
     UnitMixPolicy::Weights compositionValue{};
     UnitMixPolicy::Weights compositionPrice{};
     UnitMixPolicy::Slots compositionAvailable{};
@@ -307,19 +309,12 @@ struct QuantBot::BuildPass {
     bool openingSupplierDue{};
     int moderateCrimeProperties{};
     int dangerousCrimeProperties{};
-    // planTechSavings(): all decisions are transient; no saved budget.
-    int defenceMinimumValue{};
+    // planTechSavings(): derived each pass, never serialized.
     bool militaryEmergency{};
-    std::array<bool, Num_ItemID> emergencyCivic{};
-    int readyGroundUnits{};
-    int readyGroundValue{};
-    int committedGroundUnits{};
-    int committedGroundValue{};
     CapitalCandidate techCandidate{};
     bool techUpgrade{};
     bool techResearch{};
     bool techSavingActive{};
-    int techWorkingReserve{};
     int techCandidateIndex{-1};
 
     // chooseCapitalPlan()

@@ -300,8 +300,8 @@ struct QuantBotConfig {
         /// armour and escorts, using existing infantry shares/economy reserves.
         /// Default ON at Stefan's direction despite unproven acceptance; see HANDOVER.
         bool trooperSupport;
-        /// Stateless existing-composition/technology experiment, default OFF.
-        /// Current paired outcome audits reject adoption; see HANDOVER.
+        /// Stateless existing-composition/economy-first installments, default OFF.
+        /// No military hold or saved ledger; paired outcomes gate adoption.
         bool simpleTechSavings;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.
