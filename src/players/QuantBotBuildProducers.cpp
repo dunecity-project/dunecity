@@ -25,13 +25,11 @@
 
 void QuantBot::buildRepair(BuildPass& pass, const StructureBase* pStructure) {
     const int creditsBeforeUpgrade = getHouse()->getCredits();
-    const int upgradeCash = pass.incomeBuckets && !spendingEmergency(pass, Structure_Slowpost)
-        ? std::min(pass.money, spendingLedger.available(QuantBotSpendingPolicy::Bucket::Production)) : pass.money;
+    const int upgradeCash = pass.money;
     if (doUpgradeScoutpost(pStructure, upgradeCash)) {
         const int cost = creditsBeforeUpgrade - getHouse()->getCredits();
         pass.money -= cost;
         pass.capitalOrderedCost += cost;
-        if (pass.incomeBuckets) spendingLedger.charge(QuantBotSpendingPolicy::Bucket::Production, cost);
         --pass.itemCount[Structure_Scoutpost];
         ++pass.itemCount[Structure_Slowpost];
     }
@@ -75,7 +73,7 @@ void QuantBot::buildProducer(BuildPass& pass, const StructureBase* pStructure) {
     beginBuilderTurn(pass, turn);
     if (recoverBuilderConstruction(pass, turn)) return;
     // A selected ordinary-installment project needs no legacy yard-entry cash.
-    if (pass.techSavings && !pass.incomeBuckets && buildTechSavings(pass, turn)) return;
+    if (pass.techSavings && buildTechSavings(pass, turn)) return;
     if (upgradeYardForConcrete(pass, turn)) return;
     if (queueCampaignWindtrap(pass, turn, 0)) return;
     if (buildCampaignRepairYard(pass, turn)) return;
@@ -162,7 +160,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     const int quotedPrice=purchasePrice(turn.pBuilder,itemID);
     const Uint32 spendingItem = turn.spendingItem == NONE_ID ? itemID : turn.spendingItem;
     const auto spendingBucket = QuantBotBuildPolicy::spendingBucket(spendingItem);
-    const bool techInstallment = pass.techSavings && !pass.incomeBuckets
+    const bool techInstallment = pass.techSavings
         && turn.installmentProject != NONE_ID && turn.installmentProject == spendingItem;
     if (!compositionAdmits(pass, itemID) || !spendingAdmits(pass, spendingItem, quotedPrice)) return false;
     if (itemID==Unit_MCV && !canFundCapacityMcv(pass,quotedPrice,turn.pBuilder->getObjectID())) {
@@ -247,7 +245,6 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     doProduceItem(turn.pBuilder, itemID);
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
-        if (pass.incomeBuckets) spendingLedger.charge(spendingBucket, quotedPrice);
         if (pass.techSavings || AITelemetry::log().enabled()) {
             const size_t slot = compositionSlot(itemID);
             if (slot < UnitMixPolicy::kSlots) {
@@ -256,7 +253,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
                 if (pass.techSavings) pass.vehiclePlanValue = pass.compositionArmyValue;
             }
         }
-        if (pass.techSavings && !pass.incomeBuckets && QuantBotBuildPolicy::militaryItem(itemID)) {
+        if (pass.techSavings && QuantBotBuildPolicy::militaryItem(itemID)) {
             const size_t groundSlot = compositionSlot(itemID);
             if (isInfantryUnit(itemID) || (groundSlot < UnitMixPolicy::kSlots
                 && groundSlot != UnitMixPolicy::kOrnithopterSlot && !isSandwormUnit(itemID))) {
@@ -362,13 +359,12 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
     // Reserve the funded upgrade's producer while its accepted units finish;
     // otherwise every busy factory appends another unit and never upgrades.
     if (turn.pBuilder->isUpgrading() || (turn.pBuilder->getProductionQueueSize() > 0
-        && (pass.incomeBuckets || !pass.techUpgrade)))
+        && !pass.techUpgrade))
         return turn.pBuilder->getItemID() != Structure_ConstructionYard;
     const int cost = pass.techCandidate.cost;
     if (!spendingAdmits(pass, pass.techCandidate.item, cost, pass.techUpgrade)) return false;
-    if (pass.incomeBuckets && int64_t(pass.money) < int64_t(cost) + pass.techWorkingReserve) return false;
-    if (!pass.incomeBuckets && pass.techUpgrade && getHouse()->getCredits() < cost) return false;
-    if (!pass.incomeBuckets && !pass.techUpgrade) {
+    if (pass.techUpgrade && getHouse()->getCredits() < cost) return false;
+    if (!pass.techUpgrade) {
         turn.installmentProject = pass.techCandidate.item;
         turn.installmentProjectStartBudget = 0;
     }
@@ -386,7 +382,7 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
 
 bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine) {
     const int price=turn.pBuilder->getUpgradeCost();
-    const bool simpleProject = pass.techSavings && !pass.incomeBuckets && pass.techSavingActive
+    const bool simpleProject = pass.techSavings && pass.techSavingActive
         && pass.techUpgrade && pass.techCandidate.builder == turn.pBuilder->getObjectID();
     const bool affordable = (simpleProject ? getHouse()->getCredits() : pass.money) >= price;
     const bool funded=canFundProductionUpgrade(pass,turn.pBuilder);
@@ -395,11 +391,10 @@ bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int source
     if (accepted) {
         if (!simpleProject) pass.money-=price;
         pass.capitalOrderedCost+=price;
-        if (pass.incomeBuckets) spendingLedger.charge(QuantBotSpendingPolicy::Bucket::Production, price);
     }
     traceDecision("capital_upgrade",AITelemetry::Record().set("capital_plan",pass.capitalDecision)
         .set("builder",turn.pBuilder->getObjectID()).set("price",price).set("accepted",accepted)
-        .set("reason",!affordable ? "shared_cash_budget" : !bucketFunded ? "income_bucket_savings" : !funded ? "city_working_capital"
+        .set("reason",!affordable ? "shared_cash_budget" : !bucketFunded ? "unplanned_technology" : !funded ? "city_working_capital"
             : accepted ? "technology_unlock" : "unavailable")
         .set("source_line",sourceLine));
     return accepted;
@@ -428,7 +423,7 @@ bool QuantBot::queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 
     }
     int total=purchasePrice(turn.pBuilder,item);
     for(const auto& foundation:plan.orders)total+=purchasePrice(turn.pBuilder,foundation.item);
-    const bool techInstallment = pass.techSavings && !pass.incomeBuckets && onInstallments(turn, item);
+    const bool techInstallment = pass.techSavings && onInstallments(turn, item);
     if ((!techInstallment && pass.money < total) || !spendingAdmits(pass, item, total)) return false;
     const Uint32 previousSpendingItem = turn.spendingItem;
     turn.spendingItem = item;
@@ -1226,7 +1221,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 traceDecision("factory_growth_hold", AITelemetry::Record()
                     .set("builder", turn.pBuilder->getObjectID()).set("item", item).set("actual_item", actualItem)
                     .set("upgrade", upgrade).set("price", price).set("spendable", cash)
-                    .set("reason", yardFull ? "yard_limit" : cash < price ? "shared_cash_budget" : "income_bucket_savings"));
+                    .set("reason", yardFull ? "yard_limit" : cash < price ? "shared_cash_budget" : "unplanned_technology"));
         }
         return admitted;
     };

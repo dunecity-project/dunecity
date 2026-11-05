@@ -4,202 +4,70 @@ Custom-game Hard and Brutal bots use a house-level army posture, rather than
 asking every unit to decide independently whether the whole army is losing.
 Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 
-## Installment-first technology and existing composition
+## Stateless technology experiment and save compatibility
 
-The separately hashed `[Force Concentration] SimpleTechSavings` alternative
-is default OFF pending paired acceptance. It applies only to Custom
-Medium/Hard/Brutal, not campaigns, Easy or builder-only authority. When both
-experimental switches are set, this ledger-free policy takes precedence.
+`[Force Concentration] SimpleTechSavings` remains hashed and **OFF**. Its current
+unshipped behavior is unchanged by the ledger removal: existing-owned plus
+accepted-queue composition, ordinary installment construction, and the existing
+technology/defence funding gate remain experimental. Campaign, human-order,
+saboteur and unit-role authority are unchanged. Factory/yard upgrades still use
+the same engine admission and full-credit start rule as human players.
 
-It starts the single next legal technology structure immediately, including
-zero cash, using the ordinary founded construction queue and engine
-installments. There is no full-quote, four-minute funding or cash-reserve
-precondition. Needed yard/factory upgrades retain exactly the human full-credit
-start rule; the AI starts at the actual quote without an extra operating reserve.
-Engine upgrade admission, commands and wire layouts are unchanged.
-The selected installment project also bypasses the yard's legacy 100-credit
-entry threshold; other yard choices keep their existing admission rules.
+The rejected income-ledger experiment has been removed, not retained as an OFF
+alternative: no `TechSavings` option/hash key, factorial styles, saved balances,
+debt/shares arithmetic or ledger-only fixtures remain. The nine old ledger tests
+are retired with that implementation, including its three failing City cases.
+The surviving helper and Simple fixtures use no ledger APIs or compatibility alias.
 
-Military selection uses owned-plus-accepted-queue replacement-value proportions.
-While technology needs funding, ordinary purchases stop at the threat-sized
-ground-defence minimum, including existing commitments; real defence, opening
-workers, power and first-Starport priorities remain. Existing queues are not
-cancelled or put on hold, and human/saboteur orders are unchanged. Ordinary
-payment order still applies: a finite older backlog can delay a newer yard.
-This alternative never initializes, allocates or debits the saved ledger and
-adds no saved state or protocol change.
+Current saves are **9883**, and the network protocol is **112**, matching the
+installed format. The QuantBot block no longer appends the experimental33 bytes;
+its ordinary 9882/9883 layout is restored. Simple needs no saved runtime state.
+Multiplayer saves/observer base snapshots therefore need no ledger-specific wire
+bump; the existing supplemental observer layout is unchanged. Interim unshipped
+9884 files are not a supported format. Synthetic engine fixtures load both9882
+and9883 QuantBot blocks, resave/reload9883, check following-record alignment and
+verify that toggling Simple alone adds no serialized bytes. Private saves remain
+outside the repository.
 
-The ledger experiment below is retained OFF for comparison. At `4477575c`,
-288 canonical games rejected it: city research-OFF HF/IX/Starport completion
-was 101/55/168 OFF versus 59/2/47 ON per192 houses; all six Hard/Brutal
-mod/research cells had four adverse dispatch and kill-value seed blocks.
-Those results do not measure the installment-first alternative.
+### Measured rejection, not adoption
 
-## Technology savings and guns/butter budgets
+Two separately pinned canonical288-game/four-seed Simple cohorts were rejected.
+TrooperSupport/FundedClassicProduction were ON in both arms. At `5f2bdb16`, all
+six Hard/Brutal mod/research cells had four adverse dispatch and kill-value seed
+blocks. City research-OFF achieved HF/IX/Starport by40 minutes in
+101/55/168 of192 OFF house histories versus178/77/80 ON; research-ON was
+24/23/36 of48 versus42/21/21. Death and administrative censoring are retained.
+Paired-achiever research-OFF means were HF15.779→12.545, IX26.353→33.434 and
+Starport18.987→31.860 minutes; these are selection-conditioned, not all-house
+completion times.
 
-The experimental hashed `[Force Concentration] TechSavings` switch applies to
-Custom Medium, Hard and Brutal games, in city mode and classic content. It is
-off until paired outcome audits establish the default; campaigns, Easy,
-Builder-only authority, human order leases and saboteur orders are unchanged.
+Balanced Hard/Brutal equal-game dispatches were3.5816→1.8793 and kill value
+43,309→19,963. Actual live per-object replacement value was299.26→314.11,
+conditioned on199/320 paired nonempty measured armies; its paired95% interval
+included a decrease. This is not accepted-order mean price. City research-OFF
+gross spice fell5.712M→4.071M and gross tax3.790M→0.983M. Accepted P/E/M quotes
+were1.014/4.092/3.493M→1.052/2.360/1.743M: spending classes, **not income
+allocations**. Physical payments and gross income are reported separately.
 
-The existing capital planner allocates real net receipts between production,
-economic growth and military spending. Safe income shares are 30/35/35%;
-an observed local ground threat, active economic defence or aircraft over the
-base changes new receipts to 15/20/65%. Unspent allocations remain in their own
-bucket. Full accepted orders, upgrades and research are committed once; later
-installment payments do not charge the same allocation again. Repairs and
-upkeep reduce net receipts rather than creating fictional gross income.
-Emergency defence, opening workers, bootstrap income, power recovery and the
-first legal Starport may borrow, recording debt in their own bucket for future
-income to repay. Forecast receipts are never spendable credits.
-With TechSavings ON, the existing bounded opening-worker floor also applies
-to classic Medium/Hard games. An existing Starport with an enabled, listed
-Harvester offer is a worker supplier, not just a Heavy Factory; listed but
-sold-out imports retain their opening priority until real stock returns.
-Admission and the single ledger debit use the supplier's actual quoted price.
-The exact Economy allocation replaces the old blanket 2,000-credit classic
-cash reserve; retaining both would strand an affordable defensive order even
-while its Military bucket held enough actual money.
+PRIMARY native credited wins/house were0.2118→0.0625 and decided-match fraction
+0.4583→0.1250; own-house elimination fell0.2969→0.1259 and observed survival
+rose36.690→38.365 minutes. Alive histories are right-censored: this is not life
+expectancy or proof of strength. These symmetric all-QuantBot global-OFF/global-ON
+runs measure match health/decisiveness/passivity, not direct ON-versus-OFF winning
+power. The missing-Starport detector latches any eligible alive-with-yard absence
+at sampled minute≥20; later port completion does not clear it.
 
-Production includes factories, tech buildings, upgrades and research. Economy
-includes workers/transports, refineries/storage, power, zones/services and
-expansion MCVs; combat units and defensive emplacements are military. Concrete
-inherits the building's bucket. The same shared capital comparison reserves
-the next legal first supplier, production upgrade, IX, Palace or research
-project, including actual prerequisites and full foundations. It holds only
-production's allocated cash, leaving economy and military allocations usable.
-Below-quote technology saving requires six owned ground fighters, at least
-the larger of 3,000 credits, the existing wave minimum and 1.5 times observed
-local ground threat, stable income/power, and a four-minute funded quote.
-Losing that dispatch-capable defence releases the hold for replenishment.
-The first SP/HF chain, first legal LF and necessary research can precede the
-floor only with a fully funded Production quote and real working cash. The
-same bounded exception covers a missing capability when no legal unit can
-advance the existing mix: requiring those units before their unlock would
-deadlock growth. An optional Palace retains the normal readiness floor.
-
-First HF/Repair/High-Tech/IX/Palace/Lab orders and optional HF/High-Tech upgrades
-must match the active, fully funded project, including its builder and
-operation. Legacy overdue/wealth thresholds cannot buy a different technology
-ahead of it. Custom Medium ON can build one first Repair Yard through the same
-planning/admission predicate; OFF, campaign and repeat replacement caps remain.
-Bucket allocations persist even without an active plan; the army floor
-controls the capital hold rather than creating or deleting those allocations.
-Prerequisite walks stop at the stored mask's `.size()`, matching the engine
-catalogue. The mask represents 27 legacy structure IDs, not every extended
-structure accepted by `isStructure`; its save/protocol representation is not
-widened. A catalogue-legal first HF is asserted to yield an actual HF quote.
-
-The existing storage forecast can release a physical receipt-capacity
-constraint even while Economy owes bootstrap debt. The paid capacity still
-charges Economy; no debt is erased or forecast income invented. Existing
-generator sizing avoids borrowing for an oversized reactor when a windtrap
-suffices. A bucket-rejected yard choice yields to funded work in another
-bucket instead of monopolizing the construction turn.
-City reactor sizing and final admission both respect pending generation.
-An emergency windtrap beside an unfinished reactor must not be converted back
-into a second reactor order by a later sizing pass or parallel yard.
-
-Unit selection also changes: target ratios are compared with the replacement
-value of units actually owned plus accepted queue commitments, not with the
-military limit or unspent money. The next indivisible vehicle minimizes the
-whole current mix's basis-point error; every factory and Starport shares that
-decision and updates it after acceptance. There is no routine cheap-unit
-capacity-fill fallback. A cap-rejected or unfunded optional MCV, harvester,
-carryall or upgrade cannot consume a factory turn ahead of an otherwise
-legal, funded composition order.
-An unavailable desired type does not authorize another already-overweight
-cheap type. Empty or exactly balanced armies can take one indivisible step;
-subsequent orders must again respect the existing-share deficit.
-
-Technology quotes include busy producers, so completing an ordinary queue
-does not leave the next choice blind. A fully funded producer upgrade lets
-accepted units drain rather than appending replacements forever. A missing
-first HF may precede an unfunded import prerequisite when opening workers or
-a usable composition lane need it; first Starport retains the next priority.
-Completing the port does not disable the bounded first-HF exception.
-Heavy factories under TechSavings use the accepted item's real funding checks,
-not the old generic 2,000-credit threshold ahead of an otherwise affordable
-300-credit unit. Bucket allocations and the shared working reserve still apply.
-
-Emergency composition bypass requires an actual local ground-defence
-shortfall: nearby health-weighted ground troops and covering turrets are
-compared with the existing 1.5-times threat requirement. A distant army
-cannot satisfy local defence. Air-only pressure still changes income shares
-and permits explicit anti-air responses, but does not authorize arbitrary
-cheap ground replenishment. Ordinary standing troopers obey the existing-army
-infantry quota; an observed hostile wing retains reactive anti-air exceptions.
-Adequate local cover and air-only contact do not globally freeze funded
-progression: the threatened income shares remain, but an actual unmet ground
-deficit is the safety veto. A genuine reactive-AA troop shortage keeps its
-capital precedence; an ordinary unobserved standing floor still yields to tech.
-
-Save 9884 stores the exact integer bucket balances and committed-wealth
-baseline. Saves 9882/9883 retain their frozen settings and load an empty,
-uninitialized ledger. Protocol 113 separates older peers because transferred
-multiplayer saves and observer checkpoints carry this new QuantBot state.
-
-The audit harness opts into counterfactual OFF-arm feasibility searches with
-`DUNECITY_TECH_SAVINGS_AUDIT=1`; ordinary decision logging does not run those
-extra placement searches. Both logged arms record live existing-plus-queued
-composition. An unused all-zero ledger is neutral in the lockstep digest, so
-the default OFF arm retains its established simulation fingerprints.
-New `tech-orders.csv` files keep scenario `city` and diagnostic `city_spend`
-as unique columns. Historical captures with the old duplicate `city` header
-are admitted table-aware: scenario metadata comes from the native game/setup,
-not the shadowing spending diagnostic. Accepted city totals are unchanged.
-
-### Measured rejected trial and compatibility
-
-The initial `8a8239a5` factorial trial contains 576 successful logical games
-(48 arms, two seeds), including independent TrooperSupport and
-FundedClassicProduction OFF controls. It was rejected, not promoted: city
-dispatches and kills fell to zero, and both classics had adverse dispatch/kill
-signals. Its OFF acceptance-time composition mirror was defective; permanent
-composition samples, spending, timings and outcomes remain usable.
-
-Corrected `69d5f5c4` raw diagnostics contain 18 complete streams, one seed
-across all three difficulties/content families, 4,451 certified cheap orders
-and 108 exact house-level spending reconciliations. City ON completed no
-HF/IX/Starport in its 18 house histories. The diagnosed cycle was a 3,000-value
-army floor blocking the first 420-credit LF while a 2,250-value army could not
-grow without it; Economy debt plus a physical cash cap also blocked receipts.
-The bounded bootstrap/storage and local-emergency corrections are in
-`8a2e9bf1`. These rejected-trial observations are not confirmation results for
-that later policy.
-
-The expanded `69d5f5c4` four-seed trial confirms rejection: 288 original native
-games, 960 houses, 224,259 accepted quotes and 41,450 cheap orders reconcile to
-whole raw streams and native sidecars. Hard/Brutal research-OFF matched
-equal-game dispatch means were:
-
-| Content | OFF | ON | ON minus OFF, exploratory 95% game interval |
-| --- | ---: | ---: | ---: |
-| DuneCity | 1.125 | 0 | -1.125 [-1.651, -0.641] |
-| Dune2R | 4.281 | 1.885 | -2.396 [-3.115, -1.760] |
-| Vanilla | 3.771 | 1.698 | -2.073 [-3.063, -1.208] |
-
-All four independent seed blocks had adverse dispatch/kill signals; games and
-houses within a seed are not independent replications. City research-OFF
-completed HF/IX/SP counts were 101/55/168 out of 192 OFF histories versus
-0/6/6 ON. These are observed achievements, not zero-imputed completion times.
-The report separately records death and administrative censoring, conditional
-unit-price coverage, paid money and gross income. It excludes 144 callback
-replay attempts; three failed finalizers remain explicit infrastructure
-failures, not a globally green receipt.
-
-`4bcefd69` adds the planned-technology admission, bounded Medium Repair Yard
-and adequately-defended-pressure corrections described above. Earlier rejected
-trials do not establish adoption for this later source; the default stays OFF.
-
-Source `85ca5918` passed the approved local full-Game 9882/9883 load, 600-cycle
-advance, signed/subcredit ledger save9884 roundtrip, and 60 further cycles.
-Private fixtures and re-saves are not committed. Receipts and reproducible
-analysis are under `../outputs/tech-saving-20261105/`, including
-`final-analysis-8a8239a5/`, `final-raw-analysis-69d5f5c4-certified/`,
-`expanded-analysis-69d5f5c4/compact-summary.txt` and
-`private-save-roundtrip-85ca5918/receipt.json`.
-
+Evidence: `../outputs/tech-saving-20261105/confirmation-analysis-df7da313/` and
+`confirmation-analysis-5f2bdb16/`, including canonical house/game outcomes,
+paired uncertainty, spend/technology/composition timelines and test addenda.
+`df7da313` had152/164 passes (three old-ledger City failures and nine Simple
+zero-cash failures); `5f2bdb16` targeted Simple tests had three Dune2R passes and
+six City-upgrade/Vanilla-payment-evidence failures. No later source receives
+retroactive credit. Research-enabled production cohorts started atT9 and do
+not demonstrate research acquisition. Four-minute quote coverage is not a
+structure-start affordability condition. The audit keeps unique scenario
+`city` and diagnostic `city_spend` columns, exact acceptance contexts, and
+historical table-aware provenance.
 
 ## Required Research Lab progression
 

@@ -109,7 +109,6 @@ struct World {
         auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
         config->force.researchLab = true;
         config->force.researchLabProgression = enabled;
-        config->force.techSavings = false;
         config->force.simpleTechSavings = false;
         bot->configOverride = config;
         hash = config->getConfigHash();

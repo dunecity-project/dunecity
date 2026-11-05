@@ -72,7 +72,7 @@
 #include "tornie-campaign-audit.inc"
 #include "trooper-support-probe.inc"
 #include "zone-power-probe.inc"
-#include "tech-saving-probe.inc"
+#include "tech-production-probe.inc"
 #include "simple-tech-saving-probe.inc"
 #include "research-lab-continuation-probe.inc"
 #include "research-lab-ai-probe.inc"
@@ -150,10 +150,6 @@ int runCampaignBalanceProbe() {
     }
     if(std::getenv("BALANCE_SIMPLE_TECH_SAVING_PROBE")) {
         runSimpleTechSavingProbe(requestedMod.c_str(), partnerClass.c_str());
-        return MENU_QUIT_DEFAULT;
-    }
-    if(std::getenv("BALANCE_TECH_SAVING_PROBE")) {
-        runTechSavingProbe(requestedMod.c_str(), partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
     GameInitSettings init(humanHouse, settings.gameOptions, level);
@@ -545,7 +541,7 @@ int runCampaignBalanceProbe() {
                             .set("CityOpeningCapital",f.cityOpeningCapital).set("CityConstructionCapital",f.cityConstructionCapital)
                             .set("CityProductionPrerequisites",f.cityProductionPrerequisites)
                             .set("CityFirstFactorySaving",f.cityFirstFactorySaving)
-                            .set("TechSavings",f.techSavings)
+                            .set("SimpleTechSavings",f.simpleTechSavings)
                             .set("TrooperSupport",f.trooperSupport).set("FundedClassicProduction",f.fundedClassicProduction)
                             .set("ThreatTurrets",f.threatTurrets).set("MoreRocketTurrets",f.moreRocketTurrets)
                             .set("CityStarportSupply",f.cityStarportSupply).set("StorageCapacity",f.storageCapacity));

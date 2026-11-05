@@ -313,8 +313,8 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             admittedItem = item;
             return;
         }
-        // A rejected bucket never owns this yard's remaining selectors. Its
-        // savings stay in the ledger; another funded bucket may use the slot.
+        // A rejected technology project does not own this yard's remaining
+        // selectors; another admitted project may use the slot.
         if (capitalPending(pass)
             && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()
             && pass.capitalCandidates[pass.capitalChoice].item == item) {
@@ -323,7 +323,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             yardTurn.higherPriorityCapital = false;
         }
         yardTurn.itemID = NONE_ID;
-        yardTurn.structureRule = "income_bucket_savings";
+        yardTurn.structureRule = "technology_plan_hold";
         yardTurn.crimeServiceSite = Coord::Invalid();
         yardTurn.skipRemainingStructureLogic = yardTurn.serviceSavingHold = false;
         turn.installmentProject = NONE_ID;
@@ -339,9 +339,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         && yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic) {
         const Uint32 storage = storageExpansionItem(pass,turn.pBuilder);
         if (storage!=NONE_ID) {
-            // Only this forecasted physical-capacity release may borrow.
-            // Actual receipts then repay its exact Economy debt; a capped
-            // vault cannot otherwise replenish an overdrawn bootstrap bucket.
+            // Physical capacity recovery retains its ordinary priority.
             if (pass.techSavings) pass.emergencyCivic[storage] = true;
             yardTurn.itemID=storage;yardTurn.structureRule="storage_capacity";
             yardTurn.skipRemainingStructureLogic=true;
@@ -2545,13 +2543,10 @@ void QuantBot::useSpareYardCapacity(BuildPass& pass, BuilderTurn& turn, YardTurn
         && turn.pBuilder->getProductionQueueSize() == 0 && campaignAvailableToBuild(turn.pBuilder,Structure_Road)) {
         pass.roadMaintenanceAttempted = true;
         const int roadPrice = std::max(1,data[Structure_Road][houseID].price);
-        const int roadBudget = pass.incomeBuckets ? std::min(std::max(0, pass.money - pass.economyReserve),
-            spendingLedger.available(QuantBotSpendingPolicy::Bucket::Economy))
-            : std::max(0, pass.money - pass.economyReserve);
+        const int roadBudget = std::max(0, pass.money - pass.economyReserve);
         const int repaired = queueCityRoadRepairs(turn.pBuilder, std::min(8, roadBudget / roadPrice));
         pass.money -= repaired*roadPrice;
         pass.capitalOrderedCost += repaired*roadPrice;
-        if (pass.incomeBuckets) spendingLedger.charge(QuantBotSpendingPolicy::Bucket::Economy, repaired * roadPrice);
         if (repaired) traceDecision("capital_road_batch",AITelemetry::Record().set("capital_plan",pass.capitalDecision)
             .set("builder",planningBuilder).set("count",repaired).set("price",roadPrice).set("cost",repaired*roadPrice));
     }

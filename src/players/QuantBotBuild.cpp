@@ -46,7 +46,7 @@ bool QuantBot::canAddRepairYard(int includingQueued) const {
         // The savings ladder funds one real repair/technology prerequisite on
         // Medium too. This is not permission for repeat capacity or campaigns.
         || (includingQueued == 0 && currentGame
-            && (botConfig().force.techSavings || simpleTechPolicyActive())
+            && simpleTechPolicyActive()
             && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType) && !builderOnly());
 }
 
@@ -201,7 +201,7 @@ bool QuantBot::canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier)
 bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
     if (pass.techSavings)
         return pass.techSavingActive && pass.techResearch
-            && int64_t(getHouse()->getCredits()) >= int64_t(cost) + (pass.incomeBuckets ? pass.techWorkingReserve : 0)
+            && getHouse()->getCredits() >= cost
             && spendingAdmits(pass, Structure_ResearchLab, cost, true);
     if (!techInvestmentReady(pass)) return false;
     if (!researchRequired(pass)) return canFundWorkingCapital(pass,cost,NONE_ID);
@@ -228,8 +228,7 @@ bool QuantBot::cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 suppli
 bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* builder) {
     if (pass.techSavings && pass.techSavingActive && pass.techUpgrade
         && pass.techCandidate.builder == builder->getObjectID())
-        return int64_t(pass.incomeBuckets ? pass.money : getHouse()->getCredits())
-            >= int64_t(builder->getUpgradeCost()) + (pass.incomeBuckets ? pass.techWorkingReserve : 0);
+        return getHouse()->getCredits() >= builder->getUpgradeCost();
     // Yard upgrades unlock concrete, power, civics and reactive turrets. They
     // keep their existing prerequisite budgets; only producer tech is optional.
     if (!pass.citySimEnabled || !botConfig().force.cityOpeningCapital
@@ -283,7 +282,6 @@ void QuantBot::startTechResearch(BuildPass& pass) {
     if (!const_cast<House*>(getHouse())->startTechResearch(lab->getObjectID())) return;
     pass.money -= cost;
     pass.capitalOrderedCost += cost;
-    if (pass.incomeBuckets) spendingLedger.charge(QuantBotSpendingPolicy::Bucket::Production, cost);
     if (pass.techSavings && pass.techResearch) {
         pass.techSavingActive = false;
         pass.civWarsResearchReserve = 0;
@@ -470,10 +468,7 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     auto& data = currentGame->objectData.data;
     pass.money = getHouse()->getCredits();
     const bool simple = simpleTechPolicyActive();
-    pass.techSavings = simple || (botConfig().force.techSavings && gameMode == GameMode::Custom
-        && !isCampaignGameType(currentGame->gameType) && !builderOnly()
-        && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal));
-    pass.incomeBuckets = pass.techSavings && !simple;
+    pass.techSavings = simple;
     pass.militaryValue += pass.queuedMilitaryValue;
     // Effective military planning budget for this pass, computed once now that the
     // queue-inclusive army value and the cash are known. It equals the configured
@@ -638,8 +633,8 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     const int reservedCommitments = pass.queuedProductionCost - (simple ? pass.queuedTechnologyCost : 0);
     pass.clearanceCommitmentShortfall = std::max(0, reservedCommitments - pass.money);
     pass.money = std::max(0, pass.money - reservedCommitments);
-    // The exact Economy ledger replaces the legacy blanket cash hold. Keeping
-    // both reserves strands Military's own allocation below the old LF gate.
+    // Keep the experimental policy's current working-capital convention;
+    // ordinary production retains its existing economic cash buffer.
     pass.economyReserve = pass.vanillaEconomy && !pass.techSavings ? std::max(2000,
         data[Structure_Refinery][houseID].price + 2 * data[Unit_Harvester][houseID].price) : 0;
 }
@@ -2900,7 +2895,7 @@ size_t QuantBot::compositionSlot(Uint32 item) {
 bool QuantBot::compositionAdmits(BuildPass& pass, Uint32 item) {
     if (!pass.techSavings || !QuantBotBuildPolicy::militaryItem(item)) return true;
     if (pass.militaryEmergency) return true;
-    if (!pass.incomeBuckets && pass.techFundingPriority
+    if (pass.techFundingPriority
         && pass.committedGroundUnits >= 6 && pass.committedGroundValue >= pass.defenceMinimumValue
         && !(pass.airEngaged && (CombatPowerPolicy::airCapableItem(int(item))
             || QuantBotBuildPolicy::rocketInfantry(item)))) return false;
@@ -2975,15 +2970,11 @@ bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgra
     const bool plannedTechnology = !(firstTechnology || governedUpgrade) || requiredProducerUnlock
         || (!upgrade && item == Structure_HighTechFactory && needsFirstTransport(pass))
         || (ownsProject && pass.techSavingActive && pass.techCandidateIndex >= 0 && !pass.techResearch);
-    const int protectedProduction = pass.techSavingActive && !pass.capitalConsumed && !ownsProject
-        && !requiredProducerUnlock && bucket == QuantBotSpendingPolicy::Bucket::Production ? pass.techCandidate.cost : 0;
-    const bool admitted = emergency || (plannedTechnology
-        && (!pass.incomeBuckets || int64_t(spendingLedger.available(bucket)) >= int64_t(cost) + protectedProduction));
+    const bool admitted = emergency || plannedTechnology;
     if (!admitted && pass.emitStatsLog && AITelemetry::log().enabled())
-        traceDecision("income_bucket_hold", AITelemetry::Record().set("item", item).set("cost", cost)
+        traceDecision("technology_plan_hold", AITelemetry::Record().set("item", item).set("cost", cost)
             .set("bucket", QuantBotSpendingPolicy::bucketName(bucket))
-            .set("available", spendingLedger.available(bucket)).set("emergency", emergency)
-            .set("reason", plannedTechnology ? "income_bucket_savings" : "unplanned_technology"));
+            .set("emergency", emergency).set("reason", "unplanned_technology"));
     return admitted;
 }
 
@@ -2997,7 +2988,6 @@ void QuantBot::planTechSavings(BuildPass& pass) {
         }();
         if (!audit || !AITelemetry::log().enabled()) return;
     }
-    const bool threatened = pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid();
     pass.militaryEmergency = false;
     if (pass.techSavings && (pass.defendingEconomy || pass.groundThreatAsset.isValid())) {
         const auto& data = currentGame->objectData.data;
@@ -3049,8 +3039,6 @@ void QuantBot::planTechSavings(BuildPass& pass) {
             if (localDeficit(asset->getLocation())) { pass.militaryEmergency = true; break; }
         }
     }
-    pass.incomeShares = pass.techSavings && !pass.incomeBuckets ? QuantBotSpendingPolicy::Shares{}
-        : QuantBotSpendingPolicy::incomeShares(threatened);
     pass.defenceMinimumValue = int(std::min<int64_t>(INT_MAX,
         std::max<int64_t>(std::max(3000, minWaveValue()), int64_t(pass.groundThreatValue) * 3 / 2)));
     for (const auto* unit : getUnitList()) {
@@ -3062,9 +3050,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
     }
     pass.committedGroundUnits += pass.readyGroundUnits;
     pass.committedGroundValue += pass.readyGroundValue;
-    pass.techFundingPriority = pass.techSavings && !pass.incomeBuckets && pass.queuedTechnologyCost > 0;
-    if (pass.incomeBuckets)
-        spendingLedger.reconcile(int64_t(getHouse()->getCredits()) - pass.queuedProductionCost, pass.incomeShares);
+    pass.techFundingPriority = pass.techSavings && pass.queuedTechnologyCost > 0;
     if (pass.techSavings) pass.strategicReserveCost = 0;
     const int house = getHouse()->getHouseID();
     const auto& data = currentGame->objectData.data;
@@ -3212,42 +3198,20 @@ void QuantBot::planTechSavings(BuildPass& pass) {
             }
     }
     const bool feasible = pass.techCandidate.item != NONE_ID && pass.techCandidate.cost > 0;
-    const bool defenceReady = pass.readyGroundUnits >= 6 && pass.readyGroundValue >= pass.defenceMinimumValue;
-    const bool capabilityFunded = pass.incomeBuckets && feasible
-        && (firstSupplier || (noCombatLane && pass.techCandidate.item != Structure_Palace)) && incomeReady
-        && (pass.techUpgrade || QuantBotBuildPolicy::spendingBucket(pass.techCandidate.item)
-            == QuantBotSpendingPolicy::Bucket::Production)
-        && spendingLedger.available(QuantBotSpendingPolicy::Bucket::Production) >= pass.techCandidate.cost
-        && int64_t(pass.money) >= int64_t(pass.techCandidate.cost) + pass.techWorkingReserve;
-    // A fully funded missing capability may precede the floor when no legal
-    // unit can advance the existing mix. Requiring those units first would
-    // deadlock their own unlock. An optional Palace retains the normal floor.
     const bool simpleReady = !pass.militaryEmergency && !cityBootstrapNeeded(pass) && getHouse()->hasPower()
         && (firstSupplier || !openingWorkersNeeded(pass))
         && !(needsFirstTransport(pass) && pass.carryallBuildAvailable)
         && getHouse()->getNumItems(Structure_ConstructionYard) > 0;
-    pass.techSavingActive = pass.techSavings && feasible && (pass.incomeBuckets
-        ? ((stable && defenceReady) || capabilityFunded)
-            && int64_t(pass.forecastFunding) >= int64_t(pass.techCandidate.cost) + pass.techWorkingReserve
-        : simpleReady);
-    pass.techFundingPriority |= pass.techSavingActive && !pass.incomeBuckets;
-    if (capabilityFunded && !defenceReady) pass.techCandidate.reason = "required_capability_before_defence_minimum";
-    // Bucket savings do not occupy a yard while still unfunded. Its economic
-    // allocation can keep zoning/earning; a paid project takes the shared
-    // capital turn only once its own bucket can fund the entire quote.
-    if (pass.techSavingActive && !pass.techResearch
-        && (!pass.incomeBuckets || (spendingLedger.available(QuantBotSpendingPolicy::Bucket::Production) >= pass.techCandidate.cost
-            && int64_t(pass.money) >= int64_t(pass.techCandidate.cost) + pass.techWorkingReserve))) {
+    pass.techSavingActive = pass.techSavings && feasible && simpleReady;
+    pass.techFundingPriority |= pass.techSavingActive;
+    if (pass.techSavingActive && !pass.techResearch) {
         pass.techCandidateIndex = int(pass.capitalCandidates.size());
         pass.capitalCandidates.push_back(pass.techCandidate);
     }
-    if (pass.techSavingActive && pass.techResearch && pass.incomeBuckets)
-        pass.civWarsResearchReserve = std::min(pass.techCandidate.cost,
-            spendingLedger.available(QuantBotSpendingPolicy::Bucket::Production));
     planningBuilder = NONE_ID; clearPlacementCache(false, true);
     if (AITelemetry::log().enabled()) traceDecision("tech_savings_plan", AITelemetry::Record().set("tech_savings", pass.techSavings)
-        .set("savings_policy", !pass.techSavings ? "off" : pass.incomeBuckets ? "income_buckets" : "installments")
-        .set("income_buckets", pass.incomeBuckets).set("tech_funding", pass.techFundingPriority)
+        .set("savings_policy", pass.techSavings ? "installments" : "off")
+        .set("income_buckets", 0).set("tech_funding", pass.techFundingPriority)
         .set("feasible", feasible).set("active", pass.techSavingActive).set("stable", stable)
         .set("candidate_kind", !feasible ? "none" : pass.techResearch ? "research" : pass.techUpgrade ? "upgrade" : "structure")
         .set("item", pass.techCandidate.item).set("builder", pass.techCandidate.builder)
@@ -3255,11 +3219,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
         .set("committed_cost", pass.queuedProductionCost).set("forecast_net_income", pass.forecastNetIncome)
         .set("horizon_cycles", CityEconomyInvestmentPolicy::horizonCycles)
         .set("working_reserve", pass.techWorkingReserve).set("defence_minimum", pass.defenceMinimumValue)
-        .set("ready_ground_units", pass.readyGroundUnits).set("ready_ground_value", pass.readyGroundValue)
-        .set("production_bps", pass.incomeShares[0]).set("economy_bps", pass.incomeShares[1])
-        .set("military_bps", pass.incomeShares[2]).set("ledger_initialized", spendingLedger.initialized)
-        .set("production_balance", spendingLedger.balance[0]).set("economy_balance", spendingLedger.balance[1])
-        .set("military_balance", spendingLedger.balance[2]));
+        .set("ready_ground_units", pass.readyGroundUnits).set("ready_ground_value", pass.readyGroundValue));
 }
 
 void QuantBot::planCapitalCandidates(BuildPass& pass) {
@@ -3882,7 +3842,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         const Uint32 budgetItem = upgrade && builder ? builder->getItemID() : candidate.item;
         if (!spendingAdmits(pass, budgetItem, candidate.price + candidate.foundationCost, upgrade)) {
             candidate.score = 0;
-            candidate.reason = "income_bucket_savings";
+            candidate.reason = "unplanned_technology";
         }
     }
 }
@@ -3980,9 +3940,8 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             pass.protectionCapital = true;
         }
     }
-    // Production owns only its allocated cash, not the entire treasury. Its
-    // next legal project precedes routine replenishment and repeat zoning;
-    // actual safety and first-Starport savings keep their existing priority.
+    // The existing experimental project owns the shared capital turn.
+    // Actual safety and first-Starport priorities remain unchanged here.
     if (pass.techSavingActive && pass.techCandidateIndex >= 0
         && (!pass.protectionCapital || (pass.capitalChoice >= 0
             && !(pass.airEngaged && pass.hostileAircraft > 0 && pass.trooperCount < pass.trooperTarget)
@@ -4112,12 +4071,7 @@ int QuantBot::capitalReserve(BuildPass& pass, Uint32 builder) {
     if (!capitalPending(pass)) return 0;
     const auto& candidate = pass.capitalCandidates[pass.capitalChoice];
     int64_t cost = int64_t(candidate.price) + candidate.foundationCost;
-    if (pass.techSavings && !pass.incomeBuckets && pass.capitalChoice == pass.techCandidateIndex) return 0;
-    if (pass.incomeBuckets && !spendingEmergency(pass, candidate.item)) {
-        const auto bucket = std::string_view(candidate.kind) == "tech_upgrade"
-            ? QuantBotSpendingPolicy::Bucket::Production : QuantBotBuildPolicy::spendingBucket(candidate.item);
-        cost = std::min<int64_t>(cost, spendingLedger.available(bucket));
-    }
+    if (pass.techSavings && pass.capitalChoice == pass.techCandidateIndex) return 0;
     const bool infrastructure = std::string_view(candidate.kind) == "trooper_support";
     if (infrastructure || std::string_view(candidate.kind) == "trooper_recruitment") {
         if (infrastructure) cost = std::max<int64_t>(cost, candidate.cost);

@@ -6,8 +6,6 @@
 #include <players/QuantBotStrategy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotSpendingPolicy.h>
-#include <misc/IMemoryStream.h>
-#include <misc/OMemoryStream.h>
 
 #include <array>
 #include <cstdio>
@@ -406,64 +404,6 @@ TEST_CASE("Funded classic production defaults on and is loaded saved and hashed"
     std::filesystem::remove(path);
 }
 
-TEST_CASE("Tech savings defaults off and independently round-trips both hashed states",
-          "[ai][production][technology][config]") {
-    const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.techSavings);
-    const auto path = std::filesystem::temp_directory_path() / "quantbot-tech-savings-test.ini";
-    const auto savedPath = std::filesystem::temp_directory_path() / "quantbot-tech-savings-saved-test.ini";
-    const auto savedBytes = [&](const QuantBotConfig& config) {
-        REQUIRE(config.save(savedPath.string()));
-        std::ifstream ini(savedPath, std::ios::binary);
-        REQUIRE(ini.good());
-        return std::string(std::istreambuf_iterator<char>(ini), std::istreambuf_iterator<char>());
-    };
-
-    for (const bool causalControlsOff : {false, true}) {
-        QuantBotConfig baseline = defaults;
-        if (causalControlsOff) {
-            baseline.force.trooperSupport = false;
-            baseline.force.fundedClassicProduction = false;
-            baseline.force.waveReadinessPercent = 83;
-        }
-        QuantBotConfig config = baseline;
-        const auto disabledHash = baseline.getConfigHash();
-        {
-            std::ofstream ini(path);
-            ini << "[Force Concentration]\n";
-        }
-        REQUIRE(config.applyOverrides(path.string()));
-        REQUIRE_FALSE(config.force.techSavings);
-        REQUIRE(config.getConfigHash() == disabledHash);
-
-        for (const bool enabled : {true, false, true}) {
-            QuantBotConfig expected = baseline;
-            expected.force.techSavings = enabled;
-            const auto expectedBytes = savedBytes(expected);
-            {
-                std::ofstream ini(path);
-                ini << "[Force Concentration]\nTechSavings=" << (enabled ? "true" : "false") << '\n';
-            }
-            REQUIRE(config.applyOverrides(path.string()));
-            REQUIRE(config.force.techSavings == enabled);
-            REQUIRE((config.getConfigHash() == disabledHash) == !enabled);
-            REQUIRE(config.getConfigHash() == expected.getConfigHash());
-            // One-key overrides preserve every unrelated option, including the
-            // independent TrooperSupport/FundedClassicProduction causal controls.
-            REQUIRE(savedBytes(config) == expectedBytes);
-
-            QuantBotConfig restored;
-            restored.force.techSavings = !enabled;
-            REQUIRE(restored.applyOverrides(savedPath.string()));
-            REQUIRE(restored.force.techSavings == enabled);
-            REQUIRE(restored.getConfigHash() == expected.getConfigHash());
-            REQUIRE(savedBytes(restored) == expectedBytes);
-        }
-    }
-    std::filesystem::remove(path);
-    std::filesystem::remove(savedPath);
-}
-
 TEST_CASE("Simple tech savings defaults off and independently round-trips both hashed states",
           "[ai][production][technology][config][simple-tech-savings]") {
     const QuantBotConfig defaults;
@@ -476,68 +416,63 @@ TEST_CASE("Simple tech savings defaults off and independently round-trips both h
         REQUIRE(ini.good());
         return std::string(std::istreambuf_iterator<char>(ini), std::istreambuf_iterator<char>());
     };
-    std::array<std::string, 16> independentHashes;
+    std::array<std::string, 8> independentHashes;
     size_t hashCount = 0;
 
-    for (const bool ledgerEnabled : {false, true}) {
-        for (const bool trooperEnabled : {false, true}) {
-            for (const bool fundedEnabled : {false, true}) {
-                CAPTURE(ledgerEnabled, trooperEnabled, fundedEnabled);
-                QuantBotConfig baseline = defaults;
-                baseline.force.techSavings = ledgerEnabled;
-                baseline.force.trooperSupport = trooperEnabled;
-                baseline.force.fundedClassicProduction = fundedEnabled;
-                QuantBotConfig config = baseline;
-                const auto disabledHash = baseline.getConfigHash();
-                independentHashes[hashCount++] = disabledHash;
-                QuantBotConfig enabledConfig = baseline;
-                enabledConfig.force.simpleTechSavings = true;
-                independentHashes[hashCount++] = enabledConfig.getConfigHash();
+    for (const bool trooperEnabled : {false, true}) {
+        for (const bool fundedEnabled : {false, true}) {
+            CAPTURE(trooperEnabled, fundedEnabled);
+            QuantBotConfig baseline = defaults;
+            baseline.force.trooperSupport = trooperEnabled;
+            baseline.force.fundedClassicProduction = fundedEnabled;
+            QuantBotConfig config = baseline;
+            const auto disabledHash = baseline.getConfigHash();
+            independentHashes[hashCount++] = disabledHash;
+            QuantBotConfig enabledConfig = baseline;
+            enabledConfig.force.simpleTechSavings = true;
+            independentHashes[hashCount++] = enabledConfig.getConfigHash();
 
-                for (const bool enabled : {false, true, false, true}) {
-                    QuantBotConfig expected = baseline;
-                    expected.force.simpleTechSavings = enabled;
-                    const auto expectedBytes = savedBytes(expected);
-                    {
-                        std::ofstream ini(path);
-                        ini << "[Force Concentration]\nSimpleTechSavings="
-                            << (enabled ? "true" : "false") << '\n';
-                    }
-                    REQUIRE(config.applyOverrides(path.string()));
-                    REQUIRE(config.force.simpleTechSavings == enabled);
-                    REQUIRE(config.force.techSavings == ledgerEnabled);
-                    REQUIRE(config.force.trooperSupport == trooperEnabled);
-                    REQUIRE(config.force.fundedClassicProduction == fundedEnabled);
-                    REQUIRE((config.getConfigHash() == disabledHash) == !enabled);
-                    REQUIRE(config.getConfigHash() == expected.getConfigHash());
-                    // A one-key override must preserve every other setting.
-                    REQUIRE(savedBytes(config) == expectedBytes);
-
-                    // Missing optional keys preserve either current state, not just OFF.
-                    {
-                        std::ofstream ini(path);
-                        ini << "[Force Concentration]\n";
-                    }
-                    REQUIRE(config.applyOverrides(path.string()));
-                    REQUIRE(config.force.simpleTechSavings == enabled);
-                    REQUIRE(config.getConfigHash() == expected.getConfigHash());
-                    REQUIRE(savedBytes(config) == expectedBytes);
-
-                    QuantBotConfig restored;
-                    restored.force.simpleTechSavings = !enabled;
-                    REQUIRE(restored.applyOverrides(savedPath.string()));
-                    REQUIRE(restored.force.simpleTechSavings == enabled);
-                    REQUIRE(restored.force.techSavings == ledgerEnabled);
-                    REQUIRE(restored.force.trooperSupport == trooperEnabled);
-                    REQUIRE(restored.force.fundedClassicProduction == fundedEnabled);
-                    REQUIRE(restored.getConfigHash() == expected.getConfigHash());
-                    REQUIRE(savedBytes(restored) == expectedBytes);
+            for (const bool enabled : {false, true, false, true}) {
+                QuantBotConfig expected = baseline;
+                expected.force.simpleTechSavings = enabled;
+                const auto expectedBytes = savedBytes(expected);
+                {
+                    std::ofstream ini(path);
+                    ini << "[Force Concentration]\nSimpleTechSavings="
+                        << (enabled ? "true" : "false") << '\n';
                 }
+                REQUIRE(config.applyOverrides(path.string()));
+                REQUIRE(config.force.simpleTechSavings == enabled);
+                REQUIRE(config.force.trooperSupport == trooperEnabled);
+                REQUIRE(config.force.fundedClassicProduction == fundedEnabled);
+                REQUIRE((config.getConfigHash() == disabledHash) == !enabled);
+                REQUIRE(config.getConfigHash() == expected.getConfigHash());
+                // A one-key override must preserve every other setting.
+                REQUIRE(savedBytes(config) == expectedBytes);
+
+                // Missing optional keys preserve either current state, not just OFF.
+                {
+                    std::ofstream ini(path);
+                    ini << "[Force Concentration]\n";
+                }
+                REQUIRE(config.applyOverrides(path.string()));
+                REQUIRE(config.force.simpleTechSavings == enabled);
+                REQUIRE(config.getConfigHash() == expected.getConfigHash());
+                REQUIRE(savedBytes(config) == expectedBytes);
+
+                QuantBotConfig restored;
+                restored.force.simpleTechSavings = !enabled;
+                REQUIRE(restored.applyOverrides(savedPath.string()));
+                REQUIRE(restored.force.simpleTechSavings == enabled);
+                REQUIRE(restored.force.trooperSupport == trooperEnabled);
+                REQUIRE(restored.force.fundedClassicProduction == fundedEnabled);
+                REQUIRE(restored.getConfigHash() == expected.getConfigHash());
+                REQUIRE(savedBytes(restored) == expectedBytes);
             }
         }
     }
     REQUIRE(hashCount == independentHashes.size());
-    // The new switch cannot alias TechSavings or either causal-control flag.
+    // The new switch cannot alias either causal-control flag.
     for (size_t first = 0; first < hashCount; ++first) {
         for (size_t second = first + 1; second < hashCount; ++second)
             REQUIRE(independentHashes[first] != independentHashes[second]);
@@ -546,83 +481,6 @@ TEST_CASE("Simple tech savings defaults off and independently round-trips both h
     std::filesystem::remove(savedPath);
 }
 
-TEST_CASE("Tech savings buckets allocate only net receipts and charge commitments once",
-          "[ai][production][technology][budget]") {
-    using namespace QuantBotSpendingPolicy;
-    const Shares safe{3000, 3500, 3500};
-    const Shares threatened{1500, 2000, 6500};
-    REQUIRE(incomeShares(false) == safe);
-    REQUIRE(incomeShares(true) == threatened);
-    Ledger ledger;
-    REQUIRE_FALSE(ledger.initialized);
-    REQUIRE(ledger.balance == std::array<int64_t, 3>{});
-    ledger.reconcile(1000, safe);
-    REQUIRE(ledger.initialized);
-    REQUIRE(ledger.balance == std::array<int64_t, 3>{3000000, 3500000, 3500000});
-    REQUIRE(ledger.available(Bucket::Production) == 300);
-    REQUIRE(ledger.available(Bucket::Economy) == 350);
-    REQUIRE(ledger.available(Bucket::Military) == 350);
-
-    // One accepted 300-credit order commits its full quote now. Paying its
-    // installments reduces cash and unpaid commitments equally, not wealth.
-    ledger.charge(Bucket::Production, 300);
-    const auto committed = ledger.balance;
-    REQUIRE(ledger.lastWealth == 700);
-    for (const int paid : {0, 1, 100, 299, 300}) {
-        const int cash = 1000 - paid;
-        const int unpaid = 300 - paid;
-        ledger.reconcile(cash - unpaid, safe);
-        REQUIRE(ledger.balance == committed);
-    }
-    ledger.reconcile(800, threatened);
-    REQUIRE(ledger.balance == std::array<int64_t, 3>{150000, 3700000, 4150000});
-    REQUIRE(ledger.lastWealth == 800);
-
-    // Real upkeep/losses are negative net receipts, not a new positive-income
-    // endowment; the 35-credit division retains fractional bucket credits.
-    ledger.reconcile(765, safe);
-    REQUIRE(ledger.balance == std::array<int64_t, 3>{45000, 3577500, 4027500});
-    REQUIRE(ledger.available(Bucket::Production) == 4);
-    REQUIRE(ledger.balance[0] + ledger.balance[1] + ledger.balance[2] == 765 * creditScale);
-}
-
-TEST_CASE("Tech savings emergency debt is repaid in its own bucket and survives real stream encoding",
-          "[ai][production][technology][budget][save]") {
-    using namespace QuantBotSpendingPolicy;
-    Ledger ledger;
-    ledger.reconcile(300, incomeShares(false));
-    // The live engine fixture proves exact-budget worker/power admission.
-    // This exercises the resulting debt and receipt arithmetic without a cap,
-    // floating point, or borrowing the same other-bucket savings twice.
-    ledger.charge(Bucket::Economy, 300);
-    REQUIRE(ledger.balance == std::array<int64_t, 3>{900000, -1950000, 1050000});
-    REQUIRE(ledger.available(Bucket::Economy) == 0);
-    ledger.reconcile(100, incomeShares(false));
-    REQUIRE(ledger.balance == std::array<int64_t, 3>{1200000, -1600000, 1400000});
-    REQUIRE(ledger.available(Bucket::Economy) == 0);
-    const int64_t largeReceipt = int64_t{1} << 40;
-    ledger.reconcile(100 + largeReceipt, incomeShares(true));
-    REQUIRE(ledger.balance[0] == 1200000 + largeReceipt * 1500);
-    REQUIRE(ledger.balance[1] == -1600000 + largeReceipt * 2000);
-    REQUIRE(ledger.balance[2] == 1400000 + largeReceipt * 6500);
-    REQUIRE(ledger.balance[0] + ledger.balance[1] + ledger.balance[2]
-            == ledger.lastWealth * creditScale);
-
-    OMemoryStream output;
-    output.open();
-    ledger.save(output);
-    output.writeUint32(0xabcdef01u);
-    IMemoryStream input(output.getData(), output.getDataLength());
-    Ledger restored;
-    restored.load(input);
-    REQUIRE(restored.initialized == ledger.initialized);
-    REQUIRE(restored.lastWealth == ledger.lastWealth);
-    REQUIRE(restored.balance == ledger.balance);
-    REQUIRE(input.readUint32() == 0xabcdef01u);
-    ledger.reconcile(ledger.lastWealth + 7, incomeShares(false));
-    restored.reconcile(restored.lastWealth + 7, incomeShares(false));
-    REQUIRE(restored.balance == ledger.balance);
-}
 
 TEST_CASE("Tech savings vehicle choices use current and queued value without future cheap quotas",
           "[ai][production][technology][composition]") {

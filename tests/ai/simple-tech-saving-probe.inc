@@ -1,4 +1,4 @@
-// Private balance executable only. Include after tech-saving-probe.inc: its real
+// Private balance executable only. Include after tech-production-probe.inc: its real
 // World and PaidProduction remain the source of game setup, payment and queues.
 // Structures start at zero cash on ordinary engine installments. Upgrades keep
 // the human full-credit start rule, with no extra AI reserve. No saved wallet.
@@ -7,11 +7,12 @@
 
 namespace SimpleTechSavingProbe {
 
-using TechSavingProbe::Army;
-using TechSavingProbe::Stage;
-using TechSavingProbe::PaidProduction;
-using TechSavingProbe::vehicles;
-using TechSavingProbe::light;
+using TechProductionProbe::Army;
+using TechProductionProbe::World;
+using TechProductionProbe::Stage;
+using TechProductionProbe::PaidProduction;
+using TechProductionProbe::vehicles;
+using TechProductionProbe::light;
 
 inline void require(bool ok, const char* reason) {
     if (!ok) {
@@ -19,28 +20,6 @@ inline void require(bool ok, const char* reason) {
         throw std::runtime_error(reason);
     }
 }
-
-struct World : TechSavingProbe::World {
-    World(const char* mod, const char* playerClass, bool enabled, Stage stage,
-          Army army = Army::ReadyLight, int workers = 8, bool causalControlsOff = false,
-          HOUSETYPE side = HOUSE_HARKONNEN, int carryalls = 3, int unitLimit = -1)
-        : TechSavingProbe::World(mod, playerClass, false, stage, army, workers,
-                                 causalControlsOff, side, carryalls, unitLimit) {
-        auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
-        config->force.techSavings = false;
-        config->force.simpleTechSavings = enabled;
-        bot->configOverride = config;
-        configHash = config->getConfigHash();
-        ledgerUnused();
-    }
-
-    void ledgerUnused() const {
-        const auto& ledger = bot->getSpendingLedger();
-        require(!bot->botConfig().force.techSavings && !ledger.initialized
-                    && ledger.lastWealth == 0 && ledger.balance == std::array<int64_t, 3>{},
-                "Simple policy initialized, reconciled or charged the saved ledger");
-    }
-};
 
 inline bool contentReachable(const World& world, Uint32 goal) {
     const auto& data = world.game->objectData.data;
@@ -126,9 +105,8 @@ struct Case {
 
     void inspect() {
         const auto pass = world.observePlan();
-        world.ledgerUnused();
-        require(pass.techSavings == world.bot->botConfig().force.simpleTechSavings && !pass.incomeBuckets,
-                "Simple fixture did not select the independent active-policy/ledger-only build-pass flags");
+        require(pass.techSavings == world.bot->botConfig().force.simpleTechSavings,
+                "Simple fixture did not select the single hashed active-policy build-pass flag");
         if (pass.techSavingActive)
             require(pass.techCandidate.item != NONE_ID && pass.techCandidate.builder != NONE_ID
                         && pass.techCandidate.cost > 0,
@@ -164,7 +142,6 @@ struct Case {
     }
 
     void poll() {
-        world.ledgerUnused();
         const Uint32 cycle = world.game->getGameCycleCount();
         if (cycle - lastInspection >= MILLI2CYCLES(5000)) inspect();
         if (cycle - startCycle - lastHeartbeat >= MILLI2CYCLES(30000)) {
@@ -268,7 +245,6 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
         PaidProduction evidence(world);
         world.build();
         evidence.observe();
-        world.ledgerUnused();
         const int addedCheap = world.queuedLight() - queuedBefore;
         if (!enabled) {
             offHash = world.configHash;
@@ -305,7 +281,7 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
         }
         SDL_Log("SIMPLE_TECH_SAVING_COMPOSITION: mod=%s difficulty=%s enabled=%d queued_control=%d "
                 "causal_controls_off=%d existing_value=%d committed_value=%d committed_light=%d "
-                "cheap_added=%d legacy_cheap_added=%d selected=%u heavy_completed=%d ledger_unused=1 config_hash=%s",
+                "cheap_added=%d legacy_cheap_added=%d selected=%u heavy_completed=%d stateless_policy=1 config_hash=%s",
                 mod, playerClass, int(enabled), int(queuedControl), int(causalControlsOff), existingValue,
                 committedValue, committedLight, addedCheap, offCheap, selected, evidence.heavyCompleted(),
                 world.configHash.c_str());
@@ -366,7 +342,7 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
     world.bot->militaryValueLimit = 6000;
     Case run(world, name, mod, playerClass);
     const auto initial = world.observePlan();
-    require(initial.techSavings && !initial.incomeBuckets && initial.techSavingActive
+    require(initial.techSavings && initial.techSavingActive
                 && initial.techCandidate.item == item && initial.techCandidate.cost == initialQuote
                 && initial.techUpgrade == upgrade && !initial.techResearch
                 && initial.strategicReserveCost == 0 && !initial.militaryEmergency
@@ -382,7 +358,6 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
     PaidProduction evidence(world);
     world.build();
     evidence.observe();
-    world.ledgerUnused();
     const bool startFunded = initialCash >= initialQuote;
     if (upgrade) {
         require(heavy->isUpgrading() == startFunded,
@@ -459,7 +434,7 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
                "Selected project did not receive ordinary cash-paid installments and bounded income-funded completion");
     SDL_Log("SIMPLE_TECH_SAVING_INSTALLMENTS: case=%s mod=%s difficulty=%s item=%u quote=%d initial_cash=%d "
             "zero_cash=%d exact_quote=%d upgrade_human_gate=%d parallel_yards=2 real_receipts=1 "
-            "cash_payment=1 paid_completed=1 ledger_unused=1",
+            "cash_payment=1 paid_completed=1 stateless_policy=1",
             name, mod, playerClass, item, initial.techCandidate.cost, initialCash,
             int(cashMode == StartCash::Zero), int(cashMode == StartCash::ExactQuote), int(upgrade));
 }
@@ -532,7 +507,7 @@ inline void exactOpeningWorker(const char* mod, const char* playerClass) {
     while (world.game->getGameCycleCount() < end && world.owner->getNumHarvesters() == 0) run.step(evidence);
     run.finish(world.owner->getNumHarvesters() > 0,
                "Exactly paid opening-worker import never delivered a real worker through ordinary engine cycles");
-    SDL_Log("SIMPLE_TECH_SAVING_OPENING_WORKER: mod=%s difficulty=%s exact_quote=%d paid=1 delivered=1 ledger_unused=1",
+    SDL_Log("SIMPLE_TECH_SAVING_OPENING_WORKER: mod=%s difficulty=%s exact_quote=%d paid=1 delivered=1 stateless_policy=1",
             mod, playerClass, price);
 }
 
@@ -584,11 +559,11 @@ inline void defensiveMinimum(const char* mod, const char* playerClass, bool dist
             }
         require(asset, "Local-defence control has no real threatened economic asset");
         const Coord center = asset->getLocation();
-        const auto attackers = TechSavingProbe::spawnGroundBand(world, world.enemy, Unit_Tank, 18, center, 1, 4);
+        const auto attackers = TechProductionProbe::spawnGroundBand(world, world.enemy, Unit_Tank, 18, center, 1, 4);
         for (auto* tank : attackers)
             Command(world.pilot->getPlayerID(), CMD_UNIT_ATTACKOBJECT, tank->getObjectID(),
                     asset->getObjectID()).executeCommand();
-        const auto defenders = TechSavingProbe::spawnGroundBand(world, world.owner, Unit_SiegeTank, 60, center, 25, 64);
+        const auto defenders = TechProductionProbe::spawnGroundBand(world, world.owner, Unit_SiegeTank, 60, center, 25, 64);
         for (const auto* defender : defenders)
             require(blockDistance(defender->getLocation(), center) > 24,
                     "Distant-army control accidentally supplied local mobile cover");
@@ -640,19 +615,19 @@ inline void freshCity(const char* mod, const char* playerClass) {
     const Uint32 end = world.game->getGameCycleCount() + MILLI2CYCLES(1800000);
     auto complete = [&] {
         return supplierBelowFloor && supplierWorkerPower && reachedFloor && dispatched
-            && evidence.factoryUnitCompleted() && TechSavingProbe::builtCityLots(world) > lotsAtSupplier
+            && evidence.factoryUnitCompleted() && TechProductionProbe::builtCityLots(world) > lotsAtSupplier
             && (!requireHeavy || (evidence.completed(Structure_HeavyFactory) && evidence.heavyCompleted() > 0))
             && (!requirePort || evidence.completed(Structure_StarPort))
             && world.owner->getHarvestedSpice() + world.owner->getCityTaxReceipts() > 0;
     };
     while (world.game->getGameCycleCount() < end && !complete()) {
         run.step(evidence);
-        const auto ready = TechSavingProbe::actualGroundReadiness(world);
+        const auto ready = TechProductionProbe::actualGroundReadiness(world);
         if (lotsAtSupplier < 0 && (evidence.paidTechnology.count(Structure_LightFactory)
                                   || evidence.paidTechnology.count(Structure_HeavyFactory))) {
             supplierBelowFloor = ready.first < 6 || ready.second < minimum;
             supplierWorkerPower = world.owner->getNumHarvesters() > 0 && world.owner->hasPower();
-            lotsAtSupplier = TechSavingProbe::builtCityLots(world);
+            lotsAtSupplier = TechProductionProbe::builtCityLots(world);
         }
         if (!reachedFloor && ready.first >= 6 && ready.second >= minimum) {
             reachedFloor = true;
@@ -671,7 +646,7 @@ inline void freshCity(const char* mod, const char* playerClass) {
             mod, playerClass, int(supplierBelowFloor), int(supplierWorkerPower), int(reachedFloor), int(dispatched),
             int(evidence.factoryUnitCompleted()), int(requireHeavy), int(evidence.completed(Structure_HeavyFactory)),
             int(requirePort), int(evidence.completed(Structure_StarPort)), lotsAtSupplier,
-            TechSavingProbe::builtCityLots(world));
+            TechProductionProbe::builtCityLots(world));
     run.finish(complete(), "CY-only City opening did not pay its supplier below the floor, build a real army and continue economy/technology");
 }
 
@@ -750,7 +725,7 @@ inline void actualT1Research(const char* mod, const char* playerClass) {
                 completed.insert(research.first);
             }
     }
-    const auto ready = TechSavingProbe::actualGroundReadiness(world);
+    const auto ready = TechProductionProbe::actualGroundReadiness(world);
     SDL_Log("SIMPLE_TECH_SAVING_ACTUAL_T1_EVIDENCE: mod=%s difficulty=%s initial_tech=1 "
             "initial_structures=1 initial_units=0 ceiling=%d studies_started=%zu studies_completed=%zu "
             "lab_completed=%d LF_completed=%d HF_completed=%d paid_factory_unit=%d ready_units=%d ready_value=%d",
@@ -773,6 +748,10 @@ void runSimpleTechSavingProbe(const char* mod, const char* playerClass) {
         ~RestoreConfig() { getQuantBotConfig() = saved; }
     } restore;
     const auto start = std::chrono::steady_clock::now();
+    {
+        SimpleTechSavingProbe::World world(mod, playerClass, true, SimpleTechSavingProbe::Stage::Complete);
+        TechProductionProbe::statelessSaveRoundTrips(world);
+    }
     for (const bool causalControlsOff : {false, true}) {
         SimpleTechSavingProbe::composition(mod, playerClass, false, causalControlsOff);
         SimpleTechSavingProbe::composition(mod, playerClass, true, causalControlsOff);
@@ -795,7 +774,7 @@ void runSimpleTechSavingProbe(const char* mod, const char* playerClass) {
     const auto wall = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start).count();
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=simple_tech_saving outcome=passed mod=%s difficulty=%s "
-            "producer_scope=full_build paid_progress=1 legacy_off=1 queued_composition=1 "
-            "single_legal_project=1 structure_installments=1 ordinary_upgrade_gate=1 ledger_unused=1 causal_controls_off=1 wall_ms=%lld",
+            "producer_scope=full_build paid_progress=1 paired_off=1 queued_composition=1 "
+            "single_legal_project=1 structure_installments=1 ordinary_upgrade_gate=1 stateless_policy=1 causal_controls_off=1 wall_ms=%lld",
             mod, playerClass, static_cast<long long>(wall));
 }

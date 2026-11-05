@@ -28,7 +28,6 @@
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotColonisationPolicy.h>
 #include <players/QuantBotFoundationPolicy.h>
-#include <players/QuantBotSpendingPolicy.h>
 #include <units/MCV.h>
 class Harvester;
 #include <players/QuantBotConfig.h>
@@ -155,7 +154,6 @@ public:
         int infantryQuotaBps = 0;
     };
     const AllocationSnapshot& getAllocationSnapshot() const { return allocationSnapshot; }
-    const QuantBotSpendingPolicy::Ledger& getSpendingLedger() const { return spendingLedger; }
     std::string getDifficultyName() const;
     bool permitsPoliceReinforcement(int unitValue) const;
     /// True when the lobby selected an explicit "Maximum Number of Units Override"
@@ -350,8 +348,6 @@ private:
     Uint32 powerDemandSampleCycle = 0;
     Sint32 powerDemandSample = 0;
     Sint32 projectedPowerDemandGrowth = 0;
-    /// Exact net-income allocations and accepted commitments, saved from 9884.
-    QuantBotSpendingPolicy::Ledger spendingLedger{};
     Coord squadRetreatLocation = Coord::Invalid();
     AIRole role = AIRole::Both;
     Uint32 lastStatsLogCycle = 0;

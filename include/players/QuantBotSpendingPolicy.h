@@ -2,7 +2,6 @@
 #define QUANTBOT_SPENDING_POLICY_H
 
 #include <algorithm>
-#include <array>
 #include <cstdint>
 
 // Integer-only, recomputed from live state each planning pass. No saved timers,
@@ -10,51 +9,10 @@
 namespace QuantBotSpendingPolicy {
 constexpr int horizonMinutes = 4;
 enum class Bucket : unsigned { Production, Economy, Military };
-constexpr size_t bucketCount = 3;
-constexpr int64_t creditScale = 10000;
-using Shares = std::array<int, bucketCount>;
-inline Shares incomeShares(bool threatened) {
-    return threatened ? Shares{1500, 2000, 6500} : Shares{3000, 3500, 3500};
-}
 inline const char* bucketName(Bucket bucket) {
     return bucket == Bucket::Production ? "production"
         : bucket == Bucket::Economy ? "economy" : "military";
 }
-// The balance is allocated net income, not forecast receipts. Full accepted
-// commitments are charged once, before the engine pays their installments.
-// Subtracting unpaid queues from cash makes their later payments wealth-neutral.
-// Emergency borrowing leaves debt in its own bucket; subsequent income repays
-// it rather than silently spending another bucket's savings a second time.
-struct Ledger {
-    static constexpr size_t savedBytes = 1 + 8 + bucketCount * 8;
-    std::array<int64_t, bucketCount> balance{};
-    int64_t lastWealth = 0;
-    bool initialized = false;
-
-    void reconcile(int64_t wealth, const Shares& shares) {
-        const int64_t receipts = initialized ? wealth - lastWealth : wealth;
-        for (size_t i = 0; i < bucketCount; ++i) balance[i] += receipts * shares[i];
-        lastWealth = wealth;
-        initialized = true;
-    }
-    int available(Bucket bucket) const {
-        return int(std::clamp<int64_t>(balance[static_cast<size_t>(bucket)] / creditScale, 0, INT32_MAX));
-    }
-    void charge(Bucket bucket, int price) {
-        balance[static_cast<size_t>(bucket)] -= int64_t(price) * creditScale;
-        lastWealth -= price;
-    }
-    template<class Stream> void save(Stream& stream) const {
-        stream.writeBool(initialized);
-        stream.writeSint64(lastWealth);
-        for (const auto value : balance) stream.writeSint64(value);
-    }
-    template<class Stream> void load(Stream& stream) {
-        initialized = stream.readBool();
-        lastWealth = stream.readSint64();
-        for (auto& value : balance) value = stream.readSint64();
-    }
-};
 struct CashFlow {
     int projectedCash = 0;
     int netBurnPerMinute = 0;

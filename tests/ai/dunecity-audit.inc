@@ -98,13 +98,6 @@ inline void sampleComposition(Game& game, const House* house, const QuantBot* bo
         int(allocation.ready),allocation.cycle,allocation.infantryQuotaBps,house->getTechLevel(),
         house->getTechResearchTarget(),house->getTechResearchRemaining(),
         int(game.getGameInitSettings().getGameOptions().researchLab),int(game.isCitySimEnabled()));
-    const auto& ledger=bot->getSpendingLedger();
-    SDL_Log("DUNECITY_SPENDING_BUCKETS: minute=%d cycle=%u house=%d bucket_initialized=%d"
-            " bucket_last_wealth=%lld bucket_production_credits_x10000=%lld"
-            " bucket_economy_credits_x10000=%lld bucket_military_credits_x10000=%lld",
-        minute,game.getGameCycleCount(),houseID,int(ledger.initialized),
-        static_cast<long long>(ledger.lastWealth),static_cast<long long>(ledger.balance[0]),
-        static_cast<long long>(ledger.balance[1]),static_cast<long long>(ledger.balance[2]));
     const auto& state=technology[houseID];
     for (size_t i=0; i<kTechItems.size(); ++i)
         SDL_Log("DUNECITY_TECH_STRUCTURE: minute=%d cycle=%u house=%d name=%s item=%u live=%d built=%d"

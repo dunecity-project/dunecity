@@ -8,7 +8,6 @@
 #include <Menu/RandomSkirmishMenu.h>
 #include <players/HumanPlayer.h>
 #include <Game.h>
-#include <players/QuantBot.h>
 #include <GameInitSettings.h>
 #include <House.h>
 #include <structures/StructureBase.h>
@@ -150,15 +149,6 @@ void loadSave() {
     }
     auto game = sStart(GameInitSettings(path));
     const bool old = game->getLoadedSavegameVersion() < SAVEGAMEVERSION;
-    if (game->getLoadedSavegameVersion() < SAVEGAMEVERSION_TECH_SAVINGS) {
-        for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game->getHouse(h))
-            for (const auto& player : house->getPlayerList())
-                if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
-                    const auto& ledger = bot->getSpendingLedger();
-                    sRequire(!ledger.initialized && ledger.lastWealth == 0
-                        && ledger.balance == std::array<int64_t, 3>{}, "an old save did not start with an empty bucket ledger");
-                }
-    }
     expectNativeWorms(*game, sReport(*game, "loaded"), "loaded");
     // Tax rates are per house from save 9880; an older save held one rate, which every house keeps.
     auto* city = game->getCitySimulation();
@@ -177,17 +167,6 @@ void loadSave() {
             city->setCityTax(h, static_cast<int16_t>(3 + h % 15));
             taxRates.push_back(city->getCityTax(h));
         }
-    std::map<Uint8, QuantBotSpendingPolicy::Ledger> expectedLedgers;
-    for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game->getHouse(h))
-        for (const auto& player : house->getPlayerList())
-            if (auto* bot = dynamic_cast<QuantBot*>(player.get())) {
-                // Exercise signed debts and sub-credit allocation precision, not
-                // merely the all-zero default while the experimental switch is off.
-                bot->spendingLedger.initialized = true;
-                bot->spendingLedger.lastWealth = house->getCredits();
-                bot->spendingLedger.balance = {1234567 + h, -76543 - h, 987654 + h};
-                expectedLedgers.emplace(bot->getPlayerID(), bot->spendingLedger);
-            }
     sRequire(game->saveGame(resaved), "Could not re-save");
     sEnd(game);
     game = sStart(GameInitSettings(resaved));
@@ -198,16 +177,6 @@ void loadSave() {
     if(auto* reloaded = game->getCitySimulation(); !taxRates.empty())
         for(int h = 0; h < DuneCity::kMaxCityHouses; ++h)
             sRequire(reloaded && reloaded->getCityTax(h) == taxRates[h], "a house's tax rate did not survive the save");
-    for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game->getHouse(h))
-        for (const auto& player : house->getPlayerList())
-            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
-                const auto expected = expectedLedgers.find(bot->getPlayerID());
-                sRequire(expected != expectedLedgers.end(), "a saved QuantBot disappeared");
-                const auto& ledger = bot->getSpendingLedger();
-                sRequire(ledger.initialized == expected->second.initialized
-                    && ledger.lastWealth == expected->second.lastWealth
-                    && ledger.balance == expected->second.balance, "income-bucket state did not survive a real save round trip");
-            }
     sRun(*game, 60);
     sEnd(game);
     SDL_Log("SAVE_PROBE: round trip of a %s save: ok", old ? "previous-version" : "current-version");

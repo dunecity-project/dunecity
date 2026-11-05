@@ -8320,20 +8320,6 @@ GameStateDigest::Digest Game::computeStateDigest() const {
             houses.mixInt32(pHouse->getTechResearchRemaining());
             houses.mixUint32(pHouse->getTechResearchLabID());
         }
-        for (const auto& player : pHouse->getPlayerList()) {
-            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
-                const auto& ledger = bot->getSpendingLedger();
-                // A never-used ledger is neutral: keep the OFF arm's established
-                // lockstep fingerprints, while hashing every nonempty saved ledger.
-                if (!ledger.initialized && ledger.lastWealth == 0
-                    && std::all_of(ledger.balance.begin(), ledger.balance.end(),
-                                   [](std::int64_t balance) { return balance == 0; })) continue;
-                houses.mixUint8(bot->getPlayerID());
-                houses.mixUint8(ledger.initialized ? 1 : 0);
-                houses.mixInt64(ledger.lastWealth);
-                for (const auto balance : ledger.balance) houses.mixInt64(balance);
-            }
-        }
     }
     digest.houseHash = houses.value();
 

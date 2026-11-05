@@ -44,94 +44,43 @@
   terrain scales around the pointer while the sidebar remains unchanged.
 - No simulation, protocol, save, hashed rule or persistent preference changes.
 
-## 2026-11-05 — QuantBot technology savings (OMP TechSaving, unreleased)
+## 2026-11-06 — QuantBot ledger removed; installed save format restored (OMP TechSaving, unreleased)
 
-- Stefan supersedes cash-saving budgets with a separate hashed
-  `SimpleTechSavings` (default OFF pending acceptance): start the next legal
-  structure at zero/below-quote cash using ordinary engine installments.
-  Upgrades keep the shared human full-credit start rule, with no extra
-  operating reserve. No engine exemption or command/wire change.
-- This alternative reuses existing-owned-plus-queued composition and the
-  capital planner. While tech needs funding, military purchases are bounded
-  by the threat-sized defensive minimum including commitments; emergency,
-  workers, power and first-SP priorities remain. Old/manual queues stay
-  unchanged. It never initializes or spends the ledger, adds no saved state,
-  and wins if both experimental switches are requested.
-- Ledger `4477575c` remains rejected: all146 legacy tests PASS, six classic
-  feature probes PASS, three City progression deadlines FAIL. Canonical288
-  games/960 houses also fail adoption independently: city researchOFF
-  HF/IX/SP101/55/168→59/2/47 per192 houses; pooled H/B dispatch3.5816→1.2517,
-  kills43309→12643; all six cells/four seed blocks adverse. Full conditioned
-  tables: `confirmation-analysis-4477575c/`. No later policy receives credit.
-- Hashed `TechSavings` remains **OFF** unless paired outcomes support adoption.
-  Exact saved net-income allocations are production/economy/military
-  30/35/35% when safe, 15/20/65% under observed pressure. Full accepted
-  commitments charge once; unspent balances persist and emergency debt is
-  repaid from real receipts. No forecast money is spendable.
-- Unit selection uses current owned-plus-queued replacement-value shares,
-  never the military cap/cash-funded future quota. Every factory/import shares
-  the next composition choice. Ordinary standing troopers obey the existing
-  infantry quota; reactive AA remains. Rejected optional economic growth
-  cannot monopolize an otherwise funded military producer turn.
-- `8a2e9bf1` fixes the measured first-supplier/army-floor cycle and
-  receipt-capacity/Economy-debt trap, retaining exact balances. A fully funded
-  required-capability quote may precede the floor when no legal unit can
-  advance the existing mix; an optional Palace still needs ready defence. Existing
-  generator sizing avoids oversized bootstrap debt. Cheap emergency bypass
-  now requires unmet local ground defence, not just any pressure/aircraft;
-  covering turrets count, distant armies do not. No human/saboteur orders,
-  unitRole authority or save-order migration changed.
-- `4bcefd69` closes overdue/wealth-driven first-tech and optional HF/HTF
-  upgrade paths outside the exact fully funded project. Custom Medium ON
-  permits one first Repair Yard. Adequately defended/air-only pressure keeps
-  threatened shares without freezing growth; actual missing reactive-AA
-  troops retain capital precedence. Ordinary standing floors still yield.
-- Next selection uses only at/below-existing-share legal types; missing heavy
-  availability no longer redistributes its deficit to overweight cheap units.
-  Busy-producer quotes and queue-draining funded upgrades replace an idle-only
-  blind spot. Genuine opening-worker/composition supply may establish the first
-  HF before an unfunded import prerequisite; first SP remains next priority.
-- Root cause: four new prerequisite walks indexed a 27-bit persisted mask
-  with extended IDs up to88. They now bound by `.size()` like the real catalogue;
-  representation/save/protocol unchanged. Early engine assertion requires a
-  catalogue-legal first HF to produce its actual quote. Exact ARM alias remains
-  an inference, not a measured result. Heavy unit admission no longer inherits
-  the legacy 2,000-credit gate under the new bucket policy.
-- Deeper engine census proves the three next failures: parallel city yards
-  queued two first Nuclear Plants; classic's old 2,000-credit cash reserve
-  left exactly700 behind a strict LF `>700` gate despite a funded Military
-  bucket; Medium/Hard import workers were excluded from the opening floor.
-  ON now deduplicates pending reactor capacity, replaces that blanket cash
-  reserve with the exact Economy ledger, and recognizes real Starport worker
-  offers under the existing bounded opening floor. No assertion was weakened.
-- Audit schema now has unique scenario `city` and diagnostic `city_spend`.
-  Historical duplicate-header inputs retain explicit table-aware provenance.
-- Save **9884** adds only QuantBot ledger state;9882/9883 load zero,
-  uninitialized ledgers. Protocol **113** is required because multiplayer
-  base saves and observer snapshots carry serialized AI; supplemental
-  observer-runtime layout is unchanged. Empty unused ledgers are hash-neutral.
-- Historical latest TrooperSupport supplier-matrix OFF→ON:
-  missing-SP15/109→31/111, matched game-rateΔ+.0983 (95%+.0385,+.1624;
-  worse8/better0). This is not a FundedClassicProduction ablation. Historical
-  retained raw games are different-seed subsets, not causal quote comparisons.
-- Rejected initial8a trial:48arms/576 successful logical games, two seeds.
-  City ON dispatch/kills collapse; classic dispatch/kills also adverse.
-  Its OFF acceptance vectors are unmeasured, not zero. Corrected69 raw:
-  18complete streams/4451cheap orders; expanded69 has288 original native
-  games/960houses/41450cheap orders exactly reconciled. All four seed blocks
-  remain adverse for dispatch/kills; city researchOFF HF0/192 ON versus101/192
-  OFF. Exclude144 callback replays;3failedfinalizers are NOT GREEN.
-  All research-ON production audits were actuallyT9; they do not prove
-  research acquisition.
-- Verification receipts:69 corrected four regression paths4/4 (including
-  Pro performance/frozen city digests);6f producer compatibility14/14.
-  Source85 native build/private full-Game9882+9883 roundtrips PASS, including
-  signed subcredit ledger state and600+60cycles. Private saves stay outside
-  the repo. Real T1/bootstrap/debt/local-defence cases are registered in the
-  engine fixture; no unobserved full-suite result is claimed here.
-- Evidence root: `../outputs/tech-saving-20261105/`; last measured rejected
-  gameplay/fixture pin `4bcefd69` (146/155 tests pass; nine owned fixture failures).
-  Later fixes are not retroactively credited to that trial. No deployment.
+- Removed the rejected, never-shipped `TechSavings` ledger completely: runtime
+  allocation/debt state, config/default/hash key, eight factorial styles,
+  ledger-only arithmetic/save fixtures and all nine old engine cases. No shim.
+- Save format is **9883**, protocol **112**, matching Stefan's installed build.
+  The QuantBot33-byte tail and its digest contribution are gone; ordinary
+  9882/9883 blocks retain their former layout. Simple has no saved state, so no
+  additional multiplayer-save/observer wire change is needed. Interim unshipped
+  9884 files are not supported. No private save files are committed.
+- Synthetic engine fixtures now exercise9882 and9883 QuantBot load→9883 resave→
+  reload with following-record checks, plus byte-identical serialization when
+  Simple alone is toggled. Existing9863/9878 prefix fixtures no longer subtract
+  a nonexistent ledger tail. Full-Game private probes are separate evidence.
+- `SimpleTechSavings` stays **OFF**, and its policy behavior is deliberately
+  unchanged in this removal-only commit. The requested economy-first/no-unit-
+  hold iteration is separate. Human upgrade admission and ordinary commands
+  are unchanged; no human/saboteur/unitRole authority changes.
+- Canonical `5f2bdb16`288-game/four-seed trial rejects adoption: city researchOFF
+  HF/IX/SP101/55/168→178/77/80 per192 houses; researchON24/23/36→42/21/21 per48.
+  Pooled H/B dispatch3.5816→1.8793, kills43309→19963; all six cells/four seed
+  blocks adverse. Actual live unit value299.26→314.11 is conditional199/320
+  paired-house coverage, with uncertainty including a decrease. Paired-achiever
+  city HF/IX/SP timing15.779/26.353/18.987→12.545/33.434/31.860m is conditioned.
+- PRIMARY native H/B credited wins/house.2118→.0625; decided games.4583→.1250;
+  own-house eliminated.2969→.1259, observed right-censored survival36.690→38.365m.
+  These globalOFF/globalON selfplay outcomes measure passivity/decisiveness,
+  not direct ON-v-OFF winning power. City gross spice5.712M→4.071M and tax
+  3.790M→.983M. P/E/M labels are accepted spend classes, not allocated budgets.
+- Native source qualifications remain explicit: df7=152/164; 5f targeted new
+  nine=3Dune2R PASS,6CityASAP/Vanilla payment-evidence FAIL. Retiring the old
+  ledger is not a claim that those independent Simple failures were fixed.
+- Evidence root `../outputs/tech-saving-20261105/`; full paired tables,
+  censored tech timing, per-house outcomes/income/composition and exact cheap-
+  order paths are in `confirmation-analysis-{df7da313,5f2bdb16}/`. Earlier
+  ledger trials remain historical evidence only. No deployment performed here.
+
 
 ## 2026-11-05 — QuantBot WOR and troopers (OMP QuantTroopers, unreleased)
 

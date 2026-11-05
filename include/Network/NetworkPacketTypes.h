@@ -348,9 +348,7 @@
 //      Generated Civ Wars prioritizes required per-house research independently of the experimental strategy.
 // 112: MOD18 replaces frozen MOD17's map-area field with Mountain Scenery (save 9883).
 //      Research uses fixed prices/durations rather than map size.
-// 113: QuantBot's hashed TechSavings income buckets persist in save 9884, including
-//      multiplayer/observer checkpoints; older peers cannot consume those AI bytes.
-#define NETWORK_PROTOCOL_VERSION            113
+#define NETWORK_PROTOCOL_VERSION            112
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

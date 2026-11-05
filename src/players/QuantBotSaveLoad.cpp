@@ -262,8 +262,6 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
             if (family) initialItemCount[item] = count;
         }
     }
-    if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TECH_SAVINGS)
-        spendingLedger.load(stream);
     resolveStrategyProfile();
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
@@ -409,7 +407,6 @@ void QuantBot::save(OutputStream& stream) const {
     for (const int share : strategyPrior) stream.writeUint16(static_cast<Uint16>(share));
     for (Uint32 item = Structure_LastID + 1; item <= Unit_TameSandworm; ++item)
         stream.writeUint32(ModManager::instance().isTornieFamilyContentActive() ? initialItemCount[item] : 0);
-    spendingLedger.save(stream);
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.

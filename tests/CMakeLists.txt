@@ -877,24 +877,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         add_test(NAME quantbot_dunecity_audit_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_dunecity_audit.py)
         set_tests_properties(quantbot_dunecity_audit_parser PROPERTIES TIMEOUT 60)
-        # A paired real-engine regression: no instant completion or fixture orders
-        # for the HF/technology being asserted; each difficulty keeps its own
-        # defensive floor, and current/queued composition never uses a huge cap.
-        foreach(tech_mod IN ITEMS vanilla dunecity Dune2R)
-            foreach(tech_difficulty IN ITEMS medium hard brutal)
-                add_test(NAME quantbot_tech_savings_${tech_mod}_${tech_difficulty}
-                    COMMAND ${Python3_EXECUTABLE}
-                    ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --tech-saving-probe --repeatable
-                    --mod ${tech_mod} --partner-difficulty ${tech_difficulty}
-                    --seed 1841712204 --no-ai-telemetry --path-workers 1
-                    --wall-timeout 550 --build-dir ${CMAKE_BINARY_DIR}
-                    --output-dir ${CMAKE_BINARY_DIR}/tech-savings-${tech_mod}-${tech_difficulty}-probe)
-                set_tests_properties(quantbot_tech_savings_${tech_mod}_${tech_difficulty}
-                    PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-            endforeach()
-        endforeach()
-        # Independent ledger-free alternative; never replaces or relaxes the
-        # original saved-ledger matrix above. Both switches are pinned per case.
+        # Stateless Simple policy, independently OFF pending outcome acceptance.
         foreach(simple_tech_mod IN ITEMS vanilla dunecity Dune2R)
             foreach(simple_tech_difficulty IN ITEMS medium hard brutal)
                 add_test(NAME quantbot_simple_tech_savings_${simple_tech_mod}_${simple_tech_difficulty}

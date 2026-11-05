@@ -229,8 +229,7 @@ struct QuantBot::BuildPass {
     int infantryCount{};
     int64_t cityWorCashReserve{};
     int vehiclePlanValue{};
-    bool techSavings{}; // Either owned-composition technology policy is active.
-    bool incomeBuckets{}; // Only the original experiment allocates saved buckets.
+    bool techSavings{}; // Stateless owned-composition and installment policy.
     bool techFundingPriority{};
     UnitMixPolicy::Weights compositionValue{};
     UnitMixPolicy::Weights compositionPrice{};
@@ -308,8 +307,7 @@ struct QuantBot::BuildPass {
     bool openingSupplierDue{};
     int moderateCrimeProperties{};
     int dangerousCrimeProperties{};
-    // planTechSavings(): all transient decisions, only the bucket ledger is saved.
-    QuantBotSpendingPolicy::Shares incomeShares{};
+    // planTechSavings(): all decisions are transient; no saved budget.
     int defenceMinimumValue{};
     bool militaryEmergency{};
     std::array<bool, Num_ItemID> emergencyCivic{};
