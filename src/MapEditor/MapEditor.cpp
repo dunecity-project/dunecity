@@ -37,6 +37,7 @@
 #include <misc/format.h>
 #include <misc/DiscordManager.h>
 #include <misc/TouchInput.h>
+#include <misc/MacTrackpad.h>
 #include <CursorManager.h>
 
 #include <mod/ModManager.h>
@@ -199,6 +200,7 @@ MapEditor::MapEditor() : pInterface(nullptr) {
 }
 
 MapEditor::~MapEditor() {
+    MacTrackpad::setMapArea(nullptr);
     // Clean up cursor manager
     cursorManager.cleanup();
     
@@ -1420,12 +1422,27 @@ void MapEditor::drawScreen() {
     presentWithCursor();
 }
 
+void MapEditor::setZoomLevel(int level, int screenX, int screenY) {
+    level = std::clamp(level, 0, static_cast<int>(NUM_ZOOMLEVEL) - 1);
+    if(level == currentZoomlevel) return;
+    const Coord anchor(screenborder->screen2worldX(screenX), screenborder->screen2worldY(screenY));
+    const Coord center = screenborder->getCurrentCenter();
+    currentZoomlevel = level;
+    screenborder->adjustScreenBorderToMapsize(map.getSizeX(), map.getSizeY());
+    screenborder->setNewScreenCenter(center);
+    const Coord moved(screenborder->screen2worldX(screenX), screenborder->screen2worldY(screenY));
+    screenborder->setNewScreenCenter(screenborder->getCurrentCenter() + anchor - moved);
+}
+
 void MapEditor::processInput() {
     SDL_Event event;
 
-    while(SDL_PollEvent(&event)) {
+    for(;;) {
+        const bool mapInputEnabled = !pInterface->hasChildWindow();
+        MacTrackpad::setMapArea(mapInputEnabled ? &screenborder->getScreenRect() : nullptr);
+        if(!SDL_PollEvent(&event)) break;
         updateCursorVisibilityForInput(event);
-        if(TouchInput::translateTouchEvent(event)) {
+        if(TouchInput::translateTouchEvent(event, mapInputEnabled ? &screenborder->getScreenRect() : nullptr)) {
             continue;
         }
 
@@ -1625,16 +1642,7 @@ void MapEditor::processInput() {
                             screenborder->resetMouseWheelZoom();
                         } else {
                             const int step = screenborder->mouseWheelZoom(event.wheel);
-                            const int next = std::clamp(currentZoomlevel + step, 0, static_cast<int>(NUM_ZOOMLEVEL) - 1);
-                            if(next != currentZoomlevel) {
-                                const Coord anchor(screenborder->screen2worldX(drawnMouseX), screenborder->screen2worldY(drawnMouseY));
-                                const Coord center = screenborder->getCurrentCenter();
-                                currentZoomlevel = next;
-                                screenborder->adjustScreenBorderToMapsize(map.getSizeX(), map.getSizeY());
-                                screenborder->setNewScreenCenter(center);
-                                const Coord moved(screenborder->screen2worldX(drawnMouseX), screenborder->screen2worldY(drawnMouseY));
-                                screenborder->setNewScreenCenter(screenborder->getCurrentCenter() + anchor - moved);
-                            }
+                            setZoomLevel(currentZoomlevel + step, drawnMouseX, drawnMouseY);
                         }
                     } else {
                         screenborder->resetMouseWheelZoom();
@@ -1760,6 +1768,22 @@ void MapEditor::processInput() {
                 case SDL_QUIT:
                 {
                     bQuitEditor = true;
+                } break;
+
+                default: {
+                    TouchInput::MapGesture gesture;
+                    if(TouchInput::decodeMapGesture(event, gesture)) {
+                        bLeftMousePressed = false;
+                        if(gesture.kind == TouchInput::MapGestureKind::Pan) {
+                            const Coord before(screenborder->screen2worldX(gesture.x - gesture.dx),
+                                               screenborder->screen2worldY(gesture.y - gesture.dy));
+                            const Coord after(screenborder->screen2worldX(gesture.x), screenborder->screen2worldY(gesture.y));
+                            screenborder->setNewScreenCenter(screenborder->getCurrentCenter() + before - after);
+                        } else {
+                            setZoomLevel(currentZoomlevel + (gesture.kind == TouchInput::MapGestureKind::ZoomIn ? 1 : -1),
+                                         gesture.x, gesture.y);
+                        }
+                    }
                 } break;
             }
         }

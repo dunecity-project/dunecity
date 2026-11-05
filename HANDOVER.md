@@ -1,3 +1,28 @@
+## 2026-11-05 — Native Mac trackpad pan/pinch and consistent mobile gestures (OMP MouseControls, unreleased)
+
+- Mac two-finger scrolling now pans without a mouse button; native spread/pinch
+  zooms around the cursor. The Cocoa event monitor distinguishes phased or
+  momentum scrolling from unphased physical wheels before SDL discards that
+  metadata. Precision alone is not a device identifier: unphased high-resolution
+  wheels and ordinary notched wheels retain zoom; middle-button grab is unchanged.
+- Native magnification accumulates multiplicatively (`scale *= 1 + delta`),
+  emitting the existing 1.2× zoom steps. Consumed native gestures do not also
+  become SDL wheel events. Sidebar/list/menu scrolling passes through unchanged.
+- Game and editor reuse the existing local `TouchInput::MapGesture` queue.
+  Editor now consumes two-finger pan/zoom on iPhone/iPad too. Mobile map gestures
+  require both touch origins inside the active map, excluding controls; UI/modal
+  origins cannot pan/zoom the map. One-finger UI and two-finger taps are retained.
+- Measured **synthetic**, hidden/non-key, non-activating mini native→SDL trace:
+  SDL2-compat2.32.72/SDL3 3.4.16 collapses phased/unphased native scroll to the
+  same SDL2 wheel fields; native magnification is not delivered as SDL2 pinch.
+  Evidence: `../outputs/mac-trackpad-native-trace-20261105/`. No attach/input/
+  tracing of Stefan's running Air game; the integrator explicitly redirected
+  measurement to an isolated mini instance.
+- Pre-commit syntax checks passed for changed native/C++ TUs, touch tests and
+  the full private C++ balance-probe fixture. Cocoa test injection is compiled
+  separately to avoid AppKit's global Point/FileInfo type collisions.
+- No simulation, protocol, save, hashed rule or persistent preference changes.
+
 ## 2026-11-05 — QuantBot technology savings (OMP TechSaving, unreleased)
 
 - Stefan supersedes cash-saving budgets with a separate hashed

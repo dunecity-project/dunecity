@@ -25,7 +25,10 @@ struct MapGesture {
     int dy = 0;
 };
 
-/// Decodes a map gesture pushed by translateTouchEvent; false for any other event.
+/// Queues the same local camera event for native trackpad and mobile touch input.
+void pushMapGesture(const MapGesture& gesture);
+
+/// Decodes a local map gesture pushed by mobile touch or native trackpad input.
 bool decodeMapGesture(const SDL_Event& event, MapGesture& gesture);
 
 }

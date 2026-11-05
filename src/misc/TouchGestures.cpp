@@ -9,7 +9,7 @@ float TouchGestures::spread() const {
 }
 
 std::array<int, 2> TouchGestures::edgeAt(int x, int y) const {
-    if(!mapArea.contains(x, y) || mapControls.contains(x, y)) return {0, 0};
+    if(!mapAt(x, y)) return {0, 0};
     return {x < mapArea.x + kEdgeWidth ? -1 : (x >= mapArea.x + mapArea.w - kEdgeWidth ? 1 : 0),
             y < mapArea.y + kEdgeWidth ? -1 : (y >= mapArea.y + mapArea.h - kEdgeWidth ? 1 : 0)};
 }
@@ -28,6 +28,7 @@ TouchGestures::Actions TouchGestures::fingerDown(int64_t finger, int x, int y, u
         startX = x;
         startY = y;
         startMs = ms;
+        mapGestureAllowed = mapAt(x, y);
         state = State::Pending;
         if(edgeAt(x, y) != std::array<int, 2>{0, 0}) state = State::Edge;
         out.add(Kind::Motion, x, y);
@@ -41,6 +42,7 @@ TouchGestures::Actions TouchGestures::fingerDown(int64_t finger, int x, int y, u
 
     if(ms - startMs <= kTwoFingerWindowMs) {
         second = Finger{finger, x, y};
+        mapGestureAllowed = mapGestureAllowed && mapAt(x, y);
         startMidX = lastMidX = midX();
         startMidY = lastMidY = midY();
         startSpread = zoomSpread = spread();
@@ -101,7 +103,7 @@ TouchGestures::Actions TouchGestures::fingerMotion(int64_t finger, int x, int y,
                            || ratio > kPinchSlop || ratio < 1.0f / kPinchSlop)) {
                 moving = true;
             }
-            if(!moving) break;
+            if(!moving || !mapGestureAllowed) break;
 
             // The map follows the fingers from where they were put down, slop included.
             if(mx != lastMidX || my != lastMidY) {

@@ -23,6 +23,7 @@
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
 #include <misc/GameActivity.h>
+#include <misc/MacTrackpad.h>
 #include <misc/WatchedResultLayout.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
@@ -653,6 +654,7 @@ void Game::reconcileTransportContainment() {
     The destructor frees up all the used memory.
 */
 Game::~Game() {
+    MacTrackpad::setMapArea(nullptr);
     achievements::AchievementManager::instance().end();
     // No path task can be outstanding here -- runBatch joins before returning --
     // but the threads themselves must not outlive the match, so they are stopped
@@ -3138,10 +3140,13 @@ void Game::drawScreen()
 void Game::doInput()
 {
     SDL_Event event;
-    while(SDL_PollEvent(&event)) {
-        updateCursorVisibilityForInput(event);
+    for(;;) {
         const bool mapTouchEnabled = !pInGameMenu && !pInGameMentat
             && !pWaitingForOtherPlayers && !pInterface->hasChildWindow();
+        MacTrackpad::setMapArea(mapTouchEnabled ? &screenborder->getScreenRect() : nullptr,
+                               mapTouchEnabled ? &pInterface->getMapViewControlsRect() : nullptr);
+        if(!SDL_PollEvent(&event)) break;
+        updateCursorVisibilityForInput(event);
         if(TouchInput::translateTouchEvent(event,
                 mapTouchEnabled ? &screenborder->getScreenRect() : nullptr,
                 mapTouchEnabled ? &pInterface->getMapViewControlsRect() : nullptr)) {

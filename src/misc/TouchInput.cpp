@@ -18,11 +18,11 @@ void unpackPair(const void* packed, int& a, int& b) {
     b = static_cast<int16_t>(value & 0xFFFF);
 }
 
-#ifdef DUNECITY_MOBILE
-
 intptr_t packPair(int a, int b) {
     return static_cast<intptr_t>((static_cast<uint32_t>(static_cast<uint16_t>(a)) << 16) | static_cast<uint16_t>(b));
 }
+
+#ifdef DUNECITY_MOBILE
 
 TouchGestures gestures;
 
@@ -85,25 +85,6 @@ void pushMouseButton(Uint8 button, bool pressed, int logicalX, int logicalY) {
     SDL_PushEvent(&mouse);
 }
 
-void pushMapGesture(TouchInput::MapGestureKind kind, const TouchGestures::Action& action) {
-    if(mapGestureEventType == 0) {
-        const Uint32 type = SDL_RegisterEvents(1);
-        if(type == static_cast<Uint32>(-1)) {
-            return;
-        }
-        mapGestureEventType = type;
-    }
-
-    SDL_Event gesture{};
-    gesture.type = mapGestureEventType;
-    gesture.user.type = mapGestureEventType;
-    gesture.user.timestamp = SDL_GetTicks();
-    gesture.user.windowID = getGameWindowId();
-    gesture.user.code = static_cast<Sint32>(kind);
-    gesture.user.data1 = reinterpret_cast<void*>(packPair(action.x, action.y));
-    gesture.user.data2 = reinterpret_cast<void*>(packPair(action.dx, action.dy));
-    SDL_PushEvent(&gesture);
-}
 
 void pushActions(const TouchGestures::Actions& actions) {
     using Kind = TouchGestures::Kind;
@@ -116,9 +97,9 @@ void pushActions(const TouchGestures::Actions& actions) {
                 pushMouseButton(SDL_BUTTON_RIGHT, true, action.x, action.y);
                 pushMouseButton(SDL_BUTTON_RIGHT, false, action.x, action.y);
             } break;
-            case Kind::Pan:         pushMapGesture(TouchInput::MapGestureKind::Pan, action); break;
-            case Kind::ZoomIn:      pushMapGesture(TouchInput::MapGestureKind::ZoomIn, action); break;
-            case Kind::ZoomOut:     pushMapGesture(TouchInput::MapGestureKind::ZoomOut, action); break;
+            case Kind::Pan:         TouchInput::pushMapGesture({TouchInput::MapGestureKind::Pan, action.x, action.y, action.dx, action.dy}); break;
+            case Kind::ZoomIn:      TouchInput::pushMapGesture({TouchInput::MapGestureKind::ZoomIn, action.x, action.y}); break;
+            case Kind::ZoomOut:     TouchInput::pushMapGesture({TouchInput::MapGestureKind::ZoomOut, action.x, action.y}); break;
         }
     }
 }
@@ -128,6 +109,22 @@ void pushActions(const TouchGestures::Actions& actions) {
 }
 
 namespace TouchInput {
+
+void pushMapGesture(const MapGesture& action) {
+    if(mapGestureEventType == 0) {
+        const Uint32 type = SDL_RegisterEvents(1);
+        if(type == static_cast<Uint32>(-1)) return;
+        mapGestureEventType = type;
+    }
+    SDL_Event gesture{};
+    gesture.type = mapGestureEventType;
+    gesture.user.timestamp = SDL_GetTicks();
+    gesture.user.windowID = window ? SDL_GetWindowID(window) : 0;
+    gesture.user.code = static_cast<Sint32>(action.kind);
+    gesture.user.data1 = reinterpret_cast<void*>(packPair(action.x, action.y));
+    gesture.user.data2 = reinterpret_cast<void*>(packPair(action.dx, action.dy));
+    SDL_PushEvent(&gesture);
+}
 
 bool translateTouchEvent(SDL_Event& event, const SDL_Rect* mapArea, const SDL_Rect* mapControls) {
 #ifdef __ANDROID__

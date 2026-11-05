@@ -164,7 +164,13 @@ Use **Save Game** when you want to continue the complete match.
 
 - Over the map, **wheel up** zooms in and **wheel down** zooms out, one step
   per notch, anchored at the pointer. Zoom stops at the available limits.
-  High-resolution trackpad gestures accumulate small deltas and limit rapid zooms.
+- On a **Mac trackpad**, move two fingers together to pan the map without
+  holding a button. Spread two fingers to zoom in; pinch them together to zoom
+  out at the pointer. Two-finger scrolling pans — it does **not** zoom.
+  Physical mouse wheels, including unphased high-resolution wheels, still zoom.
+- On **iPhone/iPad**, move two fingers together to pan; spread/pinch them to
+  zoom around their midpoint. Start both fingers over the map, not a menu,
+  sidebar or map-control button. These controls work in the map editor too.
 - Hold **middle mouse button (mouse 3)** over the map and drag to grab it.
   The map follows the cursor: dragging left moves the view right. Movement
   follows the current zoom and stops at map edges. Release to stop panning;

@@ -16,6 +16,10 @@
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
+#ifdef MAC_TRACKPAD_PROBE
+extern "C" void queueMacTrackpadScroll(int, int, double, double, bool, bool);
+extern "C" void queueMacTrackpadPinch(int, int, double, int);
+#endif
 void runControlsProbe(Game& game) {
     auto require=[](bool ok,const char* why) { if(!ok){SDL_Log("CONTROLS_FAIL: %s",why);throw std::runtime_error(why);} };
     auto commands=[&](CMDTYPE type) {
@@ -215,12 +219,66 @@ void runControlsProbe(Game& game) {
 #if SDL_VERSION_ATLEAST(2, 0, 18)
     screenborder->resetMouseWheelZoom();
     wheel(0,.25f); wheel(0,.25f); wheel(0,.25f);
-    require(game.zoomStep==0,"Fractional trackpad input zoomed before one notch accumulated");
+    require(game.zoomStep==0,"Fractional high-resolution wheel zoomed before one notch accumulated");
     wheel(0,.25f);
-    require(game.zoomStep==1,"Fractional trackpad input failed to accumulate");
+    require(game.zoomStep==1,"Fractional high-resolution wheel failed to accumulate");
     for(int i=0;i<20;++i) wheel(0,.25f);
-    require(game.zoomStep==1,"One high-resolution swipe jumped multiple zoom levels");
+    require(game.zoomStep==1,"One high-resolution wheel burst jumped multiple zoom levels");
     screenborder->resetMouseWheelZoom();
+#endif
+#ifdef MAC_TRACKPAD_PROBE
+    const size_t commandsBeforeTrackpad=totalCommands();
+    auto pinch = [&](double magnification, int phase) {
+        queueMacTrackpadPinch(pointer.x,pointer.y,magnification,phase);
+        game.doInput();
+    };
+    game.setZoomStep(4,pointer.x,pointer.y,false);
+    screenborder->setNewScreenCenter(Coord(currentGameMap->getSizeX()*TILESIZE/2,
+                                            currentGameMap->getSizeY()*TILESIZE/2));
+    motion(pointer);
+    const Coord pinchAnchor(screenborder->screen2worldX(pointer.x),screenborder->screen2worldY(pointer.y));
+    pinch(0,1); pinch(.25,4); pinch(0,8);
+    require(game.zoomStep==5,"Native trackpad spread failed to zoom one step");
+    const Coord pinchAfter(screenborder->screen2worldX(pointer.x),screenborder->screen2worldY(pointer.y));
+    require(std::abs(pinchAnchor.x-pinchAfter.x)<=4 && std::abs(pinchAnchor.y-pinchAfter.y)<=4,
+            "Native trackpad pinch lost cursor anchor");
+    const Coord trackpadCenter=screenborder->getCurrentCenter();
+    const Coord trackpadExpected=trackpadCenter+Coord(
+        screenborder->screen2worldX(pointer.x+24)-screenborder->screen2worldX(pointer.x),
+        screenborder->screen2worldY(pointer.y-18)-screenborder->screen2worldY(pointer.y));
+    queueMacTrackpadScroll(pointer.x,pointer.y,-24,-18,true,true);
+    game.doInput();
+    require(game.zoomStep==5 && screenborder->getCurrentCenter()==trackpadExpected,
+            "Two-finger trackpad scroll zoomed or failed to pan expected pixels");
+    pinch(0,1); pinch(-.25,4); pinch(0,8);
+    require(game.zoomStep==4,"Native trackpad pinch-together failed to zoom out");
+    queueMacTrackpadScroll(pointer.x,pointer.y,0,1,false,false);
+    game.doInput();
+    require(game.zoomStep==5,"Native physical mouse wheel no longer zooms");
+    queueMacTrackpadScroll(pointer.x,pointer.y,0,10,true,false);
+    game.doInput();
+    require(game.zoomStep==6,"Unphased high-resolution physical wheel was mistaken for trackpad pan");
+    game.setZoomStep(4,pointer.x,pointer.y,false);
+    pinch(0,1); pinch(.1,4);
+    require(game.zoomStep==4,"Sub-threshold native pinch zoomed early");
+    pinch(.1,4);
+    require(game.zoomStep==5,"Split native pinch failed to multiply incremental scale");
+    pinch(.2,4);
+    require(game.zoomStep==6,"Accumulated native pinch lost a second zoom step");
+    pinch(0,8);
+    game.setZoomStep(4,pointer.x,pointer.y,false);
+    pinch(0,1); pinch(.21,4); pinch(.2,4); pinch(0,8);
+    require(game.zoomStep==6,"Equivalent single/split native pinch produced different zoom");
+    for(int terminal : {8,16}) {
+        game.setZoomStep(4,pointer.x,pointer.y,false);
+        pinch(0,1); pinch(.1,4); pinch(0,terminal);
+        pinch(0,1); pinch(.1,4);
+        require(game.zoomStep==4,"Ended/cancelled native pinch retained stale partial scale");
+        pinch(0,8);
+    }
+    require(totalCommands()==commandsBeforeTrackpad && game.selectedList.count(unit->getObjectID()),
+            "Trackpad camera gesture changed selection or issued a command");
+    SDL_Log("MAC_TRACKPAD_PASS: native spread/pinch cursor anchor, buttonless phased pan without zoom, physical wheel zoom, no commands");
 #endif
     const size_t commandsBeforePan=totalCommands();
     for(int step=0;step<ZoomSteps::kCount;++step) {
@@ -276,6 +334,16 @@ void runControlsProbe(Game& game) {
     }
     require(scrolled && game.zoomStep==sidebarZoom,"Sidebar wheel stopped scrolling or zoomed the map");
     wheel(1); require(list->currentListPos==0,"Sidebar wheel up failed to restore first row");
+#ifdef MAC_TRACKPAD_PROBE
+    const Coord listCenter=screenborder->getCurrentCenter();
+    queueMacTrackpadScroll(drawnMouseX,drawnMouseY,0,-60,true,true);
+    game.doInput();
+    require(list->currentListPos>0 && game.zoomStep==sidebarZoom && screenborder->getCurrentCenter()==listCenter,
+            "Trackpad scroll over sidebar failed to scroll list or moved/zoomed map");
+    queueMacTrackpadScroll(drawnMouseX,drawnMouseY,0,60,true,true);
+    game.doInput();
+    require(list->currentListPos==0,"Trackpad sidebar scroll up did not restore first row");
+#endif
     middle(Coord(mapArea.x+mapArea.w+40,mapArea.y+180),true);
     require(!screenborder->isMousePanning(),"Middle click in sidebar grabbed map");
     middle(pointer,false);
@@ -283,7 +351,7 @@ void runControlsProbe(Game& game) {
     game.setZoomStep(originalZoom,pointer.x,pointer.y,false);
     screenborder->setNewScreenCenter(originalCenter);
     select(); game.pInterface->updateObjectInterface();
-    SDL_Log("MOUSE_CONTROLS_PASS: wheel +/- one step, clamps, mouse anchor, trackpad debounce, sidebar scroll, all-zoom drag pixels, release/focus/bounds, no commands");
+    SDL_Log("MOUSE_CONTROLS_PASS: physical wheel +/- one step, clamps, mouse anchor, high-resolution wheel debounce, sidebar scroll, all-zoom middle drag pixels, release/focus/bounds, no commands");
     settings.general.wasdCamera=true;select();
     SDL_KeyboardEvent key{};key.type=SDL_KEYDOWN;key.keysym.sym=SDLK_a;
     game.handleKeyInput(key);require(game.currentCursorMode==Game::CursorMode_Normal,"WASD A activated attack");

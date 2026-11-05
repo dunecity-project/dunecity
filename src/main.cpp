@@ -54,6 +54,7 @@
 #include <misc/SDL2pp.h>
 #include <misc/md5.h>
 #include <misc/WebRuntime.h>
+#include <misc/MacTrackpad.h>
 
 #include <players/QuantBotConfig.h>
 #include <mod/ModManager.h>
@@ -352,6 +353,7 @@ void setVideoMode(int displayIndex)
             settings.video.width, settings.video.height, settings.video.interfaceHeight,
             settings.video.interfaceHeight == INTERFACE_HEIGHT_NATIVE ? " (native 1:1)" : "");
     SDL_RenderSetLogicalSize(renderer, settings.video.width, settings.video.height);
+    MacTrackpad::initialize();
     screenTexture = SDL_CreateTexture(renderer, SCREEN_FORMAT, SDL_TEXTUREACCESS_TARGET, settings.video.width, settings.video.height);
 
     // Check if texture creation failed
@@ -1748,6 +1750,7 @@ int main(int argc, char *argv[]) {
             pFileManager.reset();
 
             // Safely destroy SDL objects
+            MacTrackpad::shutdown();
             if(screenTexture != nullptr) {
                 SDL_DestroyTexture(screenTexture);
                 screenTexture = nullptr;

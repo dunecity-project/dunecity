@@ -594,7 +594,7 @@ else:
     main = main.replace(needle,'int menuResult = runQuantBotStrategyProbe();' if args.strategy_probe
                         else 'int menuResult = runCampaignBalanceProbe();')
     main = main.replace('if(shouldPlayIntro && (bFirstInit==true))','if(false && shouldPlayIntro && (bFirstInit==true))')
-    if args.stats_ui_probe or args.sidebar_grid_probe:
+    if args.stats_ui_probe or args.sidebar_grid_probe or args.controls_probe:
         # Exercise the requested logical viewport even on a smaller/headless host.
         # Only this private probe bypasses the ordinary desktop-fit clamp; the
         # shipped application retains it. SDL still supplies the real renderer.
@@ -607,9 +607,16 @@ else:
     position = main.index('int main(')
     probe_includes = ['tests/ai/windows-probe-compat.inc'] if WINDOWS else []
     probe_includes.append('tests/ai/campaign-balance-probe.inc')
+    native_trackpad_probe = sys.platform == 'darwin' and args.controls_probe and args.real_video
+    if native_trackpad_probe:
+        focus_hint = '    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");'
+        if main.count(focus_hint) != 1:
+            raise RuntimeError('Native input probe background-window hook changed.')
+        main = main.replace(focus_hint, '    SDL_SetHint(SDL_HINT_MAC_BACKGROUND_APP, "1");\n' + focus_hint)
     if args.strategy_probe: probe_includes.append('tests/ai/strategy-probe.inc')
     main = main[:position] + ''.join('#include "'+(root/name).as_posix()+'"\n' for name in probe_includes) + main[position:]
     # Placeholders keep the commands, and so the cache key below, independent of --output-dir.
+    native_compile_command = None
     if WINDOWS:
         compile_command, link, game_dir = windows_probe_commands(build)
         object_suffix, link_inputs = '.obj', ('.obj', '.lib')
@@ -626,12 +633,21 @@ else:
         compile_command[compile_command.index('-o')+1] = '@OBJECT@'
         compile_command[compile_command.index('-c')+1] = '@SOURCE@'
         compile_command.append('-fno-access-control')
+        if native_trackpad_probe:
+            compile_command.append('-DMAC_TRACKPAD_PROBE=1')
+            # Keep Cocoa's global Point/FileInfo types out of the game's C++ TU.
+            native_compile_command = [arg.replace('@SOURCE@', str(root/'tests/ai/mac-trackpad-events.mm'))
+                                      .replace('@OBJECT@', '@NATIVE_OBJECT@') for arg in compile_command]
+            position = native_compile_command.index('-c')
+            native_compile_command[position:position] = ['-x', 'objective-c++', '-fobjc-arc']
         link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
         link = link[link.index('&&')+1:]
         link = link[:link.index('&&')]
         link[link.index('-o')+1] = '@BINARY@'
         link = ['@OBJECT@' if arg.endswith('/main.cpp.o') else arg for arg in link]
         object_suffix, link_inputs = '.o', ('.o', '.a', '.dylib', '.tbd')
+        if native_compile_command:
+            link.insert(link.index('@OBJECT@') + 1, '@NATIVE_OBJECT@')
     if args.quantbot_object:
         # QuantBot.cpp and its subsystem files implement one class. The preserved
         # object(s), from a build before or after that split, replace all of them.
@@ -663,7 +679,7 @@ else:
             return False
     cache = build/'balance-probe-cache'
     cache.mkdir(exist_ok=True)
-    entry = cache/hashlib.sha256(json.dumps([main, compile_command, link]).encode()).hexdigest()[:24]
+    entry = cache/hashlib.sha256(json.dumps([main, compile_command, link, native_compile_command]).encode()).hexdigest()[:24]
     executable = 'balance-probe.exe' if WINDOWS else 'balance-probe'
     with open(cache/'.lock', 'w') as lock:
         lock_exclusive(lock)   # concurrent probes build one binary, once
@@ -672,7 +688,8 @@ else:
             shutil.rmtree(entry, ignore_errors=True)
             staging = Path(tempfile.mkdtemp(prefix='staging-', dir=cache))
             names = {'@SOURCE@': str(staging/'balance-main.cpp'), '@OBJECT@': str(staging/('balance-main'+object_suffix)),
-                     '@BINARY@': str(staging/executable), '@STAGING@': str(staging)}
+                     '@BINARY@': str(staging/executable), '@STAGING@': str(staging),
+                     '@NATIVE_OBJECT@': str(staging/'mac-trackpad-events.o')}
             def fill(arg):
                 for placeholder, value in names.items():
                     arg = arg.replace(placeholder, value)
@@ -694,11 +711,18 @@ else:
                     else:
                         subprocess.run([fill(arg) for arg in compile_command] + ['-MD', '-MF', str(staging/'deps.d')],
                                        cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+                        if native_compile_command:
+                            subprocess.run([fill(arg) for arg in native_compile_command]
+                                           + ['-MD', '-MF', str(staging/'native-deps.d')],
+                                           cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
                     subprocess.run([fill(arg) for arg in link],
                                    cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
                 if not WINDOWS:
                     depfile = (staging/'deps.d').read_text().replace('\\\n', ' ').split(':', 1)[1]
                     headers = [path for path in shlex.split(depfile) if Path(path).name != 'balance-main.cpp']
+                    if native_compile_command:
+                        native_deps = (staging/'native-deps.d').read_text().replace('\\\n', ' ').split(':', 1)[1]
+                        headers += shlex.split(native_deps)
                 inputs = [Path(build, path).resolve() for path in headers]
                 inputs += [Path(build, arg).resolve() for arg in link
                            if arg.lower().endswith(link_inputs) and Path(build, arg).is_file()]
