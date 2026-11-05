@@ -2545,13 +2545,13 @@ void QuantBot::useSpareYardCapacity(BuildPass& pass, BuilderTurn& turn, YardTurn
         && turn.pBuilder->getProductionQueueSize() == 0 && campaignAvailableToBuild(turn.pBuilder,Structure_Road)) {
         pass.roadMaintenanceAttempted = true;
         const int roadPrice = std::max(1,data[Structure_Road][houseID].price);
-        const int roadBudget = pass.techSavings ? std::min(std::max(0, pass.money - pass.economyReserve),
+        const int roadBudget = pass.incomeBuckets ? std::min(std::max(0, pass.money - pass.economyReserve),
             spendingLedger.available(QuantBotSpendingPolicy::Bucket::Economy))
             : std::max(0, pass.money - pass.economyReserve);
         const int repaired = queueCityRoadRepairs(turn.pBuilder, std::min(8, roadBudget / roadPrice));
         pass.money -= repaired*roadPrice;
         pass.capitalOrderedCost += repaired*roadPrice;
-        if (pass.techSavings) spendingLedger.charge(QuantBotSpendingPolicy::Bucket::Economy, repaired * roadPrice);
+        if (pass.incomeBuckets) spendingLedger.charge(QuantBotSpendingPolicy::Bucket::Economy, repaired * roadPrice);
         if (repaired) traceDecision("capital_road_batch",AITelemetry::Record().set("capital_plan",pass.capitalDecision)
             .set("builder",planningBuilder).set("count",repaired).set("price",roadPrice).set("cost",repaired*roadPrice));
     }

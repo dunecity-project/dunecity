@@ -866,6 +866,21 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
             endforeach()
         endforeach()
+        # Independent ledger-free alternative; never replaces or relaxes the
+        # original saved-ledger matrix above. Both switches are pinned per case.
+        foreach(simple_tech_mod IN ITEMS vanilla dunecity Dune2R)
+            foreach(simple_tech_difficulty IN ITEMS medium hard brutal)
+                add_test(NAME quantbot_simple_tech_savings_${simple_tech_mod}_${simple_tech_difficulty}
+                    COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --simple-tech-saving-probe --repeatable
+                    --mod ${simple_tech_mod} --partner-difficulty ${simple_tech_difficulty}
+                    --seed 1841712204 --no-ai-telemetry --path-workers 1
+                    --wall-timeout 550 --build-dir ${CMAKE_BINARY_DIR}
+                    --output-dir ${CMAKE_BINARY_DIR}/simple-tech-savings-${simple_tech_mod}-${simple_tech_difficulty}-probe)
+                set_tests_properties(quantbot_simple_tech_savings_${simple_tech_mod}_${simple_tech_difficulty}
+                    PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+            endforeach()
+        endforeach()
         # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
         # and saved partner state through the live Harkonnen level-9 fixture.
         foreach(pressure_mod IN ITEMS vanilla dunecity)

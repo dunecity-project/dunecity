@@ -1719,6 +1719,7 @@ private:
     /// Rocket coverage, core infrastructure and crime exposure.
     void planDefenceCoverage(BuildPass& pass);
     /// Net-income buckets, a legal next technology and its bounded savings plan.
+    bool simpleTechPolicyActive() const;
     void planTechSavings(BuildPass& pass);
     bool spendingEmergency(BuildPass& pass, Uint32 item);
     bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);

@@ -1,5 +1,22 @@
 ## 2026-11-05 — QuantBot technology savings (OMP TechSaving, unreleased)
 
+- Stefan supersedes cash-saving budgets with a separate hashed
+  `SimpleTechSavings` (default OFF pending acceptance): start the next legal
+  structure at zero/below-quote cash using ordinary engine installments.
+  Upgrades keep the shared human full-credit start rule, with no extra
+  operating reserve. No engine exemption or command/wire change.
+- This alternative reuses existing-owned-plus-queued composition and the
+  capital planner. While tech needs funding, military purchases are bounded
+  by the threat-sized defensive minimum including commitments; emergency,
+  workers, power and first-SP priorities remain. Old/manual queues stay
+  unchanged. It never initializes or spends the ledger, adds no saved state,
+  and wins if both experimental switches are requested.
+- Ledger `4477575c` remains rejected: all146 legacy tests PASS, six classic
+  feature probes PASS, three City progression deadlines FAIL. Canonical288
+  games/960 houses also fail adoption independently: city researchOFF
+  HF/IX/SP101/55/168→59/2/47 per192 houses; pooled H/B dispatch3.5816→1.2517,
+  kills43309→12643; all six cells/four seed blocks adverse. Full conditioned
+  tables: `confirmation-analysis-4477575c/`. No later policy receives credit.
 - Hashed `TechSavings` remains **OFF** unless paired outcomes support adoption.
   Exact saved net-income allocations are production/economy/military
   30/35/35% when safe, 15/20/65% under observed pressure. Full accepted

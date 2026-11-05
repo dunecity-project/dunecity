@@ -441,6 +441,88 @@ TEST_CASE("Tech savings defaults off and independently round-trips both hashed s
     std::filesystem::remove(savedPath);
 }
 
+TEST_CASE("Simple tech savings defaults off and independently round-trips both hashed states",
+          "[ai][production][technology][config][simple-tech-savings]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.simpleTechSavings);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-simple-tech-savings-test.ini";
+    const auto savedPath = std::filesystem::temp_directory_path() / "quantbot-simple-tech-savings-saved-test.ini";
+    const auto savedBytes = [&](const QuantBotConfig& config) {
+        REQUIRE(config.save(savedPath.string()));
+        std::ifstream ini(savedPath, std::ios::binary);
+        REQUIRE(ini.good());
+        return std::string(std::istreambuf_iterator<char>(ini), std::istreambuf_iterator<char>());
+    };
+    std::array<std::string, 16> independentHashes;
+    size_t hashCount = 0;
+
+    for (const bool ledgerEnabled : {false, true}) {
+        for (const bool trooperEnabled : {false, true}) {
+            for (const bool fundedEnabled : {false, true}) {
+                CAPTURE(ledgerEnabled, trooperEnabled, fundedEnabled);
+                QuantBotConfig baseline = defaults;
+                baseline.force.techSavings = ledgerEnabled;
+                baseline.force.trooperSupport = trooperEnabled;
+                baseline.force.fundedClassicProduction = fundedEnabled;
+                QuantBotConfig config = baseline;
+                const auto disabledHash = baseline.getConfigHash();
+                independentHashes[hashCount++] = disabledHash;
+                QuantBotConfig enabledConfig = baseline;
+                enabledConfig.force.simpleTechSavings = true;
+                independentHashes[hashCount++] = enabledConfig.getConfigHash();
+
+                for (const bool enabled : {false, true, false, true}) {
+                    QuantBotConfig expected = baseline;
+                    expected.force.simpleTechSavings = enabled;
+                    const auto expectedBytes = savedBytes(expected);
+                    {
+                        std::ofstream ini(path);
+                        ini << "[Force Concentration]\nSimpleTechSavings="
+                            << (enabled ? "true" : "false") << '\n';
+                    }
+                    REQUIRE(config.applyOverrides(path.string()));
+                    REQUIRE(config.force.simpleTechSavings == enabled);
+                    REQUIRE(config.force.techSavings == ledgerEnabled);
+                    REQUIRE(config.force.trooperSupport == trooperEnabled);
+                    REQUIRE(config.force.fundedClassicProduction == fundedEnabled);
+                    REQUIRE((config.getConfigHash() == disabledHash) == !enabled);
+                    REQUIRE(config.getConfigHash() == expected.getConfigHash());
+                    // A one-key override must preserve every other setting.
+                    REQUIRE(savedBytes(config) == expectedBytes);
+
+                    // Missing optional keys preserve either current state, not just OFF.
+                    {
+                        std::ofstream ini(path);
+                        ini << "[Force Concentration]\n";
+                    }
+                    REQUIRE(config.applyOverrides(path.string()));
+                    REQUIRE(config.force.simpleTechSavings == enabled);
+                    REQUIRE(config.getConfigHash() == expected.getConfigHash());
+                    REQUIRE(savedBytes(config) == expectedBytes);
+
+                    QuantBotConfig restored;
+                    restored.force.simpleTechSavings = !enabled;
+                    REQUIRE(restored.applyOverrides(savedPath.string()));
+                    REQUIRE(restored.force.simpleTechSavings == enabled);
+                    REQUIRE(restored.force.techSavings == ledgerEnabled);
+                    REQUIRE(restored.force.trooperSupport == trooperEnabled);
+                    REQUIRE(restored.force.fundedClassicProduction == fundedEnabled);
+                    REQUIRE(restored.getConfigHash() == expected.getConfigHash());
+                    REQUIRE(savedBytes(restored) == expectedBytes);
+                }
+            }
+        }
+    }
+    REQUIRE(hashCount == independentHashes.size());
+    // The new switch cannot alias TechSavings or either causal-control flag.
+    for (size_t first = 0; first < hashCount; ++first) {
+        for (size_t second = first + 1; second < hashCount; ++second)
+            REQUIRE(independentHashes[first] != independentHashes[second]);
+    }
+    std::filesystem::remove(path);
+    std::filesystem::remove(savedPath);
+}
+
 TEST_CASE("Tech savings buckets allocate only net receipts and charge commitments once",
           "[ai][production][technology][budget]") {
     using namespace QuantBotSpendingPolicy;

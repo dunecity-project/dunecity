@@ -4,6 +4,35 @@ Custom-game Hard and Brutal bots use a house-level army posture, rather than
 asking every unit to decide independently whether the whole army is losing.
 Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 
+## Installment-first technology and existing composition
+
+The separately hashed `[Force Concentration] SimpleTechSavings` alternative
+is default OFF pending paired acceptance. It applies only to Custom
+Medium/Hard/Brutal, not campaigns, Easy or builder-only authority. When both
+experimental switches are set, this ledger-free policy takes precedence.
+
+It starts the single next legal technology structure immediately, including
+zero cash, using the ordinary founded construction queue and engine
+installments. There is no full-quote, four-minute funding or cash-reserve
+precondition. Needed yard/factory upgrades retain exactly the human full-credit
+start rule; the AI starts at the actual quote without an extra operating reserve.
+Engine upgrade admission, commands and wire layouts are unchanged.
+
+Military selection uses owned-plus-accepted-queue replacement-value proportions.
+While technology needs funding, ordinary purchases stop at the threat-sized
+ground-defence minimum, including existing commitments; real defence, opening
+workers, power and first-Starport priorities remain. Existing queues are not
+cancelled or put on hold, and human/saboteur orders are unchanged. Ordinary
+payment order still applies: a finite older backlog can delay a newer yard.
+This alternative never initializes, allocates or debits the saved ledger and
+adds no saved state or protocol change.
+
+The ledger experiment below is retained OFF for comparison. At `4477575c`,
+288 canonical games rejected it: city research-OFF HF/IX/Starport completion
+was 101/55/168 OFF versus 59/2/47 ON per192 houses; all six Hard/Brutal
+mod/research cells had four adverse dispatch and kill-value seed blocks.
+Those results do not measure the installment-first alternative.
+
 ## Technology savings and guns/butter budgets
 
 The experimental hashed `[Force Concentration] TechSavings` switch applies to

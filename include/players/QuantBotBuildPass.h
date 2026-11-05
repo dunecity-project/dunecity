@@ -90,6 +90,7 @@ struct QuantBot::BuildPass {
     int ornithopterCapableFactoryCount{};
     int activeRepairYardCount{};
     int queuedProductionCost{};
+    int queuedTechnologyCost{};
     int queuedMilitaryValue{};
     int mcvUpgradesInProgress{};
 
@@ -228,7 +229,9 @@ struct QuantBot::BuildPass {
     int infantryCount{};
     int64_t cityWorCashReserve{};
     int vehiclePlanValue{};
-    bool techSavings{};
+    bool techSavings{}; // Either owned-composition technology policy is active.
+    bool incomeBuckets{}; // Only the original experiment allocates saved buckets.
+    bool techFundingPriority{};
     UnitMixPolicy::Weights compositionValue{};
     UnitMixPolicy::Weights compositionPrice{};
     UnitMixPolicy::Slots compositionAvailable{};
@@ -312,6 +315,8 @@ struct QuantBot::BuildPass {
     std::array<bool, Num_ItemID> emergencyCivic{};
     int readyGroundUnits{};
     int readyGroundValue{};
+    int committedGroundUnits{};
+    int committedGroundValue{};
     CapitalCandidate techCandidate{};
     bool techUpgrade{};
     bool techResearch{};

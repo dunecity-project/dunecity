@@ -143,8 +143,8 @@ struct QuantBotConfig {
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
     /// CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
-    /// StorageCapacity, FundedClassicProduction, TrooperSupport, TechSavings, LauncherKiteExtraDistance,
-    /// ExhaustedArmyDispatch;
+    /// StorageCapacity, FundedClassicProduction, TrooperSupport, TechSavings, SimpleTechSavings,
+    /// LauncherKiteExtraDistance, ExhaustedArmyDispatch;
     /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -301,6 +301,12 @@ struct QuantBotConfig {
         /// choose units against the existing army rather than the military cap.
         /// Experimental until paired city/classic outcome audits accept it.
         bool techSavings;
+        /// Existing-owned-plus-queued mix; start next legal tech unless a real emergency.
+        /// Structures start at zero/below full quote under ordinary engine installments.
+        /// Yard/factory upgrades keep the shared human full-credit start rule, no extra reserve.
+        /// Cheap unit purchases yield incoming credits to needed tech.
+        /// Experimental default OFF; no income buckets or persistent runtime state.
+        bool simpleTechSavings;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.
         int launcherKiteExtraDistance;

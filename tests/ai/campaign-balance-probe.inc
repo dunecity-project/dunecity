@@ -72,6 +72,7 @@
 #include "trooper-support-probe.inc"
 #include "zone-power-probe.inc"
 #include "tech-saving-probe.inc"
+#include "simple-tech-saving-probe.inc"
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -138,6 +139,10 @@ int runCampaignBalanceProbe() {
     }
     if(std::getenv("BALANCE_TROOPER_SUPPORT_PROBE")) {
         runTrooperSupportProbe();
+        return MENU_QUIT_DEFAULT;
+    }
+    if(std::getenv("BALANCE_SIMPLE_TECH_SAVING_PROBE")) {
+        runSimpleTechSavingProbe(requestedMod.c_str(), partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
     if(std::getenv("BALANCE_TECH_SAVING_PROBE")) {

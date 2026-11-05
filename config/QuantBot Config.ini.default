@@ -392,6 +392,12 @@ TrooperSupport=1
 # Experimental: preserve production/economy/military income buckets and compose
 # the next unit from the existing army, not a percentage of its military cap.
 TechSavings=0
+# Optional default-OFF alternative: existing-owned-plus-queued composition.
+# Start next legal tech unless a real emergency; structures use ordinary engine installments,
+# starting even at zero/below full quote. Yard/factory upgrades keep the shared human
+# full-credit start rule: exact price, no extra reserve. Cheap units yield income to needed tech.
+# No income buckets or persistent runtime state. Independent of TechSavings.
+SimpleTechSavings=0
 # Launchers back off two extra tiles (0 = old spacing, bounded to 0..2).
 # Hunt stand-off remains inside firing range; other unit types are unchanged.
 LauncherKiteExtraDistance=2
