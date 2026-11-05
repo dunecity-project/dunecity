@@ -296,13 +296,53 @@ bool QuantBot::buildCampaignYard(BuildPass& pass, BuilderTurn& turn, YardTurn& y
 
 bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     startYardSelection(pass, turn, yardTurn);
+    Uint32 admittedItem = NONE_ID;
+    auto releaseUnfundedChoice = [&]() {
+        const Uint32 item = yardTurn.itemID;
+        if (!pass.techSavings || item == NONE_ID || item == admittedItem
+            || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0
+            || spendingEmergency(pass, item)) return;
+        const Coord site = yardTurn.crimeServiceSite.isValid() ? yardTurn.crimeServiceSite
+            : item == Structure_RocketTurret || item == Structure_GunTurret
+                ? findEffectiveTurretPlaceLocation(item) : findPlaceLocation(item);
+        int cost = purchasePrice(turn.pBuilder, item);
+        if (site.isValid())
+            for (const auto& slab : foundationPlan(turn.pBuilder, item, site).orders)
+                cost += purchasePrice(turn.pBuilder, slab.item);
+        if (spendingAdmits(pass, item, cost)) {
+            admittedItem = item;
+            return;
+        }
+        // A rejected bucket never owns this yard's remaining selectors. Its
+        // savings stay in the ledger; another funded bucket may use the slot.
+        if (capitalPending(pass)
+            && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()
+            && pass.capitalCandidates[pass.capitalChoice].item == item) {
+            pass.capitalChoice = -1;
+            pass.protectionCapital = pass.cityGrowthProtected = false;
+            yardTurn.higherPriorityCapital = false;
+        }
+        yardTurn.itemID = NONE_ID;
+        yardTurn.structureRule = "income_bucket_savings";
+        yardTurn.crimeServiceSite = Coord::Invalid();
+        yardTurn.skipRemainingStructureLogic = yardTurn.serviceSavingHold = false;
+        turn.installmentProject = NONE_ID;
+        turn.installmentProjectStartBudget = 0;
+    };
     chooseYardAirDefence(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     chooseYardEssentials(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     // Power recovery and a present air threat keep priority. Storage consumes
     // only its own price, leaving useful army/defence/city spending available.
-    if (botConfig().force.storageCapacity && yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic) {
+    if ((botConfig().force.storageCapacity || pass.techSavings)
+        && yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic) {
         const Uint32 storage = storageExpansionItem(pass,turn.pBuilder);
         if (storage!=NONE_ID) {
+            // Only this forecasted physical-capacity release may borrow.
+            // Actual receipts then repay its exact Economy debt; a capped
+            // vault cannot otherwise replenish an overdrawn bootstrap bucket.
+            if (pass.techSavings) pass.emergencyCivic[storage] = true;
             yardTurn.itemID=storage;yardTurn.structureRule="storage_capacity";
             yardTurn.skipRemainingStructureLogic=true;
         }
@@ -320,9 +360,13 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && !yardTurn.civicClaimsYard && buildTechSavings(pass, turn)) return true;
     chooseYardCityFoundations(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     chooseYardCoreEconomy(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     chooseYardCityOpening(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     chooseYardServicesAndRefineries(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     // Spend the first-WOR allocation only after actual emergency choices. Its
     // reserved full price/working cash must not become another cheap growth lot.
     if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic
@@ -337,11 +381,15 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         }
     }
     chooseYardProductionLanes(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     chooseYardMilitaryInfrastructure(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && buildResearchLab(pass,turn)) return true;
     chooseYardTechAndExpansion(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     chooseYardCivicAndDefence(pass, turn, yardTurn);
+    releaseUnfundedChoice();
     vetYardChoice(pass, turn, yardTurn);
     if (placeYardChoice(pass, turn, yardTurn)) return true;
     useSpareYardCapacity(pass, turn, yardTurn);
@@ -372,7 +420,7 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
     yardTurn.urgentProtection = pass.airEngaged
         || (capitalPending(pass) && pass.capitalCandidates[pass.capitalChoice].urgent);
 
-    if (!botConfig().force.storageCapacity && storageExpansionItem(pass,turn.pBuilder)!=NONE_ID
+    if (!botConfig().force.storageCapacity && !pass.techSavings && storageExpansionItem(pass,turn.pBuilder)!=NONE_ID
         && getHouse()->hasPower()
         && pass.money >= buildingCapitalCost(pass, Structure_Silo)
         && findPlaceLocation(Structure_Silo).isValid()) {
@@ -842,7 +890,8 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
                     ? findCityTurretPlaceLocation(step,&coverage) : findPlaceLocation(step);
                 if (site.isValid() && (step!=Structure_RocketTurret || coverage>0)) {
                     const int cost=buildingCapitalCost(pass, step);
-                    if (pass.money>=cost || pass.cashFlow.projectedCash>=cost) {
+                    if ((pass.money>=cost || pass.cashFlow.projectedCash>=cost)
+                        && spendingAdmits(pass,step,cost)) {
                         yardTurn.itemID=pass.money>=cost ? step : NONE_ID;
                         if (yardTurn.itemID!=NONE_ID) yardTurn.crimeServiceSite=site;
                         yardTurn.serviceSavingHold=yardTurn.itemID==NONE_ID && proactiveSavingHold(pass, cost);
@@ -856,7 +905,8 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             if (turn.pBuilder->getCurrentUpgradeLevel()<data[step][houseID].upgradeLevel
                 && turn.pBuilder->getMaxUpgradeLevel()>=data[step][houseID].upgradeLevel) {
                 const int cost=turn.pBuilder->getUpgradeCost();
-                if (cost>0 && (pass.money>=cost || pass.cashFlow.projectedCash>=cost)) {
+                if (cost>0 && (pass.money>=cost || pass.cashFlow.projectedCash>=cost)
+                    && spendingAdmits(pass,turn.pBuilder->getItemID(),cost,true)) {
                     yardTurn.serviceSavingHold=proactiveSavingHold(pass, cost);yardTurn.skipRemainingStructureLogic=true;
                     yardTurn.structureRule=supplyingWorkers ? "unlock_opening_supplier" : "unlock_core_defence";
                     if (pass.money>=cost && !turn.pBuilder->isUpgrading()
@@ -923,7 +973,7 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         const auto funding = CityEconomyInvestmentPolicy::installmentOrder(
             pass.money, price, foundationBudget, cityBuildTicks(pass, Structure_NuclearPlant),
             pass.forecastNetIncome);
-        if (funding.funded()) {
+        if (funding.funded() && spendingAdmits(pass,Structure_NuclearPlant,price+foundationBudget)) {
             yardTurn.skipRemainingStructureLogic = true;
             yardTurn.serviceSavingHold = funding.reserve;
             if (funding.order) {
@@ -1047,7 +1097,8 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
                 break;
             }
             if (campaignAvailableToBuild(turn.pBuilder,step)) {
-                if (findPlaceLocation(step).isValid()) {
+                if (findPlaceLocation(step).isValid()
+                    && (!pass.techSavings || spendingAdmits(pass,step,buildingCapitalCost(pass,step)))) {
                     yardTurn.skipRemainingStructureLogic = true;
                     yardTurn.structureRule = "starport_opening";
                     if (pass.money >= data[step][houseID].price) yardTurn.itemID = step;
@@ -2078,10 +2129,10 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         const int protectedCash = std::max({1000, pass.cityWorkingReserve, cityBootstrapReserve(pass)});
         const bool nuclear = nuclearSite.isValid()
             && (onInstallments(turn, Structure_NuclearPlant)
-                || (botConfig().force.cityPowerSizing
+                || (botConfig().force.cityPowerSizing || pass.techSavings
                     ? QuantBotBuildPolicy::preferNuclearPower(need, windOutput,
                         data[Structure_WindTrap][houseID].price, data[Structure_NuclearPlant][houseID].price,
-                        windSites, cash, protectedCash, !getHouse()->hasPower())
+                        windSites, cash, protectedCash, !getHouse()->hasPower() && !pass.techSavings)
                     : cash >= data[Structure_NuclearPlant][houseID].price));
         yardTurn.itemID = nuclear ? Structure_NuclearPlant : windSite.isValid() ? Structure_WindTrap : NONE_ID;
         if (yardTurn.itemID == NONE_ID) yardTurn.skipRemainingStructureLogic = true;
