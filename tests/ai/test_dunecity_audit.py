@@ -1,6 +1,7 @@
 """Read-only audit contract fixtures; never build, run games, or claim AI evidence."""
 import ast
 import contextlib
+import csv
 import io
 import json
 from pathlib import Path
@@ -141,12 +142,12 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertEqual(order(44)['cheap_unit'], 1)
         self.assertEqual(order(41)['cheap_unit'], 0)  # A Tank is not cheap infantry/light spam.
         self.assertEqual((order(4)['bucket'], order(4)['tech']), ('production', 1))
-        self.assertEqual((order(26)['bucket'], order(26)['city']), ('economy', 1))  # Police, not a turret.
-        self.assertEqual((order(12)['bucket'], order(12)['city']), ('military', 0))
-        self.assertEqual((order(31)['bucket'], order(31)['city']), ('economy', 0))
+        self.assertEqual((order(26)['bucket'], order(26)['city_spend']), ('economy', 1))  # Police, not a turret.
+        self.assertEqual((order(12)['bucket'], order(12)['city_spend']), ('military', 0))
+        self.assertEqual((order(31)['bucket'], order(31)['city_spend']), ('economy', 0))
         self.assertEqual(order(14, spending_bucket='production')['bucket'], 'production')  # Parent project's slab.
         self.assertEqual((order(14, spending_bucket='production')['tech'],
-                          order(14, spending_bucket='production')['city']), (1, 0))
+                          order(14, spending_bucket='production')['city_spend']), (1, 0))
         path_order = order(36, rule='light_backlog', composition_basis='existing_and_queued',
                            composition_before={'36': {'committed_value': 200, 'target_bps': 1000, 'available': 1}},
                            composition={'36': {'committed_value': 400, 'target_bps': 1000, 'available': 1}},
@@ -161,6 +162,27 @@ class DuneCityAuditTests(unittest.TestCase):
         limited_path = audit['cheap_path_rows']([path_order], False)[0]
         self.assertEqual(limited_path['accepted_credits'], '')
         self.assertEqual(limited_path['observed_priced_credits'], 100)
+
+    def test_tech_sidecars_have_unique_column_names(self):
+        for filename, fields in audit['TECH_TABLES']:
+            with self.subTest(filename=filename):
+                self.assertEqual(len(fields), len(set(fields)))
+
+    def test_city_spending_does_not_overwrite_starting_city_in_csv(self):
+        args = audit['parser'].parse_args(['--city', '0'])
+        game = audit['schedule'](args)[0]
+        order = audit['accepted_order'](dict(session='fixture', seq=1, cycle=25, house=0,
+            event='production_order', data=dict(item=26, accepted=1, quoted_price=100,
+                queue_before=0, queue_after=1)))
+        row = dict(audit['metadata'](game), mod='dunecity', **order, capture_complete=1)
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=audit['TECH_ORDER_FIELDS'])
+        writer.writeheader()
+        writer.writerow(row)
+        output.seek(0)
+        captured = next(csv.DictReader(output))
+        self.assertEqual(captured['city'], '0')
+        self.assertEqual(captured['city_spend'], '1')
 
     def test_four_minute_quote_diversion_censors_short_dead_and_incomplete_windows(self):
         def event(name, seq, cycle, **data):

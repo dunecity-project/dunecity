@@ -91,6 +91,7 @@ CHEAP_ITEMS = {32, 36, 42, 43, 44, 46, 47, 52, 63, 74, 75, 77, 78, 79, 81}
 TECH_SPEND_ITEMS = set(TECH_ITEMS) | {9, 88}
 CITY_SPEND_ITEMS = ECONOMY_ITEMS - {27, 31, 34, 59, 66, 85, 86}
 SPEND_CATEGORIES = ('production', 'economy', 'military', 'other', 'cheap_unit', 'tech', 'city')
+SPEND_FLAGS = {'cheap_unit': 'cheap_unit', 'tech': 'tech', 'city': 'city_spend'}
 TECH_HORIZON = 4 * CYCLES_PER_MINUTE
 TECH_SAMPLE_VALUES = ('minute', 'cycle', 'house', 'credits', 'military_live_count', 'military_live_value',
                       'military_queued_count', 'military_queued_value', 'military_committed_count',
@@ -107,7 +108,7 @@ COMPOSITION_FIELDS = META + ('mod', 'minute', 'cycle', 'house', 'slot', 'item', 
                              'live_count_bps', 'live_value_bps', 'committed_count_bps', 'committed_value_bps',
                              'target_bps', 'value_target_delta_bps', 'allocation_ready', 'allocation_cycle')
 TECH_ORDER_FIELDS = META + ('mod', 'session', 'seq', 'cycle', 'house', 'event', 'item', 'builder',
-                            'builder_item', 'price', 'bucket', 'cheap_unit', 'tech', 'city', 'capture_complete',
+                            'builder_item', 'price', 'bucket', 'cheap_unit', 'tech', 'city_spend', 'capture_complete',
                             'rule', 'composition_basis', 'composition_before', 'composition_after',
                             'state_id', 'state_cycle', 'military_value', 'military_cap', 'military_budget', 'military_headroom')
 TECH_PLAN_CONTEXT = ('tech_savings', 'active', 'stable', 'spendable', 'working_reserve', 'defence_minimum',
@@ -334,7 +335,7 @@ def accepted_order(event):
                    military_headroom=int(budget)-int(military) if military != '' and budget != '' else '')
     return {key: event[key] for key in ('session', 'seq', 'cycle', 'house', 'event')} | dict(
         item=item, builder=data.get('builder', data.get('lab', '')), builder_item=data.get('builder_item', ''),
-        price=price, bucket=bucket, cheap_unit=int(cheap), tech=int(tech), city=int(city), **context)
+        price=price, bucket=bucket, cheap_unit=int(cheap), tech=int(tech), city_spend=int(city), **context)
 
 
 def cheap_path_rows(orders, complete):
@@ -425,8 +426,8 @@ def tech_audit(lines, samples, final, capture):
             order = by_house[house][indices[house]]
             if order['price'] != '':
                 totals[house][order['bucket']] += order['price']
-                for category in ('cheap_unit', 'tech', 'city'):
-                    if order[category]:
+                for category, flag in SPEND_FLAGS.items():
+                    if order[flag]:
                         totals[house][category] += order['price']
             indices[house] += 1
         for field in ('structures', 'army_value', 'army_units', 'spice_gross', 'tax_gross', 'spent_total'):
@@ -483,7 +484,7 @@ def tech_audit(lines, samples, final, capture):
             row[field] = last.get(field, '')
         for name in SPEND_CATEGORIES:
             values = [order['price'] for order in by_house[number]
-                      if order['bucket'] == name or name in ('cheap_unit', 'tech', 'city') and order[name]]
+                      if order['bucket'] == name or name in SPEND_FLAGS and order[SPEND_FLAGS[name]]]
             row['accepted_' + name] = sum(values) if priced else ''
         own = [event for event in decisions if int(event['house']) == number]
         for name, event_name in (('upgrade_order', 'capital_upgrade'), ('research_order', 'tech_research_started'),
