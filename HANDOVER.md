@@ -16,6 +16,10 @@
 - Save **9884** adds only QuantBot ledger state;9882/9883 read their original
   byte layouts and begin with zero balances. Protocol **113** is required:
   multiplayer save transfer and observer snapshots carry the serialized AI.
+- OFF-arm counterfactual placement scans are now audit-only rather than
+  ordinary telemetry work; this removes new diagnostic work from normal
+  performance runs. Empty unused ledgers leave OFF lockstep digests unchanged;
+  nonempty ledger state is covered. Frozen city digest expectations are retained.
 - Historical CSV baseline measured before implementation: TrooperSupport's
   `funded-matrix`48game/144house OFF→ON at862fc8b changes stalls12/135→13/135,
   bankrupt28/144→27/144,missing-SP15/109→16/109,dispatch1.30→1.22,kills16359→15677.

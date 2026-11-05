@@ -50,6 +50,12 @@ baseline. Saves 9882/9883 retain their frozen settings and load an empty,
 uninitialized ledger. Protocol 113 separates older peers because transferred
 multiplayer saves and observer checkpoints carry this new QuantBot state.
 
+The audit harness opts into counterfactual OFF-arm feasibility searches with
+`DUNECITY_TECH_SAVINGS_AUDIT=1`; ordinary decision logging does not run those
+extra placement searches. Both logged arms record live existing-plus-queued
+composition. An unused all-zero ledger is neutral in the lockstep digest, so
+the default OFF arm retains its established simulation fingerprints.
+
 ## Dispatch and the military limit
 
 The default outnumbered threshold is an observed enemy advantage of at least

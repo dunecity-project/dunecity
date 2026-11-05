@@ -90,7 +90,9 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // tax rate per city house.
     // 9881 appends Research Lab house state and MOD15 research/trooper-AA rules.
     // 9882/MOD17's pace/area/damage layout is frozen; 9883/MOD18 drops area and adds scenery.
-    REQUIRE(SAVEGAMEVERSION == 9883);
+    // 9884 appends the version-gated QuantBot income-bucket ledger.
+    REQUIRE(SAVEGAMEVERSION == 9884);
+    REQUIRE(SAVEGAMEVERSION_TECH_SAVINGS == 9884);
     REQUIRE(SAVEGAMEVERSION_MOUNTAIN_SCENERY == 9883);
     REQUIRE(SAVEGAMEVERSION_RESEARCH_PACE == 9882);
     REQUIRE(SAVEGAMEVERSION_RESEARCH_LAB == 9881);

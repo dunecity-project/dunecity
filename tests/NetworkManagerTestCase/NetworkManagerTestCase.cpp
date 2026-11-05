@@ -31,7 +31,7 @@ static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
 static constexpr int kWireCoopCampaignControl = 25;
 static constexpr int kWireCoopSetupTransfer = 26;
-static constexpr int kWireProtocolVersion = 112;
+static constexpr int kWireProtocolVersion = 113;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -62,6 +62,7 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // RNG values on the same cycle and keeps a different fleet, so the two
     // diverge immediately.
     // Different AI movement decisions cannot share lockstep with older peers.
+    // 113 transfers the save9884 QuantBot ledger in multiplayer/observer base snapshots.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
     // 67 restricts autonomous aircraft by difficulty and carries those sortie
     // permissions and asset-attack contacts in observer runtime version8.

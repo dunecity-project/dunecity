@@ -22,6 +22,7 @@
 
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
+#include <cstdlib>
 #include <string_view>
 
 using QuantBotInternal::rocketCoverageTier;
@@ -2881,7 +2882,15 @@ bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgra
 }
 
 void QuantBot::planTechSavings(BuildPass& pass) {
-    if (!pass.techSavings && !AITelemetry::log().enabled()) return;
+    if (!pass.techSavings) {
+        // Counterfactual feasibility scans belong to the paired audit, not
+        // ordinary telemetry: placement searches are material AI work.
+        static const bool audit = [] {
+            const char* value = std::getenv("DUNECITY_TECH_SAVINGS_AUDIT");
+            return value && value[0] == '1' && value[1] == '\0';
+        }();
+        if (!audit || !AITelemetry::log().enabled()) return;
+    }
     const bool threatened = pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid();
     pass.militaryEmergency = threatened;
     pass.incomeShares = QuantBotSpendingPolicy::incomeShares(threatened);

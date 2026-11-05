@@ -653,7 +653,8 @@ def play(args, scratch, binary, game):
     probe_sha256 = hashlib.sha256(Path(binary).read_bytes()).hexdigest()
     started = time.monotonic()
     process = subprocess.run(command(args, binary, game, out), cwd=root, capture_output=True, text=True,
-                             env=dict(os.environ, BALANCE_DUNECITY_AUDIT='1'))
+                             env=dict(os.environ, BALANCE_DUNECITY_AUDIT='1',
+                                      DUNECITY_TECH_SAVINGS_AUDIT='1'))
     log = out / 'run.log'
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []
     result = next((parse(line, 'SCENARIO_RESULT:') for line in lines if 'SCENARIO_RESULT:' in line), {})
