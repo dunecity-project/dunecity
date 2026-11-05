@@ -347,9 +347,9 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             yardTurn.skipRemainingStructureLogic=true;
         }
     }
-    if (civWarsResearchRequired() && pass.itemCount[Structure_ResearchLab] == 0
+    if (researchRequired() && pass.itemCount[Structure_ResearchLab] == 0
         && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
-        // Only the rebuilding yard may spend this reservation. Repeatable city
+        // Only this lab-building yard may spend the reservation. Repeatable city
         // orders and other producers still save the lab's up-front capital.
         const int researchCash = turn.reserve.reserved;
         pass.money += researchCash;

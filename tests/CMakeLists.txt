@@ -850,6 +850,21 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --no-ai-telemetry --path-workers 1 --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/trooper-support-probe)
         set_tests_properties(quantbot_trooper_support PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # Genuine tech-1 city/classic economies, the registered difficulty and
+        # Builder variants, plus Defend and negative legality/funding controls.
+        foreach(lab_mod IN ITEMS vanilla dunecity)
+            foreach(lab_difficulty IN ITEMS easy medium hard brutal)
+                add_test(NAME quantbot_research_lab_${lab_mod}_${lab_difficulty}
+                    COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --research-lab-ai-probe --repeatable
+                    --mod ${lab_mod} --partner-difficulty ${lab_difficulty}
+                    --seed 1841712204 --no-ai-telemetry --path-workers 1
+                    --wall-timeout 550 --build-dir ${CMAKE_BINARY_DIR}
+                    --output-dir ${CMAKE_BINARY_DIR}/research-lab-ai-${lab_mod}-${lab_difficulty}-probe)
+                set_tests_properties(quantbot_research_lab_${lab_mod}_${lab_difficulty}
+                    PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+            endforeach()
+        endforeach()
         # A paired real-engine regression: no instant completion or fixture orders
         # for the HF/technology being asserted; each difficulty keeps its own
         # defensive floor, and current/queued composition never uses a huge cap.

@@ -221,7 +221,7 @@ struct World {
         bot->planDefenceCoverage(pass);
         bot->planCapitalCandidates(pass);
         bot->chooseCapitalPlan(pass);
-        bot->planCivWarsResearch(pass);
+        bot->planTechResearch(pass);
         return pass;
     }
 

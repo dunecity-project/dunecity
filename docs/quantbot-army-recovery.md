@@ -201,6 +201,40 @@ analysis are under `../outputs/tech-saving-20261105/`, including
 `private-save-roundtrip-85ca5918/receipt.json`.
 
 
+## Required Research Lab progression
+
+With the match's Research Lab option enabled, the separately hashed
+`[Force Concentration] ResearchLabProgression` switch treats the lab and its
+research as prerequisites, not optional production expansion. It defaults ON;
+OFF preserves the prior ordinary-match investment policy. Generated
+Civilization Wars retains its required progression in either switch state.
+`ResearchLab=false` still disables the AI's lab/research policy altogether.
+
+The AI must have a powered, bootstrapped, positive-income economy and enough
+uncommitted cash for the lab/foundation or the complete research price plus
+working cash. Current defence emergencies and accepted production commitments
+remain protected. It does not wait for the larger opening harvester fleet,
+perfect crime coverage or repeated optional factory/city allocations: later
+technology may be needed to supply those very workers and facilities.
+Required research reserves its purchase before repeatable orders spend it,
+and an idle yard tries the first lab after power/storage emergencies.
+
+Build-list prerequisites, placement, foundations, generation and research
+payment/timing still use the ordinary engine paths shared with humans.
+Queue-inclusive counts prevent duplicate labs across yards. There is no
+new saved AI state, save migration, protocol change or random draw.
+Easy, Medium, Hard, Brutal, Defend and Builder authority use the same rule;
+Fighter-only and switched-off QuantBots remain excluded.
+
+`quantbot_research_lab_<vanilla|dunecity>_<difficulty>` runs a real tech-1
+full-build fixture with paired hashed switches, paid placement, normal
+level-2 research completion, Builder/Defend and negative legality/funding
+controls. `tests/ai/research-lab-continuation.py` audits and resumes an exact
+save through commit-pinned cluster units. Its frozen diagnostic input stores
+the save's SHA256 and gzip/base64 bytes; measured OFF/ON units reload it
+independently, without a diagnostic planning pass changing their starting
+state.
+
 ## Dispatch and the military limit
 
 The default outnumbered threshold is an observed enemy advantage of at least

@@ -298,6 +298,9 @@ parser.add_argument('--tech-saving-probe', action='store_true',
 parser.add_argument('--simple-tech-saving-probe', action='store_true',
                     help='Verify independent ledger-free current/queued composition, immediate legal technology '
                          'installments and real paid progression/opening needs')
+parser.add_argument('--research-lab-ai-probe', action='store_true',
+                    help='Verify tech-1 QuantBot lab legality, paid placement and Normal research '
+                         'completion with hashed progression off/on, Builder and Defend controls')
 parser.add_argument('--police-placement-probe', action='store_true')
 parser.add_argument('--police-budget-probe', action='store_true')
 parser.add_argument('--police-reinforcement-probe', action='store_true',
@@ -819,6 +822,7 @@ if args.opening_economy_probe: env['BALANCE_OPENING_ECONOMY_PROBE'] = '1'
 if args.trooper_support_probe: env['BALANCE_TROOPER_SUPPORT_PROBE'] = '1'
 if args.tech_saving_probe: env['BALANCE_TECH_SAVING_PROBE'] = '1'
 if args.simple_tech_saving_probe: env['BALANCE_SIMPLE_TECH_SAVING_PROBE'] = '1'
+if args.research_lab_ai_probe: env['BALANCE_RESEARCH_LAB_AI_PROBE'] = '1'
 if args.growth_installment_probe or args.civic_priority_probe:
     env['BALANCE_GROWTH_INSTALLMENT_PROBE'] = '1'
 if args.civic_priority_probe: env['BALANCE_CIVIC_PRIORITY_ONLY'] = '1'

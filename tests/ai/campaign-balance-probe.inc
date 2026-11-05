@@ -74,6 +74,7 @@
 #include "tech-saving-probe.inc"
 #include "simple-tech-saving-probe.inc"
 #include "research-lab-continuation-probe.inc"
+#include "research-lab-ai-probe.inc"
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -140,6 +141,10 @@ int runCampaignBalanceProbe() {
     }
     if(std::getenv("BALANCE_TROOPER_SUPPORT_PROBE")) {
         runTrooperSupportProbe();
+        return MENU_QUIT_DEFAULT;
+    }
+    if(std::getenv("BALANCE_RESEARCH_LAB_AI_PROBE")) {
+        runResearchLabAIProbe(requestedMod.c_str(), partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
     if(std::getenv("BALANCE_SIMPLE_TECH_SAVING_PROBE")) {

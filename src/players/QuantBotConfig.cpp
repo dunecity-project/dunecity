@@ -353,6 +353,7 @@ QuantBotConfig::QuantBotConfig() {
     // Stefan, 2026-11-01: Hard's city 20k/40k/60k/90k, growing to the largest other city.
     force.hardCityMatch = true;
     force.researchLab = true;
+    force.researchLabProgression = true;
     force.cityGrowthPower = true;
     force.cityPowerSizing = true;
     force.cityOpeningCapital = true;
@@ -672,6 +673,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
         iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
         iniFile.setBoolValue("Force Concentration", "ResearchLab", force.researchLab);
+        iniFile.setBoolValue("Force Concentration", "ResearchLabProgression", force.researchLabProgression);
         iniFile.setBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
         iniFile.setBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
         iniFile.setBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
@@ -816,6 +818,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
     civWarsStrategy = iniFile.getBoolValue("Civ Wars", "Strategy", civWarsStrategy);
     force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);
+    force.researchLabProgression = iniFile.getBoolValue("Force Concentration", "ResearchLabProgression", force.researchLabProgression);
     force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
     force.cityPowerSizing = iniFile.getBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
     force.cityOpeningCapital = iniFile.getBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
@@ -1323,6 +1326,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("defencePrerequisites", force.defencePrerequisites);
     addNamed("hardCityMatch", force.hardCityMatch);
     addNamed("researchLab", force.researchLab);
+    addNamed("researchLabProgression", force.researchLabProgression);
     addNamed("cityGrowthPower", force.cityGrowthPower);
     addNamed("cityPowerSizing", force.cityPowerSizing);
     addNamed("cityOpeningCapital", force.cityOpeningCapital);
