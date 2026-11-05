@@ -128,9 +128,13 @@
 | Dispatches | 3.5816 | .9896 | -2.5920 [-2.9801,-2.2083] |
 | Kill value | 43,309 | 11,252 | -32,057 [-36,113,-28,121] |
 | Actual live unit price | 308.39 | 271.93 | -36.46 [-53.69,-18.54] |
+| Economy-stall / bankrupt-empty detectors | .3151 / .3498 | .1632 / .1936 | both pooled intervals favorable |
+| Missing-Starport detector | .2335 | .1849 | -.0486 [-.0816,-.0174] |
 | Gross spice / tax | 85,295 / 6,972 | 75,998 / 5,115 | both intervals adverse |
 
-- Price coverage205/320 paired nonempty armies; outcomes/income320/320. Own
+- Price coverage205/320 paired nonempty armies; outcomes/income/stall/bankrupt
+  320/320. Missing-SP304/320 eligible pairs is ever-latched sampled absence
+  after20m while alive+yard in both arms, not final absence. Own
   elimination .2969→.0642, alive-final .7031→.9358, right-censored observed
   survival36.690→39.483m. Symmetric global-OFF/ON selfplay measures match
   health/passivity, not direct relative winning skill; no decided ON matches
@@ -146,12 +150,14 @@
   1,018,900 credits/5,870 orders; all47,707 cheap contexts are retained.
 - Verification is source-qualified: `8a89f35d` full156/165 (all other156 PASS,
   nine Simple failures). Fixture-only `88fbd772`6/9 PASS, all Vanilla/Dune2R;
-  City3/3 fail atelapsed0 because test turrets leave89 power headroom while
-  the existing city rule requires396. Physical initial-power premise corrected
-  without policy/threshold/payment changes; its own pinned result is separate.
-  Earlier quote-identity/income/four-refinery premises are documented, not
-  retroactively green. Retirement selection158/159 had a Mouse timeout;
-  Main's separate retirement full159/165 is a different run.
+  City3/3 fail initially because physical power headroom89 is below reserve396.
+  `048a5fae` fixes that initial-power premise without policy/payment changes,
+  but its City selection **0/3**, both Mini and Pro. Remaining five-minute HF
+  upgrade is unpaid/incomplete despite later cash1214/1354 covering quote300:
+  emerging dangerous crime disables tech admission. Initial stability does not
+  persist; no bypass or further iteration, no all-green claim. Earlier
+  quote/income/refinery failures are not retroactively green. Retirement
+  selection158/159 had a Mouse timeout; Main's full159/165 is a separate run.
 - Approved real full-Game 9882/9883 compatibility at `8a89f35d` **2/2 PASS**:
   load600cycles→9883resave/reload→continuation/native-worm checks. Input/app/
   probe SHA receipts and local private archive: `private-compatibility-8a89f35d/`.

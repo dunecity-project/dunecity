@@ -58,6 +58,21 @@ that refinery opening. Payment, progress, completion and zero-cash acceptance
 assertions remain. Its own pinned results must not retroactively relabel
 `8a89f35d` all-green.
 
+Fixture-only `88fbd772` passed **6/9** (all Dune2R/Vanilla); its three City
+failures had insufficient physical initial power reserve. `048a5fae` corrects
+that setup with real Windtraps, without changing gameplay thresholds or payment
+rules. Its separate City selection still passed **0/3**, on both Mini and Pro
+(`20261106T030739-tech-city-physical-power-048-f30819`).
+The remaining bounded failure is an HF upgrade: Medium/Hard start with zero
+cash, Brutal just below its 300-credit quote. After 18,750 cycles (five simulated
+minutes), cash is 1,214/1,354 with arriving income and sufficient power, but no
+target upgrade payment/completion. Emerging dangerous City crime disables
+`techSavingActive`; inactive/unselected tech cannot admit that upgrade.
+The initial stable premise does not persist. This is observed non-completion,
+not an all-green fixture or justification to bypass civic/emergency priority.
+No further fixture or policy iteration was made after the final cohort rejected
+the experiment.
+
 The approved private full-Game probes at `8a89f35d` passed **2/2**: actual 9882
 and 9883 saves loaded, ran 600 cycles, resaved/reloaded as 9883 and continued with
 native-worm/state checks. Their input/native binary hashes and local-only
@@ -84,12 +99,18 @@ Hard/Brutal matched equal-game means, balanced across the six mod/research cells
 | Dispatches | 3.5816 | 0.9896 | -2.5920 [-2.9801, -2.2083] |
 | Kill value | 43,309 | 11,252 | -32,057 [-36,113, -28,121] |
 | Actual live per-object replacement price | 308.39 | 271.93 | -36.46 [-53.69, -18.54] |
+| Economy-stall detector | 0.3151 | 0.1632 | -0.1519 [-0.2379, -0.0660] |
+| Bankrupt/empty-queue detector | 0.3498 | 0.1936 | -0.1563 [-0.2431, -0.0720] |
+| Missing-Starport detector | 0.2335 | 0.1849 | -0.0486 [-0.0816, -0.0174] |
 | Gross spice per observed house history | 85,295 | 75,998 | -9,297 [-12,489, -5,891] |
 | Gross tax per observed house history | 6,972 | 5,115 | -1,856 [-2,971, -852] |
 
-All six cells' dispatch and kill-value game intervals were adverse. Outcome and
-income coverage is 320/320 paired houses; live price is conditioned on 205/320
-nonempty measured pairs, not zero-imputed. Own-house elimination fell
+All six cells' dispatch and kill-value game intervals were adverse, with four
+negative seed blocks in each. Outcome, income, stall and bankruptcy coverage is
+320/320 paired houses; live price is conditioned on 205/320 nonempty measured
+pairs, not zero-imputed. Missing-Starport has 304/320 eligible pairs: ever-latched
+absence at a sampled minute >=20 while alive with a yard, with both arms exposed;
+later completion does not clear the flag. Own-house elimination fell
 0.2969→0.0642 and alive-final rose 0.7031→0.9358; observed right-censored survival
 was 36.690→39.483 minutes. In symmetric global-OFF/global-ON selfplay, fewer
 eliminations and no decided games indicate passivity/unresolved matches, **not
@@ -116,9 +137,10 @@ For City/research-OFF, accepted production/economy/military quotes were
 not allocated income or physical-payment buckets; cheap/tech/city overlays
 are not additive. The largest ON cheap path was `existing_army_composition`,
 1,018,900 credits over 5,870 City/research-OFF orders. At the 40-minute H/B
-checkpoint, paired alive City/research-OFF armies grew 32.95→41.12 objects but
-value fell 8,409→8,069 and mean price 215.89→181.86: more cheap volume did not
-satisfy the requested higher-value mix.
+checkpoint, 114 paired-alive City/research-OFF armies grew 32.95→41.12 objects
+but value fell 8,409→8,069. Mean price was 215.89→181.86 in the separately
+conditioned 106 paired nonempty armies, not a ratio of those aggregate means:
+more cheap volume did not satisfy the requested higher-value mix.
 
 The four-minute diagnostic has 141 candidate groups and six exact higher-tech
 not-ordered/diversion examples. Windows overlap and flags are planner
