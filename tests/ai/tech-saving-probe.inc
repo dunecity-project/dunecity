@@ -9,6 +9,7 @@
 #include <Map.h>
 #include <dunecity/CityConstants.h>
 #include <dunecity/CitySimulation.h>
+#include <dunecity/CityStructurePopulation.h>
 #include <mod/ModManager.h>
 #include <players/HumanPlayer.h>
 #include <players/QuantBot.h>
@@ -56,7 +57,7 @@ inline bool light(Uint32 item) {
     return item == Unit_Trike || item == Unit_RaiderTrike || item == Unit_Quad;
 }
 
-inline std::string mapText() {
+inline std::string mapText(HOUSETYPE side) {
     std::ostringstream map;
     map << "[BASIC]\nVersion=2\nWinFlags=3\nLoseFlags=1\nTechLevel=9\n"
         << "[MAP]\nSizeX=64\nSizeY=64\n";
@@ -65,10 +66,15 @@ inline std::string mapText() {
         std::snprintf(row, sizeof(row), "%03d=", y);
         map << row << std::string(64, '%') << '\n';
     }
-    map << "[Player1]\nCredits=100000\nBrain=Team1\n"
-        << "[Player2]\nCredits=100000\nBrain=Team2\n"
-        << "[STRUCTURES]\nID000=Player1,Const Yard,256," << 8 + 8 * 64 << '\n'
-        << "ID001=Player2,Const Yard,256," << 56 + 54 * 64 << '\n';
+    const HOUSETYPE opposite = side == HOUSE_HARKONNEN ? HOUSE_ATREIDES : HOUSE_HARKONNEN;
+    const auto defender = getHouseNameByNumber(side);
+    const auto attacker = getHouseNameByNumber(opposite);
+    // Generic Player1/2 sections are randomly assigned by INIMapLoader. Named
+    // houses keep the bot's yard with its scenario economy for every seed.
+    map << '[' << defender << "]\nCredits=100000\nBrain=Team1\n"
+        << '[' << attacker << "]\nCredits=100000\nBrain=Team2\n"
+        << "[STRUCTURES]\nID000=" << defender << ",Const Yard,256," << 8 + 8 * 64 << '\n'
+        << "ID001=" << attacker << ",Const Yard,256," << 56 + 54 * 64 << '\n';
     return map.str();
 }
 
@@ -88,7 +94,8 @@ struct World {
     int fullTurns = 0;
 
     World(const char* mod, const char* playerClass, bool enabled, Stage stage,
-          Army army = Army::ReadyLight, int workers = 8, bool causalControlsOff = false) {
+          Army army = Army::ReadyLight, int workers = 8, bool causalControlsOff = false,
+          HOUSETYPE side = HOUSE_HARKONNEN, int carryalls = 3) {
         require(currentGame == nullptr, "Fixture worlds share live engine globals");
         require(ModManager::instance().setActiveMod(mod), "Cannot activate savings fixture mod");
         getQuantBotConfig().strategy.random = false;
@@ -105,12 +112,13 @@ struct World {
         options.onlyOnePalace = true; // This fixture measures the first legal one-off, not repeat Palace capacity.
         options.maximumNumberOfHarvestersOverride = 8;
         options.maximumNumberOfUnitsOverride = -1;
-        GameInitSettings init("tech-saving.ini", mapText(), true, options);
+        GameInitSettings init("tech-saving.ini", mapText(side), true, options);
         init.randomSeed = static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SEED")));
-        GameInitSettings::HouseInfo defender(HOUSE_HARKONNEN, 1);
+        GameInitSettings::HouseInfo defender(side, 1);
         defender.addPlayerInfo({"Technology savings QuantBot", playerClass});
         init.addHouseInfo(defender);
-        GameInitSettings::HouseInfo attacker(HOUSE_ATREIDES, 2);
+        const HOUSETYPE opposite = side == HOUSE_HARKONNEN ? HOUSE_ATREIDES : HOUSE_HARKONNEN;
+        GameInitSettings::HouseInfo attacker(opposite, 2);
         attacker.addPlayerInfo({settings.general.playerName, HUMANPLAYERCLASS});
         init.addHouseInfo(attacker);
         game = std::make_unique<Game>();
@@ -121,8 +129,8 @@ struct World {
         game->initializeGameLoop();
         game->bPause = false;
         game->frameTiming.unitPhases = false;
-        owner = game->getHouse(HOUSE_HARKONNEN);
-        enemy = game->getHouse(HOUSE_ATREIDES);
+        owner = game->getHouse(side);
+        enemy = game->getHouse(opposite);
         require(owner && enemy && game->gameType == GameType::CustomGame,
                 "Savings fixture is not a genuine Custom match");
         for (const auto& player : owner->getPlayerList())
@@ -134,6 +142,8 @@ struct World {
                 yard = dynamic_cast<ConstructionYard*>(structure);
         require(bot && pilot && yard && pLocalHouse == enemy && game->localHumanImmortalityApplies(),
                 "Missing registered bot, yard or genuinely immortal passive Human opponent");
+        require(yard->getLocation() == Coord(8, 8),
+                "Named scenario binding put the production bot in the opposite start");
         // Per-house overrides are installed after mod initialization, as in the
         // causal match arms, rather than assuming a mod left the global INI alone.
         auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
@@ -146,9 +156,24 @@ struct World {
         configHash = config->getConfigHash();
 
         for (int i = 0; i < 14; ++i) place(Structure_WindTrap);
+        if (game->isCitySimEnabled()) {
+            // A physical, road-served district: lower initial apartments and
+            // mature jobs, with services in both the industrial and residential
+            // neighbourhoods. No population exceeds the engine's 40-person cap.
+            for (const Coord at : {Coord(10,14), Coord(22,14), Coord(10,29), Coord(28,29)})
+                placeAt(Structure_PoliceStation, at);
+            for (const Coord at : {Coord(10,23), Coord(25,23)}) placeAt(Structure_Stadium, at);
+            for (int i = 0; i < 8; ++i) {
+                auto* zone = static_cast<ZoneStructure*>(placeAt(Structure_ZoneResidential, Coord(10 + i * 3, 26)));
+                zone->setStartingLevel(stage == Stage::FirstStarport ? 2 : 1);
+            }
+            for (const int x : {10, 16, 22})
+                static_cast<ZoneStructure*>(placeAt(Structure_ZoneCommercial, Coord(x,20)))->setStartingLevel(3);
+            static_cast<ZoneStructure*>(placeAt(Structure_ZoneIndustrial, Coord(28,20)))->setStartingLevel(3);
+        }
         place(Structure_Radar);
         for (int i = 0; i < 3; ++i) lights.push_back(static_cast<BuilderBase*>(place(Structure_LightFactory)));
-        for (int i = 0; i < 2; ++i) place(Structure_WOR);
+        for (int i = 0; i < 2; ++i) place(side == HOUSE_ATREIDES ? Structure_Barracks : Structure_WOR);
         for (int i = 0; i < 3; ++i) place(Structure_Refinery);
         for (int i = 0; i < 5; ++i) place(Structure_Silo);
         if (stage != Stage::FirstStarport) place(Structure_StarPort);
@@ -164,26 +189,13 @@ struct World {
         // Cover the starting core so a peaceful technology fixture is not
         // measuring a different proactive-turret or crime-capital project.
         for (int i = 0; i < 8; ++i) place(Structure_RocketTurret);
-        if (game->isCitySimEnabled()) {
-            for (int i = 0; i < 8; ++i) {
-                auto* zone = dynamic_cast<ZoneStructure*>(place(Structure_ZoneResidential));
-                require(zone, "Missing initial developed residential district");
-                zone->setResidentialPopulation(100);
-            }
-            place(Structure_ZoneCommercial);
-            place(Structure_ZoneIndustrial);
-            place(Structure_PoliceStation);
-            place(Structure_PoliceStation);
-            auto& state = game->getCitySimulation()->houseState_[HOUSE_HARKONNEN];
-            state.resPop = 800;
-            state.comPop = state.indPop = 40;
-            state.taxBaseEighths = 8000;
-            state.avgLandValue = 160;
-            state.resValve = state.comValve = state.indValve = 0;
-            state.civicDemandBlocked = 0;
-        }
-        for (int y = 2; y < 37; ++y) for (int x = 2; x < 37; ++x)
-            if (!currentGameMap->getTile(x, y)->hasAStructure()) currentGameMap->getTile(x, y)->setRoad(true);
+        if (game->isCitySimEnabled())
+            for (int y = 2; y < 37; ++y) for (int x = 2; x < 37; ++x)
+                if (!currentGameMap->getTile(x, y)->hasAStructure()) {
+                    owner->placeStructure(NONE_ID, Structure_Road, x, y, true, true);
+                    require(currentGameMap->getTile(x, y)->isRoad(),
+                            "Initial city road network failed real scenario placement");
+                }
         for (int y = 4; y < 30; ++y) for (int x = 38; x < 62; ++x) {
             auto* tile = currentGameMap->getTile(x, y);
             tile->setType(Terrain_Spice);
@@ -191,11 +203,17 @@ struct World {
         }
         while (owner->getNumItems(Unit_Harvester) < workers) {
             const int i = owner->getNumItems(Unit_Harvester);
-            auto* worker = spawn(owner, Unit_Harvester, Coord(37 + i % 3, 29 + i / 3));
+            auto* worker = static_cast<Harvester*>(spawn(owner, Unit_Harvester, Coord(37 + i % 3, 29 + i / 3)));
             worker->doSetAttackMode(HARVEST);
+            if (stage == Stage::Progression) {
+                // The mature working fleet starts with its harvested cargo,
+                // not extra cash. Only ordinary unloading can fund the plan.
+                worker->setAmountOfSpice(worker->getSpiceCapacity());
+                worker->doReturn();
+            }
         }
         require(owner->getNumItems(Unit_Harvester) == workers, "Opening-worker scenario has unintended free workers");
-        for (int i = 0; i < 3; ++i) spawn(owner, Unit_Carryall, Coord(18 + i, 34));
+        for (int i = 0; i < carryalls; ++i) spawn(owner, Unit_Carryall, Coord(18 + i, 34));
         auto seedArmy = [&](Uint32 item, int count) {
             for (int i = 0; i < count; ++i) {
                 const int n = static_cast<int>(initialArmy.size());
@@ -204,7 +222,7 @@ struct World {
         };
         if (army == Army::ReadyLight) seedArmy(Unit_Quad, 18);
         if (army == Army::BelowValueFloor) seedArmy(Unit_Trooper, 6);
-        if (army == Army::TinyMixed) { seedArmy(Unit_Tank, 1); seedArmy(Unit_Quad, 5); }
+        if (army == Army::TinyMixed) { seedArmy(Unit_Tank, 1); seedArmy(Unit_Quad, 2); }
         if (army == Army::TinyTank) seedArmy(Unit_Tank, 1);
 
         // A real, ordinary-price scenario catalogue. Fresh generated fixtures
@@ -231,6 +249,7 @@ struct World {
         // the shortage this technology fixture is intended to reproduce.
         owner->capacity = 100000;
         game->gameCycleCount = MILLI2CYCLES(300000);
+        if (game->isCitySimEnabled()) initializePhysicalCity();
         bot->lastCalculatedSpice = 24 * 26 * 1000;
         bot->militaryValueLimit = 10000000;
         bot->harvesterLimit = 8;
@@ -250,6 +269,49 @@ struct World {
         currentGame = nullptr;
         pLocalPlayer = nullptr;
         pLocalHouse = nullptr;
+    }
+
+    StructureBase* placeAt(Uint32 item, Coord at) {
+        auto* structure = owner->placeStructure(NONE_ID, item, at.x, at.y, true, true);
+        require(structure, "Initial positioned savings structure placement failed");
+        return structure;
+    }
+
+    void initializePhysicalCity() {
+        auto* sim = game->getCitySimulation();
+        auto& state = sim->houseState_[owner->getHouseID()];
+        int residential = 0, commercial = 0, industrial = 0, taxBase = 0;
+        for (auto* structure : structureList) {
+            if (structure->getOwner() != owner) continue;
+            const Uint32 item = structure->getItemID();
+            auto* zone = dynamic_cast<ZoneStructure*>(structure);
+            if (!zone) structure->setCityOccupancy(DuneCity::getStructureMaxLevel(item));
+            const int level = zone
+                ? currentGameMap->getTile(structure->getLocation())->getCityZoneDensity()
+                : structure->getCityOccupancy();
+            const int population = DuneCity::getStructurePopulation(structure, level);
+            switch (DuneCity::getStructureCityRole(item)) {
+            case DuneCity::CityRole::Residential: residential += population; break;
+            case DuneCity::CityRole::Commercial: commercial += population; break;
+            case DuneCity::CityRole::Industrial: industrial += population; break;
+            default: break;
+            }
+            if (item == Structure_Palace) commercial += DuneCity::getPalaceCommercialPopulation(level);
+            taxBase += DuneCity::getStructureTaxBaseEighths(structure, level);
+        }
+        state.resPop = state.prevResPop = residential;
+        state.comPop = state.prevComPop = commercial;
+        state.indPop = state.prevIndPop = industrial;
+        state.taxBaseEighths = taxBase;
+        state.resValve = state.comValve = state.indValve = 0;
+        state.policeFundingPercent = 100;
+        // Recount actual structures, roads, land value, crime and tax base at
+        // the mature scenario clock. No synthetic res800/tax8000 can disappear
+        // on the first real scan, and no stale day-zero history drives migration.
+        sim->reconcileLoadedMapState(game->getGameCycleCount());
+        state.prevResPop = state.resPop;
+        state.prevComPop = state.comPop;
+        state.prevIndPop = state.indPop;
     }
 
     StructureBase* place(Uint32 item) {
@@ -281,7 +343,7 @@ struct World {
         return nullptr;
     }
 
-    int price(Uint32 item) const { return game->objectData.data[item][HOUSE_HARKONNEN].price; }
+    int price(Uint32 item) const { return game->objectData.data[item][owner->getHouseID()].price; }
 
     int queued(Uint32 item) const {
         int count = 0;
@@ -314,6 +376,21 @@ struct World {
         for (const Uint32 item : {Unit_Soldier, Unit_Infantry, Unit_Trooper, Unit_Troopers})
             total += price(item) * (owner->getNumItems(item) + (includeQueues ? queued(item) : 0));
         return total;
+    }
+
+    void seedSpentEconomy() {
+        cash(10000);
+        // A valid paused ledger after 20k of receipts, 3k of completed
+        // production and 7k of completed economic commitments. This is initial
+        // scenario history, not a fabricated payment for the asserted next unit.
+        auto& ledger = bot->spendingLedger;
+        ledger = {};
+        ledger.reconcile(20000, QuantBotSpendingPolicy::incomeShares(false));
+        ledger.charge(QuantBotSpendingPolicy::Bucket::Production, 3000);
+        ledger.charge(QuantBotSpendingPolicy::Bucket::Economy, 7000);
+        require(ledger.lastWealth == netWealth() && ledger.available(QuantBotSpendingPolicy::Bucket::Economy) == 0
+                && ledger.available(QuantBotSpendingPolicy::Bucket::Military) == 7000,
+                "Spent-economy control is not a wealth-conserving historical ledger");
     }
 
     void cash(int credits) {
@@ -449,11 +526,14 @@ inline void currentAndQueuedComposition(const char* mod, const char* playerClass
     for (const bool enabled : {false, true}) {
         World world(mod, playerClass, enabled, Stage::Complete,
                     queuedControl ? Army::TinyTank : Army::TinyMixed, 8, causalControlsOff);
-        // Abundant treasury makes the legacy future-funded quota observable
-        // even for a small light prior. The lobby's real one-yard limit keeps
-        // optional MCV capacity from substituting for the measured heavy order.
-        world.game->gameInitSettings.gameOptions.maximumNumberOfConstructionYardsOverride = 1;
-        world.cash(100000);
+        // At this treasury the normal classic target is two yards. Supply both
+        // actual mature yards, rather than selecting an MCV that a one-yard
+        // override rejects and mistaking that legacy branch for composition.
+        auto* secondYard = static_cast<BuilderBase*>(world.place(Structure_ConstructionYard));
+        secondYard->curUpgradeLev = secondYard->getMaxUpgradeLevel();
+        secondYard->updateBuildList();
+        world.game->gameInitSettings.gameOptions.maximumNumberOfConstructionYardsOverride = 2;
+        world.cash(19999);
         if (queuedControl) {
             for (auto* factory : world.lights) factory->doProduceItem(Unit_Quad);
             world.lights.push_back(static_cast<BuilderBase*>(world.place(Structure_LightFactory)));
@@ -512,6 +592,98 @@ inline void currentAndQueuedComposition(const char* mod, const char* playerClass
     }
 }
 
+inline void rejectedFactoryGrowthDoesNotStarveArmy(const char* mod, const char* playerClass) {
+    for (const bool emptyEconomy : {false, true}) {
+        World world(mod, playerClass, true, Stage::Complete, Army::TinyMixed);
+        world.closeMilitaryMarket();
+        if (emptyEconomy) world.seedSpentEconomy();
+        else {
+            world.game->gameInitSettings.gameOptions.maximumNumberOfConstructionYardsOverride = 1;
+            world.cash(100000);
+        }
+        auto* heavy = world.producer(Structure_HeavyFactory);
+        const auto pass = world.observePlan();
+        const size_t next = UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
+            pass.compositionPrice, pass.compositionAvailable);
+        require(heavy && next < UnitMixPolicy::kOrnithopterSlot
+                && heavy->isAvailableToBuild(vehicles[next]),
+                "Rejected-growth control has no globally selected legal heavy unit");
+        const Uint32 selected = vehicles[next];
+        const auto economyBefore = world.bot->getSpendingLedger().balance[1];
+        const int completedBefore = world.owner->getNumBuiltItems(selected);
+        PaidProduction evidence(world);
+        world.build();
+        evidence.observe();
+        require(heavy->getProductionQueueSize() == 1 && heavy->getCurrentProducedItem() == selected
+                && world.queued(Unit_MCV) == 0 && world.queuedLight() == 0,
+                "Rejected MCV growth occupied the HF turn instead of the selected heavy composition order");
+        if (emptyEconomy)
+            require(world.bot->getSpendingLedger().balance[1] == economyBefore,
+                    "A rejected economic priority spent the exhausted economy wallet");
+        bool paidByHeavy = false;
+        const Uint32 deadline = world.game->getGameCycleCount() + MILLI2CYCLES(90000);
+        while (world.game->getGameCycleCount() < deadline
+               && world.owner->getNumBuiltItems(selected) == completedBefore) {
+            evidence.step();
+            paidByHeavy |= heavy->getCurrentProducedItem() == selected && heavy->getProductionProgress() > 0;
+        }
+        require(paidByHeavy && world.owner->getNumBuiltItems(selected) > completedBefore,
+                "Admitted heavy order after rejected growth never received payment and completed");
+        SDL_Log("TECH_SAVING_HF_GROWTH_HOLD: mod=%s difficulty=%s cause=%s selected=%u paid=1 completed=1 "
+                "mcv_queued=0 cheap_fallback=0 exact_ledger=1",
+                mod, playerClass, emptyEconomy ? "economy_wallet" : "yard_limit", selected);
+    }
+}
+
+inline void rejectedTransportGrowthDoesNotStarveAir(const char* mod, const char* playerClass) {
+    World world(mod, playerClass, true, Stage::Complete, Army::Empty, 8, false, HOUSE_ATREIDES, 1);
+    world.closeMilitaryMarket();
+    auto mix = world.observePlan();
+    require(mix.compositionAvailable[UnitMixPolicy::kOrnithopterSlot]
+            && mix.unitMix[UnitMixPolicy::kOrnithopterSlot] > 0,
+            "Transport-growth control has no genuine Atreides Ornithopter offer");
+    // Seed a finite ground army near its actual current target, leaving only
+    // its air allocation missing. These are labelled initial scenario units.
+    int seeded = 0;
+    for (size_t i = 0; i < vehicles.size(); ++i) {
+        if (i == UnitMixPolicy::kOrnithopterSlot || !mix.compositionAvailable[i] || mix.unitMix[i] <= 0) continue;
+        const int price = world.price(vehicles[i]);
+        const int count = (20000 * mix.unitMix[i] / 10000 + price - 1) / price;
+        for (int n = 0; n < count; ++n) {
+            world.spawn(world.owner, vehicles[i], Coord(4 + seeded % 16, 39 + seeded / 16));
+            ++seeded;
+        }
+    }
+    world.seedSpentEconomy();
+    const auto pass = world.observePlan();
+    require(pass.itemCount[Unit_Carryall] == 1 && pass.transportTarget > 1
+            && UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
+                pass.compositionPrice, pass.compositionAvailable) == UnitMixPolicy::kOrnithopterSlot,
+            "Transport-growth control does not need both an economic carryall and its globally due air slot");
+    auto* highTech = world.producer(Structure_HighTechFactory);
+    require(highTech && highTech->isAvailableToBuild(Unit_Ornithopter), "Measured aircraft is not legal at its actual factory");
+    const auto economyBefore = world.bot->getSpendingLedger().balance[1];
+    const int builtBefore = world.owner->getNumBuiltItems(Unit_Ornithopter);
+    PaidProduction evidence(world);
+    world.build();
+    evidence.observe();
+    require(highTech->getProductionQueueSize() == 1 && highTech->getCurrentProducedItem() == Unit_Ornithopter
+            && world.queued(Unit_Carryall) == 0 && world.queuedLight() == 0
+            && world.bot->getSpendingLedger().balance[1] == economyBefore,
+            "Unfunded additional transport swallowed or paid from the selected military aircraft's wallet");
+    bool paidAtHighTech = false;
+    const Uint32 deadline = world.game->getGameCycleCount() + MILLI2CYCLES(90000);
+    while (world.game->getGameCycleCount() < deadline && world.owner->getNumBuiltItems(Unit_Ornithopter) == builtBefore) {
+        evidence.step();
+        paidAtHighTech |= highTech->getCurrentProducedItem() == Unit_Ornithopter && highTech->getProductionProgress() > 0;
+    }
+    require(paidAtHighTech && world.owner->getNumBuiltItems(Unit_Ornithopter) > builtBefore,
+            "Aircraft after rejected transport growth never received actual factory payment and completion");
+    SDL_Log("TECH_SAVING_HT_GROWTH_HOLD: mod=%s difficulty=%s house=atreides carryalls=1 target=%d "
+            "economy_available=0 ornithopter_paid=1 completed=1 cheap_fallback=0 exact_ledger=1",
+            mod, playerClass, pass.transportTarget);
+}
+
 inline void paidTechnologyProgression(const char* mod, const char* playerClass, bool causalControlsOff) {
     World world(mod, playerClass, true, Stage::Progression, Army::ReadyLight, 8, causalControlsOff);
     world.cash(world.price(Structure_HeavyFactory) - 1);
@@ -547,6 +719,24 @@ inline void paidTechnologyProgression(const char* mod, const char* playerClass, 
                         "Parallel technology planning duplicated an existing or pending first supplier");
         }
         if (firstHfCycle >= 0 && launcherCycle >= 0 && ixCycle >= 0 && palaceCycle >= 0) break;
+    }
+    if (firstHfCycle < 0 || launcherCycle < 0 || ixCycle < 0 || palaceCycle < 0
+        || !evidence.completed(Structure_RepairYard) || !evidence.completed(Structure_HighTechFactory)
+        || !upgradeQueued || evidence.paidUpgrades.empty()) {
+        const auto pass = world.observePlan();
+        const auto& ledger = world.bot->getSpendingLedger();
+        SDL_Log("TECH_SAVING_PROGRESSION_BLOCKED: first_hf=%d launcher=%d ix=%d palace=%d repair=%d hightech=%d "
+                "upgrade_started=%d upgrade_paid=%d cash=%d net_income_4m=%d ready_units=%d ready_value=%d minimum=%d "
+                "city_population=%d dangerous_crime=%d power=%d/%d candidate=%u candidate_cost=%d active=%d "
+                "production_raw=%lld economy_raw=%lld military_raw=%lld",
+                firstHfCycle, launcherCycle, ixCycle, palaceCycle, int(evidence.completed(Structure_RepairYard)),
+                int(evidence.completed(Structure_HighTechFactory)), int(upgradeQueued), int(!evidence.paidUpgrades.empty()),
+                world.owner->getCredits(), pass.forecastNetIncome, pass.readyGroundUnits, pass.readyGroundValue,
+                pass.defenceMinimumValue, pass.ownTotalPop, pass.dangerousCrimeProperties,
+                world.owner->getProducedPower(), world.owner->getPowerRequirement(),
+                pass.techCandidate.item, pass.techCandidate.cost, int(pass.techSavingActive),
+                static_cast<long long>(ledger.balance[0]), static_cast<long long>(ledger.balance[1]),
+                static_cast<long long>(ledger.balance[2]));
     }
     require(firstHfCycle >= 0 && launcherCycle >= 0 && ixCycle >= 0 && palaceCycle >= 0
             && evidence.completed(Structure_RepairYard) && evidence.completed(Structure_HighTechFactory)
@@ -925,6 +1115,8 @@ void runTechSavingProbe(const char* mod, const char* playerClass) {
         TechSavingProbe::currentAndQueuedComposition(mod, playerClass, true, causalControlsOff);
         TechSavingProbe::paidTechnologyProgression(mod, playerClass, causalControlsOff);
     }
+    TechSavingProbe::rejectedFactoryGrowthDoesNotStarveArmy(mod, playerClass);
+    TechSavingProbe::rejectedTransportGrowthDoesNotStarveAir(mod, playerClass);
     TechSavingProbe::protectedFirstStarport(mod, playerClass);
     TechSavingProbe::foundedTechnologyQuote(mod, playerClass);
     TechSavingProbe::realUnlockStopsCheapReplenishment(mod, playerClass);
