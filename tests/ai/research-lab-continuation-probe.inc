@@ -56,7 +56,7 @@ void audit(Game& game) {
             AITelemetry::Record row;
             row.set("house", h).set("player", bot->getPlayerID()).set("difficulty", int(bot->difficulty))
                 .set("role", int(bot->role)).set("config_hash", bot->botConfig().getConfigHash())
-                .set("research_policy", bot->researchLabPolicyActive()).set("research_required", bot->researchRequired())
+                .set("research_policy", bot->researchLabPolicyActive()).set("research_required", bot->researchRequired(pass))
                 .set("tech_savings", pass.techSavings).set("spendable", pass.money).set("queued_cost", pass.queuedProductionCost)
                 .set("forecast_tax", pass.forecastTax).set("forecast_upkeep", pass.forecastUpkeep)
                 .set("forecast_spice", pass.forecastSpice).set("forecast_net", pass.forecastNetIncome)

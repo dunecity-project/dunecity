@@ -140,7 +140,7 @@ void QuantBot::build(int militaryValue) {
             if (pStructure->isABuilder()) buildProducer(pass, pStructure);
         }
     }
-    if (!civWarsRules() && !researchRequired()) startTechResearch(pass);
+    if (!civWarsRules() && !researchRequired(pass)) startTechResearch(pass);
 
     traceCapitalOutcome(pass);
     // MULTIPLAYER FIX: Use deterministic timer instead of random
@@ -152,9 +152,10 @@ bool QuantBot::researchLabPolicyActive() const {
         && botConfig().force.researchLab && !switchedOff() && !fighterOnly();
 }
 
-bool QuantBot::researchRequired() const {
+bool QuantBot::researchRequired(const BuildPass& pass) const {
     return researchLabPolicyActive() && (currentGame->getGameInitSettings().isCivilizationWars()
-        || (botConfig().force.researchLabProgression && getHouse()->getTechLevel() < 9));
+        || (botConfig().force.researchLabProgression && getHouse()->getTechLevel() < 9
+            && (openingFleetIncomplete(pass) || pass.dangerousCrimeProperties > 0)));
 }
 
 bool QuantBot::economyReadyForCapital(BuildPass& pass) {
@@ -163,12 +164,12 @@ bool QuantBot::economyReadyForCapital(BuildPass& pass) {
     const bool taxIncome = pass.citySimEnabled && getHouse()->getCapacity() > 0
         && pass.forecastTax > pass.forecastUpkeep;
     return (spiceIncome || taxIncome) && pass.forecastNetIncome > 0
-        && !cityBootstrapNeeded(pass) && (researchRequired() || !openingFleetIncomplete(pass))
+        && !cityBootstrapNeeded(pass) && (researchRequired(pass) || !openingFleetIncomplete(pass))
         && getHouse()->hasPower()
         && (!(pass.citySimEnabled || pass.powerRules)
             || getHouse()->getProducedPower() >= getHouse()->getPowerRequirement())
         && !pass.defendingEconomy && !pass.airEngaged
-        && (civWarsRules() || researchRequired() || pass.dangerousCrimeProperties <= 0);
+        && (civWarsRules() || researchRequired(pass) || pass.dangerousCrimeProperties <= 0);
 }
 
 bool QuantBot::techInvestmentReady(BuildPass& pass) {
@@ -203,7 +204,7 @@ bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
             && int64_t(getHouse()->getCredits()) >= int64_t(cost) + (pass.incomeBuckets ? pass.techWorkingReserve : 0)
             && spendingAdmits(pass, Structure_ResearchLab, cost, true);
     if (!techInvestmentReady(pass)) return false;
-    if (!researchRequired()) return canFundWorkingCapital(pass,cost,NONE_ID);
+    if (!researchRequired(pass)) return canFundWorkingCapital(pass,cost,NONE_ID);
     // Technology is a prerequisite, not an optional expansion that must wait for
     // the unlocked worker fleet or repeated city/factory allocations to finish.
     // Queued purchases are already deducted from pass.money; keep real operating
@@ -242,7 +243,7 @@ bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* buil
 }
 
 void QuantBot::planTechResearch(BuildPass& pass) {
-    const bool required = researchRequired();
+    const bool required = researchRequired(pass);
     if ((!required && !civWarsRules()) || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9
         || !techInvestmentReady(pass)) return;
     if (getHouse()->getNumItems(Structure_ResearchLab) == 0) {
@@ -927,7 +928,7 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
         || (pass.citySimEnabled && gameMode == GameMode::Custom) || pass.brutalEconomy;
 }
 
-bool QuantBot::openingFleetIncomplete(BuildPass& pass) {
+bool QuantBot::openingFleetIncomplete(const BuildPass& pass) const {
     return pass.openingWorkerFloor
         && !getHouse()->isGroundUnitLimitReached()
         && CityEconomyInvestmentPolicy::openingWorkersNeeded(pass.itemCount[Unit_Harvester],pass.fundedHarvesterTarget,pass.brutalEconomy);

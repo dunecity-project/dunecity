@@ -205,10 +205,13 @@ analysis are under `../outputs/tech-saving-20261105/`, including
 
 With the match's Research Lab option enabled, the separately hashed
 `[Force Concentration] ResearchLabProgression` switch treats the lab and its
-research as prerequisites, not optional production expansion. It defaults ON;
-OFF preserves the prior ordinary-match investment policy. Generated
-Civilization Wars retains its required progression in either switch state.
-`ResearchLab=false` still disables the AI's lab/research policy altogether.
+research as prerequisites while the opening-fleet or dangerous-crime policy
+would otherwise veto technology. Once those gates are satisfied, the existing
+ordinary investment budget and research pacing apply; already-working classic
+openings do not become a different research rush. The switch defaults ON;
+OFF preserves the prior ordinary-match policy. Generated Civilization Wars
+retains required progression in either state. `ResearchLab=false` still
+disables the AI's lab/research policy altogether.
 
 The AI must have a powered, bootstrapped, positive-income economy and enough
 uncommitted cash for the lab/foundation or the complete research price plus

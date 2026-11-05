@@ -347,7 +347,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             yardTurn.skipRemainingStructureLogic=true;
         }
     }
-    if (researchRequired() && pass.itemCount[Structure_ResearchLab] == 0
+    if (researchRequired(pass) && pass.itemCount[Structure_ResearchLab] == 0
         && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
         // Only this lab-building yard may spend the reservation. Repeatable city
         // orders and other producers still save the lab's up-front capital.

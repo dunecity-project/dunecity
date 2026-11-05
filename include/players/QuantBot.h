@@ -1735,8 +1735,8 @@ private:
     void traceCapitalOutcome(BuildPass& pass);
     /// Match option and hashed policy switch; never consumes RNG or adds saved AI state.
     bool researchLabPolicyActive() const;
-    /// Required progression in research-enabled matches; Civ Wars always retains it.
-    bool researchRequired() const;
+    /// Break ordinary fleet/crime research vetoes; Civ Wars always retains progression.
+    bool researchRequired(const BuildPass& pass) const;
     bool techInvestmentReady(BuildPass& pass);
     bool economyReadyForCapital(BuildPass& pass);
     bool canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier);
@@ -1749,7 +1749,7 @@ private:
     /// Required progression researches before producers; legacy optional policy afterward.
     void startTechResearch(BuildPass& pass);
     // Planning helpers shared by the producers and yards (QuantBotBuild.cpp).
-    bool openingFleetIncomplete(BuildPass& pass);
+    bool openingFleetIncomplete(const BuildPass& pass) const;
     bool openingWorkersNeeded(BuildPass& pass);
     int harvesterInvestmentReserve(BuildPass& pass);
     bool needsFirstTransport(BuildPass& pass);
