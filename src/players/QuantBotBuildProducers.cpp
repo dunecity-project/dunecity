@@ -74,7 +74,8 @@ void QuantBot::buildProducer(BuildPass& pass, const StructureBase* pStructure) {
     turn.pBuilder = static_cast<const BuilderBase*>(pStructure);
     beginBuilderTurn(pass, turn);
     if (recoverBuilderConstruction(pass, turn)) return;
-    if (pass.techSavings && !pass.incomeBuckets && pass.techUpgrade && buildTechSavings(pass, turn)) return;
+    // A selected ordinary-installment project needs no legacy yard-entry cash.
+    if (pass.techSavings && !pass.incomeBuckets && buildTechSavings(pass, turn)) return;
     if (upgradeYardForConcrete(pass, turn)) return;
     if (queueCampaignWindtrap(pass, turn, 0)) return;
     if (buildCampaignRepairYard(pass, turn)) return;

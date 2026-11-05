@@ -17,6 +17,8 @@ installments. There is no full-quote, four-minute funding or cash-reserve
 precondition. Needed yard/factory upgrades retain exactly the human full-credit
 start rule; the AI starts at the actual quote without an extra operating reserve.
 Engine upgrade admission, commands and wire layouts are unchanged.
+The selected installment project also bypasses the yard's legacy 100-credit
+entry threshold; other yard choices keep their existing admission rules.
 
 Military selection uses owned-plus-accepted-queue replacement-value proportions.
 While technology needs funding, ordinary purchases stop at the threat-sized
