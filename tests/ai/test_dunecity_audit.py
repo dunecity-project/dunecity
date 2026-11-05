@@ -184,6 +184,22 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertEqual(captured['city'], '0')
         self.assertEqual(captured['city_spend'], '1')
 
+    def test_simple_policy_context_does_not_imply_income_bucket_allocation(self):
+        plan = dict(session='fixture', seq=1, cycle=0, house=0, event='tech_savings_plan',
+            data=dict(feasible=0, tech_savings=1, savings_policy='installments', income_buckets=0,
+                      tech_funding=1, ledger_initialized=0, production_bps=3000))
+        result = audit['tech_audit']([], [dict(house='0', cycle='20000')],
+            [dict(house='0', alive='1', eliminated_s='-1')], dict(status='complete', decisions=[plan]))
+        captured = result['tech-opportunities.csv'][0]
+        self.assertEqual((captured['tech_savings'], captured['savings_policy'], captured['income_buckets'],
+                          captured['tech_funding'], captured['ledger_initialized']), (1, 'installments', 0, 1, 0))
+        self.assertEqual(captured['production_bps'], 3000)  # Raw context, not an active allocation.
+        legacy = dict(plan, data=dict(feasible=0, tech_savings=0))
+        historical = audit['tech_audit']([], [dict(house='0', cycle='20000')],
+            [dict(house='0', alive='1', eliminated_s='-1')], dict(status='complete', decisions=[legacy]))
+        row = historical['tech-opportunities.csv'][0]
+        self.assertEqual((row['savings_policy'], row['income_buckets'], row['tech_funding']), ('', '', ''))
+
     def test_four_minute_quote_diversion_censors_short_dead_and_incomplete_windows(self):
         def event(name, seq, cycle, **data):
             return dict(session='fixture', house=0, event=name, seq=seq, cycle=cycle, data=data)

@@ -111,7 +111,8 @@ TECH_ORDER_FIELDS = META + ('mod', 'session', 'seq', 'cycle', 'house', 'event', 
                             'builder_item', 'price', 'bucket', 'cheap_unit', 'tech', 'city_spend', 'capture_complete',
                             'rule', 'composition_basis', 'composition_before', 'composition_after',
                             'state_id', 'state_cycle', 'military_value', 'military_cap', 'military_budget', 'military_headroom')
-TECH_PLAN_CONTEXT = ('tech_savings', 'active', 'stable', 'spendable', 'working_reserve', 'defence_minimum',
+TECH_PLAN_CONTEXT = ('tech_savings', 'savings_policy', 'income_buckets', 'tech_funding',
+                     'active', 'stable', 'spendable', 'working_reserve', 'defence_minimum',
                      'ready_ground_units', 'ready_ground_value', 'production_bps', 'economy_bps', 'military_bps',
                      'ledger_initialized', 'production_balance', 'economy_balance', 'military_balance')
 TECH_PLAN_FIELDS = META + ('mod', 'session', 'seq', 'cycle', 'house', 'feasible', 'candidate_kind', 'item',
