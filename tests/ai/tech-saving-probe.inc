@@ -783,9 +783,33 @@ inline void paidTechnologyProgression(const char* mod, const char* playerClass, 
             // Once its first supplier stands, ordinary paid capacity expansion
             // remains legal. The pending first copy and one-off IX/Palace do not
             // get an independent reservation from each yard.
-            if (world.owner->getNumItems(item) == 0 || item == Structure_IX || item == Structure_Palace)
-                require(world.owner->getNumItems(item) + world.queued(item) <= 1,
+            if (world.owner->getNumItems(item) == 0 || item == Structure_IX || item == Structure_Palace) {
+                const int owned = world.owner->getNumItems(item);
+                const int queued = world.queued(item);
+                if (owned + queued > 1) {
+                    SDL_Log("TECH_SAVING_DUPLICATE: mod=%s difficulty=%s item=%u cycle=%u elapsed=%d "
+                            "owned=%d queued=%d built=%d power=%d/%d cash=%d",
+                            mod, playerClass, item, world.game->getGameCycleCount(), elapsed,
+                            owned, queued, world.owner->getNumBuiltItems(item),
+                            world.owner->getProducedPower(), world.owner->getPowerRequirement(),
+                            world.owner->getCredits());
+                    for (const auto* structure : structureList) {
+                        const auto* builder = dynamic_cast<const BuilderBase*>(structure);
+                        if (!builder || builder->getOwner() != world.owner) continue;
+                        for (const auto& order : builder->getBuildList()) {
+                            if (order.itemID != item || order.num <= 0) continue;
+                            SDL_Log("TECH_SAVING_DUPLICATE_QUEUE: item=%u builder=%u producer=%u count=%d "
+                                    "queue=%d current=%u waiting=%d progress=%d hold=%d upgrading=%d",
+                                    item, builder->getObjectID(), builder->getItemID(), order.num,
+                                    builder->getProductionQueueSize(), builder->getCurrentProducedItem(),
+                                    int(builder->isWaitingToPlace()), builder->getProductionProgress().lround(),
+                                    int(builder->isOnHold()), int(builder->isUpgrading()));
+                        }
+                    }
+                }
+                require(owned + queued <= 1,
                         "Parallel technology planning duplicated an existing or pending first supplier");
+            }
         }
     }
     if (!technologyComplete()) {
@@ -1003,6 +1027,41 @@ inline void defensiveReplenishment(const char* mod, const char* playerClass) {
         require(world.bot->ownGroundArmyValue() < world.bot->minWaveValue(),
                 "Defensive replenishment control accidentally meets the main-wave value floor");
         world.build();
+        if (world.queuedLight() == 0) {
+            auto plan = world.observePlan();
+            const auto& ledger = world.bot->getSpendingLedger();
+            SDL_Log("TECH_SAVING_DEFENCE_BLOCKED: mod=%s difficulty=%s initial_units=%zu cash=%d money=%d "
+                    "military=%d budget=%d light_budget=%d ready_units=%d ready_value=%d minimum=%d emergency=%d "
+                    "candidate=%u active=%d next_slot=%zu production_raw=%lld economy_raw=%lld military_raw=%lld",
+                    mod, playerClass, world.initialArmy.size(), world.owner->getCredits(), plan.money,
+                    plan.militaryValue, plan.militaryBudget, plan.lightBudget, plan.readyGroundUnits,
+                    plan.readyGroundValue, plan.defenceMinimumValue, int(plan.militaryEmergency),
+                    plan.techCandidate.item, int(plan.techSavingActive),
+                    UnitMixPolicy::nextExistingSlot(plan.unitMix, plan.compositionValue,
+                        plan.compositionPrice, plan.compositionAvailable),
+                    static_cast<long long>(ledger.balance[0]), static_cast<long long>(ledger.balance[1]),
+                    static_cast<long long>(ledger.balance[2]));
+            for (size_t slot = 0; slot < UnitMixPolicy::kSlots; ++slot)
+                SDL_Log("TECH_SAVING_DEFENCE_SLOT: slot=%zu target=%d existing=%lld price=%lld available=%d",
+                        slot, plan.unitMix[slot], static_cast<long long>(plan.compositionValue[slot]),
+                        static_cast<long long>(plan.compositionPrice[slot]), int(plan.compositionAvailable[slot]));
+            const auto previousBuilder = world.bot->planningBuilder;
+            for (const auto* factory : world.lights) {
+                QuantBot::BuilderTurn turn(plan.money);
+                turn.pBuilder = factory;
+                turn.pStructure = factory;
+                world.bot->planningBuilder = factory->getObjectID();
+                world.bot->reserveBuilderCash(plan, turn);
+                SDL_Log("TECH_SAVING_DEFENCE_FACTORY: builder=%u money=%d reserved=%d active=%d queue=%d "
+                        "upgrade=%d level=%d/%d quad_available=%d worker=%d transport=%d capital=%d",
+                        factory->getObjectID(), plan.money, turn.reserve.reserved, int(factory->isActive()),
+                        factory->getProductionQueueSize(), int(factory->isUpgrading()),
+                        factory->getCurrentUpgradeLevel(), factory->getMaxUpgradeLevel(),
+                        int(factory->isAvailableToBuild(Unit_Quad)), int(turn.workerProducer),
+                        int(turn.transportProducer), int(turn.capitalSupplier));
+            }
+            world.bot->planningBuilder = previousBuilder;
+        }
         require(world.queuedLight() > 0,
                 "Optional technology savings suppressed affordable cheap defence below its own-army minimum");
         bool paid = false;
