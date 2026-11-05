@@ -243,13 +243,13 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     doProduceItem(turn.pBuilder, itemID);
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
-        if (pass.techSavings) {
-            spendingLedger.charge(spendingBucket, quotedPrice);
+        if (pass.techSavings) spendingLedger.charge(spendingBucket, quotedPrice);
+        if (pass.techSavings || AITelemetry::log().enabled()) {
             const size_t slot = compositionSlot(itemID);
             if (slot < UnitMixPolicy::kSlots) {
                 pass.compositionValue[slot] += data[itemID][houseID].price;
                 pass.compositionArmyValue += data[itemID][houseID].price;
-                pass.vehiclePlanValue = pass.compositionArmyValue;
+                if (pass.techSavings) pass.vehiclePlanValue = pass.compositionArmyValue;
             }
         }
         if (itemID != requestedItem) ++pass.itemCount[itemID];

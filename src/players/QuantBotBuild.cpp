@@ -1149,6 +1149,8 @@ AITelemetry::Record QuantBot::decisionState(BuildPass& pass) {
     return AITelemetry::Record().set("credits", getHouse()->getCredits()).set("spendable", pass.money)
         .set("military", pass.militaryValue).set("military_limit", militaryValueLimit)
         .set("military_budget", pass.militaryBudget)
+        .set("infantry_value", pass.infantryValue).set("infantry_target_percent", pass.infantryPercent)
+        .set("light_vehicle_value", pass.lightVehicleValue).set("vehicle_plan_value", pass.vehiclePlanValue)
         .set("military_budget_source", pass.militaryBudgetOverridden ? "override_rolling_headroom" : "configured")
         .set("unit_count_override", getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride)
         .set("unit_limit_reached", getHouse()->isGroundUnitLimitReached()).set("max_units", getHouse()->getMaxUnits())
@@ -1785,7 +1787,8 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         for (size_t i=0; i<kSlots; ++i) {
             const bool producible = campaignAvailableToBuild(builder,mixItems[i]);
             available[i] |= producible;
-            if (pass.techSavings && producible && builder->getHealth() > 0 && builder->isActive()
+            if ((pass.techSavings || AITelemetry::log().enabled()) && producible
+                && builder->getHealth() > 0 && builder->isActive()
                 && !getHouse()->isUnitLimitReached(mixItems[i])
                 && (builder->getItemID() != Structure_StarPort
                     || (getHouse()->getChoam().getNumAvailable(mixItems[i]) > 0
@@ -1924,7 +1927,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             pass.lightVehicleCount += pass.itemCount[item];
         }
     }
-    if (pass.techSavings) {
+    if (pass.techSavings || AITelemetry::log().enabled()) {
         for (Uint32 item = Unit_FirstID; item <= ItemID_LastID; ++item) {
             const size_t slot = compositionSlot(item);
             if (slot == UnitMixPolicy::kSlots) continue;
