@@ -73,61 +73,64 @@
   terrain scales around the pointer while the sidebar remains unchanged.
 - No simulation, protocol, save, hashed rule or persistent preference changes.
 
-## 2026-11-06 — QuantBot ledger retired; economy-first composition experiment (OMP TechSaving, unreleased)
+## 2026-11-06 — QuantBot savings experiment rejected; installed format restored (OMP TechSaving, unreleased)
 
-- Removed the rejected, never-shipped `TechSavings` ledger completely: runtime
-  allocation/debt state, config/default/hash key, eight factorial styles,
-  ledger-only arithmetic/save fixtures and all nine old engine cases. No shim.
-- Save format is **9883**, protocol **112**, matching Stefan's installed build.
-  The QuantBot33-byte tail and its digest contribution are gone; ordinary
-  9882/9883 blocks retain their former layout. Simple has no saved state, so no
-  additional multiplayer-save/observer wire change is needed. Interim unshipped
-  9884 files are not supported. No private save files are committed.
-- Synthetic engine fixtures now exercise9882 and9883 QuantBot load→9883 resave→
-  reload with following-record checks, plus byte-identical serialization when
-  Simple alone is toggled. Existing9863/9878 prefix fixtures no longer subtract
-  a nonexistent ledger tail. Full-Game private probes are separate evidence.
-- Removal-only commit `3710464d` restores 9883/112. Main's full suite was159/165;
-  the separate six-Simple-excluded retirement run was158/159, with only a
-  two-machine MouseControls timeout. These different runs are not all-green.
-  Policy commit `8a89f35d` remains OFF.
-- Current Simple selection uses existing-owned plus accepted queues, not cap
-  headroom; legal advanced ground choices disable cheap filler. Standing troop
-  quota/reservations use existing army value; reactive AA remains if the legal
-  advanced launcher cannot supply that role. No threat-sized unit hold remains.
-- Real power/storage, demanded city seeds/civics, profitable workers/refining and
-  first-Starport capital stay ahead. The selected tech building uses ordinary
-  zero-upfront installments only after those selectors; upgrades keep the human
-  full-credit rule and ordinary planning quote debit. Repeat zoning does not
-  veto technology forever; spare yards keep normal growth. No saved state added.
-- `8a89f35d` full suite156/165: all other156 tests passed; nine Simple fixtures
-  failed. Native evidence identifies physical600 vs ROI712 comparison, an
-  exact-funded300 upgrade completing before first new income, and the still-
-  deficient three-refinery Vanilla H/B setup. Fixture-only correction preserves
-  paid progress/completion and zero-cash acceptance; its pinned result is separate.
-- Approved private full-Game 9882 and9883 probes at `8a89f35d` passed2/2:
-  load600cycles→9883resave/reload→continuation/native-worm checks. Input/binary
-  SHAs and local-only receipts: `private-compatibility-8a89f35d/` under the evidence
-  root. No private saves committed. Later Air metadata SSH timed out, so a new
-  save is unmeasured, not asserted absent.
-- Canonical `5f2bdb16`288-game/four-seed trial rejects adoption: city researchOFF
-  HF/IX/SP101/55/168→178/77/80 per192 houses; researchON24/23/36→42/21/21 per48.
-  Pooled H/B dispatch3.5816→1.8793, kills43309→19963; all six cells/four seed
-  blocks adverse. Actual live unit value299.26→314.11 is conditional199/320
-  paired-house coverage, with uncertainty including a decrease. Paired-achiever
-  city HF/IX/SP timing15.779/26.353/18.987→12.545/33.434/31.860m is conditioned.
-- PRIMARY native H/B credited wins/house.2118→.0625; decided games.4583→.1250;
-  own-house eliminated.2969→.1259, observed right-censored survival36.690→38.365m.
-  These globalOFF/globalON selfplay outcomes measure passivity/decisiveness,
-  not direct ON-v-OFF winning power. City gross spice5.712M→4.071M and tax
-  3.790M→.983M. P/E/M labels are accepted spend classes, not allocated budgets.
-- Native source qualifications remain explicit: df7=152/164; 5f targeted new
-  nine=3Dune2R PASS,6CityASAP/Vanilla payment-evidence FAIL. Retiring the old
-  ledger is not a claim that those independent Simple failures were fixed.
-- Evidence root `../outputs/tech-saving-20261105/`; full paired tables,
-  censored tech timing, per-house outcomes/income/composition and exact cheap-
-  order paths are in `confirmation-analysis-{df7da313,5f2bdb16}/`. Earlier
-  ledger trials remain historical evidence only. No deployment performed here.
+- **No gameplay adoption:** `SimpleTechSavings` remains hashed and OFF. Final
+  authorized economy-first/owned-composition iteration `8a89f35d` also failed;
+  no further policy iteration was made. The installed AI does not receive this
+  rejected behavior merely because experimental code is present.
+- Ledger retirement `3710464d` removes its code/config/hash/styles/tests and
+  33-byte QuantBot tail. Save **9883**, protocol **112**; ordinary 9882/9883 layout
+  restored, no new Simple saved state/wire bump. Interim unshipped 9884 is not
+  supported. Private saves are not committed.
+- Candidate uses existing-owned + accepted queues, not military-cap shares;
+  no cheap fallback with a legal advanced supplier. No threat-sized unit hold.
+  Actual economy/civic/worker/power/first-port choices precede ordinary zero-
+  upfront tech installments; upgrades retain human full-credit admission.
+  Human leases, saboteur orders and unitRole authority are unchanged.
+- Final **288 native games / 960 house histories / four seeds**, all M/H/B and
+  three mods, T/F fixed ON. All six H/B cells' dispatch/kill intervals adverse.
+
+| Balanced H/B equal-game metric | OFF | ON | Paired 95% change |
+| --- | ---: | ---: | --- |
+| Native credited wins/house | .2118 | 0 | -.2118 [-.2517,-.1684] |
+| Native decided matches | .4583 | 0 | -.4583 [-.5417,-.3750] |
+| Dispatches | 3.5816 | .9896 | -2.5920 [-2.9801,-2.2083] |
+| Kill value | 43,309 | 11,252 | -32,057 [-36,113,-28,121] |
+| Actual live unit price | 308.39 | 271.93 | -36.46 [-53.69,-18.54] |
+| Gross spice / tax | 85,295 / 6,972 | 75,998 / 5,115 | both intervals adverse |
+
+- Price coverage205/320 paired nonempty armies; outcomes/income320/320. Own
+  elimination .2969→.0642, alive-final .7031→.9358, right-censored observed
+  survival36.690→39.483m. Symmetric global-OFF/ON selfplay measures match
+  health/passivity, not direct relative winning skill; no decided ON matches
+  is not a strength win.
+- City HF/IX/SP completed counts: research-OFF101/55/168→122/27/165 per192;
+  research-ON24/23/36→20/6/37 per48. Conditional paired-achiever HF/IX/SP times
+  15.886/24.853/21.829→26.921/29.442/22.620m (research-OFF;89/16/145 pairs).
+  Censoring remains explicit. T9 cohorts do not measure research acquisition.
+- City research-OFF accepted P/E/M quotes1.014/4.092/3.493M→.798/3.477/2.622M;
+  cheap quotes.831M→1.143M. Physical paid9.221M→7.400M; gross spice5.712M→
+  5.387M and tax3.790M→3.037M. Quote classes are not income allocations or
+  physical-payment buckets. Main ON cheap path is existing composition,
+  1,018,900 credits/5,870 orders; all47,707 cheap contexts are retained.
+- Verification is source-qualified: `8a89f35d` full156/165 (all other156 PASS,
+  nine Simple failures). Fixture-only `88fbd772`6/9 PASS, all Vanilla/Dune2R;
+  City3/3 fail atelapsed0 because test turrets leave89 power headroom while
+  the existing city rule requires396. Physical initial-power premise corrected
+  without policy/threshold/payment changes; its own pinned result is separate.
+  Earlier quote-identity/income/four-refinery premises are documented, not
+  retroactively green. Retirement selection158/159 had a Mouse timeout;
+  Main's separate retirement full159/165 is a different run.
+- Approved real full-Game 9882/9883 compatibility at `8a89f35d` **2/2 PASS**:
+  load600cycles→9883resave/reload→continuation/native-worm checks. Input/app/
+  probe SHA receipts and local private archive: `private-compatibility-8a89f35d/`.
+  Air's later mtime SSH query timed out, so a newer save remains unmeasured.
+- Evidence root `../outputs/tech-saving-20261105/`: final tables and original-
+  stream certification in `confirmation-analysis-8a89f35d/`; historical baseline
+  and T/F ablations are source-separated (Trooper supplier missing-SP15/109→
+  31/111; classic Funded7seed0W/4L/3T→7W). Ledger and earlier Simple cohorts
+  also failed; no approach passed. No deployment performed by this task.
 
 
 ## 2026-11-05 — QuantBot WOR and troopers (OMP QuantTroopers, unreleased)

@@ -6,8 +6,8 @@ Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 
 ## Stateless technology experiment and save compatibility
 
-`[Force Concentration] SimpleTechSavings` is hashed and **OFF**. The current
-unreleased iteration combines existing-owned plus accepted-queue composition
+`[Force Concentration] SimpleTechSavings` is hashed and **OFF after rejection**.
+The last authorized unreleased iteration combines existing-owned plus accepted-queue composition
 with economy-first, ordinary installment construction. A military limit is a
 ceiling, never the denominator that entitles cheap units to an opening quota.
 The next unit/factory moves the existing value composition toward its target;
@@ -65,9 +65,82 @@ receipts are in `../outputs/tech-saving-20261105/private-compatibility-8a89f35d/
 No private save was committed. The later Air modification-time query timed out;
 no newer save, or absence of one, is claimed.
 
-### Measured rejection, not adoption
+### Final economy-first trial: rejected, default OFF
 
-Two separately pinned canonical288-game/four-seed Simple cohorts were rejected.
+The last authorized policy iteration is `8a89f35d`: **288 original native games,
+960 house histories, four seeds**, DuneCity/Dune2R/Vanilla and Medium/Hard/Brutal.
+TrooperSupport and FundedClassicProduction stayed ON in both arms. Whole-stream
+admission reconciled 11,431,003 raw records, 254,076 accepted quote records and
+47,707 complete cheap-order contexts. The obsolete ledger is absent, not a
+zero-balance treatment. Neither the ledger design nor the Simple iterations
+passed adoption. **No further policy iteration was made; Simple remains OFF.**
+
+Hard/Brutal matched equal-game means, balanced across the six mod/research cells:
+
+| Metric | OFF | ON | Paired change, 95% interval |
+| --- | ---: | ---: | --- |
+| Native credited wins per house | 0.2118 | 0 | -0.2118 [-0.2517, -0.1684] |
+| Native decided-match fraction | 0.4583 | 0 | -0.4583 [-0.5417, -0.3750] |
+| Dispatches | 3.5816 | 0.9896 | -2.5920 [-2.9801, -2.2083] |
+| Kill value | 43,309 | 11,252 | -32,057 [-36,113, -28,121] |
+| Actual live per-object replacement price | 308.39 | 271.93 | -36.46 [-53.69, -18.54] |
+| Gross spice per observed house history | 85,295 | 75,998 | -9,297 [-12,489, -5,891] |
+| Gross tax per observed house history | 6,972 | 5,115 | -1,856 [-2,971, -852] |
+
+All six cells' dispatch and kill-value game intervals were adverse. Outcome and
+income coverage is 320/320 paired houses; live price is conditioned on 205/320
+nonempty measured pairs, not zero-imputed. Own-house elimination fell
+0.2969→0.0642 and alive-final rose 0.7031→0.9358; observed right-censored survival
+was 36.690→39.483 minutes. In symmetric global-OFF/global-ON selfplay, fewer
+eliminations and no decided games indicate passivity/unresolved matches, **not
+proof of greater relative winning skill** or uncensored life expectancy.
+
+City completed HF/IX/Starport by the observed end, all three difficulties:
+
+| Research option | Houses per arm | OFF HF/IX/SP | ON HF/IX/SP |
+| --- | ---: | --- | --- |
+| OFF | 192 | 101 / 55 / 168 | 122 / 27 / 165 |
+| ON | 48 | 24 / 23 / 36 | 20 / 6 / 37 |
+
+Paired-achiever HF/IX/SP minutes were 15.886/24.853/21.829→
+26.921/29.442/22.620 with research OFF (89/16/145 paired achievers), and
+13.641/26.150/20.887→32.416/35.167/23.976 with research ON (17/6/28).
+These are selected timing contrasts, not population completion-time effects;
+death/admin censoring and achievement bounds remain in the companion tables.
+All production cohorts began at T9, so research acquisition is unmeasured.
+
+For City/research-OFF, accepted production/economy/military quotes were
+1.014/4.092/3.493M→0.798/3.477/2.622M; accepted cheap quotes **rose**
+0.831M→1.143M. Actual physical payments were 9.221M→7.400M; gross spice
+5.712M→5.387M and gross tax 3.790M→3.037M. Quote classes are commitments,
+not allocated income or physical-payment buckets; cheap/tech/city overlays
+are not additive. The largest ON cheap path was `existing_army_composition`,
+1,018,900 credits over 5,870 City/research-OFF orders. At the 40-minute H/B
+checkpoint, paired alive City/research-OFF armies grew 32.95→41.12 objects but
+value fell 8,409→8,069 and mean price 215.89→181.86: more cheap volume did not
+satisfy the requested higher-value mix.
+
+The four-minute diagnostic has 141 candidate groups and six exact higher-tech
+not-ordered/diversion examples. Windows overlap and flags are planner
+observations; do not sum their cheap quotes, infer independent trials or treat
+full-quote coverage as an installment admission requirement. Actual pending
+tech and final selected capital are separate fields; only explicit raw order
+pointers join an order to its capital decision.
+
+Evidence: `../outputs/tech-saving-20261105/confirmation-analysis-8a89f35d/`.
+`compact-summary.txt`, `primary-native-outcomes-summary.txt` and
+`population-timing-supplement.txt` give compact tables; the per-house checkpoint,
+composition, timing/censoring, spend, every-cheap-order and four-minute CSVs
+retain full provenance. Historical T/F ablations remain separate: supplier
+TrooperSupport missing-SP was 15/109→31/111 (paired delta +0.0983,
+95% [+0.0385,+0.1624]); the separate powered-classic seven-seed FundedClassic
+trial was 0W/4L/3 time limits→7W/0L/0. These are not effects estimated by this
+fixed-T/F Simple cohort. Historical retained raw subsets lack exact acceptance
+vectors/full price coverage and must not be pooled with current observers.
+
+### Earlier rejected Simple cohorts
+
+Two earlier separately pinned canonical 288-game/four-seed Simple cohorts were rejected.
 TrooperSupport/FundedClassicProduction were ON in both arms. At `5f2bdb16`, all
 six Hard/Brutal mod/research cells had four adverse dispatch and kill-value seed
 blocks. City research-OFF achieved HF/IX/Starport by40 minutes in

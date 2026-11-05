@@ -185,15 +185,26 @@ inline void secureInitialCityCore(World& world) {
     // production. A raw count of eight turrets does not establish coverage of
     // an extra yard or every economic asset. Clear that real competing need
     // before a case claims to test an economy-cleared technology start.
-    world.bot->planningBuilder = world.yard->getObjectID();
     for (;;) {
+        world.bot->planningBuilder = world.yard->getObjectID();
         world.bot->cityTurretSearch.reset();
         world.bot->clearPlacementCache();
         int defence = 0;
         const Coord site = world.bot->findCityTurretPlaceLocation(Structure_RocketTurret, &defence);
-        if (defence <= 0) break;
-        require(site.isValid(), "Initial core has a real coverage need but no legal scenario emplacement");
-        world.placeAt(Structure_RocketTurret, site);
+        if (defence > 0) {
+            require(site.isValid(), "Initial core has a real coverage need but no legal scenario emplacement");
+            world.placeAt(Structure_RocketTurret, site);
+            continue;
+        }
+        // Cover consumes power too. Clear the ordinary city's real reserve,
+        // not merely its blackout threshold, before optional tech is measured.
+        // Loop back so each added generator receives its actual spatial cover.
+        const auto pass = world.observePlan();
+        const int produced = world.owner->getProducedPower();
+        if (produced - world.owner->getPowerRequirement() >= pass.cityPowerReserve) break;
+        world.place(Structure_WindTrap);
+        require(world.owner->getProducedPower() > produced,
+                "Initial city Windtrap did not provide real generation for the demanded power reserve");
     }
 }
 
@@ -413,6 +424,8 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
                 && initial.strategicReserveCost == 0 && !initial.militaryEmergency
                 && initial.civicStructuralNeed == 0 && initial.civicReserveCost == 0
                 && !world.bot->openingWorkersNeeded(initial)
+                && (!initial.citySimEnabled || world.owner->getProducedPower() - world.owner->getPowerRequirement()
+                    >= initial.cityPowerReserve)
                 && (initial.techUpgrade || initial.techCandidate.site.isValid()),
             "Technology-start setup still has an earlier economic, civic, power or defensive capital owner");
     BuilderBase* projectBuilder = nullptr;
