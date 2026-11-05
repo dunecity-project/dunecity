@@ -850,6 +850,22 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --no-ai-telemetry --path-workers 1 --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/trooper-support-probe)
         set_tests_properties(quantbot_trooper_support PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # A paired real-engine regression: no instant completion or fixture orders
+        # for the HF/technology being asserted; each difficulty keeps its own
+        # defensive floor, and current/queued composition never uses a huge cap.
+        foreach(tech_mod IN ITEMS vanilla dunecity Dune2R)
+            foreach(tech_difficulty IN ITEMS medium hard brutal)
+                add_test(NAME quantbot_tech_savings_${tech_mod}_${tech_difficulty}
+                    COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --tech-saving-probe --repeatable
+                    --mod ${tech_mod} --partner-difficulty ${tech_difficulty}
+                    --seed 1841712204 --no-ai-telemetry --path-workers 1
+                    --wall-timeout 550 --build-dir ${CMAKE_BINARY_DIR}
+                    --output-dir ${CMAKE_BINARY_DIR}/tech-savings-${tech_mod}-${tech_difficulty}-probe)
+                set_tests_properties(quantbot_tech_savings_${tech_mod}_${tech_difficulty}
+                    PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+            endforeach()
+        endforeach()
         # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
         # and saved partner state through the live Harkonnen level-9 fixture.
         foreach(pressure_mod IN ITEMS vanilla dunecity)

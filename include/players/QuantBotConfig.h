@@ -143,7 +143,7 @@ struct QuantBotConfig {
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, CityGrowthPower,
     /// CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
-    /// StorageCapacity, FundedClassicProduction, TrooperSupport, LauncherKiteExtraDistance,
+    /// StorageCapacity, FundedClassicProduction, TrooperSupport, TechSavings, LauncherKiteExtraDistance,
     /// ExhaustedArmyDispatch;
     /// optional keys, hashed for multiplayer.
     struct ForceSettings {
@@ -297,6 +297,10 @@ struct QuantBotConfig {
         /// armour and escorts, using existing infantry shares/economy reserves.
         /// Default ON at Stefan's direction despite unproven acceptance; see HANDOVER.
         bool trooperSupport;
+        /// Allocate net income to production, economy and military savings, and
+        /// choose units against the existing army rather than the military cap.
+        /// Experimental until paired city/classic outcome audits accept it.
+        bool techSavings;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.
         int launcherKiteExtraDistance;

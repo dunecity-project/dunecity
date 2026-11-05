@@ -347,13 +347,14 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
         // strategy. Earlier blocks end with the 9865 choice and 9868 ten-slot mix.
         constexpr size_t kFamilyCountBytes = sizeof(Uint32) * (Unit_TameSandworm - Structure_LastID);
         constexpr size_t kPriorBytes = 2 * UnitMixPolicy::kSlots, kStrategyBytes = 3 + kPriorBytes;
-        require(bytes.size() > kFamilyCountBytes + kStrategyBytes, "The QuantBot block lacks its strategy and 9878 tail");
-        const std::string before9878 = bytes.substr(0, bytes.size() - kFamilyCountBytes);
+        constexpr size_t kLedgerBytes = QuantBotSpendingPolicy::Ledger::savedBytes;
+        require(bytes.size() > kFamilyCountBytes + kStrategyBytes + kLedgerBytes, "The QuantBot block lacks its strategy and versioned tails");
+        const std::string before9878 = bytes.substr(0, bytes.size() - kFamilyCountBytes - kLedgerBytes);
         const size_t at = before9878.size() - kStrategyBytes;
         require(Uint8(bytes[at]) == 1 && Uint8(bytes[at + 1]) == Uint8(bot->strategy.mix)
                 && Uint8(bytes[at + 2]) == Uint8(bot->strategy.tempo), "The strategy is not before the QuantBot 9878 tail");
         if (!ModManager::instance().isTornieFamilyContentActive())
-            require(std::all_of(bytes.begin() + before9878.size(), bytes.end(), [](char byte) { return byte == 0; }),
+            require(std::all_of(bytes.begin() + before9878.size(), bytes.end() - kLedgerBytes, [](char byte) { return byte == 0; }),
                     "Family initial counts leaked into a nonfamily QuantBot save");
         for (size_t i = 0; i < UnitMixPolicy::kSlots; ++i)
             require(Uint8(bytes[at + 3 + 2 * i]) + 256 * Uint8(bytes[at + 4 + 2 * i]) == bot->strategyPrior[i]

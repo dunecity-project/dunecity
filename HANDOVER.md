@@ -1,3 +1,30 @@
+## 2026-11-05 — QuantBot technology savings (OMP TechSaving, unreleased)
+
+- Candidate hashed `TechSavings`, initially **OFF**: exact saved net-income
+  buckets for production/economy/military (safe30/35/35%, threatened15/20/65%),
+  integrated with the existing capital planner. Full accepted commitments are
+  charged once; unspent allocations persist, emergencies borrow with debt.
+- Unit selection compares actual owned-plus-queued replacement-value shares,
+  not cap/cash-funded future slots. All factories/imports share the next
+  composition choice; ordinary standing troopers lose their quota bypass,
+  observed-air response remains. No unit orders or human/saboteur authority
+  are changed by this production cutover.
+- Below-quote tech holds require six owned ground fighters and wave/threat
+  value, stable income/power and four-minute funding; only the production
+  allocation is withheld. Opening workers, power, base defence and the first
+  legal Starport retain priority. CityFirstFactorySaving remains OFF.
+- Save **9884** adds only QuantBot ledger state;9882/9883 read their original
+  byte layouts and begin with zero balances. Protocol **113** is required:
+  multiplayer save transfer and observer snapshots carry the serialized AI.
+- Historical CSV baseline measured before implementation: TrooperSupport's
+  `funded-matrix`48game/144house OFF→ON at862fc8b changes stalls12/135→13/135,
+  bankrupt28/144→27/144,missing-SP15/109→16/109,dispatch1.30→1.22,kills16359→15677.
+  Its sampled IX timing is survivor-observed only (40@21.45m→53@19.98m);
+  preplaced HF is not an unlock-time result. Old CSVs lack exact categorized
+  spend, full current-v-target mix and legal four-minute diversion events.
+  New audit instrumentation records those explicitly; no candidate acceptance
+  or verification result is claimed in this initial implementation note.
+
 ## 2026-11-05 — QuantBot WOR and troopers (OMP QuantTroopers, unreleased)
 
 - **TrooperSupport stays ON at Stefan's explicit direction knowing it is

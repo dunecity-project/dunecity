@@ -700,11 +700,14 @@ void runForceConcentrationProbe(Game& game) {
                 OMemoryStream trailer; trailer.open();
                 bot->saveDefenceMemory(trailer);
                 constexpr size_t kStrategyBytes=3+20; // 9865: picked flag, mix, tempo; 9868: 10 x Uint16 ratios
-                require(trailer.getDataLength()+kStrategyBytes<bytes.size(),"The 9864 trailer is not part of the save");
-                const std::string bytes9863=bytes.substr(0,bytes.size()-trailer.getDataLength()-kStrategyBytes);
+                constexpr size_t kFamilyBytes = sizeof(Uint32) * (Unit_TameSandworm - Structure_LastID);
+                constexpr size_t kLaterTails = kStrategyBytes + kFamilyBytes + QuantBotSpendingPolicy::Ledger::savedBytes;
+                require(trailer.getDataLength()+kLaterTails<bytes.size(),"The 9864 trailer is not part of the save");
+                const std::string bytes9863=bytes.substr(0,bytes.size()-trailer.getDataLength()-kLaterTails);
                 currentGame->loadedSavegameVersion=9863;
                 IMemoryStream oldIn(bytes9863.data(),bytes9863.size());
                 QuantBot old(oldIn,owner);
+                require(oldIn.getRemainingLength()==0,"A 9863 QuantBot block lost stream alignment");
                 require(old.enemySightings.empty() && old.musters.empty() && old.bundlePoint==bot->bundlePoint
                     && old.bundleCycle==bot->bundleCycle && old.bundleGateSince==bot->bundleGateSince,
                     "A 9863 (1.0.844) save did not load with its bundle and no enemy memory");
@@ -714,11 +717,15 @@ void runForceConcentrationProbe(Game& game) {
                 IMemoryStream upgradedIn(upgraded.getData(),upgraded.getDataLength());
                 QuantBot reloaded(upgradedIn,owner);
                 require(reloaded.enemySightings.empty() && reloaded.musters.empty() && reloaded.bundlePoint==bot->bundlePoint
-                    && upgraded.getDataLength()==bytes9863.size()+8+kStrategyBytes,
+                    && upgraded.getDataLength()==bytes9863.size()+8+kLaterTails,
                     "A loaded 9863 save did not re-save as a current save with an empty memory");
                 currentGame->loadedSavegameVersion=9862;
-                IMemoryStream legacyIn(bytes.data(),bytes.size());
+                OMemoryStream forceTrailer; forceTrailer.open();
+                bot->saveForceState(forceTrailer);
+                const std::string bytes9862=bytes9863.substr(0,bytes9863.size()-forceTrailer.getDataLength());
+                IMemoryStream legacyIn(bytes9862.data(),bytes9862.size());
                 QuantBot legacy(legacyIn,owner);
+                require(legacyIn.getRemainingLength()==0,"A 9862 QuantBot block lost stream alignment");
                 require(legacy.enemySightings.empty() && legacy.musters.empty(),"A 9862 save invented an enemy memory");
                 currentGame->loadedSavegameVersion=savedVersion;
                 SDL_Log("FORCE_PROBE: memory save_load sightings=%zu musters=1 bytes=%zu",bot->enemySightings.size(),bytes.size());

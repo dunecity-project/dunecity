@@ -107,9 +107,11 @@ void QuantBot::build(int militaryValue) {
     planCityBootstrap(pass);
     planOpeningProduction(pass);
     planDefenceCoverage(pass);
+    planTechSavings(pass);
     planCapitalCandidates(pass);
     chooseCapitalPlan(pass);
     planCivWarsResearch(pass);
+    if (pass.techSavingActive && pass.techResearch) startTechResearch(pass);
 
     phaseScope.next("ai.build.orders");
     planBuildOrder(pass);
@@ -183,6 +185,9 @@ bool QuantBot::canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier)
 }
 
 bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
+    if (pass.techSavings && pass.techSavingActive && pass.techResearch)
+        return int64_t(std::min(pass.money, getHouse()->getCredits())) >= int64_t(cost) + pass.techWorkingReserve
+            && spendingAdmits(pass, Structure_ResearchLab, cost, true);
     if (!techInvestmentReady(pass)) return false;
     if (!civWarsResearchRequired()) return canFundWorkingCapital(pass,cost,NONE_ID);
     // Technology is a prerequisite, not an optional expansion that must wait for
@@ -206,6 +211,9 @@ bool QuantBot::cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 suppli
 }
 
 bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* builder) {
+    if (pass.techSavings && pass.techSavingActive && pass.techUpgrade
+        && pass.techCandidate.builder == builder->getObjectID())
+        return int64_t(pass.money) >= int64_t(builder->getUpgradeCost()) + pass.techWorkingReserve;
     // Yard upgrades unlock concrete, power, civics and reactive turrets. They
     // keep their existing prerequisite budgets; only producer tech is optional.
     if (!pass.citySimEnabled || !botConfig().force.cityOpeningCapital
@@ -247,6 +255,7 @@ void QuantBot::planCivWarsResearch(BuildPass& pass) {
 void QuantBot::startTechResearch(BuildPass& pass) {
     if (!researchLabPolicyActive() || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9) return;
     const int cost = getHouse()->getTechResearchCost();
+    if (!spendingAdmits(pass, Structure_ResearchLab, cost, true)) return;
     if (!canFundTechInvestment(pass,cost)) return;
     const StructureBase* lab = nullptr;
     for (const auto* structure : getStructureList())
@@ -258,6 +267,10 @@ void QuantBot::startTechResearch(BuildPass& pass) {
     if (!const_cast<House*>(getHouse())->startTechResearch(lab->getObjectID())) return;
     pass.money -= cost;
     pass.capitalOrderedCost += cost;
+    if (pass.techSavings) {
+        spendingLedger.charge(QuantBotSpendingPolicy::Bucket::Production, cost);
+        if (pass.techResearch) { pass.techSavingActive = false; pass.civWarsResearchReserve = 0; }
+    }
     if (AITelemetry::log().enabled()) {
         pass.capitalOrders.set(std::to_string(lab->getObjectID())+":research",
             AITelemetry::Record().set("item",Structure_ResearchLab).set("price",cost).set("rule","tech_research"));
@@ -416,6 +429,9 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     pass.money = getHouse()->getCredits();
+    pass.techSavings = botConfig().force.techSavings && gameMode == GameMode::Custom
+        && !isCampaignGameType(currentGame->gameType) && !builderOnly()
+        && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal);
     pass.militaryValue += pass.queuedMilitaryValue;
     // Effective military planning budget for this pass, computed once now that the
     // queue-inclusive army value and the cash are known. It equals the configured
@@ -1764,10 +1780,17 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         const auto* builder = dynamic_cast<const BuilderBase*>(structure);
         if (!builder || builder->getOwner() != getHouse()
             || (builder->getItemID() != Structure_LightFactory && builder->getItemID() != Structure_HeavyFactory
-                && builder->getItemID() != Structure_HighTechFactory)) continue;
+                && builder->getItemID() != Structure_HighTechFactory
+                && !(pass.techSavings && builder->getItemID() == Structure_StarPort))) continue;
         for (size_t i=0; i<kSlots; ++i) {
             const bool producible = campaignAvailableToBuild(builder,mixItems[i]);
             available[i] |= producible;
+            if (pass.techSavings && producible && builder->getHealth() > 0 && builder->isActive()
+                && !getHouse()->isUnitLimitReached(mixItems[i])
+                && (builder->getItemID() != Structure_StarPort
+                    || (getHouse()->getChoam().getNumAvailable(mixItems[i]) > 0
+                        && purchasePrice(builder, mixItems[i]) < data[mixItems[i]][houseID].price)))
+                pass.compositionAvailable[i] = true;
             if (i == 2 && builder->getHealth() > 0 && builder->isActive())
                 launcherProductionAvailable |= producible;
         }
@@ -1901,6 +1924,17 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             pass.lightVehicleCount += pass.itemCount[item];
         }
     }
+    if (pass.techSavings) {
+        for (Uint32 item = Unit_FirstID; item <= ItemID_LastID; ++item) {
+            const size_t slot = compositionSlot(item);
+            if (slot == UnitMixPolicy::kSlots) continue;
+            pass.compositionValue[slot] += int64_t(pass.itemCount[item]) * data[item][houseID].price;
+        }
+        for (size_t i = 0; i < kSlots; ++i) {
+            pass.compositionPrice[i] = data[mixItems[i]][houseID].price;
+            pass.compositionArmyValue += int(pass.compositionValue[i]);
+        }
+    }
     pass.trooperCount = pass.itemCount[Unit_Trooper] + 3 * pass.itemCount[Unit_Troopers]
         + (ModManager::instance().isTornieFamilyContentActive() ? 5 * pass.itemCount[Unit_Troopers5] : 0);
     int hostileArmourValue = 0;
@@ -1918,7 +1952,8 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         // ceiling instead of being clipped to the ordinary mix's escort squad.
         if (pass.strategyMixProfile && pass.strategyMixProfile->infantryPercent > 0)
             pass.trooperTarget = std::max(pass.trooperTarget,
-                pass.lightBudget / std::max(1, data[Unit_Trooper][houseID].price));
+                (pass.techSavings ? pass.militaryValue : pass.lightBudget)
+                    / std::max(1, data[Unit_Trooper][houseID].price));
     }
 
 
@@ -1944,6 +1979,12 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         && int64_t(pass.militaryValue) + trooper.price <= pass.lightBudget) {
         const int missing = std::max(0, QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft) - pass.trooperCount);
         pass.trooperReserveValue = int(std::min<int64_t>(INT_MAX, int64_t(missing) * trooper.price));
+        if (pass.techSavings && pass.hostileAircraft == 0) {
+            const int quotaRoom = int(std::max<int64_t>(0,
+                int64_t(std::max(0, pass.militaryValue - pass.infantryValue)) * pass.infantryPercent
+                    / std::max(1, 100 - pass.infantryPercent) - pass.infantryValue));
+            pass.trooperReserveValue = std::min(pass.trooperReserveValue, quotaRoom);
+        }
         // Unbuilt troops claim only genuinely funded headroom in this mix.
         // Their full cap reservation and next-order cash are protected below
         // by the common producer admission path, not charged as an existing army.
@@ -1951,7 +1992,8 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             int64_t(pass.infantryValue) + std::min(pass.trooperReserveValue,
                 std::max(0, fundedArmyValue - pass.militaryValue))));
     }
-    pass.vehiclePlanValue = std::max(0, fundedArmyValue - plannedInfantryValue);
+    pass.vehiclePlanValue = pass.techSavings ? pass.compositionArmyValue
+        : std::max(0, fundedArmyValue - plannedInfantryValue);
     if (pass.emitStatsLog && AITelemetry::log().enabled()) {
         traceDecision("unit_mix", AITelemetry::Record().set("basis", !pass.learningUnitMix ? "configured" : evidenceWeightedLearning ? "lifetime_evidence_weighted_value_per_loss" : "lifetime_value_per_loss")
             .set("tank_bps", (pass.tankPercent * 10000).lround()).set("siege_bps", (pass.siegePercent * 10000).lround())
@@ -1975,6 +2017,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             .set("planned_infantry_value", plannedInfantryValue)
             .set("trooper_reserved_value", pass.trooperReserveValue)
             .set("performance_exponent_milli",1500).set("performance_confidence_bps", performanceConfidenceBps).set("funded_army_value",fundedArmyValue)
+            .set("existing_composition", pass.techSavings).set("composition_army_value", pass.compositionArmyValue)
             .set("vehicle_plan_value",pass.vehiclePlanValue).set("queued_military_value",pass.queuedMilitaryValue).set("mix_inputs", [&]() {
                 AITelemetry::Record inputs;
                 for (size_t i=0; i<kSlots; ++i) inputs.set(std::to_string(mixItems[i]),
@@ -1982,6 +2025,9 @@ void QuantBot::planUnitMix(BuildPass& pass) {
                         .set("lost_value", lostValue[i]).set("score", scores[i]).set("allocation_weight",allocationWeights[i])
                         .set("lifetime_reward_milli",performanceHistory.reward[i]).set("lifetime_loss_milli",performanceHistory.loss[i])
                         .set("available", available[i]).set("opening_bps", defaults[i]).set("target_bps", pass.unitMix[i]));
+                for (size_t i=0; i<kSlots; ++i) inputs.set("existing_"+std::to_string(mixItems[i]),
+                    AITelemetry::Record().set("committed_value", pass.compositionValue[i])
+                        .set("target_bps", pass.unitMix[i]));
                 return inputs;
             }()).set("infantry_percent", pass.infantryPercent));
     }
@@ -2011,6 +2057,12 @@ void QuantBot::planUnitMix(BuildPass& pass) {
 // already include every queued order and this pass updates them as it accepts more,
 // so several producers share one quota instead of each claiming a full share.
 bool QuantBot::infantryQuotaAdmits(BuildPass& pass, int value) {
+    // Low-tech infantry-only openings still need a dispatchable defence. Once
+    // a vehicle type is available, every ordinary infantry order uses the
+    // actual army share; the distant cap never creates a standing entitlement.
+    if (pass.techSavings && pass.militaryValue < std::max(3000, minWaveValue())
+        && std::none_of(pass.compositionAvailable.begin(), pass.compositionAvailable.end(),
+            [](bool available) { return available; })) return value > 0;
     return value > 0 && (int64_t(pass.infantryValue) + value) * 100
         <= (int64_t(pass.militaryValue) + value) * pass.infantryPercent;
 }
@@ -2049,7 +2101,7 @@ bool QuantBot::trooperOrderAdmitted(BuildPass& pass, Uint32 item, int value) {
     const bool supportFloor = pass.trooperCount + troops
         <= QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft);
     return troops > 0 && pass.trooperCount + troops <= pass.trooperTarget
-        && (supportFloor || infantryQuotaAdmits(pass, value))
+        && ((supportFloor && (!pass.techSavings || pass.hostileAircraft > 0)) || infantryQuotaAdmits(pass, value))
         && int64_t(pass.militaryValue) + value <= pass.lightBudget;
 }
 
@@ -2059,6 +2111,9 @@ Uint32 QuantBot::trooperInfrastructureItem(BuildPass& pass, const BuilderBase* y
         || !getHouse()->hasPower() || openingWorkersNeeded(pass)
         || getHouse()->getNumItems(Structure_HeavyFactory) == 0
         || pass.forecastNetIncome <= 0 || !troopContentExists(pass, yard)) return NONE_ID;
+    if (pass.techSavings && pass.hostileAircraft == 0
+        && !infantryQuotaAdmits(pass, currentGame->objectData.data[Unit_Trooper][getHouse()->getHouseID()].price))
+        return NONE_ID;
     const int technology = ModManager::instance().isTornieFamilyContentActive()
         ? yard->getTechnologyHouseID() : getHouse()->getHouseID();
     const auto& spec = currentGame->objectData.data[Structure_WOR][technology];
@@ -2189,7 +2244,8 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     // Cash-funded vanilla openings use the established parallel MCV/factory
     // policy. Use actual runway, not a fixed wealth cutoff: as the base grows,
     // the same cash must cover more production as well as its economy pipeline.
-    pass.sharedSpending = !builderOnly() && (!pass.vanillaEconomy || !pass.cashFlow.fundsParallelProduction);
+    pass.sharedSpending = !builderOnly()
+        && (pass.techSavings || !pass.vanillaEconomy || !pass.cashFlow.fundsParallelProduction);
     pass.militaryFunding = std::max(0,pass.forecastFunding-pass.continuedConstructionCost
         + pass.existingMilitaryCapacity-pass.continuedMilitaryCost);
     std::sort(pass.capitalBuilders.begin(),pass.capitalBuilders.end(),[](const auto* a,const auto* b) {
@@ -2306,6 +2362,7 @@ void QuantBot::planCityBootstrap(BuildPass& pass) {
         if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_ConstructionYard) continue;
         const auto plan = planCivicForYard(pass, static_cast<const BuilderBase*>(structure));
         if (plan.order == NONE_ID) continue;
+        pass.emergencyCivic[plan.order] = true;
         const int price = data[plan.order][houseID].price;
         pass.civicReserveCost = std::max(pass.civicReserveCost,
             CityEconomyInvestmentPolicy::productionStartBudget(price,
@@ -2755,6 +2812,218 @@ bool QuantBot::proactiveSavingHold(BuildPass& pass, int price) {
     const int services=pass.itemCount[Structure_RocketTurret]+pass.itemCount[Structure_PoliceStation];
     const bool growthTurn=pass.cityZonesIncludingQueued < 3+2*services;
     return !growthTurn || pass.cashFlow.projectedCash < price+pass.cityPlotPrice;
+}
+
+size_t QuantBot::compositionSlot(Uint32 item) {
+    for (size_t i = 0; i < kMixItems.size(); ++i) if (kMixItems[i] == item) return i;
+    switch (item) {
+    case Unit_EliteOrnithopter: return UnitMixPolicy::kOrnithopterSlot;
+    case Unit_FlameQuad: case Unit_RaiderQuad: return UnitMixPolicy::kQuadSlot;
+    case Unit_SonicTrike: return UnitMixPolicy::kFirstLightSlot;
+    case Unit_RangedTank: case Unit_SlowTank: return 0;
+    case Unit_ChemicalSiegeTank: return 1;
+    case Unit_TameSandworm: return UnitMixPolicy::kFirstSpecialSlot;
+    default: return UnitMixPolicy::kSlots;
+    }
+}
+
+bool QuantBot::compositionAdmits(BuildPass& pass, Uint32 item) {
+    if (!pass.techSavings || !QuantBotBuildPolicy::militaryItem(item)) return true;
+    if (pass.militaryEmergency) return true;
+    if (isInfantryUnit(item))
+        return (pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item) && pass.hostileAircraft > 0)
+            || infantryQuotaAdmits(pass, currentGame->objectData.data[item][getHouse()->getHouseID()].price);
+    const size_t slot = compositionSlot(item);
+    return slot == UnitMixPolicy::kSlots
+        || slot == UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
+            pass.compositionPrice, pass.compositionAvailable);
+}
+
+bool QuantBot::spendingEmergency(BuildPass& pass, Uint32 item) {
+    using Bucket = QuantBotSpendingPolicy::Bucket;
+    const auto bucket = QuantBotBuildPolicy::spendingBucket(item);
+    if (bucket == Bucket::Military)
+        return pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid()
+            || pass.readyGroundUnits < 6 || pass.readyGroundValue < pass.defenceMinimumValue;
+    if (item == Structure_StarPort && getHouse()->getNumItems(item) == 0) return true;
+    if ((item == Structure_WindTrap || item == Structure_NuclearPlant)
+        && (!getHouse()->hasPower() || getHouse()->getProducedPower()
+            < getHouse()->getPowerRequirement() + pass.committedPowerDemand)) return true;
+    if (DuneCity::isCityZoneStructure(item) && cityBootstrapNeeded(pass)) return true;
+    if (item == Structure_PoliceStation && pass.dangerousCrimeProperties > 0) return true;
+    if ((item == Unit_Harvester || item == Unit_CapacityHarvester || item == Unit_FastHarvester
+            || item == Structure_Refinery) && openingWorkersNeeded(pass)) return true;
+    if (item == Unit_Carryall && needsFirstTransport(pass)) return true;
+    if (item == Unit_MCV && (pass.itemCount[Structure_ConstructionYard] == 0
+            || pass.rockExpansionNeeded || pass.colonisationNeeded)) return true;
+    return item < Num_ItemID && pass.emergencyCivic[item];
+}
+
+bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade) {
+    if (!pass.techSavings || cost <= 0) return true;
+    const auto bucket = upgrade ? QuantBotSpendingPolicy::Bucket::Production
+        : QuantBotBuildPolicy::spendingBucket(item);
+    const bool emergency = upgrade ? item == Structure_ConstructionYard : spendingEmergency(pass, item);
+    const bool ownsProject = item == pass.techCandidate.item
+        || (upgrade && planningBuilder == pass.techCandidate.builder);
+    const int protectedProduction = pass.techSavingActive && !pass.capitalConsumed && !ownsProject
+        && bucket == QuantBotSpendingPolicy::Bucket::Production ? pass.techCandidate.cost : 0;
+    const bool admitted = emergency
+        || int64_t(spendingLedger.available(bucket)) >= int64_t(cost) + protectedProduction;
+    if (!admitted && pass.emitStatsLog && AITelemetry::log().enabled())
+        traceDecision("income_bucket_hold", AITelemetry::Record().set("item", item).set("cost", cost)
+            .set("bucket", QuantBotSpendingPolicy::bucketName(bucket))
+            .set("available", spendingLedger.available(bucket)).set("emergency", emergency));
+    return admitted;
+}
+
+void QuantBot::planTechSavings(BuildPass& pass) {
+    if (!pass.techSavings && !AITelemetry::log().enabled()) return;
+    const bool threatened = pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid();
+    pass.militaryEmergency = threatened;
+    pass.incomeShares = QuantBotSpendingPolicy::incomeShares(threatened);
+    pass.defenceMinimumValue = int(std::min<int64_t>(INT_MAX,
+        std::max<int64_t>(std::max(3000, minWaveValue()), int64_t(pass.groundThreatValue) * 3 / 2)));
+    for (const auto* unit : getUnitList()) {
+        if (unit->getOwner() != getHouse() || !unit->isActive() || unit->isBadlyDamaged()
+            || unit->getHealth() <= 0 || !unit->isAGroundUnit() || !unit->canAttack()
+            || unit->getItemID() == Unit_Saboteur || isSandwormUnit(unit->getItemID())) continue;
+        ++pass.readyGroundUnits;
+        pass.readyGroundValue += currentGame->objectData.data[unit->getItemID()][getHouse()->getHouseID()].price;
+    }
+    if (pass.techSavings) {
+        spendingLedger.reconcile(int64_t(getHouse()->getCredits()) - pass.queuedProductionCost, pass.incomeShares);
+        // The new one-project plan replaces the old unbounded IX/Palace hold.
+        pass.strategicReserveCost = 0;
+    }
+    const int house = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    pass.techWorkingReserve = std::max(300, pass.citySimEnabled ? pass.cityWorkingReserve : 0);
+    const bool stable = pass.forecastNetIncome > 0 && !cityBootstrapNeeded(pass)
+        && !openingWorkersNeeded(pass) && getHouse()->hasPower()
+        && !(needsFirstTransport(pass) && pass.carryallBuildAvailable)
+        && (!(pass.citySimEnabled || pass.powerRules)
+            || getHouse()->getProducedPower() >= getHouse()->getPowerRequirement() + pass.committedPowerDemand)
+        && !threatened && pass.dangerousCrimeProperties == 0
+        && getHouse()->getNumItems(Structure_ConstructionYard) > 0;
+    auto structure = [&](Uint32 goal) {
+        if (pass.itemCount[goal] > 0 || !data[goal][house].enabled
+            || data[goal][house].techLevel > getHouse()->getTechLevel()) return false;
+        Uint32 item = goal;
+        for (int depth = 0; depth < Num_ItemID; ++depth) {
+            Uint32 missing = NONE_ID;
+            for (Uint32 prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+                if (isStructure(prerequisite) && data[item][house].prerequisiteStructuresSet[prerequisite]
+                    && getHouse()->getNumItems(prerequisite) == 0) { missing = prerequisite; break; }
+            if (missing == NONE_ID) break;
+            if (pass.itemCount[missing] > 0 || missing == item) return false;
+            item = missing;
+            if (depth + 1 == Num_ItemID) return false;
+        }
+        if (!data[item][house].enabled || data[item][house].techLevel > getHouse()->getTechLevel()) return false;
+        for (const auto* builder : pass.capitalBuilders) {
+            if (builder->getItemID() != Structure_ConstructionYard || builder->isUpgrading()
+                || builder->isOnHold() || builder->getProductionQueueSize() != 0 || builder->getHealth() <= 0) continue;
+            CapitalCandidate candidate;
+            candidate.builder = builder->getObjectID(); candidate.item = item;
+            candidate.kind = "tech_progression"; candidate.reason = "next_legal_technology"; candidate.score = 1;
+            if (builder->getCurrentUpgradeLevel() < data[item][house].upgradeLevel
+                && builder->isAllowedToUpgrade()) {
+                candidate.kind = "tech_upgrade"; candidate.price = candidate.cost = builder->getUpgradeCost();
+                if (candidate.price <= 0) continue;
+                pass.techCandidate = candidate; pass.techUpgrade = true; return true;
+            }
+            if (!campaignAvailableToBuild(builder, item)) continue;
+            if ((pass.citySimEnabled || pass.powerRules) && getHouse()->getProducedPower()
+                < getHouse()->getPowerRequirement() + pass.committedPowerDemand + std::max(0, data[item][house].power))
+                continue;
+            planningBuilder = builder->getObjectID(); clearPlacementCache(false, true);
+            candidate.site = findPlaceLocation(item);
+            if (!candidate.site.isValid()) continue;
+            const auto foundation = foundationPlan(builder, item, candidate.site);
+            if (!foundation.complete) continue;
+            candidate.price = purchasePrice(builder, item);
+            candidate.cost = candidate.price;
+            for (const auto& slab : foundation.orders) candidate.cost += purchasePrice(builder, slab.item);
+            candidate.foundationCost = candidate.cost - candidate.price;
+            if (candidate.price <= 0) continue;
+            pass.techCandidate = candidate; return true;
+        }
+        return false;
+    };
+    auto upgrade = [&](Uint32 supplier) {
+        for (const auto* builder : pass.capitalBuilders) {
+            if (builder->getItemID() != supplier || !builder->isAllowedToUpgrade()
+                || builder->isUpgrading() || builder->isOnHold() || builder->getProductionQueueSize() > 0
+                || builder->getHealth() < builder->getMaxHealth()) continue;
+            for (Uint32 unit = Unit_FirstID; unit <= ItemID_LastID; ++unit) {
+                const auto& spec = data[unit][house];
+                if (!isUnit(unit) || !spec.enabled || spec.builder != int(supplier)
+                    || spec.techLevel > getHouse()->getTechLevel()
+                    || spec.upgradeLevel <= builder->getCurrentUpgradeLevel()
+                    || spec.upgradeLevel > builder->getMaxUpgradeLevel()
+                    || (!QuantBotBuildPolicy::militaryItem(unit) && unit != Unit_MCV)) continue;
+                bool legal = true;
+                for (Uint32 prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+                    if (isStructure(prerequisite) && spec.prerequisiteStructuresSet[prerequisite]
+                        && getHouse()->getNumItems(prerequisite) == 0) { legal = false; break; }
+                if (!legal) continue;
+                pass.techCandidate.builder = builder->getObjectID(); pass.techCandidate.item = supplier;
+                pass.techCandidate.kind = "tech_upgrade"; pass.techCandidate.reason = "unlock_higher_value_units";
+                pass.techCandidate.price = pass.techCandidate.cost = builder->getUpgradeCost();
+                pass.techCandidate.score = 1; pass.techUpgrade = true; return true;
+            }
+        }
+        return false;
+    };
+    const bool candidate = (pass.starportMarketAvailable && structure(Structure_StarPort))
+        || structure(Structure_HeavyFactory) || upgrade(Structure_HeavyFactory)
+        || (canAddRepairYard(pass.itemCount[Structure_RepairYard]) && structure(Structure_RepairYard))
+        || structure(Structure_HighTechFactory) || structure(Structure_IX)
+        || upgrade(Structure_HighTechFactory)
+        || (pass.itemCount[Structure_Palace] == 0 && structure(Structure_Palace))
+        || (researchLabPolicyActive() && getHouse()->getTechLevel() < 9
+            && !getHouse()->isTechResearchActive() && structure(Structure_ResearchLab));
+    if (!candidate && researchLabPolicyActive() && getHouse()->getNumItems(Structure_ResearchLab) > 0
+        && !getHouse()->isTechResearchActive() && getHouse()->getTechLevel() < 9) {
+        for (const auto* lab : getStructureList())
+            if (lab->getOwner() == getHouse() && lab->getItemID() == Structure_ResearchLab && lab->getHealth() > 0) {
+                pass.techCandidate.builder = lab->getObjectID(); pass.techCandidate.item = Structure_ResearchLab;
+                pass.techCandidate.kind = "tech_research"; pass.techCandidate.reason = "unlock_higher_technology";
+                pass.techCandidate.price = pass.techCandidate.cost = getHouse()->getTechResearchCost();
+                pass.techCandidate.score = 1; pass.techResearch = true; break;
+            }
+    }
+    const bool feasible = pass.techCandidate.item != NONE_ID && pass.techCandidate.cost > 0;
+    pass.techSavingActive = pass.techSavings && feasible && stable && pass.readyGroundUnits >= 6
+        && pass.readyGroundValue >= pass.defenceMinimumValue
+        && int64_t(pass.forecastFunding) >= int64_t(pass.techCandidate.cost) + pass.techWorkingReserve;
+    // Bucket savings do not occupy a yard while still unfunded. Its economic
+    // allocation can keep zoning/earning; a paid project takes the shared
+    // capital turn only once its own bucket can fund the entire quote.
+    if (pass.techSavingActive && !pass.techResearch
+        && spendingLedger.available(QuantBotSpendingPolicy::Bucket::Production) >= pass.techCandidate.cost
+        && int64_t(pass.money) >= int64_t(pass.techCandidate.cost) + pass.techWorkingReserve) {
+        pass.techCandidateIndex = int(pass.capitalCandidates.size());
+        pass.capitalCandidates.push_back(pass.techCandidate);
+    }
+    if (pass.techSavingActive && pass.techResearch)
+        pass.civWarsResearchReserve = std::min(pass.techCandidate.cost,
+            spendingLedger.available(QuantBotSpendingPolicy::Bucket::Production));
+    planningBuilder = NONE_ID; clearPlacementCache(false, true);
+    if (AITelemetry::log().enabled()) traceDecision("tech_savings_plan", AITelemetry::Record().set("tech_savings", pass.techSavings)
+        .set("feasible", feasible).set("active", pass.techSavingActive).set("stable", stable)
+        .set("candidate_kind", !feasible ? "none" : pass.techResearch ? "research" : pass.techUpgrade ? "upgrade" : "structure")
+        .set("item", pass.techCandidate.item).set("builder", pass.techCandidate.builder)
+        .set("cost", pass.techCandidate.cost).set("cash", getHouse()->getCredits()).set("spendable", pass.money)
+        .set("committed_cost", pass.queuedProductionCost).set("forecast_net_income", pass.forecastNetIncome)
+        .set("horizon_cycles", CityEconomyInvestmentPolicy::horizonCycles)
+        .set("working_reserve", pass.techWorkingReserve).set("defence_minimum", pass.defenceMinimumValue)
+        .set("ready_ground_units", pass.readyGroundUnits).set("ready_ground_value", pass.readyGroundValue)
+        .set("production_bps", pass.incomeShares[0]).set("economy_bps", pass.incomeShares[1])
+        .set("military_bps", pass.incomeShares[2]).set("ledger_initialized", spendingLedger.initialized)
+        .set("production_balance", spendingLedger.balance[0]).set("economy_balance", spendingLedger.balance[1])
+        .set("military_balance", spendingLedger.balance[2]));
 }
 
 void QuantBot::planCapitalCandidates(BuildPass& pass) {
@@ -3318,7 +3587,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             else if (getHouse()->isUnitLimitReached(item)) reason="unit_limit";
             else if (port && getHouse()->getChoam().getNumAvailable(item)<=0) reason="sold_out";
             else if (port && price >= value) reason="not_discounted";
-            else if (!port && (bps<=0 || deficit<=0)) reason="mix_satisfied";
+            else if (pass.techSavings && !compositionAdmits(pass, item)) reason="existing_composition_satisfied";
+            else if (!pass.techSavings && !port && (bps<=0 || deficit<=0)) reason="mix_satisfied";
             // City infantry answer an observed wing and claim the aggregate infantry
             // share, not a full share each. Without this a finished air raid would go
             // on reserving cash for troops nobody is going to order.
@@ -3344,7 +3614,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         if (AITelemetry::log().enabled()) pass.capitalUnitOptions.set(std::to_string(builder->getObjectID()),unitOptions);
     }
     for (auto& candidate:pass.capitalCandidates) if (isStructure(candidate.item) && candidate.score>0
-        && candidate.kind!=std::string("expansion_upgrade") && candidate.kind!=std::string("defence_upgrade")) {
+        && candidate.kind!=std::string("expansion_upgrade") && candidate.kind!=std::string("defence_upgrade")
+        && std::string_view(candidate.kind)!="tech_progression" && std::string_view(candidate.kind)!="tech_upgrade") {
         const auto* builder=dynamic_cast<const BuilderBase*>(getObject(candidate.builder));
         if (!builder) continue;
         planningBuilder=candidate.builder;clearPlacementCache(false,true);
@@ -3364,6 +3635,18 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 && pass.forecastNetIncome>=candidate.price+candidate.foundationCost+pass.queuedProductionCost;
             if (fundedBootstrap) candidate.reason="funded_first_heavy_bootstrap";
             else { candidate.score=0;candidate.reason="first_heavy_not_affordable"; }
+        }
+    }
+    if (pass.techSavings) for (auto& candidate : pass.capitalCandidates) {
+        if (candidate.score <= 0) continue;
+        planningBuilder = candidate.builder;
+        const auto kind = std::string_view(candidate.kind);
+        const bool upgrade = kind == "tech_upgrade" || kind == "defence_upgrade" || kind == "expansion_upgrade";
+        const auto* builder = dynamic_cast<const BuilderBase*>(getObject(candidate.builder));
+        const Uint32 budgetItem = upgrade && builder ? builder->getItemID() : candidate.item;
+        if (!spendingAdmits(pass, budgetItem, candidate.price + candidate.foundationCost, upgrade)) {
+            candidate.score = 0;
+            candidate.reason = "income_bucket_savings";
         }
     }
 }
@@ -3459,6 +3742,16 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             pass.capitalChoice = firstCover >= 0 ? firstCover : infantry;
             pass.protectionCapital = true;
         }
+    }
+    // Production owns only its allocated cash, not the entire treasury. Its
+    // next legal project precedes routine replenishment and repeat zoning;
+    // actual safety and first-Starport savings keep their existing priority.
+    if (pass.techSavingActive && pass.techCandidateIndex >= 0
+        && (!pass.protectionCapital || (pass.capitalChoice >= 0
+            && (std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "trooper_support"
+                || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "trooper_recruitment")))) {
+        pass.capitalChoice = pass.techCandidateIndex;
+        pass.protectionCapital = true;
     }
     pass.cityGrowthProtected = false;
     // With multiple yards, assign one to growth alongside routine investment.
@@ -3581,6 +3874,11 @@ int QuantBot::capitalReserve(BuildPass& pass, Uint32 builder) {
     if (!capitalPending(pass)) return 0;
     const auto& candidate = pass.capitalCandidates[pass.capitalChoice];
     int64_t cost = int64_t(candidate.price) + candidate.foundationCost;
+    if (pass.techSavings && !spendingEmergency(pass, candidate.item)) {
+        const auto bucket = std::string_view(candidate.kind) == "tech_upgrade"
+            ? QuantBotSpendingPolicy::Bucket::Production : QuantBotBuildPolicy::spendingBucket(candidate.item);
+        cost = std::min<int64_t>(cost, spendingLedger.available(bucket));
+    }
     const bool infrastructure = std::string_view(candidate.kind) == "trooper_support";
     if (infrastructure || std::string_view(candidate.kind) == "trooper_recruitment") {
         if (infrastructure) cost = std::max<int64_t>(cost, candidate.cost);
@@ -3685,8 +3983,10 @@ int QuantBot::queueCityRoadRepairs(const BuilderBase* yard, int limit) {
     AITelemetry::Record locations;
     for (const auto& site:sites) {
         if (queued>=limit) break;
-        builderPlaceLocations[yard->getObjectID()].emplace_back(site.first,site.second);
+        const int before = yard->getProductionQueueSize();
         doProduceItem(yard,Structure_Road);
+        if (yard->getProductionQueueSize() <= before) break;
+        builderPlaceLocations[yard->getObjectID()].emplace_back(site.first,site.second);
         locations.set(std::to_string(queued),AITelemetry::Record().set("x",site.first).set("y",site.second));
         ++queued;
     }

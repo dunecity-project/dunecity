@@ -4,6 +4,52 @@ Custom-game Hard and Brutal bots use a house-level army posture, rather than
 asking every unit to decide independently whether the whole army is losing.
 Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 
+## Technology savings and guns/butter budgets
+
+The experimental hashed `[Force Concentration] TechSavings` switch applies to
+Custom Medium, Hard and Brutal games, in city mode and classic content. It is
+off until paired outcome audits establish the default; campaigns, Easy,
+Builder-only authority, human order leases and saboteur orders are unchanged.
+
+The existing capital planner allocates real net receipts between production,
+economic growth and military spending. Safe income shares are 30/35/35%;
+an observed local ground threat, active economic defence or aircraft over the
+base changes new receipts to 15/20/65%. Unspent allocations remain in their own
+bucket. Full accepted orders, upgrades and research are committed once; later
+installment payments do not charge the same allocation again. Repairs and
+upkeep reduce net receipts rather than creating fictional gross income.
+Emergency defence, opening workers, bootstrap income, power recovery and the
+first legal Starport may borrow, recording debt in their own bucket for future
+income to repay. Forecast receipts are never spendable credits.
+
+Production includes factories, tech buildings, upgrades and research. Economy
+includes workers/transports, refineries/storage, power, zones/services and
+expansion MCVs; combat units and defensive emplacements are military. Concrete
+inherits the building's bucket. The same shared capital comparison reserves
+the next legal first supplier, production upgrade, IX, Palace or research
+project, including actual prerequisites and full foundations. It holds only
+production's allocated cash, leaving economy and military allocations usable.
+Below-quote technology saving requires six owned ground fighters, at least
+the larger of 3,000 credits, the existing wave minimum and 1.5 times observed
+local ground threat, stable income/power, and a four-minute funded quote.
+Losing that dispatch-capable defence releases the hold for replenishment.
+
+Unit selection also changes: target ratios are compared with the replacement
+value of units actually owned plus accepted queue commitments, not with the
+military limit or unspent money. The next indivisible vehicle minimizes the
+whole current mix's basis-point error; every factory and Starport shares that
+decision and updates it after acceptance. There is no routine cheap-unit
+capacity-fill fallback. An active base/economy threat may buy immediately
+affordable defenders instead of waiting for a desired expensive unit, with
+its own explicit emergency decision label. Ordinary standing troopers obey
+the existing-army infantry quota; an observed hostile wing retains reactive
+anti-air exceptions.
+
+Save 9884 stores the exact integer bucket balances and committed-wealth
+baseline. Saves 9882/9883 retain their frozen settings and load an empty,
+uninitialized ledger. Protocol 113 separates older peers because transferred
+multiplayer saves and observer checkpoints carry this new QuantBot state.
+
 ## Dispatch and the military limit
 
 The default outnumbered threshold is an observed enemy advantage of at least

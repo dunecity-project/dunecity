@@ -71,6 +71,7 @@
 #include "tornie-campaign-audit.inc"
 #include "trooper-support-probe.inc"
 #include "zone-power-probe.inc"
+#include "tech-saving-probe.inc"
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -137,6 +138,10 @@ int runCampaignBalanceProbe() {
     }
     if(std::getenv("BALANCE_TROOPER_SUPPORT_PROBE")) {
         runTrooperSupportProbe();
+        return MENU_QUIT_DEFAULT;
+    }
+    if(std::getenv("BALANCE_TECH_SAVING_PROBE")) {
+        runTechSavingProbe(requestedMod.c_str(), partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
     GameInitSettings init(humanHouse, settings.gameOptions, level);
@@ -514,6 +519,8 @@ int runCampaignBalanceProbe() {
                             .set("CityOpeningCapital",f.cityOpeningCapital).set("CityConstructionCapital",f.cityConstructionCapital)
                             .set("CityProductionPrerequisites",f.cityProductionPrerequisites)
                             .set("CityFirstFactorySaving",f.cityFirstFactorySaving)
+                            .set("TechSavings",f.techSavings)
+                            .set("TrooperSupport",f.trooperSupport).set("FundedClassicProduction",f.fundedClassicProduction)
                             .set("ThreatTurrets",f.threatTurrets).set("MoreRocketTurrets",f.moreRocketTurrets)
                             .set("CityStarportSupply",f.cityStarportSupply).set("StorageCapacity",f.storageCapacity));
                     }

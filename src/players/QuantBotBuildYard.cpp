@@ -317,6 +317,8 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         pass.money -= researchCash;
         if (queued) return true;
     }
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && !yardTurn.civicClaimsYard && buildTechSavings(pass, turn)) return true;
     chooseYardCityFoundations(pass, turn, yardTurn);
     chooseYardCoreEconomy(pass, turn, yardTurn);
     chooseYardCityOpening(pass, turn, yardTurn);
@@ -729,6 +731,8 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && pass.protectionCapital && capitalPending(pass)
         && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)!="trooper_support"
+        && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)!="tech_progression"
+        && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)!="tech_upgrade"
         && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()) {
         const auto& service = pass.capitalCandidates[pass.capitalChoice];
         const bool defenceUpgrade=service.kind==std::string("defence_upgrade");
@@ -2267,7 +2271,8 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         // of its full price. That is not "cannot afford it": replacing it
         // with a plot here is what prevented it from ever being ordered.
         && !onInstallments(turn, yardTurn.itemID)
-        && (!selectedPlaceLocation.isValid() || pass.money<selectedCost)) {
+        && (!selectedPlaceLocation.isValid() || pass.money<selectedCost
+            || !spendingAdmits(pass, yardTurn.itemID, selectedCost))) {
         const Uint32 zone=affordableCityZone(pass, turn.pBuilder,pass.money);
         if (zone!=NONE_ID) {
             yardTurn.itemID=zone;selectedPlaceLocation=findPlaceLocation(zone);
@@ -2334,6 +2339,9 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         const auto& foundations=plan.orders;
         int foundationCost=0;
         for (const auto& foundation:foundations) foundationCost+=purchasePrice(turn.pBuilder,foundation.item);
+        if (!spendingAdmits(pass, yardTurn.itemID, purchasePrice(turn.pBuilder, yardTurn.itemID) + foundationCost))
+            return true;
+        turn.spendingItem = yardTurn.itemID;
         // Foundations are queued ahead of the building, so this is where the
         // whole production start budget has to be payable: the foundations
         // plus the building's first installment. The execution check then
@@ -2482,9 +2490,13 @@ void QuantBot::useSpareYardCapacity(BuildPass& pass, BuilderTurn& turn, YardTurn
         && turn.pBuilder->getProductionQueueSize() == 0 && campaignAvailableToBuild(turn.pBuilder,Structure_Road)) {
         pass.roadMaintenanceAttempted = true;
         const int roadPrice = std::max(1,data[Structure_Road][houseID].price);
-        const int repaired = queueCityRoadRepairs(turn.pBuilder,std::min(8,std::max(0,pass.money-pass.economyReserve)/roadPrice));
+        const int roadBudget = pass.techSavings ? std::min(std::max(0, pass.money - pass.economyReserve),
+            spendingLedger.available(QuantBotSpendingPolicy::Bucket::Economy))
+            : std::max(0, pass.money - pass.economyReserve);
+        const int repaired = queueCityRoadRepairs(turn.pBuilder, std::min(8, roadBudget / roadPrice));
         pass.money -= repaired*roadPrice;
         pass.capitalOrderedCost += repaired*roadPrice;
+        if (pass.techSavings) spendingLedger.charge(QuantBotSpendingPolicy::Bucket::Economy, repaired * roadPrice);
         if (repaired) traceDecision("capital_road_batch",AITelemetry::Record().set("capital_plan",pass.capitalDecision)
             .set("builder",planningBuilder).set("count",repaired).set("price",roadPrice).set("cost",repaired*roadPrice));
     }

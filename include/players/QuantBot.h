@@ -28,6 +28,7 @@
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotColonisationPolicy.h>
 #include <players/QuantBotFoundationPolicy.h>
+#include <players/QuantBotSpendingPolicy.h>
 #include <units/MCV.h>
 class Harvester;
 #include <players/QuantBotConfig.h>
@@ -154,6 +155,7 @@ public:
         int infantryQuotaBps = 0;
     };
     const AllocationSnapshot& getAllocationSnapshot() const { return allocationSnapshot; }
+    const QuantBotSpendingPolicy::Ledger& getSpendingLedger() const { return spendingLedger; }
     std::string getDifficultyName() const;
     bool permitsPoliceReinforcement(int unitValue) const;
     /// True when the lobby selected an explicit "Maximum Number of Units Override"
@@ -348,6 +350,8 @@ private:
     Uint32 powerDemandSampleCycle = 0;
     Sint32 powerDemandSample = 0;
     Sint32 projectedPowerDemandGrowth = 0;
+    /// Exact net-income allocations and accepted commitments, saved from 9884.
+    QuantBotSpendingPolicy::Ledger spendingLedger{};
     Coord squadRetreatLocation = Coord::Invalid();
     AIRole role = AIRole::Both;
     Uint32 lastStatsLogCycle = 0;
@@ -1714,6 +1718,12 @@ private:
     void planOpeningProduction(BuildPass& pass);
     /// Rocket coverage, core infrastructure and crime exposure.
     void planDefenceCoverage(BuildPass& pass);
+    /// Net-income buckets, a legal next technology and its bounded savings plan.
+    void planTechSavings(BuildPass& pass);
+    bool spendingEmergency(BuildPass& pass, Uint32 item);
+    bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
+    static size_t compositionSlot(Uint32 item);
+    bool compositionAdmits(BuildPass& pass, Uint32 item);
     /// Scores every producer's candidate purchases.
     void planCapitalCandidates(BuildPass& pass);
     /// Chooses the protected capital purchase for this pass.
@@ -1782,6 +1792,7 @@ private:
     void buildRepair(BuildPass& pass, const StructureBase* pStructure);
     /// One producer's turn: shared rules, then its type's handler.
     void buildProducer(BuildPass& pass, const StructureBase* pStructure);
+    bool buildTechSavings(BuildPass& pass, BuilderTurn& turn);
     /// Per-builder bookkeeping and status telemetry.
     void beginBuilderTurn(BuildPass& pass, BuilderTurn& turn);
     /// Starport MCV recovery; true ends the turn.

@@ -246,6 +246,31 @@ inline int64_t deficit(int targetBps, int armyValue, int currentCount, int price
     return int64_t(targetBps) * std::max(0, armyValue)
         - int64_t(std::max(0, currentCount)) * std::max(0, price) * 10000;
 }
+// Pick one indivisible unit against the army that exists (including committed
+// queues), never cash or a future military-value cap. Compare the whole mix's
+// post-order absolute error in basis points; this also bootstraps an empty army
+// and advances a balanced one without an unbounded "fill capacity" fallback.
+inline size_t nextExistingSlot(const Mix& target, const Weights& current,
+                              const Weights& prices, const Slots& available) {
+    int64_t total = 0;
+    for (const auto value : current) total += std::max<int64_t>(0, value);
+    size_t selected = kSlots;
+    int64_t bestError = INT64_MAX, bestDeficit = INT64_MIN;
+    for (size_t i = 0; i < kSlots; ++i) {
+        if (!available[i] || target[i] <= 0 || prices[i] <= 0) continue;
+        const int64_t after = total + prices[i];
+        int64_t error = 0;
+        for (size_t j = 0; j < kSlots; ++j) {
+            const int64_t actual = (std::max<int64_t>(0, current[j]) + (i == j ? prices[i] : 0)) * 10000 / after;
+            error += actual > target[j] ? actual - target[j] : target[j] - actual;
+        }
+        const int64_t deficit = int64_t(target[i]) * total - current[i] * 10000;
+        if (error < bestError || (error == bestError && deficit > bestDeficit)) {
+            selected = i; bestError = error; bestDeficit = deficit;
+        }
+    }
+    return selected;
+}
 // The share of a group (the special slot: Devastator, Sonic Tank, Deviator) split between its
 // \a buildable members: equal parts, the rounding remainder to the lowest buildable members, 0 for
 // the others. A house that can build several specials divides the share; none gets all of it.

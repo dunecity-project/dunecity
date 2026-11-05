@@ -7,6 +7,113 @@
 
 namespace DuneCityAudit {
 
+// Replacement prices belong to the current owner, not the original owner or
+// CHOAM's discounted quote. Infantry products expand only while still queued.
+constexpr size_t kInfantrySlot = UnitMixPolicy::kSlots;
+constexpr size_t kOtherSlot = kInfantrySlot + 1;
+constexpr size_t kCompositionSlots = kOtherSlot + 1;
+constexpr std::array<Uint32,6> kTechItems = {Structure_HeavyFactory, Structure_IX,
+    Structure_StarPort, Structure_Palace, Structure_RepairYard, Structure_HighTechFactory};
+constexpr std::array<const char*,6> kTechNames = {"heavy", "ix", "starport", "palace", "repair", "hitech"};
+
+struct TechObservation {
+    const House* house{};
+    Uint32 cycle{};
+    std::array<int64_t,6> firstOwned{-1,-1,-1,-1,-1,-1};
+    std::array<int64_t,6> firstCompleted{-1,-1,-1,-1,-1,-1};
+};
+inline std::array<TechObservation,NUM_HOUSES> technology;
+
+inline size_t compositionSlot(Uint32 item) {
+    for (size_t i=0; i<QuantBot::kMixItems.size(); ++i)
+        if (QuantBot::kMixItems[i]==item) return i;
+    switch (item) {
+    case Unit_Soldier: case Unit_Infantry: case Unit_Infantry5:
+    case Unit_Trooper: case Unit_Troopers: case Unit_Troopers5:
+    case Unit_GasInfantry: case Unit_FlameTrooper: return kInfantrySlot;
+    default: return kOtherSlot;
+    }
+}
+
+inline Uint32 singleItem(Uint32 item) {
+    if (item==Unit_Infantry || item==Unit_Infantry5) return Unit_Soldier;
+    if (item==Unit_Troopers || item==Unit_Troopers5) return Unit_Trooper;
+    return item;
+}
+
+inline int productCount(Uint32 item) {
+    if (item==Unit_Infantry || item==Unit_Troopers) return 3;
+    if (item==Unit_Infantry5 || item==Unit_Troopers5) return 5;
+    return 1;
+}
+
+inline void sampleComposition(Game& game, const House* house, const QuantBot* bot, int minute) {
+    std::array<int64_t,kCompositionSlots> liveCount{}, liveValue{}, queuedCount{}, queuedValue{};
+    const int houseID=house->getHouseID();
+    for (const auto* unit:unitList) {
+        if (unit->getOwner()!=house || unit->getHealth()<=0
+            || !QuantBotInternal::mobileCombatItem(unit->getItemID())) continue;
+        const size_t slot=compositionSlot(unit->getItemID());
+        ++liveCount[slot];
+        liveValue[slot]+=game.objectData.data[unit->getItemID()][houseID].price;
+    }
+    for (const auto* structure:structureList) {
+        if (structure->getOwner()!=house || structure->getHealth()<=0) continue;
+        if (const auto* builder=dynamic_cast<const BuilderBase*>(structure)) {
+            for (const auto& order:builder->getProductionQueue()) {
+                if (!QuantBotInternal::mobileCombatItem(order.itemID)) continue;
+                const size_t slot=compositionSlot(order.itemID);
+                const int count=productCount(order.itemID);
+                queuedCount[slot]+=count;
+                queuedValue[slot]+=int64_t(count)*game.objectData.data[singleItem(order.itemID)][houseID].price;
+            }
+            SDL_Log("DUNECITY_BUILDER: minute=%d cycle=%u house=%d builder=%u item=%u level=%d upgrading=%d",
+                minute,game.getGameCycleCount(),houseID,builder->getObjectID(),builder->getItemID(),
+                builder->getCurrentUpgradeLevel(),int(builder->isUpgrading()));
+        }
+    }
+    const auto& allocation=bot->getAllocationSnapshot();
+    int64_t totalLiveCount=0,totalLiveValue=0,totalQueuedCount=0,totalQueuedValue=0;
+    for (size_t slot=0; slot<kCompositionSlots; ++slot) {
+        totalLiveCount+=liveCount[slot]; totalLiveValue+=liveValue[slot];
+        totalQueuedCount+=queuedCount[slot]; totalQueuedValue+=queuedValue[slot];
+        const int target=allocation.ready && slot<UnitMixPolicy::kSlots && allocation.slots[slot].allocated
+            ? allocation.slots[slot].targetBps : -1;
+        SDL_Log("DUNECITY_COMPOSITION: minute=%d cycle=%u house=%d slot=%zu item=%u"
+                " live_count=%lld live_value=%lld queued_count=%lld queued_value=%lld"
+                " target_bps=%d allocation_ready=%d allocation_cycle=%u",
+            minute,game.getGameCycleCount(),houseID,slot,
+            slot<UnitMixPolicy::kSlots ? QuantBot::kMixItems[slot] : Uint32(NONE_ID),
+            static_cast<long long>(liveCount[slot]),static_cast<long long>(liveValue[slot]),
+            static_cast<long long>(queuedCount[slot]),static_cast<long long>(queuedValue[slot]),
+            target,int(allocation.ready),allocation.cycle);
+    }
+    SDL_Log("DUNECITY_TECH_SAMPLE: minute=%d cycle=%u house=%d credits=%d"
+            " military_live_count=%lld military_live_value=%lld military_queued_count=%lld military_queued_value=%lld"
+            " allocation_ready=%d allocation_cycle=%u infantry_quota_bps=%d"
+            " tech_level=%d research_target=%d research_remaining=%d research_enabled=%d city_sim=%d",
+        minute,game.getGameCycleCount(),houseID,house->getCredits(),
+        static_cast<long long>(totalLiveCount),static_cast<long long>(totalLiveValue),
+        static_cast<long long>(totalQueuedCount),static_cast<long long>(totalQueuedValue),
+        int(allocation.ready),allocation.cycle,allocation.infantryQuotaBps,house->getTechLevel(),
+        house->getTechResearchTarget(),house->getTechResearchRemaining(),
+        int(game.getGameInitSettings().getGameOptions().researchLab),int(game.isCitySimEnabled()));
+    const auto& ledger=bot->getSpendingLedger();
+    SDL_Log("DUNECITY_SPENDING_BUCKETS: minute=%d cycle=%u house=%d bucket_initialized=%d"
+            " bucket_last_wealth=%lld bucket_production_credits_x10000=%lld"
+            " bucket_economy_credits_x10000=%lld bucket_military_credits_x10000=%lld",
+        minute,game.getGameCycleCount(),houseID,int(ledger.initialized),
+        static_cast<long long>(ledger.lastWealth),static_cast<long long>(ledger.balance[0]),
+        static_cast<long long>(ledger.balance[1]),static_cast<long long>(ledger.balance[2]));
+    const auto& state=technology[houseID];
+    for (size_t i=0; i<kTechItems.size(); ++i)
+        SDL_Log("DUNECITY_TECH_STRUCTURE: minute=%d cycle=%u house=%d name=%s item=%u live=%d built=%d"
+                " first_owned_cycle=%lld first_completed_cycle=%lld",
+            minute,game.getGameCycleCount(),houseID,kTechNames[i],kTechItems[i],
+            house->getNumItems(kTechItems[i]),house->getNumBuiltItems(kTechItems[i]),
+            static_cast<long long>(state.firstOwned[i]),static_cast<long long>(state.firstCompleted[i]));
+}
+
 struct StorageObservation {
     const House* house{};
     Uint32 cycle{};
@@ -27,6 +134,15 @@ inline void observe(Game& game) {
     for (int h=0; h<NUM_HOUSES; ++h) {
         const House* house = game.getHouse(h);
         if (!house || !FfaArmy::quantBotOf(house)) continue;
+        auto& tech=technology[h];
+        if (tech.house!=house || cycle<tech.cycle) tech={};
+        tech.house=house; tech.cycle=cycle;
+        for (size_t i=0; i<kTechItems.size(); ++i) {
+            if (tech.firstOwned[i]<0 && house->getNumItems(kTechItems[i])>0)
+                tech.firstOwned[i]=cycle;
+            if (tech.firstCompleted[i]<0 && house->getNumBuiltItems(kTechItems[i])>0)
+                tech.firstCompleted[i]=cycle;
+        }
         auto& state = storage[h];
         int64_t lost = 0;
         const auto totals = AITelemetry::log().economy.find(h);
@@ -55,6 +171,7 @@ inline void sample(Game& game) {
     for (const House* house : EliminationMatch::playingHouses(game)) {
         const QuantBot* bot = FfaArmy::quantBotOf(house);
         if (!bot) continue;
+        sampleComposition(game,house,bot,minute);
         const auto grid = FfaArmy::baseGrid(house);
         int fighters = 0, moving = 0, targeting = 0, enemies = 0, enemyValue = 0, coveredEnemies = 0;
         int trooperLive = 0, ornithopterLive = 0, eliteOrnithopterLive = 0;

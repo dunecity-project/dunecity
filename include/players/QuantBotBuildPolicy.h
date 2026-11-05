@@ -4,6 +4,7 @@
 #include <data.h>
 #include <SDL_stdinc.h>
 #include <Definitions.h>
+#include <players/QuantBotSpendingPolicy.h>
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -38,6 +39,21 @@ inline bool militaryItem(Uint32 item) {
     return isUnit(item) && item != Unit_Carryall && item != Unit_Harvester
         && item != Unit_CapacityHarvester && item != Unit_FastHarvester
         && item != Unit_MCV && item != Unit_Sandworm;
+}
+inline QuantBotSpendingPolicy::Bucket spendingBucket(Uint32 item) {
+    using Bucket = QuantBotSpendingPolicy::Bucket;
+    if (militaryItem(item) || item == Structure_GunTurret || item == Structure_RocketTurret
+        || item == Structure_Scoutpost || item == Structure_Slowpost
+        || item == Structure_Flamepost || item == Structure_Chemipost) return Bucket::Military;
+    switch (item) {
+    case Structure_LightFactory: case Structure_HeavyFactory: case Structure_HighTechFactory:
+    case Structure_ChaosFactory: case Structure_Barracks: case Structure_WOR:
+    case Structure_Radar: case Structure_IX: case Structure_StarPort: case Structure_Palace:
+    case Structure_RepairYard: case Structure_ResearchLab:
+        return Bucket::Production;
+    default:
+        return Bucket::Economy;
+    }
 }
 inline int fundedArmyTarget(int committed, int limit, int spendable) {
     return int(std::min<int64_t>(limit, int64_t(committed) + std::max(0, spendable)));

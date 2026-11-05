@@ -8315,6 +8315,15 @@ GameStateDigest::Digest Game::computeStateDigest() const {
             houses.mixInt32(pHouse->getTechResearchRemaining());
             houses.mixUint32(pHouse->getTechResearchLabID());
         }
+        for (const auto& player : pHouse->getPlayerList()) {
+            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
+                const auto& ledger = bot->getSpendingLedger();
+                houses.mixUint8(bot->getPlayerID());
+                houses.mixUint8(ledger.initialized ? 1 : 0);
+                houses.mixInt64(ledger.lastWealth);
+                for (const auto balance : ledger.balance) houses.mixInt64(balance);
+            }
+        }
     }
     digest.houseHash = houses.value();
 

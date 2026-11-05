@@ -96,6 +96,138 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertNotEqual(games[0]['sides'][0][0], games[1]['sides'][0][0])
         self.assertEqual(audit['parser'].parse_args([]).formats, ['1v1', '2v2', 'ffa4'])
 
+    def test_classic_content_has_distinct_ids_and_reuses_the_real_scenario_route(self):
+        common = ['--sizes', '96', '--spice', 'medium', '--formats', '1v1',
+                  '--difficulties', 'medium', 'hard', 'brutal', '--seeds', '9101', '148680876']
+        city = audit['schedule'](audit['parser'].parse_args(common))
+        self.assertTrue(all(game['id'].startswith('matrix/') for game in city))
+        for mod in ('Dune2R', 'vanilla'):
+            args = audit['parser'].parse_args(common + ['--mod', mod])
+            games = audit['schedule'](args)
+            self.assertEqual(len(games), 6)
+            self.assertTrue(all(game['id'].startswith(mod + '/matrix/') for game in games))
+            command = audit['command'](args, Path('unused-probe'), games[0], Path('unused-output'))
+            self.assertEqual(command[command.index('--mod') + 1], mod)
+            self.assertEqual([game['skirmish'] for game in games], [game['skirmish'] for game in city])
+
+    def test_composition_uses_current_and_queued_replacement_values_not_the_cap(self):
+        lines = []
+        for slot in range(12):
+            data = dict(minute=10, cycle=37500, house=0, slot=slot, item=41,
+                        live_count=2 if slot == 0 else 3 if slot == 1 else 0,
+                        live_value=1000 if slot == 0 else 500 if slot == 1 else 0,
+                        queued_count=int(slot == 0), queued_value=500 if slot == 0 else 0,
+                        target_bps=4000 if slot == 0 else 6000 if slot == 1 else 0 if slot < 10 else -1,
+                        allocation_ready=1, allocation_cycle=37000, army_target=50000)
+            lines.append('DUNECITY_COMPOSITION: ' + ' '.join(f'{key}={value}' for key, value in data.items()))
+        rows = audit['composition_rows'](lines)
+        tank = rows[0]
+        self.assertEqual((tank['committed_count'], tank['committed_value']), (3, 1500))
+        self.assertEqual(tank['committed_count_bps'], 5000)
+        self.assertEqual(tank['committed_value_bps'], 7500)
+        self.assertEqual(tank['value_target_delta_bps'], 3500)
+        self.assertAlmostEqual(tank['live_value_bps'], 6666.667)
+        self.assertEqual(rows[10]['target_bps'], '')
+        self.assertEqual(rows[10]['committed_value_bps'], '')
+        partial = audit['composition_rows'](lines[:-1])
+        self.assertTrue(all(row['committed_value_bps'] == '' for row in partial))
+
+    def test_accepted_spending_partitions_quotes_and_keeps_diagnostic_overlays_separate(self):
+        def order(item, **data):
+            return audit['accepted_order'](dict(session='fixture', seq=1, cycle=25, house=0,
+                event='production_order', data=dict(item=item, accepted=1, quoted_price=100,
+                    queue_before=0, queue_after=1, **data)))
+        self.assertEqual(order(44)['bucket'], 'military')
+        self.assertEqual(order(44)['cheap_unit'], 1)
+        self.assertEqual(order(41)['cheap_unit'], 0)  # A Tank is not cheap infantry/light spam.
+        self.assertEqual((order(4)['bucket'], order(4)['tech']), ('production', 1))
+        self.assertEqual((order(26)['bucket'], order(26)['city']), ('economy', 1))  # Police, not a turret.
+        self.assertEqual((order(12)['bucket'], order(12)['city']), ('military', 0))
+        self.assertEqual((order(31)['bucket'], order(31)['city']), ('economy', 0))
+        self.assertEqual(order(14, spending_bucket='production')['bucket'], 'production')  # Parent project's slab.
+        self.assertEqual((order(14, spending_bucket='production')['tech'],
+                          order(14, spending_bucket='production')['city']), (1, 0))
+        path_order = order(36, rule='light_backlog', composition_basis='existing_and_queued',
+                           composition_before={'36': {'committed_value': 200, 'target_bps': 1000, 'available': 1}},
+                           composition={'36': {'committed_value': 400, 'target_bps': 1000, 'available': 1}},
+                           state={'military': 1000, 'military_limit': 50000, 'military_budget': 2000})
+        self.assertEqual((path_order['rule'], path_order['composition_basis']), ('light_backlog', 'existing_and_queued'))
+        self.assertEqual(path_order['military_headroom'], 1000)
+        self.assertEqual(path_order['state_cycle'], 25)
+        self.assertEqual(json.loads(path_order['composition_before'])['36']['committed_value'], 200)
+        self.assertEqual(json.loads(path_order['composition_after'])['36']['committed_value'], 400)
+        path = audit['cheap_path_rows']([path_order, path_order], True)[0]
+        self.assertEqual((path['order_count'], path['accepted_credits']), (2, 200))
+        limited_path = audit['cheap_path_rows']([path_order], False)[0]
+        self.assertEqual(limited_path['accepted_credits'], '')
+        self.assertEqual(limited_path['observed_priced_credits'], 100)
+
+    def test_four_minute_quote_diversion_censors_short_dead_and_incomplete_windows(self):
+        def event(name, seq, cycle, **data):
+            return dict(session='fixture', house=0, event=name, seq=seq, cycle=cycle, data=data)
+        decisions = [
+            event('tech_savings_plan', 1, 0, feasible=1, candidate_kind='structure', item=6, builder=20,
+                  cost=800, cash=500, committed_cost=100, forecast_net_income=500, horizon_cycles=15000,
+                  working_reserve=0, stable=1, tech_savings=0, production_bps=3000, economy_bps=3500, military_bps=3500),
+            event('production_order', 2, 25, item=44, builder=21, accepted=1, quoted_price=200,
+                  queue_before=0, queue_after=1),
+            event('production_order', 3, 30, item=20, builder=20, accepted=1, quoted_price=100,
+                  queue_before=0, queue_after=1),
+            event('capital_upgrade', 4, 40, builder=22, accepted=1, price=200),
+            event('city_yard_upgrade', 5, 40, builder=22, accepted=1, cost=200),  # Duplicate diagnostic.
+            event('capital_road_batch', 6, 50, builder=20, count=2, price=10, cost=20),
+            event('production_order', 7, 60, item=35, builder=23, accepted=0, quoted_price=700),
+        ]
+        marker = ('DUNECITY_TECH_SAMPLE: minute=5 cycle=20000 house=0 credits=100 military_live_count=4 '
+                  'military_live_value=1200 military_queued_count=2 military_queued_value=600')
+        bucket = ('DUNECITY_SPENDING_BUCKETS: minute=5 cycle=20000 house=0 bucket_initialized=1 '
+                  'bucket_last_wealth=100 bucket_production_credits_x10000=-2000000 '
+                  'bucket_economy_credits_x10000=150000 bucket_military_credits_x10000=0')
+        sample = dict(house='0', cycle='20000', structures='4', army_target='50000')
+        final = [dict(house='0', alive='1', eliminated_s='-1')]
+        capture = dict(status='complete', decisions=decisions)
+        result = audit['tech_audit']([marker, bucket], [sample], final, capture)
+        plan = result['tech-opportunities.csv'][0]
+        self.assertEqual((plan['fully_observed_4m'], plan['affordable_without_cheap_4m'],
+                          plan['accepted_cheap_4m'], plan['quoted_diversion_4m']), (1, 1, 200, 1))
+        row = result['tech-houses.csv'][0]
+        self.assertEqual((row['accepted_production'], row['accepted_economy'], row['accepted_military']),
+                         (200, 120, 200))
+        self.assertEqual((row['accepted_cheap_unit'], row['accepted_tech'], row['accepted_city']), (200, 200, 120))
+        self.assertEqual(len(result['tech-orders.csv']), 4)
+        point = result['tech-samples.csv'][0]
+        self.assertEqual((point['mean_military_unit_cost'], point['mean_committed_unit_cost']), (300, 300))
+        self.assertEqual(point['bucket_production_credits_x10000'], '-2000000')  # No lost debt/precision.
+        self.assertEqual(point['structures'], '4')
+        for ending in ([dict(house='0', alive='0', eliminated_s='120')], final):
+            samples = [dict(sample, cycle='10000')] if ending is final else [sample]
+            censored = audit['tech_audit']([], samples, ending, capture)['tech-opportunities.csv'][0]
+            self.assertEqual(censored['fully_observed_4m'], 0)
+            self.assertEqual(censored['quoted_diversion_4m'], '')
+        limited = audit['tech_audit']([marker], [sample], final, dict(capture, status='capture_limit'))
+        self.assertEqual(limited['tech-houses.csv'][0]['accepted_cheap_unit'], '')
+        self.assertEqual(limited['tech-opportunities.csv'][0]['fully_observed_4m'], '')
+        purchased = decisions + [event('production_order', 8, 100, item=6, builder=20, accepted=1,
+                                       quoted_price=800, queue_before=0, queue_after=1)]
+        observed = audit['tech_audit']([], [sample], final, dict(capture, decisions=purchased))
+        self.assertEqual(observed['tech-opportunities.csv'][0]['quoted_diversion_4m'], 0)
+        self.assertEqual(observed['tech-opportunities.csv'][0]['candidate_ordered_4m'], 1)
+
+    def test_missing_quote_is_unmeasured_and_absent_tech_sidecars_do_not_break_old_reports(self):
+        event = dict(session='fixture', seq=1, cycle=25, house=0, event='production_order',
+                     data=dict(item=44, accepted=1, queue_before=0, queue_after=1))
+        result = audit['tech_audit']([], [dict(house='0', cycle='20000')],
+            [dict(house='0', alive='1', eliminated_s='-1')], dict(status='complete', decisions=[event]))
+        self.assertEqual(result['tech-houses.csv'][0]['accepted_military'], '')
+        self.assertEqual(result['tech-orders.csv'][0]['price'], '')
+        with tempfile.TemporaryDirectory() as temporary:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                audit['tech_report']([Path(temporary)])
+            self.assertIn('unmeasured', output.getvalue())
+        self.assertNotIn('mean_military_unit_cost', audit['SAMPLE_FIELDS'])  # Original schema stays unchanged.
+        self.assertIn('mean_military_unit_cost', audit['TECH_SAMPLE_FIELDS'])
+
     def test_capture_allowance_passes_through_the_existing_probe_option(self):
         args = audit['parser'].parse_args(['--attack-events', '--capture-mib', '512'])
         game = audit['schedule'](args)[0]
@@ -425,6 +557,9 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertIn('1 games', evidence)
         self.assertIn('p2=1.0000', evidence)  # Six houses are still only one independent sign.
         self.assertIn('point estimate decrease', evidence)
+        descriptive, state = audit['paired_metric'](list(old), old, new, 'kill_value', interval=True)
+        self.assertIn('game-mean delta -1.000, 95% [-1.000, -1.000]; 1 games', descriptive)
+        self.assertEqual(state, 'unmeasured')  # Interval is descriptive, not a price/timing acceptance verdict.
         old = {(f'game-{game}', '0'): house_row(kill_value='1000') for game in range(6)}
         new = {key: dict(row, kill_value='999', economy_stall='1') for key, row in old.items()}
         evidence, state = audit['paired_metric'](list(old), old, new, 'kill_value', direction=1)

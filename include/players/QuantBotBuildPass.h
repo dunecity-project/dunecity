@@ -228,6 +228,11 @@ struct QuantBot::BuildPass {
     int infantryCount{};
     int64_t cityWorCashReserve{};
     int vehiclePlanValue{};
+    bool techSavings{};
+    UnitMixPolicy::Weights compositionValue{};
+    UnitMixPolicy::Weights compositionPrice{};
+    UnitMixPolicy::Slots compositionAvailable{};
+    int compositionArmyValue{};
 
     // planCapitalForecast()
     // Track unique structures ordered this tick to prevent multiple CYs
@@ -300,6 +305,19 @@ struct QuantBot::BuildPass {
     bool openingSupplierDue{};
     int moderateCrimeProperties{};
     int dangerousCrimeProperties{};
+    // planTechSavings(): all transient decisions, only the bucket ledger is saved.
+    QuantBotSpendingPolicy::Shares incomeShares{};
+    int defenceMinimumValue{};
+    bool militaryEmergency{};
+    std::array<bool, Num_ItemID> emergencyCivic{};
+    int readyGroundUnits{};
+    int readyGroundValue{};
+    CapitalCandidate techCandidate{};
+    bool techUpgrade{};
+    bool techResearch{};
+    bool techSavingActive{};
+    int techWorkingReserve{};
+    int techCandidateIndex{-1};
 
     // chooseCapitalPlan()
     int capitalChoice{};
@@ -338,6 +356,8 @@ struct QuantBot::BuilderTurn {
     Uint32 installmentProject{};
     int installmentProjectStartBudget{};
     bool emergencyFoundationOrder{};
+    /// Foundation orders inherit their actual building's budget and emergency.
+    Uint32 spendingItem{NONE_ID};
 
     // reserveBuilderCash()
     bool expansionProducer{};

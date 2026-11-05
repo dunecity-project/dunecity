@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Reproducible DuneCity QuantBot Random Skirmish audit (docs/quantbot-dunecity-audit.md).
+"""Reproducible DuneCity/classic QuantBot Random Skirmish audit (docs/quantbot-dunecity-audit.md).
 
 The ordinary Random Skirmish generator and real all-QuantBot game loop supply every
 measurement. Detectors identify suspicious house histories, not automatic proof of a bug.
 Use dunecity-queue submit for games; --report and --compare only read captured CSVs.
+Additive tech-*.csv/composition.csv sidecars retain replacement-price composition,
+accepted commitments, exact first-owned/completed technology and four-minute
+quote-budget opportunities without changing historical games/houses/samples CSVs.
 """
 import argparse
 import csv
@@ -74,6 +77,59 @@ ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 AIR_KILL_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'attacker', 'victim_house', 'object', 'item',
                           'enemy', 'capture_complete', 'attacker_item', 'attacker_source', 'attacker_firing_house',
                           'attacker_attribution', 'source_enemy', 'attribution_complete')
+# Additive sidecars leave the original CSV contracts and historical readers intact.
+# Shares use only the ten unit_mix vehicle slots; infantry has a separate quota.
+MIX_SLOTS = ('tank', 'siege', 'launcher', 'devastator', 'sonic_tank', 'deviator',
+             'ornithopter', 'trike', 'raider_trike', 'quad', 'infantry', 'other')
+TECH_ITEMS = {4: 'heavy', 6: 'ix', 16: 'starport', 8: 'palace', 11: 'repair', 5: 'hitech'}
+PRODUCTION_ITEMS = {1, 4, 5, 6, 7, 8, 9, 11, 16, 19, 57, 60, 65, 72, 88}
+ECONOMY_ITEMS = {2, 10, 13, 14, 15, 17, 18, 20, 21, 22, 23, 24, 25, 26,
+                 27, 31, 34, 48, 49, 56, 58, 59, 61, 66, 76, 85, 86}
+MILITARY_ITEMS = {3, 12, 28, 29, 32, 33, 35, 36, 37, 39, 40, 41, 42, 43, 44,
+                  45, 46, 47, 52, 53, 54, 55, 62, 63, 64, 71, 74, 75, 77, 78, 79, 80, 81, 82, 83, 84, 87}
+CHEAP_ITEMS = {32, 36, 42, 43, 44, 46, 47, 52, 63, 74, 75, 77, 78, 79, 81}
+TECH_SPEND_ITEMS = set(TECH_ITEMS) | {9, 88}
+CITY_SPEND_ITEMS = ECONOMY_ITEMS - {27, 31, 34, 59, 66, 85, 86}
+SPEND_CATEGORIES = ('production', 'economy', 'military', 'other', 'cheap_unit', 'tech', 'city')
+TECH_HORIZON = 4 * CYCLES_PER_MINUTE
+TECH_SAMPLE_VALUES = ('minute', 'cycle', 'house', 'credits', 'military_live_count', 'military_live_value',
+                      'military_queued_count', 'military_queued_value', 'military_committed_count',
+                      'military_committed_value', 'mean_military_unit_cost', 'mean_committed_unit_cost',
+                      'allocation_ready', 'allocation_cycle', 'infantry_quota_bps', 'tech_level',
+                      'research_target', 'research_remaining', 'research_enabled', 'city_sim',
+                      'structures', 'army_value', 'army_units', 'spice_gross', 'tax_gross', 'spent_total',
+                      'bucket_initialized', 'bucket_last_wealth', 'bucket_production_credits_x10000',
+                      'bucket_economy_credits_x10000', 'bucket_military_credits_x10000',
+                      'order_capture', 'spending_complete') + tuple('accepted_' + name for name in SPEND_CATEGORIES)
+TECH_SAMPLE_FIELDS = META + ('mod',) + TECH_SAMPLE_VALUES
+COMPOSITION_FIELDS = META + ('mod', 'minute', 'cycle', 'house', 'slot', 'item', 'live_count', 'live_value',
+                             'queued_count', 'queued_value', 'committed_count', 'committed_value',
+                             'live_count_bps', 'live_value_bps', 'committed_count_bps', 'committed_value_bps',
+                             'target_bps', 'value_target_delta_bps', 'allocation_ready', 'allocation_cycle')
+TECH_ORDER_FIELDS = META + ('mod', 'session', 'seq', 'cycle', 'house', 'event', 'item', 'builder',
+                            'builder_item', 'price', 'bucket', 'cheap_unit', 'tech', 'city', 'capture_complete',
+                            'rule', 'composition_basis', 'composition_before', 'composition_after',
+                            'state_id', 'state_cycle', 'military_value', 'military_cap', 'military_budget', 'military_headroom')
+TECH_PLAN_CONTEXT = ('tech_savings', 'active', 'stable', 'spendable', 'working_reserve', 'defence_minimum',
+                     'ready_ground_units', 'ready_ground_value', 'production_bps', 'economy_bps', 'military_bps',
+                     'ledger_initialized', 'production_balance', 'economy_balance', 'military_balance')
+TECH_PLAN_FIELDS = META + ('mod', 'session', 'seq', 'cycle', 'house', 'feasible', 'candidate_kind', 'item',
+                           'builder', 'cost', 'cash', 'committed_cost', 'forecast_net_income', 'horizon_cycles'
+                           ) + TECH_PLAN_CONTEXT + ('fully_observed_4m', 'affordable_without_cheap_4m',
+                           'accepted_cheap_4m', 'candidate_ordered_4m', 'affordable_after_cheap_quotes_4m',
+                           'quoted_diversion_4m')
+TECH_HOUSE_VALUES = ('order_capture', 'spending_complete', 'mean_military_unit_cost', 'mean_committed_unit_cost',
+                     'first_upgrade_order_minute', 'first_upgrade_completed_observed_minute',
+                     'first_research_order_minute', 'first_research_completed_minute',
+                     'feasible_plans', 'observed_4m_plans', 'affordable_4m_plans', 'quoted_diversion_4m_plans'
+                     ) + tuple('accepted_' + name for name in SPEND_CATEGORIES) + tuple(
+    f'first_{kind}_{name}_minute' for name in TECH_ITEMS.values() for kind in ('owned', 'completed', 'order'))
+TECH_HOUSE_FIELDS = META + ('mod', 'house') + TECH_HOUSE_VALUES
+CHEAP_PATH_FIELDS = META + ('mod', 'house', 'rule', 'composition_basis', 'item', 'capture_complete',
+                            'order_count', 'accepted_credits', 'observed_orders', 'observed_priced_credits', 'missing_prices')
+TECH_TABLES = (('tech-samples.csv', TECH_SAMPLE_FIELDS), ('composition.csv', COMPOSITION_FIELDS),
+               ('tech-orders.csv', TECH_ORDER_FIELDS), ('tech-opportunities.csv', TECH_PLAN_FIELDS),
+               ('tech-houses.csv', TECH_HOUSE_FIELDS), ('cheap-paths.csv', CHEAP_PATH_FIELDS))
 lock = threading.Lock()
 
 
@@ -116,10 +172,10 @@ def air_kill_capture(out, houses, final_cycle, enabled):
     One unknown air callback conservatively censors game-wide exact Trooper totals.
     """
     if not enabled:
-        return dict(status='disabled', reasons='', attribution='disabled', unknown_attribution='', events=[])
+        return dict(status='disabled', reasons='', attribution='disabled', unknown_attribution='', events=[], decisions=[])
     paths = sorted((out / 'profile').rglob('events.jsonl'))
     teams = {int(house['house']): int(house['team']) for house in houses}
-    reasons, events = [], []
+    reasons, events, decisions = [], [], []
     limited = False
     if len(paths) != 1:
         reasons.append('missing_capture' if not paths else 'multiple_captures')
@@ -127,6 +183,7 @@ def air_kill_capture(out, houses, final_cycle, enabled):
         started = ended = summaries = last_seq = 0
         end_cycle, session = None, None
         summary_houses, victims = set(), set()
+        states = {}
         with path.open(encoding='utf-8', errors='replace') as handle:
             for line in handle:
                 try:
@@ -154,6 +211,16 @@ def air_kill_capture(out, houses, final_cycle, enabled):
                         limited = True
                     elif name == 'simulation_exception':
                         reasons.append('simulation_exception')
+                    elif name == 'state_snapshot':
+                        states[seq] = (cycle, data.get('state', {}))
+                    elif name in ('production_order', 'capital_upgrade', 'city_yard_upgrade', 'capital_road_batch',
+                                   'tech_research_started', 'tech_research_completed', 'tech_savings_plan',
+                                   'construction_completed'):
+                        if 'state' not in data and data.get('state_id') in states:
+                            state_cycle, state = states[data['state_id']]
+                            data = dict(data, state=state, state_cycle=state_cycle)
+                        decisions.append(dict(session=session, seq=seq, cycle=cycle, house=int(event['house']),
+                                              event=name, data=data))
                     elif name == 'lethal_damage' and int(data['item']) in ENEMY_AIR_FIELDS:
                         victim, attacker_house = int(event['house']), int(data['attacker_house'])
                         object_id, attacker = int(data['object']), int(data['attacker'])
@@ -195,7 +262,7 @@ def air_kill_capture(out, houses, final_cycle, enabled):
         event['capture_complete'] = int(complete)
     status = 'complete' if complete else 'capture_limit' if limited else 'missing' if not paths else 'incomplete'
     unknown = sum(not event['attribution_complete'] for event in events)
-    return dict(status=status, reasons=','.join(dict.fromkeys(reasons)), events=events,
+    return dict(status=status, reasons=','.join(dict.fromkeys(reasons)), events=events, decisions=decisions,
                 attribution=('unknown' if unknown else 'complete') if complete else status,
                 unknown_attribution=unknown if paths else '')
 
@@ -228,6 +295,237 @@ def metadata(game):
     return {field: game[field] for field in META}
 
 
+def accepted_order(event):
+    """Full accepted commitments, not installment payments or completed products."""
+    data, name = event['data'], event['event']
+    if name == 'production_order':
+        if not int(data.get('accepted', 0)):
+            return None
+        item = int(data['item'])
+        quantity = int(data.get('queue_after', 1)) - int(data.get('queue_before', 0))
+        price = int(data['quoted_price']) * quantity if 'quoted_price' in data and quantity > 0 else ''
+        bucket = data.get('spending_bucket') or ('production' if item in PRODUCTION_ITEMS else
+                 'economy' if item in ECONOMY_ITEMS else 'military' if item in MILITARY_ITEMS else 'other')
+        tech = item in TECH_SPEND_ITEMS or item in (14, 15) and bucket == 'production'
+        cheap, city = item in CHEAP_ITEMS, item in CITY_SPEND_ITEMS and bucket == 'economy'
+    elif name in ('capital_upgrade', 'city_yard_upgrade', 'tech_research_started'):
+        if name != 'tech_research_started' and not int(data.get('accepted', 0)):
+            return None
+        item = data.get('item', '')
+        key = 'price' if name == 'capital_upgrade' else 'cost'
+        price = int(data[key]) if key in data else ''
+        bucket, tech, cheap, city = 'production', True, False, False
+    elif name == 'capital_road_batch':
+        item, price = 23, int(data['cost']) if 'cost' in data else ''
+        bucket, tech, cheap, city = 'economy', False, False, True
+    else:
+        return None
+    if bucket not in SPEND_CATEGORIES[:4]:
+        bucket = 'other'
+    state = data.get('state', {})
+    military, budget = state.get('military', ''), state.get('military_budget', state.get('military_limit', ''))
+    context = dict(rule=data.get('rule', ''), composition_basis=data.get('composition_basis', ''),
+                   composition_before=json.dumps(data['composition_before'], separators=(',', ':'), sort_keys=True)
+                       if 'composition_before' in data else '',
+                   composition_after=json.dumps(data['composition'], separators=(',', ':'), sort_keys=True)
+                       if 'composition' in data else '',
+                   state_id=data.get('state_id', ''), state_cycle=data.get('state_cycle', event['cycle']) if state else '',
+                   military_value=military, military_cap=state.get('military_limit', ''), military_budget=budget,
+                   military_headroom=int(budget)-int(military) if military != '' and budget != '' else '')
+    return {key: event[key] for key in ('session', 'seq', 'cycle', 'house', 'event')} | dict(
+        item=item, builder=data.get('builder', data.get('lab', '')), builder_item=data.get('builder_item', ''),
+        price=price, bucket=bucket, cheap_unit=int(cheap), tech=int(tech), city=int(city), **context)
+
+
+def cheap_path_rows(orders, complete):
+    groups = defaultdict(list)
+    for order in orders:
+        if order['cheap_unit']:
+            groups[(order['house'], order['rule'], order['composition_basis'], order['item'])].append(order)
+    rows = []
+    for (house, rule, basis, item), group in groups.items():
+        missing = sum(order['price'] == '' for order in group)
+        total = sum(order['price'] for order in group if order['price'] != '')
+        rows.append(dict(house=house, rule=rule, composition_basis=basis, item=item,
+                         capture_complete=int(complete), order_count=len(group) if complete else '',
+                         accepted_credits=total if complete and not missing else '',
+                         observed_orders=len(group), observed_priced_credits=total, missing_prices=missing))
+    return rows
+
+
+def composition_rows(lines):
+    groups = defaultdict(dict)
+    for line in lines:
+        if 'DUNECITY_COMPOSITION:' in line:
+            data = parse(line, 'DUNECITY_COMPOSITION:')
+            groups[(int(data['house']), int(data['cycle']))][int(data['slot'])] = data
+    rows = []
+    for slots in groups.values():
+        # No guessed denominators when a log was truncated between slot rows.
+        complete = set(slots) == set(range(len(MIX_SLOTS)))
+        totals = {field: sum(int(row[field]) for slot, row in slots.items() if slot < 10)
+                  for field in ('live_count', 'live_value', 'queued_count', 'queued_value')}
+        for slot, data in sorted(slots.items()):
+            row = dict(data, slot=MIX_SLOTS[slot])
+            for suffix in ('count', 'value'):
+                row['committed_' + suffix] = int(row['live_' + suffix]) + int(row['queued_' + suffix])
+                for prefix in ('live', 'committed'):
+                    denominator = totals['live_' + suffix] + (totals['queued_' + suffix] if prefix == 'committed' else 0)
+                    row[prefix + '_' + suffix + '_bps'] = round(10000 * int(row[prefix + '_' + suffix])
+                        / denominator, 3) if complete and slot < 10 and denominator else ''
+            target = int(row['target_bps'])
+            if target < 0:
+                row['target_bps'] = ''
+            share = row['committed_value_bps']
+            row['value_target_delta_bps'] = round(share - target, 3) if share != '' and target >= 0 else ''
+            rows.append(row)
+    return rows
+
+
+def tech_audit(lines, samples, final, capture):
+    """Supplemental, read-only tables. Missing/limited capture is never zero spend."""
+    complete = capture['status'] == 'complete'
+    decisions = capture.get('decisions', [])
+    primary_upgrades = {(event['house'], event['cycle'], event['data'].get('builder'))
+                        for event in decisions if event['event'] == 'capital_upgrade'}
+    orders = [order for event in decisions
+              if not (event['event'] == 'city_yard_upgrade'
+                      and (event['house'], event['cycle'], event['data'].get('builder')) in primary_upgrades)
+              and (order := accepted_order(event)) is not None]
+    orders.sort(key=lambda row: (row['cycle'], row['seq']))
+    priced = complete and all(order['price'] != '' for order in orders)
+    for order in orders:
+        order['capture_complete'] = int(complete)
+    by_house = defaultdict(list)
+    for order in orders:
+        by_house[int(order['house'])].append(order)
+    totals = {int(house['house']): dict.fromkeys(SPEND_CATEGORIES, 0) for house in final}
+    tech_samples = {}
+    structures, builders = [], []
+    for line in lines:
+        for marker, destination in (('DUNECITY_TECH_STRUCTURE:', structures), ('DUNECITY_BUILDER:', builders)):
+            if marker in line:
+                destination.append(parse(line, marker))
+        if 'DUNECITY_TECH_SAMPLE:' in line:
+            data = parse(line, 'DUNECITY_TECH_SAMPLE:')
+            tech_samples[(int(data['house']), int(data['cycle']))] = data
+    for line in lines:
+        if 'DUNECITY_SPENDING_BUCKETS:' in line:
+            data = parse(line, 'DUNECITY_SPENDING_BUCKETS:')
+            key = (int(data['house']), int(data['cycle']))
+            if key in tech_samples:
+                tech_samples[key].update(data)
+    indices = defaultdict(int)
+    for sample in sorted(samples, key=lambda row: int(row['cycle'])):
+        house, cycle = int(sample['house']), int(sample['cycle'])
+        row = tech_samples.get((house, cycle))
+        if row is None:
+            continue
+        while indices[house] < len(by_house[house]) and by_house[house][indices[house]]['cycle'] <= cycle:
+            order = by_house[house][indices[house]]
+            if order['price'] != '':
+                totals[house][order['bucket']] += order['price']
+                for category in ('cheap_unit', 'tech', 'city'):
+                    if order[category]:
+                        totals[house][category] += order['price']
+            indices[house] += 1
+        for field in ('structures', 'army_value', 'army_units', 'spice_gross', 'tax_gross', 'spent_total'):
+            row[field] = sample.get(field, '')
+        for suffix in ('count', 'value'):
+            row['military_committed_' + suffix] = int(row['military_live_' + suffix]) + int(row['military_queued_' + suffix])
+        for prefix, field in (('live', 'mean_military_unit_cost'), ('committed', 'mean_committed_unit_cost')):
+            count = int(row['military_' + prefix + '_count'])
+            row[field] = round(int(row['military_' + prefix + '_value']) / count, 3) if count else ''
+        row.update(order_capture=capture['status'], spending_complete=int(priced))
+        row.update({'accepted_' + name: value if priced else '' for name, value in totals[house].items()})
+    final_cycle = max((int(sample['cycle']) for sample in samples), default=0)
+    ends = {int(house['house']): min(final_cycle, round(float(house['eliminated_s']) * CYCLES_PER_MINUTE / 60))
+            if house.get('alive') == '0' else final_cycle for house in final}
+    plans = []
+    for event in decisions:
+        if event['event'] != 'tech_savings_plan':
+            continue
+        data, house, cycle = event['data'], int(event['house']), int(event['cycle'])
+        row = {field: event[field] for field in ('session', 'seq', 'cycle', 'house')}
+        row.update({field: data.get(field, '') for field in ('feasible', 'candidate_kind', 'item', 'builder',
+                    'cost', 'cash', 'committed_cost', 'forecast_net_income', 'horizon_cycles') + TECH_PLAN_CONTEXT})
+        row.update({field: '' for field in ('fully_observed_4m', 'affordable_without_cheap_4m',
+                    'accepted_cheap_4m', 'candidate_ordered_4m', 'affordable_after_cheap_quotes_4m', 'quoted_diversion_4m')})
+        required = ('feasible', 'cost', 'cash', 'committed_cost', 'forecast_net_income', 'horizon_cycles', 'working_reserve')
+        if priced and all(row[field] != '' for field in required) and int(row['horizon_cycles']) == TECH_HORIZON:
+            observed = ends.get(house, 0) >= cycle + TECH_HORIZON
+            row['fully_observed_4m'] = int(observed)
+            if observed and int(row['feasible']):
+                window = [order for order in by_house[house]
+                          if (cycle, event['seq']) < (order['cycle'], order['seq'])
+                          and order['cycle'] <= cycle + TECH_HORIZON]
+                cheap = sum(order['price'] for order in window if order['cheap_unit'])
+                kind = row['candidate_kind']
+                purchased = any((kind == 'structure' and order['event'] == 'production_order'
+                                 and str(order['item']) == str(row['item']))
+                                or (kind == 'upgrade' and order['event'] == 'capital_upgrade'
+                                    and str(order['builder']) == str(row['builder']))
+                                or (kind == 'research' and order['event'] == 'tech_research_started') for order in window)
+                funding = max(0, int(row['cash']) - int(row['committed_cost']) - int(row['working_reserve'])) \
+                    + max(0, int(row['forecast_net_income']))
+                before, after = funding >= int(row['cost']), funding - cheap >= int(row['cost'])
+                row.update(affordable_without_cheap_4m=int(before), accepted_cheap_4m=cheap,
+                           candidate_ordered_4m=int(purchased), affordable_after_cheap_quotes_4m=int(after),
+                           quoted_diversion_4m=int(before and cheap > 0 and not after and not purchased))
+        plans.append(row)
+    house_rows = []
+    for house in final:
+        number = int(house['house'])
+        row = dict(house=number, order_capture=capture['status'], spending_complete=int(priced))
+        points = [point for (owner, _), point in tech_samples.items() if owner == number]
+        last = max(points, key=lambda point: int(point['cycle'])) if points else {}
+        for field in ('mean_military_unit_cost', 'mean_committed_unit_cost'):
+            row[field] = last.get(field, '')
+        for name in SPEND_CATEGORIES:
+            values = [order['price'] for order in by_house[number]
+                      if order['bucket'] == name or name in ('cheap_unit', 'tech', 'city') and order[name]]
+            row['accepted_' + name] = sum(values) if priced else ''
+        own = [event for event in decisions if int(event['house']) == number]
+        for name, event_name in (('upgrade_order', 'capital_upgrade'), ('research_order', 'tech_research_started'),
+                                 ('research_completed', 'tech_research_completed')):
+            cycles = [int(event['cycle']) for event in own
+                      if (event['event'] == event_name and (event_name != 'capital_upgrade'
+                          or int(event['data'].get('accepted', 0))))
+                      or (event_name == 'capital_upgrade' and event['event'] == 'city_yard_upgrade'
+                          and int(event['data'].get('accepted', 0)))]
+            row['first_' + name + '_minute'] = min(cycles) / CYCLES_PER_MINUTE if cycles and complete else ''
+        levels, completed = {}, []
+        for builder in sorted((entry for entry in builders if int(entry['house']) == number),
+                              key=lambda entry: int(entry['cycle'])):
+            key, level = builder['builder'], int(builder['level'])
+            if key in levels and level > levels[key]:
+                completed.append(int(builder['cycle']) / CYCLES_PER_MINUTE)
+            levels[key] = level
+        row['first_upgrade_completed_observed_minute'] = min(completed) if completed else ''
+        for entry in structures:
+            if int(entry['house']) != number:
+                continue
+            for kind in ('owned', 'completed'):
+                cycle = int(entry['first_' + kind + '_cycle'])
+                if cycle >= 0:
+                    row[f'first_{kind}_{entry["name"]}_minute'] = cycle / CYCLES_PER_MINUTE
+        for item, name in TECH_ITEMS.items():
+            cycles = [order['cycle'] for order in by_house[number]
+                      if order['event'] == 'production_order' and str(order['item']) == str(item)]
+            row[f'first_order_{name}_minute'] = min(cycles) / CYCLES_PER_MINUTE if cycles and complete else ''
+        own_plans = [plan for plan in plans if int(plan['house']) == number]
+        for field, condition in (
+                ('feasible_plans', lambda plan: str(plan['feasible']) == '1'),
+                ('observed_4m_plans', lambda plan: plan['fully_observed_4m'] == 1),
+                ('affordable_4m_plans', lambda plan: plan['affordable_without_cheap_4m'] == 1),
+                ('quoted_diversion_4m_plans', lambda plan: plan['quoted_diversion_4m'] == 1)):
+            row[field] = sum(condition(plan) for plan in own_plans) if own_plans and complete else ''
+        house_rows.append(row)
+    return dict(zip((name for name, _ in TECH_TABLES),
+                    (list(tech_samples.values()), composition_rows(lines), orders, plans, house_rows,
+                     cheap_path_rows(orders, complete))))
+
+
 def schedule(args):
     games = []
     for size in args.sizes:
@@ -251,11 +549,14 @@ def schedule(args):
                                      for i, (house, team) in enumerate(zip(houses, teams))]
                             difficulty = '-v-'.join(levels)
                             cell = f'{args.mode}/{args.base}-a{args.army}-c{args.city}/{size}/{spice}/{fmt}/{difficulty}/{args.minutes}m/{seed}'
+                            mod = getattr(args, 'mod', 'dunecity')
+                            if mod != 'dunecity':
+                                cell = f'{mod}/{cell}'
                             if swapped:
                                 cell += '/swap'
                             games.append(dict(id=cell, seed=seed, size=size, spice_level=spice, format=fmt,
                                               difficulty=difficulty, variant=args.variant, sides=sides, base=args.base, army=args.army,
-                                              city=args.city, limit=args.minutes, style=args.style or 'default',
+                                              city=args.city, limit=args.minutes, style=args.style or 'default', mod=mod,
                                               minutes=args.minutes, skirmish=f'size={size},base={args.base},army={args.army},'
                                               f'city={args.city},spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
                                               f'tech=9,credits=3000,seed={seed}'))
@@ -319,7 +620,7 @@ def detect(samples):
 def command(args, binary, game, out):
     sides = ','.join(f'{house}:{team}:{CLASSES[level]}' for house, team, level in game['sides'])
     cmd = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
-           '--prebuilt-probe', str(binary), '--output-dir', str(out), '--scenario', '--mod', 'dunecity',
+           '--prebuilt-probe', str(binary), '--output-dir', str(out), '--scenario', '--mod', game.get('mod', 'dunecity'),
            '--seed', str(game['seed']), '--minutes', str(game['minutes']),
            '--capture-mib', str(getattr(args, 'capture_mib', 256)),
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--house', game['sides'][0][0],
@@ -446,6 +747,11 @@ def play(args, scratch, binary, game):
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
             append(results / 'air-kills.csv', AIR_KILL_FIELDS,
                    [dict(metadata(game), **event) for event in capture['events']])
+        supplemental = tech_audit(lines, samples, final, capture)
+        for filename, fields in TECH_TABLES:
+            append(results / filename, fields, [dict(metadata(game), mod=game.get('mod', 'dunecity'), **entry,
+                                                   difficulty=difficulty_of[int(entry['house'])])
+                                               for entry in supplemental[filename]])
         if getattr(args, 'keep_telemetry', False):
             row['diagnostics'] = retain_telemetry(results, out)
     append(results / 'games.csv', GAME_FIELDS, [row])
@@ -458,7 +764,7 @@ def build_probe(args, scratch):
         return args.prebuilt_probe
     out = scratch / 'probe'
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
-                    '--output-dir', str(out), '--scenario', '--mod', 'dunecity', '--skirmish',
+                    '--output-dir', str(out), '--scenario', '--mod', getattr(args, 'mod', 'dunecity'), '--skirmish',
                     'size=64,base=cy,army=0,spice=0', '--scenario-sides',
                     'harkonnen:1:qBotEasy,atreides:2:qBotEasy', '--house', 'harkonnen', '--local-spectator',
                     '--minutes', '1', '--capture-mib', str(getattr(args, 'capture_mib', 256)), '--no-ai-telemetry'],
@@ -472,7 +778,7 @@ def run(args):
     results.mkdir(parents=True, exist_ok=True)
     for name, fields in (('games.csv', GAME_FIELDS), ('houses.csv', HOUSE_FIELDS),
                          ('samples.csv', SAMPLE_FIELDS), ('waves.csv', ATTACK_FIELDS),
-                         ('air-kills.csv', AIR_KILL_FIELDS)):
+                         ('air-kills.csv', AIR_KILL_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
     done = {r['id'] for r in read(results / 'games.csv') if not r['error']
             and (not (args.attack_events or args.keep_telemetry) or r.get('attack_telemetry') == '1')
@@ -534,6 +840,7 @@ def report(directories):
     combat_report(directories)
     storage_report(directories)
     trooper_report(directories)
+    tech_report(directories)
 
 
 def checkpoint_samples(directories):
@@ -660,7 +967,7 @@ def trooper_report(directories):
           'Missing history stays unmeasured.')
 
 
-def trooper_pair_keys(previous, current, old, new):
+def trooper_pair_keys(previous, current, old, new, styles=('trooper-support-off', 'trooper-support-on')):
     """Match OFF/ON source and rules; native equivalence needs cluster-parity receipts."""
     matched, rejected = [], defaultdict(int)
     fingerprints = ('source_commit', 'source_fingerprint', 'map_hash',
@@ -671,7 +978,7 @@ def trooper_pair_keys(previous, current, old, new):
         reason = ''
         if not before or not after or before.get('error') or after.get('error'):
             reason = 'incomplete_game'
-        elif before.get('style') != 'trooper-support-off' or after.get('style') != 'trooper-support-on':
+        elif styles is not None and (before.get('style'), after.get('style')) != styles:
             reason = 'not_trooper_support_OFF_ON'
         elif any(before.get(field, '') == '' or after.get(field, '') == ''
                  for field in fingerprints + ('probe_sha256',)):
@@ -711,7 +1018,7 @@ def clustered_guardrail(pairs, direction, complete=True):
             f'{len(pairs)} games; point estimate {point}; {state}'), state
 
 
-def paired_metric(keys, old, new, field, direction=None, telemetry=False):
+def paired_metric(keys, old, new, field, direction=None, telemetry=False, interval=False):
     values, by_game = [], defaultdict(list)
     for key in keys:
         rows = (old[key], new[key])
@@ -733,10 +1040,14 @@ def paired_metric(keys, old, new, field, direction=None, telemetry=False):
             f'({100 * sum(pair[side] > 0 for pair in values) / len(values):.1f}%)' for side in (0, 1))
     if field in ('wor_built', 'trooper_built') or field in TROOPER_ENEMY_AIR_FIELDS.values():
         cell += '; totals ' + ' -> '.join(f'{sum(pair[side] for pair in values):.0f}' for side in (0, 1))
-    if direction is None:
-        return cell, 'unmeasured'
     game_pairs = [tuple(statistics.mean(pair[side] for pair in group) for side in (0, 1))
                   for group in by_game.values()]
+    if direction is None:
+        if interval:
+            deltas = [after - before for before, after in game_pairs]
+            low, high = match_score.bootstrap(deltas, 9101)
+            cell += f'; game-mean delta {statistics.mean(deltas):+.3f}, 95% [{low:+.3f}, {high:+.3f}]; {len(deltas)} games'
+        return cell, 'unmeasured'
     evidence, state = clustered_guardrail(game_pairs, direction, len(values) == len(keys))
     return cell + '; ' + evidence, state
 
@@ -866,6 +1177,121 @@ def rocket_comparison(control, candidate, allowed=None):
                   f'{censored[0]}/{censored[1]} |')
 
 
+def metric_mean(rows, field):
+    values = [float(row[field]) for row in rows if row.get(field, '') != '']
+    return f'{statistics.mean(values):.2f} ({len(values)}/{len(rows)})' if values else 'unmeasured'
+
+
+def tech_report(directories):
+    houses = load(directories, 'tech-houses.csv', ('id', 'house'))
+    if not houses:
+        print('Tech savings: replacement composition, categorized accepted spending and feasible 4m candidates unmeasured')
+        return
+    groups = defaultdict(list)
+    for row in houses:
+        groups[(row['difficulty'], row['spice_level'])].append(row)
+    print('Tech savings: current-owner replacement prices include every live own mobile combat unit '
+          '(including inactive/repair units) and queued single-equivalent commitments, never the army cap. '
+          'Composition shares normalize the ten unit_mix vehicle slots; infantry quota is separate. '
+          'Accepted prices are commitments, NOT paid installments; production/economy/military/other partition '
+          'them, while cheap-unit/tech/city are diagnostic overlays and must not be added to that partition.')
+    tables = (
+        ('Accepted commitments', tuple('accepted_' + name for name in SPEND_CATEGORIES)),
+        ('First owned minute (initial bases are zero; missing histories censored)',
+         tuple(f'first_owned_{name}_minute' for name in TECH_ITEMS.values())),
+        ('First completed minute (not first ownership/capture)',
+         tuple(f'first_completed_{name}_minute' for name in TECH_ITEMS.values())),
+        ('Upgrade/research and army', ('first_upgrade_order_minute', 'first_upgrade_completed_observed_minute',
+         'first_research_order_minute', 'first_research_completed_minute', 'mean_military_unit_cost',
+         'mean_committed_unit_cost', 'feasible_plans', 'observed_4m_plans', 'affordable_4m_plans',
+         'quoted_diversion_4m_plans')),
+    )
+    for label, fields in tables:
+        print(label)
+        print('| Difficulty | Spice | ' + ' | '.join(fields) + ' |')
+        print('|---|---|' + '---|' * len(fields))
+        for (difficulty, spice), rows in sorted(groups.items()):
+            print(f'| {difficulty} | {spice} | ' + ' | '.join(metric_mean(rows, field) for field in fields) + ' |')
+    points = load(directories, 'tech-samples.csv', ('id', 'house', 'cycle'))
+    print('Observed checkpoints only (no invented zero credits/prices after elimination or early wins).')
+    print('| Difficulty | Spice | Minute | Credits | Structures | Replacement army | Mean unit cost | Spice gross | Tax gross |')
+    print('|---|---|---|---|---|---|---|---|---|')
+    checkpoints = defaultdict(list)
+    for row in points:
+        if int(row['cycle']) in (10 * CYCLES_PER_MINUTE, 20 * CYCLES_PER_MINUTE):
+            checkpoints[(row['difficulty'], row['spice_level'], int(row['cycle']) // CYCLES_PER_MINUTE)].append(row)
+    for (difficulty, spice, minute), rows in sorted(checkpoints.items()):
+        cells = [metric_mean(rows, field) for field in ('credits', 'structures', 'military_live_value',
+                                                       'mean_military_unit_cost', 'spice_gross', 'tax_gross')]
+        print(f'| {difficulty} | {spice} | {minute} | ' + ' | '.join(cells) + ' |')
+    mix = defaultdict(list)
+    for row in load(directories, 'composition.csv', ('id', 'house', 'cycle', 'slot')):
+        if int(row['cycle']) in (10 * CYCLES_PER_MINUTE, 20 * CYCLES_PER_MINUTE):
+            mix[(row['difficulty'], row['spice_level'], int(row['cycle']) // CYCLES_PER_MINUTE, row['slot'])].append(row)
+    print('Composition at observed checkpoints: target_bps is a VALUE share, never a count quota.')
+    print('| Difficulty | Spice | Minute | Slot | Live count | Queued singles | Committed value | Value share bps | Target bps | Value-target bps |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
+    for (difficulty, spice, minute, slot), rows in sorted(mix.items()):
+        fields = ('live_count', 'queued_count', 'committed_value', 'committed_value_bps', 'target_bps', 'value_target_delta_bps')
+        print(f'| {difficulty} | {spice} | {minute} | {slot} | '
+              + ' | '.join(metric_mean(rows, field) for field in fields) + ' |')
+    paths = defaultdict(list)
+    for row in load(directories, 'cheap-paths.csv', ('id', 'house', 'rule', 'composition_basis', 'item')):
+        paths[(row['rule'], row['composition_basis'], row['item'])].append(row)
+    print('Top cheap-unit accepted paths by certified quoted credits (blank rules/basis are unrecorded, not inferred).')
+    print('| Rule | Composition basis | Item | Accepted credits | Orders | Measured house histories |')
+    print('|---|---|---|---|---|---|')
+    ranked = []
+    for key, rows in paths.items():
+        measured = [row for row in rows if row['capture_complete'] == '1' and row['accepted_credits'] != '']
+        ranked.append((sum(int(row['accepted_credits']) for row in measured), key, measured, len(rows)))
+    for credits, (rule, basis, item), measured, count in sorted(ranked, key=lambda entry: -entry[0])[:12]:
+        orders = sum(int(row['order_count']) for row in measured)
+        rule, basis = rule or 'unrecorded', basis or 'unrecorded'
+        credits_cell, orders_cell = (credits, orders) if measured else ('unmeasured', 'unmeasured')
+        print(f'| {rule} | {basis} | {item} | {credits_cell} | {orders_cell} | {len(measured)}/{count} |')
+    print('A quoted_diversion_4m is a feasible candidate affordable from cash minus unpaid commitments '
+          'and working reserve plus the recorded four-minute NET income forecast, but not after subsequent accepted cheap-unit quotes, '
+          'with no matching candidate accepted. It is a quote-budget counterfactual, NOT proof of actual paid '
+          'cash diversion. Death/early game end, missing fields, another horizon or incomplete captures censor '
+          'the window. Repeated build passes/windows overlap and are not independent games. Upgrade completion '
+          'is the first sampled level increase (an upper bound); order and research event cycles are exact.')
+
+
+def tech_comparison(control, candidate):
+    games = [{row['id']: row for row in load([directory], 'games.csv', ('id',))}
+             for directory in (control, candidate)]
+    houses = [{(row['id'], row['house']): row for row in load([directory], 'houses.csv', ('id', 'house'))}
+              for directory in (control, candidate)]
+    keys, rejected = trooper_pair_keys(*games, *houses, styles=None)
+    print(f'Tech/causal comparison: {len(keys)} same-source/map/options/content house pairs; '
+          f'excluded {json.dumps(rejected, sort_keys=True)}. OFF/ON arm labels are supplied by the caller; '
+          'AI config hashes may differ, native equivalence still needs cluster-parity receipts.')
+    groups = defaultdict(list)
+    for key in keys:
+        row = houses[0][key]
+        groups[(row['difficulty'], row['spice_level'])].append(key)
+    print('| Difficulty | Spice | Pairs | economy_stall | bankrupt_queue_empty | missing_starport | Dispatches | Kill value |')
+    print('|---|---|---|---|---|---|---|---|')
+    for (difficulty, spice), paired in sorted(groups.items()):
+        cells = [paired_detector(paired, *houses, detector)[0]
+                 for detector in ('economy_stall', 'bankrupt_queue_empty', 'missing_starport')]
+        cells += [paired_metric(paired, *houses, 'attack_count', direction=1, telemetry=True)[0],
+                  paired_metric(paired, *houses, 'kill_value', direction=1)[0]]
+        print(f'| {difficulty} | {spice} | {len(paired)} | ' + ' | '.join(cells) + ' |')
+    tech = [{(row['id'], row['house']): row for row in load([directory], 'tech-houses.csv', ('id', 'house'))}
+            for directory in (control, candidate)]
+    present = [key for key in keys if all(key in rows for rows in tech)]
+    print(f'Tech metrics: {len(present)}/{len(keys)} matched house histories; blank/censored is never passing.')
+    for field in TECH_HOUSE_VALUES:
+        if field in ('order_capture', 'spending_complete'):
+            continue
+        print(field + ': ' + paired_metric(present, *tech, field, interval=True)[0])
+    print('Guardrail intervals/sign tests use equally weighted independent game clusters, not houses. '
+          'Tech timings average observed pairs only; changing completion/exposure counts is not an improvement. '
+          'No supported regression is not equivalence, and two seeds alone cannot establish a safe default ON.')
+
+
 def compare(control, candidate):
     old = {(row['id'], row['house']): row for row in load([control], 'houses.csv', ('id', 'house'))}
     new = {(row['id'], row['house']): row for row in load([candidate], 'houses.csv', ('id', 'house'))}
@@ -910,6 +1336,7 @@ def compare(control, candidate):
     storage_report([candidate], set(common), 'Candidate storage')
     rocket_comparison(control, candidate, set(common))
     trooper_comparison(control, candidate)
+    tech_comparison(control, candidate)
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -927,6 +1354,8 @@ parser.add_argument('--formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6
 parser.add_argument('--difficulties', nargs='+', choices=('medium', 'hard', 'brutal'), default=['medium', 'hard', 'brutal'])
 parser.add_argument('--seeds', nargs='+', type=int, default=[9101, 148680876])
 parser.add_argument('--minutes', type=int, default=30)
+parser.add_argument('--mod', choices=('dunecity', 'Dune2R', 'vanilla'), default='dunecity',
+                    help='Content family; classic games have a distinct id prefix, with identical audit telemetry')
 parser.add_argument('--base', choices=('cy', 'small', 'medium', 'large', 'fortress'), default='medium')
 parser.add_argument('--army', type=int, choices=range(7), default=2)
 parser.add_argument('--city', type=int, choices=range(6), default=0)

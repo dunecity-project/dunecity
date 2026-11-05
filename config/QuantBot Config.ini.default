@@ -389,6 +389,9 @@ FundedClassicProduction=1
 # Six standing; reactive air floor up to18. Infantry strategy retains its existing quota.
 # ON at Stefan's direction despite unproven adoption/Starport acceptance; see HANDOVER.
 TrooperSupport=1
+# Experimental: preserve production/economy/military income buckets and compose
+# the next unit from the existing army, not a percentage of its military cap.
+TechSavings=0
 # Launchers back off two extra tiles (0 = old spacing, bounded to 0..2).
 # Hunt stand-off remains inside firing range; other unit types are unchanged.
 LauncherKiteExtraDistance=2

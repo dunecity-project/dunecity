@@ -293,6 +293,8 @@ parser.add_argument('--battery-clearance-probe', action='store_true',
 parser.add_argument('--air-defense-probe', action='store_true')
 parser.add_argument('--trooper-support-probe', action='store_true',
                     help='Verify QuantBot WOR and troop queue completion, bounded support and real anti-air defence')
+parser.add_argument('--tech-saving-probe', action='store_true',
+                    help='Verify paid QuantBot technology savings, current/queued army ratios and protected opening needs')
 parser.add_argument('--police-placement-probe', action='store_true')
 parser.add_argument('--police-budget-probe', action='store_true')
 parser.add_argument('--police-reinforcement-probe', action='store_true',
@@ -812,6 +814,7 @@ if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args
 if args.city_placement_probe: env['BALANCE_CITY_PLACEMENT_PROBE'] = '1'
 if args.opening_economy_probe: env['BALANCE_OPENING_ECONOMY_PROBE'] = '1'
 if args.trooper_support_probe: env['BALANCE_TROOPER_SUPPORT_PROBE'] = '1'
+if args.tech_saving_probe: env['BALANCE_TECH_SAVING_PROBE'] = '1'
 if args.growth_installment_probe or args.civic_priority_probe:
     env['BALANCE_GROWTH_INSTALLMENT_PROBE'] = '1'
 if args.civic_priority_probe: env['BALANCE_CIVIC_PRIORITY_ONLY'] = '1'
