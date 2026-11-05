@@ -26,6 +26,36 @@
   stack capture (`run-sample.txt`), then kills/reaps only the private child
   process group. New `native_probe_process_lifecycle` exercises forced SDL
   startup failure, failure propagation, deadline, sampling and cleanup.
+- Fixed source `3d42030090f699dd965567bb7dad392cca2fdb32`: all five authorized
+  translation-unit syntax checks passed (main, crash handler, native router,
+  native injector and full private probe). Receipts:
+  `../outputs/mouse-controls-hang-20261106/syntax-checks.json`.
+- Source-pinned, clean first-attempt mini repetitions all passed:
+
+  | Queue job | Mouse controls | Fatal/process lifecycle |
+  | --- | ---: | ---: |
+  | `20261106T025222-mouse-fixed-2941131c4b48-1-mini-3ee6dc` | 24.52 s | 4.32 s |
+  | `20261106T025818-mouse-fixed-2941131c4b48-2-mini-5f795c` | 8.65 s | 2.86 s |
+  | `20261106T025838-mouse-fixed-2941131c4b48-3-mini-4480d5` | 8.36 s | 2.84 s |
+  | `20261106T025859-mouse-fixed-2941131c4b48-4-mini-cda3f6` | 8.87 s | 2.87 s |
+  | `20261106T025919-mouse-fixed-2941131c4b48-5-mini-0b702b` | 8.57 s | 2.87 s |
+
+- Separate Pro job `20261106T025222-mouse-fixed-2941131c4b48-1-pro-78d2c7`
+  again had no SDL displays, before input. It now failed non-interactively with
+  status 1 in **41.22 s including compilation**, not a 600 s dialog timeout.
+  The coordinator's existing automatic mini retry passed **8.52 s**; this is
+  not a Pro camera pass. Pro lifecycle regression passed **6.07 s**, including
+  the real forced-SDL-startup failure. Pro camera repetitions require a usable
+  GUI/display session; that host prerequisite is separate from the fixed code.
+- Main-authorized temporary SQLite affinity was restricted to this owner's
+  immutable source and exact original ten job tags, with other hosts excluded.
+  Both installed triggers were dropped. Complete actual attempt histories,
+  scoped SQL and queue receipts are retained under
+  `../outputs/mouse-controls-hang-20261106/repetitions/` and
+  `../outputs/mouse-controls-hang-20261106/repetitions-mini-reachable/`.
+- Viewed the fixed-source native-renderer before/after PNGs in that evidence
+  directory (`mouse-zoom-before.png`, `mouse-zoom-after.png`): the latter shows
+  **Zoom 200%**, enlarged terrain and unchanged sidebar geometry.
 
 ## 2026-11-05 — Native Mac trackpad pan/pinch and consistent mobile gestures (OMP MouseControls, unreleased)
 
