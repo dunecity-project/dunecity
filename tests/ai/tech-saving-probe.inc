@@ -1200,8 +1200,10 @@ inline void freshCityReachesMilitaryAndTechnology(const char* mod, const char* p
             reachedFloor = true;
             floorCycle = world.game->getGameCycleCount();
         }
-        if (reachedFloor && !dispatched && world.game->getGameCycleCount() % 50 == 0)
-            dispatched = world.bot->tryLaunchWave(false);
+        if (reachedFloor && !dispatched && world.game->getGameCycleCount() % 50 == 0) {
+            world.bot->attack(world.bot->militaryUnitValue());
+            dispatched = world.bot->customWave.launched != 0 && !world.bot->customWave.members.empty();
+        }
         if (reachedFloor && world.game->getGameCycleCount() - floorCycle > MILLI2CYCLES(90000))
             require(dispatched, "Fresh-city funded technology indefinitely starved an actual dispatch-capable army");
         const auto* heavy = world.producer(Structure_HeavyFactory);
@@ -1371,12 +1373,12 @@ inline std::vector<UnitBase*> spawnGroundBand(World& world, House* owner, Uint32
     std::vector<Coord> sites;
     for (int y = 1; y < 63; ++y) for (int x = 1; x < 63; ++x) {
         const Coord at(x, y);
-        const int distance = blockDistance(at, center);
+        const auto distance = blockDistance(at, center);
         if (!currentGameMap->getTile(at)->hasAGroundObject() && distance >= minimum && distance <= maximum)
             sites.push_back(at);
     }
     std::sort(sites.begin(), sites.end(), [&](Coord a, Coord b) {
-        const int da = blockDistance(a, center), db = blockDistance(b, center);
+        const auto da = blockDistance(a, center), db = blockDistance(b, center);
         if (da != db) return da < db;
         return a.y != b.y ? a.y < b.y : a.x < b.x;
     });
