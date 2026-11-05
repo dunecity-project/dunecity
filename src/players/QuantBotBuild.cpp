@@ -2899,7 +2899,9 @@ bool QuantBot::compositionAdmits(BuildPass& pass, Uint32 item) {
     if (!pass.techSavings || !QuantBotBuildPolicy::militaryItem(item)) return true;
     if (pass.militaryEmergency) return true;
     if (!pass.incomeBuckets && pass.techFundingPriority
-        && pass.committedGroundUnits >= 6 && pass.committedGroundValue >= pass.defenceMinimumValue) return false;
+        && pass.committedGroundUnits >= 6 && pass.committedGroundValue >= pass.defenceMinimumValue
+        && !(pass.airEngaged && (CombatPowerPolicy::airCapableItem(int(item))
+            || QuantBotBuildPolicy::rocketInfantry(item)))) return false;
     if (isInfantryUnit(item))
         return (pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item) && pass.hostileAircraft > 0)
             || infantryQuotaAdmits(pass, currentGame->objectData.data[item][getHouse()->getHouseID()].price);
