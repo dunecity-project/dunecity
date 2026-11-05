@@ -21,6 +21,27 @@
 - Pre-commit syntax checks passed for changed native/C++ TUs, touch tests and
   the full private C++ balance-probe fixture. Cocoa test injection is compiled
   separately to avoid AppKit's global Point/FileInfo type collisions.
+- Feature `0c0fd805`: pinned cluster job
+  `20261105T232215-mac-trackpad-native-0efeaf` **4/4 PASS** on mini:
+  native Cocoa `mouse_controls_probe` **27.21 s**, command regressions
+  **15.43 s**, menu navigation **563.19 s**, and unit tests (including touch
+  admission/gesture coverage). Native runtime logs contain `MAC_TRACKPAD_PASS`;
+  injected spread/pinch, multiplicative/split increments, ended/cancelled reset,
+  phased pan without zoom, physical wheels, list scrolling and no commands pass.
+- Follow-up `28439a61` consumes phased scroll/pinch over map-overlay controls
+  instead of leaking an SDL wheel into the ordinary zoom fallback. Pinned
+  `20261105T233821-mac-trackpad-overlay-a45f70` **PASS**, including explicit
+  no-SDL-wheel/no-camera-change overlay assertions and all existing mouse gates.
+- iOS Simulator arm64 build/install/launch **PASS**, **528 build steps,
+  337.68 s**. Rendered iPhone main-menu screenshot viewed:
+  `../outputs/mouse-controls-ios-25318627/iphone-launch.png`.
+  AXe failed to create its remote automation session, so neither single-touch
+  automation nor actual iOS two-finger interaction is claimed; no physical
+  device interaction. Windows/Linux runtime was not exercised in this check;
+  the native bridge is a no-op there, with no Cocoa dependency.
+- Viewed native-renderer 640×480 before/after zoom PNGs under the trace evidence
+  directory (`native-game-zoom-before.png`, `native-game-zoom-after.png`);
+  terrain scales around the pointer while the sidebar remains unchanged.
 - No simulation, protocol, save, hashed rule or persistent preference changes.
 
 ## 2026-11-05 — QuantBot technology savings (OMP TechSaving, unreleased)
