@@ -68,6 +68,8 @@ def build_probe(args, scratch):
 
 def play(args, scratch, binary, key):
     arm, = key
+    if not args.game_options:
+        raise ValueError('Playing an exact save requires the frozen --game-options input')
     out = scratch / arm
     out.mkdir(parents=True, exist_ok=True)
     packed = configparser.ConfigParser(interpolation=None)
@@ -137,7 +139,7 @@ def run(args):
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', default=str(root / 'build-int'))
 parser.add_argument('--results', required=True)
-parser.add_argument('--game-options', required=True)
+parser.add_argument('--game-options', help='Frozen save input; required for play, not shared probe compilation')
 parser.add_argument('--arms', nargs='+', choices=('audit', 'audit-off', 'audit-on', 'off', 'on'),
                     default=['audit-off', 'audit-on', 'off', 'on'])
 parser.add_argument('--minutes', type=int, default=12)
