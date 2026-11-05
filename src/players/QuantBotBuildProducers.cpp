@@ -348,8 +348,8 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
         || turn.pBuilder->getObjectID() != pass.techCandidate.builder) return false;
     if (turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0) return false;
     const int cost = pass.techCandidate.cost;
-    if (int64_t(pass.money) < int64_t(cost) + pass.techWorkingReserve
-        || !spendingAdmits(pass, pass.techCandidate.item, cost, pass.techUpgrade)) return true;
+    if (!spendingAdmits(pass, pass.techCandidate.item, cost, pass.techUpgrade)) return false;
+    if (int64_t(pass.money) < int64_t(cost) + pass.techWorkingReserve) return false;
     if (pass.techUpgrade) {
         if (upgradeWithLogging(pass, turn, __LINE__)) pass.capitalConsumed = true;
         return true;
@@ -772,8 +772,19 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    // An optional capital choice owns the producer only when the same
+    // unit/price admitted by the acceptance wrapper can actually be funded.
+    const auto unitAdmitted = [&](Uint32 item) {
+        if (!pass.techSavings) return true;
+        if (item == Unit_MCV && pass.yardLimit > 0
+            && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] >= pass.yardLimit) return false;
+        const Uint32 actualItem = item == Unit_Harvester ? chooseTornieHarvester(turn.pBuilder, pass.money) : item;
+        const int price = purchasePrice(turn.pBuilder, actualItem);
+        return (pass.money >= price || spendingEmergency(pass, actualItem))
+            && spendingAdmits(pass, actualItem, price);
+    };
     if (turn.capitalSupplier && capitalPending(pass) && pass.capitalCandidates[pass.capitalChoice].item==Unit_Carryall
-        && pass.money<pass.capitalCandidates[pass.capitalChoice].price) {
+        && pass.money<pass.capitalCandidates[pass.capitalChoice].price && unitAdmitted(Unit_Carryall)) {
         traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",pass.capitalDecision)
             .set("builder",turn.pBuilder->getObjectID()).set("item",Unit_Carryall)
             .set("price",pass.capitalCandidates[pass.capitalChoice].price).set("spendable",pass.money)
@@ -788,7 +799,10 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
         && !campaignAvailableToBuild(turn.pBuilder,Unit_MCV)
         && turn.pBuilder->getCurrentUpgradeLevel()<turn.pBuilder->getMaxUpgradeLevel()
         && DuneCity::prioritizeVanillaMcv(pass.money,getAIHarvesterCount(),
-            pass.itemCount[Structure_ConstructionYard],pass.itemCount[Unit_MCV],data[Unit_MCV][houseID].price);
+            pass.itemCount[Structure_ConstructionYard],pass.itemCount[Unit_MCV],data[Unit_MCV][houseID].price)
+        && (!pass.techSavings || ((pass.yardLimit <= 0
+                || pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] < pass.yardLimit)
+            && spendingAdmits(pass, turn.pBuilder->getItemID(), turn.pBuilder->getUpgradeCost(), true)));
     const bool parallelHeavyProduction=pass.fundedCityProduction
         && turn.pBuilder->getItemID()==Structure_HeavyFactory;
     if (!turn.transportProducer && !turn.expansionProducer && !unlockingVanillaMcv && !parallelHeavyProduction)
@@ -798,7 +812,8 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
                 && !QuantBotBuildPolicy::militaryItem(candidate.item)
                 && (!turn.capitalSupplier || candidate.item==pass.capitalCandidates[pass.capitalChoice].item)
                 && candidate.score>0 && candidate.price<=pass.money
-                && (!localUnitChoice || candidate.score>localUnitChoice->score)) localUnitChoice=&candidate;
+                && (!localUnitChoice || candidate.score>localUnitChoice->score)
+                && unitAdmitted(candidate.item)) localUnitChoice=&candidate;
     if (localUnitChoice && turn.pBuilder->getProductionQueueSize()==0
         && !turn.pBuilder->isUpgrading() && !turn.pBuilder->isOnHold()) {
         const auto choice=*localUnitChoice;
@@ -812,7 +827,8 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
     } else if (turn.capitalSupplier && isUnit(pass.capitalCandidates[pass.capitalChoice].item)
         && !QuantBotBuildPolicy::militaryItem(pass.capitalCandidates[pass.capitalChoice].item)
         && turn.pBuilder->getItemID()!=Structure_StarPort && !turn.transportProducer && !turn.expansionProducer
-        && !unlockingVanillaMcv && !parallelHeavyProduction) return true;
+        && !unlockingVanillaMcv && !parallelHeavyProduction
+        && unitAdmitted(pass.capitalCandidates[pass.capitalChoice].item)) return true;
 
     // Unlock a new offer only after its tech and structure prerequisites exist.
     // In particular, a factory able to build the ordinary ornithopter must still
@@ -1082,28 +1098,38 @@ void QuantBot::buildHighTechFactory(BuildPass& pass, BuilderTurn& turn) {
     air.airTargetBps = pass.unitMix[kOrnithopterSlot];
     air.airStrategy = pass.strategyMixProfile && strategyStart[kOrnithopterSlot] > 0;
     air.credits = getHouse()->getCredits();
+    bool growthHeld = false;
+    if (pass.techSavings && !air.busy && !air.upgrading && !air.airLimit) {
+        if (air.carryallAvailable && air.carryalls < air.carryallTarget
+            && !spendingAdmits(pass, Unit_Carryall, purchasePrice(turn.pBuilder, Unit_Carryall))) {
+            air.carryallAvailable = false;
+            growthHeld = true;
+        }
+        if (air.canUpgrade) {
+            const int heldCash = air.airStrategy && !air.ornithopterAvailable
+                ? std::max(0, getHouse()->getCredits() - pass.money) : 0;
+            pass.money += heldCash;
+            const bool admitted = !pass.militaryEmergency && pass.money >= turn.pBuilder->getUpgradeCost()
+                && canFundProductionUpgrade(pass, turn.pBuilder)
+                && spendingAdmits(pass, turn.pBuilder->getItemID(), turn.pBuilder->getUpgradeCost(), true);
+            pass.money -= heldCash;
+            air.canUpgrade = admitted;
+            growthHeld = growthHeld || !admitted;
+        }
+    }
     auto decision = QuantBotBuildPolicy::chooseAirProduction(air);
     if (pass.techSavings && !air.busy && !air.upgrading && !air.airLimit && air.ornithopterAvailable
         && (decision.order == QuantBotBuildPolicy::AirOrder::None
             || decision.order == QuantBotBuildPolicy::AirOrder::Ornithopter)
         && int64_t(pass.militaryValue) + ornithopterPrice <= pass.lightBudget) {
         decision = compositionAdmits(pass, ornithopter) && pass.money >= ornithopterPrice
-            ? QuantBotBuildPolicy::AirDecision{QuantBotBuildPolicy::AirOrder::Ornithopter, "existing_army_composition"}
+            ? QuantBotBuildPolicy::AirDecision{QuantBotBuildPolicy::AirOrder::Ornithopter,
+                growthHeld ? "existing_army_composition_after_growth_hold" : "existing_army_composition"}
             : QuantBotBuildPolicy::AirDecision{QuantBotBuildPolicy::AirOrder::None, "existing_air_share_satisfied"};
-    }
-    if (pass.techSavings && decision.order == QuantBotBuildPolicy::AirOrder::Upgrade
-        && (pass.militaryEmergency
-            || !spendingAdmits(pass, turn.pBuilder->getItemID(), turn.pBuilder->getUpgradeCost(), true))) {
-        if (air.ornithopterAvailable && !air.busy && !air.upgrading && !air.airLimit
-            && pass.money >= ornithopterPrice && compositionAdmits(pass, ornithopter))
-            decision = {QuantBotBuildPolicy::AirOrder::Ornithopter, "existing_army_composition"};
-        else if (air.carryallAvailable && air.carryalls < air.carryallTarget && pass.money >= carryallPrice)
-            decision = {QuantBotBuildPolicy::AirOrder::Carryall, "carryall_target"};
-        else decision = {QuantBotBuildPolicy::AirOrder::None, "production_bucket_saving"};
     }
     if (pass.emitStatsLog && AITelemetry::log().enabled()) {
         traceDecision("air_production_decision", AITelemetry::Record()
-            .set("builder",turn.pBuilder->getObjectID()).set("reason",decision.reason)
+            .set("builder",turn.pBuilder->getObjectID()).set("reason",decision.reason).set("growth_held",growthHeld)
             .set("credits",getHouse()->getCredits()).set("planning_spendable",pass.money)
             .set("economy_reserve",pass.economyReserve).set("strategic_reserve",pass.strategicReserveCost)
             .set("cash_threshold",ornithopterPrice).set("ornithopter_price",ornithopterPrice)
@@ -1156,6 +1182,28 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
     if(turn.expansionProducer && !turn.pBuilder->isUpgrading() && turn.pBuilder->getProductionQueueSize()==0
         && pass.money < (campaignAvailableToBuild(turn.pBuilder,Unit_MCV)
             ? data[Unit_MCV][houseID].price : turn.pBuilder->getUpgradeCost())) return;
+    bool growthHeld = false;
+    // Do not enter an exclusive economy branch only to have the shared
+    // acceptance wrapper reject its wallet (or an already-full yard cap).
+    // Resolve Tornie's worker against the same cash used by the real order.
+    const auto growthAdmitted = [&](Uint32 item, int cash, bool upgrade = false) {
+        if (!pass.techSavings) return true;
+        const Uint32 actualItem = upgrade ? turn.pBuilder->getItemID()
+            : item == Unit_Harvester ? chooseTornieHarvester(turn.pBuilder, cash) : item;
+        const int price = upgrade ? turn.pBuilder->getUpgradeCost() : purchasePrice(turn.pBuilder, actualItem);
+        const bool yardFull = item == Unit_MCV && pass.yardLimit > 0
+            && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] >= pass.yardLimit;
+        const bool admitted = !yardFull && cash >= price && spendingAdmits(pass, actualItem, price, upgrade);
+        if (!admitted) {
+            growthHeld = true;
+            if (pass.emitStatsLog && AITelemetry::log().enabled())
+                traceDecision("factory_growth_hold", AITelemetry::Record()
+                    .set("builder", turn.pBuilder->getObjectID()).set("item", item).set("actual_item", actualItem)
+                    .set("upgrade", upgrade).set("price", price).set("spendable", cash)
+                    .set("reason", yardFull ? "yard_limit" : cash < price ? "shared_cash_budget" : "income_bucket_savings"));
+        }
+        return admitted;
+    };
     const bool prioritizeCityMcv = !pass.postponeCapacityMcv && pass.citySimEnabled && gameMode == GameMode::Custom
         && (pass.fundedCityProduction || !openingWorkersNeeded(pass) || pass.rockExpansionNeeded)
         && !getHouse()->isGroundUnitLimitReached()
@@ -1200,7 +1248,8 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             if (produceItemWithLogging(pass, turn, Unit_MCV, __LINE__)) pass.itemCount[Unit_MCV]++;
         }
         else if (prioritizeMcv && campaignAvailableToBuild(turn.pBuilder,Unit_MCV)
-            && canFundCapacityMcv(pass,purchasePrice(turn.pBuilder,Unit_MCV),turn.pBuilder->getObjectID())) {
+            && canFundCapacityMcv(pass,purchasePrice(turn.pBuilder,Unit_MCV),turn.pBuilder->getObjectID())
+            && growthAdmitted(Unit_MCV, pass.money)) {
             if (produceItemWithLogging(pass, turn, Unit_MCV, __LINE__,
                     pass.citySimEnabled ? "city_cash_construction_capacity" : "cash_construction_capacity")) {
                 ++pass.itemCount[Unit_MCV];
@@ -1210,7 +1259,9 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             && !campaignAvailableToBuild(turn.pBuilder,Unit_MCV)
             && turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel()
             && (pass.citySimEnabled ? cityMcvCash : pass.money) >= turn.pBuilder->getUpgradeCost()
-                + (turn.expansionProducer ? 0 : pass.citySimEnabled ? std::max(1000, pass.cityWorkingReserve) : 1000)) {
+                + (turn.expansionProducer ? 0 : pass.citySimEnabled ? std::max(1000, pass.cityWorkingReserve) : 1000)
+            && (!pass.techSavings || canFundProductionUpgrade(pass, turn.pBuilder))
+            && growthAdmitted(Unit_MCV, pass.money, true)) {
             if (turn.pBuilder->getHealth() >= turn.pBuilder->getMaxHealth()) {
                 const bool accepted = upgradeWithLogging(pass, turn, __LINE__);
                 if (accepted) {
@@ -1228,7 +1279,10 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             && pass.itemCount[Unit_Harvester] < (pass.citySimEnabled ? pass.fundedHarvesterTarget : pass.spiceHarvesterTarget)
             && campaignAvailableToBuild(turn.pBuilder,Unit_Harvester) && !getHouse()->isGroundUnitLimitReached()
             && pass.money + ((pass.vanillaEconomy || harvesterInvestmentReserve(pass) > 0) ? turn.reserve.reserved : 0) >= data[Unit_Harvester][houseID].price
-                + ((pass.campaignEconomyPush || harvesterInvestmentReserve(pass) > 0) ? 0 : (openingWorkersNeeded(pass) || pass.brutalEconomy) ? 0 : pass.vanillaEconomy ? 1000 : data[Unit_Tank][houseID].price)) {
+                + ((pass.campaignEconomyPush || harvesterInvestmentReserve(pass) > 0) ? 0 : (openingWorkersNeeded(pass) || pass.brutalEconomy) ? 0 : pass.vanillaEconomy ? 1000 : data[Unit_Tank][houseID].price)
+            && (!pass.techSavings || growthAdmitted(Unit_Harvester,
+                pass.money + ((pass.vanillaEconomy || harvesterInvestmentReserve(pass) > 0)
+                    ? std::max(0, turn.reserve.reserved - capitalReserve(pass, turn.pBuilder->getObjectID())) : 0)))) {
             const int workerCash=(pass.vanillaEconomy || harvesterInvestmentReserve(pass)>0)
                 ? std::max(0,turn.reserve.reserved-capitalReserve(pass, turn.pBuilder->getObjectID())) : 0;
             pass.money+=workerCash;
@@ -1243,7 +1297,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             && !(pass.techSavings && pass.militaryEmergency)
             && (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel())
             && canFundProductionUpgrade(pass,turn.pBuilder)
-            && spendingAdmits(pass, turn.pBuilder->getItemID(), turn.pBuilder->getUpgradeCost(), true)) {
+            && growthAdmitted(turn.pBuilder->getItemID(), pass.money, true)) {
             if (turn.pBuilder->getHealth() >= turn.pBuilder->getMaxHealth()) {
                 upgradeWithLogging(pass, turn, __LINE__);
             }
@@ -1255,7 +1309,8 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             && campaignAvailableToBuild(turn.pBuilder,Unit_MCV)
             && !getHouse()->isGroundUnitLimitReached()
             && canFundCapacityMcv(pass,purchasePrice(turn.pBuilder,Unit_MCV),turn.pBuilder->getObjectID())
-            && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] < std::min(8, pass.money / 4000)) {
+            && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] < std::min(8, pass.money / 4000)
+            && growthAdmitted(Unit_MCV, pass.money)) {
             if (produceItemWithLogging(pass, turn, Unit_MCV, __LINE__, "construction_capacity")) {
                 pass.itemCount[Unit_MCV]++;
             }
@@ -1264,7 +1319,8 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             && campaignAvailableToBuild(turn.pBuilder,Unit_Harvester)
             && !getHouse()->isGroundUnitLimitReached()
             && pass.itemCount[Unit_Harvester] < pass.militaryValue / 1000
-            && pass.itemCount[Unit_Harvester] < harvesterLimit && lastCalculatedSpice > 0) {
+            && pass.itemCount[Unit_Harvester] < harvesterLimit && lastCalculatedSpice > 0
+            && growthAdmitted(Unit_Harvester, pass.money)) {
             // In case we get given lots of money, it will eventually run out so we need to be prepared
             // Classic-mode harvester expansion; city spice investment is handled above.
             if (produceItemWithLogging(pass, turn, Unit_Harvester, __LINE__)) pass.itemCount[Unit_Harvester]++;
@@ -1274,7 +1330,8 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             && pass.itemCount[Unit_Harvester] < harvesterLimit
             && campaignAvailableToBuild(turn.pBuilder,Unit_Harvester)
             && !getHouse()->isGroundUnitLimitReached()
-            && (pass.money < 2000 || gameMode == GameMode::Campaign)) {
+            && (pass.money < 2000 || gameMode == GameMode::Campaign)
+            && growthAdmitted(Unit_Harvester, pass.money)) {
             // Classic-mode recovery; city spice investment is handled above.
             if (produceItemWithLogging(pass, turn, Unit_Harvester, __LINE__)) pass.itemCount[Unit_Harvester]++;
         }
@@ -1282,7 +1339,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             && !(pass.techSavings && pass.militaryEmergency)
             && (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel())
             && canFundProductionUpgrade(pass,turn.pBuilder)
-            && spendingAdmits(pass, turn.pBuilder->getItemID(), turn.pBuilder->getUpgradeCost(), true)) {
+            && growthAdmitted(turn.pBuilder->getItemID(), pass.money, true)) {
             // Upgrade before military — unlocks MCV(1), Launcher(2), SiegeTank(3)
             if (turn.pBuilder->getHealth() >= turn.pBuilder->getMaxHealth()) {
                 upgradeWithLogging(pass, turn, __LINE__);
@@ -1357,12 +1414,12 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                     .set("spendable",pass.money).set("candidates",choices)
                     .set("selected",selected<0 ? NONE_ID : types[selected])
                     .set("reason",selected<0 ? "no_affordable_capacity"
-                        : pass.techSavings ? "existing_army_composition"
+                        : pass.techSavings ? (growthHeld ? "existing_army_composition_after_growth_hold" : "existing_army_composition")
                         : expansionFallback ? "available_factory_capacity" : "largest_affordable_deficit"));
                 lastHeavyAllocationTrace[turn.pBuilder->getObjectID()] = {allocationSignature, allocationCycle};
             }
             if (selected>=0 && produceItemWithLogging(pass, turn, types[selected],__LINE__,
-                pass.techSavings ? "existing_army_composition"
+                pass.techSavings ? (growthHeld ? "existing_army_composition_after_growth_hold" : "existing_army_composition")
                     : expansionFallback ? "available_factory_capacity" : "largest_affordable_deficit")) {
                 ++pass.itemCount[types[selected]];
 
@@ -1432,7 +1489,10 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
         // The priority purchase above imports the colonist. If
         // it is still unaffordable, preserve this port's savings.
         if (turn.capitalSupplier && capitalPending(pass)
-            && pass.capitalCandidates[pass.capitalChoice].item==Unit_MCV) return;
+            && pass.capitalCandidates[pass.capitalChoice].item==Unit_MCV
+            && (!pass.techSavings || ((pass.yardLimit <= 0
+                    || pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] < pass.yardLimit)
+                && spendingAdmits(pass, Unit_MCV, purchasePrice(turn.pBuilder, Unit_MCV))))) return;
         // A market transport is still only worth its price when
         // there is something to carry. The capital/factory lane
         // already refuses one without a working harvesting
