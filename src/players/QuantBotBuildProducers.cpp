@@ -1351,8 +1351,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 doRepair(turn.pBuilder);
             }
         }
-        else if (pass.money > (pass.techSavings && pass.militaryEmergency ? 0
-                : pass.citySimEnabled || pass.vanillaEconomy ? 500 : 2000)
+        else if (pass.money > (pass.techSavings ? 0 : pass.citySimEnabled || pass.vanillaEconomy ? 500 : 2000)
             && pass.militaryValue < pass.militaryBudget && !getHouse()->isGroundUnitLimitReached()) {
             // Every heavy mix slot is a candidate with its own learned share and
             // committed value - each special its own slot since 9868, so a house

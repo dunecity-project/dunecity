@@ -33,11 +33,11 @@ Below-quote technology saving requires six owned ground fighters, at least
 the larger of 3,000 credits, the existing wave minimum and 1.5 times observed
 local ground threat, stable income/power, and a four-minute funded quote.
 Losing that dispatch-capable defence releases the hold for replenishment.
-The first SP/HF prerequisite chain, first legal LF and research needed to
-reach that first combat capability can precede the army floor when the
-Production allocation already funds the full quote and working cash remains.
-This bounded exception avoids requiring fighters from a forbidden first
-factory; optional progression retains the normal floor.
+The first SP/HF chain, first legal LF and necessary research can precede the
+floor only with a fully funded Production quote and real working cash. The
+same bounded exception covers a missing capability when no legal unit can
+advance the existing mix: requiring those units before their unlock would
+deadlock growth. An optional Palace retains the normal readiness floor.
 
 First HF/Repair/High-Tech/IX/Palace/Lab orders and optional HF/High-Tech upgrades
 must match the active, fully funded project, including its builder and
@@ -46,6 +46,10 @@ ahead of it. Custom Medium ON can build one first Repair Yard through the same
 planning/admission predicate; OFF, campaign and repeat replacement caps remain.
 Bucket allocations persist even without an active plan; the army floor
 controls the capital hold rather than creating or deleting those allocations.
+Prerequisite walks stop at the stored mask's `.size()`, matching the engine
+catalogue. The mask represents 27 legacy structure IDs, not every extended
+structure accepted by `isStructure`; its save/protocol representation is not
+widened. A catalogue-legal first HF is asserted to yield an actual HF quote.
 
 The existing storage forecast can release a physical receipt-capacity
 constraint even while Economy owes bootstrap debt. The paid capacity still
@@ -72,6 +76,9 @@ accepted units drain rather than appending replacements forever. A missing
 first HF may precede an unfunded import prerequisite when opening workers or
 a usable composition lane need it; first Starport retains the next priority.
 Completing the port does not disable the bounded first-HF exception.
+Heavy factories under TechSavings use the accepted item's real funding checks,
+not the old generic 2,000-credit threshold ahead of an otherwise affordable
+300-credit unit. Bucket allocations and the shared working reserve still apply.
 
 Emergency composition bypass requires an actual local ground-defence
 shortfall: nearby health-weighted ground troops and covering turrets are

@@ -755,6 +755,10 @@ inline void paidTechnologyProgression(const char* mod, const char* playerClass, 
     for (const Uint32 item : {Structure_HeavyFactory, Structure_RepairYard, Structure_HighTechFactory,
                              Structure_IX, Structure_Palace})
         require(world.owner->getNumItems(item) == 0, "Asserted progression technology was supplied by the scenario");
+    const auto initialPlan = world.observePlan();
+    require(initialPlan.techCandidate.item == Structure_HeavyFactory && !initialPlan.techUpgrade
+            && initialPlan.techCandidate.site.isValid(),
+            "Catalogue-legal first HF vanished from the bounded prerequisite plan");
     const auto incomeBefore = world.owner->getHarvestedSpice();
     const Uint32 start = world.game->getGameCycleCount();
     const Uint32 deadline = start + MILLI2CYCLES(480000);
@@ -818,7 +822,7 @@ inline void paidTechnologyProgression(const char* mod, const char* playerClass, 
         const bool foundation = hfSite.isValid()
             && world.bot->foundationPlan(world.yard, Structure_HeavyFactory, hfSite).complete;
         SDL_Log("TECH_SAVING_PROGRESSION_SITE: x=%d y=%d foundation=%d", hfSite.x, hfSite.y, int(foundation));
-        for (Uint32 prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+        for (Uint32 prerequisite = Structure_FirstID; prerequisite < ownHf.prerequisiteStructuresSet.size(); ++prerequisite)
             if (isStructure(prerequisite) && ownHf.prerequisiteStructuresSet[prerequisite]
                 && world.owner->getNumItems(prerequisite) == 0)
                 SDL_Log("TECH_SAVING_PROGRESSION_PREREQUISITE: item=%u total=%d", prerequisite,

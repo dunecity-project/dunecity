@@ -11,9 +11,9 @@
   infantry quota; reactive AA remains. Rejected optional economic growth
   cannot monopolize an otherwise funded military producer turn.
 - `8a2e9bf1` fixes the measured first-supplier/army-floor cycle and
-  receipt-capacity/Economy-debt trap, retaining exact balances. Only a fully
-  funded first-supplier/necessary initial research chain may precede the
-  floor; optional tech still requires dispatch-capable defence. Existing
+  receipt-capacity/Economy-debt trap, retaining exact balances. A fully funded
+  required-capability quote may precede the floor when no legal unit can
+  advance the existing mix; an optional Palace still needs ready defence. Existing
   generator sizing avoids oversized bootstrap debt. Cheap emergency bypass
   now requires unmet local ground defence, not just any pressure/aircraft;
   covering turrets count, distant armies do not. No human/saboteur orders,
@@ -28,6 +28,12 @@
   Busy-producer quotes and queue-draining funded upgrades replace an idle-only
   blind spot. Genuine opening-worker/composition supply may establish the first
   HF before an unfunded import prerequisite; first SP remains next priority.
+- Root cause: four new prerequisite walks indexed a 27-bit persisted mask
+  with extended IDs up to88. They now bound by `.size()` like the real catalogue;
+  representation/save/protocol unchanged. Early engine assertion requires a
+  catalogue-legal first HF to produce its actual quote. Exact ARM alias remains
+  an inference, not a measured result. Heavy unit admission no longer inherits
+  the legacy 2,000-credit gate under the new bucket policy.
 - Audit schema now has unique scenario `city` and diagnostic `city_spend`.
   Historical duplicate-header inputs retain explicit table-aware provenance.
 - Save **9884** adds only QuantBot ledger state;9882/9883 load zero,

@@ -2897,7 +2897,7 @@ bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgra
             || spec.techLevel > getHouse()->getTechLevel()
             || producer->getCurrentUpgradeLevel() >= spec.upgradeLevel
             || spec.upgradeLevel > producer->getMaxUpgradeLevel()) return false;
-        for (Uint32 prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+        for (Uint32 prerequisite = Structure_FirstID; prerequisite < spec.prerequisiteStructuresSet.size(); ++prerequisite)
             if (isStructure(prerequisite) && spec.prerequisiteStructuresSet[prerequisite]
                 && getHouse()->getNumItems(prerequisite) == 0) return false;
         return true;
@@ -3039,7 +3039,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
             const auto& spec = data[item][house];
             if (!spec.enabled) return result;
             int level = spec.techLevel;
-            for (Uint32 prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+            for (Uint32 prerequisite = Structure_FirstID; prerequisite < spec.prerequisiteStructuresSet.size(); ++prerequisite)
                 if (isStructure(prerequisite) && spec.prerequisiteStructuresSet[prerequisite])
                     level = std::max(level, self(self, prerequisite));
             return result = level;
@@ -3060,7 +3060,8 @@ void QuantBot::planTechSavings(BuildPass& pass) {
         Uint32 item = goal;
         for (int depth = 0; depth < Num_ItemID; ++depth) {
             Uint32 missing = NONE_ID;
-            for (Uint32 prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+            // The persisted mask ends at Structure_LastID, not the extended item domain.
+            for (Uint32 prerequisite = Structure_FirstID; prerequisite < data[item][house].prerequisiteStructuresSet.size(); ++prerequisite)
                 if (isStructure(prerequisite) && data[item][house].prerequisiteStructuresSet[prerequisite]
                     && getHouse()->getNumItems(prerequisite) == 0) { missing = prerequisite; break; }
             if (missing == NONE_ID) break;
@@ -3115,7 +3116,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
                     || spec.upgradeLevel > builder->getMaxUpgradeLevel()
                     || (!QuantBotBuildPolicy::militaryItem(unit) && unit != Unit_MCV)) continue;
                 bool legal = true;
-                for (Uint32 prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+                for (Uint32 prerequisite = Structure_FirstID; prerequisite < spec.prerequisiteStructuresSet.size(); ++prerequisite)
                     if (isStructure(prerequisite) && spec.prerequisiteStructuresSet[prerequisite]
                         && getHouse()->getNumItems(prerequisite) == 0) { legal = false; break; }
                 if (!legal) continue;
@@ -3155,16 +3156,18 @@ void QuantBot::planTechSavings(BuildPass& pass) {
     }
     const bool feasible = pass.techCandidate.item != NONE_ID && pass.techCandidate.cost > 0;
     const bool defenceReady = pass.readyGroundUnits >= 6 && pass.readyGroundValue >= pass.defenceMinimumValue;
-    const bool supplierFunded = firstSupplier && incomeReady
+    const bool capabilityFunded = feasible
+        && (firstSupplier || (noCombatLane && pass.techCandidate.item != Structure_Palace)) && incomeReady
         && (pass.techUpgrade || QuantBotBuildPolicy::spendingBucket(pass.techCandidate.item)
             == QuantBotSpendingPolicy::Bucket::Production)
         && spendingLedger.available(QuantBotSpendingPolicy::Bucket::Production) >= pass.techCandidate.cost
         && int64_t(pass.money) >= int64_t(pass.techCandidate.cost) + pass.techWorkingReserve;
-    // Only the fully paid first supplier (or research needed to unlock it) may
-    // precede the defensive floor. Optional technology still saves behind it.
-    pass.techSavingActive = pass.techSavings && feasible && ((stable && defenceReady) || supplierFunded)
+    // A fully funded missing capability may precede the floor when no legal
+    // unit can advance the existing mix. Requiring those units first would
+    // deadlock their own unlock. An optional Palace retains the normal floor.
+    pass.techSavingActive = pass.techSavings && feasible && ((stable && defenceReady) || capabilityFunded)
         && int64_t(pass.forecastFunding) >= int64_t(pass.techCandidate.cost) + pass.techWorkingReserve;
-    if (supplierFunded && !defenceReady) pass.techCandidate.reason = "first_supplier_before_defence_minimum";
+    if (capabilityFunded && !defenceReady) pass.techCandidate.reason = "required_capability_before_defence_minimum";
     // Bucket savings do not occupy a yard while still unfunded. Its economic
     // allocation can keep zoning/earning; a paid project takes the shared
     // capital turn only once its own bucket can fund the entire quote.
