@@ -313,12 +313,34 @@ struct Evidence {
         const bool active = world.owner->isTechResearchActive();
         const int cost = world.owner->getTechResearchCost();
         const int cash = world.owner->getCredits();
-        const auto* lab = world.lab();
-        const bool legal = lab && world.owner->canStartTechResearch(lab->getObjectID());
+        const FixPoint exactCash = world.owner->storedCredits + world.owner->startingCredits + world.owner->cityCredits;
+        const auto* labBefore = world.lab();
+        const bool legalBefore = labBefore && world.owner->canStartTechResearch(labBefore->getObjectID());
+        const bool placedBefore = placed;
+        const bool houseLegalBefore = world.game->getGameInitSettings().getGameOptions().researchLab
+            && !world.owner->isNatives() && !active && world.owner->getTechLevel() == 1
+            && exactCash >= FixPoint(cost);
         world.build();
+        // Legacy build() may place the completed lab in its producer pass and
+        // start research later in that same call. Observe placement before
+        // judging the research transition, not one full build afterwards.
+        observe(world);
         if (!active && world.owner->isTechResearchActive()) {
-            require(placed && legal && world.owner->getTechResearchTarget() == 2
-                    && world.owner->getCredits() == cash - cost,
+            const auto* lab = world.lab();
+            // canStartTechResearch() now correctly rejects already-active
+            // research. For a same-call new lab, check its original House
+            // predicates read-only, plus the observed real paid placement and
+            // exact accepted lab ID; never rewind or alter research state.
+            const bool sameCallLabLegal = !labBefore && !placedBefore && placed
+                && placedCycle == int(world.game->getGameCycleCount())
+                && houseLegalBefore && world.owner->getTechLevel() == 1
+                && lab && lab->getOwner() == world.owner && lab->isActive() && lab->getHealth() > 0;
+            require(placed && lab && world.owner->getTechResearchLabID() == lab->getObjectID()
+                    && (labBefore ? legalBefore : sameCallLabLegal)
+                    && world.owner->getTechResearchTarget() == 2
+                    && world.owner->getCredits() == cash - cost
+                    && world.owner->storedCredits + world.owner->startingCredits + world.owner->cityCredits
+                        == exactCash - FixPoint(cost),
                     "AI research did not use the same lab legality and full payment as a human");
             researchCycle = world.game->getGameCycleCount();
             researchDuration = world.owner->techResearchCycles(2);
@@ -326,7 +348,6 @@ struct Evidence {
                     && world.owner->getTechResearchRemaining() == researchDuration,
                     "Fixture changed the Normal research price or timer");
         }
-        observe(world);
     }
 };
 

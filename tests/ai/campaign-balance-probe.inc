@@ -2,6 +2,7 @@
 #include <Game.h>
 #include <GameInitSettings.h>
 #include <House.h>
+#include <Network/WorkshopGameContent.h>
 #include <sand.h>
 #include <mod/ModManager.h>
 #include <players/QuantBotConfig.h>
@@ -203,7 +204,16 @@ int runCampaignBalanceProbe() {
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
     // Continue a saved match instead (its own seed, roster and options).
     const char* loadSave = std::getenv("BALANCE_LOAD_SAVE");
-    if (loadSave) init = GameInitSettings(loadSave);
+    if (loadSave) {
+        // Headless continuations must fail closed on unavailable pinned content,
+        // never hang in the interactive Workshop-download dialog.
+        const auto bytes = readCompleteFile(loadSave);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings::HouseInfoList savedHouses;
+        auto saved = GameInitSettings::readSaveSetup(input, savedHouses);
+        WorkshopGameContent::resolveMod(saved, false);
+        init = GameInitSettings(loadSave);
+    }
     const bool localSpectator=std::getenv("BALANCE_LOCAL_SPECTATOR")!=nullptr;
     init.setLocalSpectator(localSpectator);
     init.setMultiplePlayersPerHouse(!localSpectator);

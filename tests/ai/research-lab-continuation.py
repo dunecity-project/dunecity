@@ -21,7 +21,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import finish_game, probe_binary, require_free_space, restore_fixture_revisions, scratch_dir  # noqa: E402
 
 KEY = ('arm',)
 FIELDS = KEY + ('sha256', 'wall_s', 'error')
@@ -80,12 +80,15 @@ def play(args, scratch, binary, key):
         raise RuntimeError('Frozen save checksum mismatch')
     saved = out / 'notbuildingresearchlab.dls'
     saved.write_bytes(data)
+    source_profile = out / 'fixture-profile'
+    restore_fixture_revisions(source_profile, [saved])
     run = out / 'run'
     env = dict(os.environ, BALANCE_RESEARCH_LAB_CONTINUATION='1')
     if arm.startswith('audit'):
         env['BALANCE_RESEARCH_LAB_AUDIT'] = '1'
     command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(run), '--load-save', str(saved),
+               '--save-profile', str(source_profile),
                '--mod', 'dunecity', '--minutes', str(args.minutes), '--wall-timeout', str(args.wall_timeout),
                '--path-workers', '1', '--capture-mib', str(args.capture_mib)]
     if arm != 'audit':
