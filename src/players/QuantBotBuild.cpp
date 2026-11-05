@@ -601,7 +601,9 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     // orders every pass even though it was already committed to existing queues.
     pass.clearanceCommitmentShortfall = std::max(0, pass.queuedProductionCost - pass.money);
     pass.money = std::max(0, pass.money - pass.queuedProductionCost);
-    pass.economyReserve = pass.vanillaEconomy ? std::max(2000,
+    // The exact Economy ledger replaces the legacy blanket cash hold. Keeping
+    // both reserves strands Military's own allocation below the old LF gate.
+    pass.economyReserve = pass.vanillaEconomy && !pass.techSavings ? std::max(2000,
         data[Structure_Refinery][houseID].price + 2 * data[Unit_Harvester][houseID].price) : 0;
 }
 
@@ -885,7 +887,8 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
     pass.brutalEconomy = pass.brutalCityEconomy || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal
         && !builderOnly() && !isCampaignGameType(currentGame->gameType)
         && enemyHouses <= ownTeamHouses && !outnumberedByEstimate());
-    pass.openingWorkerFloor = (pass.citySimEnabled && gameMode == GameMode::Custom) || pass.brutalEconomy;
+    pass.openingWorkerFloor = pass.techSavings
+        || (pass.citySimEnabled && gameMode == GameMode::Custom) || pass.brutalEconomy;
 }
 
 bool QuantBot::openingFleetIncomplete(BuildPass& pass) {
@@ -895,7 +898,13 @@ bool QuantBot::openingFleetIncomplete(BuildPass& pass) {
 }
 
 bool QuantBot::openingWorkersNeeded(BuildPass& pass) {
-    return openingFleetIncomplete(pass) && !pass.harvesterFactories.empty();
+    // A port's listed worker offer is a real supplier, even while sold out.
+    // Do not make emergency borrowing depend on an already-built factory.
+    return openingFleetIncomplete(pass)
+        && (!pass.harvesterFactories.empty()
+            || (pass.techSavings && getHouse()->getNumItems(Structure_StarPort) > 0
+                && currentGame->objectData.data[Unit_Harvester][getHouse()->getHouseID()].enabled
+                && getHouse()->getChoam().getNumAvailable(Unit_Harvester) >= 0));
 }
 
 // Keep money for the missing workers when market stock or a delivery is
@@ -1081,6 +1090,11 @@ int QuantBot::initialCityPopulation(Uint32 item) {
 }
 
 bool QuantBot::cityAdmitsStructure(BuildPass& pass, Uint32 item) {
+    // City capacity keeps one generator in flight. Emergency wind can still
+    // restore current power while a reactor is pending, but another capital
+    // path must not turn that recovery into a second reactor reservation.
+    if (pass.techSavings && pass.citySimEnabled && item == Structure_NuclearPlant
+        && powerGenerationPending(pass)) return false;
     if (pass.populationCeiling <= 0)
         return pass.cityGrowthLimits.sharedZoneCap == QuantBotCityPolicy::kUnlimited
             || !DuneCity::isCityZoneStructure(item)

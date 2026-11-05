@@ -34,6 +34,13 @@
   catalogue-legal first HF to produce its actual quote. Exact ARM alias remains
   an inference, not a measured result. Heavy unit admission no longer inherits
   the legacy 2,000-credit gate under the new bucket policy.
+- Deeper engine census proves the three next failures: parallel city yards
+  queued two first Nuclear Plants; classic's old 2,000-credit cash reserve
+  left exactly700 behind a strict LF `>700` gate despite a funded Military
+  bucket; Medium/Hard import workers were excluded from the opening floor.
+  ON now deduplicates pending reactor capacity, replaces that blanket cash
+  reserve with the exact Economy ledger, and recognizes real Starport worker
+  offers under the existing bounded opening floor. No assertion was weakened.
 - Audit schema now has unique scenario `city` and diagnostic `city_spend`.
   Historical duplicate-header inputs retain explicit table-aware provenance.
 - Save **9884** adds only QuantBot ledger state;9882/9883 load zero,

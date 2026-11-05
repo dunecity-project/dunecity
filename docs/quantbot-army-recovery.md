@@ -21,6 +21,14 @@ upkeep reduce net receipts rather than creating fictional gross income.
 Emergency defence, opening workers, bootstrap income, power recovery and the
 first legal Starport may borrow, recording debt in their own bucket for future
 income to repay. Forecast receipts are never spendable credits.
+With TechSavings ON, the existing bounded opening-worker floor also applies
+to classic Medium/Hard games. An existing Starport with an enabled, listed
+Harvester offer is a worker supplier, not just a Heavy Factory; listed but
+sold-out imports retain their opening priority until real stock returns.
+Admission and the single ledger debit use the supplier's actual quoted price.
+The exact Economy allocation replaces the old blanket 2,000-credit classic
+cash reserve; retaining both would strand an affordable defensive order even
+while its Military bucket held enough actual money.
 
 Production includes factories, tech buildings, upgrades and research. Economy
 includes workers/transports, refineries/storage, power, zones/services and
@@ -57,6 +65,9 @@ charges Economy; no debt is erased or forecast income invented. Existing
 generator sizing avoids borrowing for an oversized reactor when a windtrap
 suffices. A bucket-rejected yard choice yields to funded work in another
 bucket instead of monopolizing the construction turn.
+City reactor sizing and final admission both respect pending generation.
+An emergency windtrap beside an unfinished reactor must not be converted back
+into a second reactor order by a later sizing pass or parallel yard.
 
 Unit selection also changes: target ratios are compared with the replacement
 value of units actually owned plus accepted queue commitments, not with the

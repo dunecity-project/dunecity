@@ -2115,7 +2115,11 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
             + pass.cityPowerReserve - getHouse()->getProducedPower());
         const Coord windSite = campaignAvailableToBuild(turn.pBuilder,Structure_WindTrap)
             ? findPlaceLocation(Structure_WindTrap) : Coord::Invalid();
-        const Coord nuclearSite = campaignAvailableToBuild(turn.pBuilder,Structure_NuclearPlant)
+        // The selectors may deliberately choose emergency wind alongside a
+        // pending reactor. Sizing must preserve that choice, not reopen the
+        // already-reserved capacity project as a second nuclear order.
+        const Coord nuclearSite = (!pass.techSavings || !powerGenerationPending(pass))
+            && campaignAvailableToBuild(turn.pBuilder,Structure_NuclearPlant)
             ? findPlaceLocation(Structure_NuclearPlant) : Coord::Invalid();
         const int windOutput = std::max(1,-data[Structure_WindTrap][houseID].power);
         const int windNeeded = (need+windOutput-1)/windOutput;
