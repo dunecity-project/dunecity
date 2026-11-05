@@ -247,9 +247,10 @@ inline int64_t deficit(int targetBps, int armyValue, int currentCount, int price
         - int64_t(std::max(0, currentCount)) * std::max(0, price) * 10000;
 }
 // Pick one indivisible unit against the army that exists (including committed
-// queues), never cash or a future military-value cap. Compare the whole mix's
-// post-order absolute error in basis points; this also bootstraps an empty army
-// and advances a balanced one without an unbounded "fill capacity" fallback.
+// queues), never cash or a future military-value cap. Only types at or below
+// their existing share compete by post-order error. A missing heavy supplier
+// must not turn its deficit into more already-overweight cheap units. Empty or
+// exactly balanced armies may take one indivisible step and then rebalance.
 inline size_t nextExistingSlot(const Mix& target, const Weights& current,
                               const Weights& prices, const Slots& available) {
     int64_t total = 0;
@@ -258,13 +259,14 @@ inline size_t nextExistingSlot(const Mix& target, const Weights& current,
     int64_t bestError = INT64_MAX, bestDeficit = INT64_MIN;
     for (size_t i = 0; i < kSlots; ++i) {
         if (!available[i] || target[i] <= 0 || prices[i] <= 0) continue;
+        const int64_t deficit = int64_t(target[i]) * total - current[i] * 10000;
+        if (total > 0 && deficit < 0) continue;
         const int64_t after = total + prices[i];
         int64_t error = 0;
         for (size_t j = 0; j < kSlots; ++j) {
             const int64_t actual = (std::max<int64_t>(0, current[j]) + (i == j ? prices[i] : 0)) * 10000 / after;
             error += actual > target[j] ? actual - target[j] : target[j] - actual;
         }
-        const int64_t deficit = int64_t(target[i]) * total - current[i] * 10000;
         if (error < bestError || (error == bestError && deficit > bestDeficit)) {
             selected = i; bestError = error; bestDeficit = deficit;
         }

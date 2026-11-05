@@ -23,6 +23,13 @@
   permits one first Repair Yard. Adequately defended/air-only pressure keeps
   threatened shares without freezing growth; actual missing reactive-AA
   troops retain capital precedence. Ordinary standing floors still yield.
+- Next selection uses only at/below-existing-share legal types; missing heavy
+  availability no longer redistributes its deficit to overweight cheap units.
+  Busy-producer quotes and queue-draining funded upgrades replace an idle-only
+  blind spot. Genuine opening-worker/composition supply may establish the first
+  HF before an unfunded import prerequisite; first SP remains next priority.
+- Audit schema now has unique scenario `city` and diagnostic `city_spend`.
+  Historical duplicate-header inputs retain explicit table-aware provenance.
 - Save **9884** adds only QuantBot ledger state;9882/9883 load zero,
   uninitialized ledgers. Protocol **113** is required because multiplayer
   base saves and observer snapshots carry serialized AI; supplemental
@@ -46,8 +53,9 @@
   signed subcredit ledger state and600+60cycles. Private saves stay outside
   the repo. Real T1/bootstrap/debt/local-defence cases are registered in the
   engine fixture; no unobserved full-suite result is claimed here.
-- Evidence root: `../outputs/tech-saving-20261105/`; current gameplay/fixture
-  pin `4bcefd69`. Earlier verification is not its final acceptance. No deployment.
+- Evidence root: `../outputs/tech-saving-20261105/`; last measured rejected
+  gameplay/fixture pin `4bcefd69` (146/155 tests pass; nine owned fixture failures).
+  Later fixes are not retroactively credited to that trial. No deployment.
 
 ## 2026-11-05 — QuantBot WOR and troopers (OMP QuantTroopers, unreleased)
 

@@ -639,7 +639,8 @@ inline void currentAndQueuedComposition(const char* mod, const char* playerClass
         }
         const Uint32 deadline = world.game->getGameCycleCount() + MILLI2CYCLES(90000);
         while (world.game->getGameCycleCount() < deadline && evidence.heavyCompleted() == 0) evidence.step();
-        require(!evidence.paidHeavyUnits.empty() && evidence.heavyCompleted() > 0,
+        // OFF is the measured legacy control, not required to satisfy the ON fix.
+        require(!enabled || (!evidence.paidHeavyUnits.empty() && evidence.heavyCompleted() > 0),
                 "Composition arbitration left legal tank/launcher production idle instead of paying a heavy order");
         SDL_Log("TECH_SAVING_COMPOSITION: mod=%s difficulty=%s enabled=%d queued_control=%d causal_controls_off=%d "
                 "military_cap=%d existing_vehicle_value=%d existing_light_value=%d committed_vehicle_value=%d "

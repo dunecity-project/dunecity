@@ -62,6 +62,16 @@ decision and updates it after acceptance. There is no routine cheap-unit
 capacity-fill fallback. A cap-rejected or unfunded optional MCV, harvester,
 carryall or upgrade cannot consume a factory turn ahead of an otherwise
 legal, funded composition order.
+An unavailable desired type does not authorize another already-overweight
+cheap type. Empty or exactly balanced armies can take one indivisible step;
+subsequent orders must again respect the existing-share deficit.
+
+Technology quotes include busy producers, so completing an ordinary queue
+does not leave the next choice blind. A fully funded producer upgrade lets
+accepted units drain rather than appending replacements forever. A missing
+first HF may precede an unfunded import prerequisite when opening workers or
+a usable composition lane need it; first Starport retains the next priority.
+Completing the port does not disable the bounded first-HF exception.
 
 Emergency composition bypass requires an actual local ground-defence
 shortfall: nearby health-weighted ground troops and covering turrets are
@@ -85,6 +95,10 @@ The audit harness opts into counterfactual OFF-arm feasibility searches with
 extra placement searches. Both logged arms record live existing-plus-queued
 composition. An unused all-zero ledger is neutral in the lockstep digest, so
 the default OFF arm retains its established simulation fingerprints.
+New `tech-orders.csv` files keep scenario `city` and diagnostic `city_spend`
+as unique columns. Historical captures with the old duplicate `city` header
+are admitted table-aware: scenario metadata comes from the native game/setup,
+not the shadowing spending diagnostic. Accepted city totals are unchanged.
 
 ### Measured rejected trial and compatibility
 

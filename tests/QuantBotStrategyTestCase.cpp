@@ -543,9 +543,19 @@ TEST_CASE("Tech savings vehicle choices use current and queued value without fut
     // Cash cannot change this selection into another overweight cheap unit.
     // Acceptance waits for the selected legal type's real purchase budget.
     available[0] = false;
-    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kQuadSlot);
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kSlots);
     available.fill(false);
     REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kSlots);
+    // A missing supplier is not permission to refill its overweight alternative.
+    current.fill(0);
+    available[UnitMixPolicy::kQuadSlot] = true;
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kQuadSlot);
+    current[UnitMixPolicy::kQuadSlot] = prices[UnitMixPolicy::kQuadSlot];
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kSlots);
+    // Do not deadlock growth at an exact ratio: permit one indivisible order.
+    available[0] = true;
+    current[0] = 800;
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == 0);
 }
 
 TEST_CASE("Trooper support provisionally defaults on and is independently loaded saved and hashed", "[ai][production][troopers][config]") {

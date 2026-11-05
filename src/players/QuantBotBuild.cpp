@@ -3021,9 +3021,9 @@ void QuantBot::planTechSavings(BuildPass& pass) {
     const bool stable = incomeReady && !openingWorkersNeeded(pass)
         && !(needsFirstTransport(pass) && pass.carryallBuildAvailable);
     const bool missingSupplier = pass.itemCount[Structure_StarPort] == 0
-        && pass.itemCount[Structure_HeavyFactory] == 0;
-    const bool noCombatLane = std::none_of(pass.compositionAvailable.begin(), pass.compositionAvailable.end(),
-        [](bool available) { return available; });
+        || pass.itemCount[Structure_HeavyFactory] == 0;
+    const bool noCombatLane = UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
+        pass.compositionPrice, pass.compositionAvailable) == UnitMixPolicy::kSlots;
     bool supplierResearch = false;
     if (pass.techSavings && noCombatLane && researchLabPolicyActive() && getHouse()->getTechLevel() < 9) {
         // Research may unlock the first ground supplier, not require the army
@@ -3071,7 +3071,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
         if (!data[item][house].enabled || data[item][house].techLevel > getHouse()->getTechLevel()) return false;
         for (const auto* builder : pass.capitalBuilders) {
             if (builder->getItemID() != Structure_ConstructionYard || builder->isUpgrading()
-                || builder->isOnHold() || builder->getProductionQueueSize() != 0 || builder->getHealth() <= 0) continue;
+                || builder->isOnHold() || builder->getHealth() <= 0) continue;
             CapitalCandidate candidate;
             candidate.builder = builder->getObjectID(); candidate.item = item;
             candidate.kind = "tech_progression"; candidate.reason = "next_legal_technology"; candidate.score = 1;
@@ -3105,7 +3105,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
     auto upgrade = [&](Uint32 supplier) {
         for (const auto* builder : pass.capitalBuilders) {
             if (builder->getItemID() != supplier || !builder->isAllowedToUpgrade()
-                || builder->isUpgrading() || builder->isOnHold() || builder->getProductionQueueSize() > 0
+                || builder->isUpgrading() || builder->isOnHold()
                 || builder->getHealth() < builder->getMaxHealth()) continue;
             for (Uint32 unit = Unit_FirstID; unit <= ItemID_LastID; ++unit) {
                 const auto& spec = data[unit][house];
@@ -3127,8 +3127,14 @@ void QuantBot::planTechSavings(BuildPass& pass) {
         }
         return false;
     };
-    const bool candidate = (pass.starportMarketAvailable && structure(Structure_StarPort))
-        || structure(Structure_HeavyFactory)
+    // A first local supplier is an opening-worker/defensive capability, not
+    // optional growth behind an unfunded import prerequisite. First Starport
+    // retains priority over the remaining optional progression.
+    const bool coreHeavy = pass.itemCount[Structure_HeavyFactory] == 0
+        && (openingWorkersNeeded(pass) || noCombatLane);
+    const bool candidate = (coreHeavy && structure(Structure_HeavyFactory))
+        || (pass.starportMarketAvailable && structure(Structure_StarPort))
+        || (!coreHeavy && structure(Structure_HeavyFactory))
         || (pass.techSavings && noCombatLane && structure(Structure_LightFactory))
         || upgrade(Structure_HeavyFactory)
         || (canAddRepairYard(pass.itemCount[Structure_RepairYard]) && structure(Structure_RepairYard))

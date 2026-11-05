@@ -346,7 +346,10 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
     if (!pass.techSavingActive || pass.techResearch || !capitalPending(pass)
         || pass.capitalChoice != pass.techCandidateIndex
         || turn.pBuilder->getObjectID() != pass.techCandidate.builder) return false;
-    if (turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0) return false;
+    // Reserve the funded upgrade's producer while its accepted units finish;
+    // otherwise every busy factory appends another unit and never upgrades.
+    if (turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0)
+        return turn.pBuilder->getItemID() != Structure_ConstructionYard;
     const int cost = pass.techCandidate.cost;
     if (!spendingAdmits(pass, pass.techCandidate.item, cost, pass.techUpgrade)) return false;
     if (int64_t(pass.money) < int64_t(cost) + pass.techWorkingReserve) return false;
