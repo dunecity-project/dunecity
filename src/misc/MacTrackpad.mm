@@ -62,7 +62,11 @@ bool eventCoordinates(NSEvent* event, SDL_Point& cursor, double& scaleX, double&
     return SDL_PointInRect(&cursor, &mapArea);
 }
 
-NSEvent* handleEvent(NSEvent* event) {
+}
+
+namespace MacTrackpad {
+
+NSEvent* handleNativeEvent(NSEvent* event) {
     if(!mapEnabled) {
         return event;
     }
@@ -135,9 +139,6 @@ NSEvent* handleEvent(NSEvent* event) {
     return nil;
 }
 
-}
-
-namespace MacTrackpad {
 
 void initialize() {
     if(eventMonitor != nil || window == nullptr) {
@@ -150,7 +151,7 @@ void initialize() {
     }
     nativeWindow = info.info.cocoa.window;
     eventMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel | NSEventMaskMagnify
-        handler:^NSEvent*(NSEvent* event) { return handleEvent(event); }];
+        handler:^NSEvent*(NSEvent* event) { return handleNativeEvent(event); }];
     NSNotificationCenter* notifications = [NSNotificationCenter defaultCenter];
     windowFocusObserver = [notifications addObserverForName:NSWindowDidResignKeyNotification object:nativeWindow
         queue:nil usingBlock:^(NSNotification*) { resetGestures(); }];

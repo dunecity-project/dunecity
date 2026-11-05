@@ -18,6 +18,7 @@
 #endif
 #ifdef MAC_TRACKPAD_PROBE
 extern "C" void queueMacTrackpadScroll(int, int, double, double, bool, bool);
+extern "C" void queueMacTrackpadMonitorPan(int, int, double, double);
 extern "C" void queueMacTrackpadPinch(int, int, double, int);
 #endif
 void runControlsProbe(Game& game) {
@@ -246,7 +247,7 @@ void runControlsProbe(Game& game) {
     const Coord trackpadExpected=trackpadCenter+Coord(
         screenborder->screen2worldX(pointer.x+24)-screenborder->screen2worldX(pointer.x),
         screenborder->screen2worldY(pointer.y-18)-screenborder->screen2worldY(pointer.y));
-    queueMacTrackpadScroll(pointer.x,pointer.y,-24,-18,true,true);
+    queueMacTrackpadMonitorPan(pointer.x,pointer.y,-24,-18);
     game.doInput();
     require(game.zoomStep==5 && screenborder->getCurrentCenter()==trackpadExpected,
             "Two-finger trackpad scroll zoomed or failed to pan expected pixels");

@@ -105,6 +105,93 @@ def run_strategy_processes(command, runs, workers, timeout):
             raise
 
 
+def run_controls_process(command, cwd, env, log_path, timeout):
+    """Bound the native input fixture well inside CTest's 600-second deadline.
+
+    A timed-out child is sampled before killing only its private process group.
+    Keep the original nonzero exit/TimeoutExpired and all logs; never retry.
+    """
+    from collections import deque
+    import signal
+
+    timeout = min(timeout, 120)
+    diagnostic_path = log_path.with_name(log_path.stem + '-timeout.log')
+    sample_path = log_path.with_name(log_path.stem + '-sample.txt')
+
+    def report(message):
+        print(f'mouse_controls_probe: {message}; log retained at {log_path}', file=sys.stderr)
+        try:
+            with log_path.open(errors='replace') as saved:
+                print('Last probe log lines:\n' + ''.join(deque(saved, maxlen=40)), file=sys.stderr)
+        except OSError as error:
+            print(f'Unable to read probe log: {error}', file=sys.stderr)
+
+    with log_path.open('w') as log:
+        options = (dict(creationflags=subprocess.CREATE_NEW_PROCESS_GROUP) if WINDOWS
+                   else dict(start_new_session=True))
+        process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                                   stdout=log, stderr=subprocess.STDOUT, **options)
+        try:
+            code = process.wait(timeout=timeout)
+        except BaseException as error:
+            try:
+                if isinstance(error, subprocess.TimeoutExpired):
+                    with diagnostic_path.open('w') as diagnostic:
+                        diagnostic.write(f'mouse_controls_probe exceeded {timeout:g}s child wall deadline\n'
+                                         f'pid={process.pid}\ncwd={cwd}\ncommand={command!r}\n'
+                                         f'probe_log={log_path}\n')
+                        sampler = shutil.which('sample') if sys.platform == 'darwin' else None
+                        debugger = shutil.which('gdb') if sys.platform.startswith('linux') else None
+                        if sampler:
+                            capture = [sampler, str(process.pid), '1', '1', '-file', str(sample_path)]
+                        elif debugger:
+                            capture = [debugger, '--batch', '-ex', 'set pagination off',
+                                       '-ex', 'thread apply all bt', '-p', str(process.pid)]
+                        else:
+                            capture = None
+                        if capture:
+                            diagnostic.write(f'Stack capture (5s maximum): {capture!r}\n')
+                            diagnostic.flush()
+                            try:
+                                result = subprocess.run(capture, stdout=diagnostic, stderr=subprocess.STDOUT,
+                                                        check=False, timeout=5)
+                                diagnostic.write(f'Stack capture exit code: {result.returncode}\n')
+                            except (OSError, subprocess.TimeoutExpired) as capture_error:
+                                diagnostic.write(f'Stack capture failed: {capture_error}\n')
+                        else:
+                            diagnostic.write('No supported stack sampler found (macOS sample / Linux gdb).\n')
+                    report(f'deadline exceeded ({timeout:g}s); diagnostics at {diagnostic_path}; '
+                           f'native sample, if captured, at {sample_path}')
+            except OSError as diagnostic_error:
+                report(f'unable to save timeout diagnostics: {diagnostic_error}')
+            finally:
+                # start_new_session gives this child a private POSIX group. Do
+                # not signal the runner, CTest, or unrelated game sessions.
+                if WINDOWS:
+                    try:
+                        subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+                                       check=False, timeout=5)
+                    except (OSError, subprocess.TimeoutExpired) as cleanup_error:
+                        print(f'Probe tree cleanup failed: {cleanup_error}', file=sys.stderr)
+                    if process.poll() is None:
+                        process.kill()
+                else:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print(f'Probe pid {process.pid} did not reap within 5s after kill', file=sys.stderr)
+            raise
+        if code:
+            report(f'exited with status {code}')
+            raise subprocess.CalledProcessError(code, command)
+        return code
+
+
 def windows_argv(command):
     """Split a Windows command line exactly as the MSVC runtime does."""
     from ctypes import wintypes
@@ -926,11 +1013,14 @@ if args.strategy_probe:
         strategy_runs.append(dict(cwd=out/f'strategy-seed{extra}', log=out/f'run-seed{extra}.log',
             env=dict(env, DUNECITY_USERDIR=str(profile), BALANCE_SEED=str(extra), BALANCE_STRATEGY_SECTIONS='3',
                      BALANCE_STRATEGY_MARGIN_ONLY='1', BALANCE_STRATEGY_TRIKES_ONLY=str(int(trikes_only)))))
-    run_strategy_processes([str(binary), '--window', '--showlog'], strategy_runs,
+    run_strategy_processes([str(binary), '--window', '--showlog', '--non-interactive'], strategy_runs,
                            args.strategy_workers, args.wall_timeout)
+elif args.controls_probe:
+    run_controls_process([str(binary), '--window', '--showlog', '--non-interactive'],
+                         out, env, out/'run.log', args.wall_timeout)
 else:
     with (out/'run.log').open('w') as log:
-        subprocess.run([str(binary),'--window','--showlog'],cwd=out,env=env,
+        subprocess.run([str(binary),'--window','--showlog','--non-interactive'],cwd=out,env=env,
                        stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
 run_lines = (out/'run.log').read_text(errors='replace').splitlines()
 results = [line for line in run_lines if 'CAMPAIGN_BALANCE_RESULT:' in line]

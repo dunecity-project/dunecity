@@ -1,21 +1,29 @@
-"""Strategy subprocess lifecycle contracts; these are not AI outcome measurements."""
+"""Native probe subprocess/fatal-path contracts; not AI outcome measurements."""
+import argparse
 import ast
 import json
+from contextlib import redirect_stderr
+import io
 import os
 from pathlib import Path
+import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 runner = Path(__file__).with_name('run-campaign-balance.py')
-node = next(node for node in ast.parse(runner.read_text()).body
-            if isinstance(node, ast.FunctionDef) and node.name == 'run_strategy_processes')
-scope = {'subprocess': subprocess}
-exec(compile(ast.Module(body=[node], type_ignores=[]), str(runner), 'exec'), scope)
+nodes = [node for node in ast.parse(runner.read_text()).body
+         if isinstance(node, ast.FunctionDef)
+         and node.name in ('run_strategy_processes', 'run_controls_process')]
+scope = dict(subprocess=subprocess, os=os, sys=sys, shutil=shutil, WINDOWS=sys.platform == 'win32')
+exec(compile(ast.Module(body=nodes, type_ignores=[]), str(runner), 'exec'), scope)
 run_batch = scope['run_strategy_processes']
+run_controls = scope['run_controls_process']
+GAME_BINARY = None
 
 CHILD = """
 import json, os, pathlib, sys, time
@@ -107,6 +115,128 @@ class StrategyProcessesTests(unittest.TestCase):
             self.assertEqual(len(processes), 3)
             self.assertTrue(all(process.poll() is not None for process in processes))
 
+class ControlsProcessTests(unittest.TestCase):
+    def test_failure_preserves_exit_status_and_actual_error_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory)
+            log_path = cwd/'run.log'
+            command = [sys.executable, '-c',
+                       'import sys; print("CONTROLS_FAIL: fixture assertion", flush=True); sys.exit(7)']
+            stderr = io.StringIO()
+            with redirect_stderr(stderr), self.assertRaises(subprocess.CalledProcessError) as failure:
+                run_controls(command, cwd, dict(os.environ), log_path, 5)
+            self.assertEqual(failure.exception.returncode, 7)
+            self.assertEqual(log_path.read_text(), 'CONTROLS_FAIL: fixture assertion\n')
+            self.assertIn('CONTROLS_FAIL: fixture assertion', stderr.getvalue())
+            self.assertIn(str(log_path), stderr.getvalue())
+            self.assertFalse((cwd/'run-timeout.log').exists())
+
+    def test_child_deadline_cannot_exceed_120_seconds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory)
+            process = Mock()
+            process.wait.return_value = 0
+            with patch.object(subprocess, 'Popen', return_value=process):
+                self.assertEqual(run_controls(['fixture'], cwd, {}, cwd/'run.log', 1800), 0)
+            process.wait.assert_called_once_with(timeout=120)
+
+    def test_timeout_preserves_logs_and_reaps_only_the_isolated_child_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory)
+            processes, options = [], []
+            native_popen = subprocess.Popen
+
+            def observe(*args, **kwargs):
+                options.append(kwargs)
+                process = native_popen(*args, **kwargs)
+                processes.append(process)
+                return process
+
+            command = [sys.executable, '-c',
+                       'import time; print("fixture entered wait", flush=True); time.sleep(30)']
+            group_signal = patch.object(os, 'killpg', wraps=os.killpg) if os.name == 'posix' else None
+            with patch.object(shutil, 'which', return_value=None), \
+                    patch.object(subprocess, 'Popen', side_effect=observe), \
+                    redirect_stderr(io.StringIO()):
+                if group_signal:
+                    group_signal.start()
+                try:
+                    with self.assertRaises(subprocess.TimeoutExpired) as failure:
+                        run_controls(command, cwd, dict(os.environ), cwd/'run.log', 1)
+                    if group_signal:
+                        self.assertTrue(options[0]['start_new_session'])
+                        os.killpg.assert_called_once_with(processes[0].pid, signal.SIGKILL)
+                finally:
+                    if group_signal:
+                        group_signal.stop()
+            self.assertEqual(failure.exception.timeout, 1)
+            self.assertEqual(len(processes), 1)
+            self.assertIsNotNone(processes[0].poll())
+            self.assertIn('fixture entered wait', (cwd/'run.log').read_text())
+            diagnostic = (cwd/'run-timeout.log').read_text()
+            self.assertIn('exceeded 1s child wall deadline', diagnostic)
+            self.assertIn('No supported stack sampler found', diagnostic)
+            self.assertIn(str(cwd/'run.log'), diagnostic)
+
+    @unittest.skipUnless(os.name == 'posix', 'macOS stack sampler / POSIX group contract')
+    def test_stack_capture_is_bounded_and_precedes_group_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory)
+            events = []
+            native_killpg = os.killpg
+
+            def capture(command, **options):
+                events.append('sample')
+                self.assertEqual(command[0], '/fixture/sample')
+                self.assertEqual(command[2:4], ['1', '1'])
+                self.assertEqual(options['timeout'], 5)
+                raise subprocess.TimeoutExpired(command, 5)
+
+            def kill_group(pid, sig):
+                events.append('kill')
+                native_killpg(pid, sig)
+
+            with patch.object(sys, 'platform', 'darwin'), \
+                    patch.object(shutil, 'which', return_value='/fixture/sample'), \
+                    patch.object(subprocess, 'run', side_effect=capture) as sampler, \
+                    patch.object(os, 'killpg', side_effect=kill_group), \
+                    redirect_stderr(io.StringIO()):
+                with self.assertRaises(subprocess.TimeoutExpired) as failure:
+                    run_controls([sys.executable, '-c', 'import time; time.sleep(30)'],
+                                 cwd, dict(os.environ), cwd/'run.log', 0.2)
+            self.assertEqual(failure.exception.timeout, 0.2)
+            self.assertEqual(events, ['sample', 'kill'])
+            self.assertEqual(sampler.call_count, 1)
+            self.assertIn('Stack capture failed:', (cwd/'run-timeout.log').read_text())
+
+    def test_real_native_fatal_error_exits_nonzero_without_a_dialog(self):
+        if GAME_BINARY is None:
+            self.skipTest('Pass --game-binary to exercise the real native fatal path')
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory)
+            profile = cwd/'profile'
+            profile.mkdir()
+            (profile/'Dune City.ini').write_text('[General]\nLanguage = en\nPlay Intro = false\n')
+            unavailable_driver = 'dunecity-fatal-path-unavailable-driver'
+            environment = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_AUDIODRIVER='dummy',
+                               SDL_VIDEODRIVER=unavailable_driver)
+            command = [str(GAME_BINARY), '--window', '--showlog', '--non-interactive']
+            with self.assertRaises(subprocess.CalledProcessError) as failure:
+                run_controls(command, cwd, environment, cwd/'run.log', 15)
+            self.assertNotEqual(failure.exception.returncode, 0)
+            text = (cwd/'run.log').read_text(errors='replace')
+            self.assertIn("An unhandled exception of type 'sdl_error' was thrown:", text)
+            self.assertIn("Couldn't initialize SDL:", text)
+            self.assertIn(unavailable_driver, text)
+            self.assertIn('DuneCity will now be terminated!', text)
+            self.assertNotIn('CAMPAIGN_BALANCE_RESULT:', text)
+            self.assertFalse((cwd/'run-timeout.log').exists())
+
+
 
 if __name__ == '__main__':
-    unittest.main()
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--game-binary', type=Path)
+    arguments, unittest_arguments = parser.parse_known_args()
+    GAME_BINARY = arguments.game_binary.resolve() if arguments.game_binary else None
+    unittest.main(argv=[sys.argv[0]] + unittest_arguments)

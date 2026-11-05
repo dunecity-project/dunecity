@@ -9,6 +9,11 @@
  * that would otherwise result in silent crashes to desktop.
  */
 
+// Automated native probes opt out before startup; ordinary game launches keep
+// their error dialogs. Logging and failure exit codes are unchanged.
+void setErrorDialogsEnabled(bool enabled);
+bool errorDialogsEnabled();
+
 /**
  * Install signal handlers for crash detection
  * 

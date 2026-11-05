@@ -155,7 +155,7 @@ void setVideoMode(int displayIndex);
 void realign_buttons();
 
 static void printUsage() {
-    fprintf(stderr, "Usage:\n\tdunecity [--showlog] [--fullscreen|--window] [--PlayerName=X] [--ServerPort=X]\n"
+    fprintf(stderr, "Usage:\n\tdunecity [--showlog] [--non-interactive] [--fullscreen|--window] [--PlayerName=X] [--ServerPort=X]\n"
                     "\t         [--RelayEndpoint=HTTPS_URL] [--RelayDevEndpoint=LOOPBACK_URL] [--RelayDev]\n");
 }
 
@@ -822,7 +822,8 @@ void showMissingFilesMessageBox() {
 
     instruction += "\nYou may want to add GERMAN.PAK or FRENCH.PAK for playing in these languages.";
 
-    if(!SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity", instruction.c_str(), nullptr)) {
+    if(!errorDialogsEnabled()
+       || !SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity", instruction.c_str(), nullptr)) {
         fprintf(stderr, "%s\n", instruction.c_str());
     }
 }
@@ -896,6 +897,13 @@ bool openStartupAudio(std::string& deviceError, std::string& fallbackError) {
 }
 
 int main(int argc, char *argv[]) {
+    // Decide this before initialization can fail. A visible game window alone
+    // does not mean a test has someone available to dismiss an error dialog.
+    for(int index = 1; index < argc; ++index) {
+        if(std::strcmp(argv[index], "--non-interactive") == 0) {
+            setErrorDialogsEnabled(false);
+        }
+    }
 #ifndef __EMSCRIPTEN__
     // Packaging checks run before opening a profile or game session.
     for(int index = 1; index < argc; ++index) {
@@ -1067,6 +1075,8 @@ int main(int argc, char *argv[]) {
             if(parameter == "--showlog") {
                 // special parameter which does not overwrite settings
                 bShowDebugLog = true;
+            } else if(parameter == "--non-interactive") {
+                // Error presentation was selected before startup.
             } else if((parameter == "-f") || (parameter == "--fullscreen") || (parameter == "-w") || (parameter == "--window") || (parameter.compare(0, 13, "--PlayerName=") == 0) || (parameter.compare(0, 13, "--ServerPort=") == 0)
                       || parameter.compare(0, 16, "--RelayEndpoint=") == 0
                       || parameter.compare(0, 19, "--RelayDevEndpoint=") == 0
@@ -1374,7 +1384,11 @@ int main(int argc, char *argv[]) {
                     setBackToEnglishWarning += filename + "\n";
                 }
                 setBackToEnglishWarning += "\nLanguage is changed to English!";
-                SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "DuneCity", setBackToEnglishWarning.c_str(), NULL);
+                if(errorDialogsEnabled()) {
+                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "DuneCity", setBackToEnglishWarning.c_str(), NULL);
+                } else {
+                    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "%s", setBackToEnglishWarning.c_str());
+                }
 
                 SDL_Log("Warning: Language is changed to English!");
 
@@ -1646,12 +1660,16 @@ int main(int argc, char *argv[]) {
                                     + "\n\nA required data file is probably missing or the bundled PAK is corrupt."
                                     + "\nSee dunecity-crash.log next to the executable for the full SDL log.";
                     SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION, "%s", msg.c_str());
-                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity — graphics load failed", msg.c_str(), nullptr);
+                    if(errorDialogsEnabled()) {
+                        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity — graphics load failed", msg.c_str(), nullptr);
+                    }
                     THROW(std::runtime_error, "%s", msg.c_str());
                 } catch(...) {
                     SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION, "GFXManager failed to initialize: unknown exception");
-                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity — graphics load failed",
-                                              "GFXManager threw an unknown exception. See dunecity-crash.log.", nullptr);
+                    if(errorDialogsEnabled()) {
+                        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity — graphics load failed",
+                                                  "GFXManager threw an unknown exception. See dunecity-crash.log.", nullptr);
+                    }
                     THROW(std::runtime_error, "GFXManager unknown exception");
                 }
 
@@ -1779,7 +1797,9 @@ int main(int argc, char *argv[]) {
     } catch(const std::exception& e) {
         std::string message = std::string("An unhandled exception of type \'") + demangleSymbol(typeid(e).name()) + std::string("\' was thrown:\n\n") + e.what() + std::string("\n\nDuneCity will now be terminated!");
         SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION, "%s", message.c_str());
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity: Unrecoverable error", message.c_str(), nullptr);
+        if(errorDialogsEnabled()) {
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity: Unrecoverable error", message.c_str(), nullptr);
+        }
 
         return EXIT_FAILURE;
     }

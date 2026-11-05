@@ -5,6 +5,9 @@
 #import <Cocoa/Cocoa.h>
 
 #include <globals.h>
+#include <misc/MacTrackpad.h>
+#include <cstdio>
+#include <string>
 #include <SDL_syswm.h>
 #include <stdexcept>
 
@@ -69,24 +72,30 @@ DuneCityProbeGestureEvent* makeMacProbeGesture(int logicalX, int logicalY, NSEve
     return event;
 }
 
-void dispatchMacProbeGesture(DuneCityProbeGestureEvent* event) {
-    // Install after MacTrackpad::initialize(): AppKit invokes existing monitors
-    // first (measured on the native SDL stack). Consumed map gestures never
-    // reach this sink. For passthrough scrolling, continue through the actual
-    // NSView/SDL scrollWheel: responder so menus and lists receive real SDL wheel
-    // events. A synthetic magnify must not reach AppKit's backing-type router.
-    id sink = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel | NSEventMaskMagnify
-        handler:^NSEvent*(NSEvent* nativeEvent) {
-            if(![nativeEvent isKindOfClass:[DuneCityProbeGestureEvent class]]) {
-                return nativeEvent;
+void dispatchMacProbeGesture(DuneCityProbeGestureEvent* event, bool throughMonitor = false) {
+    std::fprintf(stderr,"MAC_NATIVE_DISPATCH_BEGIN route=%s type=%lu phase=%lu window=%ld\n",
+                 throughMonitor ? "monitor" : "router",static_cast<unsigned long>(event.type),
+                 static_cast<unsigned long>(event.phase),static_cast<long>(event.windowNumber));
+    std::fflush(stderr);
+    // There must not be a second local monitor: AppKit does not promise monitor
+    // order, and a synthetic-event sink could swallow the gesture first. Route
+    // native metadata through the exact shipped handler. Explicit passthrough
+    // continues through SDL's actual view responder, not an invented SDL event.
+    @try {
+        if(throughMonitor) {
+            [NSApp sendEvent:event];
+        } else if(NSEvent* remaining = MacTrackpad::handleNativeEvent(event)) {
+            if(remaining.type != NSEventTypeScrollWheel) {
+                throw std::runtime_error("Native pinch router did not consume the injected map gesture");
             }
-            if(nativeEvent.type == NSEventTypeScrollWheel) {
-                [nativeEvent.window.contentView scrollWheel:nativeEvent];
-            }
-            return nil;
-        }];
-    [NSApp sendEvent:event];
-    [NSEvent removeMonitor:sink];
+            [remaining.window.contentView scrollWheel:remaining];
+        }
+    } @catch(NSException* exception) {
+        const char* reason = exception.reason.UTF8String;
+        throw std::runtime_error(std::string("Native AppKit injection failed: ") + (reason ? reason : "unknown exception"));
+    }
+    std::fprintf(stderr,"MAC_NATIVE_DISPATCH_END route=%s\n",throughMonitor ? "monitor" : "router");
+    std::fflush(stderr);
 }
 
 }
@@ -107,13 +116,26 @@ extern "C" void queueMacTrackpadScroll(int logicalX, int logicalY, double dx, do
     }
 }
 
+// A separate map-pan injection exercises real NSApp monitor installation, with
+// no competing test monitor. The shipped handler must consume this map event.
+extern "C" void queueMacTrackpadMonitorPan(int logicalX, int logicalY, double dx, double dy) {
+    @autoreleasepool {
+        auto* event = makeMacProbeGesture(logicalX, logicalY, NSEventTypeScrollWheel);
+        event.probeDeltaX = dx;
+        event.probeDeltaY = dy;
+        event.probePrecise = YES;
+        event.probePhase = NSEventPhaseChanged;
+        dispatchMacProbeGesture(event,true);
+    }
+}
+
 // Native phase bits: Began=1, Changed=4, Ended=8, Cancelled=16.
 extern "C" void queueMacTrackpadPinch(int logicalX, int logicalY, double magnification, int phase) {
     @autoreleasepool {
         auto* event = makeMacProbeGesture(logicalX, logicalY, NSEventTypeMagnify);
         event.probeMagnification = magnification;
         event.probePhase = static_cast<NSEventPhase>(phase);
-        dispatchMacProbeGesture(event);
+        dispatchMacProbeGesture(event,true);
     }
 }
 

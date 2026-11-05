@@ -809,6 +809,12 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --controls-probe --real-video --viewport 640x480 --no-ai-telemetry --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/mouse-controls-probe)
         set_tests_properties(mouse_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # Force the real main() through an SDL initialization exception with no
+        # modal dialog, and cover the probe child's deadline/diagnostic/cleanup.
+        add_test(NAME native_probe_process_lifecycle COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_strategy_processes.py
+            --game-binary $<TARGET_FILE:dunecity>)
+        set_tests_properties(native_probe_process_lifecycle PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
         # Smooth unit motion at 2 ms game speed through the real main loop and frame pacing:
         # simulated (and drawn) units never stand still mid-step, keep justStoppedMoving on a
         # chained step or jump a tile, per cycle and per rendered frame, and a unit whose carryall

@@ -1,3 +1,32 @@
+## 2026-11-06 — Deterministic native input probes and bounded fatal-error exit (OMP MouseControls, unreleased)
+
+- Investigated `20261106T010547-ledger-retirement-371-69f817`: Pro failed
+  before input with SDL “video driver did not add any displays”; mini logged
+  “Native trackpad spread failed to zoom one step”. Both then reached the
+  fatal exception path, which synchronously displayed a native message box.
+  The runner's old 1800 s wait exceeded CTest's 600 s deadline. No archived
+  stack showed a camera-loop deadlock. Pro display/session availability is a
+  separate host issue, not bypassed or retried by the fix.
+- The private native-event injector installed a second consuming AppKit monitor
+  and assumed registration order. In 20 isolated hidden/non-activating native
+  processes, A-before-B registration dispatched A→B **13** times and B→A **7**.
+  When its sink ran first it swallowed pinch before the shipped router. That
+  sink never existed in real games. Evidence:
+  `../outputs/mouse-controls-hang-20261106/monitor-order-trials.json`.
+- Removed the competing test monitor. Pinch and a dedicated phased pan still
+  traverse the real NSApp monitor; explicit physical/UI passthrough uses the
+  exact native router and actual SDL view responder. Added flushed native
+  dispatch begin/end diagnostics; no private Quartz fields or fake SDL fallback.
+  Camera math and normal game gesture behavior are unchanged.
+- Explicit `--non-interactive` selects log-only native error presentation
+  before startup. Balance probes pass it; ordinary human game launches retain
+  their fatal dialogs. Failures keep their actual logs and nonzero status.
+- Controls children now have a maximum **120 s** wait inside CTest's 600 s
+  deadline. Timeout preserves `run-timeout.log`, attempts a bounded native
+  stack capture (`run-sample.txt`), then kills/reaps only the private child
+  process group. New `native_probe_process_lifecycle` exercises forced SDL
+  startup failure, failure propagation, deadline, sampling and cleanup.
+
 ## 2026-11-05 — Native Mac trackpad pan/pinch and consistent mobile gestures (OMP MouseControls, unreleased)
 
 - Mac two-finger scrolling now pans without a mouse button; native spread/pinch
@@ -44,7 +73,7 @@
   terrain scales around the pointer while the sidebar remains unchanged.
 - No simulation, protocol, save, hashed rule or persistent preference changes.
 
-## 2026-11-06 — QuantBot ledger removed; installed save format restored (OMP TechSaving, unreleased)
+## 2026-11-06 — QuantBot ledger retired; economy-first composition experiment (OMP TechSaving, unreleased)
 
 - Removed the rejected, never-shipped `TechSavings` ledger completely: runtime
   allocation/debt state, config/default/hash key, eight factorial styles,
@@ -58,9 +87,10 @@
   reload with following-record checks, plus byte-identical serialization when
   Simple alone is toggled. Existing9863/9878 prefix fixtures no longer subtract
   a nonexistent ledger tail. Full-Game private probes are separate evidence.
-- Removal-only commit `3710464d` keeps the installed 9883/112 format; its full
-  pinned suite was159/165, with only the six already-known Simple City/Vanilla
-  fixture failures. The separate final economy-first policy remains OFF.
+- Removal-only commit `3710464d` restores 9883/112. Main's full suite was159/165;
+  the separate six-Simple-excluded retirement run was158/159, with only a
+  two-machine MouseControls timeout. These different runs are not all-green.
+  Policy commit `8a89f35d` remains OFF.
 - Current Simple selection uses existing-owned plus accepted queues, not cap
   headroom; legal advanced ground choices disable cheap filler. Standing troop
   quota/reservations use existing army value; reactive AA remains if the legal
@@ -70,6 +100,16 @@
   zero-upfront installments only after those selectors; upgrades keep the human
   full-credit rule and ordinary planning quote debit. Repeat zoning does not
   veto technology forever; spare yards keep normal growth. No saved state added.
+- `8a89f35d` full suite156/165: all other156 tests passed; nine Simple fixtures
+  failed. Native evidence identifies physical600 vs ROI712 comparison, an
+  exact-funded300 upgrade completing before first new income, and the still-
+  deficient three-refinery Vanilla H/B setup. Fixture-only correction preserves
+  paid progress/completion and zero-cash acceptance; its pinned result is separate.
+- Approved private full-Game 9882 and9883 probes at `8a89f35d` passed2/2:
+  load600cycles→9883resave/reload→continuation/native-worm checks. Input/binary
+  SHAs and local-only receipts: `private-compatibility-8a89f35d/` under the evidence
+  root. No private saves committed. Later Air metadata SSH timed out, so a new
+  save is unmeasured, not asserted absent.
 - Canonical `5f2bdb16`288-game/four-seed trial rejects adoption: city researchOFF
   HF/IX/SP101/55/168→178/77/80 per192 houses; researchON24/23/36→42/21/21 per48.
   Pooled H/B dispatch3.5816→1.8793, kills43309→19963; all six cells/four seed
