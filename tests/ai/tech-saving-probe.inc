@@ -799,6 +799,32 @@ inline void paidTechnologyProgression(const char* mod, const char* playerClass, 
                 pass.techCandidate.item, pass.techCandidate.cost, int(pass.techSavingActive),
                 static_cast<long long>(ledger.balance[0]), static_cast<long long>(ledger.balance[1]),
                 static_cast<long long>(ledger.balance[2]));
+        const int original = world.yard->getOriginalHouseID();
+        const auto& ownHf = world.game->objectData.data[Structure_HeavyFactory][world.owner->getHouseID()];
+        const auto& originalHf = world.game->objectData.data[Structure_HeavyFactory][original];
+        SDL_Log("TECH_SAVING_PROGRESSION_CENSUS: scoped=%d enabled=%d mode=%d difficulty=%d builder_only=%d "
+                "hf_owned=%d hf_total=%d builders=%d cy_original=%d cy_queue=%d cy_hold=%d cy_upgrade=%d "
+                "hf_offered=%d own_enabled=%d original_enabled=%d own_tech=%d original_tech=%d house_tech=%d",
+                int(pass.techSavings), int(world.bot->botConfig().force.techSavings), int(world.bot->gameMode),
+                int(world.bot->difficulty), int(world.bot->builderOnly()), world.owner->getNumItems(Structure_HeavyFactory),
+                pass.itemCount[Structure_HeavyFactory], int(pass.capitalBuilders.size()), original,
+                world.yard->getProductionQueueSize(), int(world.yard->isOnHold()), int(world.yard->isUpgrading()),
+                int(world.yard->isAvailableToBuild(Structure_HeavyFactory)), int(ownHf.enabled), int(originalHf.enabled),
+                ownHf.techLevel, originalHf.techLevel, world.owner->getTechLevel());
+        const auto previousBuilder = world.bot->planningBuilder;
+        world.bot->planningBuilder = world.yard->getObjectID();
+        world.bot->clearPlacementCache(false, true);
+        const auto hfSite = world.bot->findPlaceLocation(Structure_HeavyFactory);
+        const bool foundation = hfSite.isValid()
+            && world.bot->foundationPlan(world.yard, Structure_HeavyFactory, hfSite).complete;
+        SDL_Log("TECH_SAVING_PROGRESSION_SITE: x=%d y=%d foundation=%d", hfSite.x, hfSite.y, int(foundation));
+        for (Uint32 prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+            if (isStructure(prerequisite) && ownHf.prerequisiteStructuresSet[prerequisite]
+                && world.owner->getNumItems(prerequisite) == 0)
+                SDL_Log("TECH_SAVING_PROGRESSION_PREREQUISITE: item=%u total=%d", prerequisite,
+                        pass.itemCount[prerequisite]);
+        world.bot->planningBuilder = previousBuilder;
+        world.bot->clearPlacementCache(false, true);
     }
     require(technologyComplete(),
             "Stable real income did not complete the first HF, paid upgrades and legal advanced technology in bounded time");
