@@ -238,6 +238,25 @@ the save's SHA256 and gzip/base64 bytes; measured OFF/ON units reload it
 independently, without a diagnostic planning pass changing their starting
 state.
 
+`quantbot_research_lab_saved_crime` pins Stefan's original 9883
+`notbuildingresearchlab` save (SHA256
+`8772302e2199d4de929c1b109f2c3151cc10e651b911358ea862e7c5882ebcb7`)
+and its exact Workshop mod
+`27a8c8d92876c5001b7744c7252eca5971327edbc17cde5d5249e1d6351fb0f4`.
+The verified revision manifest and four historical configuration files are
+archived; all 906 files, 34,791,606 bytes, are checked against their hashes.
+Unchanged artwork is restored from the source tree into isolated profiles;
+the original profile and save are never modified.
+
+At saved cycle 49,399, Ordos and Neutral are Brutal QuantBots with 28,981
+and 27,533 credits, positive net tax forecasts of 1,128 and 1,238 per minute,
+and 333 and 268 legal lab sites. Neither has an opening-worker deficit.
+Four and three dangerous-crime properties alone make the old investment
+readiness false despite their nine and eight Police Stations. The paired
+three-minute saved-game regression requires that refusal OFF and real lab
+placement plus normal level-2 research startup ON. This is separate from
+the general tech-1 opening-fleet and full research-completion fixtures.
+
 ## Dispatch and the military limit
 
 The default outnumbered threshold is an observed enemy advantage of at least

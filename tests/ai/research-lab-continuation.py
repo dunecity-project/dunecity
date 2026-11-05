@@ -16,12 +16,13 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import finish_game, probe_binary, require_free_space, restore_fixture_revisions, scratch_dir  # noqa: E402
+from probe_profile import finish_game, probe_binary, prune_runs, require_free_space, restore_fixture_revisions, scratch_dir  # noqa: E402
 
 KEY = ('arm',)
 FIELDS = KEY + ('sha256', 'wall_s', 'error')
@@ -119,17 +120,53 @@ def play(args, scratch, binary, key):
     return row
 
 
+def verify_saved_crime(args):
+    """The real-save regression: crime alone blocked two solvent legal labs."""
+    results = Path(args.results)
+    captures = {arm: json.loads((results / (arm + '-measurements.json')).read_text())
+                for arm in ('audit-off', 'audit-on', 'off', 'on')}
+    for house in args.verify_houses:
+        audits = [next(row['data'] for row in captures[arm]
+                       if row['marker'] == 'RESEARCH_LAB_SAVE_AUDIT' and row['data']['house'] == house)
+                  for arm in ('audit-off', 'audit-on')]
+        old, new = audits
+        if not (old['dangerous_crime'] > 0 and old['opening_fleet'] == 0
+                and not old['investment_ready'] and new['investment_ready'] and new['lab_funded']):
+            print('FAIL: house %d did not isolate the solvent crime-only research veto' % house)
+            return False
+        events = {}
+        for arm in ('off', 'on'):
+            events[arm] = [dict(field.split('=', 1) for field in row['data'].split() if '=' in field)
+                           for row in captures[arm] if row['marker'] == 'RESEARCH_LAB_SAVE_EVENT']
+            events[arm] = [row for row in events[arm] if int(row['house']) == house]
+        if any(int(row['labs']) > 0 for row in events['off']):
+            print('FAIL: legacy house %d did not reproduce its missing-lab refusal' % house)
+            return False
+        placed = any(int(row['labs']) > 0 for row in events['on'])
+        studied = any(int(row['target']) == 2 and int(row['remaining']) == 7500 for row in events['on'])
+        if not placed or not studied:
+            print('FAIL: corrected house %d did not build a lab and start normal level-2 research' % house)
+            return False
+        print('RESEARCH_LAB_SAVED_CRIME_PASS: house=%d old_refusal=1 new_lab=1 normal_research=1' % house)
+    return True
+
+
 def report(args):
     rows = read(Path(args.results) / 'games.csv')
     failed = [row for row in rows if row['error']]
     print('Research Lab exact save: %d passed, %d failed' % (len(rows) - len(failed), len(failed)))
     for row in rows:
         print('%s: sha256=%s wall=%ss error=%s' % (row['arm'], row['sha256'], row['wall_s'], row['error'] or 'none'))
-    return bool(failed)
+    return bool(failed) or bool(args.verify_houses and not verify_saved_crime(args))
 
 
 def run(args):
     require_free_space()
+    if args.repeatable:
+        destination = Path(args.results)
+        destination.mkdir(parents=True, exist_ok=True)
+        prune_runs(destination, 'run-', 2)
+        args.results = tempfile.mkdtemp(prefix='run-', dir=destination)
     with scratch_dir('research-lab-continuation', args.scratch) as scratch:
         binary = build_probe(args, scratch)
         done = {row['arm'] for row in read(Path(args.results) / 'games.csv') if not row['error']}
@@ -151,6 +188,9 @@ parser.add_argument('--capture-mib', type=int, default=1024)
 parser.add_argument('--scratch', type=Path)
 parser.add_argument('--rebuild', action='store_true')
 parser.add_argument('--report', action='store_true')
+parser.add_argument('--verify-houses', nargs='+', type=int, default=[],
+                    help='Require exact crime-only refusal off and paid lab/normal research on for these houses')
+parser.add_argument('--repeatable', action='store_true', help='Use a fresh retained CTest result directory')
 args = parser.parse_args()
 if args.report:
     raise SystemExit(report(args))
