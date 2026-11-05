@@ -59,7 +59,7 @@ bool eventCoordinates(NSEvent* event, SDL_Point& cursor, double& scaleX, double&
     const double y = view.flipped ? location.y - bounds.origin.y : NSMaxY(bounds) - location.y;
     cursor.x = static_cast<int>(std::lround(left + x * scaleX));
     cursor.y = static_cast<int>(std::lround(top + y * scaleY));
-    return SDL_PointInRect(&cursor, &mapArea) && !SDL_PointInRect(&cursor, &mapControls);
+    return SDL_PointInRect(&cursor, &mapArea);
 }
 
 NSEvent* handleEvent(NSEvent* event) {
@@ -81,6 +81,12 @@ NSEvent* handleEvent(NSEvent* event) {
     if(!eventCoordinates(event, cursor, scaleX, scaleY)) {
         resetGestures();
         return event;
+    }
+    if(SDL_PointInRect(&cursor, &mapControls)) {
+        // Overlay controls have no scroll/pinch action. Do not forward a phased
+        // scroll as an SDL wheel: the game's ordinary wheel fallback would zoom.
+        resetGestures();
+        return nil;
     }
 
     if(event.type == NSEventTypeScrollWheel) {

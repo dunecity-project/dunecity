@@ -276,6 +276,21 @@ void runControlsProbe(Game& game) {
         require(game.zoomStep==4,"Ended/cancelled native pinch retained stale partial scale");
         pinch(0,8);
     }
+    const auto& overlay=game.pInterface->getMapViewControlsRect();
+    require(overlay.w>0 && overlay.h>0,"Missing map-overlay gesture fixture");
+    const Coord overlayPoint(overlay.x+overlay.w/2,overlay.y+overlay.h/2);
+    const Coord overlayCenter=screenborder->getCurrentCenter();
+    const int overlayZoom=game.zoomStep;
+    motion(overlayPoint);
+    queueMacTrackpadScroll(overlayPoint.x,overlayPoint.y,0,60,true,true);
+    require(SDL_HasEvent(SDL_MOUSEWHEEL)==SDL_FALSE,"Trackpad overlay scroll leaked an SDL wheel fallback");
+    queueMacTrackpadPinch(overlayPoint.x,overlayPoint.y,0,1);
+    queueMacTrackpadPinch(overlayPoint.x,overlayPoint.y,.5,4);
+    queueMacTrackpadPinch(overlayPoint.x,overlayPoint.y,0,8);
+    game.doInput();
+    require(game.zoomStep==overlayZoom && screenborder->getCurrentCenter()==overlayCenter,
+            "Trackpad gesture over map-overlay controls moved or zoomed the map");
+    motion(pointer);
     require(totalCommands()==commandsBeforeTrackpad && game.selectedList.count(unit->getObjectID()),
             "Trackpad camera gesture changed selection or issued a command");
     SDL_Log("MAC_TRACKPAD_PASS: native spread/pinch cursor anchor, buttonless phased pan without zoom, physical wheel zoom, no commands");
