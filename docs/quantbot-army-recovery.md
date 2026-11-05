@@ -42,11 +42,28 @@ files are unsupported. Synthetic engine fixtures load both 9882 and 9883 bot
 blocks, resave/reload 9883, check following-record alignment and verify that
 Simple OFF/ON alone adds no serialized bytes. Private saves stay outside Git.
 
-At `3710464d` the full pinned suite was **159/165**: only the six already-known
-Simple City/Vanilla fixtures failed. Ledger retirement does not receive credit
-for fixing those policy/payment-evidence failures. The new iteration's outcomes
-and real-save results must be attributed to their own pinned source, not to the
-historical cohorts below.
+At `3710464d`, Main's full suite was **159/165** (six known Simple failures).
+The separate retirement-only selection was **158/159**: `mouse_controls_probe`
+timed out on Pro and its automatic Mini retry; every selected AI/save/network
+test passed. These are different runs, not interchangeable green claims.
+
+The economy-first policy at `8a89f35d` passed **156/165**, with all nine Simple
+fixtures failing and every other test passing. Archived native evidence found
+three fixture-premise defects: ROI cost 712 was compared with physical HF quote
+600; a fully prefunded 300-credit upgrade finished before its first new income
+receipt; and the Vanilla Hard/Brutal setup still lacked the bounded fourth
+opening refinery. The fixture-only correction checks physical price/foundation
+components, requires arriving income for unfunded starts, and genuinely clears
+that refinery opening. Payment, progress, completion and zero-cash acceptance
+assertions remain. Its own pinned results must not retroactively relabel
+`8a89f35d` all-green.
+
+The approved private full-Game probes at `8a89f35d` passed **2/2**: actual 9882
+and 9883 saves loaded, ran 600 cycles, resaved/reloaded as 9883 and continued with
+native-worm/state checks. Their input/native binary hashes and local-only
+receipts are in `../outputs/tech-saving-20261105/private-compatibility-8a89f35d/`.
+No private save was committed. The later Air modification-time query timed out;
+no newer save, or absence of one, is claimed.
 
 ### Measured rejection, not adoption
 

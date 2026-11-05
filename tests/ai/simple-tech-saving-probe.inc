@@ -121,9 +121,14 @@ struct Case {
             require(size_t(pass.techCandidateIndex) < pass.capitalCandidates.size(),
                     "Simple project points outside the shared capital planner");
             const auto& choice = pass.capitalCandidates[size_t(pass.techCandidateIndex)];
+            // Reused ordinary candidates include amortized power in cost for
+            // ROI ranking. Their actual payable quote is price + foundation,
+            // exactly as capitalReserve and the technology order account it.
             require(choice.builder == pass.techCandidate.builder && choice.item == pass.techCandidate.item
-                        && choice.cost == pass.techCandidate.cost,
-                    "Simple project was not the same choice consumed by the shared capital planner");
+                        && choice.price == pass.techCandidate.price
+                        && choice.foundationCost == pass.techCandidate.foundationCost
+                        && int64_t(choice.price) + choice.foundationCost == pass.techCandidate.cost,
+                    "Simple project changed owner, item or physical quote in the shared capital planner");
         }
         if (pass.techFundingPriority)
             require(pass.techSavingActive && pass.techCandidateIndex >= 0
@@ -198,7 +203,11 @@ inline void completeInitialEconomicAssets(World& world) {
     // assets; later asserted projects still have to be paid by the real bot.
     for (;;) {
         auto pass = world.observePlan();
-        if (CityEconomyInvestmentPolicy::processingCapacityNeeded(pass.itemCount[Structure_Refinery],
+        // The ordinary non-city low-cash opening still asks for four bays
+        // before optional technology, even if three cover current throughput.
+        const bool classicOpening = !world.game->isCitySimEnabled()
+            && pass.itemCount[Structure_Refinery] < 4;
+        if (classicOpening || CityEconomyInvestmentPolicy::processingCapacityNeeded(pass.itemCount[Structure_Refinery],
                 pass.itemCount[Unit_Harvester], world.bot->workerAnnualIncome(pass), pass.bayAnnualIncome)) {
             world.place(Structure_Refinery);
             continue;
@@ -476,16 +485,22 @@ inline void nextLegalInstallments(const char* mod, const char* playerClass, Proj
                     "Discretionary technology jumped ahead of the still-pending first Starport");
     }
     const int64_t spent = world.spentQ32() - spentBefore;
-    run.finish(complete() && observedEnginePayment && spent >= FixPoint(initialQuote).getRawValue()
-                   && (!upgrade || upgradeStartedWithRealCash)
-                   && world.owner->getHarvestedSpice() + world.owner->getCityTaxReceipts() > receiptsBefore,
-               "Selected project did not receive real engine-paid installments and bounded income-funded completion");
+    const bool receivedIncome =
+        world.owner->getHarvestedSpice() + world.owner->getCityTaxReceipts() > receiptsBefore;
+    const bool incomeRequired = initialCash < initialQuote;
+    const bool paidCompleted = complete() && observedEnginePayment && spent >= FixPoint(initialQuote).getRawValue()
+        && (!upgrade || upgradeStartedWithRealCash);
     SDL_Log("SIMPLE_TECH_SAVING_INSTALLMENTS: case=%s mod=%s difficulty=%s item=%u quote=%d initial_cash=%d "
-            "zero_cash=%d exact_quote=%d upgrade_human_gate=%d parallel_yards=2 real_receipts=1 "
-            "engine_payment=1 spent_total_q32=%lld paid_completed=1 stateless_policy=1",
+            "zero_cash=%d exact_quote=%d upgrade_human_gate=%d parallel_yards=2 income_required=%d real_receipts=%d "
+            "funding=%s engine_payment=%d spent_total_q32=%lld paid_completed=%d stateless_policy=1",
             name, mod, playerClass, item, initial.techCandidate.cost, initialCash,
             int(cashMode == StartCash::Zero), int(cashMode == StartCash::ExactQuote), int(upgrade),
-            static_cast<long long>(spent));
+            int(incomeRequired), int(receivedIncome), incomeRequired ? "arriving_income" : "initial_cash",
+            int(observedEnginePayment), static_cast<long long>(spent), int(paidCompleted));
+    run.finish(paidCompleted && (!incomeRequired || receivedIncome),
+               incomeRequired
+                   ? "Selected project did not receive real engine-paid installments and bounded income-funded completion"
+                   : "Fully cash-funded project did not receive real engine-paid installments and bounded completion");
 }
 
 inline void boundedProgression(const char* mod, const char* playerClass) {
