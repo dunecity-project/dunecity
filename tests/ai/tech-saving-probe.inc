@@ -1515,8 +1515,8 @@ inline void airOnlyPressureBorrowsOnlyAntiAir(const char* mod, const char* playe
             "Air-only pressure incorrectly became a ground military emergency or lost its threatened receipts/AA floor");
     require(pass.techSavingActive && pass.techCandidate.item == Structure_HeavyFactory
             && !pass.techUpgrade && !pass.techResearch
-            && world.bot->getSpendingLedger().available(QuantBotSpendingPolicy::Bucket::Production) >= pass.techCost
-            && world.owner->getCredits() >= pass.techCost + pass.techWorkingReserve,
+            && world.bot->getSpendingLedger().available(QuantBotSpendingPolicy::Bucket::Production) >= pass.techCandidate.cost
+            && world.owner->getCredits() >= pass.techCandidate.cost + pass.techWorkingReserve,
             "Actual army floor and funded technology remained unreachable under air-only pressure");
     for (int i = 0; i < 5; ++i) world.build();
     require(world.queuedLight() == 0
