@@ -46,7 +46,7 @@ void audit(Game& game) {
     // measured off/on continuation, which each reload the unchanged save.
     for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game.getHouse(h))
         for (const auto& player : house->getPlayerList()) if (auto* bot = dynamic_cast<QuantBot*>(player.get())) {
-            QuantBot::BuildPass pass(0);
+            QuantBot::BuildPass pass(bot->militaryUnitValue());
             bot->resetBuildPass(); bot->planBuildInventory(pass); bot->planBuildBudget(pass);
             bot->planCityState(pass); bot->planStrategicReserve(pass); bot->planSpiceEconomy(pass);
             bot->planPowerAndYards(pass); bot->planCityPopulation(pass); bot->planCivicNeedAndTrips(pass);

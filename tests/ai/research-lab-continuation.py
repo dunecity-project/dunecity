@@ -80,14 +80,14 @@ def play(args, scratch, binary, key):
     saved.write_bytes(data)
     run = out / 'run'
     env = dict(os.environ, BALANCE_RESEARCH_LAB_CONTINUATION='1')
-    if arm == 'audit':
+    if arm.startswith('audit'):
         env['BALANCE_RESEARCH_LAB_AUDIT'] = '1'
     command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(run), '--load-save', str(saved),
                '--mod', 'dunecity', '--minutes', str(args.minutes), '--wall-timeout', str(args.wall_timeout),
                '--path-workers', '1', '--capture-mib', str(args.capture_mib)]
     if arm != 'audit':
-        command += ['--scenario-style', 'research-lab-progression-' + arm]
+        command += ['--scenario-style', 'research-lab-progression-' + arm.removeprefix('audit-')]
     started = time.time()
     process = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
     results = Path(args.results)
@@ -103,7 +103,7 @@ def play(args, scratch, binary, key):
     measurements = []
     for line in lines:
         if 'RESEARCH_LAB_SAVE_' in line:
-            marker, body = line.split(':', 1)
+            marker, body = line[line.index('RESEARCH_LAB_SAVE_'):].split(':', 1)
             measurements.append({'marker': marker, 'data': json.loads(body) if body.strip().startswith('{') else body.strip()})
     (results / (arm + '-measurements.json')).write_text(json.dumps(measurements, indent=2) + '\n')
     passed = process.returncode == 0 and any('RESEARCH_LAB_SAVE_RESULT:' in line for line in lines)
@@ -138,7 +138,8 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', default=str(root / 'build-int'))
 parser.add_argument('--results', required=True)
 parser.add_argument('--game-options', required=True)
-parser.add_argument('--arms', nargs='+', choices=('audit', 'off', 'on'), default=['audit', 'off', 'on'])
+parser.add_argument('--arms', nargs='+', choices=('audit', 'audit-off', 'audit-on', 'off', 'on'),
+                    default=['audit-off', 'audit-on', 'off', 'on'])
 parser.add_argument('--minutes', type=int, default=12)
 parser.add_argument('--wall-timeout', type=int, default=1800)
 parser.add_argument('--capture-mib', type=int, default=1024)

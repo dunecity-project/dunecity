@@ -154,7 +154,7 @@ bool QuantBot::researchLabPolicyActive() const {
 
 bool QuantBot::researchRequired() const {
     return researchLabPolicyActive() && (currentGame->getGameInitSettings().isCivilizationWars()
-        || botConfig().force.researchLabProgression);
+        || (botConfig().force.researchLabProgression && getHouse()->getTechLevel() < 9));
 }
 
 bool QuantBot::economyReadyForCapital(BuildPass& pass) {
