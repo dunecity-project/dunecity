@@ -254,7 +254,7 @@ bool Player::hasTornieProductionUpgradeGoal(const BuilderBase* pBuilder) const {
             || spec.techLevel > getHouse()->getTechLevel()
             || spec.upgradeLevel <= currentUpgrade || spec.upgradeLevel > maxUpgrade) continue;
         bool prerequisites = true;
-        for(int prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+        for(Uint32 prerequisite = Structure_FirstID; prerequisite < spec.prerequisiteStructuresSet.size(); ++prerequisite)
             if(isStructure(prerequisite) && spec.prerequisiteStructuresSet[prerequisite]
                 && getHouse()->getNumItems(prerequisite) == 0) prerequisites = false;
         if(prerequisites) return true;

@@ -123,6 +123,8 @@ public:
         Sint32   infspawnprop;                                        ///< what is the probability (in percent) that a infantry soldier is spawn on destruction?
         int      builder;                                             ///< In which building can this item be built
         std::bitset<Structure_LastID + 1>   prerequisiteStructuresSet;    ///< What buildings are prerequisite for building this item
+        // Only IDs below this mask's size are representable prerequisites. Extended
+        // structure IDs are not prerequisites; bound scans to size(), not Num_ItemID.
         Sint8    techLevel;                                           ///< What techLevel is needed to build this item (in campaign mode this equals to mission number)
         Sint8    upgradeLevel;                                        ///< How many upgrades must the builder already have made
     };

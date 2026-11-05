@@ -339,11 +339,46 @@ BuilderBase* capture(Game& game, House* captor, BuilderBase* victim) {
         result->getObjectID(), captor->getHouseID(), original, production, result->getTechnologyHouseID(), game.getGameCycleCount());
     return result;
 }
+void productionPrerequisiteBounds(Game& game, BuilderBase* builder) {
+    auto* owner = builder->getOwner();
+    const auto* controller = owner->getPlayerList().front().get();
+    const int technology = builder->getTechnologyHouseID();
+    std::array<ObjectData::ObjectDataStruct, Unit_TameSandworm - Unit_Troopers5 + 1> saved{};
+    for(int item = Unit_Troopers5; item <= Unit_TameSandworm; ++item) {
+        auto& spec = game.objectData.data[item][technology];
+        saved[item - Unit_Troopers5] = spec;
+        spec.enabled = false;
+    }
+    auto& spec = game.objectData.data[Unit_Troopers5][technology];
+    spec.enabled = true;
+    spec.builder = builder->getItemID();
+    spec.techLevel = owner->getTechLevel();
+    spec.upgradeLevel = builder->getCurrentUpgradeLevel() + 1;
+    spec.prerequisiteStructuresSet.reset();
+    require(spec.upgradeLevel <= builder->getMaxUpgradeLevel(), "Bounds fixture needs a real upgrade goal");
+    require(isStructure(Structure_ResearchLab)
+        && Structure_ResearchLab >= spec.prerequisiteStructuresSet.size()
+        && owner->getNumItems(Structure_ResearchLab) == 0, "Bounds fixture lacks an absent extended structure");
+    require(controller->hasTornieProductionUpgradeGoal(builder),
+        "IDs outside the prerequisite mask became phantom upgrade prerequisites");
+    spec.prerequisiteStructuresSet.set(Structure_LastID);
+    require(owner->getNumItems(Structure_LastID) == 0 && !controller->hasTornieProductionUpgradeGoal(builder),
+        "The last valid prerequisite bit was ignored");
+    spec.prerequisiteStructuresSet.reset(Structure_LastID);
+    spec.prerequisiteStructuresSet.set(Structure_WindTrap);
+    require(owner->getNumItems(Structure_WindTrap) > 0 && controller->hasTornieProductionUpgradeGoal(builder),
+        "An owned valid prerequisite blocked the upgrade goal");
+    for(int item = Unit_Troopers5; item <= Unit_TameSandworm; ++item)
+        game.objectData.data[item][technology] = saved[item - Unit_Troopers5];
+    SDL_Log("TORNIE_GAMEPLAY_PREREQUISITE_BOUNDS: mask_bits=%zu last_valid=%d extended_id=%d missing_blocks=1 owned_allows=1",
+        spec.prerequisiteStructuresSet.size(), Structure_LastID, Structure_ResearchLab);
+}
 void mechanics(std::unique_ptr<Game>& game) {
     const std::vector<int> houses{HOUSE_ORDOS,HOUSE_HARKONNEN,HOUSE_ATREIDES,HOUSE_WILDSPADE,HOUSE_KLESHMERSH,HOUSE_CUSTOM,HOUSE_NEUTRAL,HOUSE_REBELS};
     world(game,"Tornie",houses);
     std::array<Base,NUM_HOUSES> bases{};
     for(int h : houses) bases[h] = readyBase(*game,h);
+    productionPrerequisiteBounds(*game,bases[HOUSE_ORDOS].barracks);
     upgrade(*game,{{bases[HOUSE_KLESHMERSH].light,2},{bases[HOUSE_ORDOS].light,1},
         {bases[HOUSE_ATREIDES].heavy,2},{bases[HOUSE_WILDSPADE].air,3},
         {bases[HOUSE_ORDOS].barracks,2},{bases[HOUSE_ORDOS].combo,1}});
