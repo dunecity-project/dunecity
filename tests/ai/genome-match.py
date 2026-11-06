@@ -57,7 +57,8 @@ read = audit.read
 PHASES = ('opening', 'mid', 'late')
 ALL_HOUSES = ('harkonnen', 'atreides', 'ordos', 'fremen', 'sardaukar', 'mercenary',
               'neutral', 'rebels', 'custom', 'wildspade', 'kleshmersh', 'tharpique')
-DIFFICULTIES = ('defend', 'easy', 'medium', 'hard', 'brutal')
+# Numeric filenames mirror QuantBot::Difficulty, not the model's alphabetical vocabulary.
+DIFFICULTIES = ('easy', 'medium', 'hard', 'brutal', 'defend')
 MODS = {'vanilla': 'vanilla', 'dune2r': 'Dune2R', 'dunecity': 'dunecity'}
 BASES = {'none': 0, 'cy': 0, 'outpost': 1, 'small': 2, 'medium': 3, 'large': 4, 'fortress': 5}
 SPICE = {'none': 0, 'low': 1, 'medium': 2, 'high': 3, 'very-high': 4}

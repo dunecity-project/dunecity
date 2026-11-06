@@ -305,6 +305,8 @@ def schedule(args):
         for game in games:
             game['minutes'] = args.minutes
     genome_qualification.validate_schedule(args, games)
+    if getattr(args, 'qualification_smoke', False):
+        games = games[:1]  # Diagnostic only; the receipt reader still requires all six plus seven.
     return games
 
 
@@ -438,6 +440,7 @@ def play(args, scratch, binary, game):
         # Explicit, candidate-only transport; never inherit a style or another run's overlays.
         env.pop('BALANCE_SCENARIO_STYLE', None)
         env.pop('BALANCE_GENOME_PHASE_DIR', None)
+        env.pop('DUNECITY_QUANTBOT_OVERLAY', None)
         shutil.rmtree(candidate_dir, ignore_errors=True)
         genome_qualification.prepare(args, game, candidate_dir)
         env['BALANCE_SCENARIO_DUMP_MAP'] = str(candidate_dir / 'map.ini')
@@ -1040,6 +1043,8 @@ parser.add_argument('--compare', dest='compare_dirs', nargs=2, metavar=('CONTROL
 parser.add_argument('--manifest-b64', help='Inline genome manifest for candidate-specific mandatory AllAgainst gates')
 parser.add_argument('--genome', help='Actual candidate id; overrides only the Brutal Atreides, never allied Hard opponents')
 parser.add_argument('--qualification-source', help='Exact full candidate source SHA; stale/default receipts cannot qualify')
+parser.add_argument('--qualification-smoke', action='store_true',
+                    help='Exercise one original native seed without qualifying; resume full gates without this flag')
 parser.add_argument('--phase-minutes', type=int, nargs=3, default=[0, 10, 20], metavar=('OPEN', 'MID', 'LATE'))
 args = parser.parse_args()
 if args.compare_dirs:

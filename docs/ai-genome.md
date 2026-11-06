@@ -226,7 +226,7 @@ feasible elites or releasable defaults until every hard gate is satisfied.
 ## Reported-save constraints
 
 Every reported issue becomes a permanent feasibility check.
-`genome-behavior-checks.json` registers nine required cases. Five exact-save
+`genome-behavior-checks.json` registers ten required cases. Six exact-save
 adapters are implemented by `genome-behaviors.py` and the test-only
 `genome-behavior-probe.inc`:
 
@@ -234,8 +234,13 @@ adapters are implemented by `genome-behaviors.py` and the test-only
 | --- | --- |
 | notbuilding | Ordos (house 2) accepts a Light Factory order before losing its initial yard. Houses 2/5/6/7 make research progress when a legal start is observed; absent opportunity is not applicable. Positive, legal residential plots reach the real funding gate (CityZoning admission rule). |
 | problem1 / ainonuclear | No funded, available, legal nuclear-plant choice is rejected. At least one funded opportunity is required; none is not applicable. These frozen saves require no concrete, so price is the complete quote. |
+| nonuke_lowcash | Exact 160-map save `ee99099f…`, house 4 / colour slot 4, saved **Technology Installments OFF**. An authoritative compact-nuclear choice using the native **building-installments** route with spendable cash below the nuclear quote must accept a new nuclear order, produce a positive new-built delta and pay at least that accepted quote in native generator-spent telemetry. Existing standing nuclear plants never count; no funded low-cash opportunity is not applicable (whole case unverified). No global Wind Trap ban. |
 | notbuildingresearchlab | Houses 2 and 6 physically complete a Research Lab and start level-2 research. |
 | norocketturrets | The original loaded blue/cyan AI is **Neutral, house 6, visual colour slot 6** (RGB 28/164/171), not Atreides slot 1. It must order or build a rocket turret. The saved human/Fighter-shared Sardaukar house is never overridden. A mismatched/ambiguous blue roster is unverified. |
+
+Building installments in `nonuke_lowcash` are the existing progressive construction
+payments, independent of the global Technology Installments research/upgrade rule;
+this save deliberately keeps that rule OFF.
 
 Atreides no-expand, purple zero-power, Sardaukar LF/expansion and insufficient
 rocket cover remain registered but **unadapted/unverified**. Consequently no
@@ -324,6 +329,16 @@ A default recommendation requires all of:
    source/probe and genome hashes, effective options/map, applied phases and
    exact cycle/win time. Missing/stale/wrong-source/wrong-genome receipts remain
    **UNVERIFIED**; a valid loss/draw/game timeout/late win rejects qualification.
+   Every serialized effective rule is pinned to the source's compiled defaults,
+   unchanged fixture values and declared whole-game gene levels. The complete
+   dictionary must match, and its native FNV options hash is recomputed using the
+   pinned C++ field order; a partial dictionary or self-reported SHA is not proof.
+   Source certification requires explicit `workingTreeModified=false`, no
+   fingerprint error, and the v2 fingerprint matching immutable Git blobs.
+   `--qualification-smoke` exercises one original seed without qualifying;
+   resume the same results directory without this flag for all six plus seven.
+   Saved difficulty variants use native enum IDs (Easy 0, Medium 1, Hard 2,
+   Brutal 3, Defend 4), never the expression vocabulary's alphabetical order.
    `evolve --qualification RESULTS/games.csv ...` and
    `qualify --plan PLAN --evaluation-rev FULL_SHA --qualification RESULTS/games.csv
    --behaviour BEHAVIOUR/games.csv --output QUALIFICATION.json` enforce these
@@ -338,6 +353,45 @@ A default recommendation requires all of:
 4. Report Pareto trade-offs, weakest opponents, niche/context gaps, exact pins,
    traces for harmful effects and the actual recommended chromosome. The
    integrator, not the search runner, changes shipped defaults.
+
+## Offline normal-app trial
+
+For an explicit offline normal-app trial, launch the **app executable** with
+`DUNECITY_QUANTBOT_OVERLAY=/absolute/profile/overlay.ini`; optionally use an
+isolated `DUNECITY_USERDIR` too. The external file uses ordinary QuantBot
+Config.ini sections/keys. The conservative C2 overlay is:
+
+```ini
+[Force Concentration]
+CityCompactPower=true
+FirstFactoryOwnPrerequisites=true
+StartWhatMakesSense=false
+```
+
+New games and existing saves first resolve their actual mod/pinned Workshop
+revision, then read fresh QuantBot defaults, that resolved base, and this static
+overlay before any QuantBot constructor/load. Other native base values remain
+unchanged. Neither the INI nor pinned content is written; saved game options are
+unchanged. Missing, unreadable or non-absolute overlay paths abort instead of
+silently running baseline. Network/co-op/late-join launches and replays are
+refused while the overlay is requested.
+
+One warning-level `[QuantBotTrial]` normal-runtime attestation, visible without
+Diagnostic Logs, reports the resolved mod/revision, base/overlay paths, installed
+config hash and actual CityCompactPower, StartWhatMakesSense,
+FirstFactoryOwnPrerequisites, ContinuousResearch and SimpleTechSavings values.
+The owning Game restores the exact previous global config on exit or init/load
+failure, before a later lobby hash can use it.
+
+This is a **static global whole-game overlay**, not per-house/phase genome
+execution or promotion. Saved QuantBot ratios, strategy/mix and timers are
+preserved: no reinitialization or save migration. The attested config hash
+describes the installed config, not all saved AI runtime state. C2's dynamic
+CompactPower + FirstFactory booleans with SWMS OFF are the intended old-save
+trial. The overlay is intentionally not saved/replayed: loading a trial save
+again requires the explicit env/file; unset the env for ordinary pinned/base
+behaviour. Candidate-native qualification clears this desktop overlay variable
+and applies only its independently recorded genome transport.
 
 ## Commands and cluster operation
 

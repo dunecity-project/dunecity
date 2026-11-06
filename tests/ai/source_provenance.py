@@ -16,6 +16,17 @@ from pathlib import Path
 import subprocess
 
 
+SOURCE_FINGERPRINT_VERSION = 'dunecity-simulation-source-v2'
+
+
+def _entry_header(digest, name, logical_link, size):
+    encoded = name.encode('utf-8', errors='surrogateescape')
+    digest.update(len(encoded).to_bytes(8, 'big'))
+    digest.update(encoded)
+    digest.update(b'L' if logical_link else b'F')
+    digest.update(size.to_bytes(8, 'big'))
+
+
 def source_fingerprint(root: Path, build: Path, output: Path) -> str:
     root = root.resolve()
     excluded = (build.resolve(), output.resolve())
@@ -25,7 +36,7 @@ def source_fingerprint(root: Path, build: Path, output: Path) -> str:
     entries = subprocess.check_output(['git', 'ls-files', '--stage', '-z'], cwd=root).split(b'\0')
     tracked_links = {entry.split(b'\t', 1)[1].decode('utf-8', errors='surrogateescape')
                      for entry in entries if entry.startswith(b'120000 ')}
-    digest = hashlib.sha256(b'dunecity-simulation-source-v2\0')
+    digest = hashlib.sha256(SOURCE_FINGERPRINT_VERSION.encode() + b'\0')
     for name in sorted(set(filter(None, names))):
         relative = Path(name)
         if any(part in ('__pycache__', 'node_modules', '.pytest_cache') for part in relative.parts):
@@ -38,20 +49,62 @@ def source_fingerprint(root: Path, build: Path, output: Path) -> str:
             continue
         if not actual_link and not path.is_file():
             raise RuntimeError(f'Cannot fingerprint source input: {name}')
-        encoded = name.encode('utf-8', errors='surrogateescape')
-        digest.update(len(encoded).to_bytes(8, 'big'))
-        digest.update(encoded)
-        digest.update(b'L' if logical_link else b'F')
         if logical_link:
             target = os.fsencode(os.readlink(path)) if actual_link else path.read_bytes()
-            digest.update(len(target).to_bytes(8, 'big'))
+            _entry_header(digest, name, True, len(target))
             digest.update(target)
             continue
-        digest.update(path.stat().st_size.to_bytes(8, 'big'))
+        _entry_header(digest, name, False, path.stat().st_size)
         with path.open('rb') as stream:
             while True:
                 chunk = stream.read(1024 * 1024)
                 if not chunk:
                     break
                 digest.update(chunk)
+    return digest.hexdigest()
+
+
+def pinned_source_fingerprint(root: Path, source: str) -> str:
+    """The same v2 identity, derived from immutable Git blobs rather than a dirty checkout."""
+    tree = subprocess.check_output(['git', 'ls-tree', '-rz', '--full-tree', source], cwd=root)
+    entries = []
+    for entry in tree.split(b'\0'):
+        if not entry:
+            continue
+        metadata, raw_name = entry.split(b'\t', 1)
+        mode, kind, oid = metadata.split()
+        name = raw_name.decode('utf-8', errors='surrogateescape')
+        if any(part in ('__pycache__', 'node_modules', '.pytest_cache') for part in Path(name).parts):
+            continue
+        if kind != b'blob' or mode not in (b'100644', b'100755', b'120000'):
+            raise RuntimeError('Cannot certify source entry: ' + name)
+        entries.append((name, mode, oid))
+    digest = hashlib.sha256(SOURCE_FINGERPRINT_VERSION.encode() + b'\0')
+    process = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=root,
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        for name, mode, oid in sorted(entries):
+            process.stdin.write(oid + b'\n')
+            process.stdin.flush()
+            header = process.stdout.readline().split()
+            if len(header) != 3 or header[1] != b'blob':
+                raise RuntimeError('Cannot certify source blob: ' + name)
+            remaining = int(header[2])
+            _entry_header(digest, name, mode == b'120000', remaining)
+            while remaining:
+                chunk = process.stdout.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    raise RuntimeError('Truncated source blob: ' + name)
+                digest.update(chunk)
+                remaining -= len(chunk)
+            if process.stdout.read(1) != b'\n':
+                raise RuntimeError('Invalid source blob boundary: ' + name)
+    finally:
+        process.stdin.close()
+        process.stdout.close()
+        errors = process.stderr.read()
+        process.stderr.close()
+        status = process.wait()
+    if status:
+        raise RuntimeError('Cannot certify source tree: ' + errors.decode('utf-8', errors='replace'))
     return digest.hexdigest()

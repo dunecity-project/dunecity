@@ -82,8 +82,68 @@ def _literal(data, name):
     raise ValueError('Missing mandatory seed contract: ' + name)
 
 
-def contracts(reader=None):
+def native_rule_schema(reader):
+    """Inventory the pinned C++ defaults, complete serializer and native FNV field order."""
+    header = genome_model._cpp_text(reader('include/DataTypes.h').decode('utf-8'))
+    declaration = re.search(r'\bclass\s+GameOptionsClass\s*\{', header)
+    if declaration is None:
+        raise ValueError('Cannot inventory native game options')
+    members = genome_model._block(header, declaration.end())
+    declarations = dict(re.findall(r'\b(?:bool|int|TechResearch::Pace)\s+((?!operator\b)\w+)\s*(?:=(?!=)\s*([^;]+))?;', members))
+    constructor = re.search(r'GameOptionsClass\(\)\s*:\s*([\s\S]*?)\{', members)
+    if constructor is None:
+        raise ValueError('Cannot inventory native option constructor')
+    defaults = dict(declarations)
+    defaults.update(re.findall(r'\b(\w+)\(([^()]*)\)', constructor[1]))
+    pace = genome_model._cpp_text(reader('include/TechResearch.h').decode('utf-8'))
+    enums = {'TechResearch::Pace::' + key: value for key, value in re.findall(r'\b(\w+)\s*=\s*(\d+)', pace)}
+    def scalar(token):
+        token = token.strip()
+        return {'true': '1', 'false': '0'}.get(token, enums.get(token, token if re.fullmatch(r'-?\d+', token) else None))
+    writer = genome_model._function(genome_model._cpp_text(reader('src/globals.cpp').decode('utf-8')),
+                                    'writeGameOptionsToConfig')
+    bindings = re.findall(r'config\.set(?:Bool|Int)Value\(\s*section\s*,\s*"([^"]+)"\s*,\s*'
+                          r'(?:static_cast<int>\(\s*)?options\.(\w+)\s*\)?\s*\)', writer)
+    fields = {member: key for key, member in bindings}
+    if not bindings or set(fields) != set(declarations) or len(fields) != len(bindings):
+        raise ValueError('Native rules need a complete, unique option serializer')
+    hash_start = re.search(r'\bgetHash\(\)\s*const\s*\{', members)
+    if hash_start is None:
+        raise ValueError('Cannot inventory native option hash')
+    body = genome_model._block(members, hash_start.end())
+    parts = []
+    for expression in re.findall(r'optStr\s*\+=\s*([^;]+);', body):
+        prefix = re.match(r'("(?:[^"\\]|\\.)*")\s*\+\s*', expression)
+        text = json.loads(prefix[1]) if prefix else ''
+        remainder = expression[prefix.end():] if prefix else expression
+        field = re.fullmatch(r'std::to_string\((?:static_cast<std::uint32_t>\()?(\w+)\)?\)', remainder.strip())
+        if field is None or field[1] not in fields:
+            raise ValueError('Unsupported native option hash expression')
+        parts.append((text, fields[field[1]].lower()))
+    offset = re.search(r'uint64_t\s+hash\s*=\s*(\d+)ULL', body)
+    prime = re.search(r'uint64_t\s+prime\s*=\s*(\d+)ULL', body)
+    if (offset is None or prime is None
+            or {key for _, key in parts} != {key.lower() for key, _ in bindings} - {'immortal human player'}):
+        raise ValueError('Cannot certify complete native option hash coverage')
+    return dict(keys=[key for key, _ in bindings],
+                defaults={key.lower(): scalar(defaults[member]) for key, member in bindings},
+                hash_parts=parts, offset=int(offset[1]), prime=int(prime[1]))
+
+
+def native_options_hash(values, schema):
+    if set(values) != {key.lower() for key in schema['keys']}:
+        raise ValueError('Incomplete native effective options')
+    payload = ''.join(prefix + str(int(values[key])) for prefix, key in schema['hash_parts']).encode()
+    value = schema['offset']
+    for byte in payload:
+        value = ((value ^ byte) * schema['prime']) & ((1 << 64) - 1)
+    return '%016x' % value
+
+
+def contracts(reader=None, source_fingerprint=None):
     reader = reader or (lambda name: (ROOT / name).read_bytes())
+    from source_provenance import SOURCE_FINGERPRINT_VERSION
+    schema = native_rule_schema(reader)
     vanilla = _literal(reader('tests/ai/run-all-against-atreides.py'), 'DEFAULT_SEEDS')
     matrix = _literal(reader('tests/ai/scenario-matrix.py'), 'AAA_SEEDS')
     if len(vanilla) != 6 or matrix[:6] != vanilla or len(matrix) != 7:
@@ -97,7 +157,8 @@ def contracts(reader=None):
         data = reader(path)
         out[name] = dict(name=name, cell=cell, mod=mod, seeds=list(seeds), limit=limit,
                          map_sha256=sha(map_bytes), options_sha256=sha(data), options=options(data.decode('utf-8')),
-                         options_path=path, options_ini=data.decode('utf-8'))
+                         options_path=path, options_ini=data.decode('utf-8'), rule_schema=schema,
+                         source_fingerprint=source_fingerprint, source_fingerprint_version=SOURCE_FINGERPRINT_VERSION)
     return out
 
 
@@ -105,14 +166,18 @@ def contracts(reader=None):
 def pinned_contracts(source):
     if not re.fullmatch(r'[0-9a-f]{40}', source):
         raise ValueError('Qualification needs the exact full source SHA')
+    from source_provenance import pinned_source_fingerprint
     def reader(name):
         return subprocess.check_output(['git', 'show', source + ':' + name], cwd=str(ROOT))
-    return contracts(reader), genome_model._registry(json.loads(reader('tests/ai/genome-registry.json')))
+    return (contracts(reader, pinned_source_fingerprint(ROOT, source)),
+            genome_model._registry(json.loads(reader('tests/ai/genome-registry.json'))))
 
 
 def validate_schedule(args, games):
     candidate = selected(args)
     if candidate is None:
+        if getattr(args, 'qualification_smoke', False):
+            raise ValueError('--qualification-smoke needs an actual candidate manifest/genome')
         return
     if not re.fullmatch(r'[0-9a-f]{40}', getattr(args, 'qualification_source', '') or ''):
         raise ValueError('Candidate qualification requires --qualification-source FULL_COMMIT_SHA')
@@ -155,10 +220,9 @@ def overlay_hash(payload):
 
 
 def requested_ini(item, contract, registry):
-    """Only registered whole-game genes may supplement the frozen fixture."""
-    ini = configparser.ConfigParser(interpolation=None)
-    ini.optionxform = str
-    ini.read_string(contract['options_ini'])
+    """Freeze every native rule; only declared game genes may differ from its compiled default."""
+    values = dict(contract['rule_schema']['defaults'])
+    values.update(contract['options'])
     rules = genome_model.game_rules([item], registry)
     for gene in registry:
         if not genome_model.is_game_rule(gene):
@@ -167,8 +231,14 @@ def requested_ini(item, contract, registry):
         frozen = contract['options'].get(gene['key'].lower())
         if frozen is not None and frozen != level:
             raise ValueError('Candidate conflicts with frozen AllAgainst options; qualification is UNVERIFIED')
-        key = next((key for key in ini['Game Options'] if key.lower() == gene['key'].lower()), gene['key'])
-        ini.set('Game Options', key, level)
+        values[gene['key'].lower()] = level
+    if any(value is None for value in values.values()):
+        raise ValueError('Unresolved native game option default')
+    ini = configparser.ConfigParser(interpolation=None)
+    ini.optionxform = str
+    ini.add_section('Game Options')
+    for key in contract['rule_schema']['keys']:
+        ini.set('Game Options', key, values[key.lower()])
     stream = io.StringIO()
     ini.write(stream)
     return stream.getvalue()
@@ -176,7 +246,8 @@ def requested_ini(item, contract, registry):
 
 def prepare(args, game, directory):
     item, registry = selected(args)
-    contract = next(value for value in contracts().values() if value['cell'] == game['cell'])
+    expected, _ = pinned_contracts(args.qualification_source)
+    contract = next(value for value in expected.values() if value['cell'] == game['cell'])
     requested = requested_ini(item, contract, registry)
     transport().render_phase_inputs([(1, item['id'])], {key: value for key, value in context(contract).items()
                                                      if key not in ('house',)}, {item['id']: item}, directory,
@@ -213,7 +284,11 @@ def native_verdict(proof, item, source, contract, registry, phase_minutes):
                 or proof['frozen_options_sha256'] != contract['options_sha256']
                 or proof['requested_options_ini'] != requested
                 or proof['requested_options_sha256'] != sha(requested.encode())
-                or proof.get('working_tree_modified') is True
+                or proof.get('working_tree_modified') is not False
+                or proof.get('source_fingerprint_error') != ''
+                or not _hex(contract.get('source_fingerprint'), (64,))
+                or proof.get('source_fingerprint') != contract['source_fingerprint']
+                or proof.get('source_fingerprint_version') != contract['source_fingerprint_version']
                 or proof['effective_map_sha256'] != contract['map_sha256']
                 or proof['phase_inputs'] != expected or proof['overlay_sha256'] != overlay_hash(expected)
                 or not _hex(proof['probe_sha256'], (64,)) or proof.get('error')
@@ -222,14 +297,10 @@ def native_verdict(proof, item, source, contract, registry, phase_minutes):
                 or not _hex(setup.get('options_hash'))):
             return 'unverified'
         effective = proof['effective_options']
-        if (sha(canonical(effective).encode()) != proof['effective_options_sha256']
-                or any(effective.get(key) != value for key, value in contract['options'].items())):
+        if (effective != options(requested)
+                or sha(canonical(effective).encode()) != proof['effective_options_sha256']
+                or setup['options_hash'] != native_options_hash(effective, contract['rule_schema'])):
             return 'unverified'
-        for gene in registry:
-            if genome_model.is_game_rule(gene):
-                level = str(genome_model.game_rules([item], registry)[gene['id']])
-                if effective.get(gene['key'].lower()) != level:
-                    return 'unverified'
         roster = sorted((int(row['house']), int(row['team']), row['players']) for row in proof['roster'])
         expected_roster = sorted((NUMBERS[house], team, 'qBotBrutal' if code == 'QB' else 'AIPlayerHard')
                                  for house, team, code in ROSTER)
@@ -241,20 +312,21 @@ def native_verdict(proof, item, source, contract, registry, phase_minutes):
         configured = {row['phase']: row for row in proof['configured'] if row['house'] == '1'}
         applied = {row['phase']: row for row in proof['applied'] if row['house'] == '1'}
         reached = {phase for phase, minute in zip(genome_model.PHASES, phase_minutes) if minute * CPM < cycle}
-        if len(proof['applied']) != len(reached) or set(applied) != reached or int(result['seed']) != proof['seed']:
+        if len(proof['applied']) != len(reached) or set(applied) != reached:
             return 'unverified'
         if len(proof['configured']) != 3 or set(configured) != set(genome_model.PHASES):
             return 'unverified'
+        brutal_difficulty = str(transport().DIFFICULTIES.index('brutal'))
         for phase, minute in zip(genome_model.PHASES, phase_minutes):
             config = configured[phase]
             if (config['genome'] != item['id'] or int(config['start_cycle']) != minute * CPM
-                    or config.get('difficulty') != str(genome_model.DIFFICULTIES.index('brutal'))
+                    or config.get('difficulty') != brutal_difficulty
                     or config.get('controller') != '0' or not _hex(config['config_hash'])):
                 return 'unverified'
             if minute * CPM < cycle:
                 live = applied.get(phase, {})
                 if (live.get('genome') != item['id'] or int(live.get('cycle', -1)) != minute * CPM
-                        or live.get('difficulty') != str(genome_model.DIFFICULTIES.index('brutal'))
+                        or live.get('difficulty') != brutal_difficulty
                         or live.get('controller') != '0' or live.get('config_hash') != config['config_hash']):
                     return 'unverified'
         if proof['candidate_config_hash'] != configured['opening']['config_hash']:
@@ -272,7 +344,8 @@ def native_verdict(proof, item, source, contract, registry, phase_minutes):
 
 def capture(args, game, directory, lines, result, houses, binary, row, summary):
     item, registry = selected(args)
-    contract = next(value for value in contracts().values() if value['cell'] == game['cell'])
+    expected, _ = pinned_contracts(args.qualification_source)
+    contract = next(value for value in expected.values() if value['cell'] == game['cell'])
     phase_inputs = {path.name: path.read_text(encoding='utf-8') for path in directory.glob('*.ini')
                     if path.name == 'schedule.ini' or path.name.startswith('1-')}
     effective_path, map_path = directory / 'effective-options.ini', directory / 'map.ini'
@@ -285,6 +358,8 @@ def capture(args, game, directory, lines, result, houses, binary, row, summary):
                  requested_map_sha256=contract['map_sha256'], frozen_options_sha256=contract['options_sha256'],
                  requested_options_ini=requested, requested_options_sha256=sha(requested.encode()),
                  source_fingerprint=row.get('source_fingerprint', ''),
+                 source_fingerprint_error=summary.get('sourceFingerprintError'),
+                 source_fingerprint_version=contract['source_fingerprint_version'],
                  working_tree_modified=summary.get('workingTreeModified'),
                  effective_map_sha256=sha(map_path.read_bytes()) if map_path.is_file() else '',
                  effective_options=effective, effective_options_sha256=sha(canonical(effective).encode()),
@@ -310,12 +385,16 @@ def aggregate(states):
             if states and all(state == 'feasible' for state in states) else 'unverified')
 
 
-def verdicts(paths, source, genomes, phase_minutes=(0, 10, 20), local_contracts=None):
+def verdicts(paths, source, genomes, phase_minutes=(0, 10, 20)):
     known = {genome_model.genome_id(item): item for item in genomes}
     by_genome = {identity: {name: 'unverified' for name in NAMES} for identity in known}
     if not paths:
         return {identity: dict(suites=states, status='unverified') for identity, states in by_genome.items()}
-    expected, registry = local_contracts or pinned_contracts(source)
+    try:
+        expected, registry = pinned_contracts(source)
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
+        return {identity: dict(suites=states, status='unverified', certification_error=str(error))
+                for identity, states in by_genome.items()}
     rows = {}
     for supplied in paths:
         path = Path(supplied)
@@ -357,9 +436,10 @@ def verdicts(paths, source, genomes, phase_minutes=(0, 10, 20), local_contracts=
 
 
 def check_run(args):
-    item, registry = selected(args)
-    result = verdicts([args.results], args.qualification_source, [item], args.phase_minutes, (contracts(), registry))
+    item, _ = selected(args)
+    result = verdicts([args.results], args.qualification_source, [item], args.phase_minutes)
     report = dict(source_commit=args.qualification_source, genome=item, phase_minutes=list(args.phase_minutes),
-                  qualification=result, promotion='NOT_AUTHORIZED: held-out strength, history and behaviour checks still required')
+                  qualification=result, diagnostic_smoke=bool(getattr(args, 'qualification_smoke', False)),
+                  promotion='NOT_AUTHORIZED: held-out strength, history and behaviour checks still required')
     (Path(args.results) / 'candidate-qualification.json').write_text(json.dumps(report, indent=2) + '\n')
-    return result[genome_model.genome_id(item)]['status'] == 'feasible'
+    return not getattr(args, 'qualification_smoke', False) and result[genome_model.genome_id(item)]['status'] == 'feasible'
