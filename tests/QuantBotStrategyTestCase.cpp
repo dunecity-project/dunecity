@@ -6,13 +6,19 @@
 #include <players/QuantBotStrategy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotSpendingPolicy.h>
+#include <mod/Workshop.h>
+#include <mod/ModManager.h>
 
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <memory>
+#include <optional>
+#include <stdexcept>
 
 // QuantBot strategies (docs/ai-play-styles.md, "Strategies"): the pick is a pure function of the
 // game seed, the house and the config, so every peer, replay and reload plays the same strategy;
@@ -37,6 +43,52 @@ Settings randomSettings() {
     return settings;
 }
 
+
+struct OfflineTrialFiles {
+    std::filesystem::path root = std::filesystem::temp_directory_path() / ("quantbot-trial-" + Workshop::newID());
+
+    OfflineTrialFiles() { std::filesystem::create_directories(root); }
+    ~OfflineTrialFiles() {
+        std::error_code error;
+        std::filesystem::remove_all(root, error);
+    }
+
+    std::string ini(const char* name, const std::string& contents) const {
+        const auto path = root / name;
+        std::ofstream output(path, std::ios::binary);
+        output << contents;
+        output.close();
+        REQUIRE(output.good());
+        return path.string();
+    }
+
+    static std::string bytes(const std::string& path) {
+        std::ifstream input(path, std::ios::binary);
+        REQUIRE(input.good());
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+};
+
+// Same scoped environment convention as AIDecisionLogTestCase; profile tests never touch
+// the real user's QuantBot config, and put the caller's environment back on every exit.
+class ScopedTrialEnv {
+public:
+    ScopedTrialEnv(const char* name, const char* value) : name(name) {
+        if (const char* old = std::getenv(name)) previous = old;
+        set(value);
+    }
+    ~ScopedTrialEnv() { set(previous ? previous->c_str() : nullptr); }
+private:
+    void set(const char* value) {
+#ifdef _WIN32
+        _putenv_s(name, value ? value : "");
+#else
+        if (value) setenv(name, value, 1); else unsetenv(name);
+#endif
+    }
+    const char* name;
+    std::optional<std::string> previous;
+};
 } // namespace
 
 TEST_CASE("Strategy: the pick is a pure function of seed, house and config", "[ai][strategy]") {
@@ -617,6 +669,185 @@ TEST_CASE("First factory by its own prerequisites is an independently hashed def
         REQUIRE(hashes[first]!=hashes[second]);
     std::filesystem::remove(path);
     std::filesystem::remove(savedPath);
+}
+
+TEST_CASE("Offline trial starts from its resolved base instead of another mod's cached keys",
+          "[ai][config][offline-trial]") {
+    OfflineTrialFiles files;
+    const auto priorBase = files.ini("previous-mod.ini",
+        "[Force Concentration]\nContinuousResearch=true\n"
+        "[Unit Priorities]\nPreviousModOnly_Build=901\n");
+    const auto empty = files.ini("empty.ini", "");
+    QuantBotConfigTrial previousSession(priorBase, empty);
+    const auto* previous = &getQuantBotConfig();
+    const auto previousHash = previous->getConfigHash();
+    REQUIRE(previous->force.continuousResearch);
+    REQUIRE(previous->findUnitPriority("PreviousModOnly") != nullptr);
+
+    const std::string baseBytes =
+        "[Force Concentration]\nCityCompactPower=false\nStartWhatMakesSense=false\n"
+        "FirstFactoryOwnPrerequisites=true\nSimpleTechSavings=true\n"
+        "[Unit Ratios]\nHarkonnen_Tank=0.25\n"
+        "[Unit Priorities]\nTank_Build=123\nTank_Target=456\n";
+    const std::string overlayBytes =
+        "[Force Concentration]\nCityCompactPower=true\nStartWhatMakesSense=true\n"
+        "SimpleTechSavings=false\nContinuousResearch=not-a-bool\n"
+        "[Unit Ratios]\nHarkonnen_Tank=0.125\n"
+        "[Unit Priorities]\ntank_build=17\n";
+    const auto base = files.ini("resolved-revision.ini", baseBytes);
+    const auto overlay = files.ini("overlay.ini", overlayBytes);
+    {
+        QuantBotConfigTrial trial(base, overlay);
+        const auto& installed = getQuantBotConfig();
+        REQUIRE(&installed != previous);
+        REQUIRE(installed.force.cityCompactPower);
+        REQUIRE(installed.force.startWhatMakesSense);
+        REQUIRE(installed.force.firstFactoryOwnPrerequisites);
+        REQUIRE_FALSE(installed.force.simpleTechSavings);
+        // The other mod's absent key cannot leak; a malformed bool retains the fresh value.
+        REQUIRE_FALSE(installed.force.continuousResearch);
+        REQUIRE(installed.findUnitPriority("PreviousModOnly") == nullptr);
+        REQUIRE(installed.getRatios(HOUSE_HARKONNEN).tank == 0.125f);
+        REQUIRE(installed.getUnitPriority(Unit_Tank).build == 17);
+        REQUIRE(installed.getUnitPriority(Unit_Tank).target == 456);
+        REQUIRE(installed.getConfigHash() != previousHash);
+        // Sparse priority files must not trigger load()'s automatic writable-file upgrade.
+        REQUIRE(OfflineTrialFiles::bytes(base) == baseBytes);
+        REQUIRE(OfflineTrialFiles::bytes(overlay) == overlayBytes);
+    }
+    // This is the same global/hash lookup used later by a multiplayer lobby.
+    REQUIRE(&getQuantBotConfig() == previous);
+    REQUIRE(getQuantBotConfig().getConfigHash() == previousHash);
+    REQUIRE(getQuantBotConfig().force.continuousResearch);
+}
+
+TEST_CASE("Offline Vanilla trial preserves the normal profile base or missing-file defaults without writing it",
+          "[ai][config][offline-trial]") {
+    OfflineTrialFiles files;
+    const ScopedTrialEnv profile("DUNECITY_USERDIR", files.root.string().c_str());
+    auto& mods = ModManager::instance();
+    struct RestoreMod {
+        std::string name;
+        ~RestoreMod() { ModManager::instance().setActiveMod(name); }
+    } restoreMod{mods.getActiveModName()};
+    REQUIRE(mods.setActiveMod("vanilla"));
+    const auto base = getQuantBotConfigFilepath();
+    REQUIRE(std::filesystem::weakly_canonical(base)
+            == std::filesystem::weakly_canonical(files.root / "config" / "QuantBot Config.ini"));
+    const auto empty = files.ini("empty.ini", "");
+    const auto previousBase = files.ini("previous.ini", "[Force Concentration]\nContinuousResearch=true\n");
+    QuantBotConfigTrial previousSession(previousBase, empty);
+    const auto* previous = &getQuantBotConfig();
+    const auto previousHash = previous->getConfigHash();
+    const auto overlay = files.ini("overlay.ini", "[Force Concentration]\nCityCompactPower=true\n");
+
+    SECTION("A missing Vanilla profile reads fresh defaults, never a cached config or bundled substitute") {
+        REQUIRE_FALSE(std::filesystem::exists(base));
+        QuantBotConfig expected;
+        expected.force.cityCompactPower = true;
+        {
+            QuantBotConfigTrial trial(base, overlay, true);
+            REQUIRE(getQuantBotConfig().getConfigHash() == expected.getConfigHash());
+            REQUIRE_FALSE(std::filesystem::exists(base));
+        }
+        REQUIRE_FALSE(std::filesystem::exists(base));
+    }
+    SECTION("An existing customized Vanilla profile is the actual base") {
+        const std::string customBytes =
+            "[General Behavior]\nAttackTimerMs=123456\n"
+            "[Force Concentration]\nContinuousResearch=true\n"
+            "[Unit Ratios]\nHarkonnen_Tank=0.125\n";
+        files.ini("config/QuantBot Config.ini", customBytes);
+        {
+            QuantBotConfigTrial trial(base, overlay, true);
+            REQUIRE(getQuantBotConfig().attackTimerMs == 123456);
+            REQUIRE(getQuantBotConfig().force.continuousResearch);
+            REQUIRE(getQuantBotConfig().getRatios(HOUSE_HARKONNEN).tank == 0.125f);
+            REQUIRE(getQuantBotConfig().force.cityCompactPower);
+            REQUIRE(OfflineTrialFiles::bytes(base) == customBytes);
+        }
+        REQUIRE(OfflineTrialFiles::bytes(base) == customBytes);
+    }
+    SECTION("An existing unusable profile must not silently use defaults") {
+        std::filesystem::create_directory(base);
+        REQUIRE_THROWS_AS(QuantBotConfigTrial(base, overlay, true), std::runtime_error);
+    }
+    REQUIRE(&getQuantBotConfig() == previous);
+    REQUIRE(getQuantBotConfig().getConfigHash() == previousHash);
+}
+
+TEST_CASE("Offline trial rejects unavailable inputs without publishing a partly read base",
+          "[ai][config][offline-trial]") {
+    OfflineTrialFiles files;
+    const auto previousBase = files.ini("previous.ini", "[Force Concentration]\nContinuousResearch=true\n");
+    const auto empty = files.ini("empty.ini", "");
+    QuantBotConfigTrial previousSession(previousBase, empty);
+    const auto* previous = &getQuantBotConfig();
+    const auto previousHash = previous->getConfigHash();
+    const auto base = files.ini("base.ini", "[Force Concentration]\nCityCompactPower=true\n");
+    const auto overlay = files.ini("overlay.ini", "[Force Concentration]\nFirstFactoryOwnPrerequisites=true\n");
+    const auto missing = (files.root / "missing.ini").string();
+    const auto rejected = [&](const std::string& candidateBase, const std::string& candidateOverlay) {
+        REQUIRE_THROWS_AS(QuantBotConfigTrial(candidateBase, candidateOverlay), std::runtime_error);
+        REQUIRE(&getQuantBotConfig() == previous);
+        REQUIRE(getQuantBotConfig().getConfigHash() == previousHash);
+    };
+    rejected(base, missing); // The new base was read, but the overlay was not.
+    rejected(missing, overlay);
+    rejected(base, "relative-overlay.ini");
+    rejected(base, "");
+    rejected(base, files.root.string()); // A directory is not a readable overlay file.
+}
+
+TEST_CASE("Offline trial restores the singleton when an installed load scope unwinds",
+          "[ai][config][offline-trial]") {
+    OfflineTrialFiles files;
+    const auto base = files.ini("base.ini", "[Force Concentration]\nCityCompactPower=false\n");
+    const auto empty = files.ini("empty.ini", "");
+    const auto overlay = files.ini("overlay.ini", "[Force Concentration]\nCityCompactPower=true\n");
+    QuantBotConfigTrial previousSession(base, empty);
+    const auto* previous = &getQuantBotConfig();
+    const auto previousHash = previous->getConfigHash();
+    struct LoadFailure {};
+    const auto failedLoad = [&] {
+        auto pending = std::make_unique<QuantBotConfigTrial>(base, overlay);
+        REQUIRE(getQuantBotConfig().force.cityCompactPower);
+        REQUIRE(getQuantBotConfig().getConfigHash() != previousHash);
+        throw LoadFailure{};
+    };
+    REQUIRE_THROWS_AS(failedLoad(), LoadFailure);
+    REQUIRE(&getQuantBotConfig() == previous);
+    REQUIRE(getQuantBotConfig().getConfigHash() == previousHash);
+    REQUIRE_FALSE(getQuantBotConfig().force.cityCompactPower);
+}
+
+TEST_CASE("Offline overlay launch guard leaves absent requests alone and rejects network and replay use",
+          "[ai][config][offline-trial]") {
+    OfflineTrialFiles files;
+    const auto base = files.ini("base.ini", "[Force Concentration]\nContinuousResearch=true\n");
+    const auto overlay = files.ini("overlay.ini", "");
+    QuantBotConfigTrial previousSession(base, overlay);
+    const auto* previous = &getQuantBotConfig();
+    const auto previousHash = previous->getConfigHash();
+    for(const auto type : {GameType::CustomMultiplayer, GameType::LoadMultiplayer,
+                          GameType::CampaignCoop, GameType::SkirmishCoop, GameType::LoadCoop}) {
+        CAPTURE(type);
+        REQUIRE_FALSE(QuantBotConfigTrial::checkLaunch(nullptr, type, true, true));
+        REQUIRE_THROWS_AS(QuantBotConfigTrial::checkLaunch(overlay.c_str(), type, false, false), std::runtime_error);
+    }
+    for(const auto type : {GameType::Campaign, GameType::Skirmish, GameType::CustomGame, GameType::LoadSavegame}) {
+        CAPTURE(type);
+        REQUIRE(QuantBotConfigTrial::checkLaunch(overlay.c_str(), type, false, false));
+        REQUIRE_THROWS_AS(QuantBotConfigTrial::checkLaunch(overlay.c_str(), type, true, false), std::runtime_error);
+        REQUIRE_THROWS_AS(QuantBotConfigTrial::checkLaunch(overlay.c_str(), type, false, true), std::runtime_error);
+    }
+    // A multiplayer/late-join load is still blocked after reading an offline saved type;
+    // its retained load guard contributes to networkActive at the real saved-load hook.
+    REQUIRE_THROWS_AS(QuantBotConfigTrial::checkLaunch(overlay.c_str(), GameType::CustomGame, true, false),
+                      std::runtime_error);
+    REQUIRE(QuantBotConfigTrial::checkLaunch("", GameType::CustomGame, false, false));
+    REQUIRE(&getQuantBotConfig() == previous);
+    REQUIRE(getQuantBotConfig().getConfigHash() == previousHash);
 }
 
 TEST_CASE("Existing composition unit choice defaults off and independently round-trips both hashed states",

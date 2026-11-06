@@ -420,9 +420,9 @@ struct QuantBotConfig {
     // Immutable revisions and checksummed family bundles use defaults in memory only.
     bool load(const std::string& filepath);
 
-    /// Test-only (tests/ai play styles): applies the keys present in an INI file on top of this
-    /// config - any QuantBot Config.ini key, the others keep their values - without creating or
-    /// writing the file. False if the file does not exist.
+    /// Applies only the keys present in an INI file, retaining the other values, without
+    /// creating or writing the file. Used by test styles and explicit offline trials.
+    /// False if the file cannot be opened for reading.
     bool applyOverrides(const std::string& filepath);
     
     // Save to INI file
@@ -463,6 +463,28 @@ private:
 
 // Global instance (initialized on first use)
 QuantBotConfig& getQuantBotConfig();
+
+/// An explicit offline experiment, never a saved or network setting. Its address must remain
+/// stable: the singleton borrows installed_ until destruction restores the exact prior pointer.
+class QuantBotConfigTrial final {
+public:
+    /// No request is a no-op, even for network/replay launches. A present request (including
+    /// an empty string) rejects network/co-op/late-join loads and replays.
+    static bool checkLaunch(const char* overlayPath, GameType launchType, bool networkActive, bool replay);
+
+    /// Read fresh defaults + the resolved normal config source + overlay, publishing only
+    /// after the reads succeed. A missing Vanilla user-profile base may use fresh defaults;
+    /// a missing mod/revision base must fail. Never calls load() or writes either file.
+    QuantBotConfigTrial(const std::string& basePath, const std::string& overlayPath,
+                       bool missingProfileBaseUsesDefaults = false);
+    ~QuantBotConfigTrial();
+    QuantBotConfigTrial(const QuantBotConfigTrial&) = delete;
+    QuantBotConfigTrial& operator=(const QuantBotConfigTrial&) = delete;
+
+private:
+    QuantBotConfig installed_;
+    QuantBotConfig* previous_ = nullptr;
+};
 
 // Get config file paths
 std::string getQuantBotConfigFilepath();

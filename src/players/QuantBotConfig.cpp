@@ -763,8 +763,9 @@ bool QuantBotConfig::load(const std::string& filepath) {
 }
 
 bool QuantBotConfig::applyOverrides(const std::string& filepath) {
-    if (!existsFile(filepath)) return false;
-    INIFile iniFile(filepath);
+    sdl2::RWops_ptr file{SDL_RWFromFile(filepath.c_str(), "r")};
+    if (!file) return false;
+    INIFile iniFile(file.get());
     readFrom(iniFile);
     return true;
 }
@@ -1032,6 +1033,40 @@ QuantBotConfig& getQuantBotConfig() {
         g_quantBotConfig->logSettings();
     }
     return *g_quantBotConfig;
+}
+
+bool QuantBotConfigTrial::checkLaunch(const char* overlayPath, GameType launchType,
+                                     bool networkActive, bool replay) {
+    if (!overlayPath) return false;
+    if (isNetworkGameType(launchType) || networkActive || replay) {
+        THROW(std::runtime_error,
+              "DUNECITY_QUANTBOT_OVERLAY is an offline experiment; network/co-op/late-join games and replays are not supported.");
+    }
+    return true;
+}
+
+QuantBotConfigTrial::QuantBotConfigTrial(const std::string& basePath, const std::string& overlayPath,
+                                       bool missingProfileBaseUsesDefaults) {
+    if (!std::filesystem::path(overlayPath).is_absolute()) {
+        THROW(std::runtime_error, "DUNECITY_QUANTBOT_OVERLAY requires an absolute path, got '%s'.", overlayPath);
+    }
+    const auto baseStatus = std::filesystem::status(basePath);
+    const bool defaultsOnly = missingProfileBaseUsesDefaults
+        && baseStatus.type() == std::filesystem::file_type::not_found;
+    if (!defaultsOnly && (!std::filesystem::is_regular_file(baseStatus) || !installed_.applyOverrides(basePath))) {
+        THROW(std::runtime_error, "Cannot read the resolved QuantBot trial base '%s'.", basePath);
+    }
+    if (!std::filesystem::is_regular_file(overlayPath) || !installed_.applyOverrides(overlayPath)) {
+        THROW(std::runtime_error, "Cannot read DUNECITY_QUANTBOT_OVERLAY '%s'.", overlayPath);
+    }
+    // Neither failed reads nor exceptions above can affect a menu's cached config. The
+    // installed config lives inside this nonmovable owner, not in either source INI.
+    previous_ = g_quantBotConfig;
+    g_quantBotConfig = &installed_;
+}
+
+QuantBotConfigTrial::~QuantBotConfigTrial() {
+    g_quantBotConfig = previous_;
 }
 
 std::string getQuantBotConfigFilepath() {
