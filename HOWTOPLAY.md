@@ -136,10 +136,11 @@ press **Research level** to raise only your house's technology. Each study
 unlocks the next level, up to level 9. **Research Pace** changes the total
 price and study time; the sidebar shows both before you start.
 
-**Technology Installments** is on by default for new games and applies to
-humans and AI alike, for both research and Construction Yard/factory upgrades.
-You do not need the full price in the bank, and can start even with zero
-credits. Research drains credits on each funded
+**Technology Installments** is an optional rule in **Game Rules** (off by
+default) and applies to humans and AI alike, for both research and
+Construction Yard/factory upgrades. When it is on, you do not need the full
+price in the bank and can start even with zero credits. Research drains
+credits on each funded
 simulation tick. The displayed **Drain** is the nominal credits per game
 second; the exact total paid over a completed study equals its quoted price.
 The sidebar also shows progress, the amount paid, and remaining study time.
@@ -150,7 +151,7 @@ is fully funded. Income resumes research automatically: time spent paused
 does not create catch-up charges. Losing the researching lab cancels the
 study without a refund.
 
-Turning **Technology Installments** off restores full payment when starting
+With **Technology Installments** off, the full price is needed when starting
 each new study. A study keeps the price, duration and payment mode it started
 with. Older saved games retain their upfront-payment rules, and their
 already-paid research timers continue without another charge; the sidebar

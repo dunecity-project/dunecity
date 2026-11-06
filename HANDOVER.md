@@ -1,6 +1,7 @@
 ## 2026-11-06 — Shared technology installments and continuous AI research (OMP ResearchLabAI, unreleased)
 
-- New hashed **Technology Installments** match rule defaults ON for new games:
+- New hashed **Technology Installments** match rule, **default OFF** for new games
+  (Main, 2026-11-06, after the measured scenario regression below): when ON,
   humans and AI start research or any BuilderBase upgrade with any balance.
   Research captures its mode/price/duration and pays exact cumulative 32.32 dues;
   insufficient cash preserves partial payment and pauses the countdown, without
@@ -9,7 +10,9 @@
 - **Save9884/MOD19, protocol113**: one game-rule bool and 17 captured-research
   bytes per house, included in state digests. Frozen9882/MOD17 and9883/MOD18
   setups load installments OFF. Already-paid research countdowns are never
-  recharged or repriced. No extra BuilderBase or QuantBot saved fields.
+  recharged or repriced. No extra BuilderBase or QuantBot saved fields. With the
+  rule ON, the object digest also mixes each builder's upgrading flag, level and
+  exact paid progress, so sub-credit paused upgrades are visible to lockstep checks.
 - Independent hashed `[Force Concentration] ContinuousResearch` is **default
   OFF**, pending Genome promotion. With **Technology Installments ON**, it starts
   the next study through tech9 without full-quote reserves, income/fleet/crime
@@ -30,6 +33,14 @@
   at the cutoff. Rule OFF/policy OFF reaches tech4/tech3 respectively.
   Ordos's prepaid tech3 completes after exactly8196 timer updates in every arm;
   Ordos/Neutral later lose their labs in combat, not to a research veto.
+- Rule-only scenario comparison at `33014bf1` (same four mandatory smoke games,
+  overlay the only difference): OFF reproduces every expected result (CY
+  Brutal-v-Easy won at 31.66 min, FFA 90866 reaches the 60-minute exhaustion).
+  ON fails both: Brutal needs 59.76 min (Easy army 5,550 vs 2,000 at minute 20)
+  and FFA 90866 ends in a 28.28-minute Brutal win. Hence default OFF; ON returns
+  only after the AI benefits at least as much and the unchanged gates pass.
+  ContinuousResearch=1 with the rule OFF now reproduces ContinuousResearch=0
+  exactly on the private save (identical lab/tech transitions and finals).
 - Real-save bytes stay under private `outputs/` and frozen queue transport.
   The old encoded crime save is removed; committed crime/continuous coverage
   uses synthetic real-engine worlds. Private continuation tooling records

@@ -492,8 +492,8 @@ level9 without capital reserves, income/crime/fleet readiness or army pacing;
 actual attacks on economic assets and blackouts may defer a start. With the
 rule OFF, starting still needs the full price, so the complete legacy research
 planner applies. The ordinary engine decides legal ownership, concurrent
-research and payment. New-game `Technology Installments`
-is a shared human/AI rule: studies and BuilderBase upgrades can start at any
+research and payment. The opt-in `Technology Installments` match rule (default
+OFF) is shared by humans and AI: studies and BuilderBase upgrades can start at any
 balance and pause rather than cancel when cash runs out. Old saves retain
 their upfront rule and already-paid research timers. The full AI fixture
 also tests zero-cash start, pause/resume, exact payment and successive

@@ -454,8 +454,8 @@ public:
         /// Optional Research Lab and per-house technology progression (levels 1-9).
         bool        researchLab;
         TechResearch::Pace researchPace = TechResearch::Pace::Normal;
-        /// Start research and builder upgrades without their full price; pay while they run.
-        bool        technologyInstallments = true;
+        /// Opt-in: start research and builder upgrades without their full price; pay while they run.
+        bool        technologyInstallments = false;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation

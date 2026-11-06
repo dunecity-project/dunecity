@@ -213,12 +213,12 @@ void researchSameState(const House* owner, const ResearchSnapshot& state) {
 void researchInstallmentTotals(std::ostream& results) {
     using TechResearch::Pace;
     for(const auto pace : {Pace::Fast, Pace::Normal, Pace::Slow, Pace::VerySlow}) {
-        auto game = researchGame(true, false, 64, pace);
+        auto game = researchGame(true, false, 64, pace, true);
         House* owner = game->getHouse(HOUSE_ATREIDES);
         auto* lab = researchPlaceLab(owner);
         const auto player = owner->getPlayerList().front()->getPlayerID();
         const auto originalRules = game->getGameInitSettings().getGameOptions();
-        researchRequire(originalRules.technologyInstallments, "New-game source default did not enable installments");
+        researchRequire(originalRules.technologyInstallments, "Installment totals fixture did not enable its rule");
         for(int target = 2; target <= 9; ++target) {
             researchEmptyCredits(owner);
             const int cost = owner->getTechResearchCost();
@@ -355,7 +355,7 @@ std::vector<std::string> researchResume(Game& game, Sint64 partialPaid,
 }
 
 void researchInstallmentContinuation(const std::string& out, std::ostream& results) {
-    auto game = researchGame(true);
+    auto game = researchGame(true, false, 64, TechResearch::Pace::Normal, true);
     auto* owner = game->getHouse(HOUSE_ATREIDES);
     House* opponent = nullptr;
     for(int id = 0; id < NUM_HOUSES; ++id)
@@ -619,14 +619,14 @@ void upgradeNote(std::ostream& results, const char* name, const char* controller
 void upgradeExactTotals(std::ostream& results) {
     for(const bool ai : {false, true})
     for(const int item : {Structure_ConstructionYard, Structure_HeavyFactory}) {
-        auto game = researchGame(false, ai, 64, TechResearch::Pace::Normal, std::nullopt, 9);
+        auto game = researchGame(false, ai, 64, TechResearch::Pace::Normal, true, 9);
         auto* owner = game->getHouse(HOUSE_ATREIDES);
         auto* builder = upgradeBuilder(owner, item);
         const int level = builder->getCurrentUpgradeLevel(), cost = builder->getUpgradeCost();
         const Sint64 total = FixPoint(cost).getRawValue(), step = upgradeStep(total);
         researchRequire(game->getGameInitSettings().getGameOptions().technologyInstallments
             && !game->getGameInitSettings().getGameOptions().instantBuild,
-            "Exact upgrade fixture did not retain the normal source-default technology rules");
+            "Exact upgrade fixture did not enable installments with normal build speed");
         researchEmptyCredits(owner);
         researchRequire(builder->canStartUpgrade(), "ON upgrade still requires its full price at zero cash");
         owner->addUnstoredCredits(FixPoint::FromRawValue(total + 1));
@@ -661,7 +661,7 @@ void upgradeExactTotals(std::ostream& results) {
 
 void upgradeAIPartials(std::ostream& results) {
     for(const int item : {Structure_ConstructionYard, Structure_HeavyFactory}) {
-        auto game = researchGame(false, true, 64, TechResearch::Pace::Normal, std::nullopt, 9);
+        auto game = researchGame(false, true, 64, TechResearch::Pace::Normal, true, 9);
         auto* owner = game->getHouse(HOUSE_ATREIDES);
         auto* builder = upgradeBuilder(owner, item);
         const int level = builder->getCurrentUpgradeLevel();
@@ -726,7 +726,7 @@ std::vector<std::string> upgradeResume(Game& game, Uint32 builderID, int origina
 
 void upgradeHumanContinuations(const std::string& out, std::ostream& results) {
     for(const int item : {Structure_ConstructionYard, Structure_HeavyFactory}) {
-        auto game = researchGame(false, false, 64, TechResearch::Pace::Normal, std::nullopt, 9);
+        auto game = researchGame(false, false, 64, TechResearch::Pace::Normal, true, 9);
         auto* owner = game->getHouse(HOUSE_ATREIDES);
         auto* builder = upgradeBuilder(owner, item);
         const Uint32 builderID = builder->getObjectID();
@@ -1100,11 +1100,11 @@ int runResearchLabProbe() {
     note("pace_slow_complete", *game, owner);
     researchEnd(game);
 
-    game = researchGame(true, true);
+    game = researchGame(true, true, 64, TechResearch::Pace::Normal, true);
     owner = game->getHouse(HOUSE_ATREIDES);
     researchRequire(owner->getNumItems(Structure_ResearchLab) == 0, "AI was granted a free lab");
     researchRequire(game->getGameInitSettings().getGameOptions().technologyInstallments,
-                    "Natural QuantBot fixture did not retain the new-game installment default");
+                    "Natural QuantBot installment fixture did not enable its rule");
     bool seenInstallment = false;
     const int limit = MILLI2CYCLES(15 * 60 * 1000);
     int seenLab = -1;

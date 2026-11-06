@@ -1216,14 +1216,14 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
     }
 }
 
-TEST_CASE("MOD19 technology installments default on and are hashed, saved and required on the wire",
+TEST_CASE("MOD19 technology installments default off and are hashed, saved and required on the wire",
           "[research][upgrade][installments][network][save]") {
     SettingsClass::GameOptionsClass defaults;
-    REQUIRE(defaults.technologyInstallments);
-    auto upfront = defaults;
-    upfront.technologyInstallments = false;
-    REQUIRE(upfront != defaults);
-    REQUIRE(upfront.getHash() != defaults.getHash());
+    REQUIRE_FALSE(defaults.technologyInstallments);
+    auto installments = defaults;
+    installments.technologyInstallments = true;
+    REQUIRE(installments != defaults);
+    REQUIRE(installments.getHash() != defaults.getHash());
 
     auto original = makeCoop(false, true);
     auto options = original.getGameOptions();

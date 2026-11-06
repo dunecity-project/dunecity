@@ -8328,6 +8328,9 @@ GameStateDigest::Digest Game::computeStateDigest() const {
     }
     digest.houseHash = houses.value();
 
+    // An installment upgrade can pause on a sub-credit payment that changes no displayed
+    // balance. Only that rule mixes the builders' exact upgrade state; legacy digests stay as they were.
+    const bool installments = gameInitSettings.getGameOptions().technologyInstallments;
     GameStateDigest::Hasher objects;
     Uint32 objectCount = 0;
     objectManager.forEachObject([&](Uint32 objectID, const ObjectBase* pObject) {
@@ -8343,6 +8346,12 @@ GameStateDigest::Digest Game::computeStateDigest() const {
         objects.mixInt64(static_cast<std::int64_t>(pObject->getHealth().getRawValue()));
         objects.mixInt32(pObject->getLocation().x);
         objects.mixInt32(pObject->getLocation().y);
+        if(installments && pObject->isABuilder()) {
+            const auto* pBuilder = static_cast<const BuilderBase*>(pObject);
+            objects.mixUint8(pBuilder->isUpgrading() ? 1 : 0);
+            objects.mixInt32(pBuilder->getCurrentUpgradeLevel());
+            objects.mixInt64(pBuilder->getUpgradeProgress().getRawValue());
+        }
     });
     digest.objectHash  = objects.value();
     digest.objectCount = objectCount;

@@ -225,7 +225,7 @@ void researchUIOptionsProbe(Game& game) {
     using namespace ResearchLabUIProbe;
     viewport();
     SettingsClass::GameOptionsClass defaults;
-    require(defaults.technologyInstallments, "New-game technology installments do not default on");
+    require(!defaults.technologyInstallments, "New-game technology installments do not default off");
     auto rules = game.getGameInitSettings().getGameOptions();
     GameOptionsWindow window(rules);
     require(window.technologyInstallmentsCheckbox.isChecked() == rules.technologyInstallments,
@@ -260,7 +260,7 @@ void researchUIOptionsProbe(Game& game) {
             "Technology Installments was lost when reopening Game Rules");
     require(game.getGameInitSettings().getGameOptions() == rules && commandCount(game) == commands,
             "Inspecting/editing a detached rules dialog changed the running match");
-    SDL_Log("RESEARCH_UI_OPTIONS: viewport=640x480 default=1 initial=%d selected=%d checkbox=%d,%d,%d,%d screenshot=%s",
+    SDL_Log("RESEARCH_UI_OPTIONS: viewport=640x480 default=0 initial=%d selected=%d checkbox=%d,%d,%d,%d screenshot=%s",
         int(rules.technologyInstallments), int(expected.technologyInstallments), rect.x, rect.y, rect.w, rect.h, path.c_str());
 }
 
