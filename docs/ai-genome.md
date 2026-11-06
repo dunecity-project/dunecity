@@ -369,10 +369,13 @@ StartWhatMakesSense=false
 ```
 
 New games and existing saves first resolve their actual mod/pinned Workshop
-revision, then read fresh QuantBot defaults, that resolved base, and this static
-overlay before any QuantBot constructor/load. Other native base values remain
-unchanged. Neither the INI nor pinned content is written; saved game options are
-unchanged. Missing, unreadable or non-absolute overlay paths abort instead of
+revision, then read fresh QuantBot defaults, the **normal config source selected
+after that resolution**, and this static overlay before any QuantBot constructor/load.
+Vanilla retains the profile's `config/QuantBot Config.ini` customizations; if that
+file is absent, fresh compiled defaults are used without creating/writing it.
+Other mods retain normal mod/fallback config resolution. Other native base values
+remain unchanged. Neither the INI nor pinned content is written; saved game options
+are unchanged. Missing, unreadable or non-absolute overlay paths abort instead of
 silently running baseline. Network/co-op/late-join launches and replays are
 refused while the overlay is requested.
 
