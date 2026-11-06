@@ -556,7 +556,11 @@ bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
         // Nothing else is running or waiting for this money: start before it is all there.
         rule = "sole_primary";
     } else if (military) {
-        if (armyShare > 0 && sensibleDeficit(pass,cash,armyShare,SensibleLanes::Military,1,paidNow) < 0)
+        // The nominal army share is not a second wallet: old saves, sole
+        // starts and falling income can leave development using more than
+        // its share. Keep every actual lane solvent before adding a unit.
+        if (armyShare > 0 && sensibleDeficit(pass,cash,armyShare,SensibleLanes::Military,1,paidNow) < 0
+            && (deficit = sensibleDeficit(pass,cash,10000,SensibleLanes::All,1,paidNow)) < 0)
             rule = "army_share";
         else if ((deficit = sensibleDeficit(pass,cash,10000,SensibleLanes::All,withPending,paidNow)) < 0)
             rule = "spare_funds";

@@ -586,7 +586,8 @@ Admission, first match wins:
    is running yet (`emergency_funded` / `emergency_start`).
 3. No project lane is running (repairs ignored) and nobody else has a claim —
    development: `a = 0`; army: no pending development want (`sole_primary`).
-4. Army: `solvent_a(army lanes + candidate)` (`army_share`) or
+4. Army: `solvent_a(army lanes + candidate)` **and**
+   `solvent_10000(all lanes + candidate)` (`army_share`), or
    `solvent_10000(all lanes + candidate + pending)` (`spare_funds`).
 5. Development: `solvent_(10000-a)(development lanes + candidate + pending)` and
    `solvent_10000(all lanes + candidate + pending)` (`development_share`).
@@ -600,6 +601,14 @@ The planner does not create automatic holds, change build speed, cancel human
 work or change engine payment ordering. When every lane is solvent the engine's
 object-order payment does not matter; an unfunded sole/emergency start may
 still pause normally, but nothing else is started alongside it unfunded.
+
+The army's nominal share is not another wallet or a build-speed scheduler.
+Existing sole/emergency starts, loaded human/AI queues or falling income may
+already consume more than development's share. A new army order must therefore
+pass the whole-wallet check as well; observed shared-human work stays counted
+and is never held, cancelled or rescheduled. The real-queue `parallelDrains`
+fixture checks the counterexample: a unit fits its own army share while two
+existing civil lanes exceed theirs; it waits until all actual work is funded.
 
 ### 5.5 Replacement map and gene interactions
 

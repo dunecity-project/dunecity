@@ -731,17 +731,47 @@ inline void parallelDrains(const char* playerClass) {
     const int allCash = whole({primary, secondary, next});
     require(allCash > whole({primary, next}) && allCash > whole({next}),
             "The aggregate-drain boundary does not distinguish every existing primary obligation");
-    // Military production is admitted by its reserved share over its own lines,
-    // or by spare funds that leave both running development lines funded.
+    // The reserved share is a claim on this same real wallet, not another
+    // payment scheduler. These two native civil queues already consume more
+    // than their 70% allowance: a unit fitting its own 30% must still wait.
     const auto reserved = [&](int credits) {
         const int64_t cash = FixPoint(credits).getRawValue();
         const int share = armyShare(capacity, receipts, cash);
         return share > 0 && shareOf(cash, share) >= requiredScaled({next}, receipts, share);
     };
-    int boundary = 0;
-    while (boundary < allCash && !reserved(boundary)) ++boundary;
-    require(boundary > 0, "A lower-priority military order needed no cash beside two unfunded lines");
-    const char* rule = boundary < allCash ? "army_share" : "spare_funds";
+    int nominalCash = 0;
+    while (nominalCash < allCash && !reserved(nominalCash)) ++nominalCash;
+    require(nominalCash > 0 && nominalCash < allCash && reserved(nominalCash),
+            "Civil-overbook control does not separate the nominal army share from the real wallet");
+    world.cash(nominalCash);
+    pass = observe(world);
+    const int developmentShare = 10000 - pass.sensibleArmyShare;
+    require(sameReceipts(receiptsOf(world, pass), receipts) && armyCapacity(world, pass) == capacity
+                && pass.sensibleArmyShare == armyShare(capacity, receipts, cashQ32(world))
+                && requiredScaled({primary, secondary}, receipts, developmentShare)
+                    > shareOf(cashQ32(world), developmentShare),
+            "Existing civil queues do not exceed their nominal development share");
+    {
+        QuantBot::BuilderTurn turn(pass.money);
+        turn.pStructure = light;
+        turn.pBuilder = light;
+        world.bot->beginBuilderTurn(pass, turn);
+        const auto cash = cashQ32(world), spent = world.spentQ32();
+        const int quotes = pass.capitalOrderedCost;
+        require(!world.bot->produceItemWithLogging(pass, turn, Unit_Quad, __LINE__, "fixture_civil_overbook"),
+                "The nominal army share started a new unit beside insolvent real civil queues");
+        require(world.queued(Unit_Quad) == 0 && world.queued(Structure_WindTrap) == 1
+                    && world.queued(Structure_Refinery) == 1 && pass.sensibleDrains.size() == 2
+                    && cashQ32(world) == cash && world.spentQ32() == spent && pass.capitalOrderedCost == quotes
+                    && !world.yard->isOnHold() && !secondYard->isOnHold(),
+                "Refusing an overbooked unit changed existing work, cash or accepted-order accounting");
+        requireProfile(world, pass, world.yard);
+        requireProfile(world, pass, secondYard);
+    }
+    SDL_Log("START_WHAT_MAKES_SENSE_ARMY_OVERBOOK: civil_lanes=2 civil_over_development_share=1 army_nominal_fits=1 "
+            "cash=%d whole_profile_cash=%d unit_held=1 existing_work_unchanged=1", nominalCash, allCash);
+    const int boundary = allCash;
+    const char* rule = reserved(boundary) ? "army_share" : "spare_funds";
     for (bool funded : {false, true}) {
         world.cash(boundary - (funded ? 0 : 1));
         pass = observe(world);
@@ -756,7 +786,7 @@ inline void parallelDrains(const char* playerClass) {
         const int quotes = pass.capitalOrderedCost;
         const bool accepted = world.bot->produceItemWithLogging(pass, turn, Unit_Quad, __LINE__, "fixture_parallel_drain");
         require(accepted == funded && world.queued(Unit_Quad) == int(funded),
-                "Lower-priority military acceptance disagrees with its exact army-share or aggregate cash profile");
+                "Lower-priority military acceptance disagrees with the entire real wallet's finite cash profile");
         require(cashQ32(world) == cash && world.spentQ32() == spent && pass.money == world.owner->getCredits(),
                 "A lower-priority quote was booked as paid cash or removed from the live wallet");
         require(pass.capitalOrderedCost == quotes + (funded ? quote : 0),
@@ -1097,7 +1127,7 @@ void runStartWhatMakesSenseProbe(const char* playerClass) {
     underfundedPredecessor(playerClass);
     armyEntitlement(playerClass);
     rollback(playerClass);
-    SDL_Log("START_WHAT_MAKES_SENSE_PASS: difficulty=%s full_bot_power_light_civic=1 off_wait=1 zero_start=1 low_cash=1 no_cheap_fallback=1 threatened_first_factory=1 imminent_power_first=1 blackout_power_first=1 quotes_not_paid=1 finite_parallel_drains=1 army_share_parallel=1 underfunded_predecessor_first=1 blackout_emergency_exception=1 army_reserve_not_whole_prefix=1 army_entitlement_need_ratio_target_cap=1 fractional_pause_resume=1 sequential_foundations=1 rollback_actual_queue=1",
+    SDL_Log("START_WHAT_MAKES_SENSE_PASS: difficulty=%s full_bot_power_light_civic=1 off_wait=1 zero_start=1 low_cash=1 no_cheap_fallback=1 threatened_first_factory=1 imminent_power_first=1 blackout_power_first=1 quotes_not_paid=1 finite_parallel_drains=1 army_share_parallel=1 army_share_all_lanes_solvent=1 civil_overbook_held=1 underfunded_predecessor_first=1 blackout_emergency_exception=1 army_reserve_not_whole_prefix=1 army_entitlement_need_ratio_target_cap=1 fractional_pause_resume=1 sequential_foundations=1 rollback_actual_queue=1",
         playerClass);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=start_what_makes_sense outcome=passed");
 }
