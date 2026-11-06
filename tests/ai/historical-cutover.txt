@@ -1,0 +1,68 @@
+32adfb8a whole-commit historical cutover bridge (test-only)
+========================================================
+BEFORE original source: 4c3ee80b784105bc665d7f1dc9c29c971df08583 (exact first parent).
+AFTER original source: 32adfb8a5790658154b65765686786376f6dcd5a.
+This bridge is applied to one original baseline at a time. Each arm submits 24
+Vanilla research-OFF contexts: seeds 9101,148680876,55001,77001; Medium/Hard/Brutal;
+1v1 and FFA6; archived 128 CY/army0/city0/T9/credits3000 maps; 40 game minutes.
+Maps and classic OFF option bytes are reused verbatim from the preserved 807
+fixture archive. Classic options SHA256:
+10f31cd0cba4ee26439f9795b97b13b226a67f26ab0481a6812a46048304cef1.
+The fixture manifest retains the original replay/archive provenance. Its release
+metadata describes that archive's extraction, NOT this arm's engine identity.
+
+Only tests/ai bridge files differ from each original source. No engine/AI/config/
+mod is backported, frozen at another revision, tuned, or otherwise altered.
+The old GFXManager workshop INIFile conditional fixed for release807 does not
+occur in this BEFORE source: that portability patch is not carried blindly.
+The original native engine is built by the cluster, then a private main includes
+the observer with access-control relaxation and links those same native objects.
+Native local spectator mode is available here; use its original setting before
+initGame, no HumanPlayer registration. Ordinary MCV deployment supplies the exact
+cohort CY start. No resources or ratios are granted. Unsupported newer options
+are recorded, not emulated; Research Lab=true is rejected.
+
+Native getAllocationSnapshot is read after each new real production pass. CSV
+allocations retains actual pass cycle, target, allocated flag, performance score,
+learning flag, original performanceHistory reward/loss and actual Sonic producer
+availability. allocated can include recoverable lost factories; sonic_producible
+separately requires a healthy active heavy factory and the original native
+campaignAvailableToBuild gate. Affordability/payment is not inferred.
+Before slots: tank,siege,launcher,SPECIAL GROUP,ornithopter,trike,raider,quad.
+After slots: tank,siege,launcher,Devastator,Sonic,Deviator,ornithopter,trike,raider,quad.
+The observer selects layout from the original SAVEGAMEVERSION; no production
+layout changes. Before group targets apply directly to Atreides' sole Sonic.
+Composition additionally has infantry/other slots, without a native vehicle goal.
+
+Minute live and queue values use present controlling owner, positive health and
+that owner's native replacement price. Queued 3-infantry products expand to singles.
+Native built/lost/reward ledgers retain their original attribution and are not
+payments or current ownership. Tick observation records first completed/owned IX,
+elimination, first Sonic built and every native Sonic-built ledger increment.
+The first picked strategy emits fieldability, startingPrior of native fieldable
+slots, raw native tuned weights, bounded tuned weights, resolved strategy prior,
+strategy/tempo and native tech band. These are pure prior functions, not replayed
+learning; the observer never recomputes or replaces an actual learned target.
+
+The mandatory formation-duel.py dispatcher runs real native custom matches on
+archived Vanilla map9101, game seed7101, two roster orders. Shape labels only
+satisfy the queue protocol. Actual native PROBE_DIGEST and HISTORICAL_RESULT are
+compared to the mini's actual same-source run; no fake or precomputed output.
+Those scheduler-required parity runs are not members of either scientific cohort.
+
+Submit --cwd configured staging, --rev exact bridge commit. Immutable cluster
+archives survive switching this sole owned historical worktree. Finish/cancel
+BEFORE before switching its source. Preserve failed attempts and all prior807
+results. No local build, test, formatter, or extra scientific simulation.
+
+Estimators: pair by exact fixture id and house; do not forward-fill after death or
+early game end. Analyze targets only with observed snapshots, distinguish actual
+producibility from target positivity. Match post-IX intervals in relative time
+from each arm's own first native IX completion, intersect target-positive and
+alive followup in both arms; keep no-IX/short-followup histories visible. Minute
+value observations are a step-held sampling estimator, not exact tick values.
+Use the four shared seeds as independent blocks for uncertainty, never minute
+samples or multiple houses as independent replications. Report conditional and
+whole-cohort results separately: post-IX eligibility is itself treatment-affected.
+Whole-commit contrasts include all changes in 32ad; no narrower mediation claim
+without deterministic source/mapping evidence.
