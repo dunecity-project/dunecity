@@ -17844,4 +17844,13 @@ delivery-layer loading-progress helper matches its canonical Git source.
   with native PASS markers. Mandatory combined regressions and matched
   strength/historical comparisons still need the integration pin; promotion
   remains Genome-owned and CityCompactPower stays OFF.
+- Side effects, Compact-only OFF→ON from the same native events, unique
+  (house, object): problem1 Construction Yards lost **3→0**, zone completions
+  606→648, structures lost 88→70; ainonuclear yards lost **6→7**, zones
+  763→776, structures lost 484→497. Reactor detonations 1→1 and 5→4; no yard
+  loss in either arm is within 6 tiles/40 cycles of a detonation. One paired run
+  per save; no strength claim. MoneyPlanner's joint SWMS+Compact lane at
+  b8a627aa raised yard losses 3→8 (problem1) / 6→10 (ainonuclear), saved
+  rule; Compact alone does not reproduce that, so judge the combination as an
+  interaction rather than charging either gene alone.
 
