@@ -1,16 +1,24 @@
 // Diagnostic-only exact-save continuation; never linked into the shipped game.
 #include <players/QuantBotBuildPass.h>
+#include <dunecity/CityEffects.h>
 
 namespace ResearchLabContinuation {
 void snapshot(Game& game, const char* phase) {
     const auto& rules = game.getGameInitSettings().getGameOptions();
-    SDL_Log("RESEARCH_LAB_SAVE_SETUP: phase=%s cycle=%u version=%u mod=%s research_rule=%d city=%d hash=%s",
+    SDL_Log("RESEARCH_LAB_SAVE_SETUP: phase=%s cycle=%u version=%u mod=%s research_rule=%d pace=%u technology_installments=%d city=%d hash=%s",
         phase, game.getGameCycleCount(), game.getLoadedSavegameVersion(),
-        game.getGameInitSettings().getModName().c_str(), rules.researchLab, game.isCitySimEnabled(), rules.getHash().c_str());
+        game.getGameInitSettings().getModName().c_str(), rules.researchLab,
+        static_cast<unsigned>(rules.researchPace), rules.technologyInstallments,
+        game.isCitySimEnabled(), rules.getHash().c_str());
     for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game.getHouse(h)) {
         AITelemetry::Record row, players, structures, yards, zoneSites;
-        for (const auto& info : game.getGameInitSettings().getHouseInfoList()) if (info.houseID == h)
-            for (const auto& player : info.playerInfoList) players.set(player.playerName, player.playerClass);
+        for (const auto& player : house->getPlayerList())
+            players.set(std::to_string(player->getPlayerID()), AITelemetry::Record()
+                .set("name", player->getPlayername()).set("class", player->getPlayerclass()));
+        bool researchLegal = false;
+        for (const auto* structure : structureList)
+            if (structure->getOwner() == house && structure->getItemID() == Structure_ResearchLab)
+                researchLegal |= house->canStartTechResearch(structure->getObjectID());
         for (Uint32 item = ItemID_FirstID; item <= ItemID_LastID; ++item)
             if (isStructure(item) && house->getNumItems(item)) structures.set(getItemNameByID(item), house->getNumItems(item));
         for (const auto* structure : structureList) if (structure->getOwner() == house && structure->getItemID() == Structure_ConstructionYard) {
@@ -41,7 +49,11 @@ void snapshot(Game& game, const char* phase) {
             .set("power_required", house->getPowerRequirement()).set("capacity", house->getCapacity())
             .set("lab_enabled", spec.enabled).set("lab_tech", spec.techLevel).set("lab_price", spec.price)
             .set("lab_sites", sites).set("structures", structures).set("yards", yards)
-            .set("research_target", house->getTechResearchTarget()).set("research_remaining", house->getTechResearchRemaining());
+            .set("research_target", house->getTechResearchTarget()).set("research_remaining", house->getTechResearchRemaining())
+            .set("research_cost", house->getTechResearchCost()).set("research_start_legal", researchLegal)
+            .set("research_installment", house->isTechResearchInstallment()).set("research_paused", house->isTechResearchPaused())
+            .set("research_total_cost", house->getTechResearchTotalCost()).set("research_total_cycles", house->getTechResearchTotalCycles())
+            .set("research_paid_raw", house->getTechResearchPaid().getRawValue());
         row.set("res_zones", house->getNumItems(Structure_ZoneResidential))
             .set("com_zones", house->getNumItems(Structure_ZoneCommercial))
             .set("ind_zones", house->getNumItems(Structure_ZoneIndustrial)).set("zone_legal_sites", zoneSites);
@@ -55,13 +67,20 @@ void snapshot(Game& game, const char* phase) {
                 const int localCrime = sim->getCrimeRateMap().worldGet(p.x, p.y);
                 ++zones; crime += localCrime; dangerous += localCrime >= DuneCity::kCrimeDangerousThreshold;
                 vacant += DuneCity::getStructurePopulation(structure, tile->getCityZoneDensity()) == 0;
-                unpowered += sim->getPowerGridMap().worldGet(p.x, p.y) == 0;
+                unpowered += !static_cast<const ZoneStructure*>(structure)->hasCityPower();
             }
+            DuneCity::ValveInputs civics;
+            civics.resPop = state.resPop; civics.comPop = state.comPop; civics.indPop = state.indPop;
+            civics.hasStadium = house->getNumItems(Structure_Stadium) > 0;
+            civics.hasAirport = house->getNumItems(Structure_Airport) > 0;
+            civics.hasStarport = house->getNumItems(Structure_StarPort) > 0;
             row.set("population", state.getTotalPop() * 20).set("annual_tax", state.budget.getLastTaxRevenue())
                 .set("annual_police", state.lastPoliceExpense)
                 .set("res_demand", state.resValve).set("com_demand", state.comValve).set("ind_demand", state.indValve)
                 .set("crime_mean", zones ? crime / zones : 0).set("dangerous_zones", dangerous)
-                .set("vacant_zones", vacant).set("unpowered_zones", unpowered);
+                .set("vacant_zones", vacant).set("unpowered_zones", unpowered)
+                .set("civic_demand_blocked", state.civicDemandBlocked)
+                .set("missing_demand_civics", DuneCity::missingDemandCivics(civics));
         }
         SDL_Log("RESEARCH_LAB_SAVE_HOUSE: %s", row.json().c_str());
     }
@@ -111,6 +130,9 @@ void audit(Game& game) {
             row.set("house", h).set("player", bot->getPlayerID()).set("difficulty", int(bot->difficulty))
                 .set("role", int(bot->role)).set("config_hash", bot->botConfig().getConfigHash())
                 .set("research_policy", bot->researchLabPolicyActive()).set("research_required", bot->researchRequired(pass))
+                .set("continuous_research", bot->botConfig().force.continuousResearch)
+                .set("research_cost", house->getTechResearchCost())
+                .set("research_spending_admitted", bot->spendingAdmits(pass, Structure_ResearchLab, house->getTechResearchCost(), true))
                 .set("tech_savings", pass.techSavings).set("spendable", pass.money).set("queued_cost", pass.queuedProductionCost)
                 .set("forecast_tax", pass.forecastTax).set("forecast_upkeep", pass.forecastUpkeep)
                 .set("forecast_spice", pass.forecastSpice).set("forecast_net", pass.forecastNetIncome)
@@ -141,19 +163,24 @@ void runResearchLabContinuation(Game& game, int minutes) {
     } else {
         const Uint32 first = game.getGameCycleCount(), end = first + MILLI2CYCLES(minutes * 60000);
         std::array<int, NUM_HOUSES> labs{}, tech{}, target{};
+        std::array<bool, NUM_HOUSES> paused{};
         for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game.getHouse(h)) {
             labs[h] = house->getNumItems(Structure_ResearchLab); tech[h] = house->getTechLevel(); target[h] = house->getTechResearchTarget();
+            paused[h] = house->isTechResearchPaused();
         }
         Uint32 sample = first + MILLI2CYCLES(60000);
         while (!game.finished && game.getGameCycleCount() < end) {
             game.updateGameState();
             for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game.getHouse(h)) {
                 const int nextLabs = house->getNumItems(Structure_ResearchLab), nextTech = house->getTechLevel(), nextTarget = house->getTechResearchTarget();
-                if (labs[h] != nextLabs || tech[h] != nextTech || target[h] != nextTarget) {
-                    SDL_Log("RESEARCH_LAB_SAVE_EVENT: cycle=%u elapsed=%u house=%d labs=%d tech=%d target=%d remaining=%d credits=%d",
+                const bool nextPaused = house->isTechResearchPaused();
+                if (labs[h] != nextLabs || tech[h] != nextTech || target[h] != nextTarget || paused[h] != nextPaused) {
+                    SDL_Log("RESEARCH_LAB_SAVE_EVENT: cycle=%u elapsed=%u house=%d labs=%d tech=%d target=%d remaining=%d credits=%d installment=%d paused=%d total_cost=%d total_cycles=%d paid_raw=%lld",
                         game.getGameCycleCount(), game.getGameCycleCount() - first, h, nextLabs, nextTech, nextTarget,
-                        house->getTechResearchRemaining(), house->getCredits());
-                    labs[h] = nextLabs; tech[h] = nextTech; target[h] = nextTarget;
+                        house->getTechResearchRemaining(), house->getCredits(), house->isTechResearchInstallment(), nextPaused,
+                        house->getTechResearchTotalCost(), house->getTechResearchTotalCycles(),
+                        static_cast<long long>(house->getTechResearchPaid().getRawValue()));
+                    labs[h] = nextLabs; tech[h] = nextTech; target[h] = nextTarget; paused[h] = nextPaused;
                 }
             }
             if (game.getGameCycleCount() >= sample) { ResearchLabContinuation::snapshot(game, "minute"); sample += MILLI2CYCLES(60000); }

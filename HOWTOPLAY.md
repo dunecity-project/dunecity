@@ -129,6 +129,52 @@ You can play a **pure city-builder** skirmish on a big rock map, or a
 **hybrid** where you defend the colony while it grows. The simulation
 runs the same way in both modes.
 
+## Research your house's technology
+
+Enable **Research Lab** in **Game Rules**, build a lab, then select it and
+press **Research level** to raise only your house's technology. Each study
+unlocks the next level, up to level 9. **Research Pace** changes the total
+price and study time; the sidebar shows both before you start.
+
+**Technology Installments** is on by default for new games and applies to
+humans and AI alike, for both research and Construction Yard/factory upgrades.
+You do not need the full price in the bank, and can start even with zero
+credits. Research drains credits on each funded
+simulation tick. The displayed **Drain** is the nominal credits per game
+second; the exact total paid over a completed study equals its quoted price.
+The sidebar also shows progress, the amount paid, and remaining study time.
+
+If money runs out, the sidebar says **Paused: no credits**. Any affordable
+part of the next payment is kept, but the timer advances only once that tick
+is fully funded. Income resumes research automatically: time spent paused
+does not create catch-up charges. Losing the researching lab cancels the
+study without a refund.
+
+Turning **Technology Installments** off restores full payment when starting
+each new study. A study keeps the price, duration and payment mode it started
+with. Older saved games retain their upfront-payment rules, and their
+already-paid research timers continue without another charge; the sidebar
+labels these **Paid upfront** and **No further charge**.
+
+## Upgrade Construction Yards and factories
+
+Select an eligible, fully repaired Construction Yard or factory and press
+**Upgrade** (or **U**). With **Technology Installments** enabled, you can
+start without saving the whole price first, just like the AI. Credits drain
+as the upgrade progresses. At zero credits the upgrade pauses; income
+resumes it automatically, with no catch-up bill.
+
+While upgrading, the sidebar replaces the building portrait with its
+**Upgrading** or **Paused: no credits** status, total price and amount paid.
+The upgrade bar shows the funded percentage. Production resumes after the
+upgrade completes; an existing production hold remains your choice.
+
+With the rule off, including older saved games, new upgrades retain their
+old full-balance starting requirement and then drain credits as before.
+Already-paid upgrade progress is retained when loading a save or changing
+the rule, never charged again.
+
+
 ## Save a favourite map
 
 In a Random Skirmish, Civilization Wars or Custom Game, open the game menu

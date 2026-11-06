@@ -1034,6 +1034,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Unpowered Zones Vacate") result.unpoweredZonesVacate = parseBool(value);
             else if (key == "Research Lab") result.researchLab = parseBool(value);
             else if (key == "Research Pace") result.researchPace = TechResearch::sanitize(std::stoi(value));
+            else if (key == "Technology Installments") result.technologyInstallments = parseBool(value);
             else if (key == "Trooper Anti-Air") result.trooperAntiAir = parseBool(value);
             else if (key == "Starport Population") result.starportPopulation = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);

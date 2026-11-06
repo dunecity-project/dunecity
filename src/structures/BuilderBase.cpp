@@ -792,6 +792,19 @@ int BuilderBase::getUpgradeCost() const {
     return currentGame->objectData.data[itemID][technology].price / 2;
 }
 
+bool BuilderBase::canStartUpgrade() const {
+    return !upgrading && isAllowedToUpgrade()
+        && (currentGame->getGameInitSettings().getGameOptions().technologyInstallments
+            || owner->getCredits() >= getUpgradeCost());
+}
+
+bool BuilderBase::isUpgradePaused() const {
+    if(!upgrading || upgradeProgress >= FixPoint(getUpgradeCost())) return false;
+    return currentGame->getGameInitSettings().getGameOptions().technologyInstallments
+        ? owner->getStartingCredits() + owner->getEarnedCredits() <= 0
+        : owner->getCredits() <= 0;
+}
+
 
 
 void BuilderBase::takeSharedFactoryQueueWork() {
@@ -951,7 +964,19 @@ bool BuilderBase::update() {
     if(upgrading == true) {
         FixPoint totalUpgradePrice = getUpgradeCost();
 
-        if(currentGame->getGameInitSettings().getGameOptions().instantBuild == true) {
+        const auto& options = currentGame->getGameInitSettings().getGameOptions();
+        if(options.technologyInstallments) {
+            const FixPoint remaining = std::max(FixPoint(0), totalUpgradePrice - upgradeProgress);
+            // Round the raw step upward, then clamp the last payment: a funded
+            // upgrade takes 600 cycles and never overpays by a fixed-point unit.
+            constexpr int duration = 30 * 100 / 5;
+            const auto totalRaw = totalUpgradePrice.getRawValue();
+            const FixPoint step = FixPoint::FromRawValue(
+                totalRaw / duration + (totalRaw % duration != 0));
+            const auto payment = owner->payCreditsExact(options.instantBuild ? remaining : std::min(remaining, step));
+            upgradeProgress += payment.total;
+            upgradeProgressFromStartingCredits += payment.fromStarting;
+        } else if(options.instantBuild == true) {
             FixPoint upgradePriceLeft = totalUpgradePrice - upgradeProgress;
             const auto payment = owner->payCredits(upgradePriceLeft);
             upgradeProgress += payment.total;
@@ -1052,16 +1077,11 @@ void BuilderBase::doSetRepeat(Uint32 itemID, bool enabled) {
 
 
 bool BuilderBase::doUpgrade() {
-    if(upgrading) {
-        return false;
-    } else if(isAllowedToUpgrade() && (owner->getCredits() >= getUpgradeCost())) {
-        upgrading = true;
-        upgradeProgress = 0;
-        upgradeProgressFromStartingCredits = 0;
-        return true;
-    } else {
-        return false;
-    }
+    if(!canStartUpgrade()) return false;
+    upgrading = true;
+    upgradeProgress = 0;
+    upgradeProgressFromStartingCredits = 0;
+    return true;
 }
 
 void BuilderBase::doProduceItem(Uint32 itemID, bool multipleMode) {

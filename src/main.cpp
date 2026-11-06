@@ -1365,6 +1365,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.unpoweredZonesVacate = myINIFile.getBoolValue("Game Options", "Unpowered Zones Vacate", true);
             settings.gameOptions.researchLab = myINIFile.getBoolValue("Game Options", "Research Lab", false);
             settings.gameOptions.researchPace = TechResearch::sanitize(myINIFile.getIntValue("Game Options", "Research Pace", 1));
+            settings.gameOptions.technologyInstallments = myINIFile.getBoolValue("Game Options", "Technology Installments", true);
             settings.gameOptions.trooperAntiAir = myINIFile.getBoolValue("Game Options", "Trooper Anti-Air", true);
             settings.gameOptions.starportPopulation = myINIFile.getBoolValue("Game Options", "Starport Population", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);

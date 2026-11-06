@@ -37,7 +37,7 @@ inline void require(bool value, const char* why) {
     }
 }
 
-enum class Control { Solvent, RuleOff, MissingYard, NoCash, ExistingLab };
+enum class Control { Solvent, RuleOff, MissingYard, NoCash, ExistingLab, Crime };
 
 inline std::string mapText(Control control) {
     std::ostringstream map;
@@ -64,7 +64,8 @@ struct World {
     ConstructionYard* yard = nullptr;
     std::string hash;
 
-    World(const char* mod, const char* playerClass, bool enabled, Control control = Control::Solvent) {
+    World(const char* mod, const char* playerClass, bool enabled, Control control = Control::Solvent,
+          bool installments = false, bool continuous = false) {
         require(currentGame == nullptr, "Lab fixtures share live engine globals");
         require(ModManager::instance().setActiveMod(mod), "Cannot activate lab fixture mod");
         getQuantBotConfig().strategy.random = false;
@@ -78,6 +79,7 @@ struct World {
         options.concreteRequired = false;
         options.researchLab = control != Control::RuleOff;
         options.researchPace = TechResearch::Pace::Normal;
+        options.technologyInstallments = installments;
         options.maximumNumberOfHarvestersOverride = 8;
         GameInitSettings init("research-lab-ai.ini", mapText(control), true, options);
         init.randomSeed = static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SEED")));
@@ -109,6 +111,7 @@ struct World {
         auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
         config->force.researchLab = true;
         config->force.researchLabProgression = enabled;
+        config->force.continuousResearch = continuous;
         config->force.simpleTechSavings = false;
         bot->configOverride = config;
         hash = config->getConfigHash();
@@ -130,6 +133,7 @@ struct World {
                     require(currentGameMap->getTile(x, y)->isRoad(), "Initial city road placement failed");
                 }
         }
+        if (control != Control::Crime)
         for (int y = 6; y < 35; ++y) for (int x = 39; x < 62; ++x) {
             auto* tile = currentGameMap->getTile(x, y);
             tile->setType(Terrain_Spice);
@@ -144,7 +148,21 @@ struct World {
         require(owner->getNumItems(Unit_Harvester) == 2, "Unexpected free opening harvesters");
         if (control == Control::ExistingLab) place(Structure_ResearchLab, legalLabSite());
         game->gameCycleCount = MILLI2CYCLES(300000);
-        if (game->isCitySimEnabled()) initializePhysicalCity();
+        if (game->isCitySimEnabled()) {
+            if (control == Control::Crime)
+                for (auto* structure : structureList)
+                    if (structure->getOwner() == owner)
+                        if (auto* lot = dynamic_cast<ZoneStructure*>(structure)) lot->setStartingLevel(3);
+            initializePhysicalCity();
+            if (control == Control::Crime) {
+                auto& crime = game->getCitySimulation()->crimeRateMap_;
+                for (const auto* structure : structureList)
+                    if (structure->getOwner() == owner && DuneCity::isCityZoneStructure(structure->getItemID())) {
+                        const Coord p = structure->getLocation();
+                        crime.set(p.x / crime.getBlockSize(), p.y / crime.getBlockSize(), 220);
+                    }
+            }
+        }
         owner->updateBuildLists();
         bot->buildTimer = INT_MAX;
         bot->attackTimer = INT_MAX;
@@ -416,6 +434,62 @@ inline void negative(const char* mod, const char* playerClass, Control control, 
             mod, playerClass, name, world.hash.c_str(), world.owner->getNumItems(Structure_ResearchLab));
 }
 
+inline void continuous(const char* mod, const char* playerClass, bool enabled, bool installments) {
+    World world(mod, playerClass, true, Control::ExistingLab, installments, enabled);
+    const auto* lab = world.lab();
+    require(lab && world.owner->getTechLevel() == 1, "Continuous fixture lacks its ordinary initial lab");
+    world.owner->storedCredits = world.owner->startingCredits = world.owner->cityCredits = 0;
+    require(world.owner->canStartTechResearch(lab->getObjectID()) == installments,
+            "Human research eligibility did not follow the shared installment rule");
+    auto before = world.observePlan();
+    require(!world.bot->canFundTechInvestment(before, world.owner->getTechResearchCost()),
+            "Zero-cash control did not bind the old capital funding gate");
+    world.build();
+    if (!enabled || !installments) {
+        require(!world.owner->isTechResearchActive(), "Disabled policy or upfront engine invented an unfunded study");
+        SDL_Log("CONTINUOUS_RESEARCH_CONTROL: mod=%s class=%s gene=%d installments=%d cash=0 active=0",
+                mod, playerClass, enabled, installments);
+        return;
+    }
+    for (int target : {2, 3, 4}) {
+        const int price = world.owner->getTechResearchCost();
+        const int duration = world.owner->techResearchCycles(target);
+        if (!world.owner->isTechResearchActive()) world.build();
+        require(world.owner->getTechResearchTarget() == target && world.owner->isTechResearchInstallment()
+                && world.owner->getTechResearchRemaining() == duration && world.owner->getCredits() == 0
+                && world.owner->getTechResearchPaid() == FixPoint(0),
+                "Continuous QuantBot did not start the next study immediately with zero upfront payment");
+        world.owner->updateTechResearch();
+        require(world.owner->getTechResearchRemaining() == duration && world.owner->isTechResearchPaused(),
+                "Unfunded AI study advanced or cancelled instead of pausing");
+        world.owner->startingCredits = price; // Fixture funding is storage-exempt, as initial map cash is.
+        const FixPoint cash = world.owner->storedCredits + world.owner->startingCredits + world.owner->cityCredits;
+        for (int tick = 0; tick < duration; ++tick) world.owner->updateTechResearch();
+        require(world.owner->getTechLevel() == target && !world.owner->isTechResearchActive()
+                && cash - (world.owner->storedCredits + world.owner->startingCredits + world.owner->cityCredits) == FixPoint(price),
+                "AI research did not resume and pay its exact shared human price");
+        require(world.owner->getNumItems(Structure_ResearchLab) == 1 && world.queuedLabs() == 0,
+                "Continuous research duplicated its existing lab");
+        SDL_Log("CONTINUOUS_RESEARCH_PASS: mod=%s class=%s target=%d price=%d cycles=%d zero_cash_start=1 pause_resume=1 exact_payment=1",
+                mod, playerClass, target, price, duration);
+    }
+}
+
+inline void crimePolicy(bool enabled) {
+    World world("dunecity", "qBotHard", enabled, Control::Crime);
+    auto pass = world.observePlan();
+    require(pass.citySimEnabled && pass.forecastNetIncome > 0 && !world.bot->cityBootstrapNeeded(pass)
+            && !world.bot->openingFleetIncomplete(pass) && pass.dangerousCrimeProperties > 0
+            && world.owner->getCredits() >= 30000 && world.yard->isAvailableToBuild(Structure_ResearchLab),
+            "Synthetic crime-only fixture lost its physical city, income, legality or fleet isolation");
+    world.legalLabSite();
+    require(world.bot->techInvestmentReady(pass) == enabled
+            && world.bot->canFundTechInvestment(pass, world.bot->buildingCapitalCost(pass, Structure_ResearchLab)) == enabled,
+            "Crime-only lab prerequisite did not independently follow ResearchLabProgression");
+    SDL_Log("RESEARCH_LAB_CRIME_POLICY_PASS: enabled=%d dangerous=%d opening_fleet=0 funded=%d synthetic=1",
+            enabled, pass.dangerousCrimeProperties, enabled);
+}
+
 } // namespace ResearchLabAIProbe
 
 void runResearchLabAIProbe(const char* mod, const char* playerClass) {
@@ -424,6 +498,11 @@ void runResearchLabAIProbe(const char* mod, const char* playerClass) {
         ~RestoreConfig() { getQuantBotConfig() = saved; }
     } restore;
     using namespace ResearchLabAIProbe;
+    if (std::getenv("BALANCE_RESEARCH_LAB_CRIME_ONLY")) {
+        crimePolicy(false); crimePolicy(true);
+        SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=research_lab_crime_policy outcome=passed synthetic=1");
+        return;
+    }
     auto pair = [&](const std::string& controller) {
         const auto off = progression(mod, controller.c_str(), false);
         const auto on = progression(mod, controller.c_str(), true);
@@ -433,6 +512,11 @@ void runResearchLabAIProbe(const char* mod, const char* playerClass) {
     const std::string base = playerClass;
     require(base.rfind("qBot", 0) == 0, "Lab fixture needs a registered QuantBot difficulty");
     pair("qBotSupport" + base.substr(4));
+    for (const auto& controller : {std::string(playerClass), "qBotSupport" + base.substr(4)}) {
+        continuous(mod, controller.c_str(), false, true);
+        continuous(mod, controller.c_str(), true, false);
+        continuous(mod, controller.c_str(), true, true);
+    }
     // Defend is a real fifth difficulty, not a role or a renamed Hard bot.
     // Once per mod is sufficient; Builder variants above cover every CLI tier.
     if (base == "qBotHard") {

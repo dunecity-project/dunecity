@@ -139,7 +139,8 @@ void QuantBot::build(int militaryValue) {
             if (pStructure->isABuilder()) buildProducer(pass, pStructure);
         }
     }
-    if (!civWarsRules() && !researchRequired(pass)) startTechResearch(pass);
+    if (botConfig().force.continuousResearch || (!civWarsRules() && !researchRequired(pass)))
+        startTechResearch(pass);
 
     traceCapitalOutcome(pass);
     // MULTIPLAYER FIX: Use deterministic timer instead of random
@@ -238,6 +239,11 @@ bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* buil
 }
 
 void QuantBot::planTechResearch(BuildPass& pass) {
+    if (botConfig().force.continuousResearch && researchLabPolicyActive()
+        && getHouse()->getNumItems(Structure_ResearchLab) > 0) {
+        startTechResearch(pass);
+        return;
+    }
     const bool required = researchRequired(pass);
     if ((!required && !civWarsRules()) || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9
         || !techInvestmentReady(pass)) return;
@@ -266,28 +272,40 @@ void QuantBot::planTechResearch(BuildPass& pass) {
 void QuantBot::startTechResearch(BuildPass& pass) {
     if (!researchLabPolicyActive() || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9) return;
     const int cost = getHouse()->getTechResearchCost();
-    if (!spendingAdmits(pass, Structure_ResearchLab, cost, true)) return;
-    if (!canFundTechInvestment(pass,cost)) return;
+    if (botConfig().force.continuousResearch) {
+        // Research is a continuous drain, not a capital purchase that must
+        // await an opening fleet, a crime-free city or the full future quote.
+        if (pass.defendingEconomy || pass.airEngaged || !getHouse()->hasPower()
+            || ((pass.citySimEnabled || pass.powerRules)
+                && getHouse()->getProducedPower() < getHouse()->getPowerRequirement())) return;
+    } else {
+        if (!spendingAdmits(pass, Structure_ResearchLab, cost, true)
+            || !canFundTechInvestment(pass, cost)) return;
+    }
     const StructureBase* lab = nullptr;
     for (const auto* structure : getStructureList())
         if (structure->getOwner() == getHouse() && structure->getItemID() == Structure_ResearchLab
-            && structure->getHealth() > 0
+            && structure->isActive() && structure->getHealth() > 0
             && (!lab || structure->getObjectID() < lab->getObjectID())) lab = structure;
     if (!lab) return;
     const int from = getHouse()->getTechLevel();
     if (!const_cast<House*>(getHouse())->startTechResearch(lab->getObjectID())) return;
-    pass.money -= cost;
-    pass.capitalOrderedCost += cost;
+    const bool installments = getHouse()->isTechResearchInstallment();
+    const int upfrontCost = installments ? 0 : cost;
+    pass.money -= upfrontCost;
+    pass.capitalOrderedCost += upfrontCost;
     if (pass.techSavings && pass.techResearch) {
         pass.techSavingActive = false;
         pass.civWarsResearchReserve = 0;
     }
     if (AITelemetry::log().enabled()) {
         pass.capitalOrders.set(std::to_string(lab->getObjectID())+":research",
-            AITelemetry::Record().set("item",Structure_ResearchLab).set("price",cost).set("rule","tech_research"));
+            AITelemetry::Record().set("item",Structure_ResearchLab).set("price",cost)
+                .set("upfront_cost",upfrontCost).set("installments",installments).set("rule","tech_research"));
         traceDecision("research_started",AITelemetry::Record().set("capital_plan",pass.capitalDecision)
             .set("lab",lab->getObjectID())
             .set("from",from).set("to",from+1).set("cost",cost)
+            .set("upfront_cost",upfrontCost).set("installments",installments)
             .set("cycles",getHouse()->techResearchCycles(from+1))
             .set("spendable_after",pass.money).set("state",decisionState(pass)));
     }

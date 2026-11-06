@@ -114,6 +114,7 @@ private:
     Checkbox        planBuildingSitesCheckbox;      ///< Match rule: Construction Yard orders pick their plot first (pre-placement queue)
     Checkbox rememberDefaults;
     Checkbox researchLabCheckbox;
+    Checkbox technologyInstallmentsCheckbox;
     HBox researchPaceHBox;
     Label researchPaceLabel;
     DropDownBox researchPaceDropDownBox;

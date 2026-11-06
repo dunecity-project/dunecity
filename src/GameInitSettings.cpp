@@ -51,6 +51,7 @@ constexpr Uint32 GAMEINIT_MOD15_MARKER = 0x4D4F4446; // MODF: per-house research
 constexpr Uint32 GAMEINIT_MOD16_MARKER = 0x4D4F4447; // MODG: Starport city population requirement
 constexpr Uint32 GAMEINIT_MOD17_MARKER = 0x4D4F4448; // MODH: research pace/map area and damage land value
 constexpr Uint32 GAMEINIT_MOD18_MARKER = 0x4D4F4449; // MODI: fixed research pace and mountain scenery
+constexpr Uint32 GAMEINIT_MOD19_MARKER = 0x4D4F444A; // MODJ: technology installments
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -254,6 +255,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.micropolisLandValue = false;
     gameOptions.researchLab = false;
     gameOptions.researchPace = TechResearch::Pace::Normal;
+    gameOptions.technologyInstallments = false;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
@@ -265,12 +267,13 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     Uint32 modMarker = 0;
     try {
         modMarker = stream.readUint32();
-        const bool hasMountainScenery = modMarker == GAMEINIT_MOD18_MARKER;
+        const bool hasTechnologyInstallments = modMarker == GAMEINIT_MOD19_MARKER;
+        const bool hasMountainScenery = modMarker == GAMEINIT_MOD18_MARKER || hasTechnologyInstallments;
         const bool hasLegacyResearchArea = modMarker == GAMEINIT_MOD17_MARKER;
         const bool hasResearchPace = hasLegacyResearchArea || hasMountainScenery;
         const bool hasStarportPopulation = modMarker == GAMEINIT_MOD16_MARKER || hasResearchPace;
         const bool hasResearchOptions = modMarker == GAMEINIT_MOD15_MARKER || hasStarportPopulation;
-        // MOD15..18 share the complete MOD14 prefix.
+        // MOD15..19 share the complete MOD14 prefix.
         if(hasResearchOptions) modMarker = GAMEINIT_MOD14_MARKER;
         if (isKnownModMarker(modMarker)) {
             modName = stream.readString();
@@ -387,6 +390,9 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     gameOptions.mountainScenery = (cityRules & 1) != 0;
                     gameOptions.unpoweredZonesVacate = (cityRules & 2) != 0;
                 }
+            }
+            if(hasTechnologyInstallments) {
+                gameOptions.technologyInstallments = stream.readBool();
             }
         }
     } catch (InputStream::eof&) {
@@ -516,7 +522,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD18_MARKER);
+    stream.writeUint32(GAMEINIT_MOD19_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -580,6 +586,8 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.damageLowersLandValue);
     stream.writeUint8((gameOptions.mountainScenery ? 1 : 0)
         | (gameOptions.unpoweredZonesVacate ? 2 : 0));
+    // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
+    stream.writeBool(gameOptions.technologyInstallments);
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

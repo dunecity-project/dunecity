@@ -871,6 +871,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("Game Options", "Unpowered Zones Vacate", settings.gameOptions.unpoweredZonesVacate);
     myINIFile.setBoolValue("Game Options", "Research Lab", settings.gameOptions.researchLab);
     myINIFile.setIntValue("Game Options", "Research Pace", static_cast<int>(settings.gameOptions.researchPace));
+    myINIFile.setBoolValue("Game Options", "Technology Installments", settings.gameOptions.technologyInstallments);
     myINIFile.setBoolValue("Game Options", "Trooper Anti-Air", settings.gameOptions.trooperAntiAir);
     myINIFile.setBoolValue("Game Options", "Starport Population", settings.gameOptions.starportPopulation);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);

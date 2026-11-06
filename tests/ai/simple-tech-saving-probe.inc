@@ -807,8 +807,8 @@ inline void standaloneLocalProducers(const char* mod, const char* playerClass) {
     pass.capitalChoice = -1;
     pass.sharedSpending = false;
     require(pass.nextCompositionSlot() == lightSlot
-                && world.bot->localCompositionSlot(pass, heavy) == heavySlot
-                && world.bot->localCompositionSlot(pass, second) == heavySlot,
+                && world.bot->localCompositionSlot(pass, heavy, -1) == heavySlot
+                && world.bot->localCompositionSlot(pass, second, -1) == heavySlot,
             "Local-producer control does not separate the global light choice from eligible heavy deficits");
     const int64_t committedBefore = pass.compositionValue[heavySlot];
     {
@@ -1321,6 +1321,9 @@ inline void actualT1Research(const char* mod, const char* playerClass) {
         return;
     }
     World world(mod, playerClass, true, Stage::NaturalResearch, Army::Empty, 0);
+    // This policy regression retains its original upfront-payment contract;
+    // the shared installment engine and continuous policy have separate fixtures.
+    world.game->gameInitSettings.gameOptions.technologyInstallments = false;
     const int ceiling = firstCombatTech(world);
     const auto& labSpec = world.game->objectData.data[Structure_ResearchLab][world.owner->getHouseID()];
     if (ceiling <= 1 || ceiling > 9 || !labSpec.enabled || labSpec.techLevel > 1) {

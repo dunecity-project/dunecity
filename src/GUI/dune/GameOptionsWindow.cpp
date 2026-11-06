@@ -180,6 +180,12 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(&researchLabCheckbox);
     vboxLeft.addWidget(VSpacer::create(ruleGap));
 
+    technologyInstallmentsCheckbox.setText(_("Technology Installments"));
+    technologyInstallmentsCheckbox.setTooltipText(_("Research + yard/factory upgrades: any cash to start; per-tick drain/pause, humans + AI."));
+    technologyInstallmentsCheckbox.setChecked(gameOptions.technologyInstallments);
+    vboxLeft.addWidget(&technologyInstallmentsCheckbox);
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
+
     researchPaceLabel.setText(_("Research Pace"));
     researchPaceHBox.addWidget(&researchPaceLabel, 110);
     researchPaceDropDownBox.addEntry(_("Fast"), static_cast<int>(TechResearch::Pace::Fast));
@@ -338,6 +344,7 @@ void GameOptionsWindow::onOK() {
     gameOptions.unpoweredZonesVacate = unpoweredZonesVacateCheckbox.isChecked();
     gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
     gameOptions.researchLab = researchLabCheckbox.isChecked();
+    gameOptions.technologyInstallments = technologyInstallmentsCheckbox.isChecked();
     gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
     gameOptions.trooperAntiAir = trooperAntiAirCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();

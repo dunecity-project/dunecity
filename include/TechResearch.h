@@ -35,5 +35,12 @@ constexpr int cycles(int target, Pace pace) {
     return target >= 2 && target <= 9 ? scaled(MILLI2CYCLES(target * 60 * 1000), pace) : 0;
 }
 
+/// floor(totalRaw * completed / duration), without overflowing the raw 32.32 total.
+/// The caller supplies 0 <= completed <= duration and a positive duration.
+constexpr std::int64_t cumulativeDueRaw(std::int64_t totalRaw, int completed, int duration) {
+    return (totalRaw / duration) * completed
+        + ((totalRaw % duration) * completed) / duration;
+}
+
 } // namespace TechResearch
 #endif

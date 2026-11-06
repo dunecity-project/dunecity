@@ -51,7 +51,9 @@ void HeavyFactory::init() {
 HeavyFactory::~HeavyFactory() = default;
 
 void HeavyFactory::doBuildRandom() {
-    if(isAllowedToUpgrade() && (getUpgradeCost() <= owner->getCredits())) {
+    if(isAllowedToUpgrade()
+       && (currentGame->getGameInitSettings().getGameOptions().technologyInstallments
+           || getUpgradeCost() <= owner->getCredits())) {
         doUpgrade();
         return;
     }

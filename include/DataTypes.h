@@ -327,6 +327,7 @@ public:
                     && (unpoweredZonesVacate == goc.unpoweredZonesVacate)
                     && (researchLab == goc.researchLab)
                     && (researchPace == goc.researchPace)
+                    && (technologyInstallments == goc.technologyInstallments)
                     && (trooperAntiAir == goc.trooperAntiAir)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
@@ -374,6 +375,7 @@ public:
             optStr += "/unpoweredZonesVacate=" + std::to_string(unpoweredZonesVacate);
             optStr += "/researchLab=" + std::to_string(researchLab);
             optStr += "/researchPace=" + std::to_string(static_cast<std::uint32_t>(researchPace));
+            optStr += "/technologyInstallments=" + std::to_string(technologyInstallments);
             optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
@@ -452,6 +454,8 @@ public:
         /// Optional Research Lab and per-house technology progression (levels 1-9).
         bool        researchLab;
         TechResearch::Pace researchPace = TechResearch::Pace::Normal;
+        /// Start research and builder upgrades without their full price; pay while they run.
+        bool        technologyInstallments = true;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation

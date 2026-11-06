@@ -871,15 +871,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
             endforeach()
         endforeach()
-        # Exact 9883 save, immutable mod revision and ordinary House research.
-        # Ordos/Neutral have ample cash/sites but the old crime veto refuses labs.
-        add_test(NAME quantbot_research_lab_saved_crime COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/ai/research-lab-continuation.py --repeatable
+        # Synthetic physical city isolates the old crime-only lab funding veto;
+        # reported user saves remain private frozen queue inputs.
+        add_test(NAME quantbot_research_lab_crime_policy COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --research-lab-ai-probe --repeatable
+            --mod dunecity --partner-difficulty hard --seed 1841712204
+            --no-ai-telemetry --path-workers 1 --wall-timeout 240
             --build-dir ${CMAKE_BINARY_DIR}
-            --results ${CMAKE_BINARY_DIR}/research-lab-saved-crime
-            --game-options ${CMAKE_SOURCE_DIR}/tests/ai/research-lab-crime-save.ini
-            --verify-houses 2 6 --minutes 3 --wall-timeout 240)
-        set_tests_properties(quantbot_research_lab_saved_crime PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
+            --output-dir ${CMAKE_BINARY_DIR}/research-lab-crime-policy)
+        set_tests_properties(quantbot_research_lab_crime_policy PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+            ENVIRONMENT "BALANCE_RESEARCH_LAB_CRIME_ONLY=1")
         add_test(NAME quantbot_dunecity_audit_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_dunecity_audit.py)
         set_tests_properties(quantbot_dunecity_audit_parser PROPERTIES TIMEOUT 60)

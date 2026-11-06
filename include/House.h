@@ -64,6 +64,12 @@ public:
     int getTechResearchTarget() const { return techResearchTarget; }
     int getTechResearchRemaining() const { return techResearchRemaining; }
     Uint32 getTechResearchLabID() const { return techResearchLabID; }
+    /// Captured terms of the active study; all amounts are zero while idle.
+    bool isTechResearchInstallment() const { return techResearchInstallment; }
+    int getTechResearchTotalCost() const { return techResearchTotalCost; } ///< whole credits
+    int getTechResearchTotalCycles() const { return techResearchTotalCycles; }
+    FixPoint getTechResearchPaid() const { return techResearchPaid; } ///< exact 32.32 credits
+    bool isTechResearchPaused() const;
     int getTechResearchCost() const;
     int techResearchCycles(int target) const;
     bool canStartTechResearch(Uint32 labObjectID) const;
@@ -267,6 +273,8 @@ public:
     };
     /// Withdraw up to \a amount and report which pools paid for it.
     CreditPayment payCredits(FixPoint amount);
+    /// Same debit order/accounting, including balances below one displayed credit.
+    CreditPayment payCreditsExact(FixPoint amount);
     /// Refund \a newCredits, of which \a fromStartingCredits was originally
     /// paid out of starting cash and returns there. The rest is earned income
     /// and stays subject to storage capacity; the total never exceeds the
@@ -352,6 +360,7 @@ protected:
     */
     FixPoint acceptEarnedCredits(FixPoint amount, bool cityTax = false);
     void enforceCreditCeiling();
+    FixPoint nextTechResearchDue() const;
     void updateTechResearch();
 
     /// Tells the local player that storage is full, at most once every 5 seconds.
@@ -379,6 +388,10 @@ protected:
     int techResearchTarget = 0;
     int techResearchRemaining = 0;
     Uint32 techResearchLabID = NONE_ID;
+    bool techResearchInstallment = false;
+    int techResearchTotalCost = 0;
+    int techResearchTotalCycles = 0;
+    FixPoint techResearchPaid = 0;
     bool starportPopulationMet = true; ///< last meetsStarportPopulation(); derived, not saved
     Uint32 structuresSold = 0;
     Uint32 saleCredits = 0;

@@ -354,6 +354,7 @@ QuantBotConfig::QuantBotConfig() {
     force.hardCityMatch = true;
     force.researchLab = true;
     force.researchLabProgression = true;
+    force.continuousResearch = false;
     force.cityGrowthPower = true;
     force.cityPowerSizing = true;
     force.cityCompactPower = false;
@@ -675,6 +676,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
         iniFile.setBoolValue("Force Concentration", "ResearchLab", force.researchLab);
         iniFile.setBoolValue("Force Concentration", "ResearchLabProgression", force.researchLabProgression);
+        iniFile.setBoolValue("Force Concentration", "ContinuousResearch", force.continuousResearch);
         iniFile.setBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
         iniFile.setBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
         iniFile.setBoolValue("Force Concentration", "CityCompactPower", force.cityCompactPower);
@@ -821,6 +823,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     civWarsStrategy = iniFile.getBoolValue("Civ Wars", "Strategy", civWarsStrategy);
     force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);
     force.researchLabProgression = iniFile.getBoolValue("Force Concentration", "ResearchLabProgression", force.researchLabProgression);
+    force.continuousResearch = iniFile.getBoolValue("Force Concentration", "ContinuousResearch", force.continuousResearch);
     force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
     force.cityPowerSizing = iniFile.getBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
     force.cityCompactPower = iniFile.getBoolValue("Force Concentration", "CityCompactPower", force.cityCompactPower);
@@ -1331,6 +1334,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("hardCityMatch", force.hardCityMatch);
     addNamed("researchLab", force.researchLab);
     addNamed("researchLabProgression", force.researchLabProgression);
+    addNamed("continuousResearch", force.continuousResearch);
     addNamed("cityGrowthPower", force.cityGrowthPower);
     addNamed("cityPowerSizing", force.cityPowerSizing);
     addNamed("cityCompactPower", force.cityCompactPower);

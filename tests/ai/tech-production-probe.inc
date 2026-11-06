@@ -623,8 +623,8 @@ inline std::vector<UnitBase*> spawnGroundBand(World& world, House* owner, Uint32
 
 
 inline void statelessSaveRoundTrips(World& world) {
-    require(SAVEGAMEVERSION == 9883 && NETWORK_PROTOCOL_VERSION == 112,
-            "Stateless policy changed the installed save or wire format");
+    require(SAVEGAMEVERSION == 9884 && NETWORK_PROTOCOL_VERSION == 113,
+            "Stateless AI policy disagrees with the shared technology payment format");
     auto originalConfig = world.bot->configOverride;
     auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
     world.bot->configOverride = config;
@@ -646,7 +646,7 @@ inline void statelessSaveRoundTrips(World& world) {
         Uint32 version;
         ~RestoreVersion() { game.loadedSavegameVersion = version; }
     } restore{*world.game, world.game->loadedSavegameVersion};
-    for (const Uint32 version : {Uint32(9882), Uint32(9883)}) {
+    for (const Uint32 version : {Uint32(9882), Uint32(9883), Uint32(9884)}) {
         world.game->loadedSavegameVersion = version;
         IMemoryStream input(enabled.getData(), enabled.getDataLength());
         QuantBot loaded(input, world.owner);
@@ -664,7 +664,7 @@ inline void statelessSaveRoundTrips(World& world) {
         require(reloaded.militaryValueLimit == loaded.militaryValueLimit
                     && reloaded.initialMilitaryValue == loaded.initialMilitaryValue
                     && roundtrip.readUint32() == 0xabcdef01u && roundtrip.getRemainingLength() == 0,
-                "An installed-format QuantBot did not round-trip through current9883");
+                "An installed-format QuantBot did not round-trip through current9884");
         SDL_Log("SIMPLE_TECH_STATELESS_SAVE: input_version=%u output_version=%d protocol=%d bytes=%zu roundtrip=1 policy_bytes_unchanged=1",
                 version, SAVEGAMEVERSION, NETWORK_PROTOCOL_VERSION, size_t(disabled.getDataLength()));
     }

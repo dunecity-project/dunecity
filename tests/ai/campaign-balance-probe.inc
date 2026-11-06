@@ -468,6 +468,13 @@ int runCampaignBalanceProbe() {
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    if (loadSave) if (const char* mode = std::getenv("BALANCE_TECHNOLOGY_INSTALLMENTS")) {
+        const std::string_view value(mode);
+        if (value != "0" && value != "1") throw std::runtime_error("Invalid diagnostic technology installment mode");
+        // Explicit private-probe opt-in applies equally to all controllers.
+        // Normal loading retains old rules and already-paid research timers.
+        game->gameInitSettings.gameOptions.technologyInstallments = value == "1";
+    }
     // Same-build config comparisons, including the strategic-site regression's negative control,
     // a continued savegame and a custom-map match (switch off/on on the same position).
     if (scenario || loadSave || customMap || std::getenv("BALANCE_STRATEGIC_SITE_PROBE"))

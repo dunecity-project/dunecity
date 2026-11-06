@@ -349,12 +349,15 @@ Strategy=false
 # ============================================================================
 # ResearchLab is hashed for multiplayer and defaults on even when this key is
 # absent. It only acts when the match's Research Lab game option is enabled.
-# Basic income, power, defence and accepted production commitments keep their funding first.
+# Lab acquisition protects basic income/power/defence; an existing lab can research continuously.
 [Force Concentration]
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.
 ResearchLabProgression=1
+# Opt-in: start the next legal study without cash-reserve, income or army-readiness gates.
+# Actual research payments drain the same house credits as a human; live defence/blackouts defer starts.
+ContinuousResearch=0
 # Fund a legal generator before demanded city growth loses its power headroom.
 # Military production and Starport bargains may spend only the remaining cash.
 CityGrowthPower=1

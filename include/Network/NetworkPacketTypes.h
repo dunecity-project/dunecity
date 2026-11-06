@@ -348,7 +348,9 @@
 //      Generated Civ Wars prioritizes required per-house research independently of the experimental strategy.
 // 112: MOD18 replaces frozen MOD17's map-area field with Mountain Scenery (save 9883).
 //      Research uses fixed prices/durations rather than map size.
-#define NETWORK_PROTOCOL_VERSION            112
+// 113: MOD19 carries the hashed technology-installments rule (save 9884).
+//      Research state captures payment mode, terms and exact cumulative payments.
+#define NETWORK_PROTOCOL_VERSION            113
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

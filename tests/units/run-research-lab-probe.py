@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""Exercise Research Lab commands, save continuation and QuantBot with real engine objects.
+"""Exercise exact technology installments, legacy start gates, saves and real 640x480 UI.
 
-Uses the single existing macOS Ninja build, an isolated leased profile and dummy SDL.
-Research CSV, save, telemetry, logs and the diagnostic executable stay in --output-dir.
+Uses the single existing macOS Ninja build, an isolated leased source-default profile
+and dummy SDL. CSV, summary, saves, UI PNGs, telemetry and logs stay in --output-dir.
 Run through dunecity-queue after the combined committed build.
 """
 import argparse
+import csv
+import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
+import struct
 import sys
 
 root = Path(__file__).resolve().parents[2]
@@ -20,7 +24,7 @@ from probe_profile import copy_revisions, default_build_dir, discard_profile_ass
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=default_build_dir(root))
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--load-save', type=Path, help='Load an old player save, preserve paid timers, then resave/reload the current format')
+parser.add_argument('--load-save', type=Path, help='Also load an exact player save, preserve captured/paid timers, then resave/reload the current format')
 parser.add_argument('--save-profile', type=Path, help='Profile holding the exact Workshop revisions pinned by --load-save')
 args = parser.parse_args()
 if args.load_save and not args.load_save.is_file():
@@ -89,9 +93,83 @@ with scratch_dir('research-lab-probe') as scratch:
     markers = [line for line in text.splitlines() if 'RESEARCH_LAB_PROBE_PASS:' in line]
     if len(markers) != 1 or 'RESEARCH_LAB_PROBE_FAIL:' in text:
         raise RuntimeError('Missing or failed Research Lab result; see ' + str(logfile))
+    lines = text.splitlines()
+    totals = [line for line in lines if 'RESEARCH_INSTALLMENT_TOTAL:' in line]
+    if len(totals) != 32:
+        raise RuntimeError('Expected every research pace x levels 2-9; see ' + str(logfile))
+    legacy_versions = [int(match.group(1)) for match in re.finditer(
+        r'RESEARCH_LEGACY_LAYOUT_PASS: version=(\d+)', text)]
+    if sorted(legacy_versions) != [9882, 9883]:
+        raise RuntimeError('Missing explicitly synthetic 9882/9883 full-save migration cases')
+    upgrade_totals = [line for line in lines if 'UPGRADE_INSTALLMENT_TOTAL:' in line]
+    upgrade_saves = [line for line in lines if 'UPGRADE_SAVE_CONTINUATION_PASS:' in line]
+    upgrade_ai_partial = [line for line in lines if 'UPGRADE_AI_PARTIAL_PASS:' in line]
+    upgrade_legacy = [int(match.group(1)) for match in re.finditer(
+        r'UPGRADE_LEGACY_LAYOUT_PASS: version=(\d+)', text)]
+    if len(upgrade_totals) != 4 or len(upgrade_saves) != 2 or len(upgrade_ai_partial) != 2:
+        raise RuntimeError('Missing yard/factory upgrade cases: human+AI exact600, partial AI, or full-save continuation')
+    if sorted(upgrade_legacy) != [9882, 9882, 9883, 9883]:
+        raise RuntimeError('Missing explicitly synthetic old-save yard/factory upgrade gate cases')
+    if sum('RESEARCH_QUANTBOT_GENE: continuous_research=1' in line for line in lines) != 1:
+        raise RuntimeError('Natural QuantBot case did not explicitly opt into the ContinuousResearch gene')
+    states = ('installment_available', 'installment_paused', 'installment_partial',
+              'installment_researching', 'installment_complete', 'upfront_researching')
+    captures = [out / ('research-ui-' + state + '-640x480.png') for state in states]
+    captures.append(out / 'research-ui-options-640x480.png')
+    upgrade_states = tuple(kind + '_' + phase for kind in ('cy', 'factory')
+                           for phase in ('ready_partial', 'active', 'paused', 'partial', 'completed'))
+    captures.extend(out / ('upgrade-ui-' + state + '-640x480.png') for state in upgrade_states)
+    for capture in captures:
+        data = capture.read_bytes()
+        if data[:8] != b'\x89PNG\r\n\x1a\n' or data[12:16] != b'IHDR' or struct.unpack('>II', data[16:24]) != (640, 480):
+            raise RuntimeError('Missing or incorrectly sized real UI capture: ' + str(capture))
+    if sum('RESEARCH_UI_PROBE:' in line for line in lines) != len(states):
+        raise RuntimeError('Missing real-state research panel geometry assertions')
+    if sum('RESEARCH_UI_OPTIONS:' in line for line in lines) != 1 or sum('RESEARCH_UI_COMMAND:' in line for line in lines) != 1:
+        raise RuntimeError('Missing rendered options or ordinary human Research-button command assertions')
+    if sum('UPGRADE_UI_PROBE:' in line for line in lines) != len(upgrade_states):
+        raise RuntimeError('Missing real-state yard/factory upgrade panel geometry assertions')
+    if sum('UPGRADE_UI_COMMAND:' in line for line in lines) != 2:
+        raise RuntimeError('Missing ordinary human yard/factory Upgrade-button command assertions')
+    with (out / 'research.csv').open(newline='') as handle:
+        rows = list(csv.DictReader(handle))
+    actual = [(int(row['pace']), int(row['tech_level'])) for row in rows if row['case'] == 'installment_exact_total']
+    if sorted(actual) != [(pace, target) for pace in range(4) for target in range(2, 10)]:
+        raise RuntimeError('Research CSV omitted or duplicated a pace/target exact-payment result')
+    required = {'installment_partial_before_save', 'installment_exact_resume_complete',
+                'installment_cancel_no_refund', 'upfront_rule_change_complete', 'synthetic_legacy_paid_complete',
+                'active_before_save', 'completed_after_reload', 'off_legacy_digest',
+                'map_independent_quote', 'pace_slow_complete', 'quantbot_built_lab', 'quantbot_final'}
+    missing = required - {row['case'] for row in rows}
+    if missing:
+        raise RuntimeError('Research fixture omitted required cases: ' + ', '.join(sorted(missing)))
+    with (out / 'upgrades.csv').open(newline='') as handle:
+        upgrades = list(csv.DictReader(handle))
+    exact = [(row['controller'], int(row['item'])) for row in upgrades if row['case'] == 'exact_600_ticks']
+    items = {item for _, item in exact}
+    if len(items) != 2 or sorted(exact) != sorted((controller, item) for controller in ('human', 'quantbot') for item in items):
+        raise RuntimeError('Upgrade CSV omitted or duplicated human/AI yard/factory exact-payment cases')
+    for case, controller in (('human_partial_saved', 'human'), ('human_resume_complete', 'human'),
+                             ('ai_partial_resume_complete', 'quantbot')):
+        actual = [(row['controller'], int(row['item'])) for row in upgrades if row['case'] == case]
+        if sorted(actual) != sorted((controller, item) for item in items):
+            raise RuntimeError('Upgrade CSV omitted or duplicated required cases: ' + case)
+    legacy = [(int(row['legacy_version']), int(row['item'])) for row in upgrades if row['case'] == 'legacy_full_price_gate']
+    if sorted(legacy) != sorted((version, item) for version in (9882, 9883) for item in items):
+        raise RuntimeError('Upgrade CSV omitted or duplicated synthetic old-save full-price gates')
+    summary = {'source_default_technology_installments': True, 'continuous_research_gene': True, 'exact_pace_level_cases': len(totals),
+               'synthetic_legacy_save_versions': legacy_versions, 'external_player_save': bool(args.load_save),
+               'ui_resolution': [640, 480], 'ui_states': list(states), 'upgrade_ui_states': list(upgrade_states),
+               'upgrade_fully_funded_cases': len(upgrade_totals), 'upgrade_save_continuations': len(upgrade_saves),
+               'upgrade_ai_partial_cases': len(upgrade_ai_partial), 'upgrade_synthetic_legacy_versions': upgrade_legacy,
+               'cases': sorted({row['case'] for row in rows}), 'upgrade_cases': sorted({row['case'] for row in upgrades}),
+               'result': 'pass'}
+    (out / 'research-summary.json').write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
     discard_profile_assets(profile)
     shutil.copytree(profile, out / 'profile', dirs_exist_ok=True)
     shutil.rmtree(profile)
     print(markers[0])
 subprocess.run([sys.executable, str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 print('Research Lab real-engine telemetry: ' + str(out / 'research.csv'))
+print('Technology upgrade real-engine telemetry: ' + str(out / 'upgrades.csv'))
+print('Research Lab case matrix and rendered evidence: ' + str(out / 'research-summary.json'))

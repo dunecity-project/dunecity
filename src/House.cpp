@@ -227,6 +227,38 @@ House::House(InputStream& stream) : choam(this) {
                    || techResearchRemaining == 0))) {
             THROW(std::runtime_error, "Invalid house technology research state");
         }
+        if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_RESEARCH_INSTALLMENTS) {
+            techResearchInstallment = stream.readBool();
+            techResearchTotalCost = stream.readSint32();
+            techResearchTotalCycles = stream.readSint32();
+            techResearchPaid = stream.readFixPoint();
+            if(!isTechResearchActive()) {
+                if(techResearchInstallment || techResearchTotalCost != 0
+                   || techResearchTotalCycles != 0 || techResearchPaid != 0)
+                    THROW(std::runtime_error, "Invalid idle technology research payment state");
+            } else {
+                if(techResearchTotalCost <= 0 || techResearchTotalCycles < techResearchRemaining
+                   || techResearchPaid < 0 || techResearchPaid > FixPoint(techResearchTotalCost))
+                    THROW(std::runtime_error, "Invalid active technology research payment state");
+                if(techResearchInstallment) {
+                    const auto funded = FixPoint::FromRawValue(TechResearch::cumulativeDueRaw(
+                        FixPoint(techResearchTotalCost).getRawValue(),
+                        techResearchTotalCycles - techResearchRemaining, techResearchTotalCycles));
+                    if(techResearchPaid < funded || techResearchPaid > nextTechResearchDue())
+                        THROW(std::runtime_error, "Invalid technology research installment progress");
+                } else if(techResearchPaid != FixPoint(techResearchTotalCost)) {
+                    THROW(std::runtime_error, "Invalid prepaid technology research state");
+                }
+            }
+        } else if(isTechResearchActive()) {
+            // Old formats only saved a prepaid countdown, not its original terms.
+            // Keep every remaining cycle and mark the study fully paid, even if
+            // a continuation later opts into installments or a different pace.
+            const auto pace = currentGame->getGameInitSettings().getGameOptions().researchPace;
+            techResearchTotalCost = TechResearch::cost(techResearchTarget, pace);
+            techResearchTotalCycles = std::max(techResearchRemaining, techResearchCycles(techResearchTarget));
+            techResearchPaid = techResearchTotalCost;
+        }
     }
 }
 
@@ -239,6 +271,10 @@ void House::init() {
     techResearchTarget = 0;
     techResearchRemaining = 0;
     techResearchLabID = NONE_ID;
+    techResearchInstallment = false;
+    techResearchTotalCost = 0;
+    techResearchTotalCycles = 0;
+    techResearchPaid = 0;
 
     numUnits = 0;
     numStructures = 0;
@@ -326,6 +362,10 @@ void House::save(OutputStream& stream) const {
     stream.writeSint32(techResearchTarget);
     stream.writeSint32(techResearchRemaining);
     stream.writeUint32(techResearchLabID);
+    stream.writeBool(techResearchInstallment);
+    stream.writeSint32(techResearchTotalCost);
+    stream.writeSint32(techResearchTotalCycles);
+    stream.writeFixPoint(techResearchPaid);
 }
 
 
@@ -709,9 +749,15 @@ FixPoint House::takeCredits(FixPoint amount) {
 
 
 House::CreditPayment House::payCredits(FixPoint amount) {
+    // Existing construction/upkeep callers retain their displayed-credit gate.
+    return payCreditsExact(getCredits() >= 1 ? amount : FixPoint(0));
+}
+
+
+House::CreditPayment House::payCreditsExact(FixPoint amount) {
     CreditPayment payment;
 
-    if(getCredits() >= 1) {
+    if(amount > 0) {
         if(cityCredits >= amount) {
             cityCredits -= amount;
             AITelemetry::log().account(houseID, "spent_total", amount.getRawValue());
@@ -792,25 +838,39 @@ int House::techResearchCycles(int target) const {
     return TechResearch::cycles(target, rules.researchPace);
 }
 
+FixPoint House::nextTechResearchDue() const {
+    return FixPoint::FromRawValue(TechResearch::cumulativeDueRaw(
+        FixPoint(techResearchTotalCost).getRawValue(),
+        techResearchTotalCycles - techResearchRemaining + 1, techResearchTotalCycles));
+}
+
+bool House::isTechResearchPaused() const {
+    return isTechResearchActive() && techResearchInstallment
+        && storedCredits + startingCredits + cityCredits < nextTechResearchDue() - techResearchPaid;
+}
+
 bool House::canStartTechResearch(Uint32 labObjectID) const {
     if(!currentGame || !currentGame->getGameInitSettings().getGameOptions().researchLab
-       || isNatives() || isTechResearchActive() || getTechLevel() >= 9
-       || storedCredits + startingCredits + cityCredits < FixPoint(getTechResearchCost())) return false;
+       || isNatives() || isTechResearchActive() || getTechLevel() >= 9) return false;
+    if(!currentGame->getGameInitSettings().getGameOptions().technologyInstallments
+       && storedCredits + startingCredits + cityCredits < FixPoint(getTechResearchCost())) return false;
     const auto* lab = dynamic_cast<const ResearchLab*>(currentGame->getObjectManager().getObject(labObjectID));
     return lab && lab->getOwner() == this && lab->isActive() && lab->getHealth() > 0;
 }
 
 bool House::startTechResearch(Uint32 labObjectID) {
     if(!canStartTechResearch(labObjectID)) return false;
-    const int cost = getTechResearchCost();
-    takeCredits(cost);
+    techResearchInstallment = currentGame->getGameInitSettings().getGameOptions().technologyInstallments;
+    techResearchTotalCost = getTechResearchCost();
     techResearchTarget = researchedTechLevel + 1;
-    techResearchRemaining = techResearchCycles(techResearchTarget);
+    techResearchTotalCycles = techResearchCycles(techResearchTarget);
+    techResearchRemaining = techResearchTotalCycles;
     techResearchLabID = labObjectID;
+    techResearchPaid = techResearchInstallment ? FixPoint(0) : takeCredits(techResearchTotalCost);
     if(AITelemetry::log().enabled())
         AITelemetry::log().write(currentGame->getGameCycleCount(), houseID, -1, "tech_research_started",
             AITelemetry::Record().set("from", researchedTechLevel).set("to", techResearchTarget)
-                .set("cost", cost).set("cycles", techResearchRemaining).set("lab", labObjectID));
+                .set("cost", techResearchTotalCost).set("cycles", techResearchTotalCycles).set("lab", labObjectID));
     return true;
 }
 
@@ -823,6 +883,10 @@ void House::cancelTechResearch(Uint32 labObjectID) {
     techResearchTarget = 0;
     techResearchRemaining = 0;
     techResearchLabID = NONE_ID;
+    techResearchInstallment = false;
+    techResearchTotalCost = 0;
+    techResearchTotalCycles = 0;
+    techResearchPaid = 0;
 }
 
 void House::updateTechResearch() {
@@ -832,11 +896,23 @@ void House::updateTechResearch() {
         cancelTechResearch(techResearchLabID);
         return;
     }
+    if(techResearchInstallment) {
+        // Only the next cycle is due. A partial payment is retained, but
+        // unfunded work never advances and a pause cannot accumulate debt.
+        const FixPoint due = nextTechResearchDue();
+        if(techResearchPaid < due)
+            techResearchPaid += payCreditsExact(due - techResearchPaid).total;
+        if(techResearchPaid < due) return;
+    }
     if(--techResearchRemaining > 0) return;
     researchedTechLevel = techResearchTarget;
     techResearchTarget = 0;
     techResearchRemaining = 0;
     techResearchLabID = NONE_ID;
+    techResearchInstallment = false;
+    techResearchTotalCost = 0;
+    techResearchTotalCycles = 0;
+    techResearchPaid = 0;
     updateBuildLists();
     if(AITelemetry::log().enabled())
         AITelemetry::log().write(currentGame->getGameCycleCount(), houseID, -1, "tech_research_completed",

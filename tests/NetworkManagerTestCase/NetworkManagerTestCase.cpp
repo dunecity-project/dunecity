@@ -31,7 +31,7 @@ static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
 static constexpr int kWireCoopCampaignControl = 25;
 static constexpr int kWireCoopSetupTransfer = 26;
-static constexpr int kWireProtocolVersion = 112;
+static constexpr int kWireProtocolVersion = 113;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -129,7 +129,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // also appends CMD_AI_SUPPORT_ROLE, the in-game AI partner switch (save 9880), gives each
     // house its own tax rate and appends MOD14's Micropolis land value rule.
     // 112 changes network init to MOD18: fixed research rules and Mountain Scenery (save 9883).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 112);
+    // 113 adds MOD19's shared technology installment rule (save 9884).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 113);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

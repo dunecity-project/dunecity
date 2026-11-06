@@ -401,24 +401,39 @@ the save's SHA256 and gzip/base64 bytes; measured OFF/ON units reload it
 independently, without a diagnostic planning pass changing their starting
 state.
 
-`quantbot_research_lab_saved_crime` pins Stefan's original 9883
+`quantbot_research_lab_crime_policy` uses a synthetic physical city with
+positive tax income, no opening-fleet deficit, a normal legal lab offer,
+and dangerous crime read from the real city map. Its paired policy check
+requires the old funding refusal OFF and funded readiness ON. No recoverable
+user-save bytes are tracked. Stefan's private original 9883
 `notbuildingresearchlab` save (SHA256
 `8772302e2199d4de929c1b109f2c3151cc10e651b911358ea862e7c5882ebcb7`)
-and its exact Workshop mod
-`27a8c8d92876c5001b7744c7252eca5971327edbc17cde5d5249e1d6351fb0f4`.
-The verified revision manifest and four historical configuration files are
-archived; all 906 files, 34,791,606 bytes, are checked against their hashes.
-Unchanged artwork is restored from the source tree into isolated profiles;
-the original profile and save are never modified.
+can still be checked through the frozen private input transport. Its exact
+Workshop revision `27a8c8d92876c5001b7744c7252eca5971327edbc17cde5d5249e1d6351fb0f4`
+is restored from the verified manifest/configuration archive and matching
+source artwork; neither the original profile nor save is modified.
 
 At saved cycle 49,399, Ordos and Neutral are Brutal QuantBots with 28,981
 and 27,533 credits, positive net tax forecasts of 1,128 and 1,238 per minute,
 and 333 and 268 legal lab sites. Neither has an opening-worker deficit.
 Four and three dangerous-crime properties alone make the old investment
 readiness false despite their nine and eight Police Stations. The paired
-three-minute saved-game regression requires that refusal OFF and real lab
+private three-minute saved-game check requires that refusal OFF and real lab
 placement plus normal level-2 research startup ON. This is separate from
 the general tech-1 opening-fleet and full research-completion fixtures.
+
+`ContinuousResearch` is a separate hashed, default-OFF gene for an existing
+lab. ON starts each next study through level9 without capital reserves,
+income/crime/fleet readiness or army pacing; actual attacks on economic
+assets and blackouts may defer a start. The ordinary engine decides legal
+ownership, concurrent research and payment. New-game `Technology Installments`
+is a shared human/AI rule: studies and BuilderBase upgrades can start at any
+balance and pause rather than cancel when cash runs out. Old saves retain
+their upfront rule and already-paid research timers. The full AI fixture
+also tests zero-cash start, pause/resume, exact payment and successive
+technology levels2–4; the engine fixture covers all paces, save continuation
+and real640×480 research/upgrade panels.
+
 
 ## Dispatch and the military limit
 

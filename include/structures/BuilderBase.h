@@ -214,6 +214,10 @@ public:
 
     inline bool isUpgrading() const { return upgrading; }
     inline bool isAllowedToUpgrade() const { return (curUpgradeLev < getMaxUpgradeLevel()); }
+    /// Match-rule-aware acceptance, shared by commands and interface controls.
+    bool canStartUpgrade() const;
+    /// Active work lacks spendable money under the match's exact/legacy payment rule.
+    bool isUpgradePaused() const;
     inline int getCurrentUpgradeLevel() const { return curUpgradeLev; }
     int getUpgradeCost() const;
     inline FixPoint getUpgradeProgress() const { return upgradeProgress; }

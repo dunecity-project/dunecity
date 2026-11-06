@@ -8314,11 +8314,16 @@ GameStateDigest::Digest Game::computeStateDigest() const {
         // disagree about a house's delivery rate must be told so at the next digest, rather
         // than at whatever later cycle the difference first reaches a refinery.
         houses.mixUint32(pHouse->getSpiceIncomeMultiplier());
-        if(gameInitSettings.getGameOptions().researchLab) {
+        if(gameInitSettings.getGameOptions().researchLab || pHouse->isTechResearchActive()) {
             houses.mixInt32(pHouse->getTechLevel());
             houses.mixInt32(pHouse->getTechResearchTarget());
             houses.mixInt32(pHouse->getTechResearchRemaining());
             houses.mixUint32(pHouse->getTechResearchLabID());
+            houses.mixUint8(pHouse->isTechResearchInstallment() ? 1 : 0);
+            houses.mixInt32(pHouse->getTechResearchTotalCost());
+            houses.mixInt32(pHouse->getTechResearchTotalCycles());
+            houses.mixInt64(pHouse->getTechResearchPaid().getRawValue());
+            houses.mixUint8(pHouse->isTechResearchPaused() ? 1 : 0);
         }
     }
     digest.houseHash = houses.value();

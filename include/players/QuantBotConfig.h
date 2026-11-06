@@ -140,7 +140,7 @@ struct QuantBotConfig {
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
-    /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, ResearchLabProgression,
+    /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, ResearchLabProgression, ContinuousResearch,
     /// CityGrowthPower, CityPowerSizing, CityCompactPower, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
     /// StorageCapacity, FundedClassicProduction, TrooperSupport, SimpleTechSavings,
@@ -249,12 +249,17 @@ struct QuantBotConfig {
         /// On by default (Stefan, 2026-11-01).
         bool hardCityMatch;
         /// With the match's Research Lab option, build/rebuild one lab after essentials
-        /// and fund research from cash not already committed to accepted production.
+        /// and use the ContinuousResearch or legacy capital policy for each study.
         /// On by default; inert when the match option is off.
         bool researchLab;
         /// Treat research-enabled matches as technology progression, not optional
         /// capital behind the higher-tech opening fleet. Hashed; no saved state.
         bool researchLabProgression;
+        /// Keep an existing lab researching through level nine without capital,
+        /// income, crime or fleet readiness gates. Only live defence and blackouts
+        /// may defer a start; the normal human research/payment rules still apply.
+        /// Opt-in; genome evaluation promotes the default separately.
+        bool continuousResearch;
         /// Reserve a legal generator before demanded city growth runs out of its 24-power
         /// headroom, instead of allowing military savings and bargains to starve it.
         /// On by default; no effect outside city games or while generation is pending.

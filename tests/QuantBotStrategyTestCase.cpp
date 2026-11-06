@@ -237,6 +237,31 @@ TEST_CASE("Required Research Lab progression defaults on and independently round
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Continuous research defaults off and independently round-trips its hash",
+          "[ai][research][config]") {
+    QuantBotConfig config;
+    REQUIRE_FALSE(config.force.continuousResearch);
+    const auto disabledHash = config.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-continuous-research-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nContinuousResearch=true\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE(config.force.continuousResearch);
+    REQUIRE(config.force.researchLab);
+    REQUIRE(config.force.researchLabProgression);
+    REQUIRE(config.getConfigHash() != disabledHash);
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.force.continuousResearch);
+    REQUIRE(restored.force.researchLab);
+    REQUIRE(restored.force.researchLabProgression);
+    REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("City growth power defaults on and is loaded saved and hashed", "[ai][city][config]") {
     QuantBotConfig config;
     REQUIRE(config.force.cityGrowthPower);

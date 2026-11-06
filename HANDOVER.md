@@ -1,3 +1,38 @@
+## 2026-11-06 — Shared technology installments and continuous AI research (OMP ResearchLabAI, unreleased)
+
+- New hashed **Technology Installments** match rule defaults ON for new games:
+  humans and AI start research or any BuilderBase upgrade with any balance.
+  Research captures its mode/price/duration and pays exact cumulative 32.32 dues;
+  insufficient cash preserves partial payment and pauses the countdown, without
+  cancelling or accumulating catch-up debt. Upgrades use their existing saved
+  paid progress, exact capped installments and the same pause/resume semantics.
+- **Save9884/MOD19, protocol113**: one game-rule bool and 17 captured-research
+  bytes per house, included in state digests. Frozen9882/MOD17 and9883/MOD18
+  setups load installments OFF. Already-paid research countdowns are never
+  recharged or repriced. No extra BuilderBase or QuantBot saved fields.
+- Independent hashed `[Force Concentration] ContinuousResearch` is **default
+  OFF**, pending Genome promotion. ON starts the next study through tech9
+  without full-quote reserves, income/fleet/crime readiness or army pacing;
+  current attacks on economic assets and blackouts may defer a start. Normal
+  shared engine legality/payment remains authoritative. ResearchLabProgression
+  remains the separate lab-acquisition policy.
+- Private `notbuilding.dls`, SHA256 `277f2e52…9797c49`, initial cycle30088:
+  all active controllers are QuantBot Brutal, Both; Ordos has two. All four
+  houses own a legal tech1 lab at tech2 with power/income. Credits are
+  Ordos260/Mercenary519/Neutral2221/Rebels498; forecast net income is
+  918/1327/1016/1153 credits per minute. Ordos already has prepaid tech3 with
+  8196cycles left. Others face full-price/capital-reserve gates; Neutral is
+  specifically79 short of tech3's2000 plus its300 operating reserve.
+- Real-save bytes stay under private `outputs/` and frozen queue transport.
+  The old encoded crime save is removed; committed crime/continuous coverage
+  uses synthetic real-engine worlds. Private continuation tooling records
+  loaded controller types, actual rule/price/payment state, minute snapshots
+  and exact lab/tech/pause transitions; opt-in never edits the original save.
+- Research and upgrade panels show paid progress/drain/paused state; real
+  640×480 captures and ordinary human-button commands are required by the
+  engine fixture. Evidence root: `../outputs/research-installments-20261106/`.
+
+
 ## 2026-11-06 — Deterministic native input probes and bounded fatal-error exit (OMP MouseControls, unreleased)
 
 - Investigated `20261106T010547-ledger-retirement-371-69f817`: Pro failed
