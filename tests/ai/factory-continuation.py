@@ -26,7 +26,7 @@ KEY = ('arm',)
 FIELDS = KEY + ('sha256', 'wall_s', 'error')
 
 
-def rows(path):
+def read(path):
     if not path.exists():
         return []
     with path.open(newline='') as handle:
@@ -116,7 +116,7 @@ def play(args, scratch, binary, key):
 
 
 def report(args):
-    games = rows(Path(args.results) / 'games.csv')
+    games = read(Path(args.results) / 'games.csv')
     failed = [row for row in games if row['error']]
     print('Exact-save factory continuations: %d passed, %d failed' % (len(games) - len(failed), len(failed)))
     for row in games:
@@ -128,7 +128,7 @@ def run(args):
     require_free_space()
     with scratch_dir('factory-continuation', args.scratch) as scratch:
         binary = build_probe(args, scratch)
-        done = {row['arm'] for row in rows(Path(args.results) / 'games.csv') if not row['error']}
+        done = {row['arm'] for row in read(Path(args.results) / 'games.csv') if not row['error']}
         for key in schedule(args):
             if key[0] not in done:
                 play(args, scratch, binary, key)
