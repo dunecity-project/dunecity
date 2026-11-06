@@ -15,7 +15,11 @@ has `id`, `name`, genuine INI `section`/`key`, `kind`, `levels`, `default` and
 The initial committed-config inventory has 336 genes, including all 61 booleans,
 formation/strategy choices, wave thresholds, launcher distance, timers, recovery
 ratios, force budgets, unit ratios, priority weights and tuned tech-band mixes.
-New parser switches must be registered in the same self-contained source pin.
+That first source pin is `b10df0c63cf6ade5eb5057f9086a1cfac719f25d`.
+The follow-up registry has 339 genes / 64 booleans: `CityCompactPower`
+(source `dc2aee77`), `ContinuousResearch` (`f82f13d9`) and
+`StartWhatMakesSense` (`d3098d9a`) are independent `0/1`, default-OFF genes.
+Every evaluation pin must include its complete parser/registry pair.
 
 The registry loader audits the real C++ reader, constructor and shipped default
 INI. Unknown/forgotten boolean or enum keys, wrong effective defaults and invalid
@@ -169,10 +173,10 @@ actual failed LF assertion is that Ordos, with a legal offered plot, orders a
 Light Factory; the baseline ordered none before its yard was destroyed.
 
 New fixes, including independent heavy-capacity/buffered-production,
-ContinuousResearch and CityCompactPower, start OFF. A proposed funding gene is
-registered only when its genuine parser/logic lands. Research Installments is a
-global human-and-AI payment rule, never a per-house genome switch. Preserve
-existing default behaviour while collecting the second screening block.
+ContinuousResearch, CityCompactPower and StartWhatMakesSense, start OFF. Heavy
+capacity keys enter the registry only after their genuine parser/logic lands.
+Technology Installments is a global human-and-AI payment rule, never a per-house
+genome switch. Preserve shipped defaults while collecting the second block.
 
 ## Historical reference and promotion
 
