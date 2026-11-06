@@ -1,0 +1,4784 @@
+{
+  "release": "1.0.807",
+  "release_source": "abdf71e70697a01cae2ba27ed86aa9bfc2103e97",
+  "release_installation_record": "e9195eef9ecf4000341a793058064d9c858a8873",
+  "reference_source": "a1bf0d0be51785f085748dfd1e89a5a8bb1b9975",
+  "map_provenance": "Exact filedata string from original archived auto.rpl; no generator is backported or rerun.",
+  "research_support": "Absent in 807. Historical games are run once, paired primarily to research OFF; research ON mappings are contextual reuse, not a second applied historical treatment.",
+  "off_options_by_mod": {
+    "dunecity": {
+      "file": "reference-city-research-off.ini",
+      "sha256": "781ee120f1b3c70c5d7bbfcb533b584113439199876da54b0c0848d46431779b",
+      "city_effects": true,
+      "original_frozen_input_receipt": "/Users/stefan/.local/state/dunecity-queue/inputs/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.json"
+    },
+    "Dune2R": {
+      "file": "reference-classic-research-off.ini",
+      "sha256": "10f31cd0cba4ee26439f9795b97b13b226a67f26ab0481a6812a46048304cef1",
+      "city_effects": false,
+      "original_frozen_input_receipt": "/Users/stefan/.local/state/dunecity-queue/inputs/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.json"
+    },
+    "vanilla": {
+      "file": "reference-classic-research-off.ini",
+      "sha256": "10f31cd0cba4ee26439f9795b97b13b226a67f26ab0481a6812a46048304cef1",
+      "city_effects": false,
+      "original_frozen_input_receipt": "/Users/stefan/.local/state/dunecity-queue/inputs/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.json"
+    }
+  },
+  "games": [
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",
+      "mod": "Dune2R",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41.ini",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
+      "mod": "Dune2R",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132.ini",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001",
+      "mod": "Dune2R",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56.ini",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
+      "mod": "Dune2R",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa.ini",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876",
+      "mod": "Dune2R",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41.ini",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
+      "mod": "Dune2R",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132.ini",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001",
+      "mod": "Dune2R",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56.ini",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
+      "mod": "Dune2R",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa.ini",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876",
+      "mod": "Dune2R",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41.ini",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
+      "mod": "Dune2R",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132.ini",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001",
+      "mod": "Dune2R",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56.ini",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
+      "mod": "Dune2R",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa.ini",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/148680876",
+      "mod": "Dune2R",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e.ini",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/55001",
+      "mod": "Dune2R",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef.ini",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotBrutal,sardaukar:2:qBotBrutal,fremen:3:qBotBrutal,mercenary:4:qBotBrutal,harkonnen:5:qBotBrutal,atreides:6:qBotBrutal",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/77001",
+      "mod": "Dune2R",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1.ini",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotBrutal,fremen:2:qBotBrutal,mercenary:3:qBotBrutal,harkonnen:4:qBotBrutal,atreides:5:qBotBrutal,ordos:6:qBotBrutal",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
+      "mod": "Dune2R",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e.ini",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/148680876",
+      "mod": "Dune2R",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e.ini",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/55001",
+      "mod": "Dune2R",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef.ini",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotHard,sardaukar:2:qBotHard,fremen:3:qBotHard,mercenary:4:qBotHard,harkonnen:5:qBotHard,atreides:6:qBotHard",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/77001",
+      "mod": "Dune2R",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1.ini",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotHard,fremen:2:qBotHard,mercenary:3:qBotHard,harkonnen:4:qBotHard,atreides:5:qBotHard,ordos:6:qBotHard",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
+      "mod": "Dune2R",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e.ini",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/148680876",
+      "mod": "Dune2R",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e.ini",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/55001",
+      "mod": "Dune2R",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef.ini",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotMedium,sardaukar:2:qBotMedium,fremen:3:qBotMedium,mercenary:4:qBotMedium,harkonnen:5:qBotMedium,atreides:6:qBotMedium",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/77001",
+      "mod": "Dune2R",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1.ini",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotMedium,fremen:2:qBotMedium,mercenary:3:qBotMedium,harkonnen:4:qBotMedium,atreides:5:qBotMedium,ordos:6:qBotMedium",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101",
+      "mod": "Dune2R",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e.ini",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36.ini",
+      "map_sha256": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201.ini",
+      "map_sha256": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50.ini",
+      "map_sha256": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666.ini",
+      "map_sha256": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36.ini",
+      "map_sha256": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201.ini",
+      "map_sha256": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50.ini",
+      "map_sha256": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666.ini",
+      "map_sha256": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36.ini",
+      "map_sha256": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201.ini",
+      "map_sha256": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50.ini",
+      "map_sha256": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666.ini",
+      "map_sha256": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "254a7475b2a0240be16fa7f00c0cb22827ef904de1be4b4e7d0891b004a254e3.ini",
+      "map_sha256": "254a7475b2a0240be16fa7f00c0cb22827ef904de1be4b4e7d0891b004a254e3",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "e1d16b83f464044a08022948963a856815dfaa526dc51b94ba6417c0a9ff9316.ini",
+      "map_sha256": "e1d16b83f464044a08022948963a856815dfaa526dc51b94ba6417c0a9ff9316",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotBrutal,sardaukar:2:qBotBrutal,fremen:3:qBotBrutal,mercenary:4:qBotBrutal,harkonnen:5:qBotBrutal,atreides:6:qBotBrutal",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "e6198b6bd9efa2e6c16ad5cc2dd2e21068c29d011ab89272683a23087330f13d.ini",
+      "map_sha256": "e6198b6bd9efa2e6c16ad5cc2dd2e21068c29d011ab89272683a23087330f13d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotBrutal,fremen:2:qBotBrutal,mercenary:3:qBotBrutal,harkonnen:4:qBotBrutal,atreides:5:qBotBrutal,ordos:6:qBotBrutal",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "951406ee467b665027b267726048be6a74caa7433f9985f765ded8e8ce71d56d.ini",
+      "map_sha256": "951406ee467b665027b267726048be6a74caa7433f9985f765ded8e8ce71d56d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "254a7475b2a0240be16fa7f00c0cb22827ef904de1be4b4e7d0891b004a254e3.ini",
+      "map_sha256": "254a7475b2a0240be16fa7f00c0cb22827ef904de1be4b4e7d0891b004a254e3",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "e1d16b83f464044a08022948963a856815dfaa526dc51b94ba6417c0a9ff9316.ini",
+      "map_sha256": "e1d16b83f464044a08022948963a856815dfaa526dc51b94ba6417c0a9ff9316",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotHard,sardaukar:2:qBotHard,fremen:3:qBotHard,mercenary:4:qBotHard,harkonnen:5:qBotHard,atreides:6:qBotHard",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "e6198b6bd9efa2e6c16ad5cc2dd2e21068c29d011ab89272683a23087330f13d.ini",
+      "map_sha256": "e6198b6bd9efa2e6c16ad5cc2dd2e21068c29d011ab89272683a23087330f13d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotHard,fremen:2:qBotHard,mercenary:3:qBotHard,harkonnen:4:qBotHard,atreides:5:qBotHard,ordos:6:qBotHard",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "951406ee467b665027b267726048be6a74caa7433f9985f765ded8e8ce71d56d.ini",
+      "map_sha256": "951406ee467b665027b267726048be6a74caa7433f9985f765ded8e8ce71d56d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "254a7475b2a0240be16fa7f00c0cb22827ef904de1be4b4e7d0891b004a254e3.ini",
+      "map_sha256": "254a7475b2a0240be16fa7f00c0cb22827ef904de1be4b4e7d0891b004a254e3",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "e1d16b83f464044a08022948963a856815dfaa526dc51b94ba6417c0a9ff9316.ini",
+      "map_sha256": "e1d16b83f464044a08022948963a856815dfaa526dc51b94ba6417c0a9ff9316",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotMedium,sardaukar:2:qBotMedium,fremen:3:qBotMedium,mercenary:4:qBotMedium,harkonnen:5:qBotMedium,atreides:6:qBotMedium",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "e6198b6bd9efa2e6c16ad5cc2dd2e21068c29d011ab89272683a23087330f13d.ini",
+      "map_sha256": "e6198b6bd9efa2e6c16ad5cc2dd2e21068c29d011ab89272683a23087330f13d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotMedium,fremen:2:qBotMedium,mercenary:3:qBotMedium,harkonnen:4:qBotMedium,atreides:5:qBotMedium,ordos:6:qBotMedium",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "951406ee467b665027b267726048be6a74caa7433f9985f765ded8e8ce71d56d.ini",
+      "map_sha256": "951406ee467b665027b267726048be6a74caa7433f9985f765ded8e8ce71d56d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7.ini",
+      "map_sha256": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8.ini",
+      "map_sha256": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3.ini",
+      "map_sha256": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86.ini",
+      "map_sha256": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7.ini",
+      "map_sha256": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8.ini",
+      "map_sha256": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3.ini",
+      "map_sha256": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86.ini",
+      "map_sha256": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7.ini",
+      "map_sha256": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8.ini",
+      "map_sha256": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3.ini",
+      "map_sha256": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86.ini",
+      "map_sha256": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "823eb78d80ad73b4b94a628ea4e4c8e22cfed3874ed1c34103280784bef5bc2f.ini",
+      "map_sha256": "823eb78d80ad73b4b94a628ea4e4c8e22cfed3874ed1c34103280784bef5bc2f",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "bb963a288524434b815252936f9d54a1f2715151ceba6bbb4177597937a81a1c.ini",
+      "map_sha256": "bb963a288524434b815252936f9d54a1f2715151ceba6bbb4177597937a81a1c",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotBrutal,sardaukar:2:qBotBrutal,fremen:3:qBotBrutal,mercenary:4:qBotBrutal,harkonnen:5:qBotBrutal,atreides:6:qBotBrutal",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "3dfdedbf3f6ddef56d11d5aaa6a5762c660f24935bc481cb07635ccc330bb4ae.ini",
+      "map_sha256": "3dfdedbf3f6ddef56d11d5aaa6a5762c660f24935bc481cb07635ccc330bb4ae",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotBrutal,fremen:2:qBotBrutal,mercenary:3:qBotBrutal,harkonnen:4:qBotBrutal,atreides:5:qBotBrutal,ordos:6:qBotBrutal",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "e50b44e941cdc727c2f1e4aec4a746f7e06bcb236f2adddcef652bb983ee5794.ini",
+      "map_sha256": "e50b44e941cdc727c2f1e4aec4a746f7e06bcb236f2adddcef652bb983ee5794",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "823eb78d80ad73b4b94a628ea4e4c8e22cfed3874ed1c34103280784bef5bc2f.ini",
+      "map_sha256": "823eb78d80ad73b4b94a628ea4e4c8e22cfed3874ed1c34103280784bef5bc2f",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "bb963a288524434b815252936f9d54a1f2715151ceba6bbb4177597937a81a1c.ini",
+      "map_sha256": "bb963a288524434b815252936f9d54a1f2715151ceba6bbb4177597937a81a1c",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotHard,sardaukar:2:qBotHard,fremen:3:qBotHard,mercenary:4:qBotHard,harkonnen:5:qBotHard,atreides:6:qBotHard",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "3dfdedbf3f6ddef56d11d5aaa6a5762c660f24935bc481cb07635ccc330bb4ae.ini",
+      "map_sha256": "3dfdedbf3f6ddef56d11d5aaa6a5762c660f24935bc481cb07635ccc330bb4ae",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotHard,fremen:2:qBotHard,mercenary:3:qBotHard,harkonnen:4:qBotHard,atreides:5:qBotHard,ordos:6:qBotHard",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "e50b44e941cdc727c2f1e4aec4a746f7e06bcb236f2adddcef652bb983ee5794.ini",
+      "map_sha256": "e50b44e941cdc727c2f1e4aec4a746f7e06bcb236f2adddcef652bb983ee5794",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/148680876",
+      "mod": "dunecity",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "823eb78d80ad73b4b94a628ea4e4c8e22cfed3874ed1c34103280784bef5bc2f.ini",
+      "map_sha256": "823eb78d80ad73b4b94a628ea4e4c8e22cfed3874ed1c34103280784bef5bc2f",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/55001",
+      "mod": "dunecity",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "bb963a288524434b815252936f9d54a1f2715151ceba6bbb4177597937a81a1c.ini",
+      "map_sha256": "bb963a288524434b815252936f9d54a1f2715151ceba6bbb4177597937a81a1c",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotMedium,sardaukar:2:qBotMedium,fremen:3:qBotMedium,mercenary:4:qBotMedium,harkonnen:5:qBotMedium,atreides:6:qBotMedium",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/77001",
+      "mod": "dunecity",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "3dfdedbf3f6ddef56d11d5aaa6a5762c660f24935bc481cb07635ccc330bb4ae.ini",
+      "map_sha256": "3dfdedbf3f6ddef56d11d5aaa6a5762c660f24935bc481cb07635ccc330bb4ae",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotMedium,fremen:2:qBotMedium,mercenary:3:qBotMedium,harkonnen:4:qBotMedium,atreides:5:qBotMedium,ordos:6:qBotMedium",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/9101",
+      "mod": "dunecity",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "e50b44e941cdc727c2f1e4aec4a746f7e06bcb236f2adddcef652bb983ee5794.ini",
+      "map_sha256": "e50b44e941cdc727c2f1e4aec4a746f7e06bcb236f2adddcef652bb983ee5794",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",
+      "mod": "vanilla",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41.ini",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
+      "mod": "vanilla",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132.ini",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001",
+      "mod": "vanilla",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56.ini",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
+      "mod": "vanilla",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa.ini",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876",
+      "mod": "vanilla",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41.ini",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
+      "mod": "vanilla",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132.ini",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001",
+      "mod": "vanilla",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56.ini",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
+      "mod": "vanilla",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa.ini",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876",
+      "mod": "vanilla",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41.ini",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
+      "mod": "vanilla",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132.ini",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001",
+      "mod": "vanilla",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56.ini",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
+      "mod": "vanilla",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa.ini",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/148680876",
+      "mod": "vanilla",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e.ini",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/55001",
+      "mod": "vanilla",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef.ini",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotBrutal,sardaukar:2:qBotBrutal,fremen:3:qBotBrutal,mercenary:4:qBotBrutal,harkonnen:5:qBotBrutal,atreides:6:qBotBrutal",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/77001",
+      "mod": "vanilla",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1.ini",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotBrutal,fremen:2:qBotBrutal,mercenary:3:qBotBrutal,harkonnen:4:qBotBrutal,atreides:5:qBotBrutal,ordos:6:qBotBrutal",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
+      "mod": "vanilla",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e.ini",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/148680876",
+      "mod": "vanilla",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e.ini",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/55001",
+      "mod": "vanilla",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef.ini",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotHard,sardaukar:2:qBotHard,fremen:3:qBotHard,mercenary:4:qBotHard,harkonnen:5:qBotHard,atreides:6:qBotHard",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/77001",
+      "mod": "vanilla",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1.ini",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotHard,fremen:2:qBotHard,mercenary:3:qBotHard,harkonnen:4:qBotHard,atreides:5:qBotHard,ordos:6:qBotHard",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
+      "mod": "vanilla",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e.ini",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/148680876",
+      "mod": "vanilla",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e.ini",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 148680876",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/55001",
+      "mod": "vanilla",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef.ini",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 55001",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotMedium,sardaukar:2:qBotMedium,fremen:3:qBotMedium,mercenary:4:qBotMedium,harkonnen:5:qBotMedium,atreides:6:qBotMedium",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/77001",
+      "mod": "vanilla",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1.ini",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 77001",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotMedium,fremen:2:qBotMedium,mercenary:3:qBotMedium,harkonnen:4:qBotMedium,atreides:5:qBotMedium,ordos:6:qBotMedium",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101",
+      "mod": "vanilla",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e.ini",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 9101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "off"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.33.6c4a0e/probe-evidence.tar.gz",
+      "replay_member": "scratch/g2f6c9c4a49a7/profile/replay/auto.rpl",
+      "replay_sha256": "b2f25a92fd48cb72a41a9b96c30b10190a385257bd4e9b1bfbe1ad8d1acf1bdc",
+      "map_sha256": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36",
+      "setup_sha256": "a91dca96ed40a3115406bfee5a470c0ec92c62c2c7d6105a465a76717a0374e0"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.34.8e3088/probe-evidence.tar.gz",
+      "replay_member": "scratch/g153cf8ad81df/profile/replay/auto.rpl",
+      "replay_sha256": "3cb9cee83eed765f3f19fee3291db3ab067bf5ffb4ff704dff527b4b7e1c1ee7",
+      "map_sha256": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201",
+      "setup_sha256": "e9e3d6e353485a7aa840e2764e88e8d4ceb7d9563d012817ca8e2c51ef74bff0"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.35.6440a4/probe-evidence.tar.gz",
+      "replay_member": "scratch/g571b900893e0/profile/replay/auto.rpl",
+      "replay_sha256": "815d18a569f3c46028fb1374f37c186f1d399d36056dabf6032b9b12c05beca4",
+      "map_sha256": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50",
+      "setup_sha256": "f7dbcbf635bc9fcef039a61b19269cddcba154ac02843f811846693012d39c7d"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.32.7dd40f/probe-evidence.tar.gz",
+      "replay_member": "scratch/g24addcb27268/profile/replay/auto.rpl",
+      "replay_sha256": "f1f67e46c5a184567340a8bf01483986246a93a4479be7a9c1c19f5d4b785fe7",
+      "map_sha256": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666",
+      "setup_sha256": "06334316ccd6b4e32e251521d8da09a7669de1ced642c0df7c67fd686fa36efd"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.29.6f4de3/probe-evidence.tar.gz",
+      "replay_member": "scratch/gd43f7911d67f/profile/replay/auto.rpl",
+      "replay_sha256": "d91b5deab7c8f1f32ad0f0e8d937e1889384b73f23574d28ada560094b5ac2a2",
+      "map_sha256": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36",
+      "setup_sha256": "b75e364431576d1769950de0e6e364b59eaf28620aea460fbbb974b63b15ee59"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.30.060f40/probe-evidence.tar.gz",
+      "replay_member": "scratch/g001978be4339/profile/replay/auto.rpl",
+      "replay_sha256": "3b4c7b52aa53ca461a88ccb7a249848e5d7a0008f437cf85101a3f915c75650a",
+      "map_sha256": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201",
+      "setup_sha256": "60ab739e42d0fa930e7dabdcbb974ed6079edd4eb7028a22b5200b4b57455f79"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.31.54b800/probe-evidence.tar.gz",
+      "replay_member": "scratch/g0a154529e7d4/profile/replay/auto.rpl",
+      "replay_sha256": "d5eda97688265d0d8b85818d97b2a0e2fc618c8044fc02a547ea8590aafa158a",
+      "map_sha256": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50",
+      "setup_sha256": "0a8c4f946f58c9a778256e7cf0228683e31ead24509c0a255d150bb3e0402218"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.28.4f8188/probe-evidence.tar.gz",
+      "replay_member": "scratch/g2903646a756a/profile/replay/auto.rpl",
+      "replay_sha256": "8b0ec3169c87e9d94907dfcb0811c12cf5d384c019fff1988445e19c5f819900",
+      "map_sha256": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666",
+      "setup_sha256": "697489c292f5627acac98eb313f5f6b5413e3bcc8dd8fd2ad378d6f98da6fa75"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.25.2ac279/probe-evidence.tar.gz",
+      "replay_member": "scratch/gd4fef64737ae/profile/replay/auto.rpl",
+      "replay_sha256": "8ca865a71dea72c3db794115f3326bafef57f5ee652061fecd9d47d46d429103",
+      "map_sha256": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36",
+      "setup_sha256": "425121c1a1e81561b3530eca99dc5117af99ff4d968fe4a4913904871cd3c24d"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.26.3aac2c/probe-evidence.tar.gz",
+      "replay_member": "scratch/gbb12aef66872/profile/replay/auto.rpl",
+      "replay_sha256": "8ef394c762145341653c2ffe0eaca8855ef9ad895d0bf0c85402696b317287ae",
+      "map_sha256": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201",
+      "setup_sha256": "07237daff12c5cf7ebf4a37a29a41675ae91ec8fd381bd532c15aee4ce1eede0"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.27.389a2c/probe-evidence.tar.gz",
+      "replay_member": "scratch/g2e88de05a54b/profile/replay/auto.rpl",
+      "replay_sha256": "acf6d808062def80156906e6896c525233b763a8db1d1be1c70f047605fa96bd",
+      "map_sha256": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50",
+      "setup_sha256": "5cdbe9ca7c00421088d2054d2a93d8c0caeac05e35c377765dbe9c288a429d3c"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.24.d714f3/probe-evidence.tar.gz",
+      "replay_member": "scratch/gfd96b0a05e07/profile/replay/auto.rpl",
+      "replay_sha256": "c72817a7e08bfea55ab29c296de39868b41bdcee14e5ca478ed3ed7776581a10",
+      "map_sha256": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666",
+      "setup_sha256": "952bf732b71b5e0be75ca1f98cede3f0d942438738b3c50454c1504bb3ac66d8"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.45.42318a/probe-evidence.tar.gz",
+      "replay_member": "scratch/g39d0bce1ae17/profile/replay/auto.rpl",
+      "replay_sha256": "7d6cf7ccdd05356ad9ecf7bdc55bd2459633cf41b570b48260ad32f742252da9",
+      "map_sha256": "254a7475b2a0240be16fa7f00c0cb22827ef904de1be4b4e7d0891b004a254e3",
+      "setup_sha256": "c8319d545909074900a11547ace6a51a1975ffbd1985b57533e08018a6afd074"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.46.542c21/probe-evidence.tar.gz",
+      "replay_member": "scratch/g5b6ad68f568c/profile/replay/auto.rpl",
+      "replay_sha256": "bfc270623e8f44b02cd340b17b1bd33529e3ce40f5166f75e717e3039219e089",
+      "map_sha256": "e1d16b83f464044a08022948963a856815dfaa526dc51b94ba6417c0a9ff9316",
+      "setup_sha256": "68dced263423f2f76b2204240f73d542f350e2dd6cd48f58bfe36e647aafc7eb"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.47.434d78/probe-evidence.tar.gz",
+      "replay_member": "scratch/gd68ad02b21a3/profile/replay/auto.rpl",
+      "replay_sha256": "f530e31710e4d0d979816a9bce4a7f62d94eedfd587078b904b22835e61e2036",
+      "map_sha256": "e6198b6bd9efa2e6c16ad5cc2dd2e21068c29d011ab89272683a23087330f13d",
+      "setup_sha256": "520241c44c8013f9e51e6a8d0a7b9fc72cb3352ea8222286661a5daa0985ccce"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.44.1f6be0/probe-evidence.tar.gz",
+      "replay_member": "scratch/ge3d80803d9c0/profile/replay/auto.rpl",
+      "replay_sha256": "284f3796b2cf0f09e31ac8a95e6bc492647c5196ddf9b4601f6d1b2b0f348488",
+      "map_sha256": "951406ee467b665027b267726048be6a74caa7433f9985f765ded8e8ce71d56d",
+      "setup_sha256": "57863731707d0eb7df508b29c13f8b00b758d37070722330f96b5c66b74a8121"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.41.1e76ba/probe-evidence.tar.gz",
+      "replay_member": "scratch/g379e435e3d95/profile/replay/auto.rpl",
+      "replay_sha256": "6413aa3aa95aa47bd81fb4a453198b933c9811d0020b287a0033c8af20d1ca9f",
+      "map_sha256": "254a7475b2a0240be16fa7f00c0cb22827ef904de1be4b4e7d0891b004a254e3",
+      "setup_sha256": "c2270f6502bf02ac305e56c02d7d93bd579b00547322024bf92337d7c5231e37"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.42.03ace1/probe-evidence.tar.gz",
+      "replay_member": "scratch/g38debb4e3495/profile/replay/auto.rpl",
+      "replay_sha256": "d4e9107e0c2bbb0fee09957217ca934c9f6842816cf8026f17a0d6eac9c7a9b9",
+      "map_sha256": "e1d16b83f464044a08022948963a856815dfaa526dc51b94ba6417c0a9ff9316",
+      "setup_sha256": "101a5aed87014be96aefefd05de7d354dcbaaad2f2ccccc64d71b3045d153229"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.43.4444d0/probe-evidence.tar.gz",
+      "replay_member": "scratch/g5e87d4945aeb/profile/replay/auto.rpl",
+      "replay_sha256": "e898a09271102b74d2f18860aaea5ba4c97132c3748d16ffc96df29bf3d9cdb3",
+      "map_sha256": "e6198b6bd9efa2e6c16ad5cc2dd2e21068c29d011ab89272683a23087330f13d",
+      "setup_sha256": "e533d36188efb072ba816d2de6c1a7d8397a1a012ab19ed01186a3ad76d750b8"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.40.99a5b4/probe-evidence.tar.gz",
+      "replay_member": "scratch/g4547d156ffc1/profile/replay/auto.rpl",
+      "replay_sha256": "9233e95954fc43913d6846ad13a594ef8d2f4266c66f1e9cf75192892a7f2eb3",
+      "map_sha256": "951406ee467b665027b267726048be6a74caa7433f9985f765ded8e8ce71d56d",
+      "setup_sha256": "9ec31be9f23750376838dd20d501666d72cd4200b087cb577a3b49d7aa7cadd8"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.37.6d06a3/probe-evidence.tar.gz",
+      "replay_member": "scratch/ge8d8997e085f/profile/replay/auto.rpl",
+      "replay_sha256": "bb6515fb6470111a09f28fe63e39cd7dc710c78425708f86955444c9d429125d",
+      "map_sha256": "254a7475b2a0240be16fa7f00c0cb22827ef904de1be4b4e7d0891b004a254e3",
+      "setup_sha256": "9712ebd76e6c10e1df7ad08d6bfcd412940778ab7db25d495645f3393617c945"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.38.3fa322/probe-evidence.tar.gz",
+      "replay_member": "scratch/gad92bcf82228/profile/replay/auto.rpl",
+      "replay_sha256": "66d94d8c99b30bc5500ae009a1f2ecb87dad7558e6e69973d892bbe0b619f9c5",
+      "map_sha256": "e1d16b83f464044a08022948963a856815dfaa526dc51b94ba6417c0a9ff9316",
+      "setup_sha256": "7598976c49d75e6c4d18e83519bb27ad95da8cecb8829efc5af03a8a61599d09"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.39.662fd1/probe-evidence.tar.gz",
+      "replay_member": "scratch/gea1c6be0e94c/profile/replay/auto.rpl",
+      "replay_sha256": "d363edc8be05bb976c89bd3ef8282ae947990a00916ce5b816580abc7e3115d1",
+      "map_sha256": "e6198b6bd9efa2e6c16ad5cc2dd2e21068c29d011ab89272683a23087330f13d",
+      "setup_sha256": "faefa55d3a04bdde7262de1a2d39a63db004fe2606da960016df10ff3dbd9e23"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.36.e78380/probe-evidence.tar.gz",
+      "replay_member": "scratch/gc720c71a02c0/profile/replay/auto.rpl",
+      "replay_sha256": "8c2fe1939b0a43565e3de89c8e47298a6b2e34bee0c12fc405205bdca96b6ed5",
+      "map_sha256": "951406ee467b665027b267726048be6a74caa7433f9985f765ded8e8ce71d56d",
+      "setup_sha256": "769e0ea927a91175152825c73566777e07de1137ad2f2bc7de03f19381bf419a"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.9.55bdcb/probe-evidence.tar.gz",
+      "replay_member": "scratch/gf9e545774e11/profile/replay/auto.rpl",
+      "replay_sha256": "169b0f41b71d8fedada1c6875cabcb21491dfae2a3a0b61ca6fe193d25c73d81",
+      "map_sha256": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7",
+      "setup_sha256": "f2d16a1e35acce999b95c389abab88a3e6ab2d971b76b0aab81bb6926b0c9516"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.10.aefb2a/probe-evidence.tar.gz",
+      "replay_member": "scratch/gf81c318007c9/profile/replay/auto.rpl",
+      "replay_sha256": "5a0d8cdf5944e67ede82a3fa65fd5545873ae8786c1f2e41835bc1b33a914bb4",
+      "map_sha256": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8",
+      "setup_sha256": "e23989d63988d3b4bad2a7b87dfbe9a722d0f5061ec3454b66d53a92217b829a"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.11.da9ff5/probe-evidence.tar.gz",
+      "replay_member": "scratch/g809c6c1e9e28/profile/replay/auto.rpl",
+      "replay_sha256": "f13e9143b6f33087d62f618546f72a719cf1fb655fe680ac97a5048426087b78",
+      "map_sha256": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3",
+      "setup_sha256": "009b9bf54998ba10393c42cb3746f0b927c8b65475f426d817f5470319fa2671"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.8.c1a634/probe-evidence.tar.gz",
+      "replay_member": "scratch/g73e5a598bdce/profile/replay/auto.rpl",
+      "replay_sha256": "bb3473445cb0792bc3e59683afba848f681a83b7e5c2ece2794a3a86efd12125",
+      "map_sha256": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86",
+      "setup_sha256": "48abbf22a8d552a2beaf3e674c74541b4d1b35b0aaf808822be8c7e33a7a5545"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.5.83486c/probe-evidence.tar.gz",
+      "replay_member": "scratch/g0878be1937f9/profile/replay/auto.rpl",
+      "replay_sha256": "e9eba235a4f1c1899126037e2cae1bb089460530799a26458673f866eba6ede8",
+      "map_sha256": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7",
+      "setup_sha256": "0284aa3aa1234ff24329a5b33a73ad1404b50a1881547d43a98853eb6267e034"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.6.62b5ec/probe-evidence.tar.gz",
+      "replay_member": "scratch/gae2e7cde8919/profile/replay/auto.rpl",
+      "replay_sha256": "e50d1a985d1d2a3f64296bf69ed4fb062caa5b02eb14e01d475343ca7d98cc55",
+      "map_sha256": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8",
+      "setup_sha256": "7dfb37dfe68c485fd6572db60955eaeeb92930b82d245bb3529372c182fc0f92"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.7.607ab4/probe-evidence.tar.gz",
+      "replay_member": "scratch/g799f089f1e13/profile/replay/auto.rpl",
+      "replay_sha256": "1b186c8a8a009cc7afdf9d1d9fca4b0ab6130f95664abfd8251f442ebcdba15a",
+      "map_sha256": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3",
+      "setup_sha256": "2cfe7a345bff1b8dd0b3b01ed05e397d0f6acfccb491e2885c90e5b3e22dc33a"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.4.3ed9e8/probe-evidence.tar.gz",
+      "replay_member": "scratch/g6d2c0f6f07e3/profile/replay/auto.rpl",
+      "replay_sha256": "458445405ad6509071ee0ab1e8b1e2edb728b8b07d8649a480e6950433af250d",
+      "map_sha256": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86",
+      "setup_sha256": "d5ff7a111f7f32c976026934055763430070ab940ba4553a50324620e66f3e9f"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.1.53c19c/probe-evidence.tar.gz",
+      "replay_member": "scratch/g5cc3b184d7f3/profile/replay/auto.rpl",
+      "replay_sha256": "b745575ef6b9b3269d8f7c9f01649a6242f14202f027cace543c07714bad45f0",
+      "map_sha256": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7",
+      "setup_sha256": "a1cedf69bf773e2642bac27d8b9c97631f64b0d5e155a80a80b192c496a9a1e7"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.2.5495ac/probe-evidence.tar.gz",
+      "replay_member": "scratch/g23e89f0d2db3/profile/replay/auto.rpl",
+      "replay_sha256": "1fc0d2c0f2b24a8ad041cca57bffac0f6334a2d1550737d50e8f74f00a39a254",
+      "map_sha256": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8",
+      "setup_sha256": "d7a8c5253ca7ca38fa70a4f592413b8165bc30f0b08ffcbc815d904e44aaf32d"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.3.571754/probe-evidence.tar.gz",
+      "replay_member": "scratch/g6b198f8bf92e/profile/replay/auto.rpl",
+      "replay_sha256": "199b2ae32b4bedf8302cca64d1b660b7c6c266e0241e0036c8b0f861f61222a2",
+      "map_sha256": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3",
+      "setup_sha256": "badbcef755461a540ab57f1e6bdf4f55873ff33a73890bcb4c126fd6f190aa26"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.0.3ff613/probe-evidence.tar.gz",
+      "replay_member": "scratch/g228fb044edca/profile/replay/auto.rpl",
+      "replay_sha256": "0aa95182224939d1ff3bdc2bcfbd1fbc41f123844053e5df030deebfb83a2698",
+      "map_sha256": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86",
+      "setup_sha256": "96cf00fbc6b44a3d04b5537cad35e147e3fb006e96b86ab2a609f22e464b91b0"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.21.926bcc/probe-evidence.tar.gz",
+      "replay_member": "scratch/gd5d8714bd4a6/profile/replay/auto.rpl",
+      "replay_sha256": "532e8d2b298fc632fae11b0e6e0b071c2d56f0842586c9e595c0e0a0ebdfa084",
+      "map_sha256": "823eb78d80ad73b4b94a628ea4e4c8e22cfed3874ed1c34103280784bef5bc2f",
+      "setup_sha256": "d35ae13f3ed45712883d683c10e407d4cbfed30cbc99ff5ed5f4bf92f331ddbf"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.22.5846d3/probe-evidence.tar.gz",
+      "replay_member": "scratch/g1236c030282b/profile/replay/auto.rpl",
+      "replay_sha256": "5da978d0710a3aa236c2a38a71ddc2abee9dc3c96a2e2a99163b79df6d1cd5e2",
+      "map_sha256": "bb963a288524434b815252936f9d54a1f2715151ceba6bbb4177597937a81a1c",
+      "setup_sha256": "32d767d2a35c71c2952b66afd8eac872b171698505abe8304280aed9ab150d62"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.23.1d58be/probe-evidence.tar.gz",
+      "replay_member": "scratch/g343370eb5060/profile/replay/auto.rpl",
+      "replay_sha256": "dca5f80a2cc33c05687b2d77774365ba6d84203de322168288a12bd87bd993e3",
+      "map_sha256": "3dfdedbf3f6ddef56d11d5aaa6a5762c660f24935bc481cb07635ccc330bb4ae",
+      "setup_sha256": "30682b9bfac394b164feb81a0f42b91b90aa7122e19f54b87225b8bc66ff5c03"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.20.64bf50/probe-evidence.tar.gz",
+      "replay_member": "scratch/g9e0751c1a220/profile/replay/auto.rpl",
+      "replay_sha256": "b35ae0001d8133392106b6a640f2adc3d2ad69c8e1c0e82a5b7bed746a15d402",
+      "map_sha256": "e50b44e941cdc727c2f1e4aec4a746f7e06bcb236f2adddcef652bb983ee5794",
+      "setup_sha256": "c5a127921b9fb8d80a3ee2c9e2bb853aee5ba9ed568f195dc0678670288ecee0"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.17.f36e3f/probe-evidence.tar.gz",
+      "replay_member": "scratch/g674d9d1b5e78/profile/replay/auto.rpl",
+      "replay_sha256": "f07b3b459eb7f597b7c6fea1a9b644a5d561516d4d3b2a2ce2cba4648072d3ad",
+      "map_sha256": "823eb78d80ad73b4b94a628ea4e4c8e22cfed3874ed1c34103280784bef5bc2f",
+      "setup_sha256": "5e0287d303aba847312666795bc9491d3186679a844dc01c7538b28f08203b18"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.18.5524f2/probe-evidence.tar.gz",
+      "replay_member": "scratch/gb8ff75ad2497/profile/replay/auto.rpl",
+      "replay_sha256": "2bd8e6cc521692a45edb364d9c677669d2ae8362817b6b525c297372c9347280",
+      "map_sha256": "bb963a288524434b815252936f9d54a1f2715151ceba6bbb4177597937a81a1c",
+      "setup_sha256": "c553b3ad21e2db000f6233caf4651ede54ac38240f6625503dee894982a79bbc"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.19.d5e8e2/probe-evidence.tar.gz",
+      "replay_member": "scratch/gb6306cafb3c8/profile/replay/auto.rpl",
+      "replay_sha256": "286feb05e588c7063e2bfb686b3c66a23664565c3feba88957731884adb9d502",
+      "map_sha256": "3dfdedbf3f6ddef56d11d5aaa6a5762c660f24935bc481cb07635ccc330bb4ae",
+      "setup_sha256": "220b3a22c787ea9dca10adc61fef99adbb319a111c0cb0360800ee7f512a40b4"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.16.303b3c/probe-evidence.tar.gz",
+      "replay_member": "scratch/g0df267321f0f/profile/replay/auto.rpl",
+      "replay_sha256": "7120221a7592ce4917f4d3d9a8b0ee8808fd05ae2998331ac90f136867644c43",
+      "map_sha256": "e50b44e941cdc727c2f1e4aec4a746f7e06bcb236f2adddcef652bb983ee5794",
+      "setup_sha256": "163ac1d82fbb5dcedfc514984fe34df251b86e373716996d3b5585075b04fb40"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/148680876",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.13.3013e1/probe-evidence.tar.gz",
+      "replay_member": "scratch/ga47148700306/profile/replay/auto.rpl",
+      "replay_sha256": "30c86809616dbc15648d352c03c1950511679e41b7d3c4276c7494d46832f989",
+      "map_sha256": "823eb78d80ad73b4b94a628ea4e4c8e22cfed3874ed1c34103280784bef5bc2f",
+      "setup_sha256": "c8696a972350681e94b04169559a9fd46be3c674bef295ed169022c2f8c85b8f"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/55001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.14.075b5f/probe-evidence.tar.gz",
+      "replay_member": "scratch/g20c3f8ae5ba0/profile/replay/auto.rpl",
+      "replay_sha256": "36814230af4a1d97e89c5f0465e390eb8017345613c952606dd3ffcc7cac252c",
+      "map_sha256": "bb963a288524434b815252936f9d54a1f2715151ceba6bbb4177597937a81a1c",
+      "setup_sha256": "fc188e3dbffd7596f062ea5c6c592e408de5704348c7632c38003e636c3b5a77"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/77001",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.15.c577c4/probe-evidence.tar.gz",
+      "replay_member": "scratch/g239325405c17/profile/replay/auto.rpl",
+      "replay_sha256": "45bc111eabf4c4f3ccfd5b4f7ae38f63286ca4e7293036289fdc0a1cbf54e9ad",
+      "map_sha256": "3dfdedbf3f6ddef56d11d5aaa6a5762c660f24935bc481cb07635ccc330bb4ae",
+      "setup_sha256": "6aa3dcd4d803bcc30f2101730220407dc67ce891c2683891661f6447808c9b58"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/9101",
+      "mod": "dunecity",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-off/off/cluster-evidence/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.12.90e390/probe-evidence.tar.gz",
+      "replay_member": "scratch/g2c53d1615583/profile/replay/auto.rpl",
+      "replay_sha256": "265bfbd1b887ab1d717b27851af19f485a0eda65c108f67d2836f470d00afc8b",
+      "map_sha256": "e50b44e941cdc727c2f1e4aec4a746f7e06bcb236f2adddcef652bb983ee5794",
+      "setup_sha256": "aa419f03f23c7dcdb43371d52a8467e73a84930632dc3dd2086c285ce363dddb"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.21.331775/probe-evidence.tar.gz",
+      "replay_member": "scratch/g2f6c9c4a49a7/profile/replay/auto.rpl",
+      "replay_sha256": "a4c0788d06a27ce28d6c0a718d1809a955470e61a3cae5409ce2e9bdd6287bfd",
+      "map_sha256": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36",
+      "setup_sha256": "dc144f7f507bc57a6695fd96e15a5a67fa01d67dc9a0dc69987297a3fd9c64aa"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.22.6e874e/probe-evidence.tar.gz",
+      "replay_member": "scratch/g153cf8ad81df/profile/replay/auto.rpl",
+      "replay_sha256": "e9c7d7b59b92ca2d859e5b9cf0e7f57deaa1954c8eca9998bb4006af930eb066",
+      "map_sha256": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201",
+      "setup_sha256": "5b4ebc031b49fe2f6ff51c8959a3479d91697533542c86ba9d3fa11570ad3120"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.23.7e2667/probe-evidence.tar.gz",
+      "replay_member": "scratch/g571b900893e0/profile/replay/auto.rpl",
+      "replay_sha256": "0b3f3faa3c59580e3ff1baa302f55017c5e41105b932d974563d6c9e49cf26bd",
+      "map_sha256": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50",
+      "setup_sha256": "0bdb74e70e5737bad581f3502c80c77d80bb6ad7e655430c364a9a9a7265d98a"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.20.0c8e20/probe-evidence.tar.gz",
+      "replay_member": "scratch/g24addcb27268/profile/replay/auto.rpl",
+      "replay_sha256": "528770a3448e88f8b23943d11e970af3f0219bc94f347f0195a2f0eef763f1ed",
+      "map_sha256": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666",
+      "setup_sha256": "6d19442cce12224a4e84ec24e452c81e6fcf0153b2f917eeac43c362227ff91a"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.17.4d73da/probe-evidence.tar.gz",
+      "replay_member": "scratch/gd43f7911d67f/profile/replay/auto.rpl",
+      "replay_sha256": "05c76ff5416adcff611af3aaac12bb3ffd0acb3dc03e70cd5eeb64b6ee2efaed",
+      "map_sha256": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36",
+      "setup_sha256": "7de325a1bccf75405f441f02e12affc68728466348a08018ee01d2f55e9ac4f3"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.18.3b2b2c/probe-evidence.tar.gz",
+      "replay_member": "scratch/g001978be4339/profile/replay/auto.rpl",
+      "replay_sha256": "19474f1883ab87f97fcf2a918c5fbbadcea740a8772571eed310a8a8d9455dd4",
+      "map_sha256": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201",
+      "setup_sha256": "ababbf7943d9d5d7daa6a063b6348b112e3254bef06dd1e892bd6204bfd797af"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.19.ce3b47/probe-evidence.tar.gz",
+      "replay_member": "scratch/g0a154529e7d4/profile/replay/auto.rpl",
+      "replay_sha256": "fc64357740991567f875a92b3c68c30c687de88283fb0eeafc0a1096542bf72f",
+      "map_sha256": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50",
+      "setup_sha256": "4ec02dae1d0398f1c6441154e24580771f352f8e8bacc99e173d5250aa3ff6a0"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.16.e527c3/probe-evidence.tar.gz",
+      "replay_member": "scratch/g2903646a756a/profile/replay/auto.rpl",
+      "replay_sha256": "4fa040016ab28ebf6352fc49f08cfe01e7c596e7c35651a8d92981c87a47b198",
+      "map_sha256": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666",
+      "setup_sha256": "98324bfe4b6fcfa6aaff9e85942aa25c9c4fd4b868080ae24c70c28fe29f4d03"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.13.b6986d/probe-evidence.tar.gz",
+      "replay_member": "scratch/gd4fef64737ae/profile/replay/auto.rpl",
+      "replay_sha256": "0563c2c5193f1e73015e02aa19afe1971cbe511c3960b3495195db9a6a23081d",
+      "map_sha256": "f273e1fc833b91ada29b43be94c27f4288939c86ea49a0f1a333eb8d64fbeb36",
+      "setup_sha256": "f5e941f9e4fea9d899ae62cc8f668a6ca73f43d1bf66afe10827f9eedd31d841"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.14.ef838d/probe-evidence.tar.gz",
+      "replay_member": "scratch/gbb12aef66872/profile/replay/auto.rpl",
+      "replay_sha256": "211df633ea37dbaec5f0729e6540d3dbf79e35742d7f24ada31da49f8853dcb0",
+      "map_sha256": "109fad2838ae38c1c868eada38711d1aa436255f6e0d8b64cc6bd4bfb8219201",
+      "setup_sha256": "069bba56ad353fd18685c267b1f2458bff14bb9ce34b859d810440e2c3015090"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.15.ff4654/probe-evidence.tar.gz",
+      "replay_member": "scratch/g2e88de05a54b/profile/replay/auto.rpl",
+      "replay_sha256": "82856cbe5c54e66bc0bb243963ebc875eb6e5b82ed88b21b479eb50855bbc1b1",
+      "map_sha256": "d7462fd5219e26ebecc47d27c2c5b26a34b2e8ee2e0e543fe33182b2b6627d50",
+      "setup_sha256": "c53b0b204358a7cc0c72bb8c427441227c9c0bec82dc1ad29203aa9573d28a82"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.12.5f249b/probe-evidence.tar.gz",
+      "replay_member": "scratch/gfd96b0a05e07/profile/replay/auto.rpl",
+      "replay_sha256": "78f7c2f93e2d9602db97ac84b9a7d9ea81d616a33f65c06f9dae86f3ac00e77b",
+      "map_sha256": "e58e1a38079185f4835b976a21d7742e89f567c5b76b134489971562976e5666",
+      "setup_sha256": "ec9946a1afcd778542e4d17209447d3aadc565658e8a72496e2b00916c1bf847"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/148680876",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.9.9f978b/probe-evidence.tar.gz",
+      "replay_member": "scratch/gf9e545774e11/profile/replay/auto.rpl",
+      "replay_sha256": "845c9f51c0d91421034c2929d8119a1575adb77f40bc9aba7af34444b641d018",
+      "map_sha256": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7",
+      "setup_sha256": "84930e9533f6b6993875309eccc416fee8850a29e54f24e7191eb9e312206fd4"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/55001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.10.4a3029/probe-evidence.tar.gz",
+      "replay_member": "scratch/gf81c318007c9/profile/replay/auto.rpl",
+      "replay_sha256": "30f685db9a3b178036043007876ba7ea865dcd0022194e0a23bbd6a5c8168766",
+      "map_sha256": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8",
+      "setup_sha256": "f184a32c1b0351027ed944a8b814be92eebfdf8256c962b0caf31172bc27a9a3"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/77001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.11.def747/probe-evidence.tar.gz",
+      "replay_member": "scratch/g809c6c1e9e28/profile/replay/auto.rpl",
+      "replay_sha256": "956413a092166ed278b7d1f1487acae97652af2a778d7b45d3aebfcf864123f6",
+      "map_sha256": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3",
+      "setup_sha256": "6a1cd3dec2d1bb4f548f3d60f35d10c0893b96e7cb5e9ef0ade3724de654e776"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/9101",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.8.cb8157/probe-evidence.tar.gz",
+      "replay_member": "scratch/g73e5a598bdce/profile/replay/auto.rpl",
+      "replay_sha256": "9876e8b4c687a2dbe4b546a89df1f4a735c522d77375af633e7acde33c84b51a",
+      "map_sha256": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86",
+      "setup_sha256": "5d8fd9b0896f57d0660c99be0cffcfc406edf7731421d868aeb4944320fcc5c1"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/148680876",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.5.822874/probe-evidence.tar.gz",
+      "replay_member": "scratch/g0878be1937f9/profile/replay/auto.rpl",
+      "replay_sha256": "ba149ef88f8aa875d49da7187dbfd1fe48b1c0eb4827da291398123871c5fd1c",
+      "map_sha256": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7",
+      "setup_sha256": "3aff3ec8a5814cc7c4e791bd4957c4d4e2ffb20b3b97e247e3e7727372db47b4"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/55001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.6.548e36/probe-evidence.tar.gz",
+      "replay_member": "scratch/gae2e7cde8919/profile/replay/auto.rpl",
+      "replay_sha256": "f19322ed6fcdad715d73ed438e6b884a64a92cfea43a6d7bb4650ac458333a61",
+      "map_sha256": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8",
+      "setup_sha256": "7f69569a0cf6352f6d83ce6455ce9d7bcca5d683254880edb27ba2dd9f52ab80"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/77001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.7.90b09f/probe-evidence.tar.gz",
+      "replay_member": "scratch/g799f089f1e13/profile/replay/auto.rpl",
+      "replay_sha256": "d1099b27038fed4d1964c90223dab40eabd956d8a4933be97c39163ea1bd6170",
+      "map_sha256": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3",
+      "setup_sha256": "27fca4a74eb1024d50ef3fdf027e0234826d10a5467e46b02911416979a13b48"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/9101",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.4.d039fd/probe-evidence.tar.gz",
+      "replay_member": "scratch/g6d2c0f6f07e3/profile/replay/auto.rpl",
+      "replay_sha256": "4524800659006f5a702e9db82fde2dfa05c661e5999a23ef0d8f2e6317c213b4",
+      "map_sha256": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86",
+      "setup_sha256": "8921a5aae95664c2f9471f1fbd69205491c03c5f1656fe663a7d9a88a65d911c"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/148680876",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.1.946075/probe-evidence.tar.gz",
+      "replay_member": "scratch/g5cc3b184d7f3/profile/replay/auto.rpl",
+      "replay_sha256": "d8f71a4862edf49353b4117d8edc908acba7e3e974a28b67ea1957e4f0df1288",
+      "map_sha256": "69dbd2c4228d6daab0063f7c578cc1116304936eb89d0dd2ab18087c1b21abb7",
+      "setup_sha256": "4192ca58e7e2f3ed7f1a7eae6a53ccbbbec3e9002c19d3591834233e5a9a7777"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/55001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.2.88d661/probe-evidence.tar.gz",
+      "replay_member": "scratch/g23e89f0d2db3/profile/replay/auto.rpl",
+      "replay_sha256": "fdfa090093e7700e335dafd14ed161f7837719d81adae05ebbe41dc4c19a205d",
+      "map_sha256": "557686f69ab192312dd1bb5e6c0cd3d7c4bc33aaf98ff44d8b5916b0c1fb82a8",
+      "setup_sha256": "7d9125623988877f3bcbfee8ca80ac784ec6b008abc6271e4279122f5cc508e7"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/77001",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.3.5eb641/probe-evidence.tar.gz",
+      "replay_member": "scratch/g6b198f8bf92e/profile/replay/auto.rpl",
+      "replay_sha256": "d3f5db7d388c71c07513aff0937b1db6ea86efd9f09c4624442507194b6a9f7b",
+      "map_sha256": "161c9c3c9fd5e72ebe4a3d22bdca264981521c17b2d17e4296f2310f6ac508d3",
+      "setup_sha256": "0cfe913cece03dcd5436f2c08fe2de9537c103e786c43d9aa7c85f7119c37c02"
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/9101",
+      "mod": "dunecity",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/dunecity-research-on/off/cluster-evidence/20261106T122243-unit-choice-a1bf0d0b-dunecity-on-off-9d181b.0.728c0f/probe-evidence.tar.gz",
+      "replay_member": "scratch/g228fb044edca/profile/replay/auto.rpl",
+      "replay_sha256": "1b27ec8ec1f26429fbe07073b6596a048b8bac9f7dbcffc0aae5f9e516e0eb0b",
+      "map_sha256": "e9ce02eaa8141a606a491d84ead9f0c4c893159b3984be4d130935814f70da86",
+      "setup_sha256": "f9e790f23c9c70d85b635ef2155132beae85304ff6322ba5def91a46fe6c42cb"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.9.90c0a3/probe-evidence.tar.gz",
+      "replay_member": "scratch/g2d63e9239d1f/profile/replay/auto.rpl",
+      "replay_sha256": "47d988827451cdf12c48878965bff832de6c7488694957537518b997c410145b",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "86fde43bd3907f335ea2668ef9a61acb18390ddfae7be9b2ab2718d6736a53c9"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.10.bb4c77/probe-evidence.tar.gz",
+      "replay_member": "scratch/g6cc90dec4494/profile/replay/auto.rpl",
+      "replay_sha256": "1ea0a8be9244966e94a3777349f418d91fddbf95172e9f9c0aa47acb9fa94048",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "eec2a1b381b970da715af8713eb55a21418ede40e98b5e63122e996db8b8ff2e"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.11.835de6/probe-evidence.tar.gz",
+      "replay_member": "scratch/g87a9543399ac/profile/replay/auto.rpl",
+      "replay_sha256": "561aca858e98059e9fd81ab9d0d6cce9bf2b518552d7a2c3037e1d79a7a30a8f",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "5ae42dd27e6954408f57968a2c9b54faf096171a06fba817e9239a12c39c9c01"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.8.d45afa/probe-evidence.tar.gz",
+      "replay_member": "scratch/gfc0758192c70/profile/replay/auto.rpl",
+      "replay_sha256": "bf544a8b62baba2ac19e4408e3f9c5be9069c587ae78ad5e8f741de7222cafeb",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "8b294d0c88af80c1774313d4f8c1036a584b6aec1cca3c57a25e3877c060d709"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.5.aecf88/probe-evidence.tar.gz",
+      "replay_member": "scratch/ga84ff016e18b/profile/replay/auto.rpl",
+      "replay_sha256": "611b1969690afbe3ff961db96c72c13a6ad5848f6bd958b021758ba54e5f2c31",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "17dc33508988fd6ef0b74c535dfb45a7d263ebe5d93f42f490dbd3a1ac1c91d1"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.6.ee064a/probe-evidence.tar.gz",
+      "replay_member": "scratch/g652ed8944f1e/profile/replay/auto.rpl",
+      "replay_sha256": "363ab4e80d27430ef23e4f0964c890549e3a971940e11b7af6f8458d2fed7d44",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "feaf79eac0df7aa1cf74a9e5753d74b1bc410e5e66cdde351ba0025f61f94e4f"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.7.e24f3c/probe-evidence.tar.gz",
+      "replay_member": "scratch/gb1adf0131848/profile/replay/auto.rpl",
+      "replay_sha256": "4d570dd2c0f544df844eeb101627bec09c33f0111c63a198b8e86093d040edc5",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "a585124560ac35f7fb156f43fd72ec3423398576b3fbe9dd1ee28acb88661856"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.4.7ce306/probe-evidence.tar.gz",
+      "replay_member": "scratch/g28e5b735b420/profile/replay/auto.rpl",
+      "replay_sha256": "53f0a7398c659fb81d3396953f65a87844959c87a34fef07b1e4e6bc35c256df",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "c1da514fc60f02cd9502bdcc666e87a70113c1fab1582c42aeb87b6e73db3fac"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.1.244f24/probe-evidence.tar.gz",
+      "replay_member": "scratch/gb4b647a9664c/profile/replay/auto.rpl",
+      "replay_sha256": "80af69ce22bd43fe3cac53671e58153ca7fdbc4ac05ba10a001b442cbf952e47",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "41513146ed1594e2238b7066b62d6d7d727c5c22654d1b5c5a93768f26cc4640"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.2.200ef2/probe-evidence.tar.gz",
+      "replay_member": "scratch/gd2b8e447972e/profile/replay/auto.rpl",
+      "replay_sha256": "9f45ae848cf6defd702bc17336a5120ec04d70d6adaeb5a97379750bb2a3c786",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "762b41640a398e62adeb21d40034982934991c87b6fbeceeffdb2a66d75d3b9e"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.3.078236/probe-evidence.tar.gz",
+      "replay_member": "scratch/ge92c81e9b693/profile/replay/auto.rpl",
+      "replay_sha256": "0ae495b0fa2e6e69a0992cdf7d53d8d278380a2cdda5017085c9b89642dbbb6b",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "8b04d510f1e67788092fc3404b5c5a349d2a76edcbfc614e845edad96635fd8e"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.0.d2dba8/probe-evidence.tar.gz",
+      "replay_member": "scratch/g4df5d082ca4b/profile/replay/auto.rpl",
+      "replay_sha256": "8ecc6ca81b6cae4cf792f5e9cc95f4b0fe78dbec418231892b5226c1cb2c2af4",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "0691a5741019e0b3f5b4e929c13a149e5acee22e5fd786726c6717c0225710dd"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/148680876",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.21.a8b571/probe-evidence.tar.gz",
+      "replay_member": "scratch/gc648431bac89/profile/replay/auto.rpl",
+      "replay_sha256": "0f461d9a0be1638bdbc697779d1a9b21f949baf74d9929892fb23440371cd358",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "setup_sha256": "995e62d6f067a93efe9f5fea4483a0c5d2a4368696123db670bc3aa6825d0d88"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/55001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.22.e90d61/probe-evidence.tar.gz",
+      "replay_member": "scratch/g0732c8b1d416/profile/replay/auto.rpl",
+      "replay_sha256": "5ac576d5131971bb1432634581d923e476bb7897744ab663f59e2594b276b9cc",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "setup_sha256": "74e54815bcf29db8b6647fcad5ca6570e21e0c1360f74d87b8e312b13b46db0f"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/77001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.23.45ab25/probe-evidence.tar.gz",
+      "replay_member": "scratch/g9eb3739c65e5/profile/replay/auto.rpl",
+      "replay_sha256": "34e3658d0395a1f1e583583d7df4d64803fbfd2fad1b4abe735ddf7294115484",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "setup_sha256": "cf3d5733e7f3358a4882e0832d87a1a4ca7d680033c8b5aa82d0a5480e852b15"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.20.b71dda/probe-evidence.tar.gz",
+      "replay_member": "scratch/g194f2d62f363/profile/replay/auto.rpl",
+      "replay_sha256": "ef1c38cb335a6588085e2d62d070762722dc7671d5a8cb43f10b44e4d1da27f4",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "setup_sha256": "6f0134487b3c9167681313a2f35abf774aad39cf241ad2f828451b92ddd31bca"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/148680876",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.17.37be13/probe-evidence.tar.gz",
+      "replay_member": "scratch/g5c3cd3467f2d/profile/replay/auto.rpl",
+      "replay_sha256": "6331f9fcee482803067676fefd30c6b104973159558dd11302900490b3cc888d",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "setup_sha256": "2c9df6b301da8069967dedc6b398f871f17a6b7255bc35ac095a7c8c96522860"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/55001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.18.73f58d/probe-evidence.tar.gz",
+      "replay_member": "scratch/g0e4efa1888f3/profile/replay/auto.rpl",
+      "replay_sha256": "78011b1185bbe33d444a99d999553e7e6cdb00b68306f6d86fcdb1d9bd8939cb",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "setup_sha256": "62e89100d8d57e3bd7d0473761e8f790fd53c052f2c23728903ddf4e52592c0e"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/77001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.19.978183/probe-evidence.tar.gz",
+      "replay_member": "scratch/ge08568fdaf41/profile/replay/auto.rpl",
+      "replay_sha256": "6426b48fe8dca3c01585165cdf972774e776b511dea0d5772e8ed92c33af3215",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "setup_sha256": "e0002940e52d56fe3ba6496a5d88f4eae2699556e9017f941c483cea3a1bad71"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.16.e73154/probe-evidence.tar.gz",
+      "replay_member": "scratch/gd782545ac8aa/profile/replay/auto.rpl",
+      "replay_sha256": "152a0902ac5933112259924d707da313935a621209ae1cc49529fd8193a0b2a1",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "setup_sha256": "d8568c830af21ca239596035a978388f6a6c51fbd6d1c6385d31210540ca6469"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/148680876",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.13.76005c/probe-evidence.tar.gz",
+      "replay_member": "scratch/g23386d786c46/profile/replay/auto.rpl",
+      "replay_sha256": "4a47e385ac6d998cf0b123b334ace51dfb42ca1769af7c3f28f3581bcfd2c8e9",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "setup_sha256": "0c9ed00677a1b4b31c3f50ff4312872cf1d279b3f14c43dc1b482c4ff31ed979"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/55001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.14.33e162/probe-evidence.tar.gz",
+      "replay_member": "scratch/g32716a4adacc/profile/replay/auto.rpl",
+      "replay_sha256": "dc2f5372290c6360009025c3333b206c0afa9256469147decfebfd2b87f0f428",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "setup_sha256": "85cf1f9c76fccc9bea2f4c83fca5f4cc987c920b2a7f385a24ce306af4347d64"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/77001",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.15.780a9f/probe-evidence.tar.gz",
+      "replay_member": "scratch/ga2852d64a607/profile/replay/auto.rpl",
+      "replay_sha256": "0f7b63e9433318714dee643fc558c55871cb8279fdd9366e012cd24034f7b5ec",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "setup_sha256": "72734e5acd77df564822edf0eb011612cfb107d284ea704a001c9204ce645660"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101",
+      "mod": "Dune2R",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-off/off/cluster-evidence/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.12.654c77/probe-evidence.tar.gz",
+      "replay_member": "scratch/g3365313ac2a6/profile/replay/auto.rpl",
+      "replay_sha256": "204d2ce96e591240e039cdb48b46c7133b6030fdccaa5dc6e5df415da78375bb",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "setup_sha256": "542f38b4d8d26395e5ce31ac4d09669aeeeab0747390a84b212841fc489337f8"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.9.1297c4/probe-evidence.tar.gz",
+      "replay_member": "scratch/g2d63e9239d1f/profile/replay/auto.rpl",
+      "replay_sha256": "b026644a8298e2b1c4966416901ed97ac17b06696221612fe81f8b4e8e7a85b3",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "8fb81b156b3c55677c4d79d68b0f58b811b00c3313e546e56dc629af68e2704b"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.10.ea8f45/probe-evidence.tar.gz",
+      "replay_member": "scratch/g6cc90dec4494/profile/replay/auto.rpl",
+      "replay_sha256": "fe33529f6351e443539d3ce5806738b5fd9ceddf5e3f1c1e36901a4908a61547",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "db168cd61b09734537a9cd74e97e1471118036599705b6bcab544f481be07804"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.11.64cf10/probe-evidence.tar.gz",
+      "replay_member": "scratch/g87a9543399ac/profile/replay/auto.rpl",
+      "replay_sha256": "c8742022d0e252540fe162cf331acab031d3b74f197964a0fc0e45530be860ec",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "e0b1cac4546cca1b72db5a43c92ff1e733db9a8c03d3bcd629f22b53b4186abc"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.8.d3774b/probe-evidence.tar.gz",
+      "replay_member": "scratch/gfc0758192c70/profile/replay/auto.rpl",
+      "replay_sha256": "b8cc6e8cc2beecef8d920b0557af4ce17e10fcf01f59430206d76b374bca4d75",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "65aa90d9bfce907d57c8350af7a762556e1dd0a32462e7e3f0b6169c2cbe2b27"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.5.0729be/probe-evidence.tar.gz",
+      "replay_member": "scratch/ga84ff016e18b/profile/replay/auto.rpl",
+      "replay_sha256": "b6bfa1ff20ffc077d1ee1380fee3a303407068c8d0e59f19f1ca9fd66d33595d",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "1a6efbc1be569a8bb815f304cf1bc6b90bbf330887e463d61c98f774165d1a24"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.6.b0c469/probe-evidence.tar.gz",
+      "replay_member": "scratch/g652ed8944f1e/profile/replay/auto.rpl",
+      "replay_sha256": "84e09fe39f777191c2919fc9564a1203d6afb4a664a443aa4b064323c8866eee",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "ba1d78aeb19e7c894614f7f7b80b2dcd8756f10b37e3475ed0f50db9d9d2c425"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.7.cb56f5/probe-evidence.tar.gz",
+      "replay_member": "scratch/gb1adf0131848/profile/replay/auto.rpl",
+      "replay_sha256": "16bdfff844af0613c9c18e565344734af4324ba0209a434c02e001619e073832",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "8394b407ace7e4b7fa21ea8bb849686d50fe94e0b993bd641678b40da037dd2a"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.4.4bcad4/probe-evidence.tar.gz",
+      "replay_member": "scratch/g28e5b735b420/profile/replay/auto.rpl",
+      "replay_sha256": "6163f0916fb2305404cf8eb7dde6f8d70956f201946c5a66b36bf50db313a9b9",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "dcb9fb7fd11f41af3d69e6bf5b1ec309f1e7f30cc57af3d8eb10430aaff9ad6c"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.1.821f68/probe-evidence.tar.gz",
+      "replay_member": "scratch/gb4b647a9664c/profile/replay/auto.rpl",
+      "replay_sha256": "d873b0a5ea40bf61a83605caa02330f3c204e258902cc5fe9fba36687c80f3da",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "fd31419f1d9229e76946fec23ec377c02961300ec2604fe5e7062226f6bc73f0"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.2.486f20/probe-evidence.tar.gz",
+      "replay_member": "scratch/gd2b8e447972e/profile/replay/auto.rpl",
+      "replay_sha256": "0f7ed88a5b434528dedc0c243eb4b8e57a2c8246e97b803fc25179c1173af740",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "756b8b9573fbdd516dd93a2cbadc3d0084e82cdf604143e4dfc0b7f4427df7a6"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.3.a95890/probe-evidence.tar.gz",
+      "replay_member": "scratch/ge92c81e9b693/profile/replay/auto.rpl",
+      "replay_sha256": "b909a1b77a0bea17fd366b3338a3155dc6acde4cc60419d293772d3fe644ac62",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "2cba3e21ab4b57652a2e5542012522948fd3d393a296db62d6950ee1cf00fa44"
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
+      "mod": "Dune2R",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/Dune2R-research-on/off/cluster-evidence/20261106T122258-unit-choice-a1bf0d0b-Dune2R-on-off-47e39b.0.fd626a/probe-evidence.tar.gz",
+      "replay_member": "scratch/g4df5d082ca4b/profile/replay/auto.rpl",
+      "replay_sha256": "6a402508458a80847cf99d20cb61156ea14af0604f68f1376ce92d8227b1f033",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "255b1cc7d5aaf061d353be7b4924f531421473c2816c627ea5835492909be852"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.9.ef9a20/probe-evidence.tar.gz",
+      "replay_member": "scratch/gda330178a450/profile/replay/auto.rpl",
+      "replay_sha256": "485f41a0c79cac2b47402d7f7427c789418fce635ed556f9b96be82f9158854a",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "94dbc405474b92f301aa6fe0b9513eef7378f3bf0d86ebb5c59613af41ab8a60"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.10.26b908/probe-evidence.tar.gz",
+      "replay_member": "scratch/g69ef0076f6d4/profile/replay/auto.rpl",
+      "replay_sha256": "f9241e0550af2d212a1e4796b5a2a61ee3931decf4d4fcf400d5623664760f9f",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "47d06da6b8d8ddaa5b78f6430aff76b1a896e8aa3887d22f5c012fd241037689"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.11.0e4c3b/probe-evidence.tar.gz",
+      "replay_member": "scratch/gdcdeef7038ed/profile/replay/auto.rpl",
+      "replay_sha256": "9683a7568ddeb7c1a539e3b4c2c8b4e291dc8c7ec439b7d12c425c96053b39d5",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "9845968dc90e801f7a98f53a7fcd929cbcfe1618a5dd3b91320f6b750f5a2347"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.8.41821a/probe-evidence.tar.gz",
+      "replay_member": "scratch/g375b62bd2b26/profile/replay/auto.rpl",
+      "replay_sha256": "a281eed2b6daa8c4aeedff32a90d860098909367a1a5d4888972ecdbc973b82d",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "3e286acbfe2a7967100d28d044c211fdbf6a95c7e8797d5c8c546708f079c7ab"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.5.d8b43c/probe-evidence.tar.gz",
+      "replay_member": "scratch/g38d0d62ac782/profile/replay/auto.rpl",
+      "replay_sha256": "0a61f619d5d2fe9c10bfb2d87d6c6078464ffdaa538837c9b849e6c38aa60c9c",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "70ec940ba1018ec65dffbe9ea613da7edf2c9b4faacdaba7ab844522bb580e6b"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.6.db12b0/probe-evidence.tar.gz",
+      "replay_member": "scratch/g8a2706ef4a08/profile/replay/auto.rpl",
+      "replay_sha256": "16bb213c4aaa437fcdc4f34136ff4868eb37b028db82abe05a2327bafb48313b",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "0f88e9ca09b373b3d298aac7919b98e2d923a122e34d314affbdb36de576f5d0"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.7.de7fd3/probe-evidence.tar.gz",
+      "replay_member": "scratch/ga5ccb9de2088/profile/replay/auto.rpl",
+      "replay_sha256": "ff3d7f552d208638e86c55d26a84abdb17ae59a14fb433d4e71ac335d0cc970c",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "6faa5f29c279a103a92995397946a1091be8dbae487bf1c6d6e163b236155dc7"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.4.0db63f/probe-evidence.tar.gz",
+      "replay_member": "scratch/gaeb0c731ade6/profile/replay/auto.rpl",
+      "replay_sha256": "d9e3f07da646c630e560cc310d9cee648c39d8f06b8ab1f9088e8a6675fa167c",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "fa3d764b77b4e147f74de1fceabdd3c46b974bc0a0194060d7958244867234f1"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.1.33d4e0/probe-evidence.tar.gz",
+      "replay_member": "scratch/g80228b3130b0/profile/replay/auto.rpl",
+      "replay_sha256": "d96204fa4851aa2e5667feeb5e41559edaab230d871d15b9c51ce5e36c7244a6",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "4d98eb3e2e43c9103a10bf053babb3788c1498ddc4648146736e244a3243536b"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.2.1de8a7/probe-evidence.tar.gz",
+      "replay_member": "scratch/g86ae91a777d8/profile/replay/auto.rpl",
+      "replay_sha256": "cdf5be7fa964fe03ca7ab3b851235e3adeb721a5273afab1ba0fb483c3a4211c",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "550689cb2681d2d69a04a4736ec43b122c097f3e81729d8e1a798dce716983d1"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.3.72472b/probe-evidence.tar.gz",
+      "replay_member": "scratch/g15e6749d96b3/profile/replay/auto.rpl",
+      "replay_sha256": "b07d89ee44f85f2c687d5416f36b77be6fc74ebf5ac27fe4debe787274b0e2b6",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "b5dbc0a7e9e780f2ac545710f82339eb63e6d395032e53669255bb1e5e59593e"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.0.95192f/probe-evidence.tar.gz",
+      "replay_member": "scratch/g1d38597fbe45/profile/replay/auto.rpl",
+      "replay_sha256": "11909640616b5ccb3a634dcdabf4ef1eb860985757b200ccd6c8b94f8ae39c72",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "1470e86760b9eaeae34ccbf3ada8ceb353a08cd4fe3cd2f1279fa07bd90b8f8b"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/148680876",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.21.9ba77c/probe-evidence.tar.gz",
+      "replay_member": "scratch/g96940d8e49f0/profile/replay/auto.rpl",
+      "replay_sha256": "1f6845293a5b76f9f931638104d78027f99f536be1b35e053a0ac3f503750845",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "setup_sha256": "b2f98aca1a289f21fc6ce7af9615aac4948a35476f1ad1af97768a2d97f9dd35"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/55001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.22.84365d/probe-evidence.tar.gz",
+      "replay_member": "scratch/g99b5062f670f/profile/replay/auto.rpl",
+      "replay_sha256": "ef9ef96f158e2557a08e159bac8a23641d8e2a4ed879b12fa1524426598d09c8",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "setup_sha256": "e97c1a08242e376d4049911d948c6fccbe713d01573b0838217a9c1b6945dfc6"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/77001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.23.c04069/probe-evidence.tar.gz",
+      "replay_member": "scratch/g8cf02553e7cd/profile/replay/auto.rpl",
+      "replay_sha256": "5b4b28180f3436b5ace2b95434ecd3511aabdc910e3157274416c69184dc93f5",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "setup_sha256": "b61dbf7e88f7dc88a45e44c7cddfc6541c6c20f4a66300fc391c538000d4fb82"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.20.398ade/probe-evidence.tar.gz",
+      "replay_member": "scratch/g5175ec98afc3/profile/replay/auto.rpl",
+      "replay_sha256": "8650deaba56717e59b9a975ca4c8ad6b065171b3e538ec78974c56a15014335a",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "setup_sha256": "3485c47309f7bb7067df55d09c6fd237f8b362441a4bd5f005a607d690960699"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/148680876",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.17.3ee682/probe-evidence.tar.gz",
+      "replay_member": "scratch/gaa19616d9c57/profile/replay/auto.rpl",
+      "replay_sha256": "6a80c1c9fe2504f92b8fa99a3a49c7092aadf8aba380b7f15ab291eb6eece835",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "setup_sha256": "3c0ca76e96ee2e27a3307d5dbd71d14186e77651f79fc2a6d69f24b30ffe756e"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/55001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.18.b27082/probe-evidence.tar.gz",
+      "replay_member": "scratch/g69e91573d920/profile/replay/auto.rpl",
+      "replay_sha256": "db01dd52c76ecaa15ec73beaa1a993539165251b10af3364c6b5f6065275b1ab",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "setup_sha256": "3e24b63d0eadb9cf0740d4c8edbe10daece5fa88d3a6254727e79c62fe79766e"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/77001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.19.b27ffe/probe-evidence.tar.gz",
+      "replay_member": "scratch/gf0b35ed937a6/profile/replay/auto.rpl",
+      "replay_sha256": "1e49019ac7738a6944def6dcb71ae2dfa30b001833f62bf488b1a2664152b1bb",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "setup_sha256": "3edf63021c6864555a573624ba498f8ec25574b252dc1d5b4b0f6dca374b881b"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.16.a66fb4/probe-evidence.tar.gz",
+      "replay_member": "scratch/g486f8e3dc06c/profile/replay/auto.rpl",
+      "replay_sha256": "4a8fb65a29e56d58269651b7e57ca057cc37439d3492663f670dec714d8b6214",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "setup_sha256": "093175ab728ef8d8df21c8d9328fddad756ea5004a7b5b2e42a71a602b0cd8a2"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/148680876",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.13.7bcfc6/probe-evidence.tar.gz",
+      "replay_member": "scratch/gc23a9eb5ceea/profile/replay/auto.rpl",
+      "replay_sha256": "3520d30b0099c9833d8c562f8f0470c5f213e3b657bd50c7ed370939b9ddc52a",
+      "map_sha256": "b9a11b3f3ea5cc63f5f9583184696c4542d83c46b18ddb7ac5977f195b86319e",
+      "setup_sha256": "4db7427fec33c8318b441a67960b6c948d8f76177343267a7719abd66ca84237"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/55001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.14.04b867/probe-evidence.tar.gz",
+      "replay_member": "scratch/g17a42b6b309b/profile/replay/auto.rpl",
+      "replay_sha256": "12cfd9d055798f9470029f98bb022103ededba7a91d0b04b03c2541c6ec22d43",
+      "map_sha256": "5c30aec7e2b8b0dcfc16fd294cf59e17e94b3f22c32634d1cccead6f81be19ef",
+      "setup_sha256": "0ee097480a7ccb82929bbf19bfc45af3c08a1167a5e447e33d86aadb432eb647"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/77001",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.15.11911a/probe-evidence.tar.gz",
+      "replay_member": "scratch/ged18803cafcc/profile/replay/auto.rpl",
+      "replay_sha256": "2ab533eee74b30622c3a41e9a52fac5b1adfc8fe1c725a259394ea1bdb58bbab",
+      "map_sha256": "425bb8f2801d79594a1bab1153d04370caed5a0171d3393fc8112af260bc74e1",
+      "setup_sha256": "ddaf89700dd0c5175e58af3267066def17a26b4e4597bb199c19cf00e2ff3287"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101",
+      "mod": "vanilla",
+      "research": "off",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-off/off/cluster-evidence/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.12.9127a0/probe-evidence.tar.gz",
+      "replay_member": "scratch/g7fcd5e57d2ee/profile/replay/auto.rpl",
+      "replay_sha256": "c2efa869f20322e61c170df6df17f91aef232e8700728225915e18ad64996ecf",
+      "map_sha256": "a6c9bed0491cfc254421d8845ba7b97f2fd5345c8fd0311b5a4ae19f9e41093e",
+      "setup_sha256": "1581492aae62776e57ec548c47d47c8aacbfcd30a5af43f0d998c752d13bc0e8"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.9.11b6b9/probe-evidence.tar.gz",
+      "replay_member": "scratch/gda330178a450/profile/replay/auto.rpl",
+      "replay_sha256": "3f1d1d01e38cbce7aade468f7083a7b451516869c5125ea900900acec5c33658",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "f076ae644c4348516c4cea8ad2d8ed7a78f35e571885df6cd12d7fe2d8a4c395"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.10.3dde7e/probe-evidence.tar.gz",
+      "replay_member": "scratch/g69ef0076f6d4/profile/replay/auto.rpl",
+      "replay_sha256": "dcb4dbd78d028e968a8e617359c49c4a446a15ab7138e74a817e2a5f9d58742b",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "f667cb07d6f003574d610f30aaa2d472b40b6641feabfadec55ef12237aa11d3"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.11.b6f344/probe-evidence.tar.gz",
+      "replay_member": "scratch/gdcdeef7038ed/profile/replay/auto.rpl",
+      "replay_sha256": "ef9fd423a8e6fbd66049e07c1be5ae9155772a13e247e74ac6088d6e6940ed61",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "7eef13bbb8185cdea7a8cc49efd99109d729bb10251ca3410e22b9bbfa640052"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.8.14509c/probe-evidence.tar.gz",
+      "replay_member": "scratch/g375b62bd2b26/profile/replay/auto.rpl",
+      "replay_sha256": "9018844fca635719efed4db0e4c7f24181e5709e0a3d4cd1185933f20cd57a91",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "38e63f1cf1977064fae466817e76cba1ad843c01aef1864be74a0d7457d8cabd"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.5.187c55/probe-evidence.tar.gz",
+      "replay_member": "scratch/g38d0d62ac782/profile/replay/auto.rpl",
+      "replay_sha256": "485790d817481a704ef48ad8507e767e265976a3f6bcfacb699d2f0d7e8011e5",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "57236d3f9c975c31b51f7d716a29fde937fc2e9db8d706065ea8798cd168e4a4"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.6.2bdeb4/probe-evidence.tar.gz",
+      "replay_member": "scratch/g8a2706ef4a08/profile/replay/auto.rpl",
+      "replay_sha256": "cc078657ab5ca0bf8bdeb3759e1febe99ed00e259ff360c43688b8579d6990a2",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "47ae09aefb7bca9ba81b3bbc1dd91c249556e76e204b154430d047e4caacab30"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.7.c74137/probe-evidence.tar.gz",
+      "replay_member": "scratch/ga5ccb9de2088/profile/replay/auto.rpl",
+      "replay_sha256": "92775da5efb4d39d599c92302ec464f3ebe6addb79eebb80d9e99b0f115aa2ea",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "b168e14479ccee62926fe95e4b5117d85f40d8c0bc864fcebf2d994365de92ee"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.4.d67cc0/probe-evidence.tar.gz",
+      "replay_member": "scratch/gaeb0c731ade6/profile/replay/auto.rpl",
+      "replay_sha256": "907706fdc66761cacff2141e5e48935ad5c09d40f3ba92d26f7f5c937f9532f1",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "f5d512fdb543607dbb91a302ac94afd0eccc25a84a8c0be1e88223c1938a181b"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.1.6ab1c2/probe-evidence.tar.gz",
+      "replay_member": "scratch/g80228b3130b0/profile/replay/auto.rpl",
+      "replay_sha256": "f60da8ab254aa41515eaf5c096dfda0c0d2c96ad92faca18fc57f42efaae2555",
+      "map_sha256": "d9c967f6379aba400766c8cc8b8c4a68a6758eb5ced1d144c2ac5d1dad665b41",
+      "setup_sha256": "3d07d2c6f4a7c28256c5a902cafee05a21d72554ed837c361007d379c9df4d85"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.2.c27c48/probe-evidence.tar.gz",
+      "replay_member": "scratch/g86ae91a777d8/profile/replay/auto.rpl",
+      "replay_sha256": "ea15c84d7bea9b263f23cd01fdf8164a29419cbae92475dc39c41c7dd949984c",
+      "map_sha256": "db0c0e4cced06d47348a4a471e4449d5d6fc654d63ed5f296b34c145b001b132",
+      "setup_sha256": "e8dbd01b88bf9e42555758496bf13c0a6b363cbba3cd40ed020ec6cb6a604c47"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.3.7f8b7f/probe-evidence.tar.gz",
+      "replay_member": "scratch/g15e6749d96b3/profile/replay/auto.rpl",
+      "replay_sha256": "45977b3017d81c3f9b5029067fca5578716d0c532dc481d4b9c6f652cb610208",
+      "map_sha256": "970f03f78de935a70c48354bf3babbff791c6b047828cd6a2483abdf43bb8b56",
+      "setup_sha256": "6399fb4c343f973d13603e56752476612f39a87377d371cbef56cffb7ad7ac0a"
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
+      "mod": "vanilla",
+      "research": "on",
+      "native_archive": "/Users/stefan/Documents/projects/outputs/unit-choice-20261106/confirmation-a1bf0d0b/vanilla-research-on/off/cluster-evidence/20261106T122309-unit-choice-a1bf0d0b-vanilla-on-off-0b8fe1.0.068417/probe-evidence.tar.gz",
+      "replay_member": "scratch/g1d38597fbe45/profile/replay/auto.rpl",
+      "replay_sha256": "47363c19bfd958de6a6d4342d847ce53e697919682a22dad60104f41088b5ab0",
+      "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
+      "setup_sha256": "9abab9856320a5243de1480cdb58372672d29f2bca2f17628f3399da18481827"
+    }
+  ]
+}

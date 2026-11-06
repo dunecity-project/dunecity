@@ -1,0 +1,14 @@
+{
+  "bridge_scope": "Private diagnostic main, read-only native observations, exact frozen maps and requested options; no AI/engine/content gameplay changes",
+  "capabilities": {
+    "local_observer": "native detached UI, no registered HumanPlayer",
+    "research": "unsupported/off"
+  },
+  "native_tree": "43e15efe7e7e5b58e35613331a924f0af735f01d",
+  "portability_repairs": [
+    "src/FileClasses/GFXManager.cpp noncopyable conditional temporary replaced by directly returned prvalues, same UI semantics for MSVC"
+  ],
+  "release": "1.0.792",
+  "schema_version": 1,
+  "source_commit": "45e46718d09c3628275f55077376ac81126bc02a"
+}
