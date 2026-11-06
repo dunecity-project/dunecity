@@ -500,10 +500,13 @@ def _comparison(kind, candidate_cohort, reference_cohort, group, candidate, refe
         return record
     direction = 1.0 if definition['direction'] == 'higher' else -1.0
     deltas = {seed: left[seed] - right[seed] for seed in seeds}
-    margins = {seed: record['absolute_margin'] + record['relative_margin'] * abs(right[seed]) for seed in seeds}
-    slacks = {seed: direction * deltas[seed] + margins[seed] for seed in seeds}
+    # One fixed margin per comparison, on the declared basis (mean of absolute
+    # reference seed blocks). A per-seed margin would add the reference's own
+    # seed variance to the slack interval, so even an identical arm could not pass.
+    margin = record['absolute_margin'] + record['relative_margin'] * _finite_mean(abs(right[seed]) for seed in seeds)
+    slacks = {seed: direction * deltas[seed] + margin for seed in seeds}
     record.update(paired_seed_count=len(seeds), paired_delta=_finite_mean(deltas.values()),
-                  signed_benefit=direction * _finite_mean(deltas.values()), margin=_finite_mean(margins.values()),
+                  signed_benefit=direction * _finite_mean(deltas.values()), margin=margin,
                   noninferiority_slack=_finite_mean(slacks.values()))
     requests.append(IntervalRequest(deltas, record, 'delta_ci_low', 'delta_ci_high'))
     requests.append(IntervalRequest(slacks, record, 'slack_ci_low', 'slack_ci_high'))

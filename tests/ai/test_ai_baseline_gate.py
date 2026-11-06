@@ -273,6 +273,43 @@ class InferenceTests(unittest.TestCase):
         self.assertGreater(comparison['slack_ci_high'], 0)
         self.assertEqual('INCONCLUSIVE_INTERVAL', comparison['status'])
 
+    def test_identical_noisy_arms_are_noninferior_with_one_fixed_margin(self):
+        # The reference's own seed-to-seed spread must not widen the slack
+        # interval: an arm identical to its reference has slack == margin, and a
+        # relative-only margin over an all-zero reference is exactly zero.
+        noisy = lambda seed, house, orientation: 25 if seed % 2 else 175
+        values = {'kill_value': noisy, 'sonic_tank_built': 0}
+        _, _, _, comparisons = analyze(history=historical(values=values), control=fixtures(arm='off', values=values),
+                                       candidate=fixtures(values=values))
+        for kind in ('current_off', 'historical'):
+            for metric, margin in (('kill_value', 10), ('sonic_tank_built', 0)):
+                comparison = primary(comparisons, metric, kind=kind)
+                with self.subTest(kind=kind, metric=metric):
+                    self.assertEqual(0, comparison['paired_delta'])
+                    self.assertAlmostEqual(margin, comparison['margin'])
+                    self.assertAlmostEqual(margin, comparison['slack_ci_low'])
+                    self.assertAlmostEqual(margin, comparison['slack_ci_high'])
+                    self.assertEqual('NONINFERIOR', comparison['status'])
+
+    def test_fixed_margin_still_blocks_uniform_loss_and_keeps_noisy_near_misses_open(self):
+        noisy = lambda seed, house, orientation: 25 if seed % 2 else 175
+        worse = lambda seed, house, orientation: noisy(seed, house, orientation) - 30
+        _, _, _, comparisons = analyze(history=historical(values={'kill_value': noisy}),
+                                       control=fixtures(arm='off', values={'kill_value': noisy}),
+                                       candidate=fixtures(values={'kill_value': worse}))
+        comparison = primary(comparisons, 'kill_value')
+        self.assertEqual(-30, comparison['paired_delta'])
+        self.assertAlmostEqual(10, comparison['margin'])
+        self.assertAlmostEqual(-20, comparison['slack_ci_high'])
+        self.assertEqual('REGRESSION', comparison['status'])
+        inside = lambda seed, house, orientation: 62 if seed % 2 else 122
+        _, _, _, comparisons = analyze(candidate=fixtures(values={'kill_value': inside}))
+        comparison = primary(comparisons, 'kill_value')
+        self.assertEqual(-8, comparison['paired_delta'])
+        self.assertGreater(comparison['noninferiority_slack'], 0)
+        self.assertLess(comparison['slack_ci_low'], 0)
+        self.assertEqual('INCONCLUSIVE_INTERVAL', comparison['status'])
+
     def test_four_seeds_many_houses_games_and_orientations_are_still_four_seeds(self):
         options = dict(seeds=range(4), houses=tuple(str(index) for index in range(6)), swap=True)
         report, metrics, _, comparisons = analyze(history=historical(**options),

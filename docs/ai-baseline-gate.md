@@ -213,7 +213,11 @@ fractions 0.05 absolute (lower is better). All 23 hard objectives use final/summ
 minute=-1; fixed-minute checkpoints remain visible diagnostics. A zero-army
 value-share denominator is undefined, not a fabricated zero or a passing subset.
 The confidence interval for direction-adjusted benefit plus margin must be wholly
-nonnegative to pass. A wholly negative interval blocks promotion; an interval
+nonnegative to pass. Relative margins are fixed plug-in constants: the stated
+fraction of the mean absolute reference value over the matched seed blocks. Their estimation
+uncertainty is not propagated, so an arm identical to its reference passes and
+the slack interval is the direction-adjusted delta interval shifted by the
+margin. A wholly negative interval blocks promotion; an interval
 crossing zero is inconclusive, not evidence of equivalence. Core unsupported,
 unavailable, incomplete or selectively intersected seed coverage cannot pass.
 Research-ON without a supported historical-ON comparator is explicitly
