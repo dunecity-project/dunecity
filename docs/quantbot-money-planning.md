@@ -942,3 +942,45 @@ rule changed. Pro timed out at240s while initializing further native worlds;
 this many-world functional fixture now allows600s execution/900s total, not a
 performance claim. The failed job remains failed and downstream gates stay shut.
 
+At `bf362f85`, the repeated-import boundary passed, including the real debit,
+fresh-pass reconstruction and preservation of the pending transport remainder.
+The final rollback setup failed because the mature fixture covered every empty
+construction tile with Roads, which already satisfy the native foundation rule.
+It therefore never exercised acceptance and cancellation of slab orders.
+
+`0cc40a12e5bb26c4ff0fe524c52e97a2549f30d8` gives that scenario the same complete
+base without the blanket road fill and checks that the selected Palace site
+requires a complete, nonempty concrete sequence. The actual one-Palace engine
+rejection, cancellation, empty queue/profile and unchanged real cash assertions
+remain. No production policy changed.
+
+Focused job `20261107T023103-swms-unprepared-rollback-5ee5e0` **passed** on the
+mini in **64.4 seconds**, following a successful isolated probe-TU compile.
+This opens the eight exact-save continuations and the 48-game smoke gate.
+It does not certify their outcomes, a 288-game result, historical strength,
+candidate-specific All Against Atreides victory, or a new default genome.
+
+The `0cc40a12` smoke subsequently completed **48/48 games, zero native errors**.
+All24 paired contexts have matching map, options, content and object-data hashes;
+every game records the exact pinned source without a fingerprint error.
+The predeclared smoke gate **failed**, so there is **no288-game expansion and
+no SWMS promotion**. Equal-game-weight paired deltas, bootstrapped by game:
+
+| Metric | Paired games | ON−OFF | 95% CI |
+|---|---:|---:|---:|
+| Army value at20minutes |16|−5617.66|[−9245.78,−2480.94]|
+| Army dispatches per house |24|−2.125|[−3.229,−1.219]|
+| Final kill value per house |24|−12238.44|[−19048.33,−6089.38]|
+
+The20-minute metrics use48 paired house histories; missing late samples remain
+censored, not zero. This symmetric-self-play health gate is not a substitute for
+head-to-head strength. Eight exact-save continuations completed too: SWMS ordered
+the missing LF with either saved or enabled Technology Installments, but house2's
+initial CY died earlier (83.488/87.312s ON versus121.472/116.944s OFF). An accepted
+building order is therefore not survival or strength acceptance.
+
+Receipts: `outputs/money-planning-20261106/runs/0cc40a12e5bb26c4ff0fe524c52e97a2549f30d8/`
+contains `smoke48-identity.json`, `smoke48-paired-readout.json` and
+`factory-house2-yard-choice-readout.json`. Keep SWMS OFF. The positive low-cash
+nuclear diagnostic does not justify enabling this whole planner; isolate that
+admission defect before claiming a useful fix for the user's new `nonuke` save.
