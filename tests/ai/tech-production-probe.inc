@@ -86,7 +86,7 @@ inline std::string mapText(HOUSETYPE side, int techLevel = 9) {
 }
 
 enum class Stage { Progression, FirstHeavy, Advanced, FirstStarport, FirstPalace, Complete,
-                   NaturalOpening, NaturalResearch };
+                   NaturalOpening, NaturalResearch, UnfoundedComplete };
 enum class Army { Empty, ReadyLight, TinyMixed, TinyTank };
 
 struct World {
@@ -244,7 +244,7 @@ struct World {
         // Cover the starting core so a peaceful technology fixture is not
         // measuring a different proactive-turret or crime-capital project.
         for (int i = 0; i < 8; ++i) place(Structure_RocketTurret);
-        if (game->isCitySimEnabled())
+        if (game->isCitySimEnabled() && stage != Stage::UnfoundedComplete)
             for (int y = 2; y < 37; ++y) for (int x = 2; x < 37; ++x)
                 if (!currentGameMap->getTile(x, y)->hasAStructure()) {
                     owner->placeStructure(NONE_ID, Structure_Road, x, y, true, true);

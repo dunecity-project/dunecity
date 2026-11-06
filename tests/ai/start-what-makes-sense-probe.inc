@@ -1218,7 +1218,7 @@ inline void immediateMilitaryRemainder(const char* playerClass) {
 }
 
 inline void rollback(const char* playerClass) {
-    World world("dunecity", playerClass, false, Stage::Complete, Army::Empty);
+    World world("dunecity", playerClass, false, Stage::UnfoundedComplete, Army::Empty);
     configure(world, true);
     world.game->gameInitSettings.gameOptions.concreteRequired = true;
     world.owner->updateBuildLists();
@@ -1234,6 +1234,13 @@ inline void rollback(const char* playerClass) {
     turn.pStructure = world.yard;
     turn.pBuilder = world.yard;
     world.bot->beginBuilderTurn(pass, turn);
+    world.bot->planningBuilder = world.yard->getObjectID();
+    world.bot->clearPlacementCache(false, true);
+    const Coord site = world.bot->findPlaceLocation(Structure_Palace);
+    require(site.isValid(), "Rollback control has no real Palace construction site");
+    const auto foundation = world.bot->foundationPlan(world.yard, Structure_Palace, site);
+    require(foundation.complete && !foundation.orders.empty(),
+            "Rollback control needs an unprepared site with legal concrete orders");
     const auto cash = cashQ32(world), spent = world.spentQ32();
     require(!world.bot->queueFoundedStructure(pass, turn, Structure_Palace, __LINE__, "fixture_real_one_palace"),
             "A second Palace bypassed the actual one-Palace engine rule");
