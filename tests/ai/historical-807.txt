@@ -18,8 +18,9 @@ The bridge adds these tests/ai files:
   native state digests; ordinary MCV deployment for the cohort's CY start.
 - formation-duel.py: the queue's mandatory parity dispatcher filename, explicitly
   not a backport of formations or of the Random Skirmish generator.
-- historical-807-fixtures/manifest.json, reference-options.ini and maps/*.ini:
-  original archive provenance, 96 distinct game settings, 24 exact map payloads.
+- historical-807-fixtures/manifest.json, reference-city-research-off.ini,
+  reference-classic-research-off.ini and maps/*.ini: original archive provenance,
+  per-mod original OFF bytes, 96 distinct game settings, 24 exact map payloads.
 - this file: coverage and observer/harness documentation.
 No existing .cpp/header, config, mod, AI, test fixture or old campaign harness is
 changed. The only existing-file change is src/CMakeLists.txt: test builds on
@@ -53,13 +54,24 @@ mappings only, not another 48 independent historical games.
 
 807 supports BASIC TechLevel=9 (global game technology). It has no per-house
 Research Lab or Research Pace, no Slow City Year, and no Starport Population
-option. The exact modern research-OFF options file is frozen and transported
-by --game-options; supported keys are applied through 807's own
+option. The exact original per-mod modern research-OFF options bytes are frozen
+and transported by --game-options; supported keys are applied through 807's own
 applyGameOptionsFromConfig after its own mod defaults. All unsupported requested
 values are recorded in setup.json and games.csv, and the native setup line
 states they are unsupported. Research Lab=true is explicitly rejected rather
 than silently running OFF. No new-option emulation or old default replacement
 is made. The native global tech level must actually be 9.
+
+City Effects is supported by 807 and MUST match the original reference:
+- dunecity uses reference-city-research-off.ini, City Effects=true, SHA256
+  781ee120f1b3c70c5d7bbfcb533b584113439199876da54b0c0848d46431779b.
+- Dune2R and vanilla use reference-classic-research-off.ini, City Effects=false,
+  SHA256 10f31cd0cba4ee26439f9795b97b13b226a67f26ab0481a6812a46048304cef1.
+manifest.json::off_options_by_mod retains each original a1 frozen-input receipt.
+fixture_games binds these options to every scheduled game, including parity;
+without --game-options the game selects its own pinned per-mod file. An explicit
+frozen override must match that game's full SHA256 before native launch. There
+is no shared city-options default for classic games.
 
 807 also lacks the modern local-spectator flag. Its existing setupSpectatorView
 creates a detached, unregistered UI view after initGame: every playing house
@@ -136,6 +148,15 @@ compiler logs, the mini prep tail, Windows error extraction and failure notes
 live under the diagnostic output directory as historical-807-aa-*. The reused
 Windows prep.log also contains earlier unrelated failures, which are not the
 AA blocker: the relevant C2280 block ends at 2026-11-06 15:41:36 failed.
+
+Before submitting repair ae71314ac8cfbb8f77a9cd002c4215483ae5064e, the parent
+found that AA/AE incorrectly supplied common City Effects=true options to both
+classic mods. This was a supported-input mismatch, not an unsupported historical
+feature. AE was never submitted; AA never reached games. The corrected source
+separates and pins the exact original OFF option files above. The original bytes
+were already deduplicated from a1 receipts in retuned-5d7f1a27-inputs; the mapping
+in submission-plan-5d7f1a27.json identifies the original receipt for each mod.
+No original evidence is overwritten and no old AI/mod configuration is changed.
 
 Observer semantics and estimators
 --------------------------------

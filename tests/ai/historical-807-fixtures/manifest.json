@@ -5,6 +5,26 @@
   "reference_source": "a1bf0d0be51785f085748dfd1e89a5a8bb1b9975",
   "map_provenance": "Exact filedata string from original archived auto.rpl; no generator is backported or rerun.",
   "research_support": "Absent in 807. Historical games are run once, paired primarily to research OFF; research ON mappings are contextual reuse, not a second applied historical treatment.",
+  "off_options_by_mod": {
+    "dunecity": {
+      "file": "reference-city-research-off.ini",
+      "sha256": "781ee120f1b3c70c5d7bbfcb533b584113439199876da54b0c0848d46431779b",
+      "city_effects": true,
+      "original_frozen_input_receipt": "/Users/stefan/.local/state/dunecity-queue/inputs/20261106T122235-unit-choice-a1bf0d0b-dunecity-off-off-cdc91e.json"
+    },
+    "Dune2R": {
+      "file": "reference-classic-research-off.ini",
+      "sha256": "10f31cd0cba4ee26439f9795b97b13b226a67f26ab0481a6812a46048304cef1",
+      "city_effects": false,
+      "original_frozen_input_receipt": "/Users/stefan/.local/state/dunecity-queue/inputs/20261106T122248-unit-choice-a1bf0d0b-Dune2R-off-off-e8a4c7.json"
+    },
+    "vanilla": {
+      "file": "reference-classic-research-off.ini",
+      "sha256": "10f31cd0cba4ee26439f9795b97b13b226a67f26ab0481a6812a46048304cef1",
+      "city_effects": false,
+      "original_frozen_input_receipt": "/Users/stefan/.local/state/dunecity-queue/inputs/20261106T122306-unit-choice-a1bf0d0b-vanilla-off-off-c47012.json"
+    }
+  },
   "games": [
     {
       "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876",

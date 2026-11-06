@@ -11,7 +11,6 @@ reported as a historical formation duel. See historical-807.txt.
 """
 import argparse
 import importlib.util
-import json
 from pathlib import Path
 
 support_path = Path(__file__).with_name('historical-807.py')
@@ -26,7 +25,7 @@ finish_game = bridge.finish_game
 def schedule(args):
     if args.pairs != 'box:none' or args.sizes != [128] or args.seeds != [7101]:
         raise ValueError('Only the documented historical cluster parity dispatcher is supported')
-    games = json.loads((bridge.fixtures / 'manifest.json').read_text())['games']
+    games = bridge.fixture_games()
     source = next(game for game in games if game['mod'] == 'dunecity' and game['seed'] == 9101
                   and '/none/1v1/medium/' in game['id'])
     result = []
@@ -68,7 +67,8 @@ parser.add_argument('--sizes', type=int, nargs='+', default=[128])
 parser.add_argument('--seeds', type=int, nargs='+', default=[7101])
 parser.add_argument('--minutes', type=int, default=12)
 parser.add_argument('--wall-timeout', type=int, default=900)
-parser.add_argument('--game-options', type=Path, default=bridge.fixtures / 'reference-options.ini')
+parser.add_argument('--game-options', type=Path,
+                    help='Frozen override; bytes must match the source fixture mod')
 parser.add_argument('--capture-mib', type=int, default=256)
 args = parser.parse_args() if __name__ == '__main__' else None
 if args is not None:

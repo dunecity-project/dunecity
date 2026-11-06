@@ -65,9 +65,16 @@ def append(path, fields, rows):
         writer.writerows(rows)
 
 
+def fixture_games():
+    """Bind each immutable game to its original per-mod research-OFF bytes."""
+    manifest = json.loads((fixtures / 'manifest.json').read_text())
+    return [dict(game, game_options=manifest['off_options_by_mod'][game['mod']])
+            for game in manifest['games']]
+
+
 def schedule(args):
     """96 distinct maps/rosters/difficulties; research is absent, not duplicated."""
-    games = json.loads((fixtures / 'manifest.json').read_text())['games']
+    games = fixture_games()
     return [game for game in games if (not args.mod or game['mod'] == args.mod)
             and game['seed'] in args.seeds]
 
@@ -258,7 +265,10 @@ def play(args, scratch, binary, game):
     results.mkdir(parents=True, exist_ok=True)
     out = Path(scratch) / ('h807-' + hashlib.sha256(game['id'].encode()).hexdigest()[:12])
     out.mkdir(parents=True, exist_ok=False)
-    options = option_receipt(args.game_options)
+    options_path = Path(args.game_options) if args.game_options else fixtures / game['game_options']['file']
+    options = option_receipt(options_path)
+    if options['sha256'] != game['game_options']['sha256']:
+        raise ValueError('Game options differ from original per-mod OFF input: ' + game['mod'])
     map_file = fixtures / 'maps' / game['map']
     map_sha = hashlib.sha256(map_file.read_bytes()).hexdigest()
     if map_sha != game['map_sha256']:
@@ -278,7 +288,7 @@ def play(args, scratch, binary, game):
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
         DUNECITY_PATH_WORKERS='1', H807_MOD=game['mod'], H807_MAP=str(map_file), H807_MAP_NAME=game['map_name'],
         H807_SEED=str(game['seed']), H807_MINUTES=str(game.get('minutes', 40)), H807_SIDES=numeric_sides,
-        H807_GAME_OPTIONS=str(Path(args.game_options).resolve()), H807_CAPTURE_MIB=str(args.capture_mib))
+        H807_GAME_OPTIONS=str(options_path.resolve()), H807_CAPTURE_MIB=str(args.capture_mib))
     started = time.monotonic()
     error = ''
     try:
@@ -352,7 +362,8 @@ parser.add_argument('--results', required=True)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--mod', choices=('dunecity', 'Dune2R', 'vanilla'))
 parser.add_argument('--seeds', type=int, nargs='+', default=[9101, 148680876, 55001, 77001])
-parser.add_argument('--game-options', type=Path, default=fixtures / 'reference-options.ini')
+parser.add_argument('--game-options', type=Path,
+                    help='Frozen override; bytes must match the manifest OFF input for this mod')
 parser.add_argument('--capture-mib', type=int, choices=range(256, 4097), default=1024)
 parser.add_argument('--wall-timeout', type=int, default=1800)
 parser.add_argument('--list', action='store_true')
