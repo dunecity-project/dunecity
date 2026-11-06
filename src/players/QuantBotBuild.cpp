@@ -4332,6 +4332,18 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                         added,std::max(0,pass.militaryBudget-pass.militaryValue),capacity.cost);
                 if (actual==0) {
                     capacity.reason="bootstrap_managed_separately";
+                    // Ranked by the shared priorities rather than left to the
+                    // opening path, which the sensible yard choice runs before
+                    // and which needs the whole heavy chain to be legal.
+                    if (pass.startWhatMakesSense && factory!=Structure_HighTechFactory
+                        && pass.itemCount[factory]==0 && pass.militaryValue<pass.militaryBudget
+                        && campaignAvailableToBuild(builder,factory)) {
+                        capacity.site=findPlaceLocation(factory);
+                        if (capacity.site.isValid()) {
+                            capacity.kind="first_factory";capacity.score=1;
+                            capacity.reason="missing_ground_producer";
+                        }
+                    }
                     // The seed economy comes first. Finalize the full founded
                     // quote below: only an already-funded multi-yard bootstrap
                     // may save for this first supplier before it is affordable.

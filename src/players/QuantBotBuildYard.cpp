@@ -410,6 +410,9 @@ bool QuantBot::chooseSensibleYardCapital(BuildPass& pass, BuilderTurn& turn, Yar
     const auto kind = std::string_view(candidate.kind);
     const bool upgrade = kind == "tech_upgrade" || kind == "expansion_upgrade"
         || kind == "defence_upgrade" || kind == "production_upgrade";
+    // Another yard may already have ordered this pass's first factory.
+    if ((kind == "first_factory" || kind == "first_military_factory")
+        && pass.itemCount[candidate.item] > 0) return false;
     if (upgrade) {
         yardTurn.skipRemainingStructureLogic = true;
         upgradeWithLogging(pass,turn,__LINE__);
