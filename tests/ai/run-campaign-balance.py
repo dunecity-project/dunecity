@@ -450,6 +450,9 @@ parser.add_argument('--skirmish-ffa-size', type=int, choices=(64, 96, 128, 160, 
 parser.add_argument('--skirmish-map-seed', type=int, default=1, help='--skirmish-ffa-size: the Random Skirmish map seed')
 parser.add_argument('--prebuilt-probe', type=Path,
                     help='Run this balance-probe binary (from an earlier run of this tree) instead of building one')
+parser.add_argument('--build-only', action='store_true', help='Prepare the private probe binary without playing a game')
+parser.add_argument('--genome-phase-dir', type=Path,
+                    help='Internal genome-match inputs: per-house resolved phase INIs and schedule.ini (probe only)')
 parser.add_argument('--no-ai-telemetry', action='store_true',
                     help='Batch measurement: no AI decision log (DUNECITY_AI_TELEMETRY=0), so no events.jsonl, no '
                          'telemetry in summary.json and no telemetry-based wave-budget check. The simulation is the '
@@ -522,6 +525,9 @@ if args.skirmish_ffa_size and (args.custom_map or args.duel_map_size or not args
     parser.error('--skirmish-ffa-size needs --match-sides and no --custom-map or --duel-map-size.')
 if args.match_sides and (not (args.custom_map or args.skirmish_ffa_size) or args.roster or args.free_for_all):
     parser.error('--match-sides needs --custom-map or --skirmish-ffa-size and replaces --roster/--free-for-all.')
+if args.genome_phase_dir and (not (args.match_sides or args.load_save)
+                              or not (args.genome_phase_dir / 'schedule.ini').is_file()):
+    parser.error('--genome-phase-dir needs --match-sides or --load-save and an existing schedule.ini.')
 if args.quantbot_object and not all(path.is_file() for path in args.quantbot_object):
     parser.error('--quantbot-object must name existing object files.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
@@ -843,6 +849,9 @@ else:
         binary = app/'MacOS/balance-probe'
         shutil.copy2(entry/'balance-probe', binary)
     (out/'balance-main.cpp').write_text(main, encoding='utf-8')
+if args.build_only:
+    print(binary)
+    sys.exit(0)
 env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy',
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
@@ -967,6 +976,8 @@ if args.blob_wave_probe: env['BALANCE_BLOB_WAVE_PROBE'] = '1'
 if args.force_probe: env['BALANCE_FORCE_PROBE'] = '1'
 # Play styles (label suffix @style, docs/ai-play-styles.md) are read from here by the probe.
 env['BALANCE_STYLE_DIR'] = str(root / 'tests/ai/play-styles')
+if args.genome_phase_dir:
+    env['BALANCE_GENOME_PHASE_DIR'] = str(args.genome_phase_dir.resolve())
 if args.match_sides:
     env['BALANCE_MATCH_SIDES'] = ','.join(f'{house}:{label}' for house, label in sides)
 if args.skirmish_ffa_size:

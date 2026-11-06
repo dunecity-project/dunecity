@@ -132,8 +132,8 @@ def append(path, fields, rows):
 
 def skirmish(name):
     """rs<size>-<mod> -> (size, mod), or None for a bundled map."""
-    match = re.fullmatch(r'rs(\d+)-(vanilla|dunecity)', name)
-    return (int(match.group(1)), match.group(2)) if match else None
+    match = re.fullmatch(r'rs(\d+)-(vanilla|dune2r|dunecity)', name, re.IGNORECASE)
+    return (int(match.group(1)), match.group(2).lower()) if match else None
 
 
 def map_path(name):
@@ -262,7 +262,8 @@ def play(args, scratch, binary, key):
                '--wall-timeout', str(args.wall_timeout), '--path-workers', '1']
     if generated := skirmish(name):
         size, mod = generated
-        command += ['--skirmish-ffa-size', str(size), '--skirmish-map-seed', seed, '--mod', mod,
+        command += ['--skirmish-ffa-size', str(size), '--skirmish-map-seed', seed,
+                    '--mod', 'Dune2R' if mod == 'dune2r' else mod,
                     '--game-options', str(args.game_options or SKIRMISH_OPTIONS)]
     else:
         command += ['--custom-map', str(game_map(name, scratch))]

@@ -106,7 +106,7 @@ int runCampaignBalanceProbe() {
     const bool civWars=std::getenv("BALANCE_CIV_WARS")!=nullptr;
     if(civWars && requestedMod!="CivWars")
         throw std::runtime_error("Generated Civilization Wars needs the exact CivWars mod");
-    if(std::getenv("BALANCE_DEGRADATION_PROBE") || scenario || civWars)
+    if(std::getenv("BALANCE_DEGRADATION_PROBE") || scenario || civWars || std::getenv("BALANCE_GENOME_PHASE_DIR"))
         settings.gameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     getQuantBotConfig().easy.attackForceMilitaryValueRatio = percent / 100.0f;
     if (const char* shape = std::getenv("BALANCE_WAVE_FORMATION")) {

@@ -1,0 +1,274 @@
+# QuantBot genomes and regression-gated league
+
+A genome is a collection of independently expressed behaviour features, not one
+master AI on/off switch. Search changes only test inputs. **No search command
+writes shipped defaults, chooses a release, or treats a missing measurement as a
+pass.** Every AI change is opt-in until the integrator accepts the promotion
+record: same-source default, frozen league opponents, historical releases and all
+reported-issue checks.
+
+## Gene registry
+
+`tests/ai/genome-registry.json` is the single machine-readable registry. Every row
+has `id`, `name`, genuine INI `section`/`key`, `kind`, `levels`, `default` and
+`owner_doc`; difficulty-specific settings also identify their config block.
+The initial committed-config inventory has 336 genes, including all 61 booleans,
+formation/strategy choices, wave thresholds, launcher distance, timers, recovery
+ratios, force budgets, unit ratios, priority weights and tuned tech-band mixes.
+New parser switches must be registered in the same self-contained source pin.
+
+The registry loader audits the real C++ reader, constructor and shipped default
+INI. Unknown/forgotten boolean or enum keys, wrong effective defaults and invalid
+levels fail explicitly. Existing INI parsing is authoritative: a numeric-looking
+value read by `getIntValue` is an integer gene, not an invented floating knob.
+Boolean levels are integer `0/1`; decimal levels are exact strings; decision,
+mutation and statistical arithmetic does not depend on binary floats.
+
+`genome_model.py` provides `load_registry`, `default_genome`, `validate_genome`,
+`resolve`, `render_ini` and `genome_id`. A default chromosome is **sparse**:
+`values={}` renders no overrides, retaining the actual native/mod baseline hash.
+An explicit assignment to a registry default still renders; it is not silently
+dropped. Each phase starts from a fresh native baseline config, so an opening-only
+rule cannot leak into the late game. No conditional Tornie-only priorities are
+injected into a Vanilla baseline.
+
+A chromosome example (levels must be registered):
+
+```json
+{"id":"timed-waves","values":{"wave_readiness_percent":60},
+ "expression":[
+   {"when":{"difficulty":["hard","brutal"],"mod":["dunecity"],"size_max":96,"phase":["opening"]},
+    "values":{"wave_readiness_percent":45}},
+   {"when":{"house":["atreides"],"phase":["late"]},
+    "values":{"attack_timer_ms":30000}}]}
+```
+
+Predicates can select difficulty, mod, house, map format, inclusive map-size
+bounds and opening/mid/late phase. Empty/absent dimensions match all; matching
+rules apply in list order, last assignment wins. Genotype SHA-256 excludes the
+human label but preserves ordered-rule semantics. Phase boundaries default to
+0/10/20 **game** minutes, never wall time. Continuations use elapsed loaded-save
+time. Global game rules (for example Research Installments) are context, **not
+per-house AI genes**.
+
+## Mixed-genome games and provenance
+
+`genome-match.py` implements the cluster's `schedule/build_probe/play/run/report`
+contract. `--manifest-b64` contains the exact inline manifest; no worker reads a
+mutable submitter-only genome file. `--pairs a:default` mirrors each seed between
+house assignments. `--ffa a,default,default,default` uses cyclic four-slot
+rotations; distinct four-genome quartets work too. House IDs, slots and assignment
+receipts are retained. Normal play-style, force-flag and non-genome harnesses keep
+their previous path.
+
+Contexts include Medium/Hard/Brutal, Vanilla/Dune2R/DuneCity, CY and Fortress
+starts, map sizes, spice, research on/off and applicable global rules. CY/no-army
+cohorts measure real technology adoption rather than making prebuilt factories
+look like construction success. Phase INIs use real `applyOverrides` and
+`getConfigHash`. Per-house/per-controller phase hashes, manifest/registry/schedule
+SHA-256, exact map/full serialized options, content/object-data hashes, probe SHA
+and immutable source provenance are separate evidence. Config hashing is not a
+claim that the private phase schedule is a shipped multiplayer protocol.
+
+The C++ phase helper preserves saved controllers (including multiple QuantBots
+on one house) and rejects human/shared-human overrides. It refreshes the existing
+cached military limit and strategy/timer state when the corresponding config
+changes; it does not replay starting actions or replace a player.
+
+The harness reuses `dunecity-audit.py` detectors and
+`ai_baseline_scorecard.scorecard(run)`, not a second behaviour scorecard. Audit
+sidecars retain technology, actual production/spending, composition, attacks,
+wave engagement, R/I/C and research. Missing/censored/not-applicable values remain
+explicit. Flat per-game gzip traces, map/options receipts and observation files
+survive the queue's top-level collector; successful scratch is deleted promptly.
+
+## Screening and epistasis
+
+`genome_search.py screen` writes one-gene default knockouts/activations and
+registered parameter-level sweeps. The second screen is a regular resolution-IV
+fraction: highest-bit-set Walsh columns are balanced and orthogonal, with no
+main-effect column equal to the product of two main columns. It includes the
+global foldover. **Two-factor interactions remain aliased with each other.** The
+plan records those alias groups; it does not present fractional product contrasts
+as isolated causal interactions.
+
+Use fixed common seeds and mirrored/rotated assignments. Average houses and
+orientations within independent map-seed blocks before inference. Reports retain
+mod, difficulty, research, format, size, base, spice, phase and house strata;
+unsupported contexts are not pooled into a global harmful-gene conclusion.
+One-gene binary contrasts are ON minus OFF regardless of shipped default;
+parameter/fractional contrasts are explicitly alternative minus default.
+
+Intervals are deterministic seed-block bootstrap intervals. A shared-seed
+max-deviation bootstrap supplies simultaneous 95% intervals within each metric
+family. Incomplete seed designs or fewer than four independent seeds cannot
+receive a decisive interval. These exploratory screens do not authorize
+promotion; elite confirmation uses at least eight held-out seeds, with a further
+16-seed race if precision remains inadequate.
+
+After screening, `interactions --genes ...` creates explicit 2x2 followups for the
+six materially active/related genes (all pairs, retaining all four cells).
+Estimate `AB-A-B+baseline` within seed/context. In particular investigate
+production choice × producer capacity, research × civic unlocks, and power ×
+spending priorities. A negative knockout can reflect a broken prerequisite,
+context or interaction: retain its trace and diagnose the refused order, funding,
+legal-site, power or dispatch reason before proposing a parameter/logic change.
+Simply disabling the feature is not the default remedy.
+
+## Evolution and quality diversity
+
+Concrete league settings: 24 parents, 24 offspring per round, size-3 tournament
+selection, uniform locus crossover for switch/categorical genes, and adjacent
+registered-level mutation for integer/decimal genes (about two mutated loci per
+child, at least one). Context rules are preserved as ordered blocks; mutation can
+add context/phase-specific expression. Integer mutation step adapts by a 1/5
+success rule. This is a mixed discrete `(mu+lambda)` search, **not CMA-ES**: most
+loci are categorical or sparse contextual switches, so a Gaussian covariance
+model would be an unjustified representation here.
+
+Retain frozen past champions/defaults, a payoff history and four main-exploiter
+slots aimed at the current champion. Opponent priorities are Laplace-smoothed
+squared loss rates with a nonzero exploration floor (integer arithmetic). Main
+candidates face the current default, a frozen champion and a prioritized hard
+opponent; duplicate opponents are not falsely counted as distinct. Initial
+racing uses two common seeds and both slot assignments per opponent. A four-player
+cohort gets four rotations. Elites receive additional held-out seed blocks and
+context coverage before any promotion recommendation.
+
+Fitness is **not a weighted sum**. Report independent strength (placement/wins,
+kills, survival), army/economy and behaviour objectives, Pareto fronts and coverage.
+Maintain observed rush/tech/economy/balanced niches separately per mod/difficulty;
+keep a Pareto set in a niche rather than erasing a useful technology specialist
+because another chromosome rushes better. Missing objective coverage cannot
+establish dominance. Search may explore unverified candidates; they are not
+feasible elites or releasable defaults until every hard gate is satisfied.
+
+## Reported-save constraints
+
+Every reported issue becomes a permanent feasibility check. Private original
+saves are checksum-pinned and transported by the queue's frozen game-options
+mechanism; private bytes/profile copies stay out of git. Synthetic engine
+fixtures and machine-readable assertions are committed. A good tournament result
+cannot compensate for failing a required behaviour check; unavailable original
+inputs, incomplete traces or a changed controller/context cannot pass.
+
+The issue inventory includes notbuilding (Ordos LF order, research beyond T2,
+lawful demanded city growth), notbuildingresearchlab, problem1/ainonuclear,
+Atreides no-expand, purple zero-power, Sardaukar LF/expansion and rocket-cover
+regressions. Preserve actual opportunity conditions and separate accepted orders,
+completed structures and later combat destruction. Two controllers must not turn
+one physical completion into two counted buildings.
+
+Measured diagnosis from the 2026-11-06 original notbuilding continuation: the
+zoning selector is not universally idle. Ordos completed five commercial zones
+and Neutral seven before losing their yards; Mercenary reached T4, built its
+Stadium and then two residential zones. T2 civic caps lawfully suppress R/I and
+some C demand. Do not require every house to grow all three categories before
+those unlocks or invent a standalone zoning gene without causal evidence. The
+actual failed LF assertion is that Ordos, with a legal offered plot, orders a
+Light Factory; the baseline ordered none before its yard was destroyed.
+
+New fixes, including independent heavy-capacity/buffered-production,
+ContinuousResearch and CityCompactPower, start OFF. A proposed funding gene is
+registered only when its genuine parser/logic lands. Research Installments is a
+global human-and-AI payment rule, never a per-house genome switch. Preserve
+existing default behaviour while collecting the second screening block.
+
+## Historical reference and promotion
+
+Reuse the historical league's long-form observations and `ai-baseline-gate.py`.
+Historical releases (including native 1.0.807 through its test-only bridge), every
+accepted prior default and future champions form the Hall of Fame. Historical
+**whole-engine** scorecards are a separate track: running a current config is not
+running an old AI binary. Exact map/requested options and supported content/rules
+must be comparable; absent old telemetry is unavailable, never zero.
+
+A default recommendation requires all of:
+
+1. All required real-issue and synthetic behaviour checks pass on the exact
+   candidate source/config; missing/censored evidence is unverified.
+2. Same-source paired held-out strength is better than the current default:
+   simultaneous 95% lower bound above zero overall, with no meaningful context
+   regression (placement tolerance 0.02, not an inferred equivalence from low N).
+3. The independent historical gate passes all supported core objectives against
+   same-source OFF and the historical references, retaining selection-adjusted
+   seed-block intervals and per-metric best historical observations.
+4. Report Pareto trade-offs, weakest opponents, niche/context gaps, exact pins,
+   traces for harmful effects and the actual recommended chromosome. The
+   integrator, not the search runner, changes shipped defaults.
+
+## Commands and cluster operation
+
+```sh
+python3 tests/ai/genome_search.py screen --switches-only --one-alternate \
+  --sizes 96 --bases cy --spice medium --research off --modes 1v1 \
+  --seeds 110601 110602 110603 110604 --output SCREEN.json.gz
+python3 tests/ai/genome_search.py run --plan SCREEN.json.gz --rev FULL_COMMIT_SHA \
+  --output RESULTS --tag genome-screen
+python3 tests/ai/genome-match.py --report --results RESULTS --scores observations.csv.gz
+python3 tests/ai/genome_search.py analyse --plan SCREEN.json.gz \
+  --observations observations.csv.gz --output REPORT
+python3 tests/ai/genome_search.py interactions --genes focus_fire converge \
+  --output INTERACTIONS.json.gz
+python3 tests/ai/genome_search.py evolve --plan SCREEN.json.gz \
+  --report REPORT/report.json.gz --generation 1 --output ROUND1.json.gz
+```
+
+All games use `dunecity-queue submit --rev <immutable SHA>` through the project
+coordinator. The scheduler uses mini/Pro/PC and Air only when guest/game/battery
+rules permit. Idle filler may consume explicit immutable backlog entries at low
+priority; it must not invent repetitions, disable Air's playing guard, perform
+promotion or use dirty sources. Read the global compute/disk guard before
+submitting. Keep diagnostic evidence gzip-compressed and leased scratch bounded.
+
+### Measured first pilot, not a throughput promise
+
+Eighteen default games on `df06ededc5f8080dca98a1b937f475a8d048eefb` completed:
+three mods × three difficulties × 1v1/4P, 96-tile CY/no-army starts, spice medium,
+seed 110601, 30 game-minute cap. Per-game wall time was 79.725–139.246 seconds,
+not the assumed 20 seconds. All Dune2R/City games timed out; two Vanilla 1v1 games
+timed out. The recorded multi-job wait was 704.62 seconds including preparation
+and shared-machine scheduling, not a controlled throughput benchmark. Evidence:
+`outputs/genome-20261106/default-pilot-corrected/`.
+
+An exhaustive initial 61-switch/128-row fraction × nine mod/difficulty contexts ×
+four seeds × two assignments is 13,608 games before parameter/interaction races.
+Therefore the first table is produced for an explicit initial context and then
+expanded continuously; it must not imply that unmeasured contexts were tested.
+No first promotion date is promised while a required behaviour check fails.
+
+## Literature and adopted methods
+
+- [Rosin & Belew (1997), New Methods for Competitive Coevolution](https://direct.mit.edu/evco/article/5/1/1/790/New-Methods-for-Competitive-Coevolution)
+  ([accessible abstract](https://pubmed.ncbi.nlm.nih.gov/10021751),
+  [author manuscript](https://www.chrisrosin.com/newmethods.ps)): distinguish
+  competitive fitness sharing, diverse opponent sampling and a Hall of Fame.
+  Adopt frozen historical/champion memory to guard against cycling/forgetting,
+  not a claim that one recent win proves global progress.
+- [Vinyals et al., AlphaStar](https://storage.googleapis.com/deepmind-media/research/alphastar/AlphaStar_unformatted.pdf),
+  multi-agent learning/PFSP methods: frozen league players, squared-loss opponent
+  prioritization and main exploiters. Adopt these opponent-selection principles,
+  **not** AlphaStar's neural RL, TPU scale or its exact training mixture.
+- [Mouret & Clune (2015), MAP-Elites](https://arxiv.org/abs/1504.04909), especially
+  algorithm Figure 2 and section 3: keep high-performing observed behavioural
+  niches instead of one global winner. Use a small, interpretable context/style
+  archive with Pareto sets; this is a quality-diversity adaptation, not evidence
+  that all niches have already been filled.
+- [Rakshit, Konar & Das, noisy evolutionary optimization survey](https://www.sciencedirect.com/science/article/abs/pii/S221065021630308X)
+  ([accepted manuscript](https://openmole.org/paper/rakshit2016.pdf)), explicit and
+  sequential sampling/robust selection; [Merelo et al., noisy game fitness](https://carloscotta.com/papers/merelo14studying.pdf),
+  fitness memory and statistical partial orders: adopt common seeds, persistent
+  observations, elite re-evaluation/racing and intervals before promotion. Do not
+  infer independent replicates from correlated snapshots or favourable retries.
+- [Ponsen et al. (2005), AKADS/Wargus](https://cdn.aaai.org/AAAI/2005/IAAI05-012.pdf),
+  sections 4–6: parameterized build/research/economy/combat genes and state-specific
+  tactics support contextual expression. Its warning about early-rush overfitting
+  motivates late-game/quality constraints here; its scalar fitness is not copied.
+- [Miles & Louis (2006)](https://www.cse.unr.edu/~miles/papers/cig2006.pdf), sections
+  IX–XI: coevolved parameterized RTS decision makers, with Hall-of-Fame/speciation
+  discussed as extensions. This is tactical precedent, not proof about full
+  QuantBot economy or performance.
+- [Stanley & Miikkulainen (2004), NEAT competitive coevolution](https://jair.org/index.php/jair/article/download/10367/24809),
+  sections 2.2 and 5.1–5.2: diverse champions, Hall-of-Fame opponents and independent
+  dominance evaluation. Adopt the preservation/evaluation lesson, not topology
+  evolution: QuantBot's genome is a finite audited feature/parameter representation.

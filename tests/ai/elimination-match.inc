@@ -156,9 +156,11 @@ inline std::string run(Game& game, Uint32 end, int house) {
                 players.c_str(), int(game.isObserving()));
     }
     int winner = 0;
+    FormationDuel::applyGenomePhase(game);
     sample(game);
     while (game.getGameCycleCount() < end) {
         ProbeDigest::periodic(game);
+        FormationDuel::applyGenomePhase(game);
         game.updateGameState();
         crushCount.observe();
         DuneCityAudit::observe(game);
