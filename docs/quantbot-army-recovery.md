@@ -85,7 +85,7 @@ selfplay results, not direct ON-versus-OFF winning skill.
 
 The alive-time value gain and kill-value loss have the same sign in all four
 pooled seed blocks. Kill-value point estimates are lower in all six Hard/Brutal
-mod/research cells. Thus the value rule reduced cheap spending and raised the
+mod/research cells. Thus the value rule reduced cheap accepted-quote share and raised the
 observed-time unit value, but failed the “not consistently weaker” condition.
 Its dispatch result did **not** reproduce the combined trial's 3.58 → 0.99
 collapse; the other components or interactions are not identified by this trial.
@@ -114,6 +114,19 @@ and completed-building/coverage tables). Historical target mix and why the
 unchanged integer-L1 selector bought cheap units are separately preserved in
 `prior-target-mix-report.txt`, `prior-target-mix-by-house-difficulty-mod.csv`
 and `prior-cheap-choice-mechanisms.csv` in that evidence root's parent.
+
+Source qualification is separate from the outcome estimates. The study pin's
+full suite passed 160/166; it is not relabelled as green. After fixture-only
+separation and setup corrections, qualification pin
+`616d86d73ff2c38d502a6fa95af0ef99826ebb77` passed **175/178**, including all
+**12/12** standalone unit-choice engine cases (four mods × three difficulties).
+The all-against-Atreides regressions (vanilla and Dune2R) and scenario matrix
+passed at both pins. Three `quantbot_simple_tech_savings_dunecity` cases
+(Medium/Hard/Brutal) still failed on both Macs; these exercise the separately
+rejected technology/economy policy and are not claimed fixed. No simulation
+policy changed after the study pin; later changes were test harness, fixture
+setup and documentation only. See `final-qualification-616d86d7.json` and
+`decision-a1bf0d0b.json` in the evidence root for exact sources and receipts.
 
 ## Stateless technology experiment and save compatibility
 
