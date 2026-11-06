@@ -367,6 +367,7 @@ QuantBotConfig::QuantBotConfig() {
     force.fundedClassicProduction = true;
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
     force.simpleTechSavings = false;
+    force.existingCompositionUnitChoice = false;
     force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
     force.exhaustedArmyDispatch = true;
 
@@ -686,6 +687,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
         iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
         iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
+        iniFile.setBoolValue("Force Concentration", "ExistingCompositionUnitChoice", force.existingCompositionUnitChoice);
         iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
         iniFile.setBoolValue("Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
 
@@ -830,6 +832,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.fundedClassicProduction = iniFile.getBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
     force.trooperSupport = iniFile.getBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
     force.simpleTechSavings = iniFile.getBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
+    force.existingCompositionUnitChoice = iniFile.getBoolValue(
+        "Force Concentration", "ExistingCompositionUnitChoice", force.existingCompositionUnitChoice);
     force.launcherKiteExtraDistance = std::clamp(iniFile.getIntValue(
         "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
     force.exhaustedArmyDispatch = iniFile.getBoolValue(
@@ -1337,6 +1341,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("fundedClassicProduction", force.fundedClassicProduction);
     addNamed("trooperSupport", force.trooperSupport);
     addNamed("simpleTechSavings", force.simpleTechSavings);
+    addNamed("existingCompositionUnitChoice", force.existingCompositionUnitChoice);
     addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
     addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);
     configStr += "|/FORCE|";

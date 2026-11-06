@@ -542,6 +542,7 @@ int runCampaignBalanceProbe() {
                             .set("CityProductionPrerequisites",f.cityProductionPrerequisites)
                             .set("CityFirstFactorySaving",f.cityFirstFactorySaving)
                             .set("SimpleTechSavings",f.simpleTechSavings)
+                            .set("ExistingCompositionUnitChoice",f.existingCompositionUnitChoice)
                             .set("TrooperSupport",f.trooperSupport).set("FundedClassicProduction",f.fundedClassicProduction)
                             .set("ThreatTurrets",f.threatTurrets).set("MoreRocketTurrets",f.moreRocketTurrets)
                             .set("CityStarportSupply",f.cityStarportSupply).set("StorageCapacity",f.storageCapacity));

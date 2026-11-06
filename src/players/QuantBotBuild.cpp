@@ -458,6 +458,9 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     pass.money = getHouse()->getCredits();
     const bool simple = simpleTechPolicyActive();
     pass.techSavings = simple;
+    pass.existingCompositionChoice = currentGame && botConfig().force.existingCompositionUnitChoice
+        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType) && !builderOnly()
+        && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal);
     pass.militaryValue += pass.queuedMilitaryValue;
     // Effective military planning budget for this pass, computed once now that the
     // queue-inclusive army value and the cash are known. It equals the configured
@@ -1823,11 +1826,14 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         if (!builder || builder->getOwner() != getHouse()
             || (builder->getItemID() != Structure_LightFactory && builder->getItemID() != Structure_HeavyFactory
                 && builder->getItemID() != Structure_HighTechFactory
-                && !(pass.techSavings && builder->getItemID() == Structure_StarPort))) continue;
+                && !((pass.usesCompositionChoice() || AITelemetry::log().enabled())
+                    && builder->getItemID() == Structure_StarPort))) continue;
         for (size_t i=0; i<kSlots; ++i) {
             const bool producible = campaignAvailableToBuild(builder,mixItems[i]);
-            available[i] |= producible;
-            if ((pass.techSavings || AITelemetry::log().enabled()) && producible
+            // A standalone choice switch must not change the learned/fixed
+            // target mix merely because a market offer exists.
+            if (builder->getItemID() != Structure_StarPort || pass.techSavings) available[i] |= producible;
+            if ((pass.usesCompositionChoice() || AITelemetry::log().enabled()) && producible
                 && builder->getHealth() > 0 && builder->isActive()
                 && !getHouse()->isUnitLimitReached(mixItems[i])
                 && (builder->getItemID() != Structure_StarPort
@@ -1967,7 +1973,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             pass.lightVehicleCount += pass.itemCount[item];
         }
     }
-    if (pass.techSavings || AITelemetry::log().enabled()) {
+    if (pass.usesCompositionChoice() || AITelemetry::log().enabled()) {
         for (Uint32 item = Unit_FirstID; item <= ItemID_LastID; ++item) {
             const size_t slot = compositionSlot(item);
             if (slot == UnitMixPolicy::kSlots) continue;
@@ -2036,7 +2042,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             int64_t(pass.infantryValue) + std::min(pass.trooperReserveValue,
                 std::max(0, fundedArmyValue - pass.militaryValue))));
     }
-    pass.vehiclePlanValue = pass.techSavings ? pass.compositionArmyValue
+    pass.vehiclePlanValue = pass.usesCompositionChoice() ? pass.compositionArmyValue
         : std::max(0, fundedArmyValue - plannedInfantryValue);
     if (pass.emitStatsLog && AITelemetry::log().enabled()) {
         traceDecision("unit_mix", AITelemetry::Record().set("basis", !pass.learningUnitMix ? "configured" : evidenceWeightedLearning ? "lifetime_evidence_weighted_value_per_loss" : "lifetime_value_per_loss")
@@ -2061,7 +2067,8 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             .set("planned_infantry_value", plannedInfantryValue)
             .set("trooper_reserved_value", pass.trooperReserveValue)
             .set("performance_exponent_milli",1500).set("performance_confidence_bps", performanceConfidenceBps).set("funded_army_value",fundedArmyValue)
-            .set("existing_composition", pass.techSavings).set("composition_army_value", pass.compositionArmyValue)
+            .set("existing_composition", pass.usesCompositionChoice()).set("unit_choice_only", pass.existingCompositionChoice)
+            .set("composition_army_value", pass.compositionArmyValue)
             .set("vehicle_plan_value",pass.vehiclePlanValue).set("queued_military_value",pass.queuedMilitaryValue).set("mix_inputs", [&]() {
                 AITelemetry::Record inputs;
                 for (size_t i=0; i<kSlots; ++i) inputs.set(std::to_string(mixItems[i]),
@@ -2885,6 +2892,10 @@ size_t QuantBot::compositionSlot(Uint32 item) {
 }
 
 bool QuantBot::compositionAdmits(BuildPass& pass, Uint32 item) {
+    if (pass.existingCompositionChoice) {
+        const size_t slot = compositionSlot(item);
+        return slot == UnitMixPolicy::kSlots || slot == pass.nextCompositionSlot();
+    }
     if (!pass.techSavings || !QuantBotBuildPolicy::militaryItem(item)) return true;
     // A real emergency may use an available opening supplier, not refill an
     // overweight light army while advanced ground composition is available.
@@ -3615,6 +3626,10 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     }
                 } else if (factory==Structure_LightFactory && int64_t(pass.lightVehicleValue)*10000
                     >= int64_t(pass.vehiclePlanValue)*pass.lightVehicleBps) capacity.reason="light_mix_satisfied";
+                else if (pass.existingCompositionChoice && actual > 0 && [&]() {
+                    const size_t next = pass.nextCompositionSlot();
+                    return next == UnitMixPolicy::kSlots || data[mixItems[next]][houseID].builder != factory;
+                }()) capacity.reason="existing_choice_other_producer";
                 else if (pass.itemCount[factory]>actual) capacity.reason="factory_pending";
                 else if (busy<actual) capacity.reason="existing_line_available";
                 else if (!campaignAvailableToBuild(builder,factory)) capacity.reason="tech_unavailable";
@@ -3758,8 +3773,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             else if (getHouse()->isUnitLimitReached(item)) reason="unit_limit";
             else if (port && getHouse()->getChoam().getNumAvailable(item)<=0) reason="sold_out";
             else if (port && price >= value) reason="not_discounted";
-            else if (pass.techSavings && !compositionAdmits(pass, item)) reason="existing_composition_satisfied";
-            else if (!pass.techSavings && !port && (bps<=0 || deficit<=0)) reason="mix_satisfied";
+            else if (pass.usesCompositionChoice() && !compositionAdmits(pass, item)) reason="existing_composition_satisfied";
+            else if (!pass.usesCompositionChoice() && !port && (bps<=0 || deficit<=0)) reason="mix_satisfied";
             // City infantry answer an observed wing and claim the aggregate infantry
             // share, not a full share each. Without this a finished air raid would go
             // on reserving cash for troops nobody is going to order.

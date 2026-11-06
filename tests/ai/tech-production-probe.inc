@@ -165,6 +165,7 @@ struct World {
         // causal match arms, rather than assuming a mod left the global INI alone.
         auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
         config->force.simpleTechSavings = false;
+        config->force.existingCompositionUnitChoice = false;
         if (causalControlsOff) {
             config->force.trooperSupport = false;
             config->force.fundedClassicProduction = false;

@@ -395,6 +395,10 @@ TrooperSupport=1
 # Existing army composition; economy-first tech installments, no military hold.
 # Default OFF pending paired outcomes. No saved budget or format/protocol change.
 SimpleTechSavings=0
+# Independent unit/factory choice using owned plus queued VALUE shares.
+# No light filler once an advanced supplier exists; no tech/economy changes.
+# SimpleTechSavings remains independently OFF; default OFF pending measured results.
+ExistingCompositionUnitChoice=0
 # Launchers back off two extra tiles (0 = old spacing, bounded to 0..2).
 # Hunt stand-off remains inside firing range; other unit types are unchanged.
 LauncherKiteExtraDistance=2

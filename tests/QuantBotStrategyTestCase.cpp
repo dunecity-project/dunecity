@@ -481,6 +481,80 @@ TEST_CASE("Simple tech savings defaults off and independently round-trips both h
     std::filesystem::remove(savedPath);
 }
 
+TEST_CASE("Existing composition unit choice defaults off and independently round-trips both hashed states",
+          "[ai][production][config][existing-composition-unit-choice]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.existingCompositionUnitChoice);
+    REQUIRE_FALSE(defaults.force.simpleTechSavings);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-existing-composition-unit-choice-test.ini";
+    const auto savedPath = std::filesystem::temp_directory_path() / "quantbot-existing-composition-unit-choice-saved-test.ini";
+    const auto savedBytes = [&](const QuantBotConfig& config) {
+        REQUIRE(config.save(savedPath.string()));
+        std::ifstream ini(savedPath, std::ios::binary);
+        REQUIRE(ini.good());
+        return std::string(std::istreambuf_iterator<char>(ini), std::istreambuf_iterator<char>());
+    };
+    std::array<std::string, 4> independentHashes;
+    size_t hashCount = 0;
+
+    for (const bool savingsEnabled : {false, true}) {
+        CAPTURE(savingsEnabled);
+        QuantBotConfig baseline = defaults;
+        baseline.force.simpleTechSavings = savingsEnabled;
+        QuantBotConfig config = baseline;
+        const auto disabledHash = baseline.getConfigHash();
+        independentHashes[hashCount++] = disabledHash;
+        QuantBotConfig enabledConfig = baseline;
+        enabledConfig.force.existingCompositionUnitChoice = true;
+        independentHashes[hashCount++] = enabledConfig.getConfigHash();
+
+        for (const bool enabled : {false, true, false, true}) {
+            CAPTURE(enabled);
+            QuantBotConfig expected = baseline;
+            expected.force.existingCompositionUnitChoice = enabled;
+            const auto expectedBytes = savedBytes(expected);
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\nExistingCompositionUnitChoice="
+                    << (enabled ? "true" : "false") << '\n';
+            }
+            REQUIRE(config.applyOverrides(path.string()));
+            REQUIRE(config.force.existingCompositionUnitChoice == enabled);
+            REQUIRE(config.force.simpleTechSavings == savingsEnabled);
+            REQUIRE((config.getConfigHash() == disabledHash) == !enabled);
+            REQUIRE(config.getConfigHash() == expected.getConfigHash());
+            // A choice-only override must preserve savings and every other setting.
+            REQUIRE(savedBytes(config) == expectedBytes);
+
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\n";
+            }
+            REQUIRE(config.applyOverrides(path.string()));
+            REQUIRE(config.force.existingCompositionUnitChoice == enabled);
+            REQUIRE(config.force.simpleTechSavings == savingsEnabled);
+            REQUIRE(config.getConfigHash() == expected.getConfigHash());
+            REQUIRE(savedBytes(config) == expectedBytes);
+
+            QuantBotConfig restored;
+            restored.force.existingCompositionUnitChoice = !enabled;
+            restored.force.simpleTechSavings = !savingsEnabled;
+            REQUIRE(restored.applyOverrides(savedPath.string()));
+            REQUIRE(restored.force.existingCompositionUnitChoice == enabled);
+            REQUIRE(restored.force.simpleTechSavings == savingsEnabled);
+            REQUIRE(restored.getConfigHash() == expected.getConfigHash());
+            REQUIRE(savedBytes(restored) == expectedBytes);
+        }
+    }
+    REQUIRE(hashCount == independentHashes.size());
+    for (size_t first = 0; first < hashCount; ++first) {
+        for (size_t second = first + 1; second < hashCount; ++second)
+            REQUIRE(independentHashes[first] != independentHashes[second]);
+    }
+    std::filesystem::remove(path);
+    std::filesystem::remove(savedPath);
+}
+
 
 TEST_CASE("Tech savings vehicle choices use current and queued value without future cheap quotas",
           "[ai][production][technology][composition]") {

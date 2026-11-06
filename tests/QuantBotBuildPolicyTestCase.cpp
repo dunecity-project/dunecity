@@ -21,6 +21,60 @@
 
 using namespace QuantBotBuildPolicy;
 
+TEST_CASE("Standalone unit choices compare existing value shares rather than unit counts or cap headroom",
+          "[quantbot][production][composition][unit-choice]") {
+    UnitMixPolicy::Mix target{};
+    UnitMixPolicy::Weights current{}, prices{};
+    UnitMixPolicy::Slots available{};
+    target[0] = target[UnitMixPolicy::kQuadSlot] = 5000;
+    prices[0] = 800;
+    prices[UnitMixPolicy::kQuadSlot] = 200;
+    available[0] = available[UnitMixPolicy::kQuadSlot] = true;
+    current[0] = 800;
+    current[UnitMixPolicy::kQuadSlot] = 200;
+    // Equal object counts are not equal value shares: three additional cheap
+    // commitments are needed to match the one existing 800-credit tank.
+    for (int queued = 0; queued < 3; ++queued) {
+        REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kQuadSlot);
+        current[UnitMixPolicy::kQuadSlot] += prices[UnitMixPolicy::kQuadSlot];
+    }
+    REQUIRE(current[0] == current[UnitMixPolicy::kQuadSlot]);
+    // Repeated choices stay near the VALUE ratio despite the 4:1 price gap.
+    for (int order = 0; order < 100; ++order) {
+        const auto next = UnitMixPolicy::nextExistingSlot(target, current, prices, available);
+        REQUIRE(next < UnitMixPolicy::kSlots);
+        current[next] += prices[next];
+    }
+    REQUIRE(std::abs(current[0] - current[UnitMixPolicy::kQuadSlot]) <= prices[0]);
+    available.fill(false);
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kSlots);
+}
+
+TEST_CASE("Standalone extraction preserves the historical indivisible value-share selector",
+          "[quantbot][production][composition][unit-choice]") {
+    UnitMixPolicy::Mix target{};
+    UnitMixPolicy::Weights current{}, prices{};
+    UnitMixPolicy::Slots available{};
+    target[0] = 9900;
+    target[UnitMixPolicy::kQuadSlot] = 100;
+    current[0] = prices[0] = 300;
+    prices[UnitMixPolicy::kQuadSlot] = 200;
+    available[0] = available[UnitMixPolicy::kQuadSlot] = true;
+    // A 1% target is smaller than one whole quad. Keep that historical
+    // indivisible step rather than confounding this trial with a new selector.
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kQuadSlot);
+    current[UnitMixPolicy::kQuadSlot] += prices[UnitMixPolicy::kQuadSlot];
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == 0);
+    // Empty and exactly balanced armies still take one indivisible step.
+    current.fill(0);
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == 0);
+    target[0] = 8000;
+    target[UnitMixPolicy::kQuadSlot] = 2000;
+    current[0] = 800;
+    current[UnitMixPolicy::kQuadSlot] = 200;
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == 0);
+}
+
 TEST_CASE("QuantBot respects the single-palace option even in a large city", "[quantbot][production]") {
     REQUIRE(palaceTarget(true, true, 60000) == 1);
     REQUIRE(palaceTarget(false, false, 60000) == 1);

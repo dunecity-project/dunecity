@@ -20,6 +20,23 @@ UVX default would no longer have passed it.
 bounded (each producible unit type 2%-50%); new `Tuned` and `Bounded` (random within the bounds) mixes;
 randomised, control and tuned arms.
 
+**Independent unit-choice experiment (2026-11-06).** The optional, persisted and
+multiplayer-hashed `[Force Concentration] ExistingCompositionUnitChoice` defaults
+to **false pending measured paired results**. It changes only unit/factory
+selection: move the owned plus accepted-queue **VALUE shares** toward the existing
+target, rather than treating the military limit as an opening cheap-unit quota.
+Once an advanced supplier exists, do not buy light emergency/affordability filler.
+It does not enable technology saving, change economy/tech priorities or payments,
+or alter human-order leases, saboteurs or other unit-role authority.
+`SimpleTechSavings` remains independently **false** after its rejected trial.
+
+Use `default@existing-composition-unit-choice-off` and
+`default@existing-composition-unit-choice-on` for the standalone comparison.
+Both styles explicitly set `SimpleTechSavings=false`; their only difference is
+`ExistingCompositionUnitChoice=false/true`. The effective config hash and
+`ExistingCompositionUnitChoice` flag are recorded in the probe's per-player
+build-site audit manifest. No acceptance result is claimed for this new switch.
+
 **Result in one paragraph.** Eleven styles were built as test-only per-player overrides and played
 2,406 recorded games (Fortress duels and Construction Yard starts on six bundled maps, Hard) on the mini,
 MacBook Pro and Windows PC. The 1.0.846 default (BASE) is hard to beat: no fixed army composition and

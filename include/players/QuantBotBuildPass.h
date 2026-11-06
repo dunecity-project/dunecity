@@ -230,6 +230,7 @@ struct QuantBot::BuildPass {
     int64_t cityWorCashReserve{};
     int vehiclePlanValue{};
     bool techSavings{}; // Stateless owned-composition and installment policy.
+    bool existingCompositionChoice{}; // Independent unit/factory selection only.
     bool techFundingPriority{};
     bool techProjectPending{};
     bool advancedGroundAvailable{};
@@ -237,6 +238,10 @@ struct QuantBot::BuildPass {
     UnitMixPolicy::Weights compositionPrice{};
     UnitMixPolicy::Slots compositionAvailable{};
     int compositionArmyValue{};
+    bool usesCompositionChoice() const { return techSavings || existingCompositionChoice; }
+    size_t nextCompositionSlot() const {
+        return UnitMixPolicy::nextExistingSlot(unitMix, compositionValue, compositionPrice, compositionAvailable);
+    }
 
     // planCapitalForecast()
     // Track unique structures ordered this tick to prevent multiple CYs

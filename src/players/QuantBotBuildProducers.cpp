@@ -246,12 +246,12 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     doProduceItem(turn.pBuilder, itemID);
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
-        if (pass.techSavings || AITelemetry::log().enabled()) {
+        if (pass.usesCompositionChoice() || AITelemetry::log().enabled()) {
             const size_t slot = compositionSlot(itemID);
             if (slot < UnitMixPolicy::kSlots) {
                 pass.compositionValue[slot] += data[itemID][houseID].price;
                 pass.compositionArmyValue += data[itemID][houseID].price;
-                if (pass.techSavings) pass.vehiclePlanValue = pass.compositionArmyValue;
+                if (pass.usesCompositionChoice()) pass.vehiclePlanValue = pass.compositionArmyValue;
             }
         }
         if (itemID != requestedItem) ++pass.itemCount[itemID];
@@ -291,7 +291,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
         .set("source_line", sourceLine).set("rule", rule).set("queue_before", before).set("queue_after", turn.pBuilder->getProductionQueueSize())
         .set("quoted_price", quotedPrice)
         .set("spending_bucket", QuantBotSpendingPolicy::bucketName(spendingBucket))
-        .set("composition_basis", pass.techSavings ? "existing_and_queued" : "funded_cap_headroom")
+        .set("composition_basis", pass.usesCompositionChoice() ? "existing_and_queued" : "funded_cap_headroom")
         .set("composition_before", compositionBefore)
         .set("composition", [&]() {
             AITelemetry::Record mix;
@@ -889,11 +889,9 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
         && pass.militaryValue < pass.lightBudget) {
-        const size_t existingSlot = pass.techSavings
-            ? UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
-                pass.compositionPrice, pass.compositionAvailable) : kSlots;
-        const bool lightChoice = pass.techSavings
-            ? !pass.advancedGroundAvailable
+        const size_t existingSlot = pass.usesCompositionChoice() ? pass.nextCompositionSlot() : kSlots;
+        const bool lightChoice = pass.usesCompositionChoice()
+            ? (pass.techSavings && !pass.existingCompositionChoice && !pass.advancedGroundAvailable)
                 || (existingSlot >= UnitMixPolicy::kFirstLightSlot && existingSlot < kSlots)
             : (pass.citySimEnabled && pass.itemCount[Structure_HeavyFactory] == 0)
                 || (!pass.learningUnitMix && pass.lightVehicleCount < 2)
@@ -913,7 +911,7 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
             for (size_t i=UnitMixPolicy::kFirstLightSlot; i<kSlots; ++i) {
                 const Uint32 candidate = mixItems[i];
                 if (!campaignAvailableToBuild(turn.pBuilder,candidate)) continue;
-                if (pass.techSavings) {
+                if (pass.usesCompositionChoice()) {
                     if (i == existingSlot) itemID = candidate;
                     continue;
                 }
@@ -921,7 +919,7 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
                     pass.itemCount[candidate], data[candidate][houseID].price);
                 if (deficit > bestDeficit) { bestDeficit = deficit; itemID = candidate; }
             }
-            if (itemID == NONE_ID && pass.techSavings && !pass.advancedGroundAvailable) {
+            if (itemID == NONE_ID && pass.techSavings && !pass.existingCompositionChoice && !pass.advancedGroundAvailable) {
                 for (size_t i = UnitMixPolicy::kFirstLightSlot; i < kSlots; ++i)
                     if (campaignAvailableToBuild(turn.pBuilder, mixItems[i])
                         && purchasePrice(turn.pBuilder, mixItems[i]) <= pass.money
@@ -930,14 +928,15 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
                 missingAdvancedFallback = itemID != NONE_ID;
             }
             // Bootstrap a small sample before combat learning begins.
-            if (itemID == NONE_ID && !pass.techSavings && !pass.learningUnitMix && pass.lightVehicleCount < 2)
+            if (itemID == NONE_ID && !pass.usesCompositionChoice() && !pass.learningUnitMix && pass.lightVehicleCount < 2)
                 for (size_t i=UnitMixPolicy::kFirstLightSlot; i<kSlots; ++i)
                     if (campaignAvailableToBuild(turn.pBuilder,mixItems[i])
                         && (itemID == NONE_ID || pass.itemCount[mixItems[i]] < pass.itemCount[itemID])) itemID = mixItems[i];
             if (itemID != NONE_ID && int64_t(pass.militaryValue) + data[itemID][houseID].price <= pass.lightBudget
                 && produceItemWithLogging(pass, turn, itemID, __LINE__,
-                    pass.techSavings ? (missingAdvancedFallback
-                        ? "no_advanced_ground_supplier_light" : "existing_army_composition")
+                    pass.existingCompositionChoice ? "existing_value_share_choice"
+                        : pass.techSavings ? (missingAdvancedFallback
+                            ? "no_advanced_ground_supplier_light" : "existing_army_composition")
                         : pass.citySimEnabled && pass.itemCount[Structure_HeavyFactory] == 0 ? "city_no_heavy_light_replenishment"
                         : !pass.learningUnitMix && pass.lightVehicleCount < 2 ? "opening_light_sample" : "funded_light_mix")) {
                 ++pass.itemCount[itemID];
@@ -1137,13 +1136,14 @@ void QuantBot::buildHighTechFactory(BuildPass& pass, BuilderTurn& turn) {
         }
     }
     auto decision = QuantBotBuildPolicy::chooseAirProduction(air);
-    if (pass.techSavings && !air.busy && !air.upgrading && !air.airLimit && air.ornithopterAvailable
+    if (pass.usesCompositionChoice() && !air.busy && !air.upgrading && !air.airLimit && air.ornithopterAvailable
         && (decision.order == QuantBotBuildPolicy::AirOrder::None
             || decision.order == QuantBotBuildPolicy::AirOrder::Ornithopter)
         && int64_t(pass.militaryValue) + ornithopterPrice <= pass.lightBudget) {
         decision = compositionAdmits(pass, ornithopter) && pass.money >= ornithopterPrice
             ? QuantBotBuildPolicy::AirDecision{QuantBotBuildPolicy::AirOrder::Ornithopter,
-                growthHeld ? "existing_army_composition_after_growth_hold" : "existing_army_composition"}
+                pass.existingCompositionChoice ? "existing_value_share_choice"
+                    : growthHeld ? "existing_army_composition_after_growth_hold" : "existing_army_composition"}
             : QuantBotBuildPolicy::AirDecision{QuantBotBuildPolicy::AirOrder::None, "existing_air_share_satisfied"};
     }
     if (pass.emitStatsLog && AITelemetry::log().enabled()) {
@@ -1378,7 +1378,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             AITelemetry::Record choices;
             for (size_t i=0; i<types.size(); ++i) {
                 const auto item = types[i] = mixItems[i];
-                candidates[i] = {data[item][houseID].price, pass.techSavings
+                candidates[i] = {data[item][houseID].price, pass.usesCompositionChoice()
                         ? int(pass.compositionValue[i]) : data[item][houseID].price * pass.itemCount[item],
                     pass.unitMix[i], campaignAvailableToBuild(turn.pBuilder,item)
                         && (item!=Unit_Tank || !pass.surplusArmy
@@ -1398,9 +1398,8 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             int selected = -1;
             bool expansionFallback = false;
             size_t existingSlot = UnitMixPolicy::kSlots;
-            if (pass.techSavings) {
-                existingSlot = UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
-                    pass.compositionPrice, pass.compositionAvailable);
+            if (pass.usesCompositionChoice()) {
+                existingSlot = pass.nextCompositionSlot();
                 if (existingSlot < types.size() && candidates[existingSlot].available
                     && candidates[existingSlot].price <= pass.money
                     && int64_t(pass.militaryValue) + candidates[existingSlot].price <= pass.militaryBudget)
@@ -1413,9 +1412,10 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                     candidates,pass.militaryValue,pass.money,pass.militaryBudget);
             }
             const char* allocationReason = selected < 0 ? "no_affordable_capacity"
+                : pass.existingCompositionChoice ? "existing_value_share_choice"
                 : pass.techSavings ? (growthHeld ? "existing_army_composition_after_growth_hold" : "existing_army_composition")
                 : expansionFallback ? "available_factory_capacity" : "largest_affordable_deficit";
-            if (pass.techSavings && selected < 0)
+            if (pass.usesCompositionChoice() && selected < 0)
                 allocationReason = existingSlot >= UnitMixPolicy::kSlots ? "existing_mix_satisfied"
                     : existingSlot >= types.size() || !candidates[existingSlot].available ? "existing_choice_other_producer"
                     : candidates[existingSlot].price > pass.money ? "existing_choice_unaffordable" : "military_budget";
@@ -1563,7 +1563,8 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
                 const int availableReserve=std::max(0,turn.reserve.reserved - bargainReserve);
                 pass.money+=availableReserve;
                 const char* rule = "starport_bargain";
-                if (pass.techSavings) {
+                if (pass.existingCompositionChoice) rule = "starport_bargain_existing_value_share_choice";
+                else if (pass.techSavings) {
                     if (!pass.advancedGroundAvailable) rule = "starport_bargain_without_advanced_ground";
                     else if (compositionSlot(unit) < UnitMixPolicy::kSlots)
                         rule = "starport_bargain_existing_army_composition";

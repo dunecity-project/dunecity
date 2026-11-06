@@ -241,12 +241,18 @@ inline void completeInitialEconomicAssets(World& world) {
 }
 
 inline void composition(const char* mod, const char* playerClass, bool queuedControl,
-                        bool causalControlsOff) {
+                        bool causalControlsOff, bool unitChoiceOnly = false) {
     std::string offHash;
     int offCheap = 0;
     for (const bool enabled : {false, true}) {
-        World world(mod, playerClass, enabled, Stage::Complete,
+        World world(mod, playerClass, enabled && !unitChoiceOnly, Stage::Complete,
                     queuedControl ? Army::TinyTank : Army::TinyMixed, 8, causalControlsOff);
+        if (unitChoiceOnly) {
+            auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+            config->force.existingCompositionUnitChoice = enabled;
+            world.bot->configOverride = config;
+            world.configHash = config->getConfigHash();
+        }
         addMatureYard(world);
         world.closeMilitaryMarket(); // Measured heavy completion must come from its real HF.
         world.cash(19999);
@@ -270,7 +276,8 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
             notApplicable("composition", mod, playerClass, "no_legal_heavy_factory_combat_content");
             return;
         }
-        Case run(world, queuedControl ? "queued_composition" : "owned_composition", mod, playerClass);
+        Case run(world, unitChoiceOnly ? (queuedControl ? "unit_choice_queued" : "unit_choice_owned")
+            : queuedControl ? "queued_composition" : "owned_composition", mod, playerClass);
         const int queuedBefore = world.queuedLight();
         const int oldQuadsBuiltBefore = world.owner->getNumBuiltItems(Unit_Quad);
         const int existingValue = world.vehicleValue(false);
@@ -282,6 +289,10 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
         require(heavy && world.bot->militaryValueLimit >= 1000 * committedValue,
                 "Composition control has no mature HF or does not separate its current army from the huge cap");
         auto plan = world.observePlan();
+        if (unitChoiceOnly)
+            require(!plan.techSavings && !plan.techSavingActive && !plan.techFundingPriority
+                        && !plan.techProjectPending && plan.existingCompositionChoice == enabled,
+                    "Standalone unit choice enabled technology savings or installment admission");
         size_t next = UnitMixPolicy::kSlots;
         Uint32 selected = NONE_ID;
         int selectedBuiltBefore = 0;
@@ -294,8 +305,7 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
             require(plan.vehiclePlanValue == committedValue && plan.compositionArmyValue == committedValue
                         && int64_t(committedLight) * 10000 > int64_t(committedValue) * plan.lightVehicleBps,
                     "Factory composition still uses a future funded army instead of owned-plus-queued value");
-            next = UnitMixPolicy::nextExistingSlot(plan.unitMix, plan.compositionValue,
-                plan.compositionPrice, plan.compositionAvailable);
+            next = plan.nextCompositionSlot();
             require(next < UnitMixPolicy::kOrnithopterSlot && heavy->isAvailableToBuild(vehicles[next])
                         && world.price(vehicles[next]) > std::max({world.price(Unit_Trike),
                             world.price(Unit_RaiderTrike), world.price(Unit_Quad)}),
@@ -916,6 +926,10 @@ void runSimpleTechSavingProbe(const char* mod, const char* playerClass) {
     for (const bool causalControlsOff : {false, true}) {
         SimpleTechSavingProbe::composition(mod, playerClass, false, causalControlsOff);
         SimpleTechSavingProbe::composition(mod, playerClass, true, causalControlsOff);
+    }
+    for (const bool causalControlsOff : {false, true}) {
+        SimpleTechSavingProbe::composition(mod, playerClass, false, causalControlsOff, true);
+        SimpleTechSavingProbe::composition(mod, playerClass, true, causalControlsOff, true);
     }
     for (const auto goal : {SimpleTechSavingProbe::Project::HeavyFactory, SimpleTechSavingProbe::Project::HeavyUpgrade,
                             SimpleTechSavingProbe::Project::IX, SimpleTechSavingProbe::Project::Starport,

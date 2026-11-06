@@ -144,7 +144,7 @@ struct QuantBotConfig {
     /// CityGrowthPower, CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
     /// StorageCapacity, FundedClassicProduction, TrooperSupport, SimpleTechSavings,
-    /// LauncherKiteExtraDistance, ExhaustedArmyDispatch;
+    /// ExistingCompositionUnitChoice, LauncherKiteExtraDistance, ExhaustedArmyDispatch;
     /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -303,6 +303,10 @@ struct QuantBotConfig {
         /// Stateless existing-composition/economy-first installments, default OFF.
         /// No military hold or saved ledger; paired outcomes gate adoption.
         bool simpleTechSavings;
+        /// Independent unit/factory choice from owned plus queued value shares.
+        /// No light filler with an advanced supplier; no tech/economy changes.
+        /// Default OFF pending measured paired outcomes.
+        bool existingCompositionUnitChoice;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.
         int launcherKiteExtraDistance;

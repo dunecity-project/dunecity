@@ -4,6 +4,44 @@ Custom-game Hard and Brutal bots use a house-level army posture, rather than
 asking every unit to decide independently whether the whole army is losing.
 Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 
+## Independent existing-composition unit choice
+
+`[Force Concentration] ExistingCompositionUnitChoice` is an independent,
+persisted, multiplayer-hashed switch, **OFF pending measured paired outcomes**.
+It changes unit/factory selection only: the owned plus accepted-queue **VALUE
+shares** move toward the existing target, without using a future military limit
+as a cheap-unit quota. Once an advanced supplier exists, light
+emergency/affordability filler is disabled. Human-order leases, saboteurs and
+unit-role ownership remain authoritative.
+
+The target remains the same configured/strategy prior or learned mix, expressed
+in basis points of vehicle/aircraft replacement **value**, not object counts.
+For each producible target slot at or below its existing share, add one unit's
+normal replacement price to its owned plus accepted-queue value, then sum the
+absolute differences between the resulting integer-basis-point value shares and
+the target shares. Choose the smallest post-order error; ties prefer the
+largest existing credit-value shortfall, then stable slot order. No cash balance
+or future cap enters that comparison. Empty/exactly balanced armies take the
+closest indivisible growth step; a whole unit can overshoot a small share.
+
+This is the historical `nextExistingSlot` selector, unchanged for a causal
+unit-choice-only comparison, not a new maximum-deficit or cheapest-unit rule.
+Learned or supplier-limited targets can themselves be light-heavy. Busy or
+upgrading producers remain in the strategic comparison. If the selected supplier
+is busy, the unit unaffordable, or the military ceiling would be exceeded, wait
+instead of selecting a cheap alternative. Recompute the shared composition after
+every accepted order, including Starport bargains. Existing infantry quotas and
+economic/transport unit choices are unchanged.
+
+This switch does not change technology/economy priorities, construction
+installments, upgrade payment or capital reservations. It does not enable
+`SimpleTechSavings`, whose rejected combined experiment remains independently
+**OFF**. The standalone `existing-composition-unit-choice-off/on` styles both
+pin `SimpleTechSavings=false` and differ only in the new flag. The probe's
+per-player build-site audit manifest records the effective flag and config hash.
+The historical Simple results below are not evidence for adopting unit choice
+alone.
+
 ## Stateless technology experiment and save compatibility
 
 `[Force Concentration] SimpleTechSavings` is hashed and **OFF after rejection**.
