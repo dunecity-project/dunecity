@@ -165,6 +165,11 @@ receipts, metric, minute, value, status and reason. Summary observations use
 The context SHA256 hashes compact sorted-key JSON of
 `{id,mod,difficulty,research,seed}`; the exact raw map has its own independent
 receipt. No missing measurement is converted to zero.
+Native `city_simulation_disabled` and research-OFF not-applicable reasons remain
+valid when the scorecard appends well-formed `unsupported_requested_options`
+metadata. The gate compares the exact reason base separately from that metadata;
+unknown reasons, malformed metadata and unavailable active-city observations do
+not gain an applicability exemption.
 
 | Family | Measurement and interpretation |
 |---|---|

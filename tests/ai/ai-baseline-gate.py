@@ -118,10 +118,17 @@ def _valid_not_applicable(row):
     """Only explicit native feature receipts can exempt a conditional objective."""
     if row['status'] != 'not_applicable':
         return False
+    reason, metadata, payload = row['reason'].partition(';unsupported_requested_options=')
+    if metadata:
+        try:
+            if not isinstance(json.loads(payload), dict):
+                return False
+        except (ValueError, TypeError):
+            return False
     applicability = METRIC_DEFINITIONS[row['metric']]['applicability']
-    return ((applicability == 'city' and row['reason'] == 'city_simulation_disabled')
+    return ((applicability == 'city' and reason == 'city_simulation_disabled')
             or (applicability == 'research_on' and row['research'] == 'off'
-                and row['reason'] == 'research_off_or_unsupported_not_emulated'))
+                and reason == 'research_off_or_unsupported_not_emulated'))
 
 
 def validate_rows(rows, role):

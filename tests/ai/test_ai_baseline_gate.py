@@ -144,6 +144,38 @@ class InputContractTests(unittest.TestCase):
         rows = [row for row in fixtures(research='on') if row['metric'] != 'research_level']
         self.assert_code('RESEARCH_SUPPORT_UNDECLARED', lambda: analyze(candidate=rows))
 
+    def test_exact_classic_city_disabled_reason_keeps_appended_metadata(self):
+        cohorts = [historical(), fixtures(arm='off'), fixtures()]
+        for index, rows in enumerate(cohorts):
+            for row in rows:
+                row['mod'] = 'vanilla'
+                row['context_sha256'] = digest(gate.encoded(dict(
+                    id=row['id'], mod=row['mod'], difficulty=row['difficulty'],
+                    research=row['research'], seed=row['seed'])))
+                if gate.METRIC_DEFINITIONS[row['metric']]['applicability'] == 'city':
+                    row.update(status='not_applicable', value='', reason='city_simulation_disabled')
+                if index == 0:
+                    row['reason'] += ';unsupported_requested_options={"slow city year":"true"}'
+        report, _, _, comparisons = analyze(history=cohorts[0], control=cohorts[1], candidate=cohorts[2])
+        self.assertEqual(report['verdict'], 'DEFAULT_ON_ALLOWED')
+        self.assertEqual(primary(comparisons, 'population')['status'], 'NOT_APPLICABLE')
+        self.assertEqual(primary(comparisons, 'research_level')['status'], 'NOT_APPLICABLE')
+
+    def test_missing_active_city_metric_with_metadata_is_still_unverified(self):
+        for status in ('unavailable', 'not_applicable'):
+            rows = fixtures()
+            missing = next(row for row in rows if row['metric'] == 'population')
+            missing.update(status=status, value='',
+                           reason='missing_native_field;unsupported_requested_options={"slow city year":"true"}')
+            report, _, _, comparisons = analyze(candidate=rows)
+            self.assertEqual(report['verdict'], 'INCONCLUSIVE')
+            self.assertIn('UNMEASURED_CORE_OR_OBJECTIVE',
+                          primary(comparisons, 'population')['coverage_errors'])
+        for suffix in (';unknown_metadata=true', ';unsupported_requested_options=not-json'):
+            self.assertFalse(gate._valid_not_applicable(dict(
+                status='not_applicable', metric='population', research='off',
+                reason='city_simulation_disabled' + suffix)))
+
 
 class MatchingTests(unittest.TestCase):
     def test_off_on_requires_same_native_source_content_and_options(self):
