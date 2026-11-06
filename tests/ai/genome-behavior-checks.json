@@ -29,6 +29,13 @@
       "checks": [{"id": "no_funded_nuclear_rejection", "type": "nuclear_choice"}]
     },
     {
+      "id": "nonuke_lowcash", "adapted": true,
+      "save_sha256": "ee99099fdc0edef627394a046606d1ba3f8f9ff842445c732f381246db59431a",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 160},
+      "game_rules": {"technology_installments": 0}, "houses": [4], "colour_slot": 4,
+      "checks": [{"id": "lowcash_nuclear_start_and_paid_completion", "type": "lowcash_nuclear"}]
+    },
+    {
       "id": "notbuildingresearchlab", "adapted": true,
       "save_sha256": "8772302e2199d4de929c1b109f2c3151cc10e651b911358ea862e7c5882ebcb7",
       "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 256}, "houses": [2, 6],

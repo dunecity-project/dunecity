@@ -94,6 +94,7 @@ void emit(Game& game, int h, const State& state, const char* phase, Uint32 first
         row.set(names[i], state.owned[i]).set(std::string(names[i]) + "_built", state.built[i])
             .set(std::string(names[i]) + "_queued", state.queued[i]).set(std::string(names[i]) + "_available", state.available[i]);
     }
+    row.set("economy", AITelemetry::log().economyTotals(h));
     // The reported LF opportunity is pinned at load; do not repeatedly survey a 384x384 map.
     if (std::string_view(phase) == "loaded" && bots && !others)
         row.set("light_factory_sites", legalSites(*house, Structure_LightFactory));

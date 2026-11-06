@@ -380,6 +380,36 @@ def evaluate_check(check, samples, events, setup, residential):
         rejected = sum(not c['nuclear'] for c in funded)
         return ('fail' if rejected else 'pass' if funded else 'not_applicable'), 'funded_legal_nuclear_choices', {
             'funded_opportunities': len(funded), 'funded_rejections': rejected}
+    if kind == 'lowcash_nuclear':
+        choices = [e for e in events if e['event'] == 'city_generator_choice']
+        required = ('compact_nuclear', 'installments', 'nuclear', 'nuclear_available', 'nuclear_site', 'cash', 'nuclear_price')
+        if any(any(k not in e['data'] for k in required) for e in choices):
+            return 'unverified', 'lowcash_nuclear_opportunity_fields_missing', {}
+        # compact_nuclear is the engine's actual-site/foundation/dominance and
+        # real funding decision, not a blanket requirement to replace all wind.
+        # Its cash is spendable cash, not a full-price-in-hand denominator.
+        opportunities = [e for e in choices if e['data']['compact_nuclear'] and e['data']['installments']
+            and e['data']['nuclear'] and e['data']['nuclear_available'] and e['data']['nuclear_site']
+            and 0 <= e['data']['cash'] < e['data']['nuclear_price']]
+        if not opportunities:
+            return 'not_applicable', 'no_actual_funded_lowcash_nuclear_opportunity', {}
+        if first['nuclear_queued']:
+            return 'unverified', 'original_pending_nuclear_project_at_load', {}
+        accepted = [e for e in orders if e['data'].get('item') == 25 and e['cycle'] >= opportunities[0]['cycle']]
+        if any('quoted_price' not in e['data'] for e in accepted):
+            return 'unverified', 'native_nuclear_order_quote_missing', {}
+        initial_paid = first['economy'].get('generator_spent', 0)
+        paid = max(s['economy'].get('generator_spent', 0) for s in samples) - initial_paid
+        completions = max(s['nuclear_built'] for s in samples) - first['nuclear_built']
+        quoted = accepted[0]['data']['quoted_price'] if accepted else 0
+        passed = bool(accepted) and completions > 0 and quoted > 0 and paid >= quoted
+        return ('pass' if passed else 'fail'), 'lowcash_native_order_new_completion_and_generator_payment', {
+            'lowcash_opportunities': len(opportunities),
+            'first_spendable_cash': opportunities[0]['data']['cash'],
+            'nominal_nuclear_price': opportunities[0]['data']['nuclear_price'],
+            'accepted_order_cycles': [e['cycle'] for e in accepted], 'native_quote': quoted,
+            'new_nuclear_completions': completions, 'native_generator_spent_delta': paid,
+            'initial_standing_nuclear_ignored': first['nuclear']}
     if kind == 'lab_built':
         if first['research_lab']:
             return 'unverified', 'original_missing_lab_mismatch', {}
@@ -445,8 +475,9 @@ def project_event(row):
     name, data = row['event'], row.get('data') or {}
     if name not in EVENTS:
         return None
-    fields = {'production_order': ('item', 'accepted'), 'drain_budget_hold': ('item', 'priority'),
-              'city_generator_choice': ('nuclear', 'nuclear_available', 'nuclear_site', 'cash', 'nuclear_price')}
+    fields = {'production_order': ('item', 'accepted', 'quoted_price'), 'drain_budget_hold': ('item', 'priority'),
+              'city_generator_choice': ('nuclear', 'nuclear_available', 'nuclear_site', 'cash', 'nuclear_price',
+                                       'compact_nuclear', 'installments')}
     if name in fields:
         data = {k: data[k] for k in fields[name] if k in data}
     elif name == 'zone_evaluation':

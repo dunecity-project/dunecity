@@ -57,10 +57,10 @@ class BehaviorContracts(unittest.TestCase):
         with self.assertRaises(ValueError):
             runner.manifest(encoded)
 
-    def test_nine_required_issues_five_adapted(self):
+    def test_ten_required_issues_six_adapted(self):
         cases = runner.definitions()
-        self.assertEqual(len(cases), 9)
-        self.assertEqual(sum(c['adapted'] for c in cases.values()), 5)
+        self.assertEqual(len(cases), 10)
+        self.assertEqual(sum(c['adapted'] for c in cases.values()), 6)
         with self.assertRaises(ValueError):
             runner.schedule(runner.parser.parse_args(['--case', 'purple_zero_power']))
 
@@ -106,6 +106,24 @@ class BehaviorContracts(unittest.TestCase):
         data.update(cash=2000, nuclear=1)
         self.assertEqual(self.check('nuclear_choice', events=[choice], setup={'concrete_required': 0})[0], 'pass')
         self.assertEqual(self.check('nuclear_choice', events=[choice], setup={'concrete_required': 1})[0], 'unverified')
+
+    def test_lowcash_nuclear_requires_new_order_completion_and_native_payment(self):
+        rows = [sample(house=4, nuclear=2, nuclear_built=0, nuclear_queued=0, economy={}),
+                sample('finished', house=4, nuclear=2, nuclear_built=0, nuclear_queued=0, economy={})]
+        choice = event('city_generator_choice', dict(compact_nuclear=1, installments=1, nuclear=1,
+            nuclear_available=1, nuclear_site=1, cash=327, nuclear_price=2000), house=4)
+        self.assertEqual(self.check('lowcash_nuclear', rows, [choice])[0], 'fail')
+        order = event('production_order', {'item': 25, 'accepted': 1, 'quoted_price': 2000}, 111, 4)
+        self.assertEqual(self.check('lowcash_nuclear', rows, [choice, order])[0], 'fail')
+        rows[-1].update(nuclear=3, nuclear_built=1, economy={'generator_spent': 1999})
+        self.assertEqual(self.check('lowcash_nuclear', rows, [choice, order])[0], 'fail')
+        rows[-1]['economy']['generator_spent'] = 2000
+        self.assertEqual(self.check('lowcash_nuclear', rows, [choice, order])[0], 'pass')
+        choice['data']['nuclear_site'] = 0
+        self.assertEqual(self.check('lowcash_nuclear', rows, [choice, order])[0], 'not_applicable')
+        choice['data']['nuclear_site'] = 1
+        choice['data']['cash'] = 2000
+        self.assertEqual(self.check('lowcash_nuclear', rows, [choice, order])[0], 'not_applicable')
 
     def test_cap_missing_controller_and_missing_endpoint_are_unverified(self):
         case = {'houses': [2], 'checks': [{'id': 'lf', 'type': 'light_factory_order'}]}
