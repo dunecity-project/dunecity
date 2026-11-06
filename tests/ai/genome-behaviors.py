@@ -411,7 +411,7 @@ def evaluate_case(case, samples, events, setup, complete, applied, telemetry='co
     houses = case['houses'] or sorted(h for h, s in initial.items() if s.get('bots') and not s.get('other_controllers'))
     if 'colour_slot' in case:
         houses = [h for h, s in initial.items() if s.get('colour_slot') == case['colour_slot'] and s.get('bots')]
-        if len(houses) != 1:
+        if len(houses) != 1 or (case['houses'] and houses != case['houses']):
             return [dict(house='', check='blue_house_identity', status='unverified', reason='blue_AI_house_not_unique', details='{}')], 'unverified'
     rows = []
     for house in houses:
@@ -462,15 +462,21 @@ def project_event(row):
 
 
 def capture_events(run, target):
-    events, sessions, ends, capped = [], 0, 0, False
+    events, sessions, ends, capped, malformed = [], 0, 0, False, False
     paths = sorted((run / 'profile').rglob('events.jsonl'))
     with gzip.open(target, 'wt', encoding='utf-8') as dest:
         for path in paths:
-            with path.open(encoding='utf-8') as source:
+            with path.open('rb') as source:
                 for line in source:
                     if not line.strip():
                         continue
-                    row = json.loads(line)
+                    try:
+                        row = json.loads(line.decode('utf-8'))
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        # A killed/censored native process can leave half a row.
+                        # Stop, preserve the valid prefix, and never call it complete.
+                        malformed = True
+                        break
                     sessions += row['event'] == 'session_start'
                     ends += row['event'] == 'session_end'
                     capped |= row['event'] == 'capture_limit'
@@ -478,8 +484,15 @@ def capture_events(run, target):
                     if projected:
                         dest.write(canonical(projected) + '\n')
                         events.append(projected)
-    status = 'capped' if capped else 'complete' if paths and sessions == ends == len(paths) else 'missing_or_truncated'
+    status = ('capped' if capped else 'complete'
+              if paths and not malformed and sessions == ends == len(paths) else 'missing_or_truncated')
     return events, status
+
+
+def continuation_complete(result, problems):
+    # Native victory/defeat is an observed terminal, not a wall-time censor.
+    # Malformed/capped telemetry is independently rejected by evaluate_case.
+    return not problems and (result.get('completed') == '1' or result.get('finished') == '1')
 
 
 def phase_problems(lines, samples, result, label, starts):
@@ -558,7 +571,7 @@ def play(args, scratch, binary, key):
     source = summary.get('sourceCommit', '')
     if len(source) != 40 or any(c not in '0123456789abcdef' for c in source):
         problems.append('immutable_source_provenance_missing')
-    completed = not problems and result.get('completed') == '1'
+    completed = continuation_complete(result, problems)
     checks, feasibility = evaluate_case(definitions()[case_id], samples, events, setup, completed, applied, telemetry)
     for row in checks:
         row.update(case=case_id, genome=label, genome_digest=identity, source_commit=source)

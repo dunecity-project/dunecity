@@ -116,14 +116,15 @@ class BehaviorContracts(unittest.TestCase):
         rows, verdict = runner.evaluate_case(case, samples[:1], [], {}, True, {2})
         self.assertEqual(verdict, 'unverified')
 
-    def test_blue_house_comes_from_loaded_colour_not_house_identity(self):
+    def test_blue_house_matches_original_loaded_roster_and_colour(self):
         case = runner.definitions()['norocketturrets']
-        samples = [sample(house=5), sample('finished', house=5)]
-        orders = [event('production_order', {'item': 12, 'accepted': 1}, house=5)]
-        rows, verdict = runner.evaluate_case(case, samples, orders, {}, True, {5})
-        self.assertEqual((rows[0]['house'], verdict), (5, 'feasible'))
-        samples += [sample(house=1), sample('finished', house=1)]
-        self.assertEqual(runner.evaluate_case(case, samples, orders, {}, True, {1, 5})[1], 'unverified')
+        self.assertEqual((case['houses'], case['colour_slot']), ([6], 6))
+        samples = [sample(house=6, colour_slot=6), sample('finished', house=6, colour_slot=6)]
+        orders = [event('production_order', {'item': 12, 'accepted': 1}, house=6)]
+        rows, verdict = runner.evaluate_case(case, samples, orders, {}, True, {6})
+        self.assertEqual((rows[0]['house'], verdict), (6, 'feasible'))
+        samples += [sample(house=1, colour_slot=6), sample('finished', house=1, colour_slot=6)]
+        self.assertEqual(runner.evaluate_case(case, samples, orders, {}, True, {1, 6})[1], 'unverified')
 
     def test_event_projection_preserves_zoning_rule_inputs(self):
         rows = []
@@ -158,6 +159,30 @@ class BehaviorContracts(unittest.TestCase):
             self.assertEqual(runner.capture_events(run, path)[1], 'missing_or_truncated')
             log.unlink()
             self.assertEqual(runner.capture_events(run, path)[1], 'missing_or_truncated')
+
+    def test_truncated_json_and_invalid_utf8_are_unverified_not_exceptions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            log = run / 'profile/ai-decisions/one/events.jsonl'
+            log.parent.mkdir(parents=True)
+            start = (json.dumps(event('session_start', {})) + '\n').encode()
+            for broken in (b'{"event":"unterminated', b'\xff\n'):
+                log.write_bytes(start + broken)
+                captured, status = runner.capture_events(run, run / 'projected.jsonl.gz')
+                self.assertEqual(status, 'missing_or_truncated')
+                self.assertEqual([e['event'] for e in captured], ['session_start'])
+
+    def test_natural_terminal_is_observed_but_wall_censor_is_not(self):
+        self.assertTrue(runner.continuation_complete({'completed': '0', 'finished': '1'}, []))
+        self.assertTrue(runner.continuation_complete({'completed': '1', 'finished': '0'}, []))
+        self.assertFalse(runner.continuation_complete({'completed': '0', 'finished': '0'}, []))
+        self.assertFalse(runner.continuation_complete({'completed': '0', 'finished': '1'}, ['rc=1']))
+        case = {'houses': [2], 'checks': [{'id': 'lf', 'type': 'light_factory_order'}]}
+        rows, verdict = runner.evaluate_case(case, [sample(), sample('finished', yard=0)], [], {},
+            runner.continuation_complete({'completed': '0', 'finished': '1'}, []), {2})
+        self.assertEqual(verdict, 'infeasible')
+        self.assertEqual(runner.evaluate_case(case, [sample(), sample('finished', yard=0)], [], {},
+            True, {2}, 'missing_or_truncated')[1], 'unverified')
 
     def test_all_not_applicable_is_not_a_pass(self):
         self.assertEqual(runner.case_feasibility([{'status': 'not_applicable'}]), 'unverified')

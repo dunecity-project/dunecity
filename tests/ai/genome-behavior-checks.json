@@ -43,7 +43,7 @@
       "save_sha256": "f18b5229addc2e13712040f1d18ab1ff8e2f97483576d7ca62b52ef6b75a2965",
       "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 96},
       "game_rules": {"technology_installments": 0},
-      "houses": [], "colour_slot": 1,
+      "houses": [6], "colour_slot": 6,
       "checks": [{"id": "blue_rocket_cover", "type": "rocket_cover"}]
     },
     {"id": "atreides_no_expand", "adapted": false, "save_sha256": "38cffd62e16da1c8d48473ed45b5d31970eea6585f463a059ea0b64a4b5e9b8d", "checks": []},

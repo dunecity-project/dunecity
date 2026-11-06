@@ -230,12 +230,12 @@ Every reported issue becomes a permanent feasibility check.
 adapters are implemented by `genome-behaviors.py` and the test-only
 `genome-behavior-probe.inc`:
 
-| Save | Hard checks during the fixed 15-game-minute continuation |
+| Save | Hard checks during 15 game minutes or an earlier fully observed native terminal |
 | --- | --- |
 | notbuilding | Ordos (house 2) accepts a Light Factory order before losing its initial yard. Houses 2/5/6/7 make research progress when a legal start is observed; absent opportunity is not applicable. Positive, legal residential plots reach the real funding gate (CityZoning admission rule). |
 | problem1 / ainonuclear | No funded, available, legal nuclear-plant choice is rejected. At least one funded opportunity is required; none is not applicable. These frozen saves require no concrete, so price is the complete quote. |
 | notbuildingresearchlab | Houses 2 and 6 physically complete a Research Lab and start level-2 research. |
-| norocketturrets | The AI whose **loaded visual colour slot** is blue (Atreides slot 1, not an assumed house ID) orders or builds a rocket turret. Ambiguous blue identity is unverified. |
+| norocketturrets | The original loaded blue/cyan AI is **Neutral, house 6, visual colour slot 6** (RGB 28/164/171), not Atreides slot 1. It must order or build a rocket turret. The saved human/Fighter-shared Sardaukar house is never overridden. A mismatched/ambiguous blue roster is unverified. |
 
 Atreides no-expand, purple zero-power, Sardaukar LF/expansion and insufficient
 rocket cover remain registered but **unadapted/unverified**. Consequently no
@@ -273,8 +273,13 @@ effective Installments, feasibility and infrastructure error separately.
 Per-check CSV and gzip-projected events retain only fields needed by the checks,
 plus snapshots, phase hashes and complete effective options/map. Missing,
 unfinished or capture-capped evidence is **UNVERIFIED**, including when a partial
-trace contains a failure. Use at least `--capture-mib 1024` and
-`--wall-timeout 3600`; ainonuclear has measured 2,250–2,700-second continuations.
+trace contains a failure. A fully observed native victory/defeat is a valid
+terminal, not a wall-time censor: losing the blue AI before it builds rockets
+cannot turn that observed failure into an unverified game. Malformed/truncated
+JSONL retains the valid prefix and writes an explicit unverified result rather
+than aborting the reporter or silently skipping a corrupt record.
+Use at least `--capture-mib 1024` and `--wall-timeout 3600`; ainonuclear has measured
+2,250–2,700-second continuations, and busy-cluster reruns use 7,200 seconds.
 An infeasible genome is valid measured evidence, not a queue error to retry.
 
 Measured diagnosis from the 2026-11-06 original notbuilding continuation: the
