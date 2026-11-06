@@ -49,8 +49,18 @@
   with OFF (3,700). In OFF, Brutal won the minute 17-20 fight (7,090 killed for
   1,520 lost). In ON, the minute 19-24 fights took place under Easy's 14-15
   rocket turrets (OFF: 9-10 at minutes 19-21). The ON payer now keeps
-  legacy timing (above). The default remains OFF until a paired multi-seed
-  comparison, rather than this one smoke game, shows ON is not consistently worse.
+  legacy timing (above). Paired check at `c490a1d0`, with the same seeds and
+  the overlay as the only difference. In all 171 games the arms diverge by
+  minute 4. Legacy overpays part of its last share, so at the first differing
+  sample the ON houses hold more displayed credits in 169 of 171 games.
+  - Full cy and skirmish tiers (80 games): 66 have the same outcome. QB scores
+    -0.22 [-0.46, -0.01] (10 worse, 4 better). Every other controller is not
+    significant. Time-outs rise from 8 to 12.
+  - aaa plus the QB short-map ladder (91 games): 86 have the same outcome. QB
+    scores +0.01 [-0.08, +0.08].
+  - Pooled QB (83 seeds): -0.07 [-0.17, +0.02], so it is not shown worse.
+  - The ON smoke still fails 2 of 4 games: 27392 times out, and 90866 ends in
+    a QM win at 56.80 min. Default stays OFF; whether to flip it is Main's call.
   ContinuousResearch=1 with the rule OFF now reproduces ContinuousResearch=0
   exactly on the private save (identical lab/tech transitions and finals).
 - Real-save bytes stay under private `outputs/` and frozen queue transport.
