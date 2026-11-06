@@ -113,6 +113,7 @@ struct QuantBot::BuildPass {
         bool granted = false;
         bool military = false;  ///< Army production funded from the army share.
         bool emergency = false; ///< A narrow real emergency; one may start unfunded.
+        int64_t immediate = 0;  ///< Pending up-front payment / engine start-cash floor, not a queued debt.
     };
     std::vector<SensibleDrain> sensibleDrains{};
     std::vector<std::pair<int64_t,int64_t>> sensibleDrainEnds{};

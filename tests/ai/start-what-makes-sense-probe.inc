@@ -1085,6 +1085,56 @@ inline void armyEntitlement(const char* playerClass) {
     }
 }
 
+// An economic import is a real up-front debit. Its selected quote is not a
+// hypothetical builder drain: when short by one credit it protects that cash
+// from a lower-priority lot, even with no running work (sole-primary path).
+inline void immediateImportSaving(const char* playerClass) {
+    World world("dunecity", playerClass, false, Stage::Complete, Army::Empty, 8, false,
+                HOUSE_HARKONNEN, 0, 1);
+    configure(world, true);
+    TechProductionProbe::spawnGroundBand(world, world.owner, Unit_Tank, 1, Coord(20, 56), 0, 8);
+    auto* port = dynamic_cast<StarPort*>(world.producer(Structure_StarPort));
+    require(port && port->okToOrder() && world.owner->isGroundUnitLimitReached(),
+            "Immediate-import saving control lacks its real ready port or capped army");
+    auto& market = world.owner->getChoam();
+    market.availableItems.clear();
+    market.addItem(Unit_Carryall, 4);
+    market.availableItems.back().price = world.price(Unit_Carryall);
+    port->updateBuildList();
+    const int price = world.bot->purchasePrice(port, Unit_Carryall);
+    require(price > world.price(Structure_ZoneResidential) && port->isAvailableToBuild(Unit_Carryall),
+            "Immediate-import saving control lacks a legal quote above its competing lot");
+    world.cash(price - 1);
+    auto pass = observe(world);
+    require(pass.sensibleArmyShare == 0 && pass.sensibleDrains.empty(),
+            "Immediate-import saving control has another live or reserved spending claim");
+    QuantBot::BuilderTurn turn(pass.money);
+    turn.pStructure = port;
+    turn.pBuilder = port;
+    world.bot->beginBuilderTurn(pass, turn);
+    const auto cash = cashQ32(world), spent = world.spentQ32();
+    require(!world.bot->produceItemWithLogging(pass, turn, Unit_Carryall, __LINE__, "fixture_immediate_import"),
+            "An unaffordable import borrowed the missing cash");
+    require(pass.sensiblePending.builder == port->getObjectID()
+                && pass.sensiblePending.purpose == Unit_Carryall
+                && pass.sensiblePending.immediate == FixPoint(price).getRawValue()
+                && pass.sensiblePending.unpaid == 0 && pass.sensiblePending.perCycle == 0,
+            "The refused real import did not retain its immediate cash floor");
+    require(!orderStructure(world, pass, world.yard, Structure_ZoneResidential, "fixture_import_savings_lot")
+                && !queuedZone(world) && world.queued(Unit_Carryall) == 0
+                && cashQ32(world) == cash && world.spentQ32() == spent,
+            "A lower-priority sole-primary lot consumed the selected import's savings");
+    // A labelled funded counterarm: the same import spends exactly its native
+    // quote, clears only its own pending claim and does not borrow engine cash.
+    world.cash(price);
+    require(world.bot->produceItemWithLogging(pass, turn, Unit_Carryall, __LINE__, "fixture_immediate_import_funded")
+                && world.queued(Unit_Carryall) == 1 && pass.sensiblePending.purpose == NONE_ID
+                && cashQ32(world) == 0 && world.spentQ32() - spent == FixPoint(price).getRawValue(),
+            "The funded real import did not pay exactly its quote and release its pending floor");
+    SDL_Log("START_WHAT_MAKES_SENSE_IMPORT_SAVING: quote=%d short_cash=%d immediate_floor=1 "
+            "no_live_work=1 cheap_lot_held=1 native_debit_exact=1", price, price - 1);
+}
+
 inline void rollback(const char* playerClass) {
     World world("dunecity", playerClass, false, Stage::Complete, Army::Empty);
     configure(world, true);
@@ -1126,8 +1176,9 @@ void runStartWhatMakesSenseProbe(const char* playerClass) {
     parallelDrains(playerClass);
     underfundedPredecessor(playerClass);
     armyEntitlement(playerClass);
+    immediateImportSaving(playerClass);
     rollback(playerClass);
-    SDL_Log("START_WHAT_MAKES_SENSE_PASS: difficulty=%s full_bot_power_light_civic=1 off_wait=1 zero_start=1 low_cash=1 no_cheap_fallback=1 threatened_first_factory=1 imminent_power_first=1 blackout_power_first=1 quotes_not_paid=1 finite_parallel_drains=1 army_share_parallel=1 army_share_all_lanes_solvent=1 civil_overbook_held=1 underfunded_predecessor_first=1 blackout_emergency_exception=1 army_reserve_not_whole_prefix=1 army_entitlement_need_ratio_target_cap=1 fractional_pause_resume=1 sequential_foundations=1 rollback_actual_queue=1",
+    SDL_Log("START_WHAT_MAKES_SENSE_PASS: difficulty=%s full_bot_power_light_civic=1 off_wait=1 zero_start=1 low_cash=1 no_cheap_fallback=1 threatened_first_factory=1 imminent_power_first=1 blackout_power_first=1 quotes_not_paid=1 finite_parallel_drains=1 army_share_parallel=1 army_share_all_lanes_solvent=1 civil_overbook_held=1 immediate_import_saving=1 underfunded_predecessor_first=1 blackout_emergency_exception=1 army_reserve_not_whole_prefix=1 army_entitlement_need_ratio_target_cap=1 fractional_pause_resume=1 sequential_foundations=1 rollback_actual_queue=1",
         playerClass);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=start_what_makes_sense outcome=passed");
 }

@@ -477,6 +477,13 @@ int64_t QuantBot::sensibleDeficit(BuildPass& pass, int64_t cash, int shareBps, S
     };
     cash = share(cash)-paidNow;
     if (cash < 0) return 0; // Real immediate purchases cannot borrow.
+    // Pending immediate purchases must retain their real cash floor; they
+    // have no per-cycle drain to reserve. The current candidate's immediate
+    // payment was already deducted above.
+    for (size_t i = 1; i < extras; ++i) {
+        if (cash < pass.sensibleExtras[i].immediate) return 0;
+        cash -= pass.sensibleExtras[i].immediate;
+    }
     auto& ends = pass.sensibleDrainEnds;
     ends.clear();
     const bool bankable = getHouse()->getCapacity() > 0;
@@ -527,7 +534,6 @@ bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
     if (!pass.startWhatMakesSense) return true;
     const int64_t cash = (getHouse()->getStartingCredits()+getHouse()->getEarnedCredits()).getRawValue();
     const int64_t paidNow = FixPoint(immediate).getRawValue();
-    if (cash < paidNow) return false; // Real immediate purchases cannot borrow.
     bool projects = false, emergencyLane = false;
     for (const auto& lane : pass.sensibleDrains) {
         // The rest of a structure package (foundations, then the building)
@@ -540,7 +546,7 @@ bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
     const bool military = !upgrade && QuantBotBuildPolicy::militaryItem(item);
     const int priority = sensiblePriority(pass,item,upgrade);
     auto& pending = pass.sensiblePending;
-    pass.sensibleExtras[0] = {builder,priority,unpaid,perCycle,item,false,military,emergency};
+    pass.sensibleExtras[0] = {builder,priority,unpaid,perCycle,item,false,military,emergency,paidNow};
     pass.sensibleExtras[1] = pending;
     const size_t withPending = pending.purpose != NONE_ID
         && !(pending.builder == builder && pending.purpose == item)
@@ -548,11 +554,15 @@ bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
     const int armyShare = pass.sensibleArmyShare;
     const char* rule = nullptr;
     int64_t deficit = -1;
-    if (emergency) {
+    if (cash < paidNow) {
+        deficit = 0; // Real immediate purchases cannot borrow; remember the want below.
+    } else if (emergency) {
         // One real emergency may start unfunded; more only if everything stays funded.
         deficit = sensibleDeficit(pass,cash,10000,SensibleLanes::All,1,paidNow);
         rule = deficit < 0 ? "emergency_funded" : !emergencyLane ? "emergency_start" : nullptr;
-    } else if (!projects && (military ? withPending == 1 : armyShare == 0)) {
+    } else if (!projects && (military ? withPending == 1 : armyShare == 0)
+        && (withPending == 1 || pending.immediate == 0
+            || sensibleDeficit(pass,cash,10000,SensibleLanes::All,withPending,paidNow) < 0)) {
         // Nothing else is running or waiting for this money: start before it is all there.
         rule = "sole_primary";
     } else if (military) {
@@ -569,7 +579,8 @@ bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
         rule = "development_share";
     }
     if (!rule) {
-        if (!military && (pending.purpose == NONE_ID || priority < pending.priority)) pending = pass.sensibleExtras[0];
+        if ((!military || immediate > 0) && (pending.purpose == NONE_ID || priority < pending.priority))
+            pending = pass.sensibleExtras[0];
         if (AITelemetry::log().enabled())
             traceDecision("drain_budget_hold",AITelemetry::Record().set("builder",builder)
                 .set("item",item).set("priority",priority).set("military",military).set("emergency",emergency)
@@ -593,6 +604,12 @@ bool QuantBot::sensibleOrderAdmits(BuildPass& pass, const BuilderBase* builder,
     if (!upgrade && builder->getItemID() == Structure_StarPort)
         return sensibleDrainAdmits(pass,builder->getObjectID(),purpose,0,0,quotedPrice,
             sensibleEmergency(pass,purpose));
+    // Legacy upgrades require the full cash at acceptance, but debit through
+    // production afterwards. A refused start must protect that engine floor,
+    // not pretend future income can satisfy the human-and-AI start rule.
+    if (upgrade && !getGameInitSettings().getGameOptions().technologyInstallments
+        && getHouse()->getStartingCredits()+getHouse()->getEarnedCredits() < FixPoint(quotedPrice))
+        return sensibleDrainAdmits(pass,builder->getObjectID(),purpose,0,0,quotedPrice,false,true);
     const int technology = ModManager::instance().isTornieFamilyContentActive()
         ? builder->getTechnologyHouseID() : builder->getOriginalHouseID();
     const auto& data = currentGame->objectData.data;

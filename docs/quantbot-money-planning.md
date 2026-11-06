@@ -585,7 +585,8 @@ Admission, first match wins:
 2. Narrow emergency: `solvent_10000(all lanes + candidate)`, or no emergency lane
    is running yet (`emergency_funded` / `emergency_start`).
 3. No project lane is running (repairs ignored) and nobody else has a claim —
-   development: `a = 0`; army: no pending development want (`sole_primary`).
+   development: `a = 0`, retaining any higher-priority immediate cash floor;
+   army: no pending development want (`sole_primary`).
 4. Army: `solvent_a(army lanes + candidate)` **and**
    `solvent_10000(all lanes + candidate)` (`army_share`), or
    `solvent_10000(all lanes + candidate + pending)` (`spare_funds`).
@@ -596,6 +597,15 @@ Pending is included only for lower/equal-priority development and army spare
 funds, and is the highest-priority development want refused this pass. With
 telemetry enabled, starts trace `drain_budget_start` (rule, share, lanes) and
 refusals `drain_budget_hold` (share, pending item, first deficit cycle).
+
+A pending genuinely up-front import/prepaid study records its immediate price
+before an insufficient-cash return. That is a cash floor, not a zero-valued
+builder drain: lower/equal-priority development and army spare-funds starts
+subtract it as well, including an otherwise sole-primary start. Legacy upgrades
+also record their engine-required cash-at-acceptance floor when unaffordable;
+once affordable their cost is still a gradual drain, never a prepaid debit.
+Ordinary factory/yard quotes have no such immediate floor and still start in
+installments; the pending mechanism does not restore their full-quote waits.
 
 The planner does not create automatic holds, change build speed, cancel human
 work or change engine payment ordering. When every lane is solvent the engine's

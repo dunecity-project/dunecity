@@ -208,7 +208,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     // nothing else spends the same credits.
     const bool installment = itemID!=NONE_ID && itemID==turn.installmentProject;
     const int budgetFloor = installment ? turn.installmentProjectStartBudget : quotedPrice;
-    if ((!pass.startWhatMakesSense || immediatePurchase)
+    if (!pass.startWhatMakesSense
         && !emergencyGenerator && !techInstallment && pass.money<budgetFloor) {
         traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",pass.capitalDecision)
             .set("builder",turn.pBuilder->getObjectID()).set("item",itemID).set("rule",rule)
@@ -1579,10 +1579,7 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             if (price <= 0 || choam.getNumAvailable(item) <= 0
                 || !pStarPort->isAvailableToBuild(item)) return false;
             // CHOAM debits the entire quote immediately, unlike factory work.
-            if (cash < price) {
-                selectedImportHeld = pass.startWhatMakesSense;
-                return false;
-            }
+            if (!pass.startWhatMakesSense && cash < price) return false;
             traceDecision("starport_economy_purchase", AITelemetry::Record()
                 .set("item", item).set("market_price", price)
                 .set("normal_price", data[item][houseID].price)
