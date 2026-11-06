@@ -337,6 +337,15 @@ Separate earlier source `a1bf0d0be51785f085748dfd1e89a5a8bb1b9975`,
 5d7f1a27 or diagnose every idle factory as a cash gate. Both composition genes
 remain OFF pending their owners' independent trials.
 
+The native composition/capacity fixture preserves the existing city growth
+interleave with a labelled, finite initial zoning queue on the oldest yard and
+two other idle yards for income-scaled HF capacity and pending-order deduplication.
+Its selected HF traverses `startYardSelection`, lane selection, final vetting and
+the normal queue-acceptance wrapper. A default-constructed `YardTurn` alone is not
+an initialized selection; a city with every yard idle may correctly allocate
+growth before optional capacity. These setup requirements do not change any
+production policy or enable the independently default-OFF genes.
+
 ### HIST — funding switches are context-sensitive
 
 `outputs/tech-saving-20261105/baseline-summary.txt` and

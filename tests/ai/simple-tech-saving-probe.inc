@@ -905,6 +905,7 @@ inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
     world.bot->configOverride=config;
     world.closeMilitaryMarket();
     addMatureYard(world);
+    if (world.game->isCitySimEnabled()) addMatureYard(world);
     std::array<BuilderBase*,3> factories{world.producer(Structure_HeavyFactory),nullptr,nullptr};
     for (size_t i=1;i<factories.size();++i) {
         factories[i]=static_cast<BuilderBase*>(world.place(Structure_HeavyFactory));
@@ -920,6 +921,20 @@ inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
     world.cash(100000);
     completeInitialEconomicAssets(world);secureInitialCityCore(world);
     world.place(Structure_WindTrap); // Labelled physical headroom for the additional factory.
+    Uint32 initialGrowth=NONE_ID;
+    if (world.game->isCitySimEnabled()) {
+        // The oldest city yard keeps its genuine growth allocation. Two
+        // other idle yards still exercise optional capacity and pending dedup.
+        auto growth=world.observePlan();
+        world.bot->planningBuilder=world.yard->getObjectID();
+        world.bot->clearPlacementCache(false,true);
+        initialGrowth=world.bot->affordableCityZone(growth,world.yard,growth.money);
+        require(initialGrowth!=NONE_ID,"Income capacity setup has no real demanded city-growth order");
+        world.yard->doProduceItem(initialGrowth); // Labelled finite initial commitment.
+        require(world.yard->getProductionQueueSize()==1
+                    && world.yard->getCurrentProducedItem()==initialGrowth,
+                "Income capacity setup did not establish its separate real growth commitment");
+    }
     for (auto* factory:factories) factory->doProduceItem(vehicles[slot]);
     auto initial=world.observePlan();
     world.cash(world.owner->getCredits()+std::max(0,initial.nextHeavyRunway
@@ -951,14 +966,21 @@ inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
     QuantBot::BuilderTurn turn(pass.money);turn.pStructure=*found;turn.pBuilder=*found;
     world.bot->beginBuilderTurn(pass,turn);
     QuantBot::YardTurn yard;yard.isCitySim=world.game->isCitySimEnabled();
+    world.bot->startYardSelection(pass,turn,yard);
     world.bot->chooseYardProductionLanes(pass,turn,yard);world.bot->vetYardChoice(pass,turn,yard);
     require(yard.itemID==Structure_HeavyFactory,"Income-scaled factory choice was rejected by a legacy cap or final mix gate");
-    const_cast<BuilderBase*>(*found)->doProduceItem(Structure_HeavyFactory);
+    require(world.bot->produceItemWithLogging(pass,turn,yard.itemID,__LINE__,yard.structureRule)
+                && turn.pBuilder->getProductionQueueSize()==1
+                && turn.pBuilder->getCurrentProducedItem()==Structure_HeavyFactory,
+            "Selected income-capacity project did not enter its real construction queue");
     auto pending=pressure();
     require(pending.itemCount[Structure_HeavyFactory]==4 && pending.heavyIncomePendingFactories==1
                 && std::none_of(pending.capitalCandidates.begin(),pending.capitalCandidates.end(),
                     [](const auto& value) { return std::string_view(value.reason)=="income_heavy_capacity"; }),
             "Another ready yard duplicated the real pending income-capacity factory");
+    require(initialGrowth==NONE_ID || (world.yard->getProductionQueueSize()==1
+                && world.yard->getCurrentProducedItem()==initialGrowth && !world.yard->isOnHold()),
+            "Income capacity arbitration cancelled or replaced the independent finite growth commitment");
     return true;
 }
 
