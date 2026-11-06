@@ -22,9 +22,8 @@ inline int vanillaMcvShortfall(int credits, int harvesters, int yards, int pendi
         - std::max(0, yards) - std::max(0, pendingMcvs));
 }
 // Credits here are net of queued production and the protected economy reserve.
-inline bool prioritizeVanillaMcv(int credits, int harvesters, int yards, int pendingMcvs, int mcvPrice,
-                                  bool allowUnfunded = false) {
-    return mcvPrice > 0 && (allowUnfunded || credits >= mcvPrice + 1000)
+inline bool prioritizeVanillaMcv(int credits, int harvesters, int yards, int pendingMcvs, int mcvPrice) {
+    return mcvPrice > 0 && credits >= mcvPrice + 1000
         && vanillaMcvShortfall(credits, harvesters, yards, pendingMcvs) > 0;
 }
 inline int vanillaAttackThreshold(int configured, int difficulty) {

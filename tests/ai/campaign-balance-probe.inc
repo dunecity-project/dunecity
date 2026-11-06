@@ -73,17 +73,19 @@
 #include "trooper-support-probe.inc"
 #include "zone-power-probe.inc"
 #include "tech-production-probe.inc"
-#include "simple-tech-saving-probe.inc"
-#include "first-factory-own-prerequisites-probe.inc"
 #include "research-lab-continuation-probe.inc"
 #include "research-lab-ai-probe.inc"
 #include "factory-continuation-probe.inc"
 #include "power-continuation-probe.inc"
-#include "compact-power-probe.inc"
-#include "start-what-makes-sense-probe.inc"
-#include "genome-behavior-probe.inc"
 
 int runCampaignBalanceProbe() {
+    // These retained historical fixtures require policies deliberately absent
+    // from the feature-only app; never substitute an ordinary match for them.
+    for(const char* request : {"BALANCE_SIMPLE_TECH_SAVING_PROBE", "BALANCE_COMPACT_POWER_PROBE",
+            "BALANCE_START_WHAT_MAKES_SENSE_PROBE", "BALANCE_FIRST_FACTORY_OWN_PREREQUISITES_PROBE",
+            "BALANCE_EXISTING_COMPOSITION_UNIT_CHOICE_PROBE", "BALANCE_GENOME_BEHAVIOR"})
+        if(std::getenv(request))
+            throw std::runtime_error(std::string(request) + " is unavailable in the feature-only 3710464d AI build");
     const auto probeStart = ProbeDigest::Clock::now();
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
     const int minutes = std::atoi(std::getenv("BALANCE_MINUTES"));
@@ -150,28 +152,8 @@ int runCampaignBalanceProbe() {
         runTrooperSupportProbe();
         return MENU_QUIT_DEFAULT;
     }
-    if(std::getenv("BALANCE_COMPACT_POWER_PROBE")) {
-        runCompactPowerProbe(partnerClass.c_str());
-        return MENU_QUIT_DEFAULT;
-    }
-    if(std::getenv("BALANCE_START_WHAT_MAKES_SENSE_PROBE")) {
-        runStartWhatMakesSenseProbe(partnerClass.c_str());
-        return MENU_QUIT_DEFAULT;
-    }
-    if(std::getenv("BALANCE_FIRST_FACTORY_OWN_PREREQUISITES_PROBE")) {
-        runFirstFactoryOwnPrerequisitesProbe(partnerClass.c_str());
-        return MENU_QUIT_DEFAULT;
-    }
     if(std::getenv("BALANCE_RESEARCH_LAB_AI_PROBE")) {
         runResearchLabAIProbe(requestedMod.c_str(), partnerClass.c_str());
-        return MENU_QUIT_DEFAULT;
-    }
-    if(std::getenv("BALANCE_SIMPLE_TECH_SAVING_PROBE")) {
-        runSimpleTechSavingProbe(requestedMod.c_str(), partnerClass.c_str());
-        return MENU_QUIT_DEFAULT;
-    }
-    if(std::getenv("BALANCE_EXISTING_COMPOSITION_UNIT_CHOICE_PROBE")) {
-        runExistingCompositionUnitChoiceProbe(requestedMod.c_str(), partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
     GameInitSettings init(humanHouse, settings.gameOptions, level);
@@ -509,11 +491,6 @@ int runCampaignBalanceProbe() {
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
         return MENU_QUIT_DEFAULT;
     }
-    if (std::getenv("BALANCE_GENOME_BEHAVIOR")) {
-        runGenomeBehavior(*game, minutes);
-        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
-        return MENU_QUIT_DEFAULT;
-    }
     if (std::getenv("BALANCE_STRATEGIC_SITE_PROBE")) {
         runStrategicSiteProbe(*game);
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
@@ -586,7 +563,6 @@ int runCampaignBalanceProbe() {
                             .set("CityProductionPrerequisites",f.cityProductionPrerequisites)
                             .set("CityFirstFactorySaving",f.cityFirstFactorySaving)
                             .set("SimpleTechSavings",f.simpleTechSavings)
-                            .set("ExistingCompositionUnitChoice",f.existingCompositionUnitChoice)
                             .set("TrooperSupport",f.trooperSupport).set("FundedClassicProduction",f.fundedClassicProduction)
                             .set("ThreatTurrets",f.threatTurrets).set("MoreRocketTurrets",f.moreRocketTurrets)
                             .set("CityStarportSupply",f.cityStarportSupply).set("StorageCapacity",f.storageCapacity));

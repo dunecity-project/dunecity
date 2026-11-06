@@ -8,6 +8,7 @@
 #include <mod/ModManager.h>
 #include <players/QuantBot.h>
 #include <players/QuantBotConfig.h>
+#include <players/QuantBotBuildPass.h>
 #include <structures/BuilderBase.h>
 #include <structures/ResearchLab.h>
 #include <Network/GameStateDigest.h>
@@ -86,19 +87,8 @@ std::unique_ptr<Game> researchGame(bool enabled, bool ai = false, int mapSize = 
     game->initializeGameLoop();
     // Generator presets cap opening cash at 20k; fund the complete L2-L9 timing fixture.
     if(!ai) game->getHouse(HOUSE_ATREIDES)->addUnstoredCredits(80000);
-    if(ai && enabled) {
-        bool configured = false;
-        for(const auto& player : game->getHouse(HOUSE_ATREIDES)->getPlayerList()) {
-            if(auto* bot = dynamic_cast<QuantBot*>(player.get())) {
-                auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
-                config->force.continuousResearch = true;
-                bot->configOverride = config;
-                configured = true;
-            }
-        }
-        researchRequire(configured, "Natural research fixture did not configure its real QuantBot");
-        SDL_Log("RESEARCH_QUANTBOT_GENE: continuous_research=1");
-    }
+    if(ai && enabled)
+        SDL_Log("RESEARCH_QUANTBOT_POLICY: installed_reference=3710464d no_experimental_overlay=1");
     researchRequire(game->techLevel == techLevel, "Fixture did not retain its authored match technology");
     return game;
 }

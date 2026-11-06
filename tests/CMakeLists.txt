@@ -476,9 +476,6 @@ endif()
 if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
-        add_test(NAME quantbot_genome_qualification_contract COMMAND ${Python3_EXECUTABLE}
-            -B -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests/ai -p test_genome_qualification.py)
-        set_tests_properties(quantbot_genome_qualification_contract PROPERTIES TIMEOUT 60)
         add_test(NAME cross_platform_city_medium COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/cross-platform-city-medium
@@ -886,65 +883,6 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         add_test(NAME quantbot_power_continuation_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_power_continuation.py)
         set_tests_properties(quantbot_power_continuation_parser PROPERTIES TIMEOUT 60)
-        foreach(compact_power_difficulty IN ITEMS easy medium hard brutal)
-            add_test(NAME quantbot_compact_power_${compact_power_difficulty}
-                COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --compact-power-probe --repeatable
-                --mod dunecity --partner-difficulty ${compact_power_difficulty}
-                --seed 1841712204 --path-workers 1 --wall-timeout 240
-                --build-dir ${CMAKE_BINARY_DIR}
-                --output-dir ${CMAKE_BINARY_DIR}/compact-power-${compact_power_difficulty}-probe)
-            set_tests_properties(quantbot_compact_power_${compact_power_difficulty}
-                PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        endforeach()
-        add_test(NAME quantbot_start_what_makes_sense COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --start-what-makes-sense-probe --repeatable
-            --mod dunecity --partner-difficulty brutal --seed 1841712204
-            --path-workers 1 --wall-timeout 600 --build-dir ${CMAKE_BINARY_DIR}
-            --output-dir ${CMAKE_BINARY_DIR}/start-what-makes-sense-probe)
-        # Includes many independently initialized native worlds, not a timing benchmark.
-        set_tests_properties(quantbot_start_what_makes_sense PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
-        # First Light Factory on its own prerequisites, independently OFF.
-        foreach(first_factory_difficulty IN ITEMS hard brutal)
-            add_test(NAME quantbot_first_factory_own_prerequisites_${first_factory_difficulty}
-                COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --first-factory-own-prerequisites-probe
-                --repeatable --mod dunecity --partner-difficulty ${first_factory_difficulty}
-                --seed 1841712204 --path-workers 1 --wall-timeout 240
-                --build-dir ${CMAKE_BINARY_DIR}
-                --output-dir ${CMAKE_BINARY_DIR}/first-factory-own-prerequisites-${first_factory_difficulty}-probe)
-            set_tests_properties(quantbot_first_factory_own_prerequisites_${first_factory_difficulty}
-                PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        endforeach()
-        # Stateless Simple policy, independently OFF pending outcome acceptance.
-        foreach(simple_tech_mod IN ITEMS vanilla dunecity Dune2R)
-            foreach(simple_tech_difficulty IN ITEMS medium hard brutal)
-                add_test(NAME quantbot_simple_tech_savings_${simple_tech_mod}_${simple_tech_difficulty}
-                    COMMAND ${Python3_EXECUTABLE}
-                    ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --simple-tech-saving-probe --repeatable
-                    --mod ${simple_tech_mod} --partner-difficulty ${simple_tech_difficulty}
-                    --seed 1841712204 --no-ai-telemetry --path-workers 1
-                    --wall-timeout 550 --build-dir ${CMAKE_BINARY_DIR}
-                    --output-dir ${CMAKE_BINARY_DIR}/simple-tech-savings-${simple_tech_mod}-${simple_tech_difficulty}-probe)
-                set_tests_properties(quantbot_simple_tech_savings_${simple_tech_mod}_${simple_tech_difficulty}
-                    PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-            endforeach()
-        endforeach()
-        # Unit choice is a separate process from the rejected combined tech policy.
-        # Tornie exercises authored combat variants and variant-only suppliers.
-        foreach(unit_choice_mod IN ITEMS vanilla dunecity Dune2R Tornie)
-            foreach(unit_choice_difficulty IN ITEMS medium hard brutal)
-                add_test(NAME quantbot_existing_composition_unit_choice_${unit_choice_mod}_${unit_choice_difficulty}
-                    COMMAND ${Python3_EXECUTABLE}
-                    ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --existing-composition-unit-choice-probe --repeatable
-                    --mod ${unit_choice_mod} --partner-difficulty ${unit_choice_difficulty}
-                    --seed 1841712204 --no-ai-telemetry --path-workers 1
-                    --wall-timeout 550 --build-dir ${CMAKE_BINARY_DIR}
-                    --output-dir ${CMAKE_BINARY_DIR}/unit-choice-${unit_choice_mod}-${unit_choice_difficulty}-probe)
-                set_tests_properties(quantbot_existing_composition_unit_choice_${unit_choice_mod}_${unit_choice_difficulty}
-                    PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-            endforeach()
-        endforeach()
         # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
         # and saved partner state through the live Harkonnen level-9 fixture.
         foreach(pressure_mod IN ITEMS vanilla dunecity)

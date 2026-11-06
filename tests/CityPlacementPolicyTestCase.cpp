@@ -26,18 +26,6 @@ TEST_CASE("Harvester investment follows spice and processing rather than army si
     REQUIRE(fundedSpiceHarvesters(40,0) == 0);
 }
 
-TEST_CASE("Compact generation compares power per credit and occupied tile", "[ai][power]") {
-    using QuantBotBuildPolicy::compactGeneratorDominates;
-    REQUIRE(compactGeneratorDominates(2000, 2000, 9, 100, 300, 4));
-    REQUIRE(compactGeneratorDominates(2000, 2180, 9, 100, 380, 4));
-    REQUIRE_FALSE(compactGeneratorDominates(2000, 7000, 9, 100, 300, 4));
-    REQUIRE_FALSE(compactGeneratorDominates(100, 2000, 9, 100, 300, 4));
-    REQUIRE_FALSE(compactGeneratorDominates(2000, 2000, 100, 100, 300, 4));
-    REQUIRE_FALSE(compactGeneratorDominates(100, 300, 4, 100, 300, 4));
-    REQUIRE_FALSE(compactGeneratorDominates(0, 2000, 9, 100, 300, 4));
-    REQUIRE_FALSE(compactGeneratorDominates(2000, 0, 9, 100, 300, 4));
-}
-
 TEST_CASE("Generators compare incremental cost space and protected working capital", "[ai][power]") {
     using QuantBotBuildPolicy::preferNuclearPower;
     REQUIRE_FALSE(preferNuclearPower(100,100,300,2000,10,10000,600));

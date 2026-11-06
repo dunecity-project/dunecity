@@ -1719,46 +1719,18 @@ private:
     void planTechSavings(BuildPass& pass);
     bool spendingEmergency(BuildPass& pass, Uint32 item);
     bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
-    void planSensibleBudget(BuildPass& pass);
-    void planSensibleFirstFactory(BuildPass& pass);
-    int sensiblePriority(BuildPass& pass, Uint32 item, bool upgrade = false);
-    int sensibleCapitalPriority(BuildPass& pass, int choice);
-    int sensibleCapitalChoice(BuildPass& pass, Uint32 builder = NONE_ID);
-    void refreshSensibleBuilder(BuildPass& pass, const BuilderBase* builder);
-    void addSensibleRepair(BuildPass& pass, const StructureBase* structure);
-    bool sensibleEmergency(BuildPass& pass, Uint32 item);
-    enum class SensibleLanes { All, Development, Military };
-    /// First cycle at which the share runs dry, or -1. Adds sensibleExtras[0, extras);
-    /// paidNow is an immediate purchase taken from the share's cash first.
-    int64_t sensibleDeficit(BuildPass& pass, int64_t cash, int shareBps, SensibleLanes lanes,
-        size_t extras, int64_t paidNow);
-    bool sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
-        int64_t unpaid, int64_t perCycle, int immediate, bool emergency, bool upgrade = false);
-    bool sensibleOrderAdmits(BuildPass& pass, const BuilderBase* builder,
-        Uint32 item, int quotedPrice, bool upgrade = false, Uint32 purpose = NONE_ID);
-    void sensibleOrderAccepted(BuildPass& pass, const BuilderBase* builder,
-        Uint32 item, int quotedPrice, bool upgrade = false, Uint32 purpose = NONE_ID);
-    bool sensibleResearchAdmits(BuildPass& pass, Uint32 lab, int cost);
-    void sensibleResearchAccepted(BuildPass& pass, Uint32 lab, int cost, bool installments);
-    static size_t compositionSlot(Uint32 item, bool extendedVariants = false);
-    size_t localCompositionSlot(const BuildPass& pass, const BuilderBase* builder, int surplusBudget) const;
-    size_t nextCompositionSlot(BuildPass& pass, BuilderTurn& turn) const;
-    bool compositionAdmits(BuildPass& pass, BuilderTurn& turn, Uint32 item);
-    bool compositionAdmits(BuildPass& pass, Uint32 item, size_t selectedSlot);
+    static size_t compositionSlot(Uint32 item);
+    bool compositionAdmits(BuildPass& pass, Uint32 item);
     /// Scores every producer's candidate purchases.
     void planCapitalCandidates(BuildPass& pass);
-    void planCompositionHeavyCapacity(BuildPass& pass);
     /// Chooses the protected capital purchase for this pass.
     void chooseCapitalPlan(BuildPass& pass);
-    Uint32 chooseLegacyCapitalPlan(BuildPass& pass);
     /// Orders this pass's producers.
     void planBuildOrder(BuildPass& pass);
     /// Records what the capital plan achieved.
     void traceCapitalOutcome(BuildPass& pass);
     /// Match option and hashed policy switch; never consumes RNG or adds saved AI state.
     bool researchLabPolicyActive() const;
-    /// Continuous research requires installment legality; old-rule saves retain legacy planning.
-    bool continuousResearchActive() const;
     /// Break ordinary fleet/crime research vetoes; Civ Wars always retains progression.
     bool researchRequired(const BuildPass& pass) const;
     bool techInvestmentReady(BuildPass& pass);
@@ -1782,8 +1754,6 @@ private:
     AITelemetry::Record decisionState(BuildPass& pass);
     bool campaignPowerNeeded(BuildPass& pass, int nextDemand);
     bool powerGenerationPending(BuildPass& pass);
-    /// Opt-in compact comparison and actual founded funding; nonzero output designates a new installment start.
-    bool preferCompactNuclear(BuildPass& pass, const BuilderBase* builder, int* installmentStartBudget = nullptr);
     Uint32 chooseCityZone(BuildPass& pass, const BuilderBase* builder, bool bootstrap, bool missingOnly = false);
     bool canBuildMilitaryVehicle(BuildPass& pass, const BuilderBase* factory);
     CivicPlan planCivicForYard(BuildPass& pass, const BuilderBase* yard);
@@ -1814,10 +1784,6 @@ private:
     bool proactiveSavingHold(BuildPass& pass, int price);
     bool capitalPending(BuildPass& pass);
     int capitalReserve(BuildPass& pass, Uint32 builder);
-    bool firstAirDefencePending(BuildPass& pass);
-    /// Optional native quotes may not borrow the pending first-AA project's cash.
-    bool firstAirDefenceCapitalAdmits(BuildPass& pass, const BuilderBase* builder, Uint32 item,
-        int quotedCost, int alreadyReserved = 0);
     // One producer's turn (QuantBotBuildProducers.cpp).
     /// Repairs a damaged structure under the repair policy.
     void buildRepair(BuildPass& pass, const StructureBase* pStructure);
@@ -1866,20 +1832,14 @@ private:
     bool buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Selection state, storage priority and protected growth.
     void startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
-    void chooseYardGrowthAllocation(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
-    bool firstAirDefenceGeneratorAdmits(BuildPass& pass, BuilderTurn& turn, Uint32 item, Coord site);
     /// Turret goals and counter-air defence.
     void chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Essential infrastructure, power recovery and economic generation.
     void chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
-    bool chooseSensibleYardCapital(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// No-spice opening, civics, services and the seed economy.
     void chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Core protection, power reserve, reactor and production recovery.
     void chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
-    /// Buys, or saves the legacy founded quote for, the capital plan's pending
-    /// first_factory (missing first ground producer) on its own yard.
-    void chooseYardFirstFactory(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// City opening refineries, zones, vehicle factory and first transport.
     void chooseYardCityOpening(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Crime services, refineries and repair support.
@@ -1915,7 +1875,7 @@ private:
     std::map<Uint32,Uint32> roadRedirectRetryCycle;
     Coord findFinishedRoadSite(const BuilderBase* yard);
     std::vector<std::pair<int,int>> cityRoadRepairSites();
-    int queueCityRoadRepairs(BuildPass& pass, BuilderTurn& turn, int limit);
+    int queueCityRoadRepairs(const BuilderBase* yard, int limit);
 
     Sint32 cityBuildTimer = 0;
 };

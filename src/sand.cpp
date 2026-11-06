@@ -967,8 +967,8 @@ void startSinglePlayerGame(const GameInitSettings& init)
                     case GAME_LOAD:
                     case GAME_NEXTMISSION: {
                         currentGameInitInfo = currentGame->getNextGameInitSettings();
-                        // Keep the copied successor settings, but not the outgoing world or
-                        // its trial config. The next Game must start from the menu singleton.
+                        // The outgoing world must die before its successor resets
+                        // the global entity lists (load and campaign continuation).
                         delete currentGame;
                         currentGame = nullptr;
                         resetHouseVisualHouseMapping();

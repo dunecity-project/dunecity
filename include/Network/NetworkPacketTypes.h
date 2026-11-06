@@ -350,7 +350,9 @@
 //      Research uses fixed prices/durations rather than map size.
 // 113: MOD19 carries the hashed technology-installments rule (save 9884).
 //      Research state captures payment mode, terms and exact cumulative payments.
-#define NETWORK_PROTOCOL_VERSION            113
+// 114: Feature-only interim restores QuantBot's installed 3710464d decision policy;
+//      installment research books its actual zero-upfront payment (save format unchanged).
+#define NETWORK_PROTOCOL_VERSION            114
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

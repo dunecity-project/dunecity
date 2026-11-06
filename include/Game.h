@@ -75,7 +75,6 @@ class UnitBase;
 class Carryall;
 class ConstructionYard;
 class MetaServerClient;
-class QuantBotConfigTrial;
 
 
 #define END_WAIT_TIME               (6*1000)
@@ -1208,7 +1207,6 @@ public:
 
 private:
     void applyDuneCityGraphicsSkins();
-    std::unique_ptr<QuantBotConfigTrial> beginQuantBotConfigTrial(bool networkLoad = false);
 
     bool        chatMode = false;   ///< chat mode on?
     std::string typingChatMessage;  ///< currently typed chat message
@@ -1256,10 +1254,6 @@ private:
     SDL_Rect    sideBarPos = {0, 0, 0, 0};              ///< position of the right side bar
 
     ////////////////////
-
-    // Declared before house: controllers are destroyed while their trial is still installed;
-    // restoring the prior singleton is the final config action before returning to menus.
-    std::unique_ptr<QuantBotConfigTrial> quantBotConfigTrial;
 
     GameInitSettings                    gameInitSettings;       ///< the init settings this game was started with
     GameInitSettings                    nextGameInitSettings;   ///< the init settings the next game shall be started with (restarting the mission, loading a savegame)

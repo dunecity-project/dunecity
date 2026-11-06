@@ -3,17 +3,11 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <climits>
 
 // Integer-only, recomputed from live state each planning pass. No saved timers,
 // random tie breaking, or assumption that forecast income is spendable today.
 namespace QuantBotSpendingPolicy {
 constexpr int horizonMinutes = 4;
-// StartWhatMakesSense: army production keeps this share of cash and income while
-// the existing target/mix/caps admit units it can actually spend it on. 30% is
-// the default (OFF) bot's measured pooled military share of credits paid in the
-// first 20 minutes (b8a627aa cohort, 0.307); spare funds may add to it.
-constexpr int sensibleArmyShareBps = 3000;
 enum class Bucket : unsigned { Production, Economy, Military };
 inline const char* bucketName(Bucket bucket) {
     return bucket == Bucket::Production ? "production"
@@ -67,16 +61,6 @@ inline int additionalProduction(int funding, int existingCapacity, int addedCapa
 inline int productionScore(int additionalValue, int cost, int army, int target) {
     return additionalValue > 0 && cost > 0
         ? int(int64_t(additionalValue)*readiness(army,target)/(cost+additionalValue)) : 0;
-}
-// Capacity follows the live income share, not a fixed one/two-factory ceiling.
-inline int incomeShareDemand(int income, int shareBps) {
-    return int(int64_t(std::max(0,income))*std::clamp(shareBps,0,10000)/10000);
-}
-inline int factoryTargetForDemand(int actual, int capacity, int nextCapacity, int demand) {
-    actual=std::max(0,actual);
-    if (nextCapacity<=0 || demand<=capacity) return actual;
-    const int64_t missing=int64_t(demand)-std::max(0,capacity);
-    return int(std::min<int64_t>(INT_MAX,int64_t(actual)+(missing+nextCapacity-1)/nextCapacity));
 }
 inline int reserveForOther(int cash, int price, bool supplier, bool consumed, bool emergency) {
     return supplier || consumed || emergency ? 0 : std::min(std::max(0,cash),std::max(0,price));

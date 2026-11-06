@@ -324,7 +324,6 @@ QuantBotConfig::QuantBotConfig() {
     // Construction Yard starts (docs/formations.md, "Scenario tests"): holding the first wave
     // for full readiness beats BWFCQ (CY 1v1, 360 games, 0.567); inert with a Fortress army.
     force.openingReadiness = true;
-    force.openingMediumCap = true; // Preserve the current opening threshold; independently comparable.
     // Late game (docs/formations.md, "Free-for-all: finishing the game"): candidates, off.
     force.turretPriority = false;
     force.pressOn = false;
@@ -355,11 +354,8 @@ QuantBotConfig::QuantBotConfig() {
     force.hardCityMatch = true;
     force.researchLab = true;
     force.researchLabProgression = true;
-    force.continuousResearch = false;
     force.cityGrowthPower = true;
     force.cityPowerSizing = true;
-    force.cityCompactPower = false;
-    force.cityCompactPowerInstallments = false;
     force.cityOpeningCapital = true;
     force.cityConstructionCapital = true;
     force.cityProductionPrerequisites = true;
@@ -371,11 +367,6 @@ QuantBotConfig::QuantBotConfig() {
     force.fundedClassicProduction = true;
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
     force.simpleTechSavings = false;
-    force.startWhatMakesSense = false;
-    force.firstFactoryOwnPrerequisites = false;
-    force.existingCompositionUnitChoice = false;
-    force.bufferedHeavyProduction = false;
-    force.incomeHeavyFactories = false;
     force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
     force.exhaustedArmyDispatch = true;
 
@@ -660,7 +651,6 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
         iniFile.setBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
         iniFile.setBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
-        iniFile.setBoolValue("Force Concentration", "OpeningMediumCap", force.openingMediumCap);
         iniFile.setBoolValue("Force Concentration", "TurretPriority", force.turretPriority);
         iniFile.setBoolValue("Force Concentration", "PressOn", force.pressOn);
         iniFile.setBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
@@ -683,11 +673,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
         iniFile.setBoolValue("Force Concentration", "ResearchLab", force.researchLab);
         iniFile.setBoolValue("Force Concentration", "ResearchLabProgression", force.researchLabProgression);
-        iniFile.setBoolValue("Force Concentration", "ContinuousResearch", force.continuousResearch);
         iniFile.setBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
         iniFile.setBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
-        iniFile.setBoolValue("Force Concentration", "CityCompactPower", force.cityCompactPower);
-        iniFile.setBoolValue("Force Concentration", "CityCompactPowerInstallments", force.cityCompactPowerInstallments);
         iniFile.setBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
         iniFile.setBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
         iniFile.setBoolValue("Force Concentration", "CityProductionPrerequisites", force.cityProductionPrerequisites);
@@ -699,11 +686,6 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
         iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
         iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
-        iniFile.setBoolValue("Force Concentration", "StartWhatMakesSense", force.startWhatMakesSense);
-        iniFile.setBoolValue("Force Concentration", "FirstFactoryOwnPrerequisites", force.firstFactoryOwnPrerequisites);
-        iniFile.setBoolValue("Force Concentration", "ExistingCompositionUnitChoice", force.existingCompositionUnitChoice);
-        iniFile.setBoolValue("Force Concentration", "BufferedHeavyProduction", force.bufferedHeavyProduction);
-        iniFile.setBoolValue("Force Concentration", "IncomeHeavyFactories", force.incomeHeavyFactories);
         iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
         iniFile.setBoolValue("Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
 
@@ -765,9 +747,8 @@ bool QuantBotConfig::load(const std::string& filepath) {
 }
 
 bool QuantBotConfig::applyOverrides(const std::string& filepath) {
-    sdl2::RWops_ptr file{SDL_RWFromFile(filepath.c_str(), "r")};
-    if (!file) return false;
-    INIFile iniFile(file.get());
+    if (!existsFile(filepath)) return false;
+    INIFile iniFile(filepath);
     readFrom(iniFile);
     return true;
 }
@@ -813,7 +794,6 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.perimeterTurrets = iniFile.getBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
     force.sizedDefence = iniFile.getBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
     force.openingReadiness = iniFile.getBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
-    force.openingMediumCap = iniFile.getBoolValue("Force Concentration", "OpeningMediumCap", force.openingMediumCap);
     force.turretPriority = iniFile.getBoolValue("Force Concentration", "TurretPriority", force.turretPriority);
     force.pressOn = iniFile.getBoolValue("Force Concentration", "PressOn", force.pressOn);
     force.finishWeakest = iniFile.getBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
@@ -837,11 +817,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     civWarsStrategy = iniFile.getBoolValue("Civ Wars", "Strategy", civWarsStrategy);
     force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);
     force.researchLabProgression = iniFile.getBoolValue("Force Concentration", "ResearchLabProgression", force.researchLabProgression);
-    force.continuousResearch = iniFile.getBoolValue("Force Concentration", "ContinuousResearch", force.continuousResearch);
     force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
     force.cityPowerSizing = iniFile.getBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
-    force.cityCompactPower = iniFile.getBoolValue("Force Concentration", "CityCompactPower", force.cityCompactPower);
-    force.cityCompactPowerInstallments = iniFile.getBoolValue("Force Concentration", "CityCompactPowerInstallments", force.cityCompactPowerInstallments);
     force.cityOpeningCapital = iniFile.getBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
     force.cityConstructionCapital = iniFile.getBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
     force.cityProductionPrerequisites = iniFile.getBoolValue("Force Concentration", "CityProductionPrerequisites", force.cityProductionPrerequisites);
@@ -853,16 +830,6 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.fundedClassicProduction = iniFile.getBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
     force.trooperSupport = iniFile.getBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
     force.simpleTechSavings = iniFile.getBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
-    force.startWhatMakesSense = iniFile.getBoolValue(
-        "Force Concentration", "StartWhatMakesSense", force.startWhatMakesSense);
-    force.firstFactoryOwnPrerequisites = iniFile.getBoolValue(
-        "Force Concentration", "FirstFactoryOwnPrerequisites", force.firstFactoryOwnPrerequisites);
-    force.existingCompositionUnitChoice = iniFile.getBoolValue(
-        "Force Concentration", "ExistingCompositionUnitChoice", force.existingCompositionUnitChoice);
-    force.bufferedHeavyProduction = iniFile.getBoolValue(
-        "Force Concentration", "BufferedHeavyProduction", force.bufferedHeavyProduction);
-    force.incomeHeavyFactories = iniFile.getBoolValue(
-        "Force Concentration", "IncomeHeavyFactories", force.incomeHeavyFactories);
     force.launcherKiteExtraDistance = std::clamp(iniFile.getIntValue(
         "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
     force.exhaustedArmyDispatch = iniFile.getBoolValue(
@@ -1036,57 +1003,6 @@ QuantBotConfig& getQuantBotConfig() {
         g_quantBotConfig->logSettings();
     }
     return *g_quantBotConfig;
-}
-
-bool QuantBotConfigTrial::checkLaunch(const char* overlayPath, GameType launchType,
-                                     bool networkActive, bool replay) {
-    if (!overlayPath) return false;
-    if (isNetworkGameType(launchType) || networkActive || replay) {
-        THROW(std::runtime_error,
-              "DUNECITY_QUANTBOT_OVERLAY is an offline experiment; network/co-op/late-join games and replays are not supported.");
-    }
-    return true;
-}
-
-QuantBotConfigTrial::QuantBotConfigTrial(const std::string& basePath, const std::string& overlayPath,
-                                       bool missingProfileBaseUsesDefaults) {
-    if (!std::filesystem::path(overlayPath).is_absolute()) {
-        THROW(std::runtime_error, "DUNECITY_QUANTBOT_OVERLAY requires an absolute path, got '%s'.", overlayPath);
-    }
-    const auto baseStatus = std::filesystem::status(basePath);
-    const bool defaultsOnly = missingProfileBaseUsesDefaults
-        && baseStatus.type() == std::filesystem::file_type::not_found;
-    if (!defaultsOnly && (!std::filesystem::is_regular_file(baseStatus) || !installed_.applyOverrides(basePath))) {
-        THROW(std::runtime_error, "Cannot read the resolved QuantBot trial base '%s'.", basePath);
-    }
-    if (!std::filesystem::is_regular_file(overlayPath) || !installed_.applyOverrides(overlayPath)) {
-        THROW(std::runtime_error, "Cannot read DUNECITY_QUANTBOT_OVERLAY '%s'.", overlayPath);
-    }
-    // Neither failed reads nor exceptions above can affect a menu's cached config. The
-    // installed config lives inside this nonmovable owner, not in either source INI.
-    previous_ = g_quantBotConfig;
-    g_quantBotConfig = &installed_;
-}
-
-QuantBotConfigTrial::~QuantBotConfigTrial() {
-    g_quantBotConfig = previous_;
-    if (!g_quantBotConfig) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[QuantBotTrialRestore] state=uninitialized");
-        return; // Do not initialize or allocate a config merely to attest its absence.
-    }
-    try {
-        const auto& force = g_quantBotConfig->force;
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-            "[QuantBotTrialRestore] state=initialized config_hash=%s "
-            "CityCompactPower=%d CityCompactPowerInstallments=%d StartWhatMakesSense=%d FirstFactoryOwnPrerequisites=%d ContinuousResearch=%d SimpleTechSavings=%d",
-            g_quantBotConfig->getConfigHash().c_str(), int(force.cityCompactPower),
-            int(force.cityCompactPowerInstallments), int(force.startWhatMakesSense),
-            int(force.firstFactoryOwnPrerequisites), int(force.continuousResearch), int(force.simpleTechSavings));
-    } catch(...) {
-        // Restoration has already succeeded; hash allocation must not throw from teardown.
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[QuantBotTrialRestore] state=initialized hash_attestation_failed=1");
-    }
 }
 
 std::string getQuantBotConfigFilepath() {
@@ -1386,7 +1302,6 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("perimeterTurrets", force.perimeterTurrets);
     addNamed("sizedDefence", force.sizedDefence);
     addNamed("openingReadiness", force.openingReadiness);
-    addNamed("openingMediumCap", force.openingMediumCap);
     addNamed("turretPriority", force.turretPriority);
     addNamed("pressOn", force.pressOn);
     addNamed("finishWeakest", force.finishWeakest);
@@ -1409,11 +1324,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("hardCityMatch", force.hardCityMatch);
     addNamed("researchLab", force.researchLab);
     addNamed("researchLabProgression", force.researchLabProgression);
-    addNamed("continuousResearch", force.continuousResearch);
     addNamed("cityGrowthPower", force.cityGrowthPower);
     addNamed("cityPowerSizing", force.cityPowerSizing);
-    addNamed("cityCompactPower", force.cityCompactPower);
-    addNamed("cityCompactPowerInstallments", force.cityCompactPowerInstallments);
     addNamed("cityOpeningCapital", force.cityOpeningCapital);
     addNamed("cityConstructionCapital", force.cityConstructionCapital);
     addNamed("cityProductionPrerequisites", force.cityProductionPrerequisites);
@@ -1425,11 +1337,6 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("fundedClassicProduction", force.fundedClassicProduction);
     addNamed("trooperSupport", force.trooperSupport);
     addNamed("simpleTechSavings", force.simpleTechSavings);
-    addNamed("startWhatMakesSense", force.startWhatMakesSense);
-    addNamed("firstFactoryOwnPrerequisites", force.firstFactoryOwnPrerequisites);
-    addNamed("existingCompositionUnitChoice", force.existingCompositionUnitChoice);
-    addNamed("bufferedHeavyProduction", force.bufferedHeavyProduction);
-    addNamed("incomeHeavyFactories", force.incomeHeavyFactories);
     addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
     addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);
     configStr += "|/FORCE|";

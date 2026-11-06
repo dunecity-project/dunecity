@@ -225,14 +225,13 @@ protected:
     */
     int chooseLowPriorityCustomUnit(const BuilderBase* pBuilder, int chanceDenominator = 5) const;
     bool hasTornieProductionUpgradeGoal(const BuilderBase* pBuilder) const;
-    /// Unfunded selection skips purchase-price affordability, not availability or limits.
-    Uint32 chooseTornieHarvester(const BuilderBase* pBuilder, int money, bool allowUnfunded = false) const;
+    Uint32 chooseTornieHarvester(const BuilderBase* pBuilder, int money) const;
 
     /// Existing AI economy targets, extended to the family's worker and refinery variants.
     int getAIHarvesterCount() const;
     int getAIRefineryBays() const;
-    /// Prefer an available family building with the same strategic role; require its price unless allowUnfunded.
-    Uint32 chooseTornieStructure(const BuilderBase* pBuilder, Uint32 itemID, int money, bool allowUnfunded = false) const;
+    /// Prefer an available, affordable family building with the same strategic role.
+    Uint32 chooseTornieStructure(const BuilderBase* pBuilder, Uint32 itemID, int money) const;
 
     /**
         Send order and wait for delivery to pStarport.

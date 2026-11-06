@@ -14,7 +14,6 @@
 #include <mod/ModManager.h>
 #include <players/HumanPlayer.h>
 #include <Network/NetworkPacketTypes.h>
-#include <players/AIDecisionLog.h>
 #include <players/QuantBot.h>
 #include <players/QuantBotBuildPass.h>
 #include <players/QuantBotBuildPolicy.h>
@@ -53,11 +52,10 @@ constexpr std::array<Uint32, 10> vehicles = {
     Unit_Tank, Unit_SiegeTank, Unit_Launcher, Unit_Devastator, Unit_SonicTank,
     Unit_Deviator, Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad
 };
-constexpr std::array<Uint32, 17> technology = {
+constexpr std::array<Uint32, 12> technology = {
     Structure_StarPort, Structure_HeavyFactory, Structure_RepairYard,
     Structure_HighTechFactory, Structure_IX, Structure_Palace, Structure_LightFactory,
-    Structure_ResearchLab, Structure_WindTrap, Structure_Refinery, Structure_Silo, Structure_NuclearPlant,
-    Structure_ZoneResidential, Structure_ZoneCommercial, Structure_ZoneIndustrial, Structure_Stadium, Structure_Airport
+    Structure_ResearchLab, Structure_WindTrap, Structure_Refinery, Structure_Silo, Structure_NuclearPlant
 };
 
 inline bool light(Uint32 item) {
@@ -86,8 +84,8 @@ inline std::string mapText(HOUSETYPE side, int techLevel = 9) {
 }
 
 enum class Stage { Progression, FirstHeavy, Advanced, FirstStarport, FirstPalace, Complete,
-                   NaturalOpening, NaturalResearch, UnfoundedComplete };
-enum class Army { Empty, ReadyLight, TinyMixed, TinyTank };
+                   NaturalOpening, NaturalResearch };
+enum class Army { Empty, BelowValueFloor, ReadyLight, TinyMixed, TinyTank };
 
 struct World {
     std::unique_ptr<Game> game;
@@ -138,14 +136,6 @@ struct World {
         game->initializeGameLoop();
         game->bPause = false;
         game->frameTiming.unitPhases = false;
-        // The native spend account is updated only while the decision stream is
-        // open. A >=1MiB cap keeps it open after routine capture is exhausted,
-        // so fractional installment evidence survives even long City cases.
-        const char* profile = std::getenv("DUNECITY_USERDIR");
-        require(profile && *profile && AITelemetry::log().start(
-                    std::string(profile) + "/ai-decisions/",
-                    AITelemetry::Record().set("probe", "simple_tech_saving"), 1024ull * 1024),
-                "Cannot open the private fixture's native economy accounting stream");
         owner = game->getHouse(side);
         enemy = game->getHouse(opposite);
         require(owner && enemy && game->gameType == GameType::CustomGame,
@@ -165,7 +155,6 @@ struct World {
         // causal match arms, rather than assuming a mod left the global INI alone.
         auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
         config->force.simpleTechSavings = false;
-        config->force.existingCompositionUnitChoice = false;
         if (causalControlsOff) {
             config->force.trooperSupport = false;
             config->force.fundedClassicProduction = false;
@@ -237,14 +226,14 @@ struct World {
             place(Structure_RepairYard);
             place(Structure_HighTechFactory);
         }
-        if (stage != Stage::Progression && stage != Stage::Advanced && stage != Stage::FirstStarport) {
+        if (stage != Stage::Progression && stage != Stage::Advanced) {
             place(Structure_IX);
             if (stage != Stage::FirstPalace) place(Structure_Palace);
         }
         // Cover the starting core so a peaceful technology fixture is not
         // measuring a different proactive-turret or crime-capital project.
         for (int i = 0; i < 8; ++i) place(Structure_RocketTurret);
-        if (game->isCitySimEnabled() && stage != Stage::UnfoundedComplete)
+        if (game->isCitySimEnabled())
             for (int y = 2; y < 37; ++y) for (int x = 2; x < 37; ++x)
                 if (!currentGameMap->getTile(x, y)->hasAStructure()) {
                     owner->placeStructure(NONE_ID, Structure_Road, x, y, true, true);
@@ -276,6 +265,7 @@ struct World {
             }
         };
         if (army == Army::ReadyLight) seedArmy(Unit_Quad, 18);
+        if (army == Army::BelowValueFloor) seedArmy(Unit_Trooper, 6);
         if (army == Army::TinyMixed) { seedArmy(Unit_Tank, 1); seedArmy(Unit_Quad, 2); }
         if (army == Army::TinyTank) seedArmy(Unit_Tank, 1);
 
@@ -359,6 +349,7 @@ struct World {
         state.comPop = state.prevComPop = commercial;
         state.indPop = state.prevIndPop = industrial;
         state.taxBaseEighths = taxBase;
+        state.resValve = state.comValve = state.indValve = 0;
         state.policeFundingPercent = 100;
         // Recount actual structures, roads, land value, crime and tax base at
         // the mature scenario clock. No synthetic res800/tax8000 can disappear
@@ -444,19 +435,10 @@ struct World {
     }
 
     void closeMilitaryMarket() {
-        // A genuinely empty military catalogue cannot substitute a purchased
-        // heavy import for measured local factory production.
+        // A genuine empty import catalogue makes the local LF the only legal
+        // vehicle supplier; sold-out-but-listed heavy offers are not that case.
         owner->getChoam().availableItems.clear();
         if (auto* port = producer(Structure_StarPort)) port->updateBuildList();
-    }
-
-    int64_t spentQ32() const {
-        const auto& log = AITelemetry::log();
-        require(log.enabled(), "Native economy accounting stopped before payment evidence was complete");
-        const auto house = log.economy.find(owner->getHouseID());
-        if (house == log.economy.end()) return 0;
-        const auto spent = house->second.find("spent_total");
-        return spent == house->second.end() ? 0 : spent->second;
     }
 
     QuantBot::BuildPass observePlan() {
@@ -476,8 +458,6 @@ struct World {
         bot->planOpeningProduction(pass);
         bot->planDefenceCoverage(pass);
         bot->planTechSavings(pass);
-        bot->planCapitalCandidates(pass);
-        bot->chooseCapitalPlan(pass);
         return pass;
     }
 
@@ -513,16 +493,6 @@ struct PaidProduction {
         for (const Uint32 item : vehicles) unitsBuiltBefore[item] = world.owner->getNumBuiltItems(item);
         for (const Uint32 item : vehicles)
             if (!light(item)) heavyBuiltBefore += world.owner->getNumBuiltItems(item);
-        if (world.bot->botConfig().force.existingCompositionUnitChoice) {
-            heavyBuiltBefore = 0;
-            for (Uint32 item = Unit_FirstID; item <= ItemID_LastID; ++item) {
-                const auto slot = QuantBot::compositionSlot(item, true);
-                if (slot >= UnitMixPolicy::kSlots) continue;
-                unitsBuiltBefore[item] = world.owner->getNumBuiltItems(item);
-                if (slot < UnitMixPolicy::kOrnithopterSlot)
-                    heavyBuiltBefore += world.owner->getNumBuiltItems(item);
-            }
-        }
     }
 
     void observe() {
@@ -539,9 +509,7 @@ struct PaidProduction {
             if (builder->getProductionProgress() > 0) {
                 const Uint32 item = builder->getCurrentProducedItem();
                 if (builtBefore.count(item)) paidTechnology.insert(item);
-                if ((std::find(vehicles.begin(), vehicles.end(), item) != vehicles.end() && !light(item))
-                    || (world.bot->botConfig().force.existingCompositionUnitChoice
-                        && QuantBot::compositionSlot(item, true) < UnitMixPolicy::kOrnithopterSlot))
+                if (std::find(vehicles.begin(), vehicles.end(), item) != vehicles.end() && !light(item))
                     paidHeavyUnits.insert(item);
                 if ((builder->getItemID() == Structure_LightFactory || builder->getItemID() == Structure_HeavyFactory)
                     && unitsBuiltBefore.count(item)) paidFactoryUnits.insert(item);
@@ -570,13 +538,6 @@ struct PaidProduction {
     }
 
     int heavyCompleted() const {
-        if (world.bot->botConfig().force.existingCompositionUnitChoice) {
-            int total = 0;
-            for (const auto& [item, before] : unitsBuiltBefore)
-                if (QuantBot::compositionSlot(item, true) < UnitMixPolicy::kOrnithopterSlot)
-                    total += world.owner->getNumBuiltItems(item);
-            return total - heavyBuiltBefore;
-        }
         int total = 0;
         for (const Uint32 item : vehicles) if (!light(item)) total += world.owner->getNumBuiltItems(item);
         return total - heavyBuiltBefore;
@@ -623,8 +584,8 @@ inline std::vector<UnitBase*> spawnGroundBand(World& world, House* owner, Uint32
 
 
 inline void statelessSaveRoundTrips(World& world) {
-    require(SAVEGAMEVERSION == 9884 && NETWORK_PROTOCOL_VERSION == 113,
-            "Stateless AI policy disagrees with the shared technology payment format");
+    require(SAVEGAMEVERSION == 9884 && NETWORK_PROTOCOL_VERSION == 114,
+            "Stateless AI fixture disagrees with the feature-only save/wire boundary");
     auto originalConfig = world.bot->configOverride;
     auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
     world.bot->configOverride = config;
@@ -646,7 +607,7 @@ inline void statelessSaveRoundTrips(World& world) {
         Uint32 version;
         ~RestoreVersion() { game.loadedSavegameVersion = version; }
     } restore{*world.game, world.game->loadedSavegameVersion};
-    for (const Uint32 version : {Uint32(9882), Uint32(9883), Uint32(9884)}) {
+    for (const Uint32 version : {Uint32(9882), Uint32(9883)}) {
         world.game->loadedSavegameVersion = version;
         IMemoryStream input(enabled.getData(), enabled.getDataLength());
         QuantBot loaded(input, world.owner);
@@ -664,7 +625,7 @@ inline void statelessSaveRoundTrips(World& world) {
         require(reloaded.militaryValueLimit == loaded.militaryValueLimit
                     && reloaded.initialMilitaryValue == loaded.initialMilitaryValue
                     && roundtrip.readUint32() == 0xabcdef01u && roundtrip.getRemainingLength() == 0,
-                "An installed-format QuantBot did not round-trip through current9884");
+                "An installed-format QuantBot did not round-trip through current9883");
         SDL_Log("SIMPLE_TECH_STATELESS_SAVE: input_version=%u output_version=%d protocol=%d bytes=%zu roundtrip=1 policy_bytes_unchanged=1",
                 version, SAVEGAMEVERSION, NETWORK_PROTOCOL_VERSION, size_t(disabled.getDataLength()));
     }

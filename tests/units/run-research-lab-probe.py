@@ -110,8 +110,8 @@ with scratch_dir('research-lab-probe') as scratch:
         raise RuntimeError('Missing yard/factory upgrade cases: human+AI exact legacy-tick, partial AI, or full-save continuation')
     if sorted(upgrade_legacy) != [9882, 9882, 9883, 9883]:
         raise RuntimeError('Missing explicitly synthetic old-save yard/factory upgrade gate cases')
-    if sum('RESEARCH_QUANTBOT_GENE: continuous_research=1' in line for line in lines) != 1:
-        raise RuntimeError('Natural QuantBot case did not explicitly opt into the ContinuousResearch gene')
+    if sum('RESEARCH_QUANTBOT_POLICY: installed_reference=3710464d no_experimental_overlay=1' in line for line in lines) != 1:
+        raise RuntimeError('Natural QuantBot case did not use the installed-reference policy')
     states = ('installment_available', 'installment_paused', 'installment_partial',
               'installment_researching', 'installment_complete', 'upfront_researching')
     captures = [out / ('research-ui-' + state + '-640x480.png') for state in states]
@@ -157,7 +157,7 @@ with scratch_dir('research-lab-probe') as scratch:
     legacy = [(int(row['legacy_version']), int(row['item'])) for row in upgrades if row['case'] == 'legacy_full_price_gate']
     if sorted(legacy) != sorted((version, item) for version in (9882, 9883) for item in items):
         raise RuntimeError('Upgrade CSV omitted or duplicated synthetic old-save full-price gates')
-    summary = {'source_default_technology_installments': True, 'continuous_research_gene': True, 'exact_pace_level_cases': len(totals),
+    summary = {'source_default_technology_installments_off': True, 'ai_policy_reference': '3710464d', 'exact_pace_level_cases': len(totals),
                'synthetic_legacy_save_versions': legacy_versions, 'external_player_save': bool(args.load_save),
                'ui_resolution': [640, 480], 'ui_states': list(states), 'upgrade_ui_states': list(upgrade_states),
                'upgrade_fully_funded_cases': len(upgrade_totals), 'upgrade_save_continuations': len(upgrade_saves),

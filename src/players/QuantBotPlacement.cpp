@@ -1931,8 +1931,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
     for (unsigned i=0;i<serviceItems.size();++i)
         if ((serviceItems[i]!=Structure_RocketTurret || rocketOpeningReady)
             && (requiredItem == NONE_ID || requiredItem == serviceItems[i])
-            && campaignAvailableToBuild(builder,serviceItems[i])
-            && (botConfig().force.startWhatMakesSense || money >= prices[serviceItems[i]][house].price))
+            && campaignAvailableToBuild(builder,serviceItems[i]) && money >= prices[serviceItems[i]][house].price)
             available |= 1u << i;
     if (!available || (landValueOnly && !(available & 2))) return false;
     const unsigned mode = landValueOnly ? 2 : emergency ? 1 : 0;

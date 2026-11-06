@@ -130,7 +130,6 @@ void audit(Game& game) {
             row.set("house", h).set("player", bot->getPlayerID()).set("difficulty", int(bot->difficulty))
                 .set("role", int(bot->role)).set("config_hash", bot->botConfig().getConfigHash())
                 .set("research_policy", bot->researchLabPolicyActive()).set("research_required", bot->researchRequired(pass))
-                .set("continuous_research", bot->botConfig().force.continuousResearch)
                 .set("research_cost", house->getTechResearchCost())
                 .set("research_spending_admitted", bot->spendingAdmits(pass, Structure_ResearchLab, house->getTechResearchCost(), true))
                 .set("tech_savings", pass.techSavings).set("spendable", pass.money).set("queued_cost", pass.queuedProductionCost)

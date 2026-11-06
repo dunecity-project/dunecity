@@ -65,7 +65,7 @@ struct World {
     std::string hash;
 
     World(const char* mod, const char* playerClass, bool enabled, Control control = Control::Solvent,
-          bool installments = false, bool continuous = false) {
+          bool installments = false) {
         require(currentGame == nullptr, "Lab fixtures share live engine globals");
         require(ModManager::instance().setActiveMod(mod), "Cannot activate lab fixture mod");
         getQuantBotConfig().strategy.random = false;
@@ -111,7 +111,6 @@ struct World {
         auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
         config->force.researchLab = true;
         config->force.researchLabProgression = enabled;
-        config->force.continuousResearch = continuous;
         config->force.simpleTechSavings = false;
         bot->configOverride = config;
         hash = config->getConfigHash();
@@ -258,7 +257,6 @@ struct World {
         // production evaluation before observing it, but issue no orders here.
         bot->planCapitalCandidates(pass);
         bot->chooseCapitalPlan(pass);
-        bot->planSensibleBudget(pass);
         return pass;
     }
 
@@ -439,62 +437,32 @@ inline void negative(const char* mod, const char* playerClass, Control control, 
             mod, playerClass, name, world.hash.c_str(), world.owner->getNumItems(Structure_ResearchLab));
 }
 
-inline void continuous(const char* mod, const char* playerClass, bool enabled, bool installments) {
-    World world(mod, playerClass, true, Control::ExistingLab, installments, enabled);
-    const auto* lab = world.lab();
-    require(lab && world.owner->getTechLevel() == 1, "Continuous fixture lacks its ordinary initial lab");
-    require(world.bot->continuousResearchActive() == (enabled && installments),
-            "Continuous policy ignored its shared Technology Installments dependency");
-    world.owner->storedCredits = world.owner->startingCredits = world.owner->cityCredits = 0;
-    require(world.owner->canStartTechResearch(lab->getObjectID()) == installments,
-            "Human research eligibility did not follow the shared installment rule");
-    auto before = world.observePlan();
-    require(!world.bot->canFundTechInvestment(before, world.owner->getTechResearchCost()),
-            "Zero-cash control did not bind the old capital funding gate");
-    world.build();
-    if (!enabled || !installments) {
-        require(!world.owner->isTechResearchActive(), "Disabled policy or upfront engine invented an unfunded study");
-        SDL_Log("CONTINUOUS_RESEARCH_CONTROL: mod=%s class=%s gene=%d installments=%d cash=0 active=0",
-                mod, playerClass, enabled, installments);
-        if (enabled && !installments) {
-            const int price = world.owner->getTechResearchCost();
-            world.owner->startingCredits = price;
-            require(world.owner->canStartTechResearch(lab->getObjectID()),
-                    "Legacy control did not have the human engine's full research price");
-            auto legacy = world.observePlan();
-            require(!world.bot->canFundTechInvestment(legacy, price),
-                    "Legacy capital reserve did not bind the funded control");
-            world.bot->startTechResearch(legacy);
-            require(!world.owner->isTechResearchActive() && world.owner->getCredits() == price,
-                    "Continuous gene bypassed the old-rule research planner");
-            SDL_Log("CONTINUOUS_RESEARCH_LEGACY_PASS: mod=%s class=%s full_price=%d legacy_reserve_preserved=1",
-                    mod, playerClass, price);
-        }
-        return;
-    }
-    for (int target : {2, 3, 4}) {
-        const int price = world.owner->getTechResearchCost();
-        const int duration = world.owner->techResearchCycles(target);
-        if (!world.owner->isTechResearchActive()) world.build();
-        require(world.owner->getTechResearchTarget() == target && world.owner->isTechResearchInstallment()
-                && world.owner->getTechResearchRemaining() == duration && world.owner->getCredits() == 0
-                && world.owner->getTechResearchPaid() == FixPoint(0),
-                "Continuous QuantBot did not start the next study immediately with zero upfront payment");
-        world.owner->updateTechResearch();
-        require(world.owner->getTechResearchRemaining() == duration && world.owner->isTechResearchPaused(),
-                "Unfunded AI study advanced or cancelled instead of pausing");
-        world.owner->startingCredits = price; // Fixture funding is storage-exempt, as initial map cash is.
-        const FixPoint cash = world.owner->storedCredits + world.owner->startingCredits + world.owner->cityCredits;
-        for (int tick = 0; tick < duration; ++tick) world.owner->updateTechResearch();
-        require(world.owner->getTechLevel() == target && !world.owner->isTechResearchActive()
-                && cash - (world.owner->storedCredits + world.owner->startingCredits + world.owner->cityCredits) == FixPoint(price),
-                "AI research did not resume and pay its exact shared human price");
-        require(world.owner->getNumItems(Structure_ResearchLab) == 1 && world.queuedLabs() == 0,
-                "Continuous research duplicated its existing lab");
-        SDL_Log("CONTINUOUS_RESEARCH_PASS: mod=%s class=%s target=%d price=%d cycles=%d zero_cash_start=1 pause_resume=1 exact_payment=1",
-                mod, playerClass, target, price, duration);
-    }
+inline void paymentAccounting(const char* mod, const char* playerClass, bool installments) {
+    World world(mod, playerClass, true, Control::ExistingLab, installments);
+    auto* inactive = const_cast<ResearchLab*>(world.lab());
+    require(inactive, "Payment fixture lacks its ordinary initial lab");
+    inactive->setActive(false);
+    const auto* active = world.place(Structure_ResearchLab, world.legalLabSite());
+    auto pass = world.observePlan();
+    const int cost = world.owner->getTechResearchCost();
+    require(world.bot->canFundTechInvestment(pass, cost),
+            "Installed-reference policy did not admit the solvent research fixture");
+    const int cash = world.owner->getCredits(), plannedCash = pass.money;
+    const int ordered = pass.capitalOrderedCost;
+    world.bot->startTechResearch(pass);
+    const int upfront = installments ? 0 : cost;
+    require(world.owner->isTechResearchActive()
+            && world.owner->getTechResearchLabID() == active->getObjectID()
+            && world.owner->isTechResearchInstallment() == installments
+            && world.owner->getTechResearchPaid() == FixPoint(upfront)
+            && world.owner->getCredits() == cash - upfront
+            && pass.money == plannedCash - upfront
+            && pass.capitalOrderedCost == ordered + upfront,
+            "Feature adapter selected an inactive lab or booked a payment the engine did not collect");
+    SDL_Log("RESEARCH_AI_PAYMENT_ACCOUNTING_PASS: installments=%d upfront=%d active_lab=1 installed_policy=3710464d",
+            installments, upfront);
 }
+
 
 inline void crimePolicy(bool enabled) {
     World world("dunecity", "qBotHard", enabled, Control::Crime);
@@ -533,11 +501,8 @@ void runResearchLabAIProbe(const char* mod, const char* playerClass) {
     const std::string base = playerClass;
     require(base.rfind("qBot", 0) == 0, "Lab fixture needs a registered QuantBot difficulty");
     pair("qBotSupport" + base.substr(4));
-    for (const auto& controller : {std::string(playerClass), "qBotSupport" + base.substr(4)}) {
-        continuous(mod, controller.c_str(), false, true);
-        continuous(mod, controller.c_str(), true, false);
-        continuous(mod, controller.c_str(), true, true);
-    }
+    paymentAccounting(mod, playerClass, false);
+    paymentAccounting(mod, playerClass, true);
     // Defend is a real fifth difficulty, not a role or a renamed Hard bot.
     // Once per mod is sufficient; Builder variants above cover every CLI tier.
     if (base == "qBotHard") {

@@ -136,17 +136,15 @@ struct QuantBotConfig {
 
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
-    /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, OpeningMediumCap, TurretPriority, PressOn,
+    /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
-    /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, ResearchLabProgression, ContinuousResearch,
-    /// CityGrowthPower, CityPowerSizing, CityCompactPower, CityCompactPowerInstallments,
-    /// CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
+    /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, ResearchLabProgression,
+    /// CityGrowthPower, CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
     /// StorageCapacity, FundedClassicProduction, TrooperSupport, SimpleTechSavings,
-    /// FirstFactoryOwnPrerequisites, ExistingCompositionUnitChoice, BufferedHeavyProduction,
-    /// IncomeHeavyFactories, LauncherKiteExtraDistance, ExhaustedArmyDispatch;
+    /// LauncherKiteExtraDistance, ExhaustedArmyDispatch;
     /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -176,9 +174,6 @@ struct QuantBotConfig {
         /// for full readiness (ForceConcentrationPolicy::openingReadiness; docs/formations.md,
         /// "Scenario tests").
         bool openingReadiness;
-        /// Cap a held first wave's threshold at its own share of Medium's military limit.
-        /// Off removes only that cap; team readiness, reachability and later waves are unchanged.
-        bool openingMediumCap;
         /// Late game (docs/formations.md, "Free-for-all: finishing the game"): a wave hunter
         /// standing in an enemy turret's reach while it is not shooting an armed unit attacks
         /// that turret (ranged units from beyond it where they outrange it).
@@ -254,17 +249,12 @@ struct QuantBotConfig {
         /// On by default (Stefan, 2026-11-01).
         bool hardCityMatch;
         /// With the match's Research Lab option, build/rebuild one lab after essentials
-        /// and use the ContinuousResearch or legacy capital policy for each study.
+        /// and fund research from cash not already committed to accepted production.
         /// On by default; inert when the match option is off.
         bool researchLab;
         /// Treat research-enabled matches as technology progression, not optional
         /// capital behind the higher-tech opening fleet. Hashed; no saved state.
         bool researchLabProgression;
-        /// With Technology Installments enabled, keep an existing lab researching
-        /// through level nine without capital, income, crime or fleet readiness gates.
-        /// Only live defence and blackouts may defer a start. Old-rule matches retain
-        /// their complete legacy research planner. Opt-in; genome promotion is separate.
-        bool continuousResearch;
         /// Reserve a legal generator before demanded city growth runs out of its 24-power
         /// headroom, instead of allowing military savings and bargains to starve it.
         /// On by default; no effect outside city games or while generation is pending.
@@ -273,14 +263,6 @@ struct QuantBotConfig {
         /// instead of turning every affordable windtrap into a 2,000-credit reactor.
         /// Funded installment projects and emergency recovery retain their existing priority.
         bool cityPowerSizing;
-        /// Opt-in: prefer a legal funded reactor when its power per credit and
-        /// per tile both dominate wind, even for a small immediate shortfall.
-        /// Existing commitments, foundation costs and placement safety still apply.
-        bool cityCompactPower;
-        /// Independent opt-in: allow a qualifying CityCompactPower reactor to
-        /// start below its full quote with the legal founded start budget and
-        /// positive continuing income. Fully funded choices are unchanged.
-        bool cityCompactPowerInstallments;
         /// Protect tax-dependent optional yards and producer upgrades with the
         /// existing four-minute working-capital forecast. Viable spice economies
         /// retain their normal budgets; military and required recovery are unchanged.
@@ -318,27 +300,9 @@ struct QuantBotConfig {
         /// armour and escorts, using existing infantry shares/economy reserves.
         /// Default ON at Stefan's direction despite unproven acceptance; see HANDOVER.
         bool trooperSupport;
-        /// Stateless existing-composition/economy-first installments, default OFF.
-        /// No military hold or saved ledger; paired outcomes gate adoption.
+        /// Stateless existing-composition/technology experiment, default OFF.
+        /// Current paired outcome audits reject adoption; see HANDOVER.
         bool simpleTechSavings;
-        /// Start the highest sensible project without saving its full quote.
-        /// Parallel orders share the live per-tick drain budget; default OFF.
-        bool startWhatMakesSense;
-        /// A Custom house with no Light/Heavy Factory, owned or pending, buys the
-        /// Light Factory once its own prerequisites, power draw and a site allow it,
-        /// whether or not the Heavy Factory chain is legal; ahead of city growth and
-        /// forecast-only power, behind a real deficit. Default OFF.
-        bool firstFactoryOwnPrerequisites;
-        /// Per-producer choice from owned plus queued value-share deficits.
-        /// No overweight light filler; no tech/economy changes.
-        /// Default OFF; behaviour, historical and Genome gates own promotion.
-        bool existingCompositionUnitChoice;
-        /// Buffered cash may keep an otherwise-idle HF growing its nearest value family.
-        /// Independent from ordinary ratio choice; never grants light-factory filler.
-        bool bufferedHeavyProduction;
-        /// Scale heavy capacity to its share of net income, with bounded unlock priority.
-        /// No fixed one/two-factory ceiling; economy, power, space and funding still apply.
-        bool incomeHeavyFactories;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.
         int launcherKiteExtraDistance;
@@ -425,9 +389,9 @@ struct QuantBotConfig {
     // Immutable revisions and checksummed family bundles use defaults in memory only.
     bool load(const std::string& filepath);
 
-    /// Applies only the keys present in an INI file, retaining the other values, without
-    /// creating or writing the file. Used by test styles and explicit offline trials.
-    /// False if the file cannot be opened for reading.
+    /// Test-only (tests/ai play styles): applies the keys present in an INI file on top of this
+    /// config - any QuantBot Config.ini key, the others keep their values - without creating or
+    /// writing the file. False if the file does not exist.
     bool applyOverrides(const std::string& filepath);
     
     // Save to INI file
@@ -468,28 +432,6 @@ private:
 
 // Global instance (initialized on first use)
 QuantBotConfig& getQuantBotConfig();
-
-/// An explicit offline experiment, never a saved or network setting. Its address must remain
-/// stable: the singleton borrows installed_ until destruction restores the exact prior pointer.
-class QuantBotConfigTrial final {
-public:
-    /// No request is a no-op, even for network/replay launches. A present request (including
-    /// an empty string) rejects network/co-op/late-join loads and replays.
-    static bool checkLaunch(const char* overlayPath, GameType launchType, bool networkActive, bool replay);
-
-    /// Read fresh defaults + the resolved normal config source + overlay, publishing only
-    /// after the reads succeed. A missing Vanilla user-profile base may use fresh defaults;
-    /// a missing mod/revision base must fail. Never calls load() or writes either file.
-    QuantBotConfigTrial(const std::string& basePath, const std::string& overlayPath,
-                       bool missingProfileBaseUsesDefaults = false);
-    ~QuantBotConfigTrial();
-    QuantBotConfigTrial(const QuantBotConfigTrial&) = delete;
-    QuantBotConfigTrial& operator=(const QuantBotConfigTrial&) = delete;
-
-private:
-    QuantBotConfig installed_;
-    QuantBotConfig* previous_ = nullptr;
-};
 
 // Get config file paths
 std::string getQuantBotConfigFilepath();

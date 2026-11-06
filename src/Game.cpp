@@ -73,7 +73,6 @@ std::mutex Game::performanceLogMutex;
 
 #include <players/HumanPlayer.h>
 #include <players/QuantBot.h>
-#include <players/QuantBotConfig.h>
 #include <players/PlayerFactory.h>
 
 #include <CommandBufferPolicy.h>
@@ -862,36 +861,7 @@ bool Game::canBuildOnAlliedLand(const House* builderHouse, int landHouse) const 
         && builderHouse->getTeamID() != 0 && builderHouse->getTeamID() == landOwner->getTeamID();
 }
 
-std::unique_ptr<QuantBotConfigTrial> Game::beginQuantBotConfigTrial(bool networkLoad) {
-    const char* overlay = std::getenv("DUNECITY_QUANTBOT_OVERLAY");
-    if(!QuantBotConfigTrial::checkLaunch(overlay, gameInitSettings.getGameType(),
-                                       networkLoad || pNetworkManager != nullptr, bReplay)) {
-        return {};
-    }
-    if(quantBotConfigTrial) {
-        THROW(std::runtime_error, "A QuantBot overlay is already installed for this game.");
-    }
-    const std::string basePath = getQuantBotConfigFilepath();
-    const auto& mods = ModManager::instance();
-    const bool profileBase = !mods.isInitialized() || mods.getActiveModName() == "vanilla";
-    auto trial = std::make_unique<QuantBotConfigTrial>(basePath, overlay, profileBase);
-    const auto& installed = getQuantBotConfig();
-    const auto& force = installed.force;
-    // A warning-level, once-per-install attestation is visible even without Diagnostic Logs.
-    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-        "[QuantBotTrial] resolved_mod=\"%s\" revision=\"%s\" base=\"%s\" overlay=\"%s\" config_hash=%s "
-        "CityCompactPower=%d CityCompactPowerInstallments=%d StartWhatMakesSense=%d FirstFactoryOwnPrerequisites=%d ContinuousResearch=%d SimpleTechSavings=%d",
-        ModManager::instance().getActiveModName().c_str(), gameInitSettings.getModRevisionHash().c_str(),
-        basePath.c_str(), overlay, installed.getConfigHash().c_str(), int(force.cityCompactPower),
-        int(force.cityCompactPowerInstallments), int(force.startWhatMakesSense),
-        int(force.firstFactoryOwnPrerequisites), int(force.continuousResearch), int(force.simpleTechSavings));
-    return trial;
-}
-
-void Game::initGame(const GameInitSettings& newGameInitSettings) try {
-    // Check the launch type before a save replaces it with its original offline settings.
-    QuantBotConfigTrial::checkLaunch(std::getenv("DUNECITY_QUANTBOT_OVERLAY"),
-                                    newGameInitSettings.getGameType(), pNetworkManager != nullptr, bReplay);
+void Game::initGame(const GameInitSettings& newGameInitSettings) {
     achievements::AchievementManager::instance().end();
     achievementResumed = newGameInitSettings.getGameType() == GameType::LoadSavegame
         || newGameInitSettings.getGameType() == GameType::LoadMultiplayer;
@@ -905,7 +875,6 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) try {
     if(!loadedSave) {
         if(!gameInitSettings.getModRevisionHash().empty()) WorkshopGameContent::resolveMod(gameInitSettings);
         else { WorkshopGameContent::resolveMod(gameInitSettings); WorkshopGameContent::pin(gameInitSettings); }
-        quantBotConfigTrial = beginQuantBotConfigTrial();
     }
     applyCustomPaletteRuntimeHouseRamps();
 
@@ -1068,12 +1037,6 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) try {
         .set("map_width", currentGameMap ? currentGameMap->getSizeX() : 0)
         .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.aiDecisionLog);
     startMatchAnalytics();
-}
-catch(...) {
-    // initGame may fail after a successful saved load has transferred its trial to this Game.
-    // Restore immediately, even when a caller retains the failed Game before destroying it.
-    quantBotConfigTrial.reset();
-    throw;
 }
 
 House* Game::getOrCreateNativesHouse() {
@@ -5259,11 +5222,6 @@ bool Game::loadSaveGame(const std::string& filename) {
 }
 
 bool Game::loadSaveGame(InputStream& stream) {
-    QuantBotConfigTrial::checkLaunch(std::getenv("DUNECITY_QUANTBOT_OVERLAY"),
-                                    gameInitSettings.getGameType(), pNetworkManager != nullptr, bReplay);
-    // Local until the entire load succeeds: every false return and exception restores the
-    // previous singleton, including failures after some houses/controllers were read.
-    std::unique_ptr<QuantBotConfigTrial> pendingQuantBotTrial;
     gameState = GameState::Loading;
 
     targetRequestQueue.clear();
@@ -5341,7 +5299,6 @@ bool Game::loadSaveGame(InputStream& stream) {
     if(gameInitSettings.getModRevisionHash().empty() && savegameVersion >= 9806)
         gameInitSettings.setModIdentity(savedModName, savedModChecksum);
     WorkshopGameContent::resolveMod(gameInitSettings, !lateJoinLoad);
-    pendingQuantBotTrial = beginQuantBotConfigTrial(bMultiplayerLoad || lateJoinLoad);
     citySimEnabled_ = ModManager::instance().isCityModeActive();
     if(savegameVersion <= 9820) {
         gameInitSettings.migrateLegacyHouseColorSlots();
@@ -5791,7 +5748,6 @@ bool Game::loadSaveGame(InputStream& stream) {
     watchedWinnerTeam = -1;
     watchedTimeUp = false;
 
-    quantBotConfigTrial = std::move(pendingQuantBotTrial);
     return true;
     } catch(const InputStream::exception& e) {
         if(const auto* fileStream = dynamic_cast<const IFileStream*>(&stream)) {

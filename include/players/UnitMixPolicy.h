@@ -273,37 +273,6 @@ inline size_t nextExistingSlot(const Mix& target, const Weights& current,
     }
     return selected;
 }
-// Each producer fills its greatest current VALUE-share deficit. One whole order
-// may cross the target. Only the explicitly buffered surplus mask may grow an
-// already-full local family; callers keep that mask empty for light factories.
-// Empty/balanced armies retain the least-error indivisible growth step.
-inline size_t greatestExistingDeficitSlot(const Mix& target, const Weights& current,
-                                         const Weights& prices, const Slots& available,
-                                         const Slots& surplusAvailable) {
-    int64_t total = 0;
-    for (const auto value : current) total += std::max<int64_t>(0, value);
-    size_t selected = kSlots;
-    int64_t bestDeficit = 0;
-    size_t surplus = kSlots;
-    int64_t bestSurplusDeficit = INT64_MIN;
-    bool underweight = false;
-    for (size_t i = 0; i < kSlots; ++i) {
-        const int64_t deficit = int64_t(target[i]) * total
-            - std::max<int64_t>(0, current[i]) * 10000;
-        underweight |= deficit > 0;
-        if (available[i] && target[i] > 0 && prices[i] > 0 && deficit > bestDeficit) {
-            selected = i;
-            bestDeficit = deficit;
-        }
-        if (available[i] && surplusAvailable[i] && target[i] > 0 && prices[i] > 0
-            && deficit > bestSurplusDeficit) {
-            surplus = i;
-            bestSurplusDeficit = deficit;
-        }
-    }
-    return selected < kSlots ? selected : underweight ? surplus
-        : nextExistingSlot(target, current, prices, available);
-}
 // The share of a group (the special slot: Devastator, Sonic Tank, Deviator) split between its
 // \a buildable members: equal parts, the rounding remainder to the lowest buildable members, 0 for
 // the others. A house that can build several specials divides the share; none gets all of it.
