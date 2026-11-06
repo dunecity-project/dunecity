@@ -17794,15 +17794,31 @@ delivery-layer loading-progress helper matches its canonical Git source.
   House 2 has **zero human-legal 3×3 lots**; house 4 has 100 human-legal lots but
   its AI search rejects 98 for threat and four for ground access. These are
   legitimate site constraints, not scoring refusals. The old baseline hit its
-  1,800-second wall bound after 13 simulated minutes; this is not a completed
-  15-minute result. Corrected independent OFF/ON job
-  `20261106T201308-compact-power-nuclear-long-bound-1e6332` preserves both completed
-  audits and uses the same 15 simulated minutes with a 3,600-second bound.
+  1,800-second wall bound after 13 simulated minutes; that attempt stays a
+  retained failure. Corrected job
+  `20261106T201308-compact-power-nuclear-long-bound-1e6332` (same 15 simulated
+  minutes, 3,600-second bound) **PASSED** all four arms, plus `--verify-compact`.
+  Completed builds **84 Wind / 12 Nuclear → 26 Wind / 16 Nuclear**; gross
+  completed-generator footprint **444 → 248 tiles**; actual generation payments
+  **52,563 → 38,173**; funded Nuclear refusals **33 → 0**, with 11 compact
+  choices. House 4 builds no Nuclear in either arm; house 2 builds one in each.
+  Houses 1–7 end with positive power balance; house 0 and non-player house 12
+  end at 0/0 in both arms. Walls 2,249 s OFF / 2,707 s ON.
 - Checked committed source, not the dirty staging tree: all six changed C++
   translation units at dc2aee77 passed syntax compilation; QuantBotBuild.cpp at
-  1000d208 also passed. Six Python parser contracts passed. Physical fixture
-  execution, mandatory pinned AI regressions and matched strength/historical
-  comparisons are not yet green evidence; do not claim promotion. Newer shared
-  f82/d309 probe bootstraps are separately failing and owned by ResearchLabAI /
-  MoneyPlanner. Promotion remains Genome-owned; CityCompactPower stays OFF.
+  1000d208 also passed. Six Python parser contracts passed.
+- Physical fixtures: combined job
+  `20261106T204440-money-planning-corrected-combined-regressions-20261106-cfac7f`
+  failed all four difficulties at “Small-plot control excludes the windtrap
+  too”; that run did not log the AI rejection reason. 5c3d4602 authored an
+  explicit two-column lot, replacing the one-tile frontage setup guard with a
+  human-legality guard; its run passed those checks, then the decision stream
+  showed the light-factory bootstrap reserving the only small lot. fe8aa498
+  gives the factory its own 2×2 lot, separated by sand so no 3×3 exists;
+  behavior assertions are unchanged. Committed private TU syntax passed with
+  the runner's access flag.
+  Pinned job `20261106T220444-compact-power-factory-lot-081319`: **4/4 passed**
+  with native PASS markers. Mandatory combined regressions and matched
+  strength/historical comparisons still need the integration pin; promotion
+  remains Genome-owned and CityCompactPower stays OFF.
 
