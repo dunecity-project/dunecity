@@ -898,6 +898,12 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             set_tests_properties(quantbot_compact_power_${compact_power_difficulty}
                 PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         endforeach()
+        add_test(NAME quantbot_start_what_makes_sense COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --start-what-makes-sense-probe --repeatable
+            --mod dunecity --partner-difficulty brutal --seed 1841712204
+            --path-workers 1 --wall-timeout 240 --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/start-what-makes-sense-probe)
+        set_tests_properties(quantbot_start_what_makes_sense PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # Stateless Simple policy, independently OFF pending outcome acceptance.
         foreach(simple_tech_mod IN ITEMS vanilla dunecity Dune2R)
             foreach(simple_tech_difficulty IN ITEMS medium hard brutal)

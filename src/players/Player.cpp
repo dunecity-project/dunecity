@@ -262,13 +262,13 @@ bool Player::hasTornieProductionUpgradeGoal(const BuilderBase* pBuilder) const {
     return false;
 }
 
-Uint32 Player::chooseTornieHarvester(const BuilderBase* pBuilder, int money) const {
+Uint32 Player::chooseTornieHarvester(const BuilderBase* pBuilder, int money, bool allowUnfunded) const {
     if(!ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled() || !pBuilder) return Unit_Harvester;
     Uint32 selected = Unit_Harvester;
     const int technology = pBuilder->getTechnologyHouseID();
     for(const Uint32 item : {Unit_CapacityHarvester, Unit_FastHarvester})
         if(pBuilder->isAvailableToBuild(item) && !pBuilder->isUnitLimitReached(item)
-            && currentGame->objectData.data[item][technology].price <= money
+            && (allowUnfunded || currentGame->objectData.data[item][technology].price <= money)
             && (selected == Unit_Harvester || getHouse()->getNumItems(item) < getHouse()->getNumItems(selected)))
             selected = item;
     return selected;
@@ -288,13 +288,13 @@ int Player::getAIRefineryBays() const {
     return bays;
 }
 
-Uint32 Player::chooseTornieStructure(const BuilderBase* pBuilder, Uint32 itemID, int money) const {
+Uint32 Player::chooseTornieStructure(const BuilderBase* pBuilder, Uint32 itemID, int money, bool allowUnfunded) const {
     if(!ModManager::instance().isTornieFamilyContentActive() || !pBuilder) return itemID;
     const Uint32 alternative = itemID == Structure_Refinery ? Structure_Doublefinery
         : itemID == Structure_WOR ? Structure_Worfinery
         : itemID == Structure_GunTurret && pBuilder->getTechnologyHouseID() == HOUSE_NEUTRAL ? Structure_Scoutpost : itemID;
     if(alternative != itemID && pBuilder->isAvailableToBuild(alternative)
-        && currentGame->objectData.data[alternative][pBuilder->getTechnologyHouseID()].price <= money)
+        && (allowUnfunded || currentGame->objectData.data[alternative][pBuilder->getTechnologyHouseID()].price <= money))
         return alternative;
     if(itemID == NONE_ID && money > 1500 && getHouse()->getNumItems(Structure_HeavyFactory) > 0) {
         for(const Uint32 candidate : {Structure_Worfinery, Structure_Scoutpost}) {
@@ -302,7 +302,7 @@ Uint32 Player::chooseTornieStructure(const BuilderBase* pBuilder, Uint32 itemID,
                 && (pBuilder->getTechnologyHouseID() != HOUSE_NEUTRAL
                     || getHouse()->getNumItems(Structure_Slowpost) > 0)) continue;
             if(getHouse()->getNumItems(candidate) > 0 || !pBuilder->isAvailableToBuild(candidate)
-                || currentGame->objectData.data[candidate][pBuilder->getTechnologyHouseID()].price > money) continue;
+                || (!allowUnfunded && currentGame->objectData.data[candidate][pBuilder->getTechnologyHouseID()].price > money)) continue;
             bool pending = false;
             for(const auto* structure : getStructureList()) {
                 if(structure->getOwner() != getHouse() || !structure->isABuilder()) continue;

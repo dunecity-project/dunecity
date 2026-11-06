@@ -1719,6 +1719,18 @@ private:
     void planTechSavings(BuildPass& pass);
     bool spendingEmergency(BuildPass& pass, Uint32 item);
     bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
+    void planSensibleBudget(BuildPass& pass);
+    int sensiblePriority(BuildPass& pass, Uint32 item, bool upgrade = false);
+    void refreshSensibleBuilder(BuildPass& pass, const BuilderBase* builder);
+    void addSensibleRepair(BuildPass& pass, const StructureBase* structure);
+    bool sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
+        int64_t unpaid, int64_t perCycle, int immediate, bool emergency, bool upgrade = false);
+    bool sensibleOrderAdmits(BuildPass& pass, const BuilderBase* builder,
+        Uint32 item, int quotedPrice, bool upgrade = false, Uint32 purpose = NONE_ID);
+    void sensibleOrderAccepted(BuildPass& pass, const BuilderBase* builder,
+        Uint32 item, int quotedPrice, bool upgrade = false, Uint32 purpose = NONE_ID);
+    bool sensibleResearchAdmits(BuildPass& pass, Uint32 lab, int cost);
+    void sensibleResearchAccepted(BuildPass& pass, Uint32 lab, int cost, bool installments);
     static size_t compositionSlot(Uint32 item, bool extendedVariants = false);
     size_t localCompositionSlot(const BuildPass& pass, const BuilderBase* builder) const;
     size_t nextCompositionSlot(BuildPass& pass, BuilderTurn& turn) const;
@@ -1880,7 +1892,7 @@ private:
     std::map<Uint32,Uint32> roadRedirectRetryCycle;
     Coord findFinishedRoadSite(const BuilderBase* yard);
     std::vector<std::pair<int,int>> cityRoadRepairSites();
-    int queueCityRoadRepairs(const BuilderBase* yard, int limit);
+    int queueCityRoadRepairs(BuildPass& pass, BuilderTurn& turn, int limit);
 
     Sint32 cityBuildTimer = 0;
 };

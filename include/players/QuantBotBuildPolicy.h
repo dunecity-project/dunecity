@@ -112,12 +112,13 @@ inline int rollingMilitaryBudget(int committedValue, int configuredTarget,
 }
 template<size_t N>
 int fundedDeficit(const std::array<AllocationCandidate,N>& candidates, int committed,
-                  int money, int limit, int target) {
+                  int money, int limit, int target, bool allowUnfunded = false) {
     int selected = -1;
     int64_t best = 0;
     for (size_t i=0;i<N;++i) {
         const auto& c=candidates[i];
-        if (!c.available || c.price<=0 || c.price>money || int64_t(committed)+c.price>limit) continue;
+        if (!c.available || c.price<=0 || (!allowUnfunded && c.price>money)
+            || int64_t(committed)+c.price>limit) continue;
         const int64_t deficit=int64_t(target)*c.targetBps-int64_t(c.committedValue)*10000;
         if (deficit>best) { best=deficit; selected=static_cast<int>(i); }
     }
@@ -128,11 +129,12 @@ int fundedDeficit(const std::array<AllocationCandidate,N>& candidates, int commi
 // available type relative to its learned share, including this next unit.
 template<size_t N>
 int capacityFill(const std::array<AllocationCandidate,N>& candidates, int committed,
-                 int money, int limit) {
+                 int money, int limit, bool allowUnfunded = false) {
     int selected=-1;
     for (size_t i=0;i<N;++i) {
         const auto& c=candidates[i];
-        if (!c.available || c.targetBps<=0 || c.price<=0 || c.price>money || int64_t(committed)+c.price>limit) continue;
+        if (!c.available || c.targetBps<=0 || c.price<=0 || (!allowUnfunded && c.price>money)
+            || int64_t(committed)+c.price>limit) continue;
         if (selected<0 || (int64_t(c.committedValue)+c.price)*candidates[selected].targetBps
                 < (int64_t(candidates[selected].committedValue)+candidates[selected].price)*c.targetBps)
             selected=static_cast<int>(i);
@@ -327,14 +329,14 @@ struct AirProductionState {
 };
 enum class AirOrder { None, Ornithopter, Carryall, Upgrade };
 struct AirDecision { AirOrder order; const char* reason; };
-inline AirDecision chooseAirProduction(const AirProductionState& s) {
+inline AirDecision chooseAirProduction(const AirProductionState& s, bool allowUnfunded = false) {
     if (s.upgrading) return {AirOrder::None, "factory_upgrading"};
     if (s.busy) return {AirOrder::None, "factory_busy"};
     if (s.airLimit) return {AirOrder::None, "air_unit_limit"};
-    if (s.airStrategy && !s.ornithopterAvailable && s.canUpgrade && s.credits > 500)
+    if (s.airStrategy && !s.ornithopterAvailable && s.canUpgrade && (allowUnfunded || s.credits > 500))
         return {AirOrder::Upgrade, "air_strategy_upgrade"};
     const bool carryallDue = s.carryallAvailable && s.carryalls < s.carryallTarget
-        && s.carryallPrice > 0 && s.spendable >= s.carryallPrice;
+        && s.carryallPrice > 0 && (allowUnfunded || s.spendable >= s.carryallPrice);
     // Bootstrap transport, but a growing carryall target must not starve combat air.
     if (s.carryalls == 0 && s.carryallTarget > 0 && s.carryallAvailable && s.carryallPrice > 0)
         return carryallDue ? AirDecision{AirOrder::Carryall, "first_carryall"}
@@ -343,9 +345,9 @@ inline AirDecision chooseAirProduction(const AirProductionState& s) {
         > int64_t(s.airCommittedValue) * 10000;
     const bool fitsArmy = int64_t(s.armyValue) + s.ornithopterPrice <= s.armyLimit;
     if (s.ornithopterAvailable && airDue && fitsArmy && s.ornithopterPrice > 0
-        && s.spendable >= s.ornithopterPrice)
+        && (allowUnfunded || s.spendable >= s.ornithopterPrice))
         return {AirOrder::Ornithopter, "ornithopter_order_due"};
-    if (s.canUpgrade && s.spendable > 500) return {AirOrder::Upgrade, "upgrade_or_repair_priority"};
+    if (s.canUpgrade && (allowUnfunded || s.spendable > 500)) return {AirOrder::Upgrade, "upgrade_or_repair_priority"};
     if (carryallDue) return {AirOrder::Carryall, "carryall_target"};
     if (!s.ornithopterAvailable) return {AirOrder::None, "ornithopter_unavailable"};
     if (!airDue) return {AirOrder::None, "air_target_met"};
@@ -593,8 +595,10 @@ inline bool compactGeneratorDominates(int output, int price, int tiles,
 // reserve. Small starts keep cheap wind; rich cities and blackout recovery
 // prefer nuclear. Cash already committed to other work stays protected.
 inline bool preferNuclearPower(int need, int windOutput, int windPrice, int nuclearPrice,
-                              int availableWindSites, int cash, int protectedCash, bool powerShortage = false) {
-    if (need <= 0 || windOutput <= 0 || cash < nuclearPrice + std::max(0,protectedCash)) return false;
+                              int availableWindSites, int cash, int protectedCash, bool powerShortage = false,
+                              bool allowUnfunded = false) {
+    if (need <= 0 || windOutput <= 0
+        || (!allowUnfunded && cash < nuclearPrice + std::max(0,protectedCash))) return false;
     const int windCount = (need + windOutput - 1) / windOutput;
     // A rich city can afford useful spare capacity. During a blackout,
     // restore enough capacity for zones to recover instead of topping up wind.
@@ -666,20 +670,20 @@ inline int desiredHeavyFactories(bool citySim, int creditsPerSecond, int credits
 // Expand production for a funded backlog, counting queued factories as spare
 // capacity. Busy queues alone say nothing about demand for that factory's units.
 inline bool needsProductionLane(int actual, int committed, int busy, int deficit,
-                                int credits, int reserve, int factoryPrice) {
+                                int credits, int reserve, int factoryPrice, bool allowUnfunded = false) {
     return actual > 0 && committed == actual && busy * 4 >= actual * 3
-        && deficit >= factoryPrice && credits >= reserve + factoryPrice + 1000;
+        && deficit >= factoryPrice && (allowUnfunded || credits >= reserve + factoryPrice + 1000);
 }
 
 // A carryall sharing the production line must not hide combat-air demand.
 // Count incoming factories and aircraft, and fund both the lane and its next unit.
 inline bool needsAirProductionLane(int actual, int committed, int busy, int capable,
     int deficit, int credits, int reserve, int factoryPrice, int aircraftPrice,
-    int armyRoom, bool airLimit) {
+    int armyRoom, bool airLimit, bool allowUnfunded = false) {
     return !airLimit && capable > 0 && aircraftPrice > 0 && armyRoom >= aircraftPrice
         && actual > 0 && committed == actual && busy * 4 >= actual * 3
         && deficit >= aircraftPrice
-        && credits >= reserve + factoryPrice + aircraftPrice + 1000;
+        && (allowUnfunded || credits >= reserve + factoryPrice + aircraftPrice + 1000);
 }
 
 inline bool needsKiting(int distance, int weaponRange, bool easy, bool groundTarget) {

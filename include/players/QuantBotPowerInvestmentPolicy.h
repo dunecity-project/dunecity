@@ -31,9 +31,9 @@
 //      shortfall is divided by the capacity one purchase actually adds and the
 //      capital of all of them is what gets judged. The buffer is inside that
 //      one shortfall figure and is never added a second time.
-//   2. It must be affordable out of cash that the core queues and the
+//   2. By default it must be affordable out of cash that the core queues and the
 //      operating reserve do not need.
-//   3. The forecast recurring income must be able to replace that capital within
+//   3. By default forecast recurring income must replace that capital within
 //      thirty game seconds.
 //   4. Either the repairs it avoids repay that capital within ten game
 //      minutes -- priced with the engine's own integer repair formula over
@@ -42,15 +42,17 @@
 //      needs to be argued for. Buildings above 512 maximum health repair for
 //      free in that formula and correctly contribute nothing to the payback,
 //      which on its own would keep a normal mature base unpowered forever.
+// The explicit allowUnfunded admission skips only gates 2 and 3; package sizing
+// and the repair-payback or prosperity benefit test still use the real figures.
 //
 // The caller then orders one generator and re-evaluates on the next pass.
 // Delivery is therefore serial, which is fine: each pass sees the pending
 // output it already bought and keeps filling an insufficient package.
 //
 // When a gate refuses the buffered package the base may still be genuinely
-// unpowered, and degradation does not wait. Rather than waive a gate, the same
-// gates then judge the smaller operating shortage on its own -- the buffer is
-// what gets dropped, never the affordability, income or benefit test.
+// unpowered, and degradation does not wait. The same admission policy then
+// judges the smaller operating shortage on its own -- only the buffer is
+// dropped, never the benefit test.
 // ---------------------------------------------------------------------------
 
 namespace QuantBotPowerInvestmentPolicy {
@@ -163,11 +165,11 @@ inline bool buys(Verdict verdict) {
     return verdict == Verdict::BuyForRepairs || verdict == Verdict::BuyWhileProsperous;
 }
 
-inline Verdict evaluate(const Investment& state) {
+inline Verdict evaluate(const Investment& state, bool allowUnfunded = false) {
     const int capital = packageCapital(state);
     if (capital <= 0) return Verdict::NoDeficit;
-    if (state.spendable < capital) return Verdict::Unaffordable;
-    if (!incomeReplacesCapital(state, capital)) return Verdict::IncomeTooLow;
+    if (!allowUnfunded && state.spendable < capital) return Verdict::Unaffordable;
+    if (!allowUnfunded && !incomeReplacesCapital(state, capital)) return Verdict::IncomeTooLow;
     if (repaysThroughAvoidedRepairs(state, capital)) return Verdict::BuyForRepairs;
     if (prosperous(state)) return Verdict::BuyWhileProsperous;
     return Verdict::RepairsTooCheap;
@@ -184,19 +186,19 @@ struct Decision {
 // The buffered package is what a settled base should buy. If a gate refuses it
 // while the base is actually short of power, the same gates judge the bare
 // operating shortage instead: a base that cannot afford headroom should still
-// not be left degrading under a blackout it could have paid to end. No gate is
-// skipped, and the buffer is never counted twice -- the two packages are
-// alternatives, one of which is chosen.
+// not be left degrading under a blackout it could have paid to end. Both use
+// the same funding admission and benefit tests; the buffer is never counted
+// twice -- the two packages are alternatives, one of which is chosen.
 // The shortage package carries its own cheapest generator, which need not be
 // the one a much larger buffered package would have chosen.
-inline Decision decide(const Investment& buffered, const Investment& shortage) {
+inline Decision decide(const Investment& buffered, const Investment& shortage, bool allowUnfunded = false) {
     Decision decision;
     decision.deficit = buffered.deficit;
     decision.capital = packageCapital(buffered);
-    decision.verdict = evaluate(buffered);
+    decision.verdict = evaluate(buffered, allowUnfunded);
     if (buys(decision.verdict) || shortage.deficit <= 0
         || shortage.deficit >= buffered.deficit) return decision;
-    const Verdict verdict = evaluate(shortage);
+    const Verdict verdict = evaluate(shortage, allowUnfunded);
     if (!buys(verdict)) return decision;
     decision.deficit = shortage.deficit;
     decision.capital = packageCapital(shortage);

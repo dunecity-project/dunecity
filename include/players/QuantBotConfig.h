@@ -312,6 +312,9 @@ struct QuantBotConfig {
         /// Stateless existing-composition/economy-first installments, default OFF.
         /// No military hold or saved ledger; paired outcomes gate adoption.
         bool simpleTechSavings;
+        /// Start the highest sensible project without saving its full quote.
+        /// Parallel orders share the live per-tick drain budget; default OFF.
+        bool startWhatMakesSense;
         /// Per-producer choice from owned plus queued value-share deficits.
         /// No overweight light filler; no tech/economy changes.
         /// Default OFF until the retuned unit/army-value and performance gates pass.

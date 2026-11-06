@@ -79,6 +79,7 @@
 #include "factory-continuation-probe.inc"
 #include "power-continuation-probe.inc"
 #include "compact-power-probe.inc"
+#include "start-what-makes-sense-probe.inc"
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -149,6 +150,10 @@ int runCampaignBalanceProbe() {
     }
     if(std::getenv("BALANCE_COMPACT_POWER_PROBE")) {
         runCompactPowerProbe(partnerClass.c_str());
+        return MENU_QUIT_DEFAULT;
+    }
+    if(std::getenv("BALANCE_START_WHAT_MAKES_SENSE_PROBE")) {
+        runStartWhatMakesSenseProbe(partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
     if(std::getenv("BALANCE_RESEARCH_LAB_AI_PROBE")) {

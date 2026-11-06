@@ -96,6 +96,17 @@ struct QuantBot::BuildPass {
 
     // planBuildBudget()
     int money{};
+    bool startWhatMakesSense{};
+    struct SensibleDrain {
+        Uint32 builder = NONE_ID;
+        int priority = 70;
+        int64_t unpaid = 0;
+        int64_t perCycle = 0;
+        Uint32 purpose = NONE_ID;
+        bool granted = false;
+    };
+    std::vector<SensibleDrain> sensibleDrains{};
+    std::vector<std::pair<int64_t,int64_t>> sensibleDrainEnds{};
     bool militaryBudgetOverridden{};
     int militaryBudget{};
     bool surplusArmy{};

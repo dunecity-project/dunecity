@@ -3,6 +3,7 @@
 
 The frozen --game-options transport uses the existing [Research Lab Save]
 SHA256/GzipBase64 input. No private save is committed to the repository.
+--technology-installments explicitly overrides only that global saved rule.
 """
 import argparse
 import base64
@@ -74,8 +75,11 @@ def play(args, scratch, binary, key):
     restore_fixture_revisions(source_profile, [saved])
     run = out / 'run'
     env = dict(os.environ, BALANCE_FACTORY_CONTINUATION='1')
+    env.pop('BALANCE_TECHNOLOGY_INSTALLMENTS', None)
     if arm.startswith('audit'):
         env['BALANCE_FACTORY_SAVE_AUDIT'] = '1'
+    if args.technology_installments != 'saved':
+        env['BALANCE_TECHNOLOGY_INSTALLMENTS'] = '1' if args.technology_installments == 'on' else '0'
     command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(run), '--load-save', str(saved),
                '--save-profile', str(source_profile), '--mod', 'dunecity', '--minutes', str(args.minutes),
@@ -97,8 +101,8 @@ def play(args, scratch, binary, key):
             shutil.copyfileobj(source, dest)
     measurements = []
     for line in lines:
-        if 'FACTORY_SAVE_' in line or 'RESEARCH_LAB_SAVE_HOUSE:' in line:
-            marker_start = line.index('FACTORY_SAVE_') if 'FACTORY_SAVE_' in line else line.index('RESEARCH_LAB_SAVE_HOUSE:')
+        if 'FACTORY_SAVE_' in line or 'RESEARCH_LAB_SAVE_' in line:
+            marker_start = line.index('FACTORY_SAVE_') if 'FACTORY_SAVE_' in line else line.index('RESEARCH_LAB_SAVE_')
             marker, body = line[marker_start:].split(':', 1)
             measurements.append({'marker': marker, 'data': json.loads(body) if body.strip().startswith('{') else body.strip()})
     (results / (arm + '-measurements.json')).write_text(json.dumps(measurements, indent=2) + '\n')
@@ -141,6 +145,8 @@ parser.add_argument('--results', required=True)
 parser.add_argument('--game-options', help='Frozen save input; required for play, not shared probe preparation')
 parser.add_argument('--arms', nargs='+', choices=('audit', 'baseline', 'audit-off', 'audit-on', 'off', 'on'), default=['audit', 'baseline'])
 parser.add_argument('--style-prefix', default='')
+parser.add_argument('--technology-installments', choices=('saved', 'off', 'on'), default='saved',
+                    help='Explicit test-only global rule override; saved preserves the exact save rule')
 parser.add_argument('--minutes', type=int, default=15)
 parser.add_argument('--wall-timeout', type=int, default=1800)
 parser.add_argument('--capture-mib', type=int, default=512)

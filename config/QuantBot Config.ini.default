@@ -401,6 +401,9 @@ TrooperSupport=1
 # Existing army composition; economy-first tech installments, no military hold.
 # Default OFF after the combined trial. No saved budget or format/protocol change.
 SimpleTechSavings=0
+# Start sensible projects immediately; parallel starts must share their tick drain.
+# Independent candidate; OFF until behaviour, Genome and historical gates pass.
+StartWhatMakesSense=0
 # Each producer fills its own existing owned plus queued VALUE-share deficit.
 # No overweight light filler; no tech/economy changes. SimpleTechSavings stays OFF.
 # Default OFF until retuned unit value, army value and performance gates pass.
