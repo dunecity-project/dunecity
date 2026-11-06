@@ -320,6 +320,21 @@ class ObservationFiles:
             files.update(path.rglob('observations-*.csv.gz') if path.is_dir() else [path])
         self.files = tuple(sorted(files))
         self.equivalent = frozenset(equivalent)
+        self.assignments = {}
+
+    def slot(self, path, row):
+        directory = path.parent
+        if directory not in self.assignments:
+            source = directory / 'assignments.csv'
+            if not source.is_file():
+                source = directory / 'assignments.csv.gz'
+            if not source.is_file():
+                raise ValueError('Old observations need adjacent assignments.csv or regenerated --report --scores: ' + str(path))
+            self.assignments[directory] = {(entry['id'], entry['house']): entry for entry in load_rows(source)}
+        entry = self.assignments[directory].get((row['game_id'], row['house']))
+        if entry is None or entry.get('genome_digest') != row.get('genome_digest'):
+            raise ValueError('Missing or conflicting original house assignment: ' + str(path))
+        return entry['slot']
 
     def __iter__(self):
         sources = set()
@@ -335,6 +350,8 @@ class ObservationFiles:
                         sources.add('equivalent' if row['source_commit'] in self.equivalent else row['source_commit'])
                     if len(sources) > 1:
                         raise ValueError('Do not pool native revisions: use ai-baseline-gate.py for history')
+                    if not row.get('slot') and row.get('game_id') and row.get('house') is not None:
+                        row['slot'] = self.slot(path, row)
                     yield row
 
 
@@ -383,6 +400,7 @@ def responses(rows, house=False, require_rotations=False, protocol=None, genomes
     expected_digests = {name: genome_model.genome_id(item) for name, item in (genomes or {}).items()}
     grouped = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [Fraction(), 0])))
     rosters, unavailable = defaultdict(dict), defaultdict(int)
+    measured_houses = defaultdict(set)
     for row in rows:
         arm, metric, context = arm_of(row), row['metric'], context_key(row, house)
         game = row.get('game_id') or row.get('id', '')
@@ -405,6 +423,7 @@ def responses(rows, house=False, require_rotations=False, protocol=None, genomes
         cell = grouped[block][game][arm]
         cell[0] += Fraction(row['value'])
         cell[1] += 1
+        measured_houses[(block, game, arm)].add(str(row.get('house', '')))
     eligible = defaultdict(lambda: defaultdict(dict))
     for (comparison, seed, metric, context, map_sha), games in grouped.items():
         arms = {arm for values in games.values() for arm in values}
@@ -419,6 +438,13 @@ def responses(rows, house=False, require_rotations=False, protocol=None, genomes
                 if not expected or signatures != expected or len(games) != len(expected):
                     continue
                 if not house and any(set(values) != {arm, CONTROL} for values in games.values()):
+                    continue
+                coverage = {(game, label): {assignment[1] for assignment in rosters[game].values()
+                                            if assignment[2] == label and (not house or assignment[1] == context[-1])}
+                            for game in games for label in (arm, CONTROL)}
+                block = (comparison, seed, metric, context, map_sha)
+                if any(measured_houses[(block, game, label)] != expected_houses
+                       for (game, label), expected_houses in coverage.items()):
                     continue
             values = {label: [total / count for game in games.values()
                               for name, (total, count) in game.items() if name == label]

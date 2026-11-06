@@ -200,6 +200,14 @@ class GenomeSearchTests(unittest.TestCase):
         paired, _, _ = search.responses(rows, require_rotations=True)
         self.assertEqual(next(iter(paired.values())), {'1': 4})
 
+    def test_ffa_control_needs_every_expected_measured_house(self):
+        rows = self.rotation_rows(['harkonnen', 'atreides', 'ordos', 'sardaukar'], 'ffa')
+        missing = next(row for row in rows if row['arm'] == 'default')
+        missing.update(status='unavailable', value='')
+        paired, absolute, _ = search.responses(rows, require_rotations=True)
+        self.assertFalse(paired)
+        self.assertFalse(absolute)
+
     def test_observation_digest_must_match_the_plan_genotype(self):
         rows = self.rotation_rows()
         rows[0]['genome_digest'] = 'different'
@@ -339,6 +347,23 @@ class GenomeSearchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Do not pool'):
                 list(search.observations([path]))
             self.assertEqual(len(list(search.observations([path], ['a' * 40, 'b' * 40]))), 2)
+
+    def test_old_shards_recover_only_verified_original_assignment_slots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rows = self.rotation_rows()
+            assignments = [dict(id=row['game_id'], house=row['house'], slot=row.pop('slot'),
+                                genome_digest=row['genome_digest']) for row in rows]
+            path = root / 'observations-old.csv.gz'
+            search.write_rows(path, tuple(rows[0]), rows)
+            search.write_rows(root / 'assignments.csv', tuple(assignments[0]), assignments)
+            recovered = list(search.observations([root]))
+            self.assertTrue(all(row['slot'] for row in recovered))
+            self.assertTrue(search.responses(recovered, require_rotations=True)[0])
+            assignments[0]['genome_digest'] = 'wrong-genotype'
+            search.write_rows(root / 'assignments.csv', tuple(assignments[0]), assignments)
+            with self.assertRaisesRegex(ValueError, 'conflicting original house assignment'):
+                list(search.observations([path]))
 
     def test_feasibility_is_exact_source_rule_bound_and_worst_retry_wins(self):
         cases = [dict(id=case, adapted=True, game_rules={'technology_installments': 0}) for case in ('a', 'b')]
