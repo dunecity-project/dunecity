@@ -404,6 +404,38 @@ class GenomeSearchTests(unittest.TestCase):
         evolved = search.evolve(plan, report, self.registry, 1, population=4, offspring=1, seeds=[3, 4])
         self.assertEqual(evolved['selection_seeds'], [1, 2, 3, 4, 91, 92])
 
+    def test_joint_seed_is_measured_without_fake_fitness_or_extra_offspring(self):
+        plan = search.screen_plan(self.registry, self.genes[:1], parameter_sweeps=False, fraction=False)
+        report = dict(pareto_fronts=[[g['id'] for g in plan['genomes']]], genomes={}, niches={})
+        genes = ['existing_composition_unit_choice', 'buffered_heavy_production', 'income_heavy_factories']
+        result = search.evolve(plan, report, self.registry, 1, population=4, offspring=6,
+                               seed_genes=genes, seed_combinations=[genes])
+        self.assertEqual(len(result['lineage']), 6)
+        joint = next(row for row in result['lineage'] if row['role'] == 'seeded_combination')
+        child = next(item for item in result['genomes'] if item['id'] == joint['genome'])
+        self.assertTrue(all(child['values'][gene] == 1 for gene in genes))
+        self.assertIn([child['id'], search.CONTROL], result['matchups'])
+        self.assertEqual({row['mutations'][0] for row in result['lineage'] if row['role'] == 'seeded_gene'},
+                         set(genes))
+        with self.assertRaisesRegex(ValueError, 'offspring count'):
+            search.evolve(plan, report, self.registry, 1, population=4, offspring=2,
+                          seed_genes=genes, seed_combinations=[genes])
+
+    def test_race_context_expansion_retains_frozen_size_base_spice_and_seed_safety(self):
+        plan = search.screen_plan(self.registry, self.genes[:1], parameter_sweeps=False, fraction=False)
+        plan['protocol'] = dict(seeds=[1, 2], contexts=[dict(mod='dunecity', difficulty='hard', research='off',
+                                                          size=96, base='cy', spice='medium')], modes=['1v1'])
+        elite = plan['genomes'][1]['id']
+        race = search.race_plan([plan], [elite], list(range(10, 18)), self.registry,
+                                ['dunecity:brutal:on', 'vanilla:hard:off'])
+        self.assertEqual({(row['mod'], row['difficulty'], row['research']) for row in race['protocol']['contexts']},
+                         {('dunecity', 'brutal', 'on'), ('vanilla', 'hard', 'off')})
+        self.assertTrue(all(row['size'] == 96 and row['base'] == 'cy' and row['spice'] == 'medium'
+                            for row in race['protocol']['contexts']))
+        self.assertEqual(plan['protocol']['contexts'][0]['difficulty'], 'hard')
+        with self.assertRaisesRegex(ValueError, 'Race contexts'):
+            search.race_plan([plan], [elite], list(range(10, 18)), self.registry, ['unknown:hard:off'])
+
 
 if __name__ == '__main__':
     unittest.main()

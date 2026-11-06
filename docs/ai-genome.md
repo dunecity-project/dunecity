@@ -192,6 +192,10 @@ seeds from the entire recorded selection ancestry and fewer than eight seeds.
 Each round re-measures retained non-default parents against the same-source
 default on its new common seeds, so subsequent `(mu+lambda)` survival compares
 parents and children rather than silently discarding the parents.
+`race --contexts MOD:DIFFICULTY:RESEARCH ...` expands held-out coverage while
+retaining the selecting plan's size/base/spice. For example, City Brutal OFF/ON
+and classic Hard/Brutal lanes test context/interaction concerns rather than
+turning one descriptive selfplay difference into a blanket gene rejection.
 
 Genes outside the screened plan, for example newly registered default-OFF
 switches, enter a round through `evolve --seed-genes`: each gets one child, the
@@ -203,6 +207,11 @@ match that exact source, genotype, save/check/registry receipts and effective
 game rule (explicit genome value, otherwise the frozen save's registered rule).
 Missing, errored or capped runs remain unverified; retries never erase a measured
 failure. A genotype is feasible only when every registered case passed.
+`--seed-combinations GENE_A,GENE_B,...` adds an explicit joint child alongside
+individual seeds, within the same offspring count. It inherits the best-ranked
+parent and sets those loci to their registered alternatives. This gives a
+promising combined selfplay treatment real head-to-head evidence without
+inventing its fitness or attributing a joint effect to one component.
 
 Fitness is **not a weighted sum**. Report independent strength (placement/wins,
 kills, survival), army/economy and behaviour objectives, Pareto fronts and coverage.
@@ -314,9 +323,12 @@ python3 tests/ai/genome_search.py interactions --genes focus_fire converge \
 python3 tests/ai/genome_search.py evolve --plan SCREEN.json.gz \
   --report REPORT/report.json.gz --payoffs REPORT/payoffs.json --generation 1 \
   --seed-genes city_compact_power continuous_research --race-seeds 110601 110602 \
+  --seed-combinations existing_composition_unit_choice,buffered_heavy_production,income_heavy_factories \
   --behaviour BEHAVIOUR/games.csv --evaluation-rev FULL_COMMIT_SHA --output ROUND1.json.gz
 python3 tests/ai/genome_search.py race --plan SCREEN.json.gz ROUND1.json.gz \
-  --elites ELITE... --seeds EIGHT_HELD_OUT_SEEDS... --output RACE.json.gz
+  --elites ELITE... --seeds EIGHT_HELD_OUT_SEEDS... \
+  --contexts dunecity:hard:off dunecity:brutal:off dunecity:brutal:on \
+  --output RACE.json.gz
 ```
 
 Exact-save behaviour input and immutable cluster evaluation (repeat per case;

@@ -716,7 +716,8 @@ FEASIBILITY_RANK = {'feasible': 0, 'unverified': 1, 'infeasible': 2}
 
 
 def evolve(plan, report, registry, generation, population=24, offspring=24, seed=20261106,
-           payoffs=None, successes=0, attempts=0, step=1, seed_genes=(), feasibility=None, seeds=None):
+           payoffs=None, successes=0, attempts=0, step=1, seed_genes=(), feasibility=None, seeds=None,
+           seed_combinations=()):
     """One (mu+lambda) league round; every child also meets the same-source default.
 
     feasibility maps genotype digests to feasible/unverified/infeasible behaviour
@@ -726,7 +727,13 @@ def evolve(plan, report, registry, generation, population=24, offspring=24, seed
     """
     if population < 4 or offspring < 1:
         raise ValueError('Population >=4 and offspring >0 required')
-    genes = selected_genes(registry, list(dict.fromkeys(list(plan.get('search_genes', [])) + list(seed_genes))))
+    if any(len(group) < 2 or len(set(group)) != len(group) for group in seed_combinations):
+        raise ValueError('Seed combinations need at least two distinct registered genes')
+    seed_groups = [(gene,) for gene in seed_genes] + [tuple(group) for group in seed_combinations]
+    if len(seed_groups) > offspring:
+        raise ValueError('Seeded genes/combinations exceed the requested offspring count')
+    loci = list(plan.get('search_genes', [])) + [gene for group in seed_groups for gene in group]
+    genes = selected_genes(registry, list(dict.fromkeys(loci)))
     if not genes:
         raise ValueError('No mutable genes')
     known = {gene['id']: gene for gene in genes}
@@ -776,13 +783,14 @@ def evolve(plan, report, registry, generation, population=24, offspring=24, seed
         children.append(child)
         lineage.append(dict(record, genome=child['id']))
         return True
-    for gene_id in seed_genes:
-        gene = known[gene_id]
+    for group in seed_groups:
+        overrides = {gene_id: alternative(known[gene_id]) for gene_id in group}
         for name in ordered:
             base = genomes[name]
-            child = finish(genome('offspring', dict(base.get('values', {}), **{gene_id: alternative(gene)}),
+            child = finish(genome('offspring', dict(base.get('values', {}), **overrides),
                                   copy.deepcopy(base.get('expression', []))), registry)
-            if admit(child, dict(parents=[name], mutations=[gene_id], role='seeded_gene')):
+            if admit(child, dict(parents=[name], mutations=list(group),
+                                 role='seeded_combination' if len(group) > 1 else 'seeded_gene')):
                 break
     for _ in range(offspring * 100):
         if len(children) >= offspring:
@@ -1020,6 +1028,8 @@ def parser():
     evolution.add_argument('--mutation-step', type=int, default=1)
     evolution.add_argument('--seed-genes', nargs='+', default=[],
                            help='Genes outside the plan (e.g. new switches): one child each, best parent + alternative')
+    evolution.add_argument('--seed-combinations', nargs='+', default=[], metavar='GENE_A,GENE_B',
+                           help='One explicit joint child per comma-separated group, within the offspring count')
     evolution.add_argument('--behaviour', type=Path, nargs='+', default=[],
                            help='genome-behaviors.py games.csv results: feasible genomes rank first')
     evolution.add_argument('--evaluation-rev', help='Exact 40-character candidate source required with --behaviour')
@@ -1028,6 +1038,8 @@ def parser():
     race.add_argument('--plan', type=Path, required=True, nargs='+', help='Plans containing the elites')
     race.add_argument('--elites', nargs='+', required=True)
     race.add_argument('--seeds', type=int, nargs='+', required=True, help='Held-out seeds never used for selection')
+    race.add_argument('--contexts', nargs='+', metavar='MOD:DIFFICULTY:RESEARCH',
+                      help='Held-out context coverage; preserve each selecting context size/base/spice')
     race.add_argument('--output', type=Path, required=True)
     run = commands.add_parser('run')
     run.add_argument('--plan', type=Path, required=True)
@@ -1080,7 +1092,7 @@ def feasibility_table(paths, cases=None, source=None, genomes=(), registry=None)
             for identity in sorted(identities) if identity}
 
 
-def race_plan(plans, elites, seeds, registry):
+def race_plan(plans, elites, seeds, registry, contexts=None):
     """Held-out confirmation: each elite against the same-source default."""
     pool = {}
     for plan in plans:
@@ -1097,6 +1109,17 @@ def race_plan(plans, elites, seeds, registry):
         genome_model.validate_genome(item, registry)
     protocol = copy.deepcopy(plans[0]['protocol'])
     protocol['seeds'] = list(seeds)
+    if contexts:
+        expanded = {}
+        for specification in contexts:
+            fields = specification.split(':')
+            if (len(fields) != 3 or fields[0] not in ('vanilla', 'dune2r', 'dunecity')
+                    or fields[1] not in ('medium', 'hard', 'brutal') or fields[2] not in ('off', 'on')):
+                raise ValueError('Race contexts need MOD:DIFFICULTY:RESEARCH')
+            for original in protocol['contexts']:
+                context = dict(original, mod=fields[0], difficulty=fields[1], research=fields[2])
+                expanded[canonical(context)] = context
+        protocol['contexts'] = list(expanded.values())
     output = dict(schema_version=1, kind='race', genomes=[genome(CONTROL)] + racers,
                   matchups=[[item['id'], CONTROL] for item in racers],
                   designs=[dict(stage='candidate', genome=item['id']) for item in racers],
@@ -1139,14 +1162,14 @@ def main():
         result = evolve(plan, load_json(args.report), registry, args.generation,
                         args.population, args.offspring, args.seed, load_json(args.payoffs) if args.payoffs else None,
                         args.successes, args.attempts, args.mutation_step, args.seed_genes,
-                        feasibility, args.race_seeds)
+                        feasibility, args.race_seeds, [group.split(',') for group in args.seed_combinations])
         result['behaviour_source_commit'] = args.evaluation_rev
         result['plan_sha256'] = digest({key: value for key, value in result.items() if key != 'plan_sha256'})
         save_json(args.output, result)
         print(canonical(dict(generation=result['generation'], offspring=len(result['lineage']),
                              frozen_opponents=len(result['hall_of_fame']), matchups=len(result['matchups']))))
     elif args.command == 'race':
-        result = race_plan([load_json(path) for path in args.plan], args.elites, args.seeds, registry)
+        result = race_plan([load_json(path) for path in args.plan], args.elites, args.seeds, registry, args.contexts)
         save_json(args.output, result)
         print(canonical(dict(elites=len(result['matchups']), seeds=len(args.seeds), plan_sha256=result['plan_sha256'])))
     elif args.command == 'run':
