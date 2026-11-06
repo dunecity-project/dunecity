@@ -92,28 +92,66 @@ int runOwnershipProbe() {
         GameInitSettings copy(input);
         if(copy.getGameOptions().maximumNumberOfConstructionYardsOverride != before+1)
             throw std::runtime_error("Yard cap lost in network/save setup");
-        std::string legacy(output.getData(),output.getDataLength());
-        const auto marker = legacy.rfind("IDOM");
-        if(marker == std::string::npos) throw std::runtime_error("MOD18 fixture missing");
-        // Everything after MOD4's payload: the yard limit, the original-damage byte,
-        // MOD7's factor count plus one factor per house, MOD8's plan-sites byte, MOD9's
-        // ground-steps byte, MOD10's two planned-construction bytes, MOD11–MOD14,
-        // MOD15's research/trooper-AA, MOD16's population, MOD18's pace/damage/scenery.
-        const auto afterMod4 = 4 + 1
-            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size() + 1 + 1 + 2 + 1 + 6 + 1 + 1 + 2 + 1 + 6;
-        legacy[marker]='4'; legacy.resize(legacy.size()-afterMod4);
-        IMemoryStream oldInput(legacy.data(),legacy.size());
+        // Freeze the historical MOD4 layout instead of slicing the latest
+        // marker/tail, so new setup rules cannot corrupt this old-save fixture.
+        const auto& setup = game->gameInitSettings;
+        const auto& options = setup.getGameOptions();
+        const auto& houses = setup.getHouseInfoList();
+        OMemoryStream legacy; legacy.open();
+        legacy.writeSint8(static_cast<Sint8>(setup.gameType));
+        legacy.writeSint8(setup.houseID);
+        legacy.writeString(setup.filename);
+        legacy.writeString(setup.filedata);
+        legacy.writeUint8(setup.mission);
+        legacy.writeUint32(setup.alreadyPlayedRegions);
+        legacy.writeUint32(setup.alreadyShownTutorialHints);
+        legacy.writeUint32(setup.randomSeed);
+        legacy.writeBool(setup.multiplePlayersPerHouse);
+        legacy.writeUint32(options.gameSpeed);
+        legacy.writeBool(options.concreteRequired);
+        legacy.writeBool(false); // Reserved degradation rule.
+        legacy.writeBool(options.fogOfWar);
+        legacy.writeBool(options.startWithExploredMap);
+        legacy.writeBool(options.instantBuild);
+        legacy.writeBool(options.onlyOnePalace);
+        legacy.writeBool(options.rocketTurretsNeedPower);
+        legacy.writeBool(options.sandwormsRespawn);
+        legacy.writeBool(options.killedSandwormsDropSpice);
+        legacy.writeBool(options.manualCarryallDrops);
+        legacy.writeSint32(options.maximumNumberOfUnitsOverride);
+        legacy.writeSint32(options.maximumNumberOfHarvestersOverride);
+        legacy.writeBool(options.immortalHumanPlayer);
+        legacy.writeUint32(houses.size());
+        for(const auto& house : houses) house.save(legacy);
+        legacy.writeUint32(0x4D4F4434); // MOD4.
+        legacy.writeString(setup.modName);
+        legacy.writeString(setup.modChecksum);
+        legacy.writeUint32(houses.size());
+        for(const auto& house : houses) legacy.writeSint32(house.colorOfHouse);
+        legacy.writeUint32(houses.size());
+        for(const auto& house : houses)
+            legacy.writeUint32(static_cast<Uint32>(house.graphicsSkin));
+        legacy.writeUint32(static_cast<Uint32>(setup.campaignGraphicsSkin));
+        legacy.writeString(setup.modRevisionHash);
+        legacy.writeUint32(setup.modRevisionVersion);
+        legacy.writeString(setup.mapRevisionHash);
+        legacy.writeUint32(setup.mapRevisionVersion);
+        legacy.writeString(setup.mapRevisionManifest);
+        legacy.writeUint32(0x79617264);
+        IMemoryStream oldInput(legacy.getData(), legacy.getDataLength());
         GameInitSettings old(oldInput);
         if(old.getGameOptions().maximumNumberOfConstructionYardsOverride != -1)
             throw std::runtime_error("Older setup did not default to unlimited yards");
         for(const auto& houseInfo : old.getHouseInfoList())
             if(houseInfo.spiceIncomeMultiplier != SpiceIncome::kDefault)
                 throw std::runtime_error("Older setup did not default to 1x spice income");
-        if(copy.getHouseInfoList().size() != game->gameInitSettings.getHouseInfoList().size())
+        if(oldInput.readUint32() != 0x79617264)
+            throw std::runtime_error("Older setup consumed following save data");
+        if(copy.getHouseInfoList().size() != setup.getHouseInfoList().size())
             throw std::runtime_error("Yard cap roundtrip lost a house row");
         rules.maximumNumberOfConstructionYardsOverride = -1;
         game->gameInitSettings.setGameOptions(rules);
-        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD15 roundtrip and MOD4 defaults pass");
+        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; setup roundtrip and MOD4 defaults preserve following save data");
     }
     UnitBase* unit = owner->createUnit(Unit_Tank, true);
     unit->doSetAttackMode(GUARD);

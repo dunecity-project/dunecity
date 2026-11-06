@@ -31,25 +31,45 @@ void runTaxReceiptsProbe(Game& game) {
            || restored.getHarvestedSpice() != 123 || input.readUint32() != 0x74617831)
             throw std::runtime_error("Tax save roundtrip or following fields changed");
     }
-    // A 9840 House lacks the tax slot, spice income factor, measured deviation
-    // counters, 9878 sale/research tail and 9881 technology research tail.
-    std::vector<char> legacy(bytes.getData(), bytes.getData() + bytes.getDataLength());
-    OMemoryStream tornieTail; tornieTail.open();
-    tornieTail.writeUint32(source.getStructuresSold());
-    tornieTail.writeUint32(source.getSaleCredits());
-    source.saveRadarResearch(tornieTail);
-    constexpr size_t technologyTailBytes = 4 * sizeof(Uint32);
-    legacy.erase(legacy.end() - sizeof(Uint32) - tornieTail.getDataLength() - technologyTailBytes,
-                 legacy.end() - sizeof(Uint32));
-    // The 9851 prefix is 96 bytes, followed by 56 bytes per item reward record.
-    OMemoryStream counterBytes; counterBytes.open(); source.getDeviationCounters().save(counterBytes);
-    const size_t counterOffset = 96 + 56 * Num_ItemID;
-    legacy.erase(legacy.begin() + counterOffset,
-                 legacy.begin() + counterOffset + counterBytes.getDataLength());
-    legacy.erase(legacy.begin() + 35, legacy.begin() + 39); // Spice income factor (9851).
-    legacy.erase(legacy.begin() + 27, legacy.begin() + 35);
+    // Write the historical 9840 layout directly. Trimming today's save tail
+    // makes this compatibility fixture change whenever a new field is appended.
+    OMemoryStream legacy; legacy.open();
+    legacy.writeUint8(source.houseID);
+    legacy.writeUint8(source.teamID);
+    legacy.writeBool(source.autoRepairEnabled);
+    legacy.writeFixPoint(source.storedCredits);
+    legacy.writeFixPoint(source.startingCredits);
+    legacy.writeFixPoint(source.cityCredits);
+    legacy.writeSint32(source.maxUnits);
+    legacy.writeSint32(source.maxHarvesters);
+    legacy.writeSint32(source.quota);
+    legacy.writeBools(source.bHadContactWithEnemy, source.bHadDirectContactWithEnemy,
+                      source.isAIActive, source.doneFullScaleAttack);
+    legacy.writeUint32(source.unitBuiltValue);
+    legacy.writeUint32(source.structureBuiltValue);
+    legacy.writeUint32(source.militaryValue);
+    legacy.writeUint32(source.killValue);
+    legacy.writeUint32(source.lossValue);
+    legacy.writeUint32(source.numBuiltUnits);
+    legacy.writeUint32(source.numBuiltStructures);
+    legacy.writeUint32(source.destroyedValue);
+    legacy.writeUint32(source.numDestroyedUnits);
+    legacy.writeUint32(source.numDestroyedStructures);
+    legacy.writeUint32(Num_ItemID);
+    for(int i = 0; i < Num_ItemID; ++i) {
+        source.combatRewards[i].save(legacy);
+        legacy.writeSint32(source.numItemDamageInflicted[i]);
+        legacy.writeSint32(source.numItemLosses[i]);
+    }
+    legacy.writeFixPoint(source.harvestedSpice);
+    legacy.writeSint32(source.producedPower);
+    legacy.writeSint32(source.powerUsageTimer);
+    source.choam.save(legacy);
+    legacy.writeUint32(0); // No AI teams or players in this standalone House.
+    legacy.writeUint32(0);
+    legacy.writeUint32(0x74617831);
     game.loadedSavegameVersion = 9840;
-    IMemoryStream oldInput(legacy.data(), legacy.size());
+    IMemoryStream oldInput(legacy.getData(), legacy.getDataLength());
     {
         House restored(oldInput);
         if(restored.getCityTaxReceipts() != 0 || restored.getSpiceIncomeMultiplier() != 1
