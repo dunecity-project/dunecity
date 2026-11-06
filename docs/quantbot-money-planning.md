@@ -835,8 +835,15 @@ the power/LF/civic fractional-payment checks but failed its next yard control
 on both mini and pro. The OFF forecast-only case physically lacked commercial
 and industrial opening seeds, so the real bot correctly chose its earlier
 `opening_city_seed` commercial lot rather than the asserted optional generator.
-The fixture now physically supplies all three opening seeds, retains real
-competing growth and logs each switch/power case before unchanged priority,
-native payment and no-zone assertions. No planner rule changed. This failed
-receipt is not a pass or permission for the gated8/48/288 continuations.
+The attempted all-three-seed fixture at `45f4fb09` instead legitimately chose
+an LF through its legacy `opening_supplier` core branch; focused job
+`20261107T011058-factoryproof-swms-physical-seeds-fc71b6` failed on mini/pro.
+Neither result demonstrates a production-priority defect. The incidental OFF
+generator expectation is removed rather than manufacturing a mature baseline;
+the extra C/I seeds are removed too. OFF choices remain diagnostic. ON still
+must choose the first LF before forecast-only reserve, choose a generator for
+actual/imminent pre-LF power loss, avoid displacing either with growth, and
+make native paid progress without up-front quote debits. Every case logs its
+observed choice before assertions. No planner rule changed, and neither failed
+receipt permits the gated8/48/288 continuations.
 

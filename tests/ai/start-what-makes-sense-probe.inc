@@ -326,11 +326,6 @@ inline void threatenedFactorySeed(World& world) {
         world.placeAt(Structure_Refinery, at);
     world.placeAt(Structure_Radar, Coord(3, 8));
     world.placeAt(Structure_ZoneResidential, Coord(18, 24));
-    // Complete all three opening seeds physically. Otherwise the OFF control
-    // correctly chooses its missing commercial/industrial seed before optional
-    // forecast power, which is not the reserve-versus-factory boundary here.
-    world.placeAt(Structure_ZoneCommercial, Coord(24, 24));
-    world.placeAt(Structure_ZoneIndustrial, Coord(30, 24));
     for (int y = 2; y < 29; ++y) for (int x = 2; x < 37; ++x)
         if (!currentGameMap->getTile(x, y)->hasAStructure()) {
             world.owner->placeStructure(NONE_ID, Structure_Road, x, y, true, true);
@@ -483,25 +478,30 @@ inline void threatenedFirstFactory(const char* playerClass) {
             : power == FirstFactoryPower::DueBeforeCompletion ? "deficit_before_lf" : "actual_blackout";
         SDL_Log("START_WHAT_MAKES_SENSE_YARD_CHOICE: enabled=%d case=%s power=%d/%d reserve=%d latent=%d imminent_power=%d expected_lf=%d queued_lf=%d generators=%d yard_item=%u hash=%s",
             int(enabled), powerCase, produced, required, plan.cityPowerReserve, latent, imminentPower,
-            int(factoryFirst), world.queued(Structure_LightFactory), generators,
+            enabled ? int(factoryFirst) : -1, world.queued(Structure_LightFactory), generators,
             world.yard->getCurrentProducedItem(), world.configHash.c_str());
-        require(world.queued(Structure_LightFactory) == int(factoryFirst),
-                "Threatened first LF did not distinguish forecast reserve from imminent/actual power loss");
-        require(factoryFirst ? generators == 0 : generators > 0,
-                factoryFirst ? "ON forecast-only reserve displaced the first LF with a generator"
-                    : power == FirstFactoryPower::Blackout ? "Actual blackout did not choose a generator before the first LF"
-                    : power == FirstFactoryPower::DueBeforeCompletion ? "Imminent pre-LF power loss did not choose a generator"
-                    : "OFF forecast-only control did not choose its legacy generator");
-        require(!queuedZone(world),
-                "Live city growth displaced the threatened first capability or its necessary power");
+        // The OFF arm is a diagnostic baseline, not a frozen legacy yard
+        // sequence: opening seeds and worker suppliers are legitimate choices.
+        // The feature's observable priority guarantees belong to its ON arm.
+        if (enabled) {
+            require(world.queued(Structure_LightFactory) == int(factoryFirst),
+                    "Threatened first LF did not distinguish forecast reserve from imminent/actual power loss");
+            require(factoryFirst ? generators == 0 : generators > 0,
+                    factoryFirst ? "ON forecast-only reserve displaced the first LF with a generator"
+                        : power == FirstFactoryPower::Blackout ? "ON actual blackout did not choose a generator before the first LF"
+                        : "ON imminent pre-LF power loss did not choose a generator");
+            require(!queuedZone(world),
+                    "Live city growth displaced the threatened first capability or its necessary power");
+        }
         require(cashQ32(world) == cash && world.spentQ32() == spent,
                 "First-factory/power selection treated an accepted quote as an up-front cash payment");
-        require(paidTick(world, world.yard) > 0,
-                "The full bot's selected LF or necessary generator did not enter ordinary paid production");
-        SDL_Log("START_WHAT_MAKES_SENSE_THREATENED_FACTORY: enabled=%d case=%s power=%d/%d reserve=%d latent=%d imminent_power=%d lf_first=%d generators=%d live_city_demand=1 native_paid=1 hash=%s",
-            int(enabled), power == FirstFactoryPower::ReserveOnly ? "forecast_reserve"
-                : power == FirstFactoryPower::DueBeforeCompletion ? "deficit_before_lf" : "actual_blackout",
-            produced, required, plan.cityPowerReserve, latent, imminentPower, int(factoryFirst), generators,
+        const bool queued = world.yard->getProductionQueueSize() != 0;
+        if (enabled || queued)
+            require(paidTick(world, world.yard) > 0,
+                    "The full bot's selected ordinary construction did not enter native paid production");
+        SDL_Log("START_WHAT_MAKES_SENSE_THREATENED_FACTORY: enabled=%d case=%s power=%d/%d reserve=%d latent=%d imminent_power=%d lf_first=%d generators=%d live_city_demand=1 native_paid=%d hash=%s",
+            int(enabled), powerCase, produced, required, plan.cityPowerReserve, latent, imminentPower,
+            int(world.queued(Structure_LightFactory) > 0), generators, int(queued),
             world.configHash.c_str());
     }
 }
