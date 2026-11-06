@@ -533,9 +533,9 @@ if args.skirmish_ffa_size and (args.custom_map or args.duel_map_size or not args
     parser.error('--skirmish-ffa-size needs --match-sides and no --custom-map or --duel-map-size.')
 if args.match_sides and (not (args.custom_map or args.skirmish_ffa_size) or args.roster or args.free_for_all):
     parser.error('--match-sides needs --custom-map or --skirmish-ffa-size and replaces --roster/--free-for-all.')
-if args.genome_phase_dir and (not (args.match_sides or args.load_save)
+if args.genome_phase_dir and (not (args.match_sides or args.load_save or (args.scenario and args.scenario_sides))
                               or not (args.genome_phase_dir / 'schedule.ini').is_file()):
-    parser.error('--genome-phase-dir needs --match-sides or --load-save and an existing schedule.ini.')
+    parser.error('--genome-phase-dir needs --match-sides, --load-save or --scenario-sides and an existing schedule.ini.')
 if args.quantbot_object and not all(path.is_file() for path in args.quantbot_object):
     parser.error('--quantbot-object must name existing object files.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':

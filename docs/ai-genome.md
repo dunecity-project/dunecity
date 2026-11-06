@@ -306,6 +306,24 @@ A default recommendation requires all of:
 
 1. All required real-issue and synthetic behaviour checks pass on the exact
    candidate source/config; missing/censored evidence is unverified.
+   The exact candidate must additionally **win as Brutal Atreides against four
+   allied AIPlayer Hard houses within 40 game minutes on every original vanilla
+   seed (six), and the separate saved Dune2R gate (seven)**. Survival, draws,
+   timeouts, late wins and a default-OFF CTest pass do not qualify a candidate.
+   The default CTests remain unchanged. Candidate `scenario-matrix.py` accepts
+   `--manifest-b64 INLINE_BASE64 --genome CANDIDATE --qualification-source FULL_SHA`
+   only with `--tier full --check` and the unchanged mandatory cells
+   `^aaa/(qb-v-4ah/vanilla|qb-v-4ah-saved/Dune2R)$`; use a fresh per-candidate
+   results directory. Only the actual Brutal Atreides receives its resolved
+   opening/mid/late overlays. Compressed per-seed proof records native roster,
+   source/probe and genome hashes, effective options/map, applied phases and
+   exact cycle/win time. Missing/stale/wrong-source/wrong-genome receipts remain
+   **UNVERIFIED**; a valid loss/draw/game timeout/late win rejects qualification.
+   `evolve --qualification RESULTS/games.csv ...` and
+   `qualify --plan PLAN --evaluation-rev FULL_SHA --qualification RESULTS/games.csv
+   --behaviour BEHAVIOUR/games.csv --output QUALIFICATION.json` enforce these
+   native gates alongside issue checks. `qualify` is hard feasibility only,
+   never production promotion or a substitute for held-out/history evidence.
 2. Same-source paired held-out strength is better than the current default:
    simultaneous 95% lower bound above zero overall, with no meaningful context
    regression (placement tolerance 0.02, not an inferred equivalence from low N).

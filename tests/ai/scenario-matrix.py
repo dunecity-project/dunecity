@@ -56,6 +56,7 @@ sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
 from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
+import genome_qualification  # noqa: E402
 
 MP = root / 'data/maps/multiplayer'
 AAA_MAP = root / 'data/maps/singleplayer/5P - 128x128 - All against Atreides.ini'
@@ -74,7 +75,8 @@ DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
 CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
-               'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint')
+               'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint') \
+              + genome_qualification.FIELDS
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
@@ -302,6 +304,7 @@ def schedule(args):
     if getattr(args, 'minutes', None) is not None:
         for game in games:
             game['minutes'] = args.minutes
+    genome_qualification.validate_schedule(args, games)
     return games
 
 
@@ -389,6 +392,8 @@ def command(args, binary, game, out):
     if getattr(args, 'style', None):
         cmd += ['--scenario-style', args.style]
     options_path = game.get('options')
+    if getattr(args, 'genome', None):
+        options_path = out.with_suffix('.candidate') / 'game-options.ini'
     if getattr(args, 'game_options', None):
         options = configparser.ConfigParser(strict=False, interpolation=None)
         options.optionxform = str
@@ -408,6 +413,8 @@ def command(args, binary, game, out):
         return cmd
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
+    if getattr(args, 'genome', None):
+        cmd += ['--genome-phase-dir', str(out.with_suffix('.candidate'))]
     cmd += ['--skirmish', game['skirmish']] if game['skirmish'] else ['--custom-map', str(game['path'])]
     return cmd
 
@@ -426,6 +433,14 @@ def play(args, scratch, binary, game):
     shutil.rmtree(out, ignore_errors=True)
     started = time.time()
     env = dict(os.environ)
+    candidate_dir = out.with_suffix('.candidate')
+    if getattr(args, 'genome', None):
+        # Explicit, candidate-only transport; never inherit a style or another run's overlays.
+        env.pop('BALANCE_SCENARIO_STYLE', None)
+        env.pop('BALANCE_GENOME_PHASE_DIR', None)
+        shutil.rmtree(candidate_dir, ignore_errors=True)
+        genome_qualification.prepare(args, game, candidate_dir)
+        env['BALANCE_SCENARIO_DUMP_MAP'] = str(candidate_dir / 'map.ini')
     if getattr(args, 'economy_samples', False):
         env['BALANCE_DUNECITY_AUDIT'] = '1'
     outcome = subprocess.run(command(args, binary, game, out), cwd=root, capture_output=True, text=True, env=env)
@@ -460,6 +475,9 @@ def play(args, scratch, binary, game):
     row['winner'] = '+'.join(sorted({code_of.get(int(h['house']), '?') for h in houses if h['team'] == winner})) \
         if winner not in ('', '0', '-1') and not campaign else ''
     results = Path(args.results)
+    if getattr(args, 'genome', None):
+        row.update(genome_qualification.capture(args, game, candidate_dir, lines, result, houses, binary, row, summary))
+        shutil.rmtree(candidate_dir, ignore_errors=True)
     if row['error']:
         (results / f'failed-{out.name}.txt').write_text(game['id'] + '\n' + outcome.stdout[-4000:] + '\n'
                                                        + outcome.stderr[-4000:] + '\n' + '\n'.join(lines[-80:]))
@@ -552,6 +570,8 @@ def run(args):
                     print(f'[{count}/{len(todo)} {round(time.time() - started)} s] {row["id"]} -> '
                           f'{outcome_label(row)} {row["winner"]} ({row["minutes"]} min, {row["wall_s"]} s wall)'
                           f'{" " + row["error"] if row["error"] else ""}', flush=True)
+    if getattr(args, 'genome', None) and not genome_qualification.check_run(args):
+        sys.exit(1)
     if args.tier == 'smoke' or getattr(args, 'check', False):
         sys.exit(0 if smoke_checks(args, results) else 1)
 
@@ -1017,6 +1037,10 @@ parser.add_argument('--style', help='A play style (tests/ai/play-styles/<style>.
 parser.add_argument('--compare', dest='compare_dirs', nargs=2, metavar=('CONTROL', 'CANDIDATE'),
                     help='Paired A/B of two results directories over their common game ids (ladder: the stronger '
                          'side; team: the Hard team; campaign: the Hard partner won)')
+parser.add_argument('--manifest-b64', help='Inline genome manifest for candidate-specific mandatory AllAgainst gates')
+parser.add_argument('--genome', help='Actual candidate id; overrides only the Brutal Atreides, never allied Hard opponents')
+parser.add_argument('--qualification-source', help='Exact full candidate source SHA; stale/default receipts cannot qualify')
+parser.add_argument('--phase-minutes', type=int, nargs=3, default=[0, 10, 20], metavar=('OPEN', 'MID', 'LATE'))
 args = parser.parse_args()
 if args.compare_dirs:
     compare(args)

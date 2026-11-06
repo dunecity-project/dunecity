@@ -22,6 +22,7 @@ from fractions import Fraction
 from pathlib import Path
 
 import genome_model
+import genome_qualification
 
 ROOT = Path(__file__).resolve().parents[2]
 BEHAVIOUR_CHECKS = Path(__file__).with_name('genome-behavior-checks.json')
@@ -1033,6 +1034,8 @@ def parser():
     evolution.add_argument('--behaviour', type=Path, nargs='+', default=[],
                            help='genome-behaviors.py games.csv results: feasible genomes rank first')
     evolution.add_argument('--evaluation-rev', help='Exact 40-character candidate source required with --behaviour')
+    evolution.add_argument('--qualification', type=Path, nargs='+', default=[],
+                           help='Actual candidate six-seed vanilla and seven-seed Dune2R mandatory win receipts')
     evolution.add_argument('--race-seeds', type=int, nargs='+', help='Common seeds for this round (default: plan seeds)')
     race = commands.add_parser('race')
     race.add_argument('--plan', type=Path, required=True, nargs='+', help='Plans containing the elites')
@@ -1041,6 +1044,13 @@ def parser():
     race.add_argument('--contexts', nargs='+', metavar='MOD:DIFFICULTY:RESEARCH',
                       help='Held-out context coverage; preserve each selecting context size/base/spice')
     race.add_argument('--output', type=Path, required=True)
+    qualify = commands.add_parser('qualify', help='Hard candidate qualification only; never authorizes default promotion')
+    qualify.add_argument('--plan', type=Path, required=True)
+    qualify.add_argument('--evaluation-rev', required=True)
+    qualify.add_argument('--behaviour', type=Path, nargs='+', default=[])
+    qualify.add_argument('--qualification', type=Path, nargs='+', default=[])
+    qualify.add_argument('--phase-minutes', type=int, nargs=3, default=[0, 10, 20])
+    qualify.add_argument('--output', type=Path, required=True)
     run = commands.add_parser('run')
     run.add_argument('--plan', type=Path, required=True)
     run.add_argument('--output', type=Path, required=True)
@@ -1055,10 +1065,12 @@ def parser():
     return parser
 
 
-def feasibility_table(paths, cases=None, source=None, genomes=(), registry=None):
+def feasibility_table(paths, cases=None, source=None, genomes=(), registry=None, qualification_paths=(),
+                      phase_minutes=(0, 10, 20)):
     """Exact-source/config hard checks; no stale passes or last-write-wins retries."""
     if not source or not re.fullmatch(r'[0-9a-f]{40}', source):
         raise ValueError('--behaviour requires --evaluation-rev with the exact full source SHA')
+    mandatory_native = cases is None
     checks_sha = hashlib.sha256(BEHAVIOUR_CHECKS.read_bytes()).hexdigest() if cases is None else None
     cases = load_json(BEHAVIOUR_CHECKS)['cases'] if cases is None else cases
     definitions = {case['id']: case for case in cases}
@@ -1088,8 +1100,13 @@ def feasibility_table(paths, cases=None, source=None, genomes=(), registry=None)
     def aggregate(states):
         return ('infeasible' if 'infeasible' in states else 'feasible'
                 if states and all(state == 'feasible' for state in states) else 'unverified')
-    return {identity: aggregate([aggregate(verdicts[identity].get(case_id, [])) for case_id in definitions])
-            for identity in sorted(identities) if identity}
+    result = {identity: aggregate([aggregate(verdicts[identity].get(case_id, [])) for case_id in definitions])
+              for identity in sorted(identities) if identity}
+    if mandatory_native:
+        native = genome_qualification.verdicts(qualification_paths, source, genomes, phase_minutes)
+        result = {identity: aggregate([state, native.get(identity, {}).get('status', 'unverified')])
+                  for identity, state in result.items()}
+    return result
 
 
 def race_plan(plans, elites, seeds, registry, contexts=None):
@@ -1132,7 +1149,7 @@ def race_plan(plans, elites, seeds, registry, contexts=None):
 
 def main():
     args = parser().parse_args()
-    registry = genome_model.load_registry() if args.command in ('screen', 'interactions', 'evolve', 'race') else None
+    registry = genome_model.load_registry() if args.command in ('screen', 'interactions', 'evolve', 'race', 'qualify') else None
     if args.command == 'screen':
         genes = selected_genes(registry, args.genes, args.switches_only)
         plan = add_protocol(screen_plan(registry, genes, not args.one_alternate, not args.no_fraction), args)
@@ -1157,8 +1174,11 @@ def main():
         print(report['recommendation'])
     elif args.command == 'evolve':
         plan = load_json(args.plan)
-        feasibility = (feasibility_table(args.behaviour, source=args.evaluation_rev,
-                                        genomes=plan['genomes'], registry=registry) if args.behaviour else None)
+        if (args.behaviour or args.qualification) and not args.evaluation_rev:
+            raise ValueError('Candidate receipts require --evaluation-rev FULL_COMMIT_SHA')
+        feasibility = (feasibility_table(args.behaviour, source=args.evaluation_rev, genomes=plan['genomes'],
+                                        registry=registry, qualification_paths=args.qualification)
+                       if args.evaluation_rev else {genome_model.genome_id(item): 'unverified' for item in plan['genomes']})
         result = evolve(plan, load_json(args.report), registry, args.generation,
                         args.population, args.offspring, args.seed, load_json(args.payoffs) if args.payoffs else None,
                         args.successes, args.attempts, args.mutation_step, args.seed_genes,
@@ -1168,6 +1188,15 @@ def main():
         save_json(args.output, result)
         print(canonical(dict(generation=result['generation'], offspring=len(result['lineage']),
                              frozen_opponents=len(result['hall_of_fame']), matchups=len(result['matchups']))))
+    elif args.command == 'qualify':
+        plan = load_json(args.plan)
+        native = genome_qualification.verdicts(args.qualification, args.evaluation_rev, plan['genomes'], args.phase_minutes)
+        hard = feasibility_table(args.behaviour, source=args.evaluation_rev, genomes=plan['genomes'],
+                                 registry=registry, qualification_paths=args.qualification, phase_minutes=args.phase_minutes)
+        report = dict(source_commit=args.evaluation_rev, native_gates=native, feasibility=hard,
+                      promotion='NOT_AUTHORIZED: held-out head-to-head and rule-matched historical evidence required')
+        save_json(args.output, report)
+        print(canonical(report))
     elif args.command == 'race':
         result = race_plan([load_json(path) for path in args.plan], args.elites, args.seeds, registry, args.contexts)
         save_json(args.output, result)

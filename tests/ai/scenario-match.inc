@@ -220,6 +220,14 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
             int(game.isObserving()), style && *style ? style : "default");
     if (const char* path = std::getenv("BALANCE_SCENARIO_DUMP_MAP"))
         std::ofstream(path, std::ios::binary) << init.getFiledata();
+    const char* genomeDirectory = std::getenv("BALANCE_GENOME_PHASE_DIR");
+    if (genomeDirectory) {
+        INIFile options(true, "Complete effective candidate qualification options");
+        writeGameOptionsToConfig(options, "Game Options", init.getGameOptions());
+        if (!options.saveChangesTo(std::string(genomeDirectory) + "/effective-options.ini"))
+            throw std::runtime_error("Cannot record candidate qualification options");
+        FormationDuel::applyGenomePhase(game);
+    }
     const House* tracked = game.getHouse(trackedHouse);
     // The houses that start with something: a campaign roster also names houses its map lacks.
     std::vector<const House*> houses;
@@ -242,6 +250,7 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     while (game.getGameCycleCount() < end) {
         ProbeDigest::periodic(game);
         const Uint32 now = game.getGameCycleCount();
+        if (genomeDirectory && now) FormationDuel::applyGenomePhase(game);
         const auto& triggers = game.getTriggerManager().getTriggers();
         for (auto it = triggers.begin(); it != triggers.end() && (*it)->getCycleNumber() == now; ++it) ++fired;
         game.updateGameState();
