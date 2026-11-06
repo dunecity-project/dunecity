@@ -403,7 +403,10 @@ bool QuantBot::chooseSensibleYardCapital(BuildPass& pass, BuilderTurn& turn, Yar
             return false;
         }
     }
-    if (choice < 0 || priority >= currentPriority
+    // Only urgent wants (emergency, power, worker/refinery/structural civic,
+    // the threatened first factory) pre-empt the yard's own ordered rules;
+    // ordinary capability and growth keep the existing yard sequence.
+    if (choice < 0 || priority >= currentPriority || priority >= 30
         || (yardTurn.civicClaimsYard && priority > 20)
         || (cityBootstrapNeeded(pass) && priority > 20)) return false;
     const auto& candidate = pass.capitalCandidates[choice];
