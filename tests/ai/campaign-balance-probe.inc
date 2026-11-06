@@ -76,6 +76,7 @@
 #include "simple-tech-saving-probe.inc"
 #include "research-lab-continuation-probe.inc"
 #include "research-lab-ai-probe.inc"
+#include "factory-continuation-probe.inc"
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -469,6 +470,11 @@ int runCampaignBalanceProbe() {
                 if (House* house = game->getHouse(h))
                     for (const auto& player : house->getPlayerList())
                         if (auto* bot = dynamic_cast<QuantBot*>(player.get())) FormationDuel::applyStyle(*bot, style);
+    if (std::getenv("BALANCE_FACTORY_CONTINUATION")) {
+        runFactoryContinuation(*game, minutes);
+        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
     if (std::getenv("BALANCE_RESEARCH_LAB_CONTINUATION")) {
         runResearchLabContinuation(*game, minutes);
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
