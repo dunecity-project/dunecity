@@ -575,7 +575,7 @@ int QuantBot::reachableAttackThreshold(int required) const {
     // waiting for 20,000 (25% of 80,000) on a 96x96 map was killed at home by Medium's first wave
     // of 10,000 in 23 of 72 ladder games; now Brutal 6,250, Hard 7,500, Medium 10,000. A starting
     // army that can strike keeps its thresholds (quantbot_ffa_army_deploys).
-    if (autonomousCustomArmy() && customWave.launched == 0
+    if (botConfig().force.openingMediumCap && autonomousCustomArmy() && customWave.launched == 0
         && initialMilitaryValue < ForceConcentrationPolicy::scaledReadiness(required, waveReadinessPercent())) {
         const auto& config = botConfig();
         const float own = config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent;

@@ -136,7 +136,7 @@ struct QuantBotConfig {
 
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
-    /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
+    /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, OpeningMediumCap, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
@@ -175,6 +175,9 @@ struct QuantBotConfig {
         /// for full readiness (ForceConcentrationPolicy::openingReadiness; docs/formations.md,
         /// "Scenario tests").
         bool openingReadiness;
+        /// Cap a held first wave's threshold at its own share of Medium's military limit.
+        /// Off removes only that cap; team readiness, reachability and later waves are unchanged.
+        bool openingMediumCap;
         /// Late game (docs/formations.md, "Free-for-all: finishing the game"): a wave hunter
         /// standing in an enemy turret's reach while it is not shooting an armed unit attacks
         /// that turret (ranged units from beyond it where they outrange it).

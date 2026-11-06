@@ -839,6 +839,62 @@ TEST_CASE("Exhausted army dispatch defaults on and independently round-trips bot
     std::filesystem::remove(savedPath);
 }
 
+TEST_CASE("Opening Medium cap defaults on and independently round-trips both hashed states",
+          "[ai][army][opening][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.openingMediumCap);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-opening-medium-cap-test.ini";
+    const auto savedPath = std::filesystem::temp_directory_path() / "quantbot-opening-medium-cap-saved-test.ini";
+    const auto savedBytes = [&](const QuantBotConfig& config) {
+        REQUIRE(config.save(savedPath.string()));
+        std::ifstream ini(savedPath, std::ios::binary);
+        REQUIRE(ini.good());
+        return std::string(std::istreambuf_iterator<char>(ini), std::istreambuf_iterator<char>());
+    };
+
+    for (const bool customized : {false, true}) {
+        QuantBotConfig baseline = defaults;
+        if (customized) {
+            baseline.force.waveReadinessPercent = 83;
+            baseline.force.openingReadiness = false;
+            baseline.force.exhaustedArmyDispatch = false;
+        }
+        for (const bool enabled : {false, true, false}) {
+            QuantBotConfig expected = baseline;
+            expected.force.openingMediumCap = enabled;
+            const auto expectedBytes = savedBytes(expected);
+            QuantBotConfig config = baseline;
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\nOpeningMediumCap="
+                    << (enabled ? "true" : "false") << '\n';
+            }
+            REQUIRE(config.applyOverrides(path.string()));
+            REQUIRE(config.force.openingMediumCap == enabled);
+            REQUIRE(config.getConfigHash() == expected.getConfigHash());
+            REQUIRE((config.getConfigHash() == baseline.getConfigHash()) == enabled);
+            REQUIRE(savedBytes(config) == expectedBytes);
+            // An absent override preserves either state rather than resetting the gene.
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\n";
+            }
+            REQUIRE(config.applyOverrides(path.string()));
+            REQUIRE(config.force.openingMediumCap == enabled);
+            REQUIRE(savedBytes(config) == expectedBytes);
+
+            QuantBotConfig restored;
+            restored.force.openingMediumCap = !enabled;
+            REQUIRE(restored.applyOverrides(savedPath.string()));
+            REQUIRE(restored.force.openingMediumCap == enabled);
+            REQUIRE(restored.getConfigHash() == expected.getConfigHash());
+            REQUIRE(savedBytes(restored) == expectedBytes);
+        }
+    }
+    std::filesystem::remove(path);
+    std::filesystem::remove(savedPath);
+}
+
 TEST_CASE("More rocket turrets defaults off and is independent loaded saved and hashed", "[ai][defence][config]") {
     QuantBotConfig config;
     REQUIRE_FALSE(config.force.moreRocketTurrets);
