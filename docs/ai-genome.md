@@ -203,19 +203,48 @@ feasible elites or releasable defaults until every hard gate is satisfied.
 
 ## Reported-save constraints
 
-Every reported issue becomes a permanent feasibility check. Private original
-saves are checksum-pinned and transported by the queue's frozen game-options
-mechanism; private bytes/profile copies stay out of git. Public synthetic engine
-fixtures exist, but the combined exact-save adapter and automatic hard-constraint
-ingestion are not complete. Consequently no genome is certified feasible and
-promotion remains blocked; tournament strength alone cannot clear this gate.
+Every reported issue becomes a permanent feasibility check.
+`genome-behavior-checks.json` registers nine required cases. Five exact-save
+adapters are implemented by `genome-behaviors.py` and the test-only
+`genome-behavior-probe.inc`:
 
-The issue inventory includes notbuilding (Ordos LF order, research beyond T2,
-lawful demanded city growth), notbuildingresearchlab, problem1/ainonuclear,
-Atreides no-expand, purple zero-power, Sardaukar LF/expansion and rocket-cover
-regressions. Preserve actual opportunity conditions and separate accepted orders,
-completed structures and later combat destruction. Two controllers must not turn
-one physical completion into two counted buildings.
+| Save | Hard checks during the fixed 15-game-minute continuation |
+| --- | --- |
+| notbuilding | Ordos (house 2) accepts a Light Factory order before losing its initial yard. Houses 2/5/6/7 make research progress when a legal start is observed; absent opportunity is not applicable. Positive, legal residential plots reach the real funding gate (CityZoning admission rule). |
+| problem1 / ainonuclear | No funded, available, legal nuclear-plant choice is rejected. At least one funded opportunity is required; none is not applicable. These frozen saves require no concrete, so price is the complete quote. |
+| notbuildingresearchlab | Houses 2 and 6 physically complete a Research Lab and start level-2 research. |
+| norocketturrets | The AI whose **loaded visual colour slot** is blue (Atreides slot 1, not an assumed house ID) orders or builds a rocket turret. Ambiguous blue identity is unverified. |
+
+Atreides no-expand, purple zero-power, Sardaukar LF/expansion and insufficient
+rocket cover remain registered but **unadapted/unverified**. Consequently no
+genome is certified feasible and promotion remains blocked. An all-not-applicable
+case is unverified, not a pass. Tournament strength cannot clear these gates.
+
+Private original saves are checksum-pinned; `--freeze` writes an input INI for
+the queue's existing frozen `--game-options` transport. Private save bytes,
+frozen inputs and profile copies stay outside git. Context pins the loaded map
+size/mod and uses `format=saved`; phases use elapsed continuation time and each
+saved controller's actual difficulty, including multiple QuantBots on one house.
+Non-QuantBot/shared-human houses are never overridden. An explicit game-rule
+gene changes Installments equally for all controllers after load; when absent,
+the save's own rule and existing paid countdowns are retained.
+
+Snapshots at load/every minute/end and per-cycle changes observe ordinary play:
+no planner audit, RNG draw, scripted order or synthetic building site is added.
+Accepted orders, physical completions and later combat losses remain distinct;
+two controllers cannot duplicate one physical completion. The residential rule
+requires shared-budget admission, not forced completion when a higher real drain
+wins; it also rejects optional, unexecuted MCV/WOR candidates owning the lane.
+Legacy opportunities must have an affordable residential capital candidate.
+
+`games.csv` carries source/genotype/save/input/registry/check/probe receipts,
+effective Installments, feasibility and infrastructure error separately.
+Per-check CSV and gzip-projected events retain only fields needed by the checks,
+plus snapshots, phase hashes and complete effective options/map. Missing,
+unfinished or capture-capped evidence is **UNVERIFIED**, including when a partial
+trace contains a failure. Use at least `--capture-mib 1024` and
+`--wall-timeout 3600`; ainonuclear has measured 2,250–2,700-second continuations.
+An infeasible genome is valid measured evidence, not a queue error to retry.
 
 Measured diagnosis from the 2026-11-06 original notbuilding continuation: the
 zoning selector is not universally idle. Ordos completed five commercial zones
@@ -275,6 +304,19 @@ python3 tests/ai/genome_search.py evolve --plan SCREEN.json.gz \
   --behaviour BEHAVIOUR/games.csv --output ROUND1.json.gz
 python3 tests/ai/genome_search.py race --plan SCREEN.json.gz ROUND1.json.gz \
   --elites ELITE... --seeds EIGHT_HELD_OUT_SEEDS... --output RACE.json.gz
+```
+
+Exact-save behaviour input and immutable cluster evaluation (repeat per case;
+`--manifest-b64` is the same inline `{schema_version:1,genomes:[...]}` contract):
+
+```sh
+python3 tests/ai/genome-behaviors.py --freeze PRIVATE_SAVE --case notbuilding \
+  --output PRIVATE_INPUT.ini
+dunecity-queue submit --cwd STAGING --rev FULL_COMMIT_SHA --tag genome-behaviour -- \
+  python3 tests/ai/genome-behaviors.py --case notbuilding \
+  --game-options PRIVATE_INPUT.ini --manifest-b64 INLINE_BASE64 --results RESULTS \
+  --capture-mib 1024 --wall-timeout 3600
+python3 tests/ai/genome-behaviors.py --report --results RESULTS
 ```
 
 `--native-equivalent` pools observation sources only after `git diff` proves the

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "policy": "Every applicable check must pass on the exact candidate source/config. Missing, capped or incomplete evidence is UNVERIFIED, never a pass. All-not-applicable is unverified. Private saves and frozen input files stay outside git. Unadapted reported issues remain required and unverified.",
+  "cases": [
+    {
+      "id": "notbuilding", "adapted": true,
+      "save_sha256": "277f2e520c3ea3099f0c7948c8e581f1f919270a4f45c7212d07fddced797c49",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 160},
+      "game_rules": {"technology_installments": 0},
+      "houses": [2, 5, 6, 7],
+      "checks": [
+        {"id": "ordos_light_factory_order", "type": "light_factory_order", "houses": [2]},
+        {"id": "research_progress", "type": "research_progress"},
+        {"id": "residential_reaches_funding", "type": "residential_admission", "min_opportunities": 10}
+      ]
+    },
+    {
+      "id": "problem1", "adapted": true,
+      "save_sha256": "3471c2f58cf449cf49fa38538db923877b94d9b3b668be68927d15e949e94db6",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 384}, "houses": [],
+      "game_rules": {"technology_installments": 0},
+      "checks": [{"id": "no_funded_nuclear_rejection", "type": "nuclear_choice"}]
+    },
+    {
+      "id": "ainonuclear", "adapted": true,
+      "save_sha256": "91c8f0e23deff5bca62a29f36c714493fe000a11b5b6172608b535e7f6f7821b",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 384}, "houses": [],
+      "game_rules": {"technology_installments": 0},
+      "checks": [{"id": "no_funded_nuclear_rejection", "type": "nuclear_choice"}]
+    },
+    {
+      "id": "notbuildingresearchlab", "adapted": true,
+      "save_sha256": "8772302e2199d4de929c1b109f2c3151cc10e651b911358ea862e7c5882ebcb7",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 256}, "houses": [2, 6],
+      "game_rules": {"technology_installments": 0},
+      "checks": [
+        {"id": "research_lab_built", "type": "lab_built"},
+        {"id": "level_two_research_started", "type": "level_two_research"}
+      ]
+    },
+    {
+      "id": "norocketturrets", "adapted": true,
+      "save_sha256": "f18b5229addc2e13712040f1d18ab1ff8e2f97483576d7ca62b52ef6b75a2965",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 96},
+      "game_rules": {"technology_installments": 0},
+      "houses": [], "colour_slot": 1,
+      "checks": [{"id": "blue_rocket_cover", "type": "rocket_cover"}]
+    },
+    {"id": "atreides_no_expand", "adapted": false, "save_sha256": "38cffd62e16da1c8d48473ed45b5d31970eea6585f463a059ea0b64a4b5e9b8d", "checks": []},
+    {"id": "purple_zero_power", "adapted": false, "save_sha256": "6717d4212849c49d4ebdee2bc2e59cf9e8ba863f85fd41a51fe59cd674f35d7c", "checks": []},
+    {"id": "sardaukar_lf", "adapted": false, "save_sha256": "abfe913844b7c30ff3ad34f2d23175a7b9008f8e126fa247e2a4e019992ee481", "checks": []},
+    {"id": "insufficient_rocket_turrets", "adapted": false, "checks": []}
+  ]
+}

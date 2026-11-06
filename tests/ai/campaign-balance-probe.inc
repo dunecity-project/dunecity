@@ -81,6 +81,7 @@
 #include "power-continuation-probe.inc"
 #include "compact-power-probe.inc"
 #include "start-what-makes-sense-probe.inc"
+#include "genome-behavior-probe.inc"
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -505,6 +506,11 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_RESEARCH_LAB_CONTINUATION")) {
         runResearchLabContinuation(*game, minutes);
+        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_GENOME_BEHAVIOR")) {
+        runGenomeBehavior(*game, minutes);
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
         return MENU_QUIT_DEFAULT;
     }
