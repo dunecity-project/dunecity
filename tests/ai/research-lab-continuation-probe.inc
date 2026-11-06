@@ -8,7 +8,7 @@ void snapshot(Game& game, const char* phase) {
         phase, game.getGameCycleCount(), game.getLoadedSavegameVersion(),
         game.getGameInitSettings().getModName().c_str(), rules.researchLab, game.isCitySimEnabled(), rules.getHash().c_str());
     for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game.getHouse(h)) {
-        AITelemetry::Record row, players, structures, yards;
+        AITelemetry::Record row, players, structures, yards, zoneSites;
         for (const auto& info : game.getGameInitSettings().getHouseInfoList()) if (info.houseID == h)
             for (const auto& player : info.playerInfoList) players.set(player.playerName, player.playerClass);
         for (Uint32 item = ItemID_FirstID; item <= ItemID_LastID; ++item)
@@ -26,16 +26,42 @@ void snapshot(Game& game, const char* phase) {
             for (int x = 0; x + size.x <= currentGameMap->getSizeX(); ++x)
                 sites += currentGameMap->okayToPlaceStructure(x, y, size.x, size.y, false, house, false, Structure_ResearchLab);
         const auto& spec = game.objectData.data[Structure_ResearchLab][h];
+        // Count human-legal lots only at endpoints; minute samples stay cheap.
+        if (std::string_view(phase) != "minute")
+            for (Uint32 item : {Structure_ZoneResidential, Structure_ZoneCommercial, Structure_ZoneIndustrial}) {
+                int legal = 0;
+                const Coord extent = getStructureSize(item);
+                for (int y = 0; y + extent.y <= currentGameMap->getSizeY(); ++y)
+                    for (int x = 0; x + extent.x <= currentGameMap->getSizeX(); ++x)
+                        legal += currentGameMap->okayToPlaceStructure(x, y, extent.x, extent.y, false, house, false, item);
+                zoneSites.set(getItemNameByID(item), legal);
+            }
         row.set("phase", phase).set("cycle", game.getGameCycleCount()).set("house", h).set("players", players)
             .set("tech", house->getTechLevel()).set("credits", house->getCredits()).set("power", house->getProducedPower())
             .set("power_required", house->getPowerRequirement()).set("capacity", house->getCapacity())
             .set("lab_enabled", spec.enabled).set("lab_tech", spec.techLevel).set("lab_price", spec.price)
             .set("lab_sites", sites).set("structures", structures).set("yards", yards)
             .set("research_target", house->getTechResearchTarget()).set("research_remaining", house->getTechResearchRemaining());
+        row.set("res_zones", house->getNumItems(Structure_ZoneResidential))
+            .set("com_zones", house->getNumItems(Structure_ZoneCommercial))
+            .set("ind_zones", house->getNumItems(Structure_ZoneIndustrial)).set("zone_legal_sites", zoneSites);
         if (const auto* sim = game.getCitySimulation()) {
             const auto& state = sim->getHouseState(h);
+            int zones = 0, crime = 0, dangerous = 0, vacant = 0, unpowered = 0;
+            for (const auto* structure : structureList) {
+                if (structure->getOwner() != house || !DuneCity::isCityZoneStructure(structure->getItemID())) continue;
+                const Coord p = structure->getLocation();
+                const auto* tile = currentGameMap->getTile(p.x, p.y);
+                const int localCrime = sim->getCrimeRateMap().worldGet(p.x, p.y);
+                ++zones; crime += localCrime; dangerous += localCrime >= DuneCity::kCrimeDangerousThreshold;
+                vacant += DuneCity::getStructurePopulation(structure, tile->getCityZoneDensity()) == 0;
+                unpowered += sim->getPowerGridMap().worldGet(p.x, p.y) == 0;
+            }
             row.set("population", state.getTotalPop() * 20).set("annual_tax", state.budget.getLastTaxRevenue())
-                .set("annual_police", state.lastPoliceExpense);
+                .set("annual_police", state.lastPoliceExpense)
+                .set("res_demand", state.resValve).set("com_demand", state.comValve).set("ind_demand", state.indValve)
+                .set("crime_mean", zones ? crime / zones : 0).set("dangerous_zones", dangerous)
+                .set("vacant_zones", vacant).set("unpowered_zones", unpowered);
         }
         SDL_Log("RESEARCH_LAB_SAVE_HOUSE: %s", row.json().c_str());
     }
@@ -53,7 +79,35 @@ void audit(Game& game) {
             bot->planUnitMix(pass); bot->planCapitalForecast(pass); bot->planCityBootstrap(pass);
             bot->planOpeningProduction(pass); bot->planDefenceCoverage(pass); bot->planTechSavings(pass);
             bot->planCapitalCandidates(pass); bot->chooseCapitalPlan(pass);
-            AITelemetry::Record row;
+            AITelemetry::Record row, zones, candidates;
+            for (const auto* yard : pass.capitalBuilders) {
+                if (yard->getItemID() != Structure_ConstructionYard) continue;
+                bot->planningBuilder = yard->getObjectID(); bot->clearPlacementCache(false, true);
+                AITelemetry::Record options;
+                for (Uint32 item : {Structure_ZoneResidential, Structure_ZoneCommercial, Structure_ZoneIndustrial}) {
+                    const Coord site = bot->findPlaceLocation(item);
+                    options.set(getItemNameByID(item), AITelemetry::Record()
+                        .set("admitted", bot->cityAdmitsStructure(pass, item))
+                        .set("available", bot->campaignAvailableToBuild(yard, item))
+                        .set("site_valid", site.isValid()).set("x", site.x).set("y", site.y)
+                        .set("placement", bot->placementScoreDetails[item]));
+                }
+                const Uint32 choice = bot->chooseCityZone(pass, yard, false);
+                const Uint32 affordable = bot->affordableCityZone(pass, yard, pass.money);
+                const Uint32 economy = bot->chooseCityEconomy(pass, yard, false);
+                zones.set(std::to_string(yard->getObjectID()), AITelemetry::Record()
+                    .set("queue_size", yard->getProductionQueueSize()).set("upgrading", yard->isUpgrading())
+                    .set("hold", yard->isOnHold()).set("zone", choice).set("affordable_zone", affordable)
+                    .set("economy", economy).set("options", options));
+            }
+            bot->planningBuilder = NONE_ID; bot->clearPlacementCache(false, true);
+            for (size_t i = 0; i < pass.capitalCandidates.size(); ++i) {
+                const auto& candidate = pass.capitalCandidates[i];
+                candidates.set(std::to_string(i), AITelemetry::Record()
+                    .set("builder", candidate.builder).set("item", candidate.item).set("kind", candidate.kind)
+                    .set("reason", candidate.reason).set("price", candidate.price)
+                    .set("foundation_cost", candidate.foundationCost).set("score", candidate.score));
+            }
             row.set("house", h).set("player", bot->getPlayerID()).set("difficulty", int(bot->difficulty))
                 .set("role", int(bot->role)).set("config_hash", bot->botConfig().getConfigHash())
                 .set("research_policy", bot->researchLabPolicyActive()).set("research_required", bot->researchRequired(pass))
@@ -70,7 +124,10 @@ void audit(Game& game) {
                 .set("cash_buffer", pass.cashBuffer).set("economy_reserve", pass.economyReserve)
                 .set("working_reserve", pass.cityWorkingReserve).set("strategic_reserve", pass.strategicReserveCost)
                 .set("civic_reserve", pass.civicReserveCost).set("trooper_support", bot->botConfig().force.trooperSupport)
-                .set("city_production_prerequisites", bot->botConfig().force.cityProductionPrerequisites);
+                .set("city_production_prerequisites", bot->botConfig().force.cityProductionPrerequisites)
+                .set("state", bot->decisionState(pass)).set("zoning", zones).set("capital_candidates", candidates)
+                .set("capital_choice", pass.capitalChoice).set("protection_capital", pass.protectionCapital)
+                .set("tech_funding_priority", pass.techFundingPriority).set("growth_protected", pass.cityGrowthProtected);
             SDL_Log("RESEARCH_LAB_SAVE_AUDIT: %s", row.json().c_str());
         }
 }
