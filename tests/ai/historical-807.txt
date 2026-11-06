@@ -1,0 +1,146 @@
+Historical 807 unit-choice comparison bridge (test-only)
+======================================================
+
+Identity and scope
+------------------
+Base engine/AI/content source: abdf71e70697a01cae2ba27ed86aa9bfc2103e97.
+CMake declares 1.0.807. Installation record e9195eef9ecf4000341a793058064d9c858a8873
+explicitly records installing that source on the MacBook Air, protocol 55,
+policy whole-army-base-scramble-v90, save 9852/runtime 7. It also says nothing was
+pushed or publicly published. There is no v1.0.807 tag: this is the approved,
+verified installed release baseline, not a claim of a tagged public release.
+
+Only new tests/ai files are added by the bridge:
+- historical-807.py: queue batch API, portable private-main compile/link recipe,
+  immutable fixture scheduling, row extraction and read-only final report.
+- historical-807-observer.inc: custom-map diagnostic entry point; standalone
+  native QuantBot roster; read-only minute samples, tick-level IX observation,
+  native state digests; ordinary MCV deployment for the cohort's CY start.
+- formation-duel.py: the queue's mandatory parity dispatcher filename, explicitly
+  not a backport of formations or of the Random Skirmish generator.
+- historical-807-fixtures/manifest.json, reference-options.ini and maps/*.ini:
+  original archive provenance, 96 distinct game settings, 24 exact map payloads.
+- this file: coverage and observer/harness documentation.
+No existing source, config, mod, AI, CMake, test fixture or old campaign harness
+is changed. The diagnostic main links against the original game's engine
+objects. It never installs an altered engine/AI object. No local native build
+tree is created; the cluster prepares its existing pinned-source trees.
+
+Exact inputs and genuine differences
+------------------------------------
+Reference scientific source: a1bf0d0be51785f085748dfd1e89a5a8bb1b9975.
+Each map is the exact length-prefixed GameInitSettings.filedata string from an
+original archived profile/replay/auto.rpl. The replay starts with local-name
+string, game-type byte, house byte, filename string, then filedata string.
+GameInitSettings.cpp::save and Game.cpp::initializeReplay define this layout.
+No generator is rerun or backported. Manifest references retain archive path,
+replay member, replay SHA256 and map SHA256. setup_sha256 in those references
+is a canonical sorted-key JSON hash of setup.json, not a raw-member byte hash.
+The reference map name, roster order, teams, controller classes, game seed,
+starting credits, map T9 and ordinary CY-start deployment are retained.
+
+The one historical arm covers all 96 distinct research-OFF reference contexts:
+- DuneCity: 48 games, none/medium spice x 1v1/FFA6 x Medium/Hard/Brutal x 4 seeds.
+- Dune2R: 24 games, medium spice x 1v1/FFA6 x those 3 difficulties x 4 seeds.
+- vanilla: 24 games, same classic coverage as Dune2R.
+Seeds: 9101, 148680876, 55001, 77001. All maps 128x128, base=cy, army=0,
+city=0, T9, 3000 credits, 40 game minutes, path workers=1. There are 384 initial
+house histories. An additional 48 modern research-ON reference games have the
+same map and roster as these existing historical fixtures; they are provenance
+mappings only, not another 48 independent historical games.
+
+807 supports BASIC TechLevel=9 (global game technology). It has no per-house
+Research Lab or Research Pace, no Slow City Year, and no Starport Population
+option. The exact modern research-OFF options file is frozen and transported
+by --game-options; supported keys are applied through 807's own
+applyGameOptionsFromConfig after its own mod defaults. All unsupported requested
+values are recorded in setup.json and games.csv, and the native setup line
+states they are unsupported. Research Lab=true is explicitly rejected rather
+than silently running OFF. No new-option emulation or old default replacement
+is made. The native global tech level must actually be 9.
+
+807 also lacks the modern local-spectator flag. Its existing setupSpectatorView
+creates a detached, unregistered UI view after initGame: every playing house
+retains exactly one registered QuantBot and isAI=true, so none becomes a human
+helper. This is not claimed to be the modern local-observer implementation.
+The harness ignores the detached view's local win/loss UI result and ends on
+native House::isAlive team elimination or the time limit, matching the cohort's
+FFA termination convention. The native tick, AI decisions and game rules are
+unchanged. The initial MCV deployment is the same explicit harness start click
+used for base=cy in the current comparison, not a new AI order policy.
+
+Only map payloads and supported explicit settings are matched. Bundled object
+prices, mod options, AI algorithms/defaults and city/economy rules remain 807's,
+so this is a historical whole-release contrast, not isolation of the unit-choice
+switch. Runtime content/object-data/AI-content/config/options hashes, executable
+SHA256 and source SHA are retained. Hash schemas/options differ between releases;
+equality of a hash is not assumed or used to conceal unsupported settings.
+
+Cluster compatibility and parity
+--------------------------------
+The installed cluster discovers top-level schedule/build_probe/play functions
+and truncates loading at the top-level args assignment. It also needs parser,
+read, scratch_dir, finish_game and a read-only report API. This harness provides
+those interfaces. Probe construction uses the original Ninja main-object/link
+recipes: macOS private app Resources point to the native build; Windows uses
+ABI-compatible clang-cl for only the private main, and links beside native data.
+No game is played during build_probe.
+
+The node unconditionally builds tests/ai/formation-duel.py for every game source,
+then lists and plays indices 0 and 1 with box:none, size=128, seed=7101, hard,
+12 minutes. Because 807 predates formations, its clearly identified dispatcher
+instead runs two actual standalone-QuantBot custom matches on the frozen
+DuneCity map generated with seed 9101, match RNG seed 7101, both roster orders.
+Shape labels are dispatcher protocol only; no formation claim or fake parity
+output is produced. Periodic PROBE_DIGEST lines come from 807's existing
+computeStateDigest; HISTORICAL_RESULT comes from the played native match.
+The installed queue compares those lines exactly to the mini's same-source
+reference (no historical relaxation, no pre-recorded expected answers). Builds,
+parity games and all campaign-comparison games are left for the parent to submit
+and qualify. This source bridge has not itself been compiled or game-tested.
+
+Observer semantics and estimators
+--------------------------------
+composition.csv: minute 0, each game minute and an off-minute final sample.
+Slots 0..7 are 807's native lastUnitMixBps in order Tank, SiegeTank, Launcher,
+SPECIAL GROUP, Ornithopter, Trike, RaiderTrike, Quad. Special combines actual
+SonicTank, Devastator and Deviator values; the displayed representative item is
+SonicTank, not a claim that every house builds SonicTanks. Slot 8 is infantry,
+slot 9 other mobile combat units; neither has a native vehicle target.
+Targets are value shares over those eight vehicle slots, not count quotas.
+Before a positive native mix exists target_bps=-1/target_observed=0, not zero.
+807 has no allocation snapshot/cycle receipt: a sample reads the last native
+8-slot target without recalculating it. Freshness must come from retained native
+unit_mix telemetry; do not label the sample cycle as an allocation cycle.
+
+Live numerator/denominator: present controlling owner, health > 0, owner-specific
+ObjectData replacement price, including inactive bay/repair units. The combat
+population excludes transports, workers, MCV, worms, Saboteur, Frigate and ambient
+traffic. Queues expand the old 3-soldier/3-trooper products into singles and use
+single-unit replacement prices. units.csv keeps per-type current live/queued
+counts separately from native registered_actual, built/lost and combat reward
+ledgers. Those native ledgers follow their original attribution, not current
+ownership; construction/CHOAM/refunds/payments are not inferred from them.
+No payment accounting is added. Kill-value/replacement-cost metrics are proxies,
+not causal combat ROI or production cash spending.
+
+first_ix_completed_cycle is the first tick-boundary at which 807's cumulative
+getNumBuiltItems(IX) becomes positive; first_ix_owned_cycle is recorded separately.
+With MCV-only initial assets neither is a starting-tech gift. Absence is -1,
+right-censored by elimination or game end, never an invented late completion.
+Minute samples are not independent games and neither are houses of one game.
+Match houses -> games -> equally weighted supported cells, with the FOUR shared
+seed blocks as independent resampling units. Do not treat the 24 maps or the
+48 reused research-ON mappings as independent seed blocks. Formal same-context
+release pairing is against modern research OFF; ON is a contextual, feature-
+confounded contrast because historical research is unsupported. Keep early-win,
+elimination and IX eligibility censoring explicit; do not forward-fill a winner
+through 40 minutes or turn missing observations into zeros.
+
+Rows are collected only after a native result and native final summary exist.
+native_capture=summary_present_not_stream_certified deliberately does not claim
+that every original decision event survived the native capture budget. The
+read-only observer lives in run.log and is independent of that native JSONL cap.
+The cluster retains run.log, setup.json, summary.json, native events and replay
+in per-attempt evidence before owned scratch cleanup. Never replace the original
+modern evidence; do not compare incompletely collected historical attempts.
