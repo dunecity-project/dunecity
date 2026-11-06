@@ -807,8 +807,8 @@ inline void standaloneLocalProducers(const char* mod, const char* playerClass) {
     pass.capitalChoice = -1;
     pass.sharedSpending = false;
     require(pass.nextCompositionSlot() == lightSlot
-                && world.bot->localCompositionSlot(pass, heavy, -1) == heavySlot
-                && world.bot->localCompositionSlot(pass, second, -1) == heavySlot,
+                && world.bot->localCompositionSlot(pass, heavy) == heavySlot
+                && world.bot->localCompositionSlot(pass, second) == heavySlot,
             "Local-producer control does not separate the global light choice from eligible heavy deficits");
     const int64_t committedBefore = pass.compositionValue[heavySlot];
     {
