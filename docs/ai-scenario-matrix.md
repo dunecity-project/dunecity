@@ -646,6 +646,11 @@ The default `--technology-installments saved` clears ambient overrides and keeps
 the original save's payment rules. Explicit `off`/`on` uses the shared validated
 post-load probe hook and must have a separate result directory/tag; native setup
 records the effective rule. It does not rewrite the private input save.
+For an unarchived private mod, optional `[Genome Revisions] SHA256/GzipBase64`
+uses the behavior harness's exact revision transport. It restores the original
+manifest and missing configuration bytes before loading; matching source/retired
+artwork is reused only after size/SHA-256 checks. Never substitute a current mod
+or rewrite the private save to get past a missing-revision error.
 `--verify-compact --arms on` requires eligible houses to order reactors, rejects
 funded wind substitutions and requires ordinary paid reactor completion.
 These saves require no concrete, so the recorded reactor price is its founded quote.

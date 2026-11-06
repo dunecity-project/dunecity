@@ -3,9 +3,11 @@
 
 Frozen --game-options uses [Research Lab Save] SHA256/GzipBase64. Optional
 [Power Config] GzipBase64 contains a QuantBot INI overlay for genome candidates.
+[Genome Revisions] transports exact private mod bytes using the behavior harness.
 The private saves and overlays are input data, never repository fixtures.
 """
 import argparse
+import ast
 import base64
 import configparser
 import csv
@@ -17,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import time
+import types
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
@@ -25,6 +28,22 @@ from probe_profile import finish_game, probe_binary, require_free_space, restore
 
 KEY = ('arm',)
 FIELDS = KEY + ('sha256', 'technology_installments', 'wall_s', 'error')
+
+
+def helpers(filename):
+    """Reuse non-importable harnesses through the queue's AST argument boundary."""
+    path = Path(__file__).with_name(filename)
+    body = []
+    for node in ast.parse(path.read_text(encoding='utf-8'), str(path)).body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name) and node.targets[0].id == 'args'):
+            break
+        body.append(node)
+    else:
+        raise RuntimeError('Missing queue argument boundary: ' + str(path))
+    namespace = {'__file__': str(path), '__name__': 'cluster_harness'}
+    exec(compile(ast.Module(body=body, type_ignores=[]), str(path), 'exec'), namespace)
+    return types.SimpleNamespace(**namespace)
 
 
 def read(path):
@@ -124,6 +143,8 @@ def play(args, scratch, binary, key):
     saved.write_bytes(data)
     source_profile = out / 'fixture-profile'
     restore_fixture_revisions(source_profile, [saved])
+    if packed.has_section('Genome Revisions'):
+        helpers('genome-behaviors.py').restore_input_revisions(args.game_options, source_profile)
     run = out / 'run'
     env = dict(os.environ, BALANCE_POWER_CONTINUATION='1')
     env.pop('BALANCE_TECHNOLOGY_INSTALLMENTS', None)
