@@ -812,3 +812,22 @@ fractional bits; no engine payment or planner rule changes. The failed receipts
 remain failed evidence, not a green gate. Gene-A exact styles explicitly force
 SWMS OFF in both arms so that independent qualification need not await SWMS.
 
+At `e80eac4dffda7f416b106d973977d6a28228be39`, the committed probe translation
+unit passed syntax compilation. Independent exact-save job
+`20261107T004830-factoryproof-first-factory-exact-8df938` completed both full
+15-minute arms with SWMS explicitly OFF. Ordos house2 with FirstFactory OFF
+never ordered an LF before its initial CY loss at121.584s; ON accepted the LF
+at23.120s and completed it at47.120s, before CY loss at116.400s. The original
+save SHA is `277f2e520c3ea3099f0c7948c8e581f1f919270a4f45c7212d07fddced797c49`.
+This proves the independent first-capability behavior, not broader survival.
+
+Corrected SWMS job `20261107T004823-factoryproof-swms-corrected-eba38f` passed
+the power/LF/civic fractional-payment checks but failed its next yard control
+on both mini and pro. The OFF forecast-only case physically lacked commercial
+and industrial opening seeds, so the real bot correctly chose its earlier
+`opening_city_seed` commercial lot rather than the asserted optional generator.
+The fixture now physically supplies all three opening seeds, retains real
+competing growth and logs each switch/power case before unchanged priority,
+native payment and no-zone assertions. No planner rule changed. This failed
+receipt is not a pass or permission for the gated8/48/288 continuations.
+
