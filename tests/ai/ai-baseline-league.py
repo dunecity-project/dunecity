@@ -181,7 +181,6 @@ def build_probe(args, scratch):
              'LOCAL_OBSERVER': 'setLocalSpectator' in headers['GameInitSettings.h'],
              'FIVE_SQUADS': 'Unit_Infantry5' in headers['data.h']}
     definitions = ''.join('#define BASELINE_HAS_%s %d\n' % (name, enabled) for name, enabled in flags.items())
-    definitions = definitions.replace('\\n', '\n')
     position = main.index('int main(')
     observer = (root / 'tests/ai/ai-baseline-observer.inc').as_posix()
     main = main[:position] + definitions + '#include "' + observer + '"\n' + main[position:]
@@ -405,7 +404,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--results',required=True)
 parser.add_argument('--build-dir',type=Path,default=root/'build-int')
 parser.add_argument('--mod',choices=('dunecity','Dune2R','vanilla'))
-parser.add_argument('--seeds',type=int,nargs='+',default=[9101,148680876,55001,77001])
+parser.add_argument('--seeds',type=int,nargs='+',default=[9101,148680876,55001,77001,1841712204,8101,8202,8303])
 parser.add_argument('--difficulties',choices=('medium','hard','brutal'),nargs='+',default=['medium','hard','brutal'])
 parser.add_argument('--game-options',type=Path)
 parser.add_argument('--capture-mib',type=int,default=1024)

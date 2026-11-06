@@ -54,6 +54,32 @@
       ]
     },
     {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1841712204",
+      "mod": "Dune2R",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78.ini",
+      "map_sha256": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
       "mod": "Dune2R",
       "seed": 55001,
@@ -105,6 +131,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8101",
+      "mod": "Dune2R",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43.ini",
+      "map_sha256": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8202",
+      "mod": "Dune2R",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233.ini",
+      "map_sha256": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8303",
+      "mod": "Dune2R",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1.ini",
+      "map_sha256": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -162,6 +266,32 @@
       ]
     },
     {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1841712204",
+      "mod": "Dune2R",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78.ini",
+      "map_sha256": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
       "mod": "Dune2R",
       "seed": 55001,
@@ -213,6 +343,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/8101",
+      "mod": "Dune2R",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43.ini",
+      "map_sha256": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/8202",
+      "mod": "Dune2R",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233.ini",
+      "map_sha256": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/hard/40m/8303",
+      "mod": "Dune2R",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1.ini",
+      "map_sha256": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -270,6 +478,32 @@
       ]
     },
     {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1841712204",
+      "mod": "Dune2R",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78.ini",
+      "map_sha256": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
       "mod": "Dune2R",
       "seed": 55001,
@@ -321,6 +555,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/8101",
+      "mod": "Dune2R",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43.ini",
+      "map_sha256": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/8202",
+      "mod": "Dune2R",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233.ini",
+      "map_sha256": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/1v1/medium/40m/8303",
+      "mod": "Dune2R",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1.ini",
+      "map_sha256": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -388,6 +700,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1841712204",
+      "mod": "Dune2R",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818.ini",
+      "map_sha256": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotBrutal,mercenary:2:qBotBrutal,harkonnen:3:qBotBrutal,atreides:4:qBotBrutal,ordos:5:qBotBrutal,sardaukar:6:qBotBrutal",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -477,6 +831,132 @@
       ]
     },
     {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8101",
+      "mod": "Dune2R",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d.ini",
+      "map_sha256": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotBrutal,harkonnen:2:qBotBrutal,atreides:3:qBotBrutal,ordos:4:qBotBrutal,sardaukar:5:qBotBrutal,fremen:6:qBotBrutal",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8202",
+      "mod": "Dune2R",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe.ini",
+      "map_sha256": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8303",
+      "mod": "Dune2R",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da.ini",
+      "map_sha256": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
       "mod": "Dune2R",
       "seed": 9101,
@@ -556,6 +1036,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1841712204",
+      "mod": "Dune2R",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818.ini",
+      "map_sha256": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotHard,mercenary:2:qBotHard,harkonnen:3:qBotHard,atreides:4:qBotHard,ordos:5:qBotHard,sardaukar:6:qBotHard",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -645,6 +1167,132 @@
       ]
     },
     {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8101",
+      "mod": "Dune2R",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d.ini",
+      "map_sha256": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotHard,harkonnen:2:qBotHard,atreides:3:qBotHard,ordos:4:qBotHard,sardaukar:5:qBotHard,fremen:6:qBotHard",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8202",
+      "mod": "Dune2R",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe.ini",
+      "map_sha256": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8303",
+      "mod": "Dune2R",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da.ini",
+      "map_sha256": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
       "mod": "Dune2R",
       "seed": 9101,
@@ -724,6 +1372,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1841712204",
+      "mod": "Dune2R",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818.ini",
+      "map_sha256": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotMedium,mercenary:2:qBotMedium,harkonnen:3:qBotMedium,atreides:4:qBotMedium,ordos:5:qBotMedium,sardaukar:6:qBotMedium",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -813,6 +1503,132 @@
       ]
     },
     {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8101",
+      "mod": "Dune2R",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d.ini",
+      "map_sha256": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotMedium,harkonnen:2:qBotMedium,atreides:3:qBotMedium,ordos:4:qBotMedium,sardaukar:5:qBotMedium,fremen:6:qBotMedium",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8202",
+      "mod": "Dune2R",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe.ini",
+      "map_sha256": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8303",
+      "mod": "Dune2R",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da.ini",
+      "map_sha256": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "Dune2R/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101",
       "mod": "Dune2R",
       "seed": 9101,
@@ -882,6 +1698,32 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "26efc9ffb5a925185df846c4c04c813a5b4fd1537632667341d731ec700e5c3c.ini",
+      "map_sha256": "26efc9ffb5a925185df846c4c04c813a5b4fd1537632667341d731ec700e5c3c",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -933,6 +1775,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "55ae387de820f6595f46c0b955ad405dbbc199c00ed8502dbda65ee43d0fc23b.ini",
+      "map_sha256": "55ae387de820f6595f46c0b955ad405dbbc199c00ed8502dbda65ee43d0fc23b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "8929bab8085cbe5db7a99a9a4006604eb457eda3be68e422512427b7f345458b.ini",
+      "map_sha256": "8929bab8085cbe5db7a99a9a4006604eb457eda3be68e422512427b7f345458b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "f5f1a250f02c7b4fad27c85c0e07cdad62a59ae917eb3a35cb8785479a049464.ini",
+      "map_sha256": "f5f1a250f02c7b4fad27c85c0e07cdad62a59ae917eb3a35cb8785479a049464",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -990,6 +1910,32 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "26efc9ffb5a925185df846c4c04c813a5b4fd1537632667341d731ec700e5c3c.ini",
+      "map_sha256": "26efc9ffb5a925185df846c4c04c813a5b4fd1537632667341d731ec700e5c3c",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -1041,6 +1987,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "55ae387de820f6595f46c0b955ad405dbbc199c00ed8502dbda65ee43d0fc23b.ini",
+      "map_sha256": "55ae387de820f6595f46c0b955ad405dbbc199c00ed8502dbda65ee43d0fc23b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "8929bab8085cbe5db7a99a9a4006604eb457eda3be68e422512427b7f345458b.ini",
+      "map_sha256": "8929bab8085cbe5db7a99a9a4006604eb457eda3be68e422512427b7f345458b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "f5f1a250f02c7b4fad27c85c0e07cdad62a59ae917eb3a35cb8785479a049464.ini",
+      "map_sha256": "f5f1a250f02c7b4fad27c85c0e07cdad62a59ae917eb3a35cb8785479a049464",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -1098,6 +2122,32 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "26efc9ffb5a925185df846c4c04c813a5b4fd1537632667341d731ec700e5c3c.ini",
+      "map_sha256": "26efc9ffb5a925185df846c4c04c813a5b4fd1537632667341d731ec700e5c3c",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -1149,6 +2199,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "55ae387de820f6595f46c0b955ad405dbbc199c00ed8502dbda65ee43d0fc23b.ini",
+      "map_sha256": "55ae387de820f6595f46c0b955ad405dbbc199c00ed8502dbda65ee43d0fc23b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "8929bab8085cbe5db7a99a9a4006604eb457eda3be68e422512427b7f345458b.ini",
+      "map_sha256": "8929bab8085cbe5db7a99a9a4006604eb457eda3be68e422512427b7f345458b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "f5f1a250f02c7b4fad27c85c0e07cdad62a59ae917eb3a35cb8785479a049464.ini",
+      "map_sha256": "f5f1a250f02c7b4fad27c85c0e07cdad62a59ae917eb3a35cb8785479a049464",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -1216,6 +2344,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "195e139e7caa886e19f311bd9d50aa51e575415e86fa8c658d963f997feaf534.ini",
+      "map_sha256": "195e139e7caa886e19f311bd9d50aa51e575415e86fa8c658d963f997feaf534",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotBrutal,mercenary:2:qBotBrutal,harkonnen:3:qBotBrutal,atreides:4:qBotBrutal,ordos:5:qBotBrutal,sardaukar:6:qBotBrutal",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -1305,6 +2475,132 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "edce6838c380a02207c6836d67d3a48c53c5d7dba9432c34aa1ba78ae01044d3.ini",
+      "map_sha256": "edce6838c380a02207c6836d67d3a48c53c5d7dba9432c34aa1ba78ae01044d3",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotBrutal,harkonnen:2:qBotBrutal,atreides:3:qBotBrutal,ordos:4:qBotBrutal,sardaukar:5:qBotBrutal,fremen:6:qBotBrutal",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "7fd50a5bbc66f7316bff1b6b4d694038ed6a078504dfd2b384296abd125d6753.ini",
+      "map_sha256": "7fd50a5bbc66f7316bff1b6b4d694038ed6a078504dfd2b384296abd125d6753",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "3fba035b8ecfb55b05f1f44fc1b40229b12587b61dcf7e38c4f80ef40460a557.ini",
+      "map_sha256": "3fba035b8ecfb55b05f1f44fc1b40229b12587b61dcf7e38c4f80ef40460a557",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -1384,6 +2680,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "195e139e7caa886e19f311bd9d50aa51e575415e86fa8c658d963f997feaf534.ini",
+      "map_sha256": "195e139e7caa886e19f311bd9d50aa51e575415e86fa8c658d963f997feaf534",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotHard,mercenary:2:qBotHard,harkonnen:3:qBotHard,atreides:4:qBotHard,ordos:5:qBotHard,sardaukar:6:qBotHard",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -1473,6 +2811,132 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "edce6838c380a02207c6836d67d3a48c53c5d7dba9432c34aa1ba78ae01044d3.ini",
+      "map_sha256": "edce6838c380a02207c6836d67d3a48c53c5d7dba9432c34aa1ba78ae01044d3",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotHard,harkonnen:2:qBotHard,atreides:3:qBotHard,ordos:4:qBotHard,sardaukar:5:qBotHard,fremen:6:qBotHard",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "7fd50a5bbc66f7316bff1b6b4d694038ed6a078504dfd2b384296abd125d6753.ini",
+      "map_sha256": "7fd50a5bbc66f7316bff1b6b4d694038ed6a078504dfd2b384296abd125d6753",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "3fba035b8ecfb55b05f1f44fc1b40229b12587b61dcf7e38c4f80ef40460a557.ini",
+      "map_sha256": "3fba035b8ecfb55b05f1f44fc1b40229b12587b61dcf7e38c4f80ef40460a557",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -1552,6 +3016,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "195e139e7caa886e19f311bd9d50aa51e575415e86fa8c658d963f997feaf534.ini",
+      "map_sha256": "195e139e7caa886e19f311bd9d50aa51e575415e86fa8c658d963f997feaf534",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotMedium,mercenary:2:qBotMedium,harkonnen:3:qBotMedium,atreides:4:qBotMedium,ordos:5:qBotMedium,sardaukar:6:qBotMedium",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -1641,6 +3147,132 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "edce6838c380a02207c6836d67d3a48c53c5d7dba9432c34aa1ba78ae01044d3.ini",
+      "map_sha256": "edce6838c380a02207c6836d67d3a48c53c5d7dba9432c34aa1ba78ae01044d3",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotMedium,harkonnen:2:qBotMedium,atreides:3:qBotMedium,ordos:4:qBotMedium,sardaukar:5:qBotMedium,fremen:6:qBotMedium",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "7fd50a5bbc66f7316bff1b6b4d694038ed6a078504dfd2b384296abd125d6753.ini",
+      "map_sha256": "7fd50a5bbc66f7316bff1b6b4d694038ed6a078504dfd2b384296abd125d6753",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "3fba035b8ecfb55b05f1f44fc1b40229b12587b61dcf7e38c4f80ef40460a557.ini",
+      "map_sha256": "3fba035b8ecfb55b05f1f44fc1b40229b12587b61dcf7e38c4f80ef40460a557",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -1710,6 +3342,32 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "a4911a36cfbaedd311fd9574b7d45af396019bc5df3211cb88e091b394d6b74b.ini",
+      "map_sha256": "a4911a36cfbaedd311fd9574b7d45af396019bc5df3211cb88e091b394d6b74b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -1761,6 +3419,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "d171532c713a2cb6557cbd25af27cc0ce8448e08ea2cca3036e0d3190425d73b.ini",
+      "map_sha256": "d171532c713a2cb6557cbd25af27cc0ce8448e08ea2cca3036e0d3190425d73b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "5dec46bc07e9a1f24b523d226df8af6793ceb63beee6888530d7db2c3c782a25.ini",
+      "map_sha256": "5dec46bc07e9a1f24b523d226df8af6793ceb63beee6888530d7db2c3c782a25",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "0e4358286b0c42cb2e1a43e3e5f18b5a365814a60e38cac2eb8c8f18331c8b1e.ini",
+      "map_sha256": "0e4358286b0c42cb2e1a43e3e5f18b5a365814a60e38cac2eb8c8f18331c8b1e",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -1818,6 +3554,32 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "a4911a36cfbaedd311fd9574b7d45af396019bc5df3211cb88e091b394d6b74b.ini",
+      "map_sha256": "a4911a36cfbaedd311fd9574b7d45af396019bc5df3211cb88e091b394d6b74b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -1869,6 +3631,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "d171532c713a2cb6557cbd25af27cc0ce8448e08ea2cca3036e0d3190425d73b.ini",
+      "map_sha256": "d171532c713a2cb6557cbd25af27cc0ce8448e08ea2cca3036e0d3190425d73b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "5dec46bc07e9a1f24b523d226df8af6793ceb63beee6888530d7db2c3c782a25.ini",
+      "map_sha256": "5dec46bc07e9a1f24b523d226df8af6793ceb63beee6888530d7db2c3c782a25",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "0e4358286b0c42cb2e1a43e3e5f18b5a365814a60e38cac2eb8c8f18331c8b1e.ini",
+      "map_sha256": "0e4358286b0c42cb2e1a43e3e5f18b5a365814a60e38cac2eb8c8f18331c8b1e",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -1926,6 +3766,32 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "a4911a36cfbaedd311fd9574b7d45af396019bc5df3211cb88e091b394d6b74b.ini",
+      "map_sha256": "a4911a36cfbaedd311fd9574b7d45af396019bc5df3211cb88e091b394d6b74b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -1977,6 +3843,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "d171532c713a2cb6557cbd25af27cc0ce8448e08ea2cca3036e0d3190425d73b.ini",
+      "map_sha256": "d171532c713a2cb6557cbd25af27cc0ce8448e08ea2cca3036e0d3190425d73b",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "5dec46bc07e9a1f24b523d226df8af6793ceb63beee6888530d7db2c3c782a25.ini",
+      "map_sha256": "5dec46bc07e9a1f24b523d226df8af6793ceb63beee6888530d7db2c3c782a25",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "0e4358286b0c42cb2e1a43e3e5f18b5a365814a60e38cac2eb8c8f18331c8b1e.ini",
+      "map_sha256": "0e4358286b0c42cb2e1a43e3e5f18b5a365814a60e38cac2eb8c8f18331c8b1e",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -2044,6 +3988,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "538ec62393d933c231c959fd3a46a2dd700dc26c54b4de3f17f0517ec4db3215.ini",
+      "map_sha256": "538ec62393d933c231c959fd3a46a2dd700dc26c54b4de3f17f0517ec4db3215",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotBrutal,mercenary:2:qBotBrutal,harkonnen:3:qBotBrutal,atreides:4:qBotBrutal,ordos:5:qBotBrutal,sardaukar:6:qBotBrutal",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -2133,6 +4119,132 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "c25ef63f37d0e6cb9d9d045daf2ef190e0f3d4590fa6f3f01794bc70473b01df.ini",
+      "map_sha256": "c25ef63f37d0e6cb9d9d045daf2ef190e0f3d4590fa6f3f01794bc70473b01df",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotBrutal,harkonnen:2:qBotBrutal,atreides:3:qBotBrutal,ordos:4:qBotBrutal,sardaukar:5:qBotBrutal,fremen:6:qBotBrutal",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "020c3155bd10cc4ae9c1189f1344c34711237d6cfbdf9cdac5663d8954481d5e.ini",
+      "map_sha256": "020c3155bd10cc4ae9c1189f1344c34711237d6cfbdf9cdac5663d8954481d5e",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "e9c3716a0d3ed31434c7c022050d3601735a6bd7ba06d3775884432033e3fddf.ini",
+      "map_sha256": "e9c3716a0d3ed31434c7c022050d3601735a6bd7ba06d3775884432033e3fddf",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -2212,6 +4324,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "538ec62393d933c231c959fd3a46a2dd700dc26c54b4de3f17f0517ec4db3215.ini",
+      "map_sha256": "538ec62393d933c231c959fd3a46a2dd700dc26c54b4de3f17f0517ec4db3215",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotHard,mercenary:2:qBotHard,harkonnen:3:qBotHard,atreides:4:qBotHard,ordos:5:qBotHard,sardaukar:6:qBotHard",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -2301,6 +4455,132 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "c25ef63f37d0e6cb9d9d045daf2ef190e0f3d4590fa6f3f01794bc70473b01df.ini",
+      "map_sha256": "c25ef63f37d0e6cb9d9d045daf2ef190e0f3d4590fa6f3f01794bc70473b01df",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotHard,harkonnen:2:qBotHard,atreides:3:qBotHard,ordos:4:qBotHard,sardaukar:5:qBotHard,fremen:6:qBotHard",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "020c3155bd10cc4ae9c1189f1344c34711237d6cfbdf9cdac5663d8954481d5e.ini",
+      "map_sha256": "020c3155bd10cc4ae9c1189f1344c34711237d6cfbdf9cdac5663d8954481d5e",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "e9c3716a0d3ed31434c7c022050d3601735a6bd7ba06d3775884432033e3fddf.ini",
+      "map_sha256": "e9c3716a0d3ed31434c7c022050d3601735a6bd7ba06d3775884432033e3fddf",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -2380,6 +4660,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/1841712204",
+      "mod": "dunecity",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "538ec62393d933c231c959fd3a46a2dd700dc26c54b4de3f17f0517ec4db3215.ini",
+      "map_sha256": "538ec62393d933c231c959fd3a46a2dd700dc26c54b4de3f17f0517ec4db3215",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotMedium,mercenary:2:qBotMedium,harkonnen:3:qBotMedium,atreides:4:qBotMedium,ordos:5:qBotMedium,sardaukar:6:qBotMedium",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -2469,6 +4791,132 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8101",
+      "mod": "dunecity",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "c25ef63f37d0e6cb9d9d045daf2ef190e0f3d4590fa6f3f01794bc70473b01df.ini",
+      "map_sha256": "c25ef63f37d0e6cb9d9d045daf2ef190e0f3d4590fa6f3f01794bc70473b01df",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotMedium,harkonnen:2:qBotMedium,atreides:3:qBotMedium,ordos:4:qBotMedium,sardaukar:5:qBotMedium,fremen:6:qBotMedium",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8202",
+      "mod": "dunecity",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "020c3155bd10cc4ae9c1189f1344c34711237d6cfbdf9cdac5663d8954481d5e.ini",
+      "map_sha256": "020c3155bd10cc4ae9c1189f1344c34711237d6cfbdf9cdac5663d8954481d5e",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8303",
+      "mod": "dunecity",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "e9c3716a0d3ed31434c7c022050d3601735a6bd7ba06d3775884432033e3fddf.ini",
+      "map_sha256": "e9c3716a0d3ed31434c7c022050d3601735a6bd7ba06d3775884432033e3fddf",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -2538,6 +4986,32 @@
       ]
     },
     {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1841712204",
+      "mod": "vanilla",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78.ini",
+      "map_sha256": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
       "mod": "vanilla",
       "seed": 55001,
@@ -2589,6 +5063,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8101",
+      "mod": "vanilla",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43.ini",
+      "map_sha256": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8202",
+      "mod": "vanilla",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233.ini",
+      "map_sha256": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8303",
+      "mod": "vanilla",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1.ini",
+      "map_sha256": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -2646,6 +5198,32 @@
       ]
     },
     {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1841712204",
+      "mod": "vanilla",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78.ini",
+      "map_sha256": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
       "mod": "vanilla",
       "seed": 55001,
@@ -2697,6 +5275,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/8101",
+      "mod": "vanilla",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43.ini",
+      "map_sha256": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/8202",
+      "mod": "vanilla",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233.ini",
+      "map_sha256": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/8303",
+      "mod": "vanilla",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1.ini",
+      "map_sha256": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -2754,6 +5410,32 @@
       ]
     },
     {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1841712204",
+      "mod": "vanilla",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78.ini",
+      "map_sha256": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
       "mod": "vanilla",
       "seed": 55001,
@@ -2805,6 +5487,84 @@
       "reference_research_cells": [
         "off",
         "on"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/8101",
+      "mod": "vanilla",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43.ini",
+      "map_sha256": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/8202",
+      "mod": "vanilla",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233.ini",
+      "map_sha256": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/8303",
+      "mod": "vanilla",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1.ini",
+      "map_sha256": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
       ]
     },
     {
@@ -2872,6 +5632,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1841712204",
+      "mod": "vanilla",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818.ini",
+      "map_sha256": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotBrutal,mercenary:2:qBotBrutal,harkonnen:3:qBotBrutal,atreides:4:qBotBrutal,ordos:5:qBotBrutal,sardaukar:6:qBotBrutal",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -2961,6 +5763,132 @@
       ]
     },
     {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8101",
+      "mod": "vanilla",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d.ini",
+      "map_sha256": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotBrutal,harkonnen:2:qBotBrutal,atreides:3:qBotBrutal,ordos:4:qBotBrutal,sardaukar:5:qBotBrutal,fremen:6:qBotBrutal",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8202",
+      "mod": "vanilla",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe.ini",
+      "map_sha256": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8303",
+      "mod": "vanilla",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da.ini",
+      "map_sha256": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
       "mod": "vanilla",
       "seed": 9101,
@@ -3040,6 +5968,48 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1841712204",
+      "mod": "vanilla",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818.ini",
+      "map_sha256": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotHard,mercenary:2:qBotHard,harkonnen:3:qBotHard,atreides:4:qBotHard,ordos:5:qBotHard,sardaukar:6:qBotHard",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
       ]
@@ -3129,6 +6099,132 @@
       ]
     },
     {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8101",
+      "mod": "vanilla",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d.ini",
+      "map_sha256": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotHard,harkonnen:2:qBotHard,atreides:3:qBotHard,ordos:4:qBotHard,sardaukar:5:qBotHard,fremen:6:qBotHard",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8202",
+      "mod": "vanilla",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe.ini",
+      "map_sha256": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8303",
+      "mod": "vanilla",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da.ini",
+      "map_sha256": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
       "mod": "vanilla",
       "seed": 9101,
@@ -3213,6 +6309,48 @@
       ]
     },
     {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1841712204",
+      "mod": "vanilla",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818.ini",
+      "map_sha256": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1841712204",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotMedium,mercenary:2:qBotMedium,harkonnen:3:qBotMedium,atreides:4:qBotMedium,ordos:5:qBotMedium,sardaukar:6:qBotMedium",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
       "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/55001",
       "mod": "vanilla",
       "seed": 55001,
@@ -3292,6 +6430,132 @@
         ]
       ],
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8101",
+      "mod": "vanilla",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d.ini",
+      "map_sha256": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8101",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotMedium,harkonnen:2:qBotMedium,atreides:3:qBotMedium,ordos:4:qBotMedium,sardaukar:5:qBotMedium,fremen:6:qBotMedium",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8202",
+      "mod": "vanilla",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe.ini",
+      "map_sha256": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8202",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8303",
+      "mod": "vanilla",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da.ini",
+      "map_sha256": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8303",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8303",
       "reference_research_cells": [
         "off"
       ]
@@ -4780,5 +8044,310 @@
       "map_sha256": "8d8b8123b65d7ac53b68dcb3cfb2e5e65dcbb803f56f64498afb900b982f4ffa",
       "setup_sha256": "9abab9856320a5243de1480cdb58372672d29f2bca2f17628f3399da18481827"
     }
-  ]
+  ],
+  "seed_expansion": {
+    "native_source": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+    "seeds": [
+      1841712204,
+      8101,
+      8202,
+      8303
+    ],
+    "map_input_jobs": [
+      "20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1",
+      "20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-2"
+    ],
+    "provenance": "Exact replay filedata from24 pinned current native one-minute input-generation matches; cap/difficulty changes do not alter frozen raw bytes. One-minute measurements are excluded from behaviour reference.",
+    "receipts": [
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/1m/8303",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.15.350002/probe-evidence.tar.gz",
+        "archive_sha256": "714a04466c44764dad0bbefa6335d8e0a9c44e484cda71df1c39d2a494475c8f",
+        "replay_member": "scratch/ge37e3a061ab1/profile/replay/auto.rpl",
+        "replay_sha256": "3401dff720f34a175dce130084fccbd884374abc9c8c7776082254057bc54c2e",
+        "map_sha256": "3fba035b8ecfb55b05f1f44fc1b40229b12587b61dcf7e38c4f80ef40460a557",
+        "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8303",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/1m/8202",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.14.3a66f7/probe-evidence.tar.gz",
+        "archive_sha256": "5cf754078f8dbe3b819ac42ecf9aa2837efdf0102bb00f8ba52e6f1587736933",
+        "replay_member": "scratch/g78dbfcd111a5/profile/replay/auto.rpl",
+        "replay_sha256": "a8a10758e0c717ce33716f877baac6aa28f875165d7c325dcab7fcd94c504642",
+        "map_sha256": "7fd50a5bbc66f7316bff1b6b4d694038ed6a078504dfd2b384296abd125d6753",
+        "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8202",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/1m/8101",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.13.8ed702/probe-evidence.tar.gz",
+        "archive_sha256": "eb6a17872f77a2e673ea3b408280faa0e2a17604327c710c107ffd5bdd3d86cb",
+        "replay_member": "scratch/gcf99e8c48bbc/profile/replay/auto.rpl",
+        "replay_sha256": "d9f43d32d052713cfa0bdd438dea38354b70963a92e236e02ac408f901d7052e",
+        "map_sha256": "edce6838c380a02207c6836d67d3a48c53c5d7dba9432c34aa1ba78ae01044d3",
+        "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8101",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/1m/8101",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.9.be0a52/probe-evidence.tar.gz",
+        "archive_sha256": "97b007e51b50da2016ba7c45597ec1560716fa0e955ec91b86f81667962c35bd",
+        "replay_member": "scratch/gbe1bfcf372ad/profile/replay/auto.rpl",
+        "replay_sha256": "102a5f3cd8d6288f8478cba7258f842f27fe1b878c6accec207c50b28988ced0",
+        "map_sha256": "55ae387de820f6595f46c0b955ad405dbbc199c00ed8502dbda65ee43d0fc23b",
+        "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8101",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1841712204",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.12.6df349/probe-evidence.tar.gz",
+        "archive_sha256": "7c7f25783b802ba41318d8aa44e5aa84830498ba2a015651b50ef29acd11876c",
+        "replay_member": "scratch/g1676488ac701/profile/replay/auto.rpl",
+        "replay_sha256": "a57f461152feaf7607d8c439ed6ad2a71e73ef9092c036181b6968d9205457d4",
+        "map_sha256": "195e139e7caa886e19f311bd9d50aa51e575415e86fa8c658d963f997feaf534",
+        "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 1841712204",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/1m/8303",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.11.e4c419/probe-evidence.tar.gz",
+        "archive_sha256": "16c9def11c2a49fe659f4eaa805dae54bda8062bef94600e9742ce03b5345efc",
+        "replay_member": "scratch/gdceb36c93d8e/profile/replay/auto.rpl",
+        "replay_sha256": "f47249ded53b2f67545781e95e53fb8a954eaec137bd483cd934436ef9565e8e",
+        "map_sha256": "f5f1a250f02c7b4fad27c85c0e07cdad62a59ae917eb3a35cb8785479a049464",
+        "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8303",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/1m/8202",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.10.cdf11f/probe-evidence.tar.gz",
+        "archive_sha256": "1da92727d87f38c130d0dacab0d9ef6262a3ce56a3a7ac1af57d5730b9f82626",
+        "replay_member": "scratch/g4b1dcd21344e/profile/replay/auto.rpl",
+        "replay_sha256": "0e29b51c7b4f1a3bfcdab46aab27d8e83390c08f80d18a4428a45f7b729c9bdf",
+        "map_sha256": "8929bab8085cbe5db7a99a9a4006604eb457eda3be68e422512427b7f345458b",
+        "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8202",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/8303",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/vanilla/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-2.7.eb0dea/probe-evidence.tar.gz",
+        "archive_sha256": "dfefd38682e77a794b0681098dbe774c017694a95235c41360530e9092e5f260",
+        "replay_member": "scratch/gdd324925f461/profile/replay/auto.rpl",
+        "replay_sha256": "ee1dbbff68e85988c2be37976c9f9d35bf2930cbf716f9a4b237a18545b06a07",
+        "map_sha256": "9bd6e81abd731889da1416a09e89baabf45d455164a71eb5f9fb1c351d2be6da",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8303",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/1m/1841712204",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.8.1c459f/probe-evidence.tar.gz",
+        "archive_sha256": "aaaaa127e807177deef08c605a7480f0bb93e2fe92929d511c027be243aef514",
+        "replay_member": "scratch/gc9cdff70908a/profile/replay/auto.rpl",
+        "replay_sha256": "6346b62ff48ce67ee0391cfc39b61da345af1c042a96941149a8e59eeb5149c7",
+        "map_sha256": "26efc9ffb5a925185df846c4c04c813a5b4fd1537632667341d731ec700e5c3c",
+        "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 1841712204",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/1m/8303",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.7.680f7e/probe-evidence.tar.gz",
+        "archive_sha256": "6c7cb3e84bc9d45f554a63f12cc452da382366f91cbfa83accb8d2e4070ddb29",
+        "replay_member": "scratch/g677a82e8c167/profile/replay/auto.rpl",
+        "replay_sha256": "69cae9b8a0fd7dc67fd08d8a358259d5f6054dbeb8ee5430b70abb707e15019d",
+        "map_sha256": "e9c3716a0d3ed31434c7c022050d3601735a6bd7ba06d3775884432033e3fddf",
+        "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8303",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/8202",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/vanilla/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-2.6.e02e6d/probe-evidence.tar.gz",
+        "archive_sha256": "7e3fecfede2f5db015ad0cc0dd77e43e2721905730a855d2b815579e28af6024",
+        "replay_member": "scratch/g9c365fcfc81b/profile/replay/auto.rpl",
+        "replay_sha256": "4580a21442f192ff77cd87ddf659a06bdfe22e77082eae436669ec072119b547",
+        "map_sha256": "e83b4b3fd599b1db0d1b49546d93807025d5e350c9bc61123ca3ec86414756fe",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8202",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/1m/8202",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.6.a289df/probe-evidence.tar.gz",
+        "archive_sha256": "8475c3832e0c5cabc05f9d65f3630a03e0fe1188b3b2c0cd4ed9630fedb105d6",
+        "replay_member": "scratch/gd99fa228c0cd/profile/replay/auto.rpl",
+        "replay_sha256": "6f094f29914269b116c2341bdaa99e671f2be51cc85452e4c71f64abc567066c",
+        "map_sha256": "020c3155bd10cc4ae9c1189f1344c34711237d6cfbdf9cdac5663d8954481d5e",
+        "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8202",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/8101",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/vanilla/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-2.5.c14d9d/probe-evidence.tar.gz",
+        "archive_sha256": "5b485f8a6e6a30601e03d950de94c680519d12b8c3c589ee892d7cded9af97db",
+        "replay_member": "scratch/gb432b60ad4c0/profile/replay/auto.rpl",
+        "replay_sha256": "95dd819ba574c47e300cbce43a072a161fb89402d692dcf0c2d342923c78db5e",
+        "map_sha256": "5048ec8809375d233e5f2811d76076f0ff58467f16ea0e2916f64c60fba2c99d",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 8101",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1841712204",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/vanilla/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-2.4.56be36/probe-evidence.tar.gz",
+        "archive_sha256": "205995b751e4b7472ee65b8bf13de5858a522bf9f69a8689afc17034c7a53f96",
+        "replay_member": "scratch/gf506d8e0d1a7/profile/replay/auto.rpl",
+        "replay_sha256": "d63276f22684901d95c7707933d14a0663aed3ecdaead6a47769d39de4496e69",
+        "map_sha256": "63b73c1a670c4fd5b3975eeb2531722d059b5ab4d7feb5bbd1668e9a5a497818",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1841712204",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/1m/8101",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.5.028a0b/probe-evidence.tar.gz",
+        "archive_sha256": "ea0cb46817b3afbd55bd7412f1f6497d0f6fa04f9d8ba7fe00d83670f906f1f3",
+        "replay_member": "scratch/gc64dc52233ea/profile/replay/auto.rpl",
+        "replay_sha256": "3dccd8b9555567259d7b9df3ec612e953adca755614ff296f3c93b83accd718e",
+        "map_sha256": "c25ef63f37d0e6cb9d9d045daf2ef190e0f3d4590fa6f3f01794bc70473b01df",
+        "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 8101",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/8303",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/vanilla/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-2.3.ab7144/probe-evidence.tar.gz",
+        "archive_sha256": "503b0ddc2f9bec1e8be69b7a98c9e4617958099f136999852e869b0f3dd6e5f8",
+        "replay_member": "scratch/gfc78f97e92e6/profile/replay/auto.rpl",
+        "replay_sha256": "c91bc07428cdc4d37d65f1bdc423f36d1dd94f87c5ccac4c70a1d97c7e7a0b8d",
+        "map_sha256": "1e6031ca4776d7dd2e0cd30065bd1263802ade2e64112cba294343a7202988f1",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8303",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/1m/1841712204",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.4.e620f0/probe-evidence.tar.gz",
+        "archive_sha256": "dc1074c168c7d0cd83f5ca50874bc55de503b360aa1cfda692510df6785b0d5a",
+        "replay_member": "scratch/g6979a6e4f7ff/profile/replay/auto.rpl",
+        "replay_sha256": "8599047b221e61199f28715a4f2ac67d95926b2fcd5f79c997aebd57233a35a2",
+        "map_sha256": "538ec62393d933c231c959fd3a46a2dd700dc26c54b4de3f17f0517ec4db3215",
+        "map_name": "6P - 128x128 - Random 6 starts DuneCity T9 1841712204",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/1m/8303",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.3.a4e0b0/probe-evidence.tar.gz",
+        "archive_sha256": "43b0e1d1152932ac5a42281b2fef52b6fac1249296fa9e2bc67536ec7dc5d508",
+        "replay_member": "scratch/g36256abecd02/profile/replay/auto.rpl",
+        "replay_sha256": "d098e027097fa7e5d998824bce620d48185c1151bb1b1907676ca13871921ea9",
+        "map_sha256": "0e4358286b0c42cb2e1a43e3e5f18b5a365814a60e38cac2eb8c8f18331c8b1e",
+        "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8303",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/1m/8202",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.2.da2b47/probe-evidence.tar.gz",
+        "archive_sha256": "eeac6406d90481e27af12b5ee9c7ac946e930607fbbcf285085cff1e4cb6932c",
+        "replay_member": "scratch/g08bbc02c0393/profile/replay/auto.rpl",
+        "replay_sha256": "73cc9a4c0135faf75c7fb7cf17a0be4f187c85a7a642afd126d775d2822c961f",
+        "map_sha256": "5dec46bc07e9a1f24b523d226df8af6793ceb63beee6888530d7db2c3c782a25",
+        "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8202",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/8202",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/vanilla/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-2.2.87241d/probe-evidence.tar.gz",
+        "archive_sha256": "1cf38421432a961face9b64fbf523940abb55e60dc7d32a65bf6868b01e7ece8",
+        "replay_member": "scratch/g21890c73ea80/profile/replay/auto.rpl",
+        "replay_sha256": "68f244c0c5da6212ccd1f20817865ceb24ce339e6fc3e8b7346a48d0073e87cf",
+        "map_sha256": "a520b12a63a683c15f181db2d9f7bcb8d5dabc4cf632ee4badb5380b275cd233",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8202",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/8101",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/vanilla/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-2.1.19a63f/probe-evidence.tar.gz",
+        "archive_sha256": "f7278dad648ec454be7c21536d2286a877f3b2a0823decb8a42b0b24927e1dcc",
+        "replay_member": "scratch/ge68ce848a4c5/profile/replay/auto.rpl",
+        "replay_sha256": "3d96971eb18cae079009b6105c671da791cff23e77ee20ba64d9cf52cc13b933",
+        "map_sha256": "401e5e3e058f542ad78a02d7ab920f9fef9f97475022d7dcf37930ee49bfae43",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 8101",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/1m/8101",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.1.9c4882/probe-evidence.tar.gz",
+        "archive_sha256": "e82c1fb699fae429a42eba51affe102c01723d870bfdf6f6fe81bc75657d8f52",
+        "replay_member": "scratch/g42b28f1f7eb4/profile/replay/auto.rpl",
+        "replay_sha256": "562784650885af228b1aee91d50375eba25905fd74b4835f6559d7b99cb923b3",
+        "map_sha256": "d171532c713a2cb6557cbd25af27cc0ce8448e08ea2cca3036e0d3190425d73b",
+        "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 8101",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/1m/1841712204",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/dunecity/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-1.0.560176/probe-evidence.tar.gz",
+        "archive_sha256": "da7d5edf58377fe3f0b8cb38234d2f7bef5cd6c5add78e7d7aaeb2f1a5a21991",
+        "replay_member": "scratch/gcfb4ee6c92a0/profile/replay/auto.rpl",
+        "replay_sha256": "0e215d95b0ebb0f750167d4f5c93e301b42eddd84a851ed083c96944f78505c6",
+        "map_sha256": "a4911a36cfbaedd311fd9574b7d45af396019bc5df3211cb88e091b394d6b74b",
+        "map_name": "2P - 128x128 - Random 2 starts DuneCity T9 1841712204",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/1841712204",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/map-inputs/vanilla/cluster-evidence/20261106T184424-baseline-map-inputs-eight-seeds-93d6f2-2.0.efd377/probe-evidence.tar.gz",
+        "archive_sha256": "00d1a8d5c109f74eb2ee7daa369994a1504b10fd19bc6fd4999028a0d9afcc9a",
+        "replay_member": "scratch/g4dcd6f149d1a/profile/replay/auto.rpl",
+        "replay_sha256": "90d8cf93e772a2556920d742209e072b74144ed0e435b0ddba2d68b9acd3e989",
+        "map_sha256": "837a108075acf789ae2e987c3e4cd441b6b44e9a89116fe2927d643db362fe78",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1841712204",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      }
+    ],
+    "roster_policy": "Eight-seed audit order is original four followed by expansion four; expansion rosters use global seed index4..7. Map generation-only roster was index0..3; no generation behaviour rows are reused."
+  }
 }

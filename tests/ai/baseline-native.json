@@ -6,7 +6,9 @@
   },
   "native_tree": "43e15efe7e7e5b58e35613331a924f0af735f01d",
   "portability_repairs": [
-    "src/FileClasses/GFXManager.cpp noncopyable conditional temporary replaced by directly returned prvalues, same UI semantics for MSVC"
+    "src/FileClasses/GFXManager.cpp noncopyable INIFile conditional replaced by directly returned prvalues, same UI semantics for MSVC",
+    "src/mod/Workshop.cpp saveMod metadata noncopyable INIFile conditional replaced by directly returned prvalues, same inactive Workshop persistence semantics",
+    "src/mod/ModManager.cpp writeModInfo noncopyable INIFile conditional replaced by directly returned prvalues, same inactive metadata persistence semantics"
   ],
   "release": "1.0.792",
   "schema_version": 1,

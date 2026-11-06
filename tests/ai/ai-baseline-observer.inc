@@ -134,7 +134,7 @@ inline int survivingTeam(Game& game) {
         if(team && team!=house->getTeamID()) return 0;
         team=house->getTeamID();
     }
-    return team;
+    return team ? team : -1;
 }
 inline void digest(const Game& game) {
     SDL_Log("PROBE_DIGEST: %s",GameStateDigest::describe(game.computeStateDigest()).c_str());
@@ -206,7 +206,8 @@ int runAIBaselineProbe() {
     }
     if(game->getGameCycleCount()%minute) observer.sample(*game);
     AIBaseline::digest(*game);
-    SDL_Log("BASELINE_RESULT: cycle=%u winner_team=%d outcome=%s",game->getGameCycleCount(),winner,winner?"decided":"time_limit");
+    SDL_Log("BASELINE_RESULT: cycle=%u winner_team=%d outcome=%s",game->getGameCycleCount(),std::max(0,winner),
+        winner>0?"decided":winner<0?"extinct":"time_limit");
     game.reset();currentGame=nullptr;pLocalPlayer=nullptr;pLocalHouse=nullptr;
     return MENU_QUIT_DEFAULT;
 }
