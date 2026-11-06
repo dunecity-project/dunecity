@@ -97,6 +97,12 @@ struct QuantBot::BuildPass {
     // planBuildBudget()
     int money{};
     bool startWhatMakesSense{};
+    bool threatenedFirstFactory{};
+    bool powerBeforeFirstFactory{};
+    Uint32 firstFactoryPriorityBuilder{NONE_ID};
+    Coord firstFactoryPrioritySite{Coord::Invalid()};
+    int firstFactoryCompletionCycles{};
+    int firstFactoryFoundationCost{};
     struct SensibleDrain {
         Uint32 builder = NONE_ID;
         int priority = 70;
@@ -104,9 +110,17 @@ struct QuantBot::BuildPass {
         int64_t perCycle = 0;
         Uint32 purpose = NONE_ID;
         bool granted = false;
+        bool military = false;  ///< Army production funded from the army share.
+        bool emergency = false; ///< A narrow real emergency; one may start unfunded.
     };
     std::vector<SensibleDrain> sensibleDrains{};
     std::vector<std::pair<int64_t,int64_t>> sensibleDrainEnds{};
+    /// Army production's guaranteed share of cash and income, in basis points.
+    int sensibleArmyShare{};
+    /// Highest-priority development want refused for money this pass. Lower
+    /// development starts and army spare-funds starts must leave it fundable.
+    SensibleDrain sensiblePending{};
+    std::array<SensibleDrain,2> sensibleExtras{}; ///< Candidate and pending scratch.
     bool militaryBudgetOverridden{};
     int militaryBudget{};
     bool surplusArmy{};
@@ -375,6 +389,8 @@ struct QuantBot::BuildPass {
     bool protectionCapital{};
     bool cityGrowthProtected{};
     bool capitalConsumed{};
+    bool capitalPreferFundedBattery{}; ///< Legacy capital-plan telemetry.
+    bool capitalTechEconomyPriority{}; ///< Legacy capital-plan telemetry.
     int capitalOrderedCost{};
     AITelemetry::Record capitalOrders{};
     int capitalInitialCount{};
@@ -442,6 +458,7 @@ struct QuantBot::YardTurn {
     Uint32 itemID{};
     const char* structureRule = nullptr;
     Coord crimeServiceSite{};
+    int sensibleChoice{-1};
     bool serviceSavingHold{};
     bool skipRemainingStructureLogic{};
     CivicPlan civicPlan{};

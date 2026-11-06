@@ -315,8 +315,13 @@ bool QuantBot::buildCampaignYard(BuildPass& pass, BuilderTurn& turn, YardTurn& y
 
 bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     startYardSelection(pass, turn, yardTurn);
-    chooseYardAirDefence(pass, turn, yardTurn);
+    const int sensibleChoice = pass.startWhatMakesSense
+        ? sensibleCapitalChoice(pass,turn.pBuilder->getObjectID()) : -1;
+    if (!pass.startWhatMakesSense || pass.airEngaged || sensibleChoice < 0
+        || sensibleCapitalPriority(pass,sensibleChoice) >= 50)
+        chooseYardAirDefence(pass, turn, yardTurn);
     chooseYardEssentials(pass, turn, yardTurn);
+    if (chooseSensibleYardCapital(pass,turn,yardTurn)) return true;
     // Power recovery and a present air threat keep priority. Storage consumes
     // only its own price, leaving useful army/defence/city spending available.
     if ((botConfig().force.storageCapacity || pass.techSavings)
@@ -372,6 +377,56 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     return false;
 }
 
+bool QuantBot::chooseSensibleYardCapital(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    if (!pass.startWhatMakesSense) return false;
+    if (turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() != 0) return true;
+    const int choice = sensibleCapitalChoice(pass,turn.pBuilder->getObjectID());
+    const int priority = choice >= 0 ? sensibleCapitalPriority(pass,choice) : 100;
+    const int currentPriority = yardTurn.itemID == NONE_ID ? 100
+        : sensiblePriority(pass,yardTurn.itemID);
+    // Generation is a dependency only when real queued loads/growth exhaust
+    // the current surplus before the first factory can finish, not merely
+    // because the usual reserve is below target.
+    if (pass.threatenedFirstFactory && pass.powerBeforeFirstFactory
+        && priority >= 8 && currentPriority > 8) {
+        Uint32 generator = NONE_ID;
+        if (campaignAvailableToBuild(turn.pBuilder,Structure_WindTrap)
+            && findPlaceLocation(Structure_WindTrap).isValid()) generator = Structure_WindTrap;
+        if (campaignAvailableToBuild(turn.pBuilder,Structure_NuclearPlant)
+            && (generator == NONE_ID || preferCompactNuclear(pass,turn.pBuilder))
+            && findPlaceLocation(Structure_NuclearPlant).isValid()) generator = Structure_NuclearPlant;
+        if (generator != NONE_ID) {
+            yardTurn.itemID = generator;
+            yardTurn.structureRule = "first_factory_power_deadline";
+            yardTurn.skipRemainingStructureLogic = true;
+            yardTurn.urgentProtection = true;
+            return false;
+        }
+    }
+    if (choice < 0 || priority >= currentPriority
+        || (yardTurn.civicClaimsYard && priority > 20)
+        || (cityBootstrapNeeded(pass) && priority > 20)) return false;
+    const auto& candidate = pass.capitalCandidates[choice];
+    const auto kind = std::string_view(candidate.kind);
+    const bool upgrade = kind == "tech_upgrade" || kind == "expansion_upgrade"
+        || kind == "defence_upgrade" || kind == "production_upgrade";
+    if (upgrade) {
+        yardTurn.skipRemainingStructureLogic = true;
+        upgradeWithLogging(pass,turn,__LINE__);
+        return true;
+    }
+    if (!isStructure(candidate.item) || !candidate.site.isValid()
+        || !campaignAvailableToBuild(turn.pBuilder,candidate.item)) return false;
+    yardTurn.itemID = candidate.item;
+    yardTurn.structureRule = candidate.kind;
+    yardTurn.sensibleChoice = choice;
+    yardTurn.crimeServiceSite = candidate.site;
+    yardTurn.skipRemainingStructureLogic = true;
+    yardTurn.urgentProtection |= candidate.urgent || priority < 20;
+    return false;
+}
+
+
 void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     // custom AI starts here:
 
@@ -408,7 +463,7 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
     // A demanded plot can be blocked by generation rather than its own
     // hundred-credit price. Its selected, bounded power project owns the
     // savings and this yard until queued; other producers keep the remainder.
-    if (yardTurn.itemID==NONE_ID && capitalPending(pass) && !yardTurn.civicClaimsYard
+    if (!pass.startWhatMakesSense && yardTurn.itemID==NONE_ID && capitalPending(pass) && !yardTurn.civicClaimsYard
         && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)=="city_growth_power"
         && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()) {
         const auto& power=pass.capitalCandidates[pass.capitalChoice];
@@ -426,7 +481,7 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
     // at 0, so this allocation would buy a lot that cannot develop and
     // spend the civic's down payment doing it. The civic rule below
     // owns the decision in that case.
-    if (yardTurn.itemID==NONE_ID && pass.cityGrowthProtected && capitalPending(pass)
+    if (!pass.startWhatMakesSense && yardTurn.itemID==NONE_ID && pass.cityGrowthProtected && capitalPending(pass)
         && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()
         && !yardTurn.civicClaimsYard) {
         yardTurn.itemID=affordableCityZone(pass, turn.pBuilder,pass.money);
@@ -2314,7 +2369,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         && protectedProject->item==yardTurn.itemID
         && (std::string_view(protectedProject->reason)=="ground_threat"
             || std::string_view(protectedProject->kind)=="city_supply");
-    if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite)
+    if (yardTurn.sensibleChoice < 0 && yardTurn.itemID != Structure_RocketTurret
+        && yardTurn.itemID != Structure_PoliceStation && !protectedSite)
         yardTurn.crimeServiceSite = Coord::Invalid();
 }
 
@@ -2329,7 +2385,10 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     }
     Coord selectedPlaceLocation = Coord::Invalid();
     if (yardTurn.itemID != NONE_ID && campaignAvailableToBuild(turn.pBuilder,yardTurn.itemID)) {
-        if (yardTurn.crimeServiceSite.isValid()) selectedPlaceLocation = yardTurn.crimeServiceSite;
+        if (yardTurn.sensibleChoice >= 0
+            && pass.capitalCandidates[yardTurn.sensibleChoice].item == yardTurn.itemID)
+            selectedPlaceLocation = pass.capitalCandidates[yardTurn.sensibleChoice].site;
+        else if (yardTurn.crimeServiceSite.isValid()) selectedPlaceLocation = yardTurn.crimeServiceSite;
         else if (yardTurn.itemID == Structure_PoliceStation) {
             // Legacy demand/emergency rules use the same bounded service
             // scorer; no alternate full-map search bypasses its overlap costs.

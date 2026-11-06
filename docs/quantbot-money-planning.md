@@ -411,29 +411,81 @@ planner good or bad; they require explicit interaction/context checks.
 Stefan's implementation instruction supersedes the original design's
 “save until sustainably startable” rule. The independent hashed bool is
 `[Force Concentration] StartWhatMakesSense=0` / `force.startWhatMakesSense`.
-There are no extra confidence, deferred-start, share or saved-hold genes in this
+There are no extra confidence, deferred-start or saved-hold genes in this
 candidate. OFF retains the existing path. ON has one financial admission view,
 no AI credit/discount/extra income, and uses ordinary shared engine APIs.
 
-### 5.1 Start the primary project; finance only parallelism
+### 5.0 Failed first candidate (b8a627aa) and the correction
+
+The first ON candidate queued the highest-priority project, every newly
+higher-priority project and every broad `spendingEmergency` item regardless of
+funding. Measured on the full 288-game paired screen at `b8a627aa` (144 OFF +
+144 ON same-source games, 432 house pairs, 0 game errors; T9 symmetric
+selfplay, not a strength or research proof) it failed:
+
+| Measure | OFF | ON |
+| --- | --- | --- |
+| Army value at 20 min (278 house pairs) | 7367 | 1726 |
+| Army units at 20 min | 25.39 | 7.94 |
+| Mean final kill value | 12294 | 2172 |
+| Dispatches | 552 | 277 |
+| Cash 0 with queued/upgrading work at 20 min | 6/278 | 216/278 |
+| Economy stalls | 105/413 | 215/432 |
+| Credits paid, minutes 0–20 (mean/median) | 26655/29128 | 9461/8006 |
+| Military units paid (mean; Starport share) | 8177 (56%) | 1671 (0.6%) |
+| Harvesters/carryalls/MCVs paid (mean) | 5938 | 1327 |
+| Military share of paid credits (house mean/median/pooled) | 0.228/0.273/0.307 | 0.144/0.154/0.177 |
+
+Paid-by-bucket is derived (Starport orders at purchase, factory units at quote
+on completion; partial payments still in production at minute 20 are not
+counted); the paid total is exact. Starting everything spread income across
+many drains so nothing finished, cash sat at zero so Starport imports and
+workers stopped, income collapsed and army production starved. Artifacts:
+`outputs/money-planning-20261106/runs/b8a627aa8f6db28de26fd05f491b497cd9739deb/`
+(`paired-cohort-analysis.json`, `paid-spend-split-0-20m.json`). No promotion.
+
+The b8 exact continuations (900 s each, captures, rule flags and save hashes
+confirmed) also failed. Factory save, 8 runs: house 2 never accepted a Light
+Factory order in any arm, and ON lost its Construction Yard sooner (saved rule
+121.6 s → 83.3 s; explicit installments 117.1 s → 88.2 s). Power save, SWMS
+only: Nuclear orders 14 → 10 / 15 → 7 and paid generator spend 59.5k → 53.8k /
+59.3k → 47.3k (saved / explicit rule). Jointly with CityCompactPower, Windtrap
+orders fell 106 → 10 / 115 → 11 while Construction Yards destroyed rose 3 → 8 /
+2 → 6; on the nuclear save, yards destroyed rose in every ON arm (6 → 7, 4 → 9;
+joint 6 → 10, 4 → 9). See `factory-native-observations.json` and
+`exact-power-nuclear-observations.json` beside the cohort artifacts.
+
+### 5.1 Start funded work; finish before adding; keep the army's share
 
 1. Existing economy, power, prerequisite, defence and selected unit-ratio
    policies still identify legal useful wants. Remove liquidity-only filtering
    from their selectors: a low cash balance must not turn a good expensive
    choice into a different cheap item.
-2. Keep the highest sensible progressive project and **queue it immediately,
-   including at zero cash**. Sustainability is not an admission prerequisite
-   for that primary project. It pays what the shared engine can pay and pauses
-   normally when broke.
-3. A new higher-priority project or a real emergency may similarly start despite
-   a currently insolvent projection. This is an explicit admission override,
-   not a claim that all queued work will run at maximum speed.
-4. Lower/equal-priority independent starts require finite cash-path surplus after
-   all live obligations and their own drain. They cannot claim the same cash/
-   projected receipt twice. Never reserve the full quote or an arbitrary1000.
-5. A real immediate debit (Starport/conversion/prepaid study) still needs real
-   cash, and legacy global-OFF upgrades retain their human-and-AI acceptance
-   rule. The gene cannot borrow engine cash or silently rewrite a saved option.
+2. **Every start must keep all live work funded to completion** (§5.4): the
+   sum of the per-cycle drains may exceed income only by what actual cash
+   covers until those drains finish. A start that would make any running lane
+   crawl is refused; started work finishes before new work begins.
+3. **Army production keeps a guaranteed share** of cash and income
+   (`sensibleArmyShareBps` = 30%, the OFF bot's measured pooled military share)
+   while the existing target/mix/caps admit units it can spend it on, capped by
+   what its running lines plus ready admitted producers can spend. Development
+   is funded from the rest; the army may additionally use spare funds that no
+   running lane or waiting higher-priority development want needs.
+4. **Start before the money is all there.** Nothing waits for the full quote:
+   a start needs only the part of its price that its share of income will not
+   cover during its build. When no project is running and the army has no
+   claim, the top want starts at zero cash (nothing else can be starved).
+5. The highest-priority development want refused for money becomes the pass's
+   *pending* want; lower development starts and army spare-funds starts must
+   leave it fundable, so cheap filler cannot postpone it indefinitely.
+6. Only a narrow real emergency (actual blackout generator, no construction
+   yard, no spice worker or unloading bay, the existing local ground/air defence
+   emergency) overrides the shares; one may start unfunded, more only funded.
+   Forecast power, a first port, crime police and opening targets keep their
+   priority but are funded like anything else.
+7. A real immediate debit (Starport/conversion/prepaid study) still needs real
+   cash from its share, and legacy global-OFF upgrades retain their human-and-AI
+   acceptance rule. The gene cannot borrow engine cash or rewrite a saved option.
 
 CYs run before economic producer/import lanes, research before ordinary army
 lanes. Existing yard selection and tie rules continue to choose each builder's
@@ -496,38 +548,58 @@ income. True immediate debits use actual acceptance; free direct overlay roads
 remain free. Manual/shared-house work is observed, never cancelled or paused.
 The model is per-pass scratch, not a persisted wallet or planner-owned hold set.
 
-### 5.4 Integer parallel-drain admission
+### 5.4 Integer bounded-drain admission
 
 All money is engine32.32 `FixPoint` raw units; time is simulation cycles.
 Use quotient plus remainder for positive ceiling division, saturating queue cost
 addition and guarded64-bit multiplication/integration. No floating-point finance,
 long unchecked `price*duration`, per-cycle simulation or fabricated cash.
 
-For a lower/equal-priority candidate:
+For a share `s` (basis points) of the wallet and a set of lanes:
 
-`balance(t) = actualCashRaw - actualImmediateQuoteRaw`
-`             + modeledBankableTaxAndSpiceRaw(t) - powerPoliceUpkeepRaw(t)`
-`             - existingFiniteDrainRaw(t) - candidateFiniteDrainRaw(t)`
+`balance_s(t) = s·actualCashRaw - immediateQuoteRaw`
+`               + s·(bankableTax - powerPoliceUpkeep + modeledSpice)(t)`
+`               - Σ finite drains of the lanes and extra profiles (t)`
 
-Current tax is bankable only with real storage. Spice rate comes from the existing
-actual delivered-fleet/refinery model and is capped by remaining per-house spice;
-an exhaustion endpoint removes it. No future worker, factory or speculative new
-zone tax is credited. This is a **rate projection**, re-evaluated each build pass,
-not a promise that uncertain future receipts arrive on a particular tick.
+`solvent_s` holds when `balance_s(t) ≥ 0` at every endpoint. Scaling is
+`v/10000·s + v%10000·s/10000` (truncated), applied to cash, the net tax rate and
+the spice rate separately. Current tax is bankable only with real storage. Spice
+comes from the existing delivered-fleet/refinery model and ends at the house's
+spice exhaustion. No future worker, factory or speculative zone tax is credited.
+This is a **rate projection**, re-evaluated every build pass.
 
-Build a sorted endpoint list at finite drain completions and spice exhaustion.
-Within each segment the conservative balance is affine; test each endpoint.
-Reject on the first negative prefix, not merely a negative final balance.
-Cash accumulation is capped at the shared maximum. A sorted finite profile
-costs `O(n log n)` for n live lanes; scratch capacity is reused within the pass.
-When telemetry is enabled a parallel refusal reports `drain_budget_hold` with
-builder/item/priority and first projected deficit cycle.
+Endpoints are the finite drain completions and spice exhaustion, sorted; the
+balance is affine between them. Reject on the first negative prefix, not merely
+a negative final balance. Cost is `O(n log n)` for n live lanes; scratch is
+reused within the pass.
 
-The primary/higher-priority/emergency start deliberately bypasses this forecast,
-but never a real engine acceptance rule. Thus positive future income is not
-misrepresented as enough to keep every primary project continuously running:
-normal pausing is part of the requested behavior. The planner does not create
-automatic holds, cancel human work or change engine payment ordering.
+Army share `a = 0` without army capacity; otherwise
+`min(3000, capacity·10000/max(1, max(0, net income) + cash/horizonCycles))`,
+where capacity is the summed per-cycle rate of running military lanes plus
+ready military capital candidates (score > 0: legal, under unit caps, mix and
+military target). Discounted Starport imports count at price per delivery cycle.
+
+Admission, first match wins:
+
+1. The rest of a structure package the same builder was granted this pass.
+2. Narrow emergency: `solvent_10000(all lanes + candidate)`, or no emergency lane
+   is running yet (`emergency_funded` / `emergency_start`).
+3. No project lane is running (repairs ignored) and nobody else has a claim —
+   development: `a = 0`; army: no pending development want (`sole_primary`).
+4. Army: `solvent_a(army lanes + candidate)` (`army_share`) or
+   `solvent_10000(all lanes + candidate + pending)` (`spare_funds`).
+5. Development: `solvent_(10000-a)(development lanes + candidate + pending)` and
+   `solvent_10000(all lanes + candidate + pending)` (`development_share`).
+
+Pending is included only for lower/equal-priority development and army spare
+funds, and is the highest-priority development want refused this pass. With
+telemetry enabled, starts trace `drain_budget_start` (rule, share, lanes) and
+refusals `drain_budget_hold` (share, pending item, first deficit cycle).
+
+The planner does not create automatic holds, change build speed, cancel human
+work or change engine payment ordering. When every lane is solvent the engine's
+object-order payment does not matter; an unfunded sole/emergency start may
+still pause normally, but nothing else is started alongside it unfunded.
 
 ### 5.5 Replacement map and gene interactions
 
@@ -539,7 +611,7 @@ automatic holds, cancel human work or change engine payment ordering.
 | CityConstructionCapital / CityFirstFactorySaving / firstFactoryCapital / nextHeavyRunway | Remove full missing-chain, full building and four-minute next-line funding waits. Keep legal/difficulty/need/all-lines-busy/no-pending/site/cap policies.|
 | FundedClassicProduction | Preserve its selected classic economy/utility routes; no separate cash gate or entitlement to hypothetical continuous maximum production.|
 | CityPowerSizing / CityCompactPower | Determine useful legal generator/footprint choice without cash+reserve filtering. Compact remains a separate default-OFF gene. PowerPlants' separate StartBeforeFunded experiment is superseded/held, not a second finance policy.|
-| ResearchLab / ResearchLabProgression / ContinuousResearch | Supply lab/study wants under their selected policy. Continuous alone is unchanged. With both genes ON, even continuous studies use the common parallel-drain admission; all actual accepted starts enter the same obligation model. Primary research can start with0.|
+| ResearchLab / ResearchLabProgression / ContinuousResearch | Supply lab/study wants under their selected policy. Continuous alone is unchanged. With both genes ON, even continuous studies use the common bounded-drain admission (development share, priority 40); all actual accepted starts enter the same obligation model.|
 | Technology Installments global option | Humans and AI share research/upgrade acceptance/payment. New-gameON versus legacy-saveOFF is preserved; this is not an AI gene.|
 | CityZoning / civic / storage / service policies | Keep actual demand, thresholds, benefit, recurring expense, legality, road and placement requirements; remove liquidity-only filters. No invented positive R/I/C demand.|
 | UnitChoice genes | Keep independently selected ratio/family/buffered-heavy/income-capacity wants and their trials. No new gene is enabled by this cutover. Actual current finance goes through one admission function.|
@@ -553,17 +625,19 @@ not this candidate's author.
 
 ### 5.6 Small numerical examples (illustrative, not measurements)
 
-- A1000-credit primary project taking2minutes starts with100 or0 cash, even if
-  income is only300/min and progress must pause. It no longer waits for1000.
-- With100 cash and600/min timely modeled net income, an active500/min drain
-  plus another500/min consumes that100 after15seconds. The lower parallel
-  project is refused; the existing primary is not replaced by cheap filler.
-- A3000-credit civic with zero cash is still startable as the highest sensible
-  progressive want. It is not labelled continuously sustainable merely because
-  the engine accepts its queue.
-- A2000-credit immediate import/prepaid study on400 cash cannot start. Research
-  AND upgrade under the shared global installment rule can start progressively;
-  legacy global-OFF acceptance remains real and identical for humans.
+- No project running, no army capacity: a1000-credit generator starts at0 cash
+  and pays from income as it arrives. It no longer waits for1000.
+- Army wanting (`a`=30%), 1500/min income, 500 cash: a300-credit tank over
+  ~15 s needs `0.3·500 + 0.3·1500·0.25 ≈ 262 < 300` from its share, so it starts
+  only if spare funds (after running work and the pending want) cover it.
+  A300-credit windtrap over ~11.5 s needs `0.7·500 + 0.7·1500·0.19 ≈ 551 ≥ 300`:
+  it starts, and both finish at full speed.
+- With a funded windtrap running, a second lower-priority start that would
+  leave the windtrap short before it completes is refused; the windtrap
+  finishes first.
+- A2000-credit immediate import on400 cash cannot start. Research and upgrades
+  under the shared global installment rule start progressively; legacy
+  global-OFF acceptance remains real and identical for humans.
 
 ## 6. Required evidence before implementation promotion
 
@@ -573,20 +647,25 @@ check passed. The candidate remains OFF pending the pinned receipts below.
 ### Behavior hard gates
 
 1. Full-quote production no longer blocks the highest sensible LF/factory/zone/
-   civic/generator start even at0 cash. Fractional32.32, health/speed, concrete/
+   civic/generator start: it needs only the part of its quote its share of
+   income will not cover during the build, and starts at0 cash when nothing
+   else runs or claims money. Fractional32.32, health/speed, concrete/
    no-concrete, pause/income-resume and instant-build preserve actual engine pay.
 2. Every actual queue/upgrade/repair/research/recurring cost appears once;
    prepaid cargo/research appears0 times as future debt. Same-pass multiple
    builders/controllers cannot reuse a funding grant. Commit/rollback symmetric.
-3. More than one independent queue starts when their **sum** is sustainable;
-   the lower one fails finite prefix solvency after the higher drain.
-   A missing/unplaceable/unreachable want does not acquire a cash reservation.
+3. More than one independent queue starts when their **sum** is funded to
+   completion; a start that would leave a running lane short is refused even when
+   it ranks higher (no unfunded higher-priority bypass). A missing/unplaceable/
+   unreachable want never becomes pending, so it acquires no cash reservation.
 4. Demand caps, military/engine limits, campaign permissions, shared-human
    authority and existing role/saboteur protections remain unchanged.
    Real legacy global-OFF upgrade/prepaid/import admission is retained.
-5. Explicit emergency/higher-priority admission may accept normal pausing, never
+   Army starts keep their share while target/mix/caps admit units; a satisfied
+   army leaves the whole wallet to development.
+5. Only the narrow emergency set may start unfunded (one at a time), never with
    fake credit, AI privileges, human-order cancellation or automatic hold state.
-   A distant threat/quiet overlap cannot invent an emergency.
+   A distant threat/quiet overlap or forecast deficit cannot invent an emergency.
 6. Research acquisition is exercised from actualT1/T2 through relevant unlocks,
    not just research-option-ON matches already atT9. Global installment OFF/ON,
    old paid timers, pause/resume, lab loss and human parity are separate gates.
@@ -611,11 +690,15 @@ Exact continuation harnesses expose `--technology-installments saved|off|on`.
 are global post-load overrides for every player, separately tagged, not a save
 rewrite or an AI exemption. Retain setup/mode/content/source hashes.
 
-The required288 screen uses144 same-source game pairs:3mods ×2sizes ×2spice
-levels ×2formats ×3difficulties ×2seeds,30minutes, no initial army/city/dispatch,
-and the same explicit global installment option in both arms. Its two seeds do
-not satisfy the8-seed promotion requirement. Separate exact-save and joint
-CityCompactPower interaction continuations do not inflate the288 count.
+Before the288 screen, every revised candidate first passes the exact factory
+saves and a48-game paired smoke (a balanced subset of the288 dimensions) on
+army value at20 minutes, dispatches and kill value, plus cash-0-with-queued-work
+and paid credits by bucket. The required288 screen uses144 same-source game
+pairs:3mods ×2sizes ×2spice levels ×2formats ×3difficulties ×2seeds,30
+minutes, no initial army/city/dispatch, and the same explicit global installment
+option in both arms. Its two seeds do not satisfy the8-seed promotion
+requirement. Separate exact-save and joint CityCompactPower interaction
+continuations do not inflate the288 count.
 
 ### Tournament and historical gate
 

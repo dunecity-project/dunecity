@@ -9,6 +9,11 @@
 // random tie breaking, or assumption that forecast income is spendable today.
 namespace QuantBotSpendingPolicy {
 constexpr int horizonMinutes = 4;
+// StartWhatMakesSense: army production keeps this share of cash and income while
+// the existing target/mix/caps admit units it can actually spend it on. 30% is
+// the default (OFF) bot's measured pooled military share of credits paid in the
+// first 20 minutes (b8a627aa cohort, 0.307); spare funds may add to it.
+constexpr int sensibleArmyShareBps = 3000;
 enum class Bucket : unsigned { Production, Economy, Military };
 inline const char* bucketName(Bucket bucket) {
     return bucket == Bucket::Production ? "production"

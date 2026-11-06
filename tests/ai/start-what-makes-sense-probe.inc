@@ -2,6 +2,12 @@
 // asserted policy start uses the real bot or its ordinary order wrapper, and all
 // progress/payment/placement observations use the native engine. Include after
 // tech-production-probe.inc, which owns the shared World setup and private access.
+#include <players/CityEconomyInvestmentPolicy.h>
+#include <players/QuantBotBuildPolicy.h>
+#include <players/QuantBotSpendingPolicy.h>
+#include <players/UnitMixPolicy.h>
+#include <string_view>
+
 namespace StartWhatMakesSenseProbe {
 using TechProductionProbe::World;
 using TechProductionProbe::Stage;
@@ -125,6 +131,168 @@ inline bool queuedZone(const World& world) {
         || world.queued(Structure_ZoneIndustrial);
 }
 
+// The planner's own receipt forecast: the only income a finite-prefix check may
+// count. Tax is bankable only with real storage capacity.
+struct Receipts {
+    int64_t netTax = 0;     // raw credits per cycle, (tax - upkeep)
+    int64_t spice = 0;      // raw credits per cycle from the four-minute fleet forecast
+    int64_t spiceStock = 0; // raw remaining field share that ends the spice rate
+};
+
+inline Receipts receiptsOf(const World& world, const QuantBot::BuildPass& pass) {
+    const bool bankable = world.owner->getCapacity() > 0;
+    Receipts result;
+    result.netTax = ((FixPoint(bankable ? pass.forecastTax : 0) - FixPoint(pass.forecastUpkeep))
+        / DuneCity::kCyclesPerMinute).getRawValue();
+    result.spice = (FixPoint(bankable ? pass.forecastSpice : 0)
+        / CityEconomyInvestmentPolicy::horizonCycles).getRawValue();
+    result.spiceStock = FixPoint(std::max(0, pass.spiceShare)).getRawValue();
+    return result;
+}
+
+inline bool sameReceipts(const Receipts& a, const Receipts& b) {
+    return a.netTax == b.netTax && a.spice == b.spice && a.spiceStock == b.spiceStock;
+}
+
+// A whole-basis-point share of a raw 32.32 amount, truncated toward zero.
+inline int64_t shareOf(int64_t raw, int bps) {
+    return raw / 10000 * bps + raw % 10000 * bps / 10000;
+}
+
+// The least share-scaled cash that keeps every listed obligation paid at every
+// finite endpoint. An independent integrator: each obligation ends after
+// ceil(unpaid/rate) cycles and the spice rate stops when its field share is
+// exhausted. It never asks the production predicate for its verdict.
+inline int64_t requiredScaled(const std::vector<Profile>& profiles, const Receipts& receipts, int bps) {
+    int64_t rate = shareOf(receipts.netTax, bps) + shareOf(receipts.spice, bps);
+    std::vector<std::pair<int64_t, int64_t>> ends;
+    for (const auto& profile : profiles) {
+        if (profile.unpaid <= 0 || profile.perCycle <= 0) continue;
+        rate -= profile.perCycle;
+        ends.emplace_back((profile.unpaid + profile.perCycle - 1) / profile.perCycle, profile.perCycle);
+    }
+    if (receipts.spice > 0 && !ends.empty()) {
+        const int64_t exhaustion = (receipts.spiceStock + receipts.spice - 1) / receipts.spice;
+        if (exhaustion < std::max_element(ends.begin(), ends.end())->first)
+            ends.emplace_back(exhaustion, -shareOf(receipts.spice, bps));
+    }
+    std::sort(ends.begin(), ends.end());
+    int64_t previous = 0, balance = 0, required = 0;
+    for (const auto& end : ends) {
+        balance += rate * (end.first - previous);
+        required = std::max(required, -balance);
+        rate += end.second;
+        previous = end.first;
+    }
+    return required;
+}
+
+// The first whole credit balance whose share covers a share-scaled requirement.
+inline int creditsFor(int64_t scaled, int bps) {
+    if (scaled <= 0) return 0;
+    require(bps > 0, "A zero share cannot fund a positive obligation");
+    const int64_t one = FixPoint(1).getRawValue();
+    int64_t credits = std::max<int64_t>(0, scaled / one * 10000 / bps - 2);
+    while (shareOf(credits * one, bps) < scaled) ++credits;
+    return int(credits);
+}
+
+// One order's full quote and native per-cycle rate on its real builder.
+inline Profile quoteProfile(World& world, BuilderBase* builder, Uint32 item) {
+    const int quote = world.bot->purchasePrice(builder, item);
+    require(quote > 0, "Order quote control has no real build-list price");
+    const auto& spec = world.game->objectData.data[item][builder->getOriginalHouseID()];
+    return {FixPoint(quote).getRawValue(),
+        ((FixPoint(quote) / (15 * DuneCity::getCityBuildTime(item, spec.buildtime)))
+            * builder->getBuildSpeedLimit()).getRawValue()};
+}
+
+// The army can spend only through its running military lines and the ready
+// producers whose real target, mix and cap gates still admit a unit.
+inline int64_t armyCapacity(const World& world, const QuantBot::BuildPass& pass) {
+    int64_t capacity = 0;
+    for (auto* structure : structureList) {
+        auto* builder = dynamic_cast<BuilderBase*>(structure);
+        if (!builder || structure->getOwner() != world.owner || builder->getItemID() == Structure_StarPort
+            || builder->isUpgrading() || builder->currentProductionQueue.empty()) continue;
+        bool military = true;
+        for (const auto& order : builder->currentProductionQueue)
+            military &= QuantBotBuildPolicy::militaryItem(order.itemID);
+        const auto profile = queueProfile(world, builder);
+        if (military && profile.unpaid > 0) capacity += profile.perCycle;
+    }
+    for (const auto& candidate : pass.capitalCandidates) {
+        if (candidate.score <= 0 || std::string_view(candidate.kind) != "military" || candidate.price <= 0) continue;
+        BuilderBase* builder = nullptr;
+        for (auto* structure : structureList)
+            if (structure->getObjectID() == candidate.builder) builder = dynamic_cast<BuilderBase*>(structure);
+        require(builder && builder->getOwner() == world.owner && QuantBotBuildPolicy::militaryItem(candidate.item),
+                "An army entitlement did not come from the house's own military producer");
+        const int64_t quote = FixPoint(candidate.price).getRawValue();
+        if (builder->getItemID() == Structure_StarPort) {
+            // An import is paid at once; its delivery delay bounds the rate.
+            const int64_t delay = std::max(1, candidate.delay);
+            capacity += quote / delay + (quote % delay != 0);
+            continue;
+        }
+        require(builder->getProductionQueueSize() == 0 && builder->isAvailableToBuild(candidate.item),
+                "A local army entitlement did not come from a ready producer's real build list");
+        const auto& spec = world.game->objectData.data[candidate.item][builder->getOriginalHouseID()];
+        capacity += ((FixPoint(candidate.price) / (15 * DuneCity::getCityBuildTime(candidate.item, spec.buildtime)))
+            * builder->getBuildSpeedLimit()).getRawValue();
+    }
+    return capacity;
+}
+
+// The army's guaranteed basis points: what its capacity can spend of the
+// receipts plus cash spread over the four-minute horizon, up to the reserve.
+inline int armyShare(int64_t capacity, const Receipts& receipts, int64_t cash) {
+    if (capacity <= 0) return 0;
+    const int64_t wallet = std::max<int64_t>(1, std::max<int64_t>(0, receipts.netTax + receipts.spice)
+        + std::max<int64_t>(0, cash) / CityEconomyInvestmentPolicy::horizonCycles);
+    const int reserve = QuantBotSpendingPolicy::sensibleArmyShareBps;
+    return capacity >= wallet ? reserve : int(std::min<int64_t>(reserve, capacity * 10000 / wallet));
+}
+
+inline int cheapestMilitaryOffer(const World& world) {
+    int cheapest = INT_MAX;
+    for (auto* structure : structureList) {
+        auto* builder = dynamic_cast<BuilderBase*>(structure);
+        if (!builder || structure->getOwner() != world.owner || builder->getItemID() == Structure_StarPort) continue;
+        for (const auto& offer : builder->getBuildList())
+            if (QuantBotBuildPolicy::militaryItem(offer.itemID))
+                cheapest = std::min(cheapest, world.price(offer.itemID));
+    }
+    require(cheapest < INT_MAX, "Army control has no real local military offer");
+    return cheapest;
+}
+
+// Physically field real tanks until every unit the ready local producers offer
+// would exceed the bot's own military target. Nothing overrides that target.
+inline int fieldArmyTarget(World& world) {
+    const int tank = world.price(Unit_Tank);
+    require(tank > 0, "Army-target control has no real tank value");
+    for (int fielded = 0;;) {
+        const auto pass = world.observePlan();
+        const int64_t room = int64_t(pass.militaryBudget) - pass.militaryValue - cheapestMilitaryOffer(world);
+        if (room < 0) return fielded;
+        const int count = int(room / tank) + 1;
+        require(fielded + count <= 64, "Cannot physically field the bot's own military target");
+        TechProductionProbe::spawnGroundBand(world, world.owner, Unit_Tank, count, Coord(20, 56), 0, 8);
+        fielded += count;
+    }
+}
+
+// The real founded-structure order wrapper on one builder's ordinary turn.
+inline bool orderStructure(World& world, QuantBot::BuildPass& pass, BuilderBase* builder, Uint32 item,
+                           const char* rule) {
+    QuantBot::BuilderTurn turn(pass.money);
+    turn.pStructure = builder;
+    turn.pBuilder = builder;
+    world.bot->beginBuilderTurn(pass, turn);
+    return world.bot->queueFoundedStructure(pass, turn, item, __LINE__, rule);
+}
+
 inline void powerSeed(World& world) {
     world.placeAt(Structure_WindTrap, Coord(18, 8));
     for (Coord at : {Coord(3, 18), Coord(10, 18), Coord(17, 18)}) world.placeAt(Structure_Refinery, at);
@@ -146,6 +314,180 @@ inline void lightSeed(World& world) {
             "First-light scenario lacks its real prerequisite gap or power");
 }
 
+enum class FirstFactoryPower { ReserveOnly, DueBeforeCompletion, Blackout };
+
+inline void threatenedFactorySeed(World& world) {
+    world.placeAt(Structure_WindTrap, Coord(18, 8));
+    for (Coord at : {Coord(3, 18), Coord(10, 18), Coord(17, 18), Coord(24, 18)})
+        world.placeAt(Structure_Refinery, at);
+    world.placeAt(Structure_Radar, Coord(3, 8));
+    world.placeAt(Structure_ZoneResidential, Coord(18, 24));
+    for (int y = 2; y < 29; ++y) for (int x = 2; x < 37; ++x)
+        if (!currentGameMap->getTile(x, y)->hasAStructure()) {
+            world.owner->placeStructure(NONE_ID, Structure_Road, x, y, true, true);
+            require(currentGameMap->getTile(x, y)->isRoad(),
+                    "Threatened first-factory scenario lost its real road-served growth opportunity");
+        }
+    world.game->gameCycleCount = MILLI2CYCLES(300000);
+    world.initializePhysicalCity();
+    world.closeMilitaryMarket();
+    const auto attackers = TechProductionProbe::spawnGroundBand(
+        world, world.enemy, Unit_Tank, 1, world.yard->getLocation(), 1, 3);
+    auto* attacker = attackers.front();
+    Command(world.pilot->getPlayerID(), CMD_UNIT_ATTACKOBJECT, attacker->getObjectID(),
+            world.yard->getObjectID()).executeCommand();
+    require(attacker->getTarget() == world.yard && attacker->isInWeaponRange(world.yard),
+            "First-factory fixture lacks a real visible ground attacker engaging its actual yard");
+    world.bot->updateEnemySightings();
+    // Clear actual urgent firing-cover claims with physical emplacements; do not
+    // disable their gene or manufacture an empty threat survey. Leave forecast
+    // reserve expansion live, while supplying enough real generation for the LF
+    // and even full maturation of the existing vacant residential lot.
+    const int factoryPower = std::max(0,
+        world.game->objectData.data[Structure_LightFactory][world.owner->getHouseID()].power);
+    for (int assets = 0;; ++assets) {
+        require(assets < 64, "Cannot establish the physical first-factory power/cover boundary");
+        auto pass = world.observePlan();
+        if (pass.groundThreatAsset.isValid()) {
+            world.bot->planningBuilder = world.yard->getObjectID();
+            world.bot->clearPlacementCache();
+            const Coord site = world.bot->findThreatTurretPlaceLocation(
+                pass.groundThreatAsset, pass.groundThreatApproach);
+            require(site.isValid(), "Threatened core has no legal scenario emplacement for its real cover need");
+            world.placeAt(Structure_RocketTurret, site);
+            continue;
+        }
+        const int latent = std::max(0, pass.matureZonePower - pass.currentZonePower);
+        const int headroom = world.owner->getProducedPower() - world.owner->getPowerRequirement();
+        if (headroom < factoryPower + latent + 1) {
+            world.place(Structure_WindTrap);
+            continue;
+        }
+        if (headroom >= pass.cityPowerReserve) {
+            world.place(Structure_Radar);
+            continue;
+        }
+        require(pass.defendingEconomy && !pass.airEngaged && pass.civicStructuralNeed == 0,
+                "First-factory priority scenario is not a focused real ground defence");
+        require(pass.ownResValve > 0 || pass.ownComValve > 0 || pass.ownIndValve > 0,
+                "First-factory fixture erased city demand instead of competing with live growth");
+        require(world.yard->isAvailableToBuild(Structure_LightFactory),
+                "Threatened first Light Factory is not genuinely available to the real yard");
+        break;
+    }
+    for (Uint32 item : {Structure_LightFactory, Structure_HeavyFactory, Structure_HighTechFactory,
+                       Structure_Barracks, Structure_WOR, Structure_StarPort})
+        require(world.owner->getNumItems(item) == 0,
+                "Threatened first-factory fixture already has a real army supplier");
+    require(TechProductionProbe::actualGroundReadiness(world).first == 0,
+            "Threatened first-factory fixture inherited a defending field army");
+    world.owner->updateBuildLists();
+}
+
+inline int imminentConsumerQueues(World& world) {
+    const int house = world.owner->getHouseID();
+    const auto& radar = world.game->objectData.data[Structure_Radar][house];
+    const auto& factory = world.game->objectData.data[Structure_LightFactory][house];
+    const int factoryTicks = 15 * DuneCity::getCityBuildTime(Structure_LightFactory, factory.buildtime);
+    const int radarTicks = 15 * DuneCity::getCityBuildTime(Structure_Radar, radar.buildtime);
+    const int64_t price = FixPoint(radar.price).getRawValue();
+    require(radar.power > 0, "Imminent consumer control has no actual positive power draw");
+    world.cash(10000); // Labelled initial commitments are paid, not fake progress.
+    int queuedPower = 0;
+    for (int count = 0; queuedPower <= world.owner->getProducedPower() - world.owner->getPowerRequirement(); ++count) {
+        require(count < 8, "Imminent consumer setup cannot cross its real current power headroom");
+        auto* builder = static_cast<BuilderBase*>(world.placeAt(Structure_ConstructionYard,
+            Coord(40 + 6 * (count % 2), 36 + 6 * (count / 2))));
+        builder->curUpgradeLev = builder->getMaxUpgradeLevel();
+        builder->updateBuildList();
+        auto pass = world.observePlan();
+        world.bot->planSensibleBudget(pass);
+        QuantBot::BuilderTurn turn(pass.money);
+        turn.pStructure = builder;
+        turn.pBuilder = builder;
+        world.bot->beginBuilderTurn(pass, turn);
+        require(world.bot->queueFoundedStructure(pass, turn, Structure_Radar, __LINE__,
+                    "fixture_imminent_consuming_commitment"),
+                "Initial consuming commitment has no real legal production/placement package");
+        require(builder->getCurrentProducedItem() == Structure_Radar,
+                "Imminent consumer control did not create a real consuming building queue");
+        const int64_t rate = ((FixPoint(radar.price) / radarTicks)
+            * builder->getBuildSpeedLimit()).getRawValue();
+        require(rate > 0, "Imminent real consumer has no native production rate");
+        int paidTicks = 0;
+        while (price - builder->getProductionProgress().getRawValue() > 2 * rate) {
+            require(++paidTicks <= 2 * radarTicks, "Native initial consumer payment exceeded its declared bound");
+            require(paidTick(world, builder) > 0, "A funded real consumer did not make native paid progress");
+        }
+        const int64_t remaining = price - builder->getProductionProgress().getRawValue();
+        require(remaining > 0 && !builder->isWaitingToPlace()
+                    && (remaining + rate - 1) / rate < factoryTicks,
+                "Countercase consumer is already placeable or would not finish before the first LF");
+        queuedPower += radar.power;
+    }
+    require(world.owner->hasPower(), "Imminent-queue countercase is already in an actual blackout");
+    return queuedPower;
+}
+
+inline void threatenedFirstFactory(const char* playerClass) {
+    for (bool enabled : {false, true}) for (FirstFactoryPower power :
+            {FirstFactoryPower::ReserveOnly, FirstFactoryPower::DueBeforeCompletion, FirstFactoryPower::Blackout}) {
+        World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
+        configure(world, enabled);
+        threatenedFactorySeed(world);
+        int imminentPower = 0;
+        if (power == FirstFactoryPower::DueBeforeCompletion) {
+            imminentPower = imminentConsumerQueues(world);
+        } else if (power == FirstFactoryPower::Blackout) {
+            for (int consumers = 0; world.owner->hasPower(); ++consumers) {
+                require(consumers < 8, "Physical blackout control did not exhaust actual generation");
+                world.place(Structure_Radar);
+            }
+            world.owner->updateBuildLists();
+        }
+        world.cash(6000);
+        const auto plan = world.observePlan();
+        const int produced = world.owner->getProducedPower(), required = world.owner->getPowerRequirement();
+        const int factoryPower = std::max(0,
+            world.game->objectData.data[Structure_LightFactory][world.owner->getHouseID()].power);
+        const int latent = std::max(0, plan.matureZonePower - plan.currentZonePower);
+        require(plan.defendingEconomy, "Real engaging enemy disappeared before the full bot decision");
+        require(plan.ownResValve > 0 || plan.ownComValve > 0 || plan.ownIndValve > 0,
+                "Full first-factory decision has no genuine competing city demand");
+        if (power == FirstFactoryPower::ReserveOnly) {
+            require(world.owner->hasPower() && produced - required >= factoryPower + latent
+                        && produced - required < plan.cityPowerReserve,
+                    "Positive control does not separate actual LF power needs from forecast-only reserve");
+        } else if (power == FirstFactoryPower::DueBeforeCompletion) {
+            require(world.owner->hasPower() && imminentPower > produced - required
+                        && plan.committedPowerDemand >= imminentPower,
+                    "Real soon-completing consumers would not cause a pre-LF power deficit");
+        } else {
+            require(!world.owner->hasPower() && required > produced,
+                    "Blackout countercase did not create an actual engine power deficit");
+        }
+        const auto cash = cashQ32(world), spent = world.spentQ32();
+        world.build();
+        const bool factoryFirst = enabled && power == FirstFactoryPower::ReserveOnly;
+        const int generators = world.queued(Structure_WindTrap) + world.queued(Structure_NuclearPlant);
+        require(world.queued(Structure_LightFactory) == int(factoryFirst),
+                "Threatened first LF did not distinguish forecast reserve from imminent/actual power loss");
+        require(factoryFirst ? generators == 0 : generators > 0,
+                "Full real yard did not preserve the OFF forecast-power choice or ON power-loss exceptions");
+        require(!queuedZone(world),
+                "Live city growth displaced the threatened first capability or its necessary power");
+        require(cashQ32(world) == cash && world.spentQ32() == spent,
+                "First-factory/power selection treated an accepted quote as an up-front cash payment");
+        require(paidTick(world, world.yard) > 0,
+                "The full bot's selected LF or necessary generator did not enter ordinary paid production");
+        SDL_Log("START_WHAT_MAKES_SENSE_THREATENED_FACTORY: enabled=%d case=%s power=%d/%d reserve=%d latent=%d imminent_power=%d lf_first=%d generators=%d live_city_demand=1 native_paid=1 hash=%s",
+            int(enabled), power == FirstFactoryPower::ReserveOnly ? "forecast_reserve"
+                : power == FirstFactoryPower::DueBeforeCompletion ? "deficit_before_lf" : "actual_blackout",
+            produced, required, plan.cityPowerReserve, latent, imminentPower, int(factoryFirst), generators,
+            world.configHash.c_str());
+    }
+}
+
 inline void civicSeed(World& world) {
     world.placeAt(Structure_NuclearPlant, Coord(27, 3));
     world.placeAt(Structure_WindTrap, Coord(18, 8));
@@ -157,6 +499,13 @@ inline void civicSeed(World& world) {
         auto* lot = static_cast<ZoneStructure*>(world.placeAt(Structure_ZoneResidential, Coord(3 + 2 * i, 40)));
         lot->setResidentialPopulation(40);
     }
+    // A civic-start case must not also be an unanswered crime emergency. The
+    // dense initial industrial core and the two residential edges need actual
+    // nearby service, not disabled service genes or overwritten crime maps.
+    // These road-served stations share the core's and apartments' native
+    // six-tile police cells; the real effects scan computes their coverage.
+    for (int y : {1, 11, 37}) for (int x : {3, 9, 15, 21, 27, 33})
+        world.placeAt(Structure_PoliceStation, Coord(x, y));
     for (int y = 2; y < 45; ++y) for (int x = 2; x < 37; ++x)
         if (!currentGameMap->getTile(x, y)->hasAStructure()) {
             world.owner->placeStructure(NONE_ID, Structure_Road, x, y, true, true);
@@ -179,6 +528,8 @@ inline void civicSeed(World& world) {
     auto pass = world.observePlan();
     require(world.bot->storageExpansionItem(pass, world.yard) == NONE_ID,
             "A real storage shortage competes with the intended civic-start case");
+    require(pass.dangerousCrimeProperties == 0,
+            "Physical civic district still has an urgent crime emergency instead of a clear civic-start premise");
     require(pass.civicStructuralNeed & DuneCity::NeedStadium,
             "Actual residential population did not demand the missing Stadium");
     require(world.yard->isAvailableToBuild(Structure_Stadium) && world.owner->hasPower(),
@@ -229,38 +580,55 @@ inline void fullBuildStarts(const char* playerClass) {
                 int(enabled), credits, world.queued(Structure_LightFactory), world.configHash.c_str());
         }
     }
-    for (bool enabled : {false, true}) {
-        World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
-        configure(world, enabled);
-        civicSeed(world);
-        world.cash(0);
-        const auto spent = world.spentQ32();
-        world.build();
-        require(world.queued(Structure_Stadium) == int(enabled),
-                "A real demanded civic did not distinguish OFF start-budget waiting from ON zero-cash admission");
-        require(cashQ32(world) == 0 && world.spentQ32() == spent,
-                "A zero-cash civic quote was charged up front");
-        if (enabled) {
-            require(!queuedZone(world), "Cheap zoning replaced the selected missing civic");
-            pauseAndResume(world, world.yard, "civic_zero");
-        }
-        SDL_Log("START_WHAT_MAKES_SENSE_START: case=civic enabled=%d initial_cash=0 queued=%d hash=%s",
-            int(enabled), world.queued(Structure_Stadium), world.configHash.c_str());
-    }
+    // Ready light and heavy factories whose real target, mix and caps still
+    // admit units keep the army's guaranteed share: a zero-cash civic waits.
     {
         World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
         configure(world, true);
         civicSeed(world);
-        require(world.price(Structure_Stadium) > 1, "Low-cash civic control already holds the full quote");
-        world.cash(1);
-        const auto cash = cashQ32(world), spent = world.spentQ32();
+        world.cash(0);
+        const auto plan = observe(world);
+        const int64_t capacity = armyCapacity(world, plan);
+        require(capacity > 0 && plan.sensibleArmyShare > 0
+                    && plan.sensibleArmyShare == armyShare(capacity, receiptsOf(world, plan), cashQ32(world)),
+                "Civic army-need control has no live, exactly reserved army entitlement");
+        const auto spent = world.spentQ32();
         world.build();
-        require(world.queued(Structure_Stadium) == 1 && !queuedZone(world),
-                "A real selected civic lost its low-cash start to cheaper growth");
-        require(cashQ32(world) == cash && world.spentQ32() == spent,
-                "A low-cash civic quote was paid before native production");
-        SDL_Log("START_WHAT_MAKES_SENSE_START: case=civic enabled=1 initial_cash=1 queued=1 hash=%s",
-            world.configHash.c_str());
+        require(world.queued(Structure_Stadium) == 0,
+                "A zero-cash civic started on the army's reserved share instead of its own funding");
+        require(cashQ32(world) == 0 && world.spentQ32() == spent, "Holding a reserved-share civic moved real cash");
+        SDL_Log("START_WHAT_MAKES_SENSE_START: case=civic enabled=1 army_need=1 army_share_bps=%d initial_cash=0 queued=0 hash=%s",
+            plan.sensibleArmyShare, world.configHash.c_str());
+    }
+    // A physically fielded army at the bot's own target leaves the whole wallet
+    // to development: OFF still waits for full price, ON starts at zero/low cash.
+    for (bool enabled : {false, true}) {
+        for (bool lowCash : {false, true}) {
+            if (!enabled && lowCash) continue;
+            World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
+            configure(world, enabled);
+            civicSeed(world);
+            const int fielded = fieldArmyTarget(world);
+            require(!lowCash || world.price(Structure_Stadium) > 1, "Low-cash civic control already holds the full quote");
+            world.cash(lowCash ? 1 : 0);
+            if (enabled) {
+                const auto plan = observe(world);
+                require(plan.sensibleArmyShare == 0 && armyCapacity(world, plan) == 0 && plan.sensibleDrains.empty(),
+                        "A satisfied army still reserved a share, or other work competes with the civic start");
+            }
+            const auto cash = cashQ32(world), spent = world.spentQ32();
+            world.build();
+            require(world.queued(Structure_Stadium) == int(enabled),
+                    "A real demanded civic did not distinguish OFF start-budget waiting from ON zero/low-cash admission");
+            require(cashQ32(world) == cash && world.spentQ32() == spent,
+                    "A zero/low-cash civic quote was charged up front");
+            if (enabled) {
+                require(!queuedZone(world), "Cheap zoning replaced the selected missing civic");
+                if (!lowCash) pauseAndResume(world, world.yard, "civic_zero");
+            }
+            SDL_Log("START_WHAT_MAKES_SENSE_START: case=civic enabled=%d army_target_met=1 fielded_tanks=%d initial_cash=%d queued=%d hash=%s",
+                int(enabled), fielded, lowCash ? 1 : 0, world.queued(Structure_Stadium), world.configHash.c_str());
+        }
     }
 }
 
@@ -324,26 +692,6 @@ inline void foundedStart(const char* playerClass) {
         foundations, static_cast<long long>(world.spentQ32() - spentBefore));
 }
 
-// An independent cycle-by-cycle envelope checks every finite prefix, rather
-// than calling the production predicate to manufacture its own acceptance data.
-inline int requiredCash(const std::vector<Profile>& profiles, int forecast) {
-    int64_t end = 0;
-    for (const auto& profile : profiles)
-        end = std::max(end, (profile.unpaid + profile.perCycle - 1) / profile.perCycle);
-    const int64_t income = (FixPoint(forecast) / CityEconomyInvestmentPolicy::horizonCycles).getRawValue();
-    int64_t required = 0;
-    for (int64_t tick = 1; tick <= end; ++tick) {
-        int64_t paid = 0;
-        for (const auto& profile : profiles) {
-            const int64_t ticks = (profile.unpaid + profile.perCycle - 1) / profile.perCycle;
-            paid += profile.perCycle * std::min(ticks, tick);
-        }
-        required = std::max(required, paid - income * tick);
-    }
-    const int64_t one = FixPoint(1).getRawValue();
-    return int((required + one - 1) / one);
-}
-
 inline void parallelDrains(const char* playerClass) {
     World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
     configure(world, true);
@@ -367,20 +715,39 @@ inline void parallelDrains(const char* playerClass) {
     require(pass.sensibleDrains.size() == 2, "Initial actual primary queues did not produce two drain lanes");
     requireProfile(world, pass, world.yard);
     requireProfile(world, pass, secondYard);
+    for (const auto& lane : pass.sensibleDrains)
+        require(!lane.military && !lane.emergency, "Initial primary queues were not ordinary development lanes");
     require(pass.forecastNetIncome <= 0, "No-worker no-lot control invented forecast receipts");
-    const auto& spec = world.game->objectData.data[Unit_Quad][light->getOriginalHouseID()];
+    const auto receipts = receiptsOf(world, pass);
+    // The idle factory is the army's whole spending capacity here, and only while
+    // its real target, mix and caps still admit a unit.
+    const int64_t capacity = armyCapacity(world, pass);
     const int quote = world.bot->purchasePrice(light, Unit_Quad);
-    const Profile next{FixPoint(quote).getRawValue(),
-        ((FixPoint(quote) / (15 * DuneCity::getCityBuildTime(Unit_Quad, spec.buildtime)))
-            * light->getBuildSpeedLimit()).getRawValue()};
+    const auto next = quoteProfile(world, light, Unit_Quad);
     const auto primary = queueProfile(world, world.yard), secondary = queueProfile(world, secondYard);
-    const int allCash = requiredCash({primary, secondary, next}, pass.forecastNetIncome);
-    require(allCash > requiredCash({primary, next}, pass.forecastNetIncome)
-                && allCash > requiredCash({next}, pass.forecastNetIncome),
+    const auto whole = [&](const std::vector<Profile>& profiles) {
+        return creditsFor(requiredScaled(profiles, receipts, 10000), 10000);
+    };
+    const int allCash = whole({primary, secondary, next});
+    require(allCash > whole({primary, next}) && allCash > whole({next}),
             "The aggregate-drain boundary does not distinguish every existing primary obligation");
+    // Military production is admitted by its reserved share over its own lines,
+    // or by spare funds that leave both running development lines funded.
+    const auto reserved = [&](int credits) {
+        const int64_t cash = FixPoint(credits).getRawValue();
+        const int share = armyShare(capacity, receipts, cash);
+        return share > 0 && shareOf(cash, share) >= requiredScaled({next}, receipts, share);
+    };
+    int boundary = 0;
+    while (boundary < allCash && !reserved(boundary)) ++boundary;
+    require(boundary > 0, "A lower-priority military order needed no cash beside two unfunded lines");
+    const char* rule = boundary < allCash ? "army_share" : "spare_funds";
     for (bool funded : {false, true}) {
-        world.cash(allCash - (funded ? 0 : 1));
+        world.cash(boundary - (funded ? 0 : 1));
         pass = observe(world);
+        require(sameReceipts(receiptsOf(world, pass), receipts) && armyCapacity(world, pass) == capacity
+                    && pass.sensibleArmyShare == armyShare(capacity, receipts, cashQ32(world)),
+                "The reserved army share disagrees with its live military capacity and wallet");
         QuantBot::BuilderTurn turn(pass.money);
         turn.pStructure = light;
         turn.pBuilder = light;
@@ -389,7 +756,7 @@ inline void parallelDrains(const char* playerClass) {
         const int quotes = pass.capitalOrderedCost;
         const bool accepted = world.bot->produceItemWithLogging(pass, turn, Unit_Quad, __LINE__, "fixture_parallel_drain");
         require(accepted == funded && world.queued(Unit_Quad) == int(funded),
-                "Actual lower-priority queue acceptance disagrees with the finite aggregate cash profile");
+                "Lower-priority military acceptance disagrees with its exact army-share or aggregate cash profile");
         require(cashQ32(world) == cash && world.spentQ32() == spent && pass.money == world.owner->getCredits(),
                 "A lower-priority quote was booked as paid cash or removed from the live wallet");
         require(pass.capitalOrderedCost == quotes + (funded ? quote : 0),
@@ -397,6 +764,12 @@ inline void parallelDrains(const char* playerClass) {
         require(pass.sensibleDrains.size() == (funded ? 3u : 2u),
                 "Rejected/accepted orders did not match the actual queue-based drain count");
         requireProfile(world, pass, light);
+        if (funded) {
+            const auto lane = std::find_if(pass.sensibleDrains.begin(), pass.sensibleDrains.end(),
+                [&](const auto& entry) { return entry.builder == light->getObjectID(); });
+            require(lane != pass.sensibleDrains.end() && lane->military && !lane->emergency,
+                    "The accepted Quad's actual queue was not an ordinary military lane");
+        }
     }
     // Paying the real lower lane reduces only its unpaid obligation. Holding and
     // cancellation remove the real lane; accepted quote totals cannot keep it live.
@@ -414,8 +787,272 @@ inline void parallelDrains(const char* playerClass) {
     requireProfile(world, pass, light);
     require(pass.sensibleDrains.size() == 2, "Cancelled lower production left a phantom accepted drain");
     pauseAndResume(world, world.yard, "protected_primary");
-    SDL_Log("START_WHAT_MAKES_SENSE_PARALLEL: primary_lanes=2 rejected_cash=%d accepted_cash=%d quote=%d actual_queue_profile=1",
-        allCash - 1, allCash, quote);
+    SDL_Log("START_WHAT_MAKES_SENSE_PARALLEL: primary_lanes=2 rule=%s army_share_bps=%d rejected_cash=%d accepted_cash=%d whole_profile_cash=%d quote=%d actual_queue_profile=1",
+        rule, armyShare(capacity, receipts, FixPoint(boundary).getRawValue()), boundary - 1, boundary, allCash, quote);
+}
+
+// A real lower-priority development queue on a second yard: a labelled earlier
+// commitment that no declared cash or receipt funds. A working spice worker
+// keeps refinery/worker orders from being a separate narrow emergency here.
+inline ConstructionYard* lowerPriorityQueue(World& world) {
+    auto* second = dynamic_cast<ConstructionYard*>(world.placeAt(Structure_ConstructionYard, Coord(25, 18)));
+    require(second, "Lower-priority control lacks its real second yard");
+    second->curUpgradeLev = second->getMaxUpgradeLevel();
+    world.spawn(world.owner, Unit_Harvester, Coord(37, 29));
+    world.owner->updateBuildLists();
+    second->doProduceItem(Structure_Silo);
+    require(second->getCurrentProducedItem() == Structure_Silo,
+            "Lower-priority control did not create its real labelled queue");
+    return second;
+}
+
+// A new higher-priority generator no longer starts unconditionally beside an
+// underfunded real queue: the earlier work must be funded alongside it or be
+// finished first. An actual blackout remains the narrow emergency exception.
+inline void underfundedPredecessor(const char* playerClass) {
+    enum class Arm { Underfunded, Funded, Finished, Blackout };
+    for (Arm arm : {Arm::Underfunded, Arm::Funded, Arm::Finished, Arm::Blackout}) {
+        World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
+        configure(world, true);
+        powerSeed(world);
+        auto* second = lowerPriorityQueue(world);
+        if (arm == Arm::Blackout) {
+            for (int consumers = 0; world.owner->hasPower(); ++consumers) {
+                require(consumers < 8, "Physical blackout control did not exhaust actual generation");
+                world.place(Structure_Radar);
+            }
+            world.owner->updateBuildLists();
+        }
+        world.cash(0);
+        auto pass = observe(world);
+        require(pass.sensibleDrains.size() == 1 && pass.sensibleArmyShare == 0 && armyCapacity(world, pass) == 0,
+                "Predecessor control is not one real queue without an army entitlement");
+        requireProfile(world, pass, second);
+        const auto lane = pass.sensibleDrains.front();
+        require(lane.builder == second->getObjectID() && !lane.military && !lane.emergency
+                    && lane.priority > world.bot->sensiblePriority(pass, Structure_WindTrap),
+                "The started queue is not a lower-priority ordinary development lane");
+        const auto silo = queueProfile(world, second);
+        const auto receipts = receiptsOf(world, pass);
+        require(requiredScaled({silo}, receipts, 10000) > 0,
+                "The started lower-priority queue is already funded by receipts alone");
+        const auto spent = world.spentQ32();
+        int boundary = 0;
+        if (arm == Arm::Underfunded) {
+            require(!orderStructure(world, pass, world.yard, Structure_WindTrap, "fixture_underfunded_predecessor"),
+                    "A higher-priority generator still started unconditionally beside an underfunded real queue");
+            require(pass.sensiblePending.purpose == Structure_WindTrap
+                        && pass.sensiblePending.builder == world.yard->getObjectID(),
+                    "The refused generator was not kept as this pass's pending highest-priority want");
+            require(world.yard->getProductionQueueSize() == 0, "A refused generator left a real order behind");
+            world.build();
+            require(world.queued(Structure_WindTrap) == 0 && !queuedZone(world)
+                        && world.yard->getProductionQueueSize() == 0,
+                    "The full bot added new work beside its underfunded real queue");
+            require(cashQ32(world) == 0 && world.spentQ32() == spent, "Holding new work moved real cash");
+            requireProfile(world, observe(world), second);
+        } else if (arm == Arm::Funded) {
+            const auto wind = quoteProfile(world, world.yard, Structure_WindTrap);
+            boundary = creditsFor(requiredScaled({silo, wind}, receipts, 10000), 10000);
+            require(boundary > 0, "Funded-predecessor control needs no cash for its two real lanes");
+            for (bool funded : {false, true}) {
+                world.cash(boundary - (funded ? 0 : 1));
+                pass = observe(world);
+                require(sameReceipts(receiptsOf(world, pass), receipts) && pass.sensibleArmyShare == 0,
+                        "Changing only cash changed receipts or created an army entitlement");
+                const auto cash = cashQ32(world);
+                require(orderStructure(world, pass, world.yard, Structure_WindTrap, "fixture_funded_predecessor") == funded,
+                        "A generator beside a real queue disagreed with the exact finite funding of both lanes");
+                require(world.queued(Structure_WindTrap) == int(funded) && cashQ32(world) == cash
+                            && world.spentQ32() == spent && pass.sensibleDrains.size() == (funded ? 2u : 1u),
+                        "A funded start booked its quote as cash or disagreed with the actual queues");
+                requireProfile(world, pass, second);
+                requireProfile(world, pass, world.yard);
+            }
+        } else if (arm == Arm::Finished) {
+            world.cash(10000); // A declared paid interval for the earlier commitment only.
+            const auto& spec = world.game->objectData.data[Structure_Silo][world.owner->getHouseID()];
+            const int bound = 2 * 15 * DuneCity::getCityBuildTime(Structure_Silo, spec.buildtime) + 8;
+            for (int tick = 0; !second->isWaitingToPlace(); ++tick) {
+                require(tick < bound, "The funded earlier commitment did not finish within its native bound");
+                require(paidTick(world, second) > 0, "The earlier commitment made no native paid progress");
+            }
+            world.bot->planningBuilder = second->getObjectID();
+            world.bot->clearPlacementCache();
+            const Coord site = world.bot->findPlaceLocation(Structure_Silo);
+            require(site.isValid() && world.bot->doPlaceStructure(second, site.x, site.y)
+                        && second->getProductionQueueSize() == 0,
+                    "The finished earlier commitment had no real legal placement");
+            world.cash(0);
+            pass = observe(world);
+            require(pass.sensibleDrains.empty() && pass.sensibleArmyShare == 0 && world.owner->hasPower(),
+                    "Finished-predecessor control still has running work, an army entitlement or no power");
+            const auto paid = world.spentQ32();
+            world.build();
+            require(world.queued(Structure_WindTrap) == 1 && !queuedZone(world)
+                        && cashQ32(world) == 0 && world.spentQ32() == paid,
+                    "After its earlier work finished, the bot did not start its generator from zero cash");
+        } else {
+            require(!world.owner->hasPower(), "Blackout countercase still has actual generation headroom");
+            world.build();
+            require(world.queued(Structure_WindTrap) + world.queued(Structure_NuclearPlant) == 1 && !queuedZone(world),
+                    "An actual blackout generator lost its narrow emergency start beside an underfunded queue");
+            require(cashQ32(world) == 0 && world.spentQ32() == spent, "An emergency start paid cash up front");
+        }
+        SDL_Log("START_WHAT_MAKES_SENSE_PREDECESSOR: case=%s lower_priority=%d both_funded_cash=%d wind=%d hash=%s",
+            arm == Arm::Underfunded ? "underfunded" : arm == Arm::Funded ? "funded_boundary"
+                : arm == Arm::Finished ? "finished_first" : "blackout_emergency",
+            lane.priority, boundary, world.queued(Structure_WindTrap), world.configHash.c_str());
+    }
+}
+
+// Light and heavy factories, ready and powered, with no running work.
+inline void armySeed(World& world) {
+    world.placeAt(Structure_WindTrap, Coord(18, 8));
+    world.placeAt(Structure_Silo, Coord(25, 18));
+    for (Uint32 item : {Structure_LightFactory, Structure_HeavyFactory}) {
+        auto* factory = dynamic_cast<BuilderBase*>(world.place(item));
+        require(factory, "Army-entitlement control lacks a real factory");
+        factory->curUpgradeLev = factory->getMaxUpgradeLevel();
+    }
+    world.bot->lastCalculatedSpice = 0;
+    world.closeMilitaryMarket();
+    world.owner->updateBuildLists();
+    require(world.owner->hasPower() && world.producer(Structure_LightFactory)->isAvailableToBuild(Unit_Quad),
+            "Army-entitlement control lacks powered ready local producers");
+}
+
+// The army keeps its guaranteed share only while ready producers' real target,
+// mix ratio and unit cap still admit a unit. While it is reserved, development
+// must fit the remaining share even when the whole finite prefix is funded.
+inline void armyEntitlement(const char* playerClass) {
+    const int reserve = QuantBotSpendingPolicy::sensibleArmyShareBps;
+    require(reserve > 0 && reserve < 10000, "The army share is not a partial reservation");
+    {
+        World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
+        configure(world, true);
+        armySeed(world);
+        world.cash(0);
+        auto pass = observe(world);
+        const int64_t capacity = armyCapacity(world, pass);
+        const auto receipts = receiptsOf(world, pass);
+        require(capacity > 0 && pass.sensibleDrains.empty() && pass.sensibleArmyShare > 0
+                    && pass.sensibleArmyShare == armyShare(capacity, receipts, cashQ32(world)),
+                "Ready factories with a live army need did not reserve the exact army share");
+        require(!orderStructure(world, pass, world.yard, Structure_WindTrap, "fixture_reserved_army_zero")
+                    && world.yard->getProductionQueueSize() == 0,
+                "A zero-cash development start took the army's reserved share as a sole primary");
+        const auto wind = quoteProfile(world, world.yard, Structure_WindTrap);
+        const int whole = creditsFor(requiredScaled({wind}, receipts, 10000), 10000);
+        const auto admits = [&](int credits) {
+            const int64_t cash = FixPoint(credits).getRawValue();
+            const int development = 10000 - armyShare(capacity, receipts, cash);
+            return shareOf(cash, development) >= requiredScaled({wind}, receipts, development)
+                && cash >= requiredScaled({wind}, receipts, 10000);
+        };
+        int boundary = whole;
+        while (!admits(boundary))
+            require(++boundary < House::MAX_GAME_CREDITS, "No cash funds a development start beside the army share");
+        require(boundary > whole,
+                "The army's reserved share did not separate a funded start from the whole finite prefix");
+        for (bool funded : {false, true}) {
+            world.cash(boundary - (funded ? 0 : 1));
+            pass = observe(world);
+            require(sameReceipts(receiptsOf(world, pass), receipts) && armyCapacity(world, pass) == capacity
+                        && pass.sensibleArmyShare == armyShare(capacity, receipts, cashQ32(world)),
+                    "The reserved army share disagrees with its live capacity and wallet");
+            const auto cash = cashQ32(world), spent = world.spentQ32();
+            require(orderStructure(world, pass, world.yard, Structure_WindTrap, "fixture_reserved_army_share") == funded,
+                    "Development admission disagreed with the exact cash left beside the army's reserved share");
+            require(world.queued(Structure_WindTrap) == int(funded) && cashQ32(world) == cash
+                        && world.spentQ32() == spent,
+                    "A development start beside the army reserve booked its quote as cash");
+            requireProfile(world, pass, world.yard);
+        }
+        SDL_Log("START_WHAT_MAKES_SENSE_ARMY_SHARE: case=need army_share_bps=%d whole_prefix_cash=%d rejected_cash=%d accepted_cash=%d",
+            armyShare(capacity, receipts, FixPoint(boundary).getRawValue()), whole, boundary - 1, boundary);
+        // Ratio: physically field the light factory's own mix share while the
+        // target and caps still admit more. Only that line leaves the reservation.
+        auto* light = world.producer(Structure_LightFactory);
+        const int64_t one = FixPoint(1).getRawValue();
+        const int spread = int(capacity * 2 * 10000 / reserve * CityEconomyInvestmentPolicy::horizonCycles / one) + 1;
+        world.cash(spread);
+        pass = observe(world);
+        const int needShare = pass.sensibleArmyShare;
+        require(armyCapacity(world, pass) == capacity
+                    && needShare == armyShare(capacity, receiptsOf(world, pass), cashQ32(world))
+                    && needShare > 0 && needShare < reserve,
+                "A large declared balance did not scale the army share by its live capacity");
+        int fieldedLight = 0;
+        for (;;) {
+            Uint32 wanted = NONE_ID;
+            for (const auto& candidate : pass.capitalCandidates)
+                if (candidate.builder == light->getObjectID() && candidate.score > 0
+                    && std::string_view(candidate.kind) == "military") wanted = candidate.item;
+            if (wanted == NONE_ID) break;
+            require(++fieldedLight <= 4, "A few real light units did not meet the light factory's mix share");
+            TechProductionProbe::spawnGroundBand(world, world.owner, wanted, 1, Coord(20, 56), 0, 8);
+            pass = observe(world);
+        }
+        require(fieldedLight > 0 && !pass.usesCompositionChoice(),
+                "The light factory had no ordinary mix entitlement to satisfy");
+        for (const auto& offer : light->getBuildList()) {
+            if (!QuantBotBuildPolicy::militaryItem(offer.itemID)) continue;
+            const int value = world.price(offer.itemID);
+            int bps = 0;
+            for (size_t slot = 0; slot < QuantBot::kMixItems.size(); ++slot)
+                if (QuantBot::kMixItems[slot] == offer.itemID) bps = pass.unitMix[slot];
+            require(int64_t(pass.militaryValue) + value <= pass.militaryBudget
+                        && !world.owner->isUnitLimitReached(offer.itemID)
+                        && (bps <= 0 || int64_t(pass.vehiclePlanValue) * bps
+                            <= int64_t(pass.itemCount[offer.itemID]) * value * 10000),
+                    "The light factory's entitlement ended for a reason other than its met mix ratio");
+        }
+        const int64_t ratioCapacity = armyCapacity(world, pass);
+        require(ratioCapacity > 0 && ratioCapacity < capacity
+                    && pass.sensibleArmyShare == armyShare(ratioCapacity, receiptsOf(world, pass), cashQ32(world))
+                    && pass.sensibleArmyShare < needShare,
+                "Meeting one producer's mix ratio did not remove exactly its line from the army share");
+        SDL_Log("START_WHAT_MAKES_SENSE_ARMY_SHARE: case=ratio fielded_light=%d need_share_bps=%d ratio_share_bps=%d cash=%d",
+            fieldedLight, needShare, pass.sensibleArmyShare, spread);
+    }
+    // Target, then an explicit unit cap: a satisfied or unbuildable army keeps
+    // no share, so the same development start is a zero-cash sole primary again.
+    for (bool capped : {false, true}) {
+        World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty, 8, false,
+                    HOUSE_HARKONNEN, 3, capped ? 1 : -1);
+        configure(world, true);
+        armySeed(world);
+        world.cash(0);
+        int fielded = 0;
+        if (capped) {
+            require(world.owner->getMaxUnits() == 1 && !world.owner->isGroundUnitLimitReached(),
+                    "The explicit unit-cap control was not honoured below its cap");
+            auto below = observe(world);
+            require(armyCapacity(world, below) > 0 && below.sensibleArmyShare > 0
+                        && !orderStructure(world, below, world.yard, Structure_WindTrap, "fixture_army_below_cap"),
+                    "Below its explicit cap the army did not keep its reserved share");
+            TechProductionProbe::spawnGroundBand(world, world.owner, Unit_Tank, 1, Coord(20, 56), 0, 8);
+            fielded = 1;
+        } else {
+            fielded = fieldArmyTarget(world);
+        }
+        auto pass = observe(world);
+        const bool targetMet = int64_t(pass.militaryValue) + cheapestMilitaryOffer(world) > pass.militaryBudget;
+        require(capped ? world.owner->isGroundUnitLimitReached() && !targetMet
+                       : targetMet && !world.owner->isGroundUnitLimitReached(),
+                "The army control did not isolate its target or its unit cap");
+        require(armyCapacity(world, pass) == 0 && pass.sensibleArmyShare == 0 && pass.sensibleDrains.empty(),
+                "A satisfied or capped army still reserved a share of the wallet");
+        const auto spent = world.spentQ32();
+        require(orderStructure(world, pass, world.yard, Structure_WindTrap,
+                    capped ? "fixture_army_capped" : "fixture_army_target_met")
+                    && world.queued(Structure_WindTrap) == 1 && cashQ32(world) == 0 && world.spentQ32() == spent,
+                "Without an army entitlement, development did not start from zero cash as sole primary");
+        requireProfile(world, pass, world.yard);
+        SDL_Log("START_WHAT_MAKES_SENSE_ARMY_SHARE: case=%s fielded=%d military=%d budget=%d share_bps=0 zero_cash_start=1",
+            capped ? "unit_cap" : "target_met", fielded, pass.militaryValue, pass.militaryBudget);
+    }
 }
 
 inline void rollback(const char* playerClass) {
@@ -423,7 +1060,9 @@ inline void rollback(const char* playerClass) {
     configure(world, true);
     world.game->gameInitSettings.gameOptions.concreteRequired = true;
     world.owner->updateBuildLists();
-    world.cash(0);
+    // The complete base's ready factories keep the army's reserved share, so the
+    // package needs a declared balance for its development share.
+    world.cash(10 * world.price(Structure_Palace));
     require(world.owner->getNumItems(Structure_Palace) == 1
                 && world.game->getGameInitSettings().getGameOptions().onlyOnePalace
                 && world.yard->isAvailableToBuild(Structure_Palace),
@@ -433,14 +1072,14 @@ inline void rollback(const char* playerClass) {
     turn.pStructure = world.yard;
     turn.pBuilder = world.yard;
     world.bot->beginBuilderTurn(pass, turn);
-    const auto spent = world.spentQ32();
+    const auto cash = cashQ32(world), spent = world.spentQ32();
     require(!world.bot->queueFoundedStructure(pass, turn, Structure_Palace, __LINE__, "fixture_real_one_palace"),
             "A second Palace bypassed the actual one-Palace engine rule");
     require(pass.capitalOrderedCost > 0, "Rollback control never accepted any real foundation quotes");
     require(world.yard->getProductionQueueSize() == 0 && pass.sensibleDrains.empty()
                 && world.bot->builderPlaceLocations[world.yard->getObjectID()].empty(),
             "Rejected founded package retained slabs, placement sites or a phantom cash profile");
-    require(cashQ32(world) == 0 && world.spentQ32() == spent,
+    require(cashQ32(world) == cash && world.spentQ32() == spent,
             "Rolling back unpaid foundation quotes spent or invented house cash");
     requireProfile(world, pass, world.yard);
     SDL_Log("START_WHAT_MAKES_SENSE_ROLLBACK: real_engine_rejection=one_palace accepted_foundation_quotes=%d actual_queue=0 drains=0 paid=0",
@@ -452,10 +1091,13 @@ void runStartWhatMakesSenseProbe(const char* playerClass) {
     using namespace StartWhatMakesSenseProbe;
     require(!QuantBotConfig().force.startWhatMakesSense, "StartWhatMakesSense must remain default OFF");
     fullBuildStarts(playerClass);
+    threatenedFirstFactory(playerClass);
     foundedStart(playerClass);
     parallelDrains(playerClass);
+    underfundedPredecessor(playerClass);
+    armyEntitlement(playerClass);
     rollback(playerClass);
-    SDL_Log("START_WHAT_MAKES_SENSE_PASS: difficulty=%s full_bot_power_light_civic=1 off_wait=1 zero_start=1 low_cash=1 no_cheap_fallback=1 quotes_not_paid=1 finite_parallel_drains=1 fractional_pause_resume=1 sequential_foundations=1 rollback_actual_queue=1",
+    SDL_Log("START_WHAT_MAKES_SENSE_PASS: difficulty=%s full_bot_power_light_civic=1 off_wait=1 zero_start=1 low_cash=1 no_cheap_fallback=1 threatened_first_factory=1 imminent_power_first=1 blackout_power_first=1 quotes_not_paid=1 finite_parallel_drains=1 army_share_parallel=1 underfunded_predecessor_first=1 blackout_emergency_exception=1 army_reserve_not_whole_prefix=1 army_entitlement_need_ratio_target_cap=1 fractional_pause_resume=1 sequential_foundations=1 rollback_actual_queue=1",
         playerClass);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=start_what_makes_sense outcome=passed");
 }

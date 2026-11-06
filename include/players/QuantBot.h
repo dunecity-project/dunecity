@@ -1720,9 +1720,18 @@ private:
     bool spendingEmergency(BuildPass& pass, Uint32 item);
     bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
     void planSensibleBudget(BuildPass& pass);
+    void planSensibleFirstFactory(BuildPass& pass);
     int sensiblePriority(BuildPass& pass, Uint32 item, bool upgrade = false);
+    int sensibleCapitalPriority(BuildPass& pass, int choice);
+    int sensibleCapitalChoice(BuildPass& pass, Uint32 builder = NONE_ID);
     void refreshSensibleBuilder(BuildPass& pass, const BuilderBase* builder);
     void addSensibleRepair(BuildPass& pass, const StructureBase* structure);
+    bool sensibleEmergency(BuildPass& pass, Uint32 item);
+    enum class SensibleLanes { All, Development, Military };
+    /// First cycle at which the share runs dry, or -1. Adds sensibleExtras[0, extras);
+    /// paidNow is an immediate purchase taken from the share's cash first.
+    int64_t sensibleDeficit(BuildPass& pass, int64_t cash, int shareBps, SensibleLanes lanes,
+        size_t extras, int64_t paidNow);
     bool sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
         int64_t unpaid, int64_t perCycle, int immediate, bool emergency, bool upgrade = false);
     bool sensibleOrderAdmits(BuildPass& pass, const BuilderBase* builder,
@@ -1741,6 +1750,7 @@ private:
     void planCompositionHeavyCapacity(BuildPass& pass);
     /// Chooses the protected capital purchase for this pass.
     void chooseCapitalPlan(BuildPass& pass);
+    Uint32 chooseLegacyCapitalPlan(BuildPass& pass);
     /// Orders this pass's producers.
     void planBuildOrder(BuildPass& pass);
     /// Records what the capital plan achieved.
@@ -1856,6 +1866,7 @@ private:
     void chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Essential infrastructure, power recovery and economic generation.
     void chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    bool chooseSensibleYardCapital(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// No-spice opening, civics, services and the seed economy.
     void chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Core protection, power reserve, reactor and production recovery.

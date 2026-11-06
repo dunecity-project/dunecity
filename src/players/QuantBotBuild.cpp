@@ -133,6 +133,7 @@ void QuantBot::build(int militaryValue) {
     planOpeningProduction(pass);
     planDefenceCoverage(pass);
     planTechSavings(pass);
+    planSensibleFirstFactory(pass);
     planCapitalCandidates(pass);
     chooseCapitalPlan(pass);
     planSensibleBudget(pass);
@@ -144,7 +145,7 @@ void QuantBot::build(int militaryValue) {
     for (const auto& entry : pass.planningOrder) {
         const auto* pStructure = dynamic_cast<const StructureBase*>(getObject(entry.second));
         if (pStructure && pStructure->getOwner() == getHouse()) {
-            if (pass.startWhatMakesSense && !sensibleResearchVisited && entry.first < 2) {
+            if (pass.startWhatMakesSense && !sensibleResearchVisited && entry.first < 60) {
                 sensibleResearchVisited = true;
                 if (civWarsRules() || researchRequired(pass)) planTechResearch(pass);
                 else startTechResearch(pass);
@@ -173,7 +174,9 @@ void QuantBot::build(int militaryValue) {
 
 int QuantBot::sensiblePriority(BuildPass& pass, Uint32 item, bool upgrade) {
     if (spendingEmergency(pass,item)) return 0;
-    if (item == Structure_WindTrap || item == Structure_NuclearPlant) return 10;
+    if (item == Structure_LightFactory && pass.threatenedFirstFactory) return 9;
+    if (item == Structure_WindTrap || item == Structure_NuclearPlant)
+        return pass.threatenedFirstFactory && pass.powerBeforeFirstFactory ? 8 : 10;
     if (item == Unit_Harvester || item == Unit_CapacityHarvester || item == Unit_FastHarvester
         || item == Structure_Refinery || (item == Unit_Carryall && needsFirstTransport(pass))
         || (isStructure(item) && currentGame->objectData.data[item][getHouse()->getHouseID()].capacity > 0
@@ -188,6 +191,146 @@ int QuantBot::sensiblePriority(BuildPass& pass, Uint32 item, bool upgrade) {
     return QuantBotBuildPolicy::militaryItem(item) || DuneCity::isCityZoneStructure(item)
         || item == Unit_Carryall ? 60 : 70;
 }
+
+int QuantBot::sensibleCapitalPriority(BuildPass& pass, int choice) {
+    const auto& candidate = pass.capitalCandidates[choice];
+    const auto kind = std::string_view(candidate.kind);
+    const bool upgrade = kind == "tech_upgrade" || kind == "expansion_upgrade"
+        || kind == "defence_upgrade" || kind == "production_upgrade";
+    return candidate.urgent ? 0 : sensiblePriority(pass,candidate.item,upgrade);
+}
+
+int QuantBot::sensibleCapitalChoice(BuildPass& pass, Uint32 builder) {
+    int selected = -1;
+    for (size_t i = 0; i < pass.capitalCandidates.size(); ++i) {
+        const auto& candidate = pass.capitalCandidates[i];
+        if (candidate.score <= 0 || (builder != NONE_ID && candidate.builder != builder)) continue;
+        const int priority = sensibleCapitalPriority(pass,int(i));
+        if (selected < 0) { selected = int(i); continue; }
+        const auto& previous = pass.capitalCandidates[selected];
+        const int previousPriority = sensibleCapitalPriority(pass,selected);
+        if (priority < previousPriority || (priority == previousPriority
+            && (candidate.builder < previous.builder || (candidate.builder == previous.builder
+                && (candidate.score > previous.score
+                    || (candidate.score == previous.score && candidate.item < previous.item))))))
+            selected = int(i);
+    }
+    return selected;
+}
+
+void QuantBot::planSensibleFirstFactory(BuildPass& pass) {
+    if (!pass.startWhatMakesSense || getHouse()->getNumItems(Structure_LightFactory) > 0
+        || getHouse()->getNumItems(Structure_HeavyFactory) > 0) return;
+    bool threatened = pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid();
+    if (!threatened) for (const auto* unit : getUnitList()) {
+        if (!unit->isActive() || unit->getHealth() <= 0 || !unit->canAttack() || !unit->getOwner()
+            || unit->getItemID() == Unit_Saboteur
+            || unit->getOwner()->getTeamID() == getHouse()->getTeamID()
+            || !unit->isVisible(getHouse()->getTeamID())) continue;
+        for (const auto* asset : getStructureList())
+            if (asset->getOwner() == getHouse() && asset->getHealth() > 0
+                && blockDistance(unit->getLocation(),asset->getClosestPoint(unit->getLocation()))
+                    <= std::max(1,unit->getWeaponRange())+8) { threatened = true; break; }
+        if (threatened) break;
+    }
+    if (!threatened) return;
+    const auto& data = currentGame->objectData.data;
+    const bool instant = getGameInitSettings().getGameOptions().instantBuild;
+    const auto stepCycles = [&](const BuilderBase* builder, Uint32 item, int price, FixPoint progress) {
+        if (instant || price <= 0) return 1;
+        const FixPoint speed = std::min(builder->getHealth()/builder->getMaxHealth(),builder->getBuildSpeedLimit());
+        const int technology = ModManager::instance().isTornieFamilyContentActive()
+            ? builder->getTechnologyHouseID() : builder->getOriginalHouseID();
+        const int base = data[item][technology].buildtime;
+        const int ticks = 15*(pass.citySimEnabled ? DuneCity::getCityBuildTime(item,base) : std::max(1,base));
+        const int64_t remaining = std::max<int64_t>(0,FixPoint(price).getRawValue()-progress.getRawValue());
+        const int64_t rate = ((FixPoint(price)/std::max(1,ticks))*speed).getRawValue();
+        return remaining <= 0 ? 0 : rate <= 0 ? INT_MAX
+            : int(std::min<int64_t>(INT_MAX,drainCycles(remaining,rate)));
+    };
+    const auto upgradeCycles = [&](const BuilderBase* builder) {
+        if (!builder->isUpgrading()) return 0;
+        if (instant) return 1;
+        const int64_t price = FixPoint(builder->getUpgradeCost()).getRawValue();
+        const int64_t remaining = std::max<int64_t>(0,price-builder->getUpgradeProgress().getRawValue());
+        return price <= 0 ? 0 : int(std::min<int64_t>(INT_MAX,drainCycles(remaining,drainCycles(price,600))));
+    };
+    auto& events = pass.sensibleDrainEnds;
+    events.clear();
+    int best = INT_MAX;
+    const Uint32 previousBuilder = planningBuilder;
+    for (const auto* builder : pass.capitalBuilders) {
+        if (builder->getItemID() != Structure_ConstructionYard || !builder->isActive()
+            || builder->isOnHold() || builder->getHealth() <= 0) continue;
+        const int technology = ModManager::instance().isTornieFamilyContentActive()
+            ? builder->getTechnologyHouseID() : builder->getOriginalHouseID();
+        int elapsed = upgradeCycles(builder);
+        bool front = true, foundFactory = false;
+        for (const auto& order : builder->getProductionQueue()) {
+            elapsed = int(std::min<int64_t>(INT_MAX,int64_t(elapsed)
+                + stepCycles(builder,order.itemID,int(order.price),front ? builder->getProductionProgress() : 0)));
+            front = false;
+            if (isStructure(order.itemID)) {
+                const int power = DuneCity::isCityZoneStructure(order.itemID)
+                    ? DuneCity::getZonePower(order.itemID,3) : data[order.itemID][technology].power;
+                if (power != 0) events.emplace_back(elapsed,power);
+            }
+            if (!foundFactory && order.itemID == Structure_LightFactory) {
+                foundFactory = true;
+                if (elapsed < best || (elapsed == best && builder->getObjectID() < pass.firstFactoryPriorityBuilder)) {
+                    best = elapsed;
+                    pass.firstFactoryPriorityBuilder = builder->getObjectID();
+                }
+            }
+        }
+        if (pass.itemCount[Structure_LightFactory] > 0 || builder->isUpgrading()
+            || builder->getProductionQueueSize() != 0
+            || !campaignAvailableToBuild(builder,Structure_LightFactory)) continue;
+        planningBuilder = builder->getObjectID();
+        clearPlacementCache(false,true);
+        const Coord site = findPlaceLocation(Structure_LightFactory);
+        if (!site.isValid()) continue;
+        const auto foundation = foundationPlan(builder,Structure_LightFactory,site);
+        if (!foundation.complete) continue;
+        int cycles = stepCycles(builder,Structure_LightFactory,purchasePrice(builder,Structure_LightFactory),0);
+        int foundationCost = 0;
+        for (const auto& slab : foundation.orders) {
+            const int price = purchasePrice(builder,slab.item);
+            cycles = int(std::min<int64_t>(INT_MAX,int64_t(cycles)+stepCycles(builder,slab.item,price,0)));
+            foundationCost += price;
+        }
+        if (cycles < best || (cycles == best && builder->getObjectID() < pass.firstFactoryPriorityBuilder)) {
+            best = cycles;
+            pass.firstFactoryPriorityBuilder = builder->getObjectID();
+            pass.firstFactoryPrioritySite = site;
+            pass.firstFactoryFoundationCost = foundationCost;
+        }
+    }
+    planningBuilder = previousBuilder;
+    clearPlacementCache(false,true);
+    if (best == INT_MAX) return;
+    pass.threatenedFirstFactory = true;
+    pass.firstFactoryCompletionCycles = std::max(1,best);
+    if (!(pass.citySimEnabled || pass.powerRules)) return;
+    if (pass.itemCount[Structure_LightFactory] == 0)
+        events.emplace_back(pass.firstFactoryCompletionCycles,
+            std::max(0,data[Structure_LightFactory][getHouse()->getHouseID()].power));
+    events.emplace_back(pass.firstFactoryCompletionCycles,0);
+    std::sort(events.begin(),events.end());
+    int64_t headroom = int64_t(getHouse()->getProducedPower())-getHouse()->getPowerRequirement();
+    const int growth = pass.citySimEnabled
+        ? std::max(std::max(0,projectedPowerDemandGrowth),std::max(0,pass.matureZonePower-pass.currentZonePower)) : 0;
+    const int horizon = MILLI2CYCLES(120000);
+    pass.powerBeforeFirstFactory = !getHouse()->hasPower() || headroom < 0;
+    for (const auto& event : events) {
+        if (event.first > pass.firstFactoryCompletionCycles) break;
+        const int64_t growthByThen = drainCycles(int64_t(growth)*event.first,horizon);
+        if (headroom < growthByThen) pass.powerBeforeFirstFactory = true;
+        headroom -= event.second;
+        if (headroom < growthByThen) pass.powerBeforeFirstFactory = true;
+    }
+}
+
 
 void QuantBot::refreshSensibleBuilder(BuildPass& pass, const BuilderBase* builder) {
     if (!pass.startWhatMakesSense || !builder || builder->getItemID() == Structure_StarPort) return;
@@ -204,6 +347,7 @@ void QuantBot::refreshSensibleBuilder(BuildPass& pass, const BuilderBase* builde
     const int technology = ModManager::instance().isTornieFamilyContentActive()
         ? builder->getTechnologyHouseID() : builder->getOriginalHouseID();
     const bool instant = getGameInitSettings().getGameOptions().instantBuild;
+    bool queued = false, military = true;
     if (!builder->isOnHold()) {
         for (const auto& offer : builder->getBuildList()) {
             if (offer.num <= 0) continue;
@@ -216,6 +360,9 @@ void QuantBot::refreshSensibleBuilder(BuildPass& pass, const BuilderBase* builde
                 : ((price / ticks) * builder->getBuildSpeedLimit()).getRawValue();
             lane.perCycle = std::max(lane.perCycle,rate);
             lane.priority = std::min(lane.priority,sensiblePriority(pass,offer.itemID));
+            lane.emergency |= sensibleEmergency(pass,offer.itemID);
+            queued = true;
+            military &= QuantBotBuildPolicy::militaryItem(offer.itemID);
         }
         lane.unpaid = std::max<int64_t>(0,lane.unpaid-builder->getProductionProgress().getRawValue());
     }
@@ -224,12 +371,16 @@ void QuantBot::refreshSensibleBuilder(BuildPass& pass, const BuilderBase* builde
         addDrainCost(lane.unpaid,std::max<int64_t>(0,price-builder->getUpgradeProgress().getRawValue()));
         lane.perCycle = std::max(lane.perCycle,instant ? price : drainCycles(price,600));
         lane.priority = std::min(lane.priority,sensiblePriority(pass,builder->getItemID(),true));
+        military = false;
     }
+    lane.military = queued && military;
     const auto reserved = reservedStructures.find(id);
     if (reserved != reservedStructures.end())
         lane.priority = std::min(lane.priority,sensiblePriority(pass,reserved->second.item));
-    if (lane.purpose != NONE_ID)
+    if (lane.purpose != NONE_ID) {
         lane.priority = std::min(lane.priority,sensiblePriority(pass,lane.purpose));
+        lane.emergency |= sensibleEmergency(pass,lane.purpose);
+    }
     if (lane.unpaid <= 0 || lane.perCycle <= 0) {
         if (found != pass.sensibleDrains.end()) pass.sensibleDrains.erase(found);
     } else if (found == pass.sensibleDrains.end()) pass.sensibleDrains.push_back(lane);
@@ -246,10 +397,28 @@ void QuantBot::addSensibleRepair(BuildPass& pass, const StructureBase* structure
         pass.sensibleDrains.push_back({NONE_ID,20,(rate*ticks).getRawValue(),rate.getRawValue()});
 }
 
+// Only real loss of the means to act bypasses the shares: an actual blackout,
+// no construction yard, no spice worker or unloading bay, or the existing local
+// ground/air defence emergency. Forecast power, first ports, crime and opening
+// targets keep their priority but must be funded like any other start.
+bool QuantBot::sensibleEmergency(BuildPass& pass, Uint32 item) {
+    if (QuantBotBuildPolicy::militaryItem(item))
+        return pass.militaryEmergency
+            || (pass.airEngaged && (CombatPowerPolicy::airCapableItem(int(item))
+                || QuantBotBuildPolicy::rocketInfantry(item)));
+    if (item == Structure_WindTrap || item == Structure_NuclearPlant) return !getHouse()->hasPower();
+    if (item == Unit_MCV) return getHouse()->getNumItems(Structure_ConstructionYard) == 0;
+    if (item == Unit_Harvester || item == Unit_CapacityHarvester || item == Unit_FastHarvester
+        || item == Structure_Refinery)
+        return lastCalculatedSpice > 0 && (pass.actualHarvesters == 0 || getAIRefineryBays() == 0);
+    return false;
+}
+
 void QuantBot::planSensibleBudget(BuildPass& pass) {
     if (!pass.startWhatMakesSense) return;
     pass.sensibleDrains.reserve(pass.capitalBuilders.size()+pass.busyRepairBays+4);
-    pass.sensibleDrainEnds.reserve(pass.capitalBuilders.size()+pass.busyRepairBays+5);
+    pass.sensibleDrainEnds.reserve(pass.capitalBuilders.size()+pass.busyRepairBays+7);
+    pass.sensiblePending = {};
     for (const auto* builder : pass.capitalBuilders) refreshSensibleBuilder(pass,builder);
     for (const auto* structure : getStructureList()) {
         if (structure->getOwner() != getHouse()) continue;
@@ -270,48 +439,67 @@ void QuantBot::planSensibleBudget(BuildPass& pass) {
         pass.sensibleDrains.push_back({getHouse()->getTechResearchLabID(),40,
             std::max<int64_t>(0,price-getHouse()->getTechResearchPaid().getRawValue()),drainCycles(price,ticks)});
     }
+    // The army's share is what its running lines plus the ready producers that
+    // the existing target/mix/caps still admit can spend, up to the fixed share.
+    // A satisfied or unbuildable army leaves the whole wallet to development.
+    int64_t capacity = 0;
+    for (const auto& lane : pass.sensibleDrains) if (lane.military) addDrainCost(capacity,lane.perCycle);
+    const auto& data = currentGame->objectData.data;
+    for (const auto& candidate : pass.capitalCandidates) {
+        if (candidate.score <= 0 || std::string_view(candidate.kind) != "military" || candidate.price <= 0) continue;
+        const auto* builder = dynamic_cast<const BuilderBase*>(getObject(candidate.builder));
+        if (!builder) continue;
+        if (builder->getItemID() == Structure_StarPort) {
+            // A discounted import is paid at once; its delivery cycle bounds the rate.
+            addDrainCost(capacity,drainCycles(FixPoint(candidate.price).getRawValue(),std::max(1,candidate.delay)));
+            continue;
+        }
+        const int technology = ModManager::instance().isTornieFamilyContentActive()
+            ? builder->getTechnologyHouseID() : builder->getOriginalHouseID();
+        const int base = data[candidate.item][technology].buildtime;
+        const int ticks = 15 * (pass.citySimEnabled ? DuneCity::getCityBuildTime(candidate.item,base) : std::max(1,base));
+        addDrainCost(capacity,((FixPoint(candidate.price)/std::max(1,ticks))*builder->getBuildSpeedLimit()).getRawValue());
+    }
+    const bool bankable = getHouse()->getCapacity() > 0;
+    const int64_t income = std::max<int64_t>(0,((FixPoint(bankable ? pass.forecastTax : 0)-FixPoint(pass.forecastUpkeep))
+        / DuneCity::kCyclesPerMinute).getRawValue()
+        + (FixPoint(bankable ? pass.forecastSpice : 0) / CityEconomyInvestmentPolicy::horizonCycles).getRawValue());
+    const int64_t cash = std::max<int64_t>(0,(getHouse()->getStartingCredits()+getHouse()->getEarnedCredits()).getRawValue());
+    const int64_t wallet = std::max<int64_t>(1,income+cash/CityEconomyInvestmentPolicy::horizonCycles);
+    pass.sensibleArmyShare = capacity <= 0 ? 0 : capacity >= wallet ? QuantBotSpendingPolicy::sensibleArmyShareBps
+        : int(std::min<int64_t>(QuantBotSpendingPolicy::sensibleArmyShareBps,capacity*10000/wallet));
 }
 
-bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
-    int64_t unpaid, int64_t perCycle, int immediate, bool emergency, bool upgrade) {
-    if (!pass.startWhatMakesSense) return true;
-    int64_t cash = (getHouse()->getStartingCredits()+getHouse()->getEarnedCredits()).getRawValue()
-        - FixPoint(immediate).getRawValue();
-    if (cash < 0) return false; // Real immediate purchases cannot borrow.
-    const int priority = sensiblePriority(pass,item,upgrade);
-    int firstPriority = 100;
-    for (const auto& lane : pass.sensibleDrains) {
-        firstPriority = std::min(firstPriority,lane.priority);
-        if (!immediate && lane.builder == builder && lane.granted && lane.purpose == item) return true;
-    }
-    // A sensible highest-priority progressive project starts even with no cash.
-    // Lower independent starts must leave every existing drain funded.
-    if (!immediate && (emergency || priority < firstPriority)) return true;
+int64_t QuantBot::sensibleDeficit(BuildPass& pass, int64_t cash, int shareBps, SensibleLanes lanes,
+    size_t extras, int64_t paidNow) {
+    const auto share = [shareBps](int64_t value) {
+        return value / 10000 * shareBps + value % 10000 * shareBps / 10000;
+    };
+    cash = share(cash)-paidNow;
+    if (cash < 0) return 0; // Real immediate purchases cannot borrow.
     auto& ends = pass.sensibleDrainEnds;
     ends.clear();
-    const bool bankableIncome = getHouse()->getCapacity() > 0;
-    const int tax = bankableIncome ? pass.forecastTax : 0;
-    const int64_t spiceRate = (FixPoint(bankableIncome ? pass.forecastSpice : 0)
+    const bool bankable = getHouse()->getCapacity() > 0;
+    const int64_t spiceRate = (FixPoint(bankable ? pass.forecastSpice : 0)
         / CityEconomyInvestmentPolicy::horizonCycles).getRawValue();
-    int64_t balanceRate = ((FixPoint(tax)-FixPoint(pass.forecastUpkeep))
-        / DuneCity::kCyclesPerMinute).getRawValue()+spiceRate;
-    for (const auto& lane : pass.sensibleDrains) {
-        if (lane.unpaid <= 0 || lane.perCycle <= 0) continue;
+    int64_t balanceRate = share(((FixPoint(bankable ? pass.forecastTax : 0)-FixPoint(pass.forecastUpkeep))
+        / DuneCity::kCyclesPerMinute).getRawValue())+share(spiceRate);
+    const auto add = [&](const BuildPass::SensibleDrain& lane) {
+        if (lane.unpaid <= 0 || lane.perCycle <= 0) return true;
         if (balanceRate <= std::numeric_limits<int64_t>::min()+lane.perCycle) return false;
         balanceRate -= lane.perCycle;
         ends.emplace_back(drainCycles(lane.unpaid,lane.perCycle),lane.perCycle);
-    }
-    if (unpaid > 0 && perCycle > 0) {
-        if (balanceRate <= std::numeric_limits<int64_t>::min()+perCycle) return false;
-        balanceRate -= perCycle;
-        ends.emplace_back(drainCycles(unpaid,perCycle),perCycle);
-    }
+        return true;
+    };
+    for (const auto& lane : pass.sensibleDrains)
+        if ((lanes == SensibleLanes::All || lane.military == (lanes == SensibleLanes::Military)) && !add(lane))
+            return 0;
+    for (size_t i = 0; i < extras; ++i) if (!add(pass.sensibleExtras[i])) return 0;
     // A four-minute fleet estimate is a rate, not an inexhaustible field.
     if (spiceRate > 0 && !ends.empty()) {
-        const int64_t spice = FixPoint(std::max(0,pass.spiceShare)).getRawValue();
-        const int64_t exhaustion = drainCycles(spice,spiceRate);
+        const int64_t exhaustion = drainCycles(FixPoint(std::max(0,pass.spiceShare)).getRawValue(),spiceRate);
         const auto last = std::max_element(ends.begin(),ends.end());
-        if (exhaustion < last->first) ends.emplace_back(exhaustion,-spiceRate);
+        if (exhaustion < last->first) ends.emplace_back(exhaustion,-share(spiceRate));
     }
     std::sort(ends.begin(),ends.end());
     int64_t previous = 0;
@@ -319,21 +507,78 @@ bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
     for (const auto& end : ends) {
         const int64_t duration = end.first-previous;
         if (balanceRate < 0) {
-            if (duration > cash/(-balanceRate)) {
-                if (AITelemetry::log().enabled())
-                    traceDecision("drain_budget_hold",AITelemetry::Record().set("builder",builder)
-                        .set("item",item).set("priority",priority).set("reason","parallel_drain")
-                        .set("cash",getHouse()->getCredits()).set("deficit_cycle",previous+cash/(-balanceRate)));
-                return false;
-            }
+            if (duration > cash/(-balanceRate)) return previous+cash/(-balanceRate);
             cash += balanceRate*duration;
         } else if (balanceRate > 0) {
             cash = duration > (cashCeiling-cash)/balanceRate ? cashCeiling : cash+balanceRate*duration;
         }
-        if (end.second < 0 && balanceRate <= std::numeric_limits<int64_t>::min()-end.second) return false;
+        if (end.second < 0 && balanceRate <= std::numeric_limits<int64_t>::min()-end.second) return previous;
         balanceRate += end.second;
         previous = end.first;
     }
+    return -1;
+}
+
+// Every admitted start must keep all live work funded to completion: lanes
+// that cannot finish at full speed starve each other. Army production keeps
+// its guaranteed share; development uses the rest, highest priority first.
+bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
+    int64_t unpaid, int64_t perCycle, int immediate, bool emergency, bool upgrade) {
+    if (!pass.startWhatMakesSense) return true;
+    const int64_t cash = (getHouse()->getStartingCredits()+getHouse()->getEarnedCredits()).getRawValue();
+    const int64_t paidNow = FixPoint(immediate).getRawValue();
+    if (cash < paidNow) return false; // Real immediate purchases cannot borrow.
+    bool projects = false, emergencyLane = false;
+    for (const auto& lane : pass.sensibleDrains) {
+        // The rest of a structure package (foundations, then the building)
+        // this builder was already granted this pass.
+        if (!immediate && lane.builder == builder && lane.granted && lane.purpose == item
+            && isStructure(item)) return true;
+        projects |= lane.builder != NONE_ID;
+        emergencyLane |= lane.emergency;
+    }
+    const bool military = !upgrade && QuantBotBuildPolicy::militaryItem(item);
+    const int priority = sensiblePriority(pass,item,upgrade);
+    auto& pending = pass.sensiblePending;
+    pass.sensibleExtras[0] = {builder,priority,unpaid,perCycle,item,false,military,emergency};
+    pass.sensibleExtras[1] = pending;
+    const size_t withPending = pending.purpose != NONE_ID
+        && !(pending.builder == builder && pending.purpose == item)
+        && (military || priority >= pending.priority) ? 2 : 1;
+    const int armyShare = pass.sensibleArmyShare;
+    const char* rule = nullptr;
+    int64_t deficit = -1;
+    if (emergency) {
+        // One real emergency may start unfunded; more only if everything stays funded.
+        deficit = sensibleDeficit(pass,cash,10000,SensibleLanes::All,1,paidNow);
+        rule = deficit < 0 ? "emergency_funded" : !emergencyLane ? "emergency_start" : nullptr;
+    } else if (!projects && (military ? withPending == 1 : armyShare == 0)) {
+        // Nothing else is running or waiting for this money: start before it is all there.
+        rule = "sole_primary";
+    } else if (military) {
+        if (armyShare > 0 && sensibleDeficit(pass,cash,armyShare,SensibleLanes::Military,1,paidNow) < 0)
+            rule = "army_share";
+        else if ((deficit = sensibleDeficit(pass,cash,10000,SensibleLanes::All,withPending,paidNow)) < 0)
+            rule = "spare_funds";
+    } else if ((deficit = sensibleDeficit(pass,cash,10000-armyShare,SensibleLanes::Development,withPending,paidNow)) < 0
+        && (deficit = sensibleDeficit(pass,cash,10000,SensibleLanes::All,withPending,paidNow)) < 0) {
+        rule = "development_share";
+    }
+    if (!rule) {
+        if (!military && (pending.purpose == NONE_ID || priority < pending.priority)) pending = pass.sensibleExtras[0];
+        if (AITelemetry::log().enabled())
+            traceDecision("drain_budget_hold",AITelemetry::Record().set("builder",builder)
+                .set("item",item).set("priority",priority).set("military",military).set("emergency",emergency)
+                .set("army_share_bps",armyShare).set("pending_item",pending.purpose)
+                .set("lanes",int(pass.sensibleDrains.size())).set("cash",getHouse()->getCredits())
+                .set("deficit_cycle",deficit));
+        return false;
+    }
+    if (AITelemetry::log().enabled())
+        traceDecision("drain_budget_start",AITelemetry::Record().set("builder",builder)
+            .set("item",item).set("priority",priority).set("military",military).set("rule",rule)
+            .set("army_share_bps",armyShare).set("lanes",int(pass.sensibleDrains.size()))
+            .set("cash",getHouse()->getCredits()));
     return true;
 }
 
@@ -343,7 +588,7 @@ bool QuantBot::sensibleOrderAdmits(BuildPass& pass, const BuilderBase* builder,
     if (purpose == NONE_ID) purpose = item;
     if (!upgrade && builder->getItemID() == Structure_StarPort)
         return sensibleDrainAdmits(pass,builder->getObjectID(),purpose,0,0,quotedPrice,
-            spendingEmergency(pass,purpose));
+            sensibleEmergency(pass,purpose));
     const int technology = ModManager::instance().isTornieFamilyContentActive()
         ? builder->getTechnologyHouseID() : builder->getOriginalHouseID();
     const auto& data = currentGame->objectData.data;
@@ -364,7 +609,7 @@ bool QuantBot::sensibleOrderAdmits(BuildPass& pass, const BuilderBase* builder,
     }
     if (getGameInitSettings().getGameOptions().instantBuild) rate = unpaid;
     return sensibleDrainAdmits(pass,builder->getObjectID(),purpose,unpaid,rate,0,
-        spendingEmergency(pass,purpose),upgrade);
+        sensibleEmergency(pass,purpose),upgrade);
 }
 
 void QuantBot::sensibleOrderAccepted(BuildPass& pass, const BuilderBase* builder,
@@ -379,6 +624,8 @@ void QuantBot::sensibleOrderAccepted(BuildPass& pass, const BuilderBase* builder
         lane.granted = true;
         break;
     }
+    if (pass.sensiblePending.builder == builder->getObjectID() && pass.sensiblePending.purpose == purpose)
+        pass.sensiblePending = {};
 }
 
 bool QuantBot::sensibleResearchAdmits(BuildPass& pass, Uint32 lab, int cost) {
@@ -390,7 +637,10 @@ bool QuantBot::sensibleResearchAdmits(BuildPass& pass, Uint32 lab, int cost) {
 }
 
 void QuantBot::sensibleResearchAccepted(BuildPass& pass, Uint32 lab, int cost, bool installments) {
-    if (!pass.startWhatMakesSense || !installments) return;
+    if (!pass.startWhatMakesSense) return;
+    if (pass.sensiblePending.builder == lab && pass.sensiblePending.purpose == Structure_ResearchLab)
+        pass.sensiblePending = {};
+    if (!installments) return;
     const int64_t price = FixPoint(cost).getRawValue();
     const int ticks = std::max(1,getHouse()->getTechResearchTotalCycles());
     pass.sensibleDrains.push_back({lab,40,price,drainCycles(price,ticks),Structure_ResearchLab,true});
@@ -3453,7 +3703,7 @@ bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgra
 }
 
 void QuantBot::planTechSavings(BuildPass& pass) {
-    if (!pass.techSavings) {
+    if (!pass.techSavings && !pass.startWhatMakesSense) {
         // Counterfactual feasibility scans belong to the paired audit, not
         // ordinary telemetry: placement searches are material AI work.
         static const bool audit = [] {
@@ -3463,7 +3713,8 @@ void QuantBot::planTechSavings(BuildPass& pass) {
         if (!audit || !AITelemetry::log().enabled()) return;
     }
     pass.militaryEmergency = false;
-    if (pass.techSavings && (pass.defendingEconomy || pass.groundThreatAsset.isValid())) {
+    if ((pass.techSavings || pass.startWhatMakesSense)
+        && (pass.defendingEconomy || pass.groundThreatAsset.isValid())) {
         const auto& data = currentGame->objectData.data;
         const int team = getHouse()->getTeamID();
         auto groundCombat = [](const UnitBase* unit) {
@@ -3513,6 +3764,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
             if (localDeficit(asset->getLocation())) { pass.militaryEmergency = true; break; }
         }
     }
+    if (pass.startWhatMakesSense && !pass.techSavings) return;
     const int house = getHouse()->getHouseID();
     const auto& data = currentGame->objectData.data;
     const bool incomeReady = pass.forecastNetIncome > 0 && !cityBootstrapNeeded(pass)
@@ -4288,10 +4540,26 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         if (AITelemetry::log().enabled()) pass.capitalUnitOptions.set(std::to_string(builder->getObjectID()),unitOptions);
     }
     planCompositionHeavyCapacity(pass);
+    if (pass.threatenedFirstFactory && pass.itemCount[Structure_LightFactory] == 0
+        && pass.firstFactoryPrioritySite.isValid()) {
+        const auto* builder = dynamic_cast<const BuilderBase*>(getObject(pass.firstFactoryPriorityBuilder));
+        if (builder && campaignAvailableToBuild(builder,Structure_LightFactory)) {
+            CapitalCandidate factory;
+            factory.builder = builder->getObjectID(); factory.item = Structure_LightFactory;
+            factory.price = purchasePrice(builder,factory.item);
+            factory.foundationCost = pass.firstFactoryFoundationCost;
+            factory.cost = factory.price+factory.foundationCost;
+            factory.site = pass.firstFactoryPrioritySite;
+            factory.kind = "first_military_factory"; factory.reason = "local_threat_missing_ground_producer";
+            factory.score = 1; // Priority comes from the missing capability, not a fabricated ROI.
+            pass.capitalCandidates.push_back(factory);
+        }
+    }
     for (auto& candidate:pass.capitalCandidates) if (isStructure(candidate.item) && candidate.score>0
         && candidate.kind!=std::string("expansion_upgrade") && candidate.kind!=std::string("defence_upgrade")
         && std::string_view(candidate.kind)!="tech_progression" && std::string_view(candidate.kind)!="tech_upgrade"
         && std::string_view(candidate.kind)!="production_upgrade") {
+        if (std::string_view(candidate.kind) == "first_military_factory") continue;
         const auto* builder=dynamic_cast<const BuilderBase*>(getObject(candidate.builder));
         if (!builder) continue;
         planningBuilder=candidate.builder;clearPlacementCache(false,true);
@@ -4405,8 +4673,7 @@ void QuantBot::planCompositionHeavyCapacity(BuildPass& pass) {
     planningBuilder=NONE_ID;
 }
 
-void QuantBot::chooseCapitalPlan(BuildPass& pass) {
-    planningBuilder=NONE_ID; clearPlacementCache(false,true);
+Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
     pass.capitalChoice = -1;
     // A fleet-ratio carryall plan is not active mining, repair or pickup work.
     // It must not indefinitely outrank a fully income-budgeted standing battery.
@@ -4433,6 +4700,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         }
     }
     const bool preferFundedBattery=mayPreferBattery && fundedBattery;
+    pass.capitalPreferFundedBattery = preferFundedBattery;
     if (preferFundedBattery) pass.capitalChoice=withoutIdleTransport;
     // A bargain's return score must not divert the bounded safety/supplier
     // savings into the military-to-zoning interleave just before they are paid.
@@ -4548,6 +4816,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     }
     const bool economySelected = pass.capitalChoice >= 0 && pass.capitalChoice != pass.techCandidateIndex
         && incomeCapital(pass.capitalCandidates[pass.capitalChoice]);
+    pass.capitalTechEconomyPriority = neededEconomy || economySelected;
     // Technology may replace optional cover or routine military capital, not
     // income, demanded services, their legal prerequisites or the first port.
     if (pass.techSavingActive && pass.techCandidateIndex >= 0 && !economySelected
@@ -4608,6 +4877,21 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
                 && (growth<0 || pass.capitalCandidates[i].score>pass.capitalCandidates[growth].score)) growth=int(i);
         if (growth>=0) {pass.capitalChoice=growth;pass.cityGrowthProtected=true;}
     }
+    return dedicatedCityYard;
+}
+
+void QuantBot::chooseCapitalPlan(BuildPass& pass) {
+    planningBuilder = NONE_ID; clearPlacementCache(false,true);
+    Uint32 dedicatedCityYard = NONE_ID;
+    if (pass.startWhatMakesSense) {
+        pass.capitalChoice = sensibleCapitalChoice(pass);
+        pass.protectionCapital = pass.capitalChoice >= 0
+            && sensibleCapitalPriority(pass,pass.capitalChoice) < 60;
+        pass.techFundingPriority = pass.techSavingActive && !pass.techResearch
+            && pass.techCandidateIndex >= 0 && pass.capitalChoice == pass.techCandidateIndex;
+        pass.cityGrowthProtected = pass.capitalChoice >= 0
+            && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "city_growth";
+    } else dedicatedCityYard = chooseLegacyCapitalPlan(pass);
     pass.capitalConsumed = false;
     pass.capitalOrderedCost = 0;
     pass.capitalInitialCount = pass.capitalChoice>=0 ? pass.itemCount[pass.capitalCandidates[pass.capitalChoice].item] : 0;
@@ -4645,12 +4929,12 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("projected_cash",pass.cashFlow.projectedCash).set("cash_buffer",pass.cashBuffer)
             .set("net_burn_per_minute",pass.cashFlow.netBurnPerMinute).set("cash_runway_seconds",pass.cashFlow.runwaySeconds)
             .set("funds_parallel_production",pass.cashFlow.fundsParallelProduction).set("shared_priority",pass.sharedSpending)
-            .set("prefer_funded_battery",preferFundedBattery)
+            .set("prefer_funded_battery",pass.capitalPreferFundedBattery)
             .set("starport_market_available",pass.starportMarketAvailable).set("funded_factory_opening",pass.fundedFactoryOpening)
             .set("funded_city_production",pass.fundedCityProduction).set("next_heavy_runway",pass.nextHeavyRunway)
             .set("city_growth_protected",pass.cityGrowthProtected)
             .set("tech_funding_selected",pass.techFundingPriority)
-            .set("tech_economy_priority",neededEconomy || economySelected)
+            .set("tech_economy_priority",pass.capitalTechEconomyPriority)
             .set("city_growth_yards_busy",pass.cityGrowthYardsBusy)
             .set("city_growth_dedicated_yard",dedicatedCityYard)
             .set("city_growth_builder",pass.cityGrowthProtected ? pass.capitalCandidates[pass.capitalChoice].builder : NONE_ID)
@@ -4709,8 +4993,10 @@ int QuantBot::capitalReserve(BuildPass& pass, Uint32 builder) {
 }
 
 void QuantBot::planBuildOrder(BuildPass& pass) {
+    int yards = 0;
     for (const auto* structure : getStructureList())
         if (structure->getOwner() == getHouse()) {
+            if (structure->getItemID() == Structure_ConstructionYard) ++yards;
             int priority=QuantBotBuildPolicy::productionPlanningPriority(pass.citySimEnabled,
                 structure->getItemID(), structure->getItemID() == Structure_ConstructionYard
                     && static_cast<const ConstructionYard*>(structure)->isWaitingToPlace(), needsFirstTransport(pass));
@@ -4726,18 +5012,34 @@ void QuantBot::planBuildOrder(BuildPass& pass) {
             if (pass.capitalChoice>=0 && pass.capitalCandidates[pass.capitalChoice].item==Unit_Carryall
                 && pass.capitalCandidates[pass.capitalChoice].builder==structure->getObjectID()
                 && getHouse()->hasPower()) priority=7;
-            if (pass.startWhatMakesSense)
-                priority = structure->getItemID()==Structure_ConstructionYard ? 3
-                    : structure->getItemID()==Structure_StarPort
-                        || (structure->getItemID()==Structure_HeavyFactory && openingWorkersNeeded(pass))
-                        || (structure->getItemID()==Structure_HighTechFactory && needsFirstTransport(pass)) ? 2 : 1;
+            if (pass.startWhatMakesSense) {
+                const int choice = structure->isABuilder()
+                    ? sensibleCapitalChoice(pass,structure->getObjectID()) : -1;
+                int purpose = choice >= 0 ? sensibleCapitalPriority(pass,choice)
+                    : structure->isABuilder() && structure->getItemID() != Structure_ConstructionYard ? 60 : 70;
+                if (structure->getItemID() == Structure_ConstructionYard) {
+                    if (!getHouse()->hasPower()
+                        || ((pass.citySimEnabled || pass.powerRules)
+                            && getHouse()->getProducedPower() < getHouse()->getPowerRequirement())) purpose = 0;
+                    if (pass.civicStructuralNeed || cityBootstrapNeeded(pass)) purpose = std::min(purpose,20);
+                    if (pass.threatenedFirstFactory) {
+                        if (pass.powerBeforeFirstFactory) purpose = std::min(purpose,8);
+                        else if (structure->getObjectID() == pass.firstFactoryPriorityBuilder) purpose = std::min(purpose,9);
+                    }
+                } else if ((structure->getItemID() == Structure_HeavyFactory && openingWorkersNeeded(pass))
+                    || (structure->getItemID() == Structure_HighTechFactory && needsFirstTransport(pass)))
+                    purpose = std::min(purpose,20);
+                priority = 100-purpose;
+            }
             pass.planningOrder.emplace_back(priority,structure->getObjectID());
         }
     std::stable_sort(pass.planningOrder.begin(), pass.planningOrder.end(),
         [](const auto& a, const auto& b) { return a.first > b.first; });
-    cityReadyYardCount = std::max(1,int(std::count_if(pass.planningOrder.begin(),pass.planningOrder.end(),
-        [](const auto& row){return row.first == 3;})));
-    if (pass.citySimEnabled) CityPlanningPolicy::rotateYards(pass.planningOrder,getGameCycleCount());
+    cityReadyYardCount = pass.startWhatMakesSense ? std::max(1,yards)
+        : std::max(1,int(std::count_if(pass.planningOrder.begin(),pass.planningOrder.end(),
+            [](const auto& row){return row.first == 3;})));
+    if (pass.citySimEnabled && !pass.startWhatMakesSense)
+        CityPlanningPolicy::rotateYards(pass.planningOrder,getGameCycleCount());
 }
 
 void QuantBot::traceCapitalOutcome(BuildPass& pass) {
