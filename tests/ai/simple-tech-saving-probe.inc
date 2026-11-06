@@ -255,10 +255,14 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
         }
         addMatureYard(world);
         world.closeMilitaryMarket(); // Measured heavy completion must come from its real HF.
-        // Unit-choice-only leaves the legacy wealth/MCV policy untouched.
-        // Below its third-yard cash trigger, both arms exercise the military
-        // selector instead of an unrelated, already-capped MCV branch.
-        world.cash(unitChoiceOnly ? 9999 : 19999);
+        if (unitChoiceOnly) {
+            // Satisfy the unchanged legacy wealth/capacity target with real
+            // initial yards. Lower cash also closes the OFF light-budget gate
+            // and therefore cannot establish the intended cheap-order control.
+            addMatureYard(world);
+            addMatureYard(world);
+        }
+        world.cash(19999);
         if (queuedControl) {
             // Labelled initial commitments, not the asserted bot's heavy order.
             for (auto* factory : world.lights) factory->doProduceItem(Unit_Quad);
