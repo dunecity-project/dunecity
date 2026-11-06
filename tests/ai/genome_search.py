@@ -24,8 +24,10 @@ from pathlib import Path
 import genome_model
 
 ROOT = Path(__file__).resolve().parents[2]
+BEHAVIOUR_CHECKS = Path(__file__).with_name('genome-behavior-checks.json')
 CONTROL = 'default'
-CONTEXT = ('mod', 'difficulty', 'research', 'format', 'size', 'phase', 'base', 'spice')
+# Whole-game rules are context: genomes needing a rule are compared inside games played under it.
+CONTEXT = ('mod', 'difficulty', 'research', 'format', 'size', 'phase', 'base', 'spice', 'technology_installments')
 OBJECTIVES = ('win_score', 'kill_value', 'alive_followup_minute', 'army_value_time_mean',
               'special_built', 'attack_count', 'special_live_value_share', 'idle_money_time_mean',
               'economy_stall_fraction', 'base_loss_fraction', 'population', 'research_level')
@@ -102,13 +104,18 @@ def decimal(value, places=4):
 
 
 def selected_genes(registry, names=None, switches_only=False):
+    """Independent search loci. Game rules follow their dependent genes, never vary alone:
+    one whole-game rule is identical for both arms, so it has no within-game contrast."""
     known = {gene['id']: gene for gene in registry}
     if names:
         missing = sorted(set(names) - set(known))
         if missing:
             raise ValueError('Unknown genes: ' + ', '.join(missing))
+        rules = sorted(name for name in names if genome_model.is_game_rule(known[name]))
+        if rules:
+            raise ValueError('Game rules are set by their dependent genes, not searched alone: ' + ', '.join(rules))
         return [known[name] for name in names]
-    return [gene for gene in registry if len(gene['levels']) > 1
+    return [gene for gene in registry if len(gene['levels']) > 1 and not genome_model.is_game_rule(gene)
             and (not switches_only or gene['kind'] == 'bool')]
 
 
@@ -124,6 +131,15 @@ def alternative(gene):
 
 def genome(name, values=None, expression=None):
     return dict(id=name, values=values or {}, expression=expression or [])
+
+
+def with_rules(name, values, genes):
+    """A design genome plus every game rule its active genes require (whole-game, both arms)."""
+    rules = {}
+    for gene in genes:
+        if gene['id'] in values and values[gene['id']] != gene['default']:
+            rules.update(gene.get('requires', {}))
+    return genome(name, dict(values, **rules)), rules
 
 
 def fractional_design(genes):
@@ -151,15 +167,19 @@ def screen_plan(registry, genes, parameter_sweeps=True, fraction=True):
             levels = [alternative(gene)]
         for index, level in enumerate(levels):
             name = 'one-%s-%d' % (gene['id'], index)
-            genomes.append(genome(name, {gene['id']: level}))
-            designs.append(dict(genome=name, stage='one_gene', gene=gene['id'],
-                                baseline=gene['default'], alternative=level, binary=gene['kind'] == 'bool'))
+            item, rules = with_rules(name, {gene['id']: level}, [gene])
+            genomes.append(item)
+            designs.append(dict(genome=name, stage='one_gene', gene=gene['id'], baseline=gene['default'],
+                                alternative=level, binary=gene['kind'] == 'bool', game_rules=rules))
+    # A gene needing a game rule would confound the rule with its fraction column;
+    # it is screened one gene at a time, inside games played under its rule.
+    dependent = [gene['id'] for gene in genes if gene.get('requires')]
     columns = {}
     if fraction:
-        signs_list, columns = fractional_design(genes)
+        signs_list, columns = fractional_design([gene for gene in genes if gene['id'] not in dependent])
         for index, signs in enumerate(signs_list):
             name = 'fraction-%04d' % index
-            values = {gene['id']: alternative(gene) for gene in genes if signs[gene['id']] == 1}
+            values = {gene['id']: alternative(gene) for gene in genes if signs.get(gene['id']) == 1}
             genomes.append(genome(name, values))
             designs.append(dict(genome=name, stage='fractional', signs=signs))
     for item in genomes:
@@ -170,24 +190,28 @@ def screen_plan(registry, genes, parameter_sweeps=True, fraction=True):
     return dict(schema_version=1, kind='screen', registry_sha256=digest(registry),
                 search_genes=[gene['id'] for gene in genes], genomes=genomes, designs=designs,
                 fractional_columns=columns, fractional_resolution=4 if columns else None,
-                interaction_alias_groups=list(aliases.values()), independent_unit='common map-seed block')
+                one_gene_only=dependent, interaction_alias_groups=list(aliases.values()),
+                independent_unit='common map-seed block')
 
 
 def interaction_plan(registry, names):
     genes = selected_genes(registry, names)
     genomes, designs = [genome(CONTROL)], []
     for left, right in itertools.combinations(genes, 2):
+        # All four cells share the pair's game rules, so the 2x2 compares like with like.
+        rules = dict(left.get('requires', {}), **right.get('requires', {}))
         variants = {}
         for a, b in itertools.product((0, 1), repeat=2):
             name = 'pair-%s-%s-%d%d' % (left['id'], right['id'], a, b)
-            values = {}
+            values = dict(rules)
             if a:
                 values[left['id']] = alternative(left)
             if b:
                 values[right['id']] = alternative(right)
             genomes.append(genome(name, values))
+            genome_model.validate_genome(genomes[-1], registry)
             variants['%d%d' % (a, b)] = name
-        designs.append(dict(stage='interaction', genes=[left['id'], right['id']], variants=variants))
+        designs.append(dict(stage='interaction', genes=[left['id'], right['id']], variants=variants, game_rules=rules))
     return dict(schema_version=1, kind='interactions', registry_sha256=digest(registry),
                 genomes=genomes, designs=designs)
 
@@ -254,15 +278,45 @@ def arm_of(row):
     return row.get('genome_id') or row.get('arm') or row.get('label') or ''
 
 
-class ObservationFiles:
-    """Re-iterable streaming evidence; snapshots never become independent seeds."""
+# Files that never enter the native probe build: pure genome bookkeeping and docs.
+HARNESS_ONLY = ('tests/ai/genome-match.py', 'tests/ai/genome_search.py', 'tests/ai/genome_model.py',
+                'tests/ai/genome-registry.json')
 
-    def __init__(self, paths):
+
+def native_equivalence(revisions):
+    """Verify that commits differ only in genome harness files (identical native build).
+
+    Returns the git-observed differing paths. Anything else, including other
+    Python harnesses that can patch or drive the probe build, refuses pooling.
+    """
+    revisions = list(dict.fromkeys(revisions))
+    differences = {}
+    for other in revisions[1:]:
+        changed = subprocess.check_output(['git', 'diff', '--name-only', revisions[0], other],
+                                          cwd=str(ROOT), text=True).split()
+        native = [path for path in changed if path not in HARNESS_ONLY and not path.startswith('docs/')
+                  and not path.startswith('tests/ai/test_genome')]
+        if native:
+            raise ValueError('Revisions %s and %s differ outside the genome harness: %s'
+                             % (revisions[0], other, ', '.join(native[:5])))
+        differences[other] = changed
+    return dict(revisions=revisions, differing_paths=differences)
+
+
+class ObservationFiles:
+    """Re-iterable streaming evidence; snapshots never become independent seeds.
+
+    equivalent names full commit SHAs already verified by native_equivalence;
+    they count as one native source. Any other second source is refused.
+    """
+
+    def __init__(self, paths, equivalent=()):
         files = set()
         for path in paths:
             path = Path(path)
             files.update(path.rglob('observations-*.csv.gz') if path.is_dir() else [path])
         self.files = tuple(sorted(files))
+        self.equivalent = frozenset(equivalent)
 
     def __iter__(self):
         sources = set()
@@ -275,14 +329,33 @@ class ObservationFiles:
                     if row.get('status') not in ('measured', 'unavailable', 'censored', 'not_applicable'):
                         raise ValueError('Missing explicit evidence status in ' + str(path))
                     if row.get('source_commit'):
-                        sources.add(row['source_commit'])
+                        sources.add('equivalent' if row['source_commit'] in self.equivalent else row['source_commit'])
                     if len(sources) > 1:
                         raise ValueError('Do not pool native revisions: use ai-baseline-gate.py for history')
                     yield row
 
 
-def observations(paths):
-    return ObservationFiles(paths)
+def observations(paths, equivalent=()):
+    return ObservationFiles(paths, equivalent)
+
+
+def payoff_table(rows):
+    """PFSP records per opponent: 1v1 games against it and how many the other arm lost."""
+    scores = defaultdict(dict)
+    for row in rows:
+        if (row['metric'] != 'win_score' or row['status'] != 'measured' or row.get('value', '') == ''
+                or row.get('format') != '1v1' or str(row.get('minute', '-1')) not in ('', '-1')):
+            continue
+        scores[row.get('game_id') or row.get('id', '')][arm_of(row)] = Fraction(row['value'])
+    table = defaultdict(lambda: dict(games=0, losses=0))
+    for game in scores.values():
+        if len(game) != 2:
+            continue
+        (left, left_score), (right, right_score) = sorted(game.items())
+        for opponent, own, other in ((left, right_score, left_score), (right, left_score, right_score)):
+            table[opponent]['games'] += 1
+            table[opponent]['losses'] += int(own < other)
+    return {opponent: record for opponent, record in sorted(table.items())}
 
 
 def responses(rows, house=False, require_rotations=False):
@@ -316,9 +389,13 @@ def responses(rows, house=False, require_rotations=False):
         control_cell = by_arm.get(CONTROL)
         control = control_cell[0] / control_cell[1] if control_cell else None
         for arm, (total, count) in by_arm.items():
+            # Fitness uses the common same-source default opponent only; league games
+            # against champions/PFSP picks are payoff evidence, not comparable levels.
+            if control is None:
+                continue
             value = total / count
             absolute[(arm, metric, context)][seed].append(value)
-            if arm != CONTROL and control is not None:
+            if arm != CONTROL:
                 contrasts[(arm, metric, context)][seed].append(value - control)
     reduce = lambda source: {key: {seed: mean(values) for seed, values in seeds.items()}
                              for key, seeds in source.items()}
@@ -342,6 +419,10 @@ def effect_contrasts(plan, measured):
             name = '%s:%s->%s' % (design['gene'], design['baseline'], design['alternative'])
             for metric, context, seeds in by_arm[design['genome']]:
                 out[('one_gene', name, metric, context)] = {s: v * sign for s, v in seeds.items()}
+        elif design['stage'] == 'candidate':
+            # Whole-genome candidate minus the same-source default in the same games.
+            for metric, context, seeds in by_arm[design['genome']]:
+                out[('candidate', design['genome'], metric, context)] = dict(seeds)
     fractions = [d for d in plan.get('designs', []) if d['stage'] == 'fractional']
     for gene in plan.get('fractional_columns', {}):
         cells = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
@@ -482,7 +563,14 @@ def analyse(plan, rows):
                 recommendation='KEEP_SHIPPED_DEFAULT: promotion needs held-out CIs and historical quality gate', default_changed=False)
 
 
-def mutate(parent, genes, rng, step=1, contexts=None):
+def finish(child, registry=None):
+    """Close game rules over active dependent genes, then name by genotype digest."""
+    child = genome_model.close_game_rules(child, registry)
+    child['id'] = 'g-' + genome_model.genome_id(child)[:16]
+    return child
+
+
+def mutate(parent, genes, rng, step=1, contexts=None, registry=None):
     child = copy.deepcopy(parent)
     picked = [gene for gene in genes if rng.randrange(max(1, len(genes))) < 2]
     if not picked:
@@ -511,11 +599,10 @@ def mutate(parent, genes, rng, step=1, contexts=None):
             new = choices[rng.randrange(len(choices))]
         target[gene['id']] = new
         changed.append(gene['id'])
-    child['id'] = 'g-' + genome_model.genome_id(child)[:16]
-    return child, changed
+    return finish(child, registry), changed
 
 
-def crossover(left, right, genes, rng):
+def crossover(left, right, genes, rng, registry=None):
     values = {}
     for gene in genes:
         parent = left if rng.randrange(2) == 0 else right
@@ -524,9 +611,7 @@ def crossover(left, right, genes, rng):
             values[gene['id']] = value
     # Preserve ordered context-rule blocks; reordering overlaps changes semantics.
     expression = copy.deepcopy((left if rng.randrange(2) == 0 else right).get('expression', []))
-    child = genome('offspring', values, expression)
-    child['id'] = 'g-' + genome_model.genome_id(child)[:16]
-    return child
+    return finish(genome('offspring', values, expression), registry)
 
 
 def pfsp_weights(payoffs, opponents):
@@ -549,18 +634,32 @@ def weighted_choice(weights, rng):
     raise AssertionError('Unreachable draw')
 
 
+FEASIBILITY_RANK = {'feasible': 0, 'unverified': 1, 'infeasible': 2}
+
+
 def evolve(plan, report, registry, generation, population=24, offspring=24, seed=20261106,
-           payoffs=None, successes=0, attempts=0, step=1):
+           payoffs=None, successes=0, attempts=0, step=1, seed_genes=(), feasibility=None, seeds=None):
+    """One (mu+lambda) league round; every child also meets the same-source default.
+
+    feasibility maps genotype digests to feasible/unverified/infeasible behaviour
+    verdicts: feasible genomes rank first and unknown genomes are unverified, never
+    feasible. seed_genes (for example newly registered switches) each get one
+    child: the best parent with that gene at its alternative level.
+    """
     if population < 4 or offspring < 1:
         raise ValueError('Population >=4 and offspring >0 required')
-    genes = selected_genes(registry, plan.get('search_genes'))
+    genes = selected_genes(registry, list(dict.fromkeys(list(plan.get('search_genes', [])) + list(seed_genes))))
     if not genes:
         raise ValueError('No mutable genes')
+    known = {gene['id']: gene for gene in genes}
+    feasibility = feasibility or {}
     rng = random.Random(seed + generation)
     genomes = {g['id']: g for g in plan['genomes']}
     ranks = {name: rank for rank, front in enumerate(report.get('pareto_fronts', [])) for name in front}
     quality = report.get('genomes', {})
-    ordering = lambda name: (len(quality.get(name, {}).get('missing_quality', QUALITY)), ranks[name], name)
+    verdict = lambda name: feasibility.get(genome_model.genome_id(genomes[name]), 'unverified')
+    ordering = lambda name: (FEASIBILITY_RANK[verdict(name)],
+                             len(quality.get(name, {}).get('missing_quality', QUALITY)), ranks[name], name)
     ordered = sorted((name for name in ranks if name in genomes), key=ordering)
     if not ordered:
         raise ValueError('No measured genomes: synthetic or surrogate fitness is not accepted')
@@ -589,20 +688,33 @@ def evolve(plan, report, registry, generation, population=24, offspring=24, seed
         return genomes[min(candidates, key=ordering)]
     children, lineage = [], []
     seen = {genome_model.genome_id(g) for g in parents}
-    for _ in range(offspring * 100):
-        if len(children) == offspring:
-            break
-        left, right = tournament(), tournament()
-        child, changed = mutate(crossover(left, right, genes, rng), genes, rng, step, contexts)
+
+    def admit(child, record):
         identity = genome_model.genome_id(child)
         if identity in seen:
-            continue
+            return False
         genome_model.validate_genome(child, registry)
         seen.add(identity)
         children.append(child)
-        lineage.append(dict(genome=child['id'], parents=[left['id'], right['id']], mutations=changed,
-                            role='main_exploiter' if len(children) <= 4 else 'main'))
-    if len(children) != offspring:
+        lineage.append(dict(record, genome=child['id']))
+        return True
+    for gene_id in seed_genes:
+        gene = known[gene_id]
+        for name in ordered:
+            base = genomes[name]
+            child = finish(genome('offspring', dict(base.get('values', {}), **{gene_id: alternative(gene)}),
+                                  copy.deepcopy(base.get('expression', []))), registry)
+            if admit(child, dict(parents=[name], mutations=[gene_id], role='seeded_gene')):
+                break
+    for _ in range(offspring * 100):
+        if len(children) >= offspring:
+            break
+        left, right = tournament(), tournament()
+        child, changed = mutate(crossover(left, right, genes, rng, registry), genes, rng, step, contexts, registry)
+        exploiters = sum(record['role'] == 'main_exploiter' for record in lineage)
+        admit(child, dict(parents=[left['id'], right['id']], mutations=changed,
+                          role='main_exploiter' if exploiters < 4 else 'main'))
+    if len(children) < offspring:
         raise ValueError('Not enough unique offspring in registered search space')
     frozen = copy.deepcopy(plan.get('hall_of_fame', []))
     champion = genomes[ordered[0]]
@@ -610,16 +722,25 @@ def evolve(plan, report, registry, generation, population=24, offspring=24, seed
         frozen.append(copy.deepcopy(champion))
     opponents = sorted({CONTROL, champion['id']} | {g['id'] for g in frozen})
     weights, matchups = pfsp_weights(payoffs or {}, opponents), []
+    pool = {g['id']: g for g in parents + children + frozen}
     for child, record in zip(children, lineage):
-        targets = [champion['id']] if record['role'] == 'main_exploiter' else list(dict.fromkeys(
-            (CONTROL, champion['id'], weighted_choice(weights, rng))))
-        matchups.extend([child['id'], target] for target in targets if child['id'] != target)
+        # The same-source default is the common paired control for every child.
+        targets = (CONTROL, champion['id']) if record['role'] == 'main_exploiter' else (
+            CONTROL, champion['id'], weighted_choice(weights, rng))
+        for target in dict.fromkeys(targets):
+            if target != child['id']:
+                genome_model.game_rules([child, pool.get(target, genome(CONTROL))], registry)
+                matchups.append([child['id'], target])
+    protocol = copy.deepcopy(plan.get('protocol', {}))
+    if seeds:
+        protocol['seeds'] = list(seeds)
     output = dict(schema_version=1, kind='evolution', generation=generation, registry_sha256=digest(registry),
-                  genomes=list({g['id']: g for g in parents + children + frozen}.values()), hall_of_fame=frozen,
+                  genomes=list(pool.values()), hall_of_fame=frozen,
                   lineage=lineage, matchups=matchups, mutation_step=step,
                   adaptive_rule='integer 1/5 success rule on registered-level step',
-                  protocol=copy.deepcopy(plan.get('protocol', {})), designs=[], search_genes=[g['id'] for g in genes],
-                  pfsp_weights=weights, parents=selected)
+                  protocol=protocol, designs=[dict(stage='candidate', genome=child['id']) for child in children],
+                  search_genes=[g['id'] for g in genes], pfsp_weights=weights, parents=selected,
+                  feasibility={name: verdict(name) for name in selected})
     output['plan_sha256'] = digest(output)
     return output
 
@@ -795,6 +916,8 @@ def parser():
     analysis.add_argument('--plan', type=Path, required=True)
     analysis.add_argument('--observations', type=Path, nargs='+', required=True)
     analysis.add_argument('--output', type=Path, required=True)
+    analysis.add_argument('--native-equivalent', nargs='+', default=[], metavar='FULL_SHA',
+                          help='Pool commits proven by git to differ only in genome harness files')
     evolution = commands.add_parser('evolve')
     evolution.add_argument('--plan', type=Path, required=True)
     evolution.add_argument('--report', type=Path, required=True)
@@ -807,6 +930,16 @@ def parser():
     evolution.add_argument('--successes', type=int, default=0)
     evolution.add_argument('--attempts', type=int, default=0)
     evolution.add_argument('--mutation-step', type=int, default=1)
+    evolution.add_argument('--seed-genes', nargs='+', default=[],
+                           help='Genes outside the plan (e.g. new switches): one child each, best parent + alternative')
+    evolution.add_argument('--behaviour', type=Path, nargs='+', default=[],
+                           help='genome-behaviors.py games.csv results: feasible genomes rank first')
+    evolution.add_argument('--race-seeds', type=int, nargs='+', help='Common seeds for this round (default: plan seeds)')
+    race = commands.add_parser('race')
+    race.add_argument('--plan', type=Path, required=True, nargs='+', help='Plans containing the elites')
+    race.add_argument('--elites', nargs='+', required=True)
+    race.add_argument('--seeds', type=int, nargs='+', required=True, help='Held-out seeds never used for selection')
+    race.add_argument('--output', type=Path, required=True)
     run = commands.add_parser('run')
     run.add_argument('--plan', type=Path, required=True)
     run.add_argument('--output', type=Path, required=True)
@@ -821,9 +954,55 @@ def parser():
     return parser
 
 
+def feasibility_table(paths, cases=None):
+    """Per-genotype hard behaviour verdicts from genome-behaviors.py games.csv files.
+
+    A genotype is feasible only when every registered case is feasible; any
+    infeasible case makes it infeasible; missing/errored cases leave it unverified.
+    """
+    if cases is None:
+        cases = sorted(case['id'] for case in load_json(BEHAVIOUR_CHECKS)['cases'])
+    verdicts = defaultdict(dict)
+    for path in paths:
+        for row in load_rows(path):
+            if not row.get('error'):
+                verdicts[row['genome_digest']][row['case']] = row['feasibility']
+    table = {}
+    for identity, by_case in sorted(verdicts.items()):
+        states = [by_case.get(case, 'unverified') for case in cases]
+        table[identity] = ('infeasible' if 'infeasible' in states
+                           else 'feasible' if all(state == 'feasible' for state in states) else 'unverified')
+    return table
+
+
+def race_plan(plans, elites, seeds, registry):
+    """Held-out confirmation: each elite against the same-source default."""
+    pool = {}
+    for plan in plans:
+        pool.update({item['id']: item for item in plan['genomes']})
+    missing = sorted(set(elites) - set(pool))
+    if missing:
+        raise ValueError('Unknown elites: ' + ', '.join(missing))
+    used = {seed for plan in plans for seed in plan.get('protocol', {}).get('seeds', [])}
+    if set(seeds) & used or len(set(seeds)) < 8:
+        raise ValueError('Racing needs at least eight seeds never used by the selecting plans')
+    racers = [pool[name] for name in dict.fromkeys(elites) if name != CONTROL]
+    for item in racers:
+        genome_model.validate_genome(item, registry)
+    protocol = copy.deepcopy(plans[0]['protocol'])
+    protocol['seeds'] = list(seeds)
+    output = dict(schema_version=1, kind='race', genomes=[genome(CONTROL)] + racers,
+                  matchups=[[item['id'], CONTROL] for item in racers],
+                  designs=[dict(stage='candidate', genome=item['id']) for item in racers],
+                  protocol=protocol, registry_sha256=digest(registry),
+                  selected_by=[plan.get('plan_sha256') for plan in plans])
+    output['plan_sha256'] = digest(output)
+    return output
+
+
 def main():
     args = parser().parse_args()
-    registry = genome_model.load_registry() if args.command in ('screen', 'interactions', 'evolve') else None
+    registry = genome_model.load_registry() if args.command in ('screen', 'interactions', 'evolve', 'race') else None
     if args.command == 'screen':
         genes = selected_genes(registry, args.genes, args.switches_only)
         plan = add_protocol(screen_plan(registry, genes, not args.one_alternate, not args.no_fraction), args)
@@ -834,9 +1013,13 @@ def main():
     elif args.command == 'interactions':
         save_json(args.output, add_protocol(interaction_plan(registry, args.genes), args))
     elif args.command == 'analyse':
-        report = analyse(load_json(args.plan), observations(args.observations))
+        pooled = native_equivalence(args.native_equivalent) if args.native_equivalent else None
+        rows = observations(args.observations, args.native_equivalent)
+        report = analyse(load_json(args.plan), rows)
+        report['native_equivalence'] = pooled
         args.output.mkdir(parents=True, exist_ok=True)
         save_json(args.output / 'report.json.gz', report)
+        save_json(args.output / 'payoffs.json', payoff_table(rows))
         fields = ('stage', 'gene', 'metric', 'context', 'seeds', 'effect', 'low', 'high', 'interpretation', 'verdict')
         write_rows(args.output / 'gene-effects.csv.gz', fields, report['effects'])
         write_rows(args.output / 'house-effects.csv.gz', fields, report['house_effects'])
@@ -845,10 +1028,15 @@ def main():
     elif args.command == 'evolve':
         result = evolve(load_json(args.plan), load_json(args.report), registry, args.generation,
                         args.population, args.offspring, args.seed, load_json(args.payoffs) if args.payoffs else None,
-                        args.successes, args.attempts, args.mutation_step)
+                        args.successes, args.attempts, args.mutation_step, args.seed_genes,
+                        feasibility_table(args.behaviour) if args.behaviour else None, args.race_seeds)
         save_json(args.output, result)
         print(canonical(dict(generation=result['generation'], offspring=len(result['lineage']),
                              frozen_opponents=len(result['hall_of_fame']), matchups=len(result['matchups']))))
+    elif args.command == 'race':
+        result = race_plan([load_json(path) for path in args.plan], args.elites, args.seeds, registry)
+        save_json(args.output, result)
+        print(canonical(dict(elites=len(result['matchups']), seeds=len(args.seeds), plan_sha256=result['plan_sha256'])))
     elif args.command == 'run':
         run_plan(load_json(args.plan), args)
 

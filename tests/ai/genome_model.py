@@ -10,6 +10,11 @@ floats. Predicates are case-sensitive; absent/empty categorical lists match all.
 Size bounds are inclusive. Matching expression rules apply in list order, with
 the last assignment to a gene winning. Phase boundaries belong to the harness;
 this module only consumes opening/mid/late, never wall time or simulation RNG.
+
+A ``"scope": "game"`` gene is a whole-game [Game Options] rule, not a QuantBot
+key: it is set once per game for every house, only in a genome's top-level
+values, and never rendered into a per-house INI. ``requires`` on a QuantBot gene
+names the game-rule levels without which its active level has no effect.
 """
 import configparser
 from decimal import Decimal
@@ -30,6 +35,8 @@ _GENE_ID = re.compile(r'[a-z][a-z0-9]*(?:_[a-z0-9]+)*\Z')
 _SLUG = re.compile(r'[a-z0-9][a-z0-9_-]*\Z')
 _DECIMAL = re.compile(r'(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z')
 _REQUIRED_GENE = {'id', 'name', 'section', 'key', 'kind', 'levels', 'default', 'owner_doc'}
+_OPTIONAL_GENE = {'difficulty', 'scope', 'requires'}
+GAME_SCOPE = 'game'
 _GETTER = re.compile(
     r'iniFile\.get(Bool|Int|Double|String)Value\(\s*'
     r'("[^"\n]+"|section)\s*,\s*(prefix\s*\+\s*"[^"\n]+"|"[^"\n]+")'
@@ -230,6 +237,31 @@ def _source_catalog():
     return catalog, defaults, tuple(mix_names), tuple(tempo_names)
 
 
+@lru_cache(maxsize=1)
+def _game_option_catalog():
+    """[Game Options] booleans of the requested-options reader and their compiled defaults.
+
+    Keys come from ``applyGameOptionsFromConfig`` (the harness's requested-options
+    path); defaults from GameOptionsClass in-class initializers. A rule without a
+    compiled initializer has no auditable default and maps to None (fails closed).
+    """
+    reader = _function(_cpp_text((ROOT / 'src/globals.cpp').read_text(encoding='utf-8')),
+                       'applyGameOptionsFromConfig')
+    keys = dict(re.findall(r'\breadBool\(\s*"([^"\n]+)"\s*,\s*options\.(\w+)\s*\)', reader))
+    header = _cpp_text((ROOT / 'include/DataTypes.h').read_text(encoding='utf-8'))
+    declaration = re.search(r'\bclass\s+GameOptionsClass\s*\{', header)
+    if not keys or not declaration:
+        _fail('cannot inventory [Game Options] rules')
+    members = _block(header, declaration.end())
+    defaults = {member: _scalar(value, 'bool')
+                for member, value in re.findall(r'\bbool\s+(\w+)\s*=\s*(true|false)\s*;', members)}
+    return {key: defaults.get(member) for key, member in keys.items()}
+
+
+def is_game_rule(gene):
+    return gene.get('scope') == GAME_SCOPE
+
+
 def _same_level(left, right):
     return type(left) is type(right) and left == right
 
@@ -265,13 +297,44 @@ def _level_valid(level, gene, mix_names, tempo_names):
     return False
 
 
+def _validate_game_rule(gene):
+    gene_id = gene['id']
+    if gene['section'] != 'Game Options' or 'difficulty' in gene or 'requires' in gene:
+        _fail(gene_id + ': a game rule is one [Game Options] key without difficulty or dependencies')
+    catalog = _game_option_catalog()
+    if gene['key'] not in catalog or gene['kind'] != 'bool':
+        _fail(gene_id + ': unknown or non-boolean [Game Options] rule: ' + repr(gene['key']))
+    if catalog[gene['key']] is None:
+        _fail(gene_id + ': game rule has no compiled default to audit')
+    if not all(type(level) is int and level in (0, 1) for level in gene['levels']):
+        _fail(gene_id + ': level is not accepted unchanged by the game options reader')
+    if not _same_level(gene['default'], catalog[gene['key']]):
+        _fail(gene_id + ': default differs from the compiled game rule: ' + repr(catalog[gene['key']]))
+
+
+def _validate_dependencies(registry):
+    genes = {gene['id']: gene for gene in registry}
+    for gene in registry:
+        if 'requires' not in gene:
+            continue
+        requires = gene['requires']
+        if not isinstance(requires, dict) or not requires:
+            _fail(gene['id'] + ': requires must name game rules and levels')
+        for rule_id, level in requires.items():
+            rule = genes.get(rule_id)
+            if rule is None or not is_game_rule(rule):
+                _fail(gene['id'] + ': requires an unregistered game rule: ' + repr(rule_id))
+            if not any(_same_level(level, candidate) for candidate in rule['levels']) or _same_level(level, rule['default']):
+                _fail(gene['id'] + ': requires a registered non-default level of ' + rule_id)
+
+
 def _validate_registry(registry, complete=False):
     if not isinstance(registry, list) or not registry:
         _fail('registry must be a nonempty list of genes')
     catalog, defaults, mixes, tempos = _source_catalog()
     ids, keys = set(), set()
     for gene in registry:
-        if not isinstance(gene, dict) or not _REQUIRED_GENE <= gene.keys() or gene.keys() - (_REQUIRED_GENE | {'difficulty'}):
+        if not isinstance(gene, dict) or not _REQUIRED_GENE <= gene.keys() or gene.keys() - (_REQUIRED_GENE | _OPTIONAL_GENE):
             _fail('registry gene has missing or unknown fields')
         gene_id = gene['id']
         if not isinstance(gene_id, str) or not _GENE_ID.fullmatch(gene_id) or gene_id in ids:
@@ -280,23 +343,31 @@ def _validate_registry(registry, complete=False):
         for field in ('name', 'section', 'key', 'kind', 'owner_doc'):
             if not isinstance(gene[field], str) or not gene[field].strip():
                 _fail(gene_id + ': ' + field + ' must be a nonempty string')
+        if 'scope' in gene and gene['scope'] != GAME_SCOPE:
+            _fail(gene_id + ': scope must be "game" or absent (QuantBot INI)')
         pair = (gene['section'], gene['key'])
-        if pair not in catalog or pair in keys:
-            _fail(gene_id + ': unknown or duplicate INI section/key: ' + repr(pair))
+        if pair in keys:
+            _fail(gene_id + ': duplicate INI section/key: ' + repr(pair))
         keys.add(pair)
-        if gene['kind'] != catalog[pair][0]:
-            _fail(gene_id + ': kind does not match the actual INI getter')
         levels = gene['levels']
         if not isinstance(levels, list) or len(levels) < 2:
             _fail(gene_id + ': levels must contain at least two choices')
         for index, level in enumerate(levels):
-            if not _level_valid(level, gene, mixes, tempos):
-                _fail(gene_id + ': level is not accepted unchanged by the INI parser: ' + repr(level))
             if any(_same_level(level, previous) for previous in levels[:index]):
                 _fail(gene_id + ': duplicate level: ' + repr(level))
-        default = gene['default']
-        if not any(_same_level(default, level) for level in levels):
+        if not any(_same_level(gene['default'], level) for level in levels):
             _fail(gene_id + ': default is not one of its levels')
+        if is_game_rule(gene):
+            _validate_game_rule(gene)
+            continue
+        if pair not in catalog:
+            _fail(gene_id + ': unknown or duplicate INI section/key: ' + repr(pair))
+        if gene['kind'] != catalog[pair][0]:
+            _fail(gene_id + ': kind does not match the actual INI getter')
+        for level in levels:
+            if not _level_valid(level, gene, mixes, tempos):
+                _fail(gene_id + ': level is not accepted unchanged by the INI parser: ' + repr(level))
+        default = gene['default']
         expected = defaults.get(pair)
         equal = (Decimal(default) == Decimal(expected) if gene['kind'] == 'decimal'
                  else _same_level(default, expected))
@@ -304,6 +375,7 @@ def _validate_registry(registry, complete=False):
             _fail(gene_id + ': default differs from effective shipped configuration: ' + repr(expected))
         if 'difficulty' in gene:
             _categorical(gene['difficulty'], 'difficulty', gene_id)
+    _validate_dependencies(registry)
     if complete:
         missing = sorted(pair for pair, (kind, _) in catalog.items() if kind == 'bool' and pair not in keys)
         if missing:
@@ -363,7 +435,26 @@ def _values(values, location, genes=None):
                 _fail(location + ': unknown level for ' + gene_id + ': ' + repr(level))
 
 
-def _validate_shape(genome, genes=None):
+def _required(genome, genes):
+    """Game-rule levels needed by active dependent genes anywhere in a genome.
+
+    Active means assigned (top-level or in any rule) to a non-default level.
+    Returns rule id -> (level, dependent gene id).
+    """
+    needed = {}
+    for values in [genome.get('values', {})] + [rule['values'] for rule in genome.get('expression', [])]:
+        for gene_id, level in values.items():
+            gene = genes[gene_id]
+            if 'requires' not in gene or _same_level(level, gene['default']):
+                continue
+            for rule_id, required in gene['requires'].items():
+                if rule_id in needed and not _same_level(needed[rule_id][0], required):
+                    _fail('genome: ' + gene_id + ' and ' + needed[rule_id][1] + ' need different ' + rule_id + ' levels')
+                needed.setdefault(rule_id, (required, gene_id))
+    return needed
+
+
+def _validate_shape(genome, genes=None, dependencies=True):
     if not isinstance(genome, dict) or genome.keys() - {'id', 'values', 'expression'}:
         _fail('genome must be an object with only id, values and expression')
     if not isinstance(genome.get('id'), str) or not _SLUG.fullmatch(genome['id']):
@@ -377,6 +468,8 @@ def _validate_shape(genome, genes=None):
         if not isinstance(rule, dict) or 'values' not in rule or rule.keys() - {'when', 'values'}:
             _fail(location + ': rule must contain values and optional when only')
         _values(rule['values'], location, genes)
+        if genes is not None and any(is_game_rule(genes[gene_id]) for gene_id in rule['values']):
+            _fail(location + ': a game rule is one whole-game top-level value, not contextual expression')
         when = rule.get('when', {})
         if not isinstance(when, dict) or when.keys() - (set(_DIMENSIONS) | {'size_min', 'size_max'}):
             _fail(location + ': unknown or malformed when predicate')
@@ -388,11 +481,59 @@ def _validate_shape(genome, genes=None):
                 _fail(location + ': ' + bound + ' must be a nonnegative integer')
         if 'size_min' in when and 'size_max' in when and when['size_min'] > when['size_max']:
             _fail(location + ': size_min exceeds size_max')
+    if genes is not None and dependencies:
+        values = genome.get('values', {})
+        for rule_id, (level, dependent) in sorted(_required(genome, genes).items()):
+            if not _same_level(values.get(rule_id, genes[rule_id]['default']), level):
+                _fail('genome: active ' + dependent + ' requires game rule ' + rule_id + '=' + str(level))
 
 
 def validate_genome(genome, registry=None):
-    """Reject unknown genes/levels/fields; overlaps are legal, ordered overrides."""
+    """Reject unknown genes/levels/fields, contextual game rules and unmet dependencies."""
     _validate_shape(genome, {gene['id']: gene for gene in _registry(registry)})
+
+
+def close_game_rules(genome, registry=None):
+    """Copy a genome with exactly the game rules its active genes require.
+
+    Search operators use this so that game rules follow their dependent genes
+    instead of becoming independent loci; unrequired rules are dropped (sparse).
+    """
+    genes = {gene['id']: gene for gene in _registry(registry)}
+    _validate_shape(genome, genes, dependencies=False)
+    closed = json.loads(json.dumps(genome))
+    values = closed.setdefault('values', {})
+    needed = _required(closed, genes)
+    for gene_id, gene in genes.items():
+        if not is_game_rule(gene):
+            continue
+        if gene_id in needed:
+            values[gene_id] = needed[gene_id][0]
+        else:
+            values.pop(gene_id, None)
+    return closed
+
+
+def game_rules(genomes, registry=None):
+    """One explicit whole-game level for every registered game rule in a roster.
+
+    Every arm of one game plays under the same rule. Explicit roster values must
+    agree; an arm that does not set a rule adopts the game's level. All rules are
+    returned (registry default when nobody sets one), so the harness requests and
+    records the rule explicitly for both arms instead of relying on mod defaults.
+    """
+    genes = {gene['id']: gene for gene in _registry(registry)}
+    chosen = {}
+    for genome in genomes:
+        _validate_shape(genome, genes)
+        for gene_id, level in sorted(genome.get('values', {}).items()):
+            if not is_game_rule(genes[gene_id]):
+                continue
+            if gene_id in chosen and not _same_level(chosen[gene_id][0], level):
+                _fail('conflicting whole-game rule ' + gene_id + ': ' + chosen[gene_id][1] + ' versus ' + genome['id'])
+            chosen.setdefault(gene_id, (level, genome['id']))
+    return {gene_id: chosen[gene_id][0] if gene_id in chosen else gene['default']
+            for gene_id, gene in sorted(genes.items()) if is_game_rule(gene)}
 
 
 def _validate_context(context):
@@ -438,7 +579,8 @@ def render_ini(genome, context, registry=None):
             explicit.update(rule['values'])
     sections = {}
     for gene in genes:
-        if gene['id'] in explicit:
+        # Game rules are requested once per game by the harness, not per house.
+        if gene['id'] in explicit and not is_game_rule(gene):
             sections.setdefault(gene['section'], {})[gene['key']] = str(values[gene['id']])
     return '\n\n'.join('[' + section + ']\n' + '\n'.join(key + '=' + value for key, value in sorted(entries.items()))
                         for section, entries in sorted(sections.items())) + ('\n' if sections else '')

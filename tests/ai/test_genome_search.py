@@ -4,6 +4,7 @@ import copy
 from fractions import Fraction
 import random
 import unittest
+from unittest.mock import patch
 import tempfile
 from pathlib import Path
 
@@ -154,7 +155,7 @@ class GenomeSearchTests(unittest.TestCase):
         self.assertFalse(incomplete)
         complete, _, _ = search.responses(rows, require_rotations=True)
         self.assertEqual(next(iter(complete.values())), {'1': 4})
-        self.assertEqual(next(iter(complete))[2][-1], 'medium')
+        self.assertEqual(dict(zip(search.CONTEXT, next(iter(complete))[2]))['spice'], 'medium')
 
     def test_game_identity_prevents_unrelated_control_pooling(self):
         rows = []
@@ -184,6 +185,108 @@ class GenomeSearchTests(unittest.TestCase):
             self.assertEqual(entry['games'], 4)
             self.assertEqual(entry['id'], search.digest(dict(revision=args.rev, command=entry['command'])))
             self.assertEqual(entry['plan_sha256'], plan['plan_sha256'])
+
+    def test_game_rules_follow_dependent_genes_and_are_never_searched_alone(self):
+        names = [gene['id'] for gene in search.selected_genes(self.registry)]
+        self.assertNotIn('technology_installments', names)
+        self.assertIn('continuous_research', names)
+        with self.assertRaisesRegex(ValueError, 'Game rules'):
+            search.selected_genes(self.registry, ['technology_installments'])
+        genes = search.selected_genes(self.registry, ['focus_fire', 'converge', 'continuous_research'])
+        plan = search.screen_plan(self.registry, genes, parameter_sweeps=False)
+        one = {d['gene']: d for d in plan['designs'] if d['stage'] == 'one_gene'}
+        self.assertEqual(one['continuous_research']['game_rules'], {'technology_installments': 1})
+        self.assertEqual(one['focus_fire']['game_rules'], {})
+        genomes = {g['id']: g for g in plan['genomes']}
+        self.assertEqual(genomes[one['continuous_research']['genome']]['values'],
+                         {'continuous_research': 1, 'technology_installments': 1})
+        self.assertEqual(plan['one_gene_only'], ['continuous_research'])
+        self.assertNotIn('continuous_research', plan['fractional_columns'])
+        for design in plan['designs']:
+            if design['stage'] == 'fractional':
+                self.assertNotIn('technology_installments', genomes[design['genome']]['values'])
+        pairs = search.interaction_plan(self.registry, ['focus_fire', 'continuous_research'])
+        for item in pairs['genomes'][1:]:
+            self.assertEqual(item['values']['technology_installments'], 1)
+
+    def test_operators_close_game_rules_over_active_dependents(self):
+        genes = search.selected_genes(self.registry, ['focus_fire', 'continuous_research'])
+        active = search.finish(search.genome('x', {'continuous_research': 1}), self.registry)
+        self.assertEqual(active['values']['technology_installments'], 1)
+        dropped = search.finish(search.genome('y', {'technology_installments': 1, 'focus_fire': 0}), self.registry)
+        self.assertNotIn('technology_installments', dropped['values'])
+        for seed in range(40):
+            rng = random.Random(seed)
+            child = search.crossover(active, dropped, genes, rng, self.registry)
+            child, _ = search.mutate(child, genes, rng, registry=self.registry)
+            genome_model.validate_genome(child, self.registry)
+            needed = child['values'].get('continuous_research') == 1 or any(
+                rule['values'].get('continuous_research') == 1 for rule in child['expression'])
+            self.assertEqual(child['values'].get('technology_installments') == 1, needed)
+
+    def test_evolution_seeds_new_genes_and_pairs_every_child_with_default(self):
+        plan = search.screen_plan(self.registry, self.genes[:2], parameter_sweeps=False, fraction=False)
+        names = [g['id'] for g in plan['genomes']]
+        report = dict(pareto_fronts=[names[1:], [names[0]]], genomes={}, niches={})
+        result = search.evolve(plan, report, self.registry, 1, population=4, offspring=6,
+                               seed_genes=['continuous_research'], seeds=[7, 8])
+        seeded = [r for r in result['lineage'] if r['role'] == 'seeded_gene']
+        self.assertEqual(len(seeded), 1)
+        child = next(g for g in result['genomes'] if g['id'] == seeded[0]['genome'])
+        self.assertEqual(child['values']['technology_installments'], 1)
+        self.assertEqual(result['protocol']['seeds'], [7, 8])
+        for record in result['lineage']:
+            self.assertIn([record['genome'], search.CONTROL], result['matchups'])
+        self.assertEqual({d['genome'] for d in result['designs']}, {r['genome'] for r in result['lineage']})
+        verdicts = {genome_model.genome_id(g): 'infeasible' for g in plan['genomes'] if g['id'] == names[1]}
+        ranked = search.evolve(plan, report, self.registry, 1, population=4, offspring=2, feasibility=verdicts)
+        self.assertEqual(ranked['feasibility'][names[1]], 'infeasible')
+        self.assertNotEqual(ranked['parents'][0], names[1])
+
+    def test_league_games_without_default_are_payoffs_not_fitness(self):
+        rows = []
+        for game, arms in (('g1', (('a', '1'), ('default', '0'))), ('g2', (('a', '0'), ('champion', '1')))):
+            for arm, value in arms:
+                rows.append(dict(id=game, game_id=game, seed='1', metric='win_score', minute='-1',
+                                 phase='all', format='1v1', arm=arm, value=value, status='measured'))
+        _, absolute, _ = search.responses(rows)
+        self.assertEqual({k[0]: v for k, v in absolute.items()}, {'a': {'1': 1}, 'default': {'1': 0}})
+        payoffs = search.payoff_table(rows)
+        self.assertEqual(payoffs['champion'], {'games': 1, 'losses': 1})
+        self.assertEqual(payoffs['default'], {'games': 1, 'losses': 0})
+        self.assertEqual(payoffs['a'], {'games': 2, 'losses': 1})
+
+    def test_native_pooling_needs_harness_only_git_differences(self):
+        with patch.object(search.subprocess, 'check_output',
+                          return_value='tests/ai/genome-match.py\ndocs/ai-genome.md\n'):
+            proof = search.native_equivalence(['a' * 40, 'b' * 40])
+        self.assertEqual(proof['differing_paths']['b' * 40], ['tests/ai/genome-match.py', 'docs/ai-genome.md'])
+        with patch.object(search.subprocess, 'check_output', return_value='src/players/QuantBot.cpp\n'):
+            with self.assertRaisesRegex(ValueError, 'outside the genome harness'):
+                search.native_equivalence(['a' * 40, 'b' * 40])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'observations-x.csv'
+            path.write_text('schema_version,source_commit,status\n1,%s,measured\n1,%s,measured\n'
+                            % ('a' * 40, 'b' * 40))
+            with self.assertRaisesRegex(ValueError, 'Do not pool'):
+                list(search.observations([path]))
+            self.assertEqual(len(list(search.observations([path], ['a' * 40, 'b' * 40]))), 2)
+
+    def test_feasibility_requires_every_case_and_races_need_held_out_seeds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'games.csv'
+            path.write_text('case,genome_digest,feasibility,error\na,g1,feasible,\nb,g1,feasible,\n'
+                            'a,g2,feasible,\nb,g2,infeasible,\na,g3,feasible,\nb,g3,feasible,rc=1\n')
+            table = search.feasibility_table([path], ['a', 'b'])
+        self.assertEqual(table, {'g1': 'feasible', 'g2': 'infeasible', 'g3': 'unverified'})
+        plan = search.screen_plan(self.registry, self.genes[:1], parameter_sweeps=False, fraction=False)
+        plan['protocol'] = dict(seeds=[1, 2], contexts=[], modes=['1v1'])
+        elite = plan['genomes'][1]['id']
+        with self.assertRaisesRegex(ValueError, 'eight seeds'):
+            search.race_plan([plan], [elite], [2, 3, 4, 5, 6, 7, 8, 9], self.registry)
+        race = search.race_plan([plan], [elite], list(range(10, 18)), self.registry)
+        self.assertEqual(race['matchups'], [[elite, search.CONTROL]])
+        self.assertEqual(race['designs'], [dict(stage='candidate', genome=elite)])
 
 
 if __name__ == '__main__':

@@ -20,8 +20,38 @@ The follow-up registry has 339 genes / 64 booleans: `CityCompactPower`
 (source `dc2aee77`), `ContinuousResearch` (`f82f13d9`) and
 `StartWhatMakesSense` (`d3098d9a`) are independent `0/1`, default-OFF genes.
 UnitChoice's `BufferedHeavyProduction` and `IncomeHeavyFactories` (source
-`e9f72ce3`, default OFF) bring the registry to 341 genes / 66 booleans.
-Every evaluation pin must include its complete parser/registry pair.
+`e9f72ce3`, default OFF) bring the QuantBot part to 341 genes / 66 booleans.
+The registry also holds one **game-rule gene**, `technology_installments`
+(342 rows in total). Every evaluation pin must include its complete
+parser/registry pair.
+
+### Game-rule genes
+
+A row with `"scope": "game"` is a whole-game `[Game Options]` rule, not a
+QuantBot key. The loader audits its key against the requested-options reader
+(`applyGameOptionsFromConfig`) and its default against the compiled
+`GameOptionsClass` initializer. A game rule:
+
+- may appear only in a genome's top-level `values`, never in a contextual or
+  per-phase expression rule, and is never rendered into a per-house INI;
+- applies to **both arms**: one game has one rule level for every house.
+  `genome-match.py` resolves it from the roster, requests it explicitly in
+  `requested-options.ini` (registry default when no arm sets it, never a mod
+  default), records it on the game, house, assignment and observation rows and
+  fails the game (`game_rule_mismatch`) unless the effective options carry it.
+  Roster genomes, `--technology-installments` and a frozen `--game-options`
+  INI that set different levels are an error, not a silent override;
+- is not a search locus. A one-gene contrast of the rule alone would compare
+  identical AIs under one shared rule. Instead a QuantBot gene declares
+  `"requires": {"<rule>": <level>}`: `continuous_research` requires
+  `technology_installments: 1`, because ContinuousResearch only acts when the
+  Installments rule is on. Validation rejects an active dependent gene (top
+  level or any expression rule) without its rule; search operators close the
+  rule over active dependents and drop it otherwise. A dependent gene is
+  screened one gene at a time (never a fraction column) and its 2x2
+  interactions put all four cells under the rule. Analysis strata include
+  `technology_installments`, so rule-ON games are never pooled with rule-OFF
+  games.
 
 The registry loader audits the real C++ reader, constructor and shipped default
 INI. Unknown/forgotten boolean or enum keys, wrong effective defaults and invalid
@@ -54,8 +84,7 @@ bounds and opening/mid/late phase. Empty/absent dimensions match all; matching
 rules apply in list order, last assignment wins. Genotype SHA-256 excludes the
 human label but preserves ordered-rule semantics. Phase boundaries default to
 0/10/20 **game** minutes, never wall time. Continuations use elapsed loaded-save
-time. Global game rules (for example Technology Installments) are context, **not
-per-house AI genes**.
+time. Global game rules are whole-game genes (above), never per-house AI genes.
 
 ## Mixed-genome games and provenance
 
@@ -143,10 +172,24 @@ Retain frozen past champions/defaults, a payoff history and four main-exploiter
 slots aimed at the current champion. Opponent priorities are Laplace-smoothed
 squared loss rates with a nonzero exploration floor (integer arithmetic). Main
 candidates face the current default, a frozen champion and a prioritized hard
-opponent; duplicate opponents are not falsely counted as distinct. Initial
-racing uses two common seeds and all four genotype-to-house × house-to-slot
-orientations per 1v1 house pair. A four-player cohort has 4 × 4 = 16 orientations.
-Elites receive additional held-out seed blocks and context coverage before promotion.
+opponent; exploiters face the champion. **Every child also plays the same-source
+default**: that common opponent is the only source of comparable fitness levels
+and paired `candidate` contrasts. Games without the default are league payoff
+evidence only (`analyse` writes `payoffs.json` for the next round's PFSP), never
+pooled into another genome's fitness. Duplicate opponents are not falsely
+counted as distinct. Initial racing uses two common seeds and all four
+genotype-to-house × house-to-slot orientations per 1v1 house pair. A
+four-player cohort has 4 × 4 = 16 orientations. Elites receive additional
+held-out seed blocks and context coverage before promotion: `race` refuses
+seeds used by the selecting plans and fewer than eight seeds.
+
+Genes outside the screened plan, for example newly registered default-OFF
+switches, enter a round through `evolve --seed-genes`: each gets one child, the
+best-ranked parent with that gene at its alternative level (dependent game
+rules closed), before ordinary tournament offspring fill the round. `evolve
+--behaviour games.csv...` ranks genotypes feasible < unverified < infeasible
+before quality coverage and Pareto rank; a genotype is feasible only when every
+registered reported-save case passed on it.
 
 Fitness is **not a weighted sum**. Report independent strength (placement/wins,
 kills, survival), army/economy and behaviour objectives, Pareto fronts and coverage.
@@ -184,8 +227,9 @@ Light Factory; the baseline ordered none before its yard was destroyed.
 New fixes, including independent heavy-capacity/buffered-production,
 ContinuousResearch, CityCompactPower and StartWhatMakesSense, start OFF. Heavy
 capacity keys enter the registry only after their genuine parser/logic lands.
-Technology Installments is a global human-and-AI payment rule, never a per-house
-genome switch. Preserve shipped defaults while collecting the second block.
+Technology Installments is a global human-and-AI payment rule: a whole-game
+genome rule shared by both arms, never a per-house switch. Preserve shipped
+defaults while collecting the second block.
 
 ## Historical reference and promotion
 
@@ -220,12 +264,22 @@ python3 tests/ai/genome_search.py run --plan SCREEN.json.gz --rev FULL_COMMIT_SH
   --output RESULTS --tag genome-screen
 python3 tests/ai/genome-match.py --report --results RESULTS --scores observations.csv.gz
 python3 tests/ai/genome_search.py analyse --plan SCREEN.json.gz \
-  --observations observations.csv.gz --output REPORT
+  --observations observations.csv.gz --output REPORT [--native-equivalent SHA_A SHA_B]
 python3 tests/ai/genome_search.py interactions --genes focus_fire converge \
   --output INTERACTIONS.json.gz
 python3 tests/ai/genome_search.py evolve --plan SCREEN.json.gz \
-  --report REPORT/report.json.gz --generation 1 --output ROUND1.json.gz
+  --report REPORT/report.json.gz --payoffs REPORT/payoffs.json --generation 1 \
+  --seed-genes city_compact_power continuous_research --race-seeds 110601 110602 \
+  --behaviour BEHAVIOUR/games.csv --output ROUND1.json.gz
+python3 tests/ai/genome_search.py race --plan SCREEN.json.gz ROUND1.json.gz \
+  --elites ELITE... --seeds EIGHT_HELD_OUT_SEEDS... --output RACE.json.gz
 ```
+
+`--native-equivalent` pools observation sources only after `git diff` proves the
+commits differ solely in the genome bookkeeping files (`genome-match.py`,
+`genome_search.py`, `genome_model.py`, registry, genome tests, docs); any other
+difference, including a Python harness that patches or drives the probe build,
+refuses pooling. The proof is stored in the report.
 
 All games use `dunecity-queue submit --rev <immutable SHA>` through the project
 coordinator. The scheduler uses mini/Pro/PC and Air only when guest/game/battery

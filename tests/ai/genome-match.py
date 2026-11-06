@@ -61,6 +61,7 @@ DIFFICULTIES = ('defend', 'easy', 'medium', 'hard', 'brutal')
 MODS = {'vanilla': 'vanilla', 'dune2r': 'Dune2R', 'dunecity': 'dunecity'}
 BASES = {'none': 0, 'cy': 0, 'outpost': 1, 'small': 2, 'medium': 3, 'large': 4, 'fortress': 5}
 SPICE = {'none': 0, 'low': 1, 'medium': 2, 'high': 3, 'very-high': 4}
+BOOLEANS = {'true': 1, '1': 1, 'yes': 1, 'on': 1, 'false': 0, '0': 0, 'no': 0, 'off': 0}
 GAME_FIELDS = audit.GAME_FIELDS + (
     'tag', 'mod', 'research', 'technology_installments', 'map', 'map_width', 'map_height', 'context_id', 'comparison_id',
     'manifest_sha256', 'registry_sha256', 'manifest_b64', 'phase_schedule_sha256', 'phase_schedule_json',
@@ -74,7 +75,7 @@ PHASE_FIELDS = ('id', 'house', 'genome_id', 'phase', 'start_minute', 'start_cycl
 # Lean evidence also always writes games, assignments, config phases and scorecard observations.
 LEAN_TABLES = ('houses.csv',)
 OBSERVATION_EXTRA = ('game_id', 'genome_id', 'genome_digest', 'comparison_id', 'format', 'size', 'base', 'spice_level',
-                     'phase', 'manifest_sha256', 'phase_schedule_sha256')
+                     'phase', 'manifest_sha256', 'phase_schedule_sha256', 'technology_installments')
 SAMPLE_FIELDS = audit.SAMPLE_FIELDS + ('refineries', 'zone_residential', 'zone_industrial', 'zone_commercial',
                                       'tech_level', 'light', 'light_built', 'palace', 'palace_built')
 UNIT_FIELDS = audit.META + ('minute', 'cycle', 'house', 'item', 'built', 'lost', 'actual', 'live_value')
@@ -219,6 +220,7 @@ def schedule(args):
     value, genomes, registry, inline = manifest(args.manifest_b64)
     manifest_sha, registry_sha = digest(value), digest(registry)
     options_sha = file_digest(args.game_options) if args.game_options else ''
+    requested = requested_rules(args, registry)
     games, seen = [], set()
     for mod, size, difficulty, fmt, seed, base, spice in itertools.product(
             args.mods, args.sizes, args.difficulties, formats, args.seeds, args.bases, args.spice):
@@ -234,11 +236,13 @@ def schedule(args):
                 raise ValueError('City starts require --mods dunecity')
             tech = args.tech if args.tech is not None else (1 if args.research == 'on' else 9)
             for sides in orientations(args, fmt):
+                rules = genome_model.game_rules([genomes[label] for _, label in sides] + requested, registry)
                 context = dict(tag=args.tag, mod=mod, difficulty=difficulty, format=fmt, seed=seed,
                                map=name, map_width=width, map_height=height, size=max(width, height),
                                base=base if map_mod else 'map', army=army if map_mod else '', city=city if map_mod else '',
                                spice_level=spice if map_mod else 'map', research=args.research,
-                               technology_installments=args.technology_installments, research_pace=args.research_pace,
+                               technology_installments='on' if rules.get('technology_installments') else 'off',
+                               game_rules=rules, research_pace=args.research_pace,
                                initial_tech=tech, limit=args.minutes, requested_options_sha256=options_sha)
                 match_context = {key: value for key, value in context.items() if key != 'tag'}
                 context_id = digest(dict(match_context, houses=[house for house, _ in sides]))
@@ -303,6 +307,30 @@ def render_phase_inputs(assignments, context, genomes, directory, phase_minutes=
     return receipts
 
 
+def requested_rules(args, registry):
+    """Frozen-INI and CLI game rules as whole-game assignments the roster must agree with."""
+    rules = {gene['key'].lower(): gene for gene in registry if genome_model.is_game_rule(gene)}
+    requested = []
+    if args.game_options:
+        frozen = configparser.ConfigParser(strict=False, interpolation=None)
+        frozen.optionxform = str
+        frozen.read(args.game_options, encoding='utf-8')
+        values = {}
+        if frozen.has_section('Game Options'):
+            for key, text in frozen['Game Options'].items():
+                if key.lower() in rules:
+                    level = BOOLEANS.get(text.strip().lower())
+                    if level is None:
+                        raise ValueError('Unreadable game rule in --game-options: ' + key)
+                    values[rules[key.lower()]['id']] = level
+        if values:
+            requested.append(dict(id='frozen-game-options', values=values, expression=[]))
+    if args.technology_installments is not None:
+        requested.append(dict(id='requested-options', expression=[],
+                              values={'technology_installments': int(args.technology_installments == 'on')}))
+    return requested
+
+
 def phase_inputs(args, game, directory):
     _, genomes, registry, _ = manifest(args.manifest_b64)
     context = {key: game[key] for key in ('difficulty', 'mod', 'format', 'size')}
@@ -318,8 +346,9 @@ def phase_inputs(args, game, directory):
     if not options.has_section('Game Options'):
         options.add_section('Game Options')
     overrides = {'Research Lab': args.research == 'on'}
-    if args.technology_installments is not None:
-        overrides['Technology Installments'] = args.technology_installments == 'on'
+    # Every game rule is requested explicitly for the whole game, never left to mod defaults.
+    overrides.update({gene['key']: bool(game['game_rules'][gene['id']])
+                      for gene in registry if genome_model.is_game_rule(gene)})
     if args.research_pace is not None:
         overrides['Research Pace'] = args.research_pace
     for key, value in overrides.items():
@@ -474,7 +503,8 @@ def observations(args, game, row, tables, fixture_path, inputs, results):
         observation.update(arm=label, game_id=game['id'], genome_id=label, genome_digest=genome_model.genome_id(genomes[label]),
                            comparison_id=game['comparison_id'], format=game['format'], size=game['size'], base=game['base'],
                            spice_level=game['spice_level'], phase=phase, manifest_sha256=game['manifest_sha256'],
-                           phase_schedule_sha256=row['phase_schedule_sha256'])
+                           phase_schedule_sha256=row['phase_schedule_sha256'],
+                           technology_installments=row['technology_installments'])
         rows.append(observation)
     if not rows:
         raise ValueError('Canonical scorecard produced no observations')
@@ -538,7 +568,11 @@ def play(args, scratch, binary, game):
         options.read(options_path, encoding='utf-8')
     values = dict(options['Game Options']) if options.has_section('Game Options') else {}
     research = 'on' if values.get('research lab', '').lower() in ('true', '1') else 'off'
-    installments = values.get('technology installments', '')
+    # Game rules are whole-game: the effective options must carry exactly the requested level.
+    _, _, registry, _ = manifest(args.manifest_b64)
+    rule_errors = [gene['id'] for gene in registry if genome_model.is_game_rule(gene)
+                   and BOOLEANS.get(values.get(gene['key'].lower(), '').strip().lower()) != game['game_rules'][gene['id']]]
+    installments = {1: 'on', 0: 'off'}.get(BOOLEANS.get(values.get('technology installments', '').strip().lower()), '')
     problems = []
     if process.returncode or not result or len(final) != len(game['sides']):
         problems.append('rc=' + str(process.returncode))
@@ -548,6 +582,8 @@ def play(args, scratch, binary, game):
         problems.append('missing_provenance')
     if research != args.research:
         problems.append('research_context_mismatch')
+    if rule_errors:
+        problems.append('game_rule_mismatch')
     problems += sorted(set(phase_errors))
     phase_schedule = dict(schema_version=1, phases=receipts)
     row = dict(metadata(game), sides=','.join(f'{house}:{slot}:{label}' for slot, (house, label) in enumerate(game['sides'], 1)),
@@ -674,7 +710,9 @@ parser.add_argument('--city', type=int, choices=range(6), help='Generator popula
 parser.add_argument('--spice', nargs='+', choices=tuple(SPICE), default=['none', 'medium'])
 parser.add_argument('--tech', type=int, choices=range(1, 10), help='Initial technology; default research-on1, research-off9')
 parser.add_argument('--research', choices=('off', 'on'), default='off')
-parser.add_argument('--technology-installments', choices=('off', 'on'), help='Global hashed human-and-AI rule; default mod rules')
+parser.add_argument('--technology-installments', choices=('off', 'on'),
+                    help='Whole-game human-and-AI rule for every game; must agree with roster game-rule genes. '
+                         'Without it each game requests its roster rule explicitly (registry default off)')
 parser.add_argument('--research-pace', type=int, choices=range(4), help='Global research pace: Fast0, Normal1, Slow2, VerySlow3')
 parser.add_argument('--game-options', type=Path, help='Frozen requested Game Options INI over real mod defaults')
 parser.add_argument('--seeds', nargs='+', type=int, help='Fixed unsigned 32-bit seeds (required for games)')

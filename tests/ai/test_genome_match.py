@@ -128,6 +128,39 @@ class GenomeMatchTests(unittest.TestCase):
             self.assertTrue(options.getboolean('Game Options', 'Research Lab'))
             self.assertFalse(options.getboolean('Game Options', 'Technology Installments'))
 
+    def test_game_rule_genes_set_one_explicit_rule_for_the_whole_game(self):
+        candidate = dict(id='candidate', values={'continuous_research': 1, 'technology_installments': 1}, expression=[])
+        args = arguments()
+        args.manifest_b64 = inline([candidate])
+        games = league['schedule'](args)
+        self.assertTrue(all(game['technology_installments'] == 'on' for game in games))
+        self.assertTrue(all(game['game_rules'] == {'technology_installments': 1} for game in games))
+        plain = league['schedule'](arguments())
+        self.assertTrue(all(game['technology_installments'] == 'off' for game in plain))
+        self.assertNotEqual(games[0]['comparison_id'], plain[0]['comparison_id'])
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / 'inputs'
+            league['phase_inputs'](args, games[0], directory)
+            options = configparser.ConfigParser()
+            options.read(directory / 'requested-options.ini')
+            self.assertTrue(options.getboolean('Game Options', 'Technology Installments'))
+            self.assertNotIn('installments', (directory / '0-opening.ini').read_text().lower())
+        conflicting = arguments('--technology-installments', 'off')
+        conflicting.manifest_b64 = inline([candidate])
+        with self.assertRaisesRegex(ValueError, 'conflicting whole-game rule'):
+            league['schedule'](conflicting)
+        with tempfile.TemporaryDirectory() as temporary:
+            frozen = Path(temporary) / 'frozen.ini'
+            frozen.write_text('[Game Options]\nTechnology Installments=false\n')
+            from_file = arguments('--game-options', str(frozen))
+            from_file.manifest_b64 = inline([candidate])
+            with self.assertRaisesRegex(ValueError, 'conflicting whole-game rule'):
+                league['schedule'](from_file)
+        dependent_only = arguments()
+        dependent_only.manifest_b64 = inline([dict(id='candidate', values={'continuous_research': 1}, expression=[])])
+        with self.assertRaisesRegex(ValueError, 'requires game rule'):
+            league['schedule'](dependent_only)
+
     def test_saved_phase_helper_supports_all_houses_and_actual_difficulty_variants(self):
         _, genomes, registry, _ = league['manifest'](inline())
         context = dict(mod='dunecity', difficulty='hard', format='save', size=128)
