@@ -1820,14 +1820,44 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     constexpr size_t kOrnithopterSlot = UnitMixPolicy::kOrnithopterSlot;
     UnitMixPolicy::Weights damage{}, rewardMilli{}, killBonusMilli{}, lostValue{}, scores{}, defaults{}, prices{}, lossMilli{};
     UnitMixPolicy::Slots available{};
+    UnitMixPolicy::Weights offeredPrices{};
     bool launcherProductionAvailable = false;
     for (const auto* structure : getStructureList()) {
         const auto* builder = dynamic_cast<const BuilderBase*>(structure);
-        if (!builder || builder->getOwner() != getHouse()
-            || (builder->getItemID() != Structure_LightFactory && builder->getItemID() != Structure_HeavyFactory
-                && builder->getItemID() != Structure_HighTechFactory
-                && !((pass.usesCompositionChoice() || AITelemetry::log().enabled())
-                    && builder->getItemID() == Structure_StarPort))) continue;
+        if (!builder || builder->getOwner() != getHouse()) continue;
+        if (pass.existingCompositionChoice) {
+            // Standalone choice follows real offers, not the canonical unit's
+            // builder: some houses field only a mapped variant of that family.
+            for (const auto& offer : builder->getBuildList()) {
+                const Uint32 item = offer.itemID;
+                const size_t slot = compositionSlot(item, true);
+                if (slot == kSlots || data[item][houseID].price <= 0
+                    || !campaignAvailableToBuild(builder, item)) continue;
+                const int value = data[item][houseID].price;
+                available[slot] = true;
+                if (offeredPrices[slot] == 0 || value < offeredPrices[slot]) offeredPrices[slot] = value;
+                if (builder->getHealth() <= 0 || !builder->isActive()
+                    || getHouse()->isUnitLimitReached(item)
+                    || (builder->getItemID() == Structure_StarPort
+                        && (getHouse()->getChoam().getNumAvailable(item) <= 0
+                            || purchasePrice(builder, item) >= value))) continue;
+                pass.compositionAvailable[slot] = true;
+                if (pass.compositionPrice[slot] == 0 || value < pass.compositionPrice[slot])
+                    pass.compositionPrice[slot] = value;
+                switch (builder->getItemID()) {
+                case Structure_LightFactory: pass.compositionFactoryAvailable[0][slot] = true; break;
+                case Structure_HeavyFactory: pass.compositionFactoryAvailable[1][slot] = true; break;
+                case Structure_HighTechFactory: pass.compositionFactoryAvailable[2][slot] = true; break;
+                default: break;
+                }
+                if (slot == 2 && builder->getItemID() != Structure_StarPort) launcherProductionAvailable = true;
+            }
+            continue;
+        }
+        // OFF and Simple-only retain their historical canonical scan.
+        if (builder->getItemID() != Structure_LightFactory && builder->getItemID() != Structure_HeavyFactory
+            && builder->getItemID() != Structure_HighTechFactory
+            && !(pass.usesCompositionChoice() && builder->getItemID() == Structure_StarPort)) continue;
         for (size_t i=0; i<kSlots; ++i) {
             const bool producible = campaignAvailableToBuild(builder,mixItems[i]);
             // An actual import supplier participates in composition targets.
@@ -1871,13 +1901,17 @@ void QuantBot::planUnitMix(BuildPass& pass) {
         // Each special keeps the special group's former prior price, so a house with one special
         // learns exactly as it did when the three shared one slot.
         const bool special = i >= UnitMixPolicy::kFirstSpecialSlot && i < kOrnithopterSlot;
-        int priorPrice = special ? 700 : std::max(1, data[item][houseID].price);
+        const int familyPrice = pass.existingCompositionChoice && offeredPrices[i] > 0
+            ? int(offeredPrices[i]) : data[item][houseID].price;
+        int priorPrice = special ? 700 : std::max(1, familyPrice);
+        // Combat evidence and the learning model remain canonical in both arms.
         damage[i] = std::max(0, getHouse()->getNumItemDamageInflicted(item));
         rewardMilli[i] = getHouse()->getCombatReward(item).total();
         killBonusMilli[i] = getHouse()->getCombatReward(item).killBonusMilli;
         lostValue[i] = int64_t(getHouse()->getNumLostItems(item)) * data[item][houseID].price;
-        const bool enabled = data[item][houseID].enabled && data[item][houseID].price > 0
-            && data[item][houseID].techLevel <= getHouse()->getTechLevel();
+        const bool enabled = (pass.existingCompositionChoice && offeredPrices[i] > 0)
+            || (data[item][houseID].enabled && data[item][houseID].price > 0
+                && data[item][houseID].techLevel <= getHouse()->getTechLevel());
         totalDamage += damage[i];
         totalRewardMilli += rewardMilli[i];
         totalLostValue += lostValue[i];
@@ -1973,14 +2007,20 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             pass.lightVehicleCount += pass.itemCount[item];
         }
     }
+    if (pass.existingCompositionChoice) {
+        for (const Uint32 item : {Unit_RocketTrike, Unit_SonicTrike}) {
+            pass.lightVehicleValue += data[item][houseID].price * pass.itemCount[item];
+            pass.lightVehicleCount += pass.itemCount[item];
+        }
+    }
     if (pass.usesCompositionChoice() || AITelemetry::log().enabled()) {
         for (Uint32 item = Unit_FirstID; item <= ItemID_LastID; ++item) {
-            const size_t slot = compositionSlot(item);
+            const size_t slot = compositionSlot(item, pass.existingCompositionChoice);
             if (slot == UnitMixPolicy::kSlots) continue;
             pass.compositionValue[slot] += int64_t(pass.itemCount[item]) * data[item][houseID].price;
         }
         for (size_t i = 0; i < kSlots; ++i) {
-            pass.compositionPrice[i] = data[mixItems[i]][houseID].price;
+            if (!pass.existingCompositionChoice) pass.compositionPrice[i] = data[mixItems[i]][houseID].price;
             pass.compositionArmyValue += int(pass.compositionValue[i]);
             if (i < kOrnithopterSlot && pass.compositionAvailable[i]) pass.advancedGroundAvailable = true;
         }
@@ -2878,7 +2918,7 @@ bool QuantBot::proactiveSavingHold(BuildPass& pass, int price) {
     return !growthTurn || pass.cashFlow.projectedCash < price+pass.cityPlotPrice;
 }
 
-size_t QuantBot::compositionSlot(Uint32 item) {
+size_t QuantBot::compositionSlot(Uint32 item, bool extendedVariants) {
     for (size_t i = 0; i < kMixItems.size(); ++i) if (kMixItems[i] == item) return i;
     switch (item) {
     case Unit_EliteOrnithopter: return UnitMixPolicy::kOrnithopterSlot;
@@ -2887,13 +2927,19 @@ size_t QuantBot::compositionSlot(Uint32 item) {
     case Unit_RangedTank: case Unit_SlowTank: return 0;
     case Unit_ChemicalSiegeTank: return 1;
     case Unit_TameSandworm: return UnitMixPolicy::kFirstSpecialSlot;
+    // These previously bypassed the shared selector. Keep their legacy
+    // OFF/Simple-only accounting and admission unchanged.
+    case Unit_RocketTrike: return extendedVariants ? UnitMixPolicy::kFirstLightSlot : UnitMixPolicy::kSlots;
+    case Unit_FlameTank: return extendedVariants ? 0 : UnitMixPolicy::kSlots;
+    case Unit_EliteSiegeTank: return extendedVariants ? 1 : UnitMixPolicy::kSlots;
+    case Unit_EliteLauncher: return extendedVariants ? 2 : UnitMixPolicy::kSlots;
     default: return UnitMixPolicy::kSlots;
     }
 }
 
 bool QuantBot::compositionAdmits(BuildPass& pass, Uint32 item) {
     if (pass.existingCompositionChoice) {
-        const size_t slot = compositionSlot(item);
+        const size_t slot = compositionSlot(item, true);
         return slot == UnitMixPolicy::kSlots || slot == pass.nextCompositionSlot();
     }
     if (!pass.techSavings || !QuantBotBuildPolicy::militaryItem(item)) return true;
@@ -3626,10 +3672,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     }
                 } else if (factory==Structure_LightFactory && int64_t(pass.lightVehicleValue)*10000
                     >= int64_t(pass.vehiclePlanValue)*pass.lightVehicleBps) capacity.reason="light_mix_satisfied";
-                else if (pass.existingCompositionChoice && actual > 0 && [&]() {
-                    const size_t next = pass.nextCompositionSlot();
-                    return next == UnitMixPolicy::kSlots || data[mixItems[next]][houseID].builder != factory;
-                }()) capacity.reason="existing_choice_other_producer";
+                else if (!pass.compositionFactoryAdmits(factory)) capacity.reason="existing_choice_other_producer";
                 else if (pass.itemCount[factory]>actual) capacity.reason="factory_pending";
                 else if (busy<actual) capacity.reason="existing_line_available";
                 else if (!campaignAvailableToBuild(builder,factory)) capacity.reason="tech_unavailable";
@@ -3765,6 +3808,10 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             int bps=0;
             // Every special has its own mix slot (and so its own share) since 9868.
             for (size_t i=0;i<mixItems.size();++i) if (mixItems[i]==item) bps=pass.unitMix[i];
+            const size_t slot = pass.existingCompositionChoice ? compositionSlot(item, true) : UnitMixPolicy::kSlots;
+            if (pass.existingCompositionChoice && slot < UnitMixPolicy::kSlots) bps=pass.unitMix[slot];
+            const bool compositionUnit = pass.usesCompositionChoice()
+                && (!pass.existingCompositionChoice || slot < UnitMixPolicy::kSlots);
             if (item==Unit_Soldier || item==Unit_Infantry || item==Unit_Trooper || item==Unit_Troopers) bps=pass.infantryPercent*100;
             const int64_t deficit=int64_t(pass.vehiclePlanValue)*bps-int64_t(pass.itemCount[item])*value*10000;
             int score=QuantBotSpendingPolicy::militaryScore(price,value,pass.militaryValue,pass.militaryBudget,pass.defendingEconomy);
@@ -3774,7 +3821,13 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             else if (port && getHouse()->getChoam().getNumAvailable(item)<=0) reason="sold_out";
             else if (port && price >= value) reason="not_discounted";
             else if (pass.usesCompositionChoice() && !compositionAdmits(pass, item)) reason="existing_composition_satisfied";
-            else if (!pass.usesCompositionChoice() && !port && (bps<=0 || deficit<=0)) reason="mix_satisfied";
+            else if (!compositionUnit && !port && (bps<=0 || deficit<=0)) reason="mix_satisfied";
+            // Standalone choice does not give unmapped infantry a new army
+            // entitlement: its producer will still refuse an overweight quota.
+            else if (pass.existingCompositionChoice && !port && isInfantryUnit(item)
+                && item != Unit_Saboteur && pass.infantryCount >= 3
+                && int64_t(pass.infantryValue)*100 >= int64_t(std::max(pass.militaryValue,1))*pass.infantryPercent)
+                reason="infantry_quota_satisfied";
             // City infantry answer an observed wing and claim the aggregate infantry
             // share, not a full share each. Without this a finished air raid would go
             // on reserving cash for troops nobody is going to order.

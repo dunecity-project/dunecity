@@ -1719,7 +1719,7 @@ private:
     void planTechSavings(BuildPass& pass);
     bool spendingEmergency(BuildPass& pass, Uint32 item);
     bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
-    static size_t compositionSlot(Uint32 item);
+    static size_t compositionSlot(Uint32 item, bool extendedVariants = false);
     bool compositionAdmits(BuildPass& pass, Uint32 item);
     /// Scores every producer's candidate purchases.
     void planCapitalCandidates(BuildPass& pass);

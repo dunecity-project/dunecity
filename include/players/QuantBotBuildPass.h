@@ -237,10 +237,24 @@ struct QuantBot::BuildPass {
     UnitMixPolicy::Weights compositionValue{};
     UnitMixPolicy::Weights compositionPrice{};
     UnitMixPolicy::Slots compositionAvailable{};
+    // Actual LF/HF/HTF offers, including standalone-only variant suppliers.
+    std::array<UnitMixPolicy::Slots, 3> compositionFactoryAvailable{};
     int compositionArmyValue{};
     bool usesCompositionChoice() const { return techSavings || existingCompositionChoice; }
     size_t nextCompositionSlot() const {
         return UnitMixPolicy::nextExistingSlot(unitMix, compositionValue, compositionPrice, compositionAvailable);
+    }
+    bool compositionFactoryAdmits(Uint32 factory) const {
+        if (!existingCompositionChoice) return true;
+        size_t supplier = 0;
+        switch (factory) {
+        case Structure_LightFactory: supplier = 0; break;
+        case Structure_HeavyFactory: supplier = 1; break;
+        case Structure_HighTechFactory: supplier = 2; break;
+        default: return true;
+        }
+        const size_t next = nextCompositionSlot();
+        return next < UnitMixPolicy::kSlots && compositionFactoryAvailable[supplier][next];
     }
 
     // planCapitalForecast()

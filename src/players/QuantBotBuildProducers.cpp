@@ -247,7 +247,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
         if (pass.usesCompositionChoice() || AITelemetry::log().enabled()) {
-            const size_t slot = compositionSlot(itemID);
+            const size_t slot = compositionSlot(itemID, pass.existingCompositionChoice);
             if (slot < UnitMixPolicy::kSlots) {
                 pass.compositionValue[slot] += data[itemID][houseID].price;
                 pass.compositionArmyValue += data[itemID][houseID].price;

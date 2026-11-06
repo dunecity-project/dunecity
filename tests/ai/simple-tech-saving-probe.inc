@@ -319,7 +319,8 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
                 sawLightFactory |= choice.item == Structure_LightFactory;
                 sawHeavyFactory |= choice.item == Structure_HeavyFactory;
                 if (choice.item == Structure_LightFactory || choice.item == Structure_HeavyFactory)
-                    require(choice.item == nextFactory || choice.score == 0,
+                    require((unitChoiceOnly ? plan.compositionFactoryAdmits(choice.item) : choice.item == nextFactory)
+                                || choice.score == 0,
                             "Next-factory admission disagrees with the owned-plus-accepted-queue next combat unit");
             }
             require(sawLightFactory && sawHeavyFactory,
@@ -327,6 +328,13 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
         }
         PaidProduction evidence(world);
         world.build();
+        if (enabled && unitChoiceOnly && heavy->getProductionQueueSize() == 1) {
+            // A real mapped variant may fulfill the same selected family.
+            selected = heavy->getCurrentProducedItem();
+            selectedBuiltBefore = world.owner->getNumBuiltItems(selected);
+            require(QuantBot::compositionSlot(selected, true) == next,
+                    "Standalone HF accepted a custom unit outside the selected family");
+        }
         evidence.observe();
         const int addedCheap = world.queuedLight() - queuedBefore;
         if (!enabled) {
@@ -374,7 +382,7 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
 inline void standaloneStarport(const char* mod, const char* playerClass) {
     World world(mod, playerClass, false, Stage::FirstHeavy, Army::TinyTank);
     auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
-    config->force.existingCompositionUnitChoice = true;
+    config->force.existingCompositionUnitChoice = false;
     world.bot->configOverride = config;
     world.configHash = config->getConfigHash();
     std::vector<StructureBase*> localFactories;
@@ -392,6 +400,12 @@ inline void standaloneStarport(const char* mod, const char* playerClass) {
             offer.price = world.price(offer.itemID) * 3 / 4;
     world.owner->updateBuildLists();
     world.cash(19999);
+    const auto offPlan = world.observePlan();
+    require(!offPlan.usesCompositionChoice()
+                && std::all_of(offPlan.unitMix.begin(), offPlan.unitMix.end(), [](int share) { return share == 0; }),
+            "Telemetry changed the legacy factory-only target mask while both selection switches were off");
+    config->force.existingCompositionUnitChoice = true;
+    world.configHash = config->getConfigHash();
     Case run(world, "unit_choice_starport_only", mod, playerClass);
     auto plan = world.observePlan();
     const auto next = plan.nextCompositionSlot();
@@ -409,6 +423,318 @@ inline void standaloneStarport(const char* mod, const char* playerClass) {
     run.finish(world.queued(vehicles[next]) > queuedBefore,
                "Standalone composition refused its selected real Starport bargain without a local factory");
 }
+
+// Real authored Tornie offers, not synthetic ObjectData replacements. Canonical
+// learning inputs stay unchanged; these controls concern suppliers and value only.
+inline void standaloneVariantAccounting(const char* mod, const char* playerClass) {
+    if (!ModManager::instance().isTornieFamilyContentActive()) return;
+    constexpr std::array<std::pair<Uint32, size_t>, 12> variants{{
+        {Unit_RocketTrike, 7}, {Unit_FlameTank, 0}, {Unit_EliteLauncher, 2}, {Unit_EliteSiegeTank, 1},
+        {Unit_SonicTrike, 7}, {Unit_ChemicalSiegeTank, 1}, {Unit_FlameQuad, 9},
+        {Unit_EliteOrnithopter, 6}, {Unit_RaiderQuad, 9}, {Unit_RangedTank, 0},
+        {Unit_SlowTank, 0}, {Unit_TameSandworm, 3}
+    }};
+    std::array<bool, variants.size()> covered{};
+    for (const auto& [item, slot] : variants)
+        require(QuantBot::compositionSlot(item, true) == slot, "A real mobile combat variant has no mix family");
+    for (const Uint32 item : {Unit_Soldier, Unit_Infantry, Unit_Trooper, Unit_Troopers,
+            Unit_Troopers5, Unit_Infantry5, Unit_GasInfantry, Unit_FlameTrooper,
+            Unit_Harvester, Unit_RebelHarvester, Unit_CapacityHarvester, Unit_FastHarvester,
+            Unit_Carryall, Unit_ChemicalCarryall, Unit_Frigate, Unit_MCV, Unit_Saboteur,
+            Unit_Sandworm, Unit_AmbientAirplane, Unit_AmbientHelicopter})
+        require(QuantBot::compositionSlot(item, true) == UnitMixPolicy::kSlots,
+                "Standalone composition captured an infantry, economy, transport, saboteur or native-worm exemption");
+    for (const HOUSETYPE side : {HOUSE_HARKONNEN, HOUSE_ATREIDES, HOUSE_ORDOS, HOUSE_NEUTRAL,
+            HOUSE_REBELS, HOUSE_CUSTOM, HOUSE_WILDSPADE, HOUSE_KLESHMERSH}) {
+        World world(mod, playerClass, false, Stage::Complete, Army::Empty, 8, true, side);
+        world.closeMilitaryMarket();
+        const int house = world.owner->getHouseID();
+        if (world.game->objectData.data[Structure_Worfinery][house].enabled
+            && contentReachable(world, Structure_Worfinery)) {
+            auto* combo = static_cast<BuilderBase*>(world.place(Structure_Worfinery));
+            combo->curUpgradeLev = combo->getMaxUpgradeLevel();
+            combo->updateBuildList();
+        }
+        UnitMixPolicy::Weights expected{}, legacy{};
+        int count = 0;
+        for (size_t i = 0; i < variants.size(); ++i) {
+            const auto [item, slot] = variants[i];
+            BuilderBase* supplier = nullptr;
+            for (auto* structure : structureList) {
+                auto* builder = dynamic_cast<BuilderBase*>(structure);
+                if (builder && builder->getOwner() == world.owner && builder->isAvailableToBuild(item)) {
+                    supplier = builder;
+                    break;
+                }
+            }
+            if (!supplier) continue;
+            covered[i] = true;
+            world.spawn(world.owner, item, Coord(4 + count++, 40));
+            // Labelled scenario commitments, not claimed bot production.
+            supplier->doProduceItem(item);
+            require(world.owner->getNumItems(item) == 1 && world.queued(item) == 1,
+                    "Variant accounting control lacks its separate live unit and real queued order");
+            const int value = world.price(item) * 2;
+            expected[slot] += value;
+            const auto oldSlot = QuantBot::compositionSlot(item);
+            if (oldSlot < UnitMixPolicy::kSlots) legacy[oldSlot] += value;
+        }
+        auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+        world.bot->configOverride = config;
+        const auto off = world.observePlan();
+        config->force.simpleTechSavings = true;
+        const auto simple = world.observePlan();
+        require(off.compositionValue == legacy && simple.compositionValue == legacy
+                    && off.unitMix == simple.unitMix,
+                "Extended variant accounting or supplier scans leaked into OFF or Simple-only");
+        config->force.simpleTechSavings = false;
+        config->force.existingCompositionUnitChoice = true;
+        const auto on = world.observePlan();
+        require(on.compositionValue == expected && on.vehiclePlanValue == on.compositionArmyValue,
+                "Standalone composition omitted a variant's actual owned or queued nominal value");
+        int total = 0;
+        for (size_t slot = 0; slot < expected.size(); ++slot) {
+            total += int(expected[slot]);
+            if (expected[slot] > 0)
+                require(on.compositionAvailable[slot] && on.compositionPrice[slot] > 0
+                            && world.bot->allocationSnapshot.slots[slot].allocated && on.unitMix[slot] > 0,
+                        "A real variant supplier disappeared from the current or strategic family mask");
+        }
+        require(on.compositionArmyValue == total, "Variant family totals use canonical prices or count a commitment twice");
+        for (const auto& [item, slot] : variants) {
+            if (world.owner->getNumItems(item) == 0 || QuantBot::compositionSlot(item) < UnitMixPolicy::kSlots) continue;
+            auto accepted = on;
+            accepted.unitMix = {};
+            accepted.unitMix[slot] = 10000; // Labelled selected-family acceptance control.
+            accepted.money = 19999;
+            BuilderBase* supplier = nullptr;
+            for (auto* structure : structureList) {
+                auto* builder = dynamic_cast<BuilderBase*>(structure);
+                if (builder && builder->getOwner() == world.owner && builder->isAvailableToBuild(item)) {
+                    supplier = builder;
+                    break;
+                }
+            }
+            require(supplier && accepted.nextCompositionSlot() == slot,
+                    "Actual custom acceptance control has no selected real supplier");
+            QuantBot::BuilderTurn turn(accepted.money);
+            turn.pStructure = supplier;
+            turn.pBuilder = supplier;
+            require(world.bot->produceItemWithLogging(accepted, turn, item, __LINE__, "fixture_selected_variant_commitment")
+                        && accepted.compositionValue[slot] == on.compositionValue[slot] + world.price(item)
+                        && accepted.compositionArmyValue == on.compositionArmyValue + world.price(item),
+                    "Accepted custom order did not immediately update the shared family and army commitment");
+        }
+        SDL_Log("SIMPLE_TECH_SAVING_VARIANTS: mod=%s difficulty=%s house=%d actual_variants=%d "
+                "owned_and_queued_value=%d off_simple_preserved=1", mod, playerClass, house, count, total);
+    }
+    if (ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled())
+        for (size_t i = 0; i < variants.size(); ++i)
+            if (variants[i].first != Unit_TameSandworm)
+                require(covered[i], "Authored Tornie variant coverage missed a real available combat supplier");
+    // A Tame Sandworm is a real combat family, but its Worfinery offer additionally
+    // requires a chaos-mode event. Ordinary scenarios do not invent that offer.
+    if (!covered.back())
+        notApplicable("unit_choice_variant_accounting", mod, playerClass, "no_actual_chaos_worfinery_offer", Unit_TameSandworm);
+}
+
+inline void standaloneVariantSupplier(const char* mod, const char* playerClass) {
+    if (!ModManager::instance().isTornieFamilyContentActive()) return;
+    World world(mod, playerClass, false, Stage::FirstHeavy, Army::Empty, 8, true, HOUSE_REBELS);
+    world.closeMilitaryMarket();
+    std::vector<StructureBase*> aircraftFactories;
+    for (auto* structure : structureList)
+        if (structure->getOwner() == world.owner && structure->getItemID() == Structure_HighTechFactory)
+            aircraftFactories.push_back(structure);
+    for (auto* factory : aircraftFactories) {
+        factory->setVisible(VIS_ALL, false);
+        factory->destroy();
+    }
+    auto* lightFactory = world.producer(Structure_LightFactory);
+    require(lightFactory && !lightFactory->isAvailableToBuild(Unit_Trike)
+                && lightFactory->isAvailableToBuild(Unit_SonicTrike),
+            "Rebels variant-only supplier control is not using its authored Sonic Trike offer");
+    for (int i = 0; i < 12; ++i) world.spawn(world.owner, Unit_RaiderTrike, Coord(4 + i, 40));
+    world.cash(19999);
+    auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+    world.bot->configOverride = config;
+    const auto off = world.observePlan();
+    config->force.simpleTechSavings = true;
+    const auto simple = world.observePlan();
+    require(!off.compositionAvailable[7] && !simple.compositionAvailable[7]
+                && off.unitMix[7] == 0 && simple.unitMix[7] == 0,
+            "Variant-only fieldability changed the OFF or Simple-only canonical controls");
+    config->force.simpleTechSavings = false;
+    config->force.existingCompositionUnitChoice = true;
+    auto on = world.observePlan();
+    require(on.nextCompositionSlot() == 7 && on.unitMix[7] > 0 && on.compositionAvailable[7]
+                && on.compositionPrice[7] == world.price(Unit_SonicTrike)
+                && on.compositionFactoryAdmits(Structure_LightFactory)
+                && !on.compositionFactoryAdmits(Structure_HeavyFactory),
+            "Variant-only family has no positive actual-price target or actual factory supplier");
+    QuantBot::BuilderTurn turn(on.money);
+    turn.pStructure = lightFactory;
+    turn.pBuilder = lightFactory;
+    const auto before = on.compositionValue[7];
+    require(world.bot->produceItemWithLogging(on, turn, Unit_SonicTrike, __LINE__, "fixture_actual_variant_supplier")
+                && world.queued(Unit_SonicTrike) == 1
+                && on.compositionValue[7] == before + world.price(Unit_SonicTrike),
+            "Selected variant-only supplier could not accept and book its real unit");
+}
+
+inline void standaloneCustomBypass(const char* mod, const char* playerClass) {
+    if (!ModManager::instance().isTornieFamilyContentActive()) return;
+    World world(mod, playerClass, false, Stage::Complete, Army::TinyMixed, 8, true, HOUSE_NEUTRAL);
+    world.closeMilitaryMarket();
+    for (int i = 0; i < 12; ++i) world.spawn(world.owner, Unit_RocketTrike, Coord(4 + i, 40));
+    for (auto* factory : world.lights) {
+        require(factory->isAvailableToBuild(Unit_RocketTrike), "Cheap custom control lacks its authored Rocket Trike");
+        factory->doProduceItem(Unit_RocketTrike);
+    }
+    auto* idle = static_cast<BuilderBase*>(world.place(Structure_LightFactory));
+    idle->curUpgradeLev = idle->getMaxUpgradeLevel();
+    idle->updateBuildList();
+    world.cash(19999);
+    auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+    world.bot->configOverride = config;
+    auto off = world.observePlan();
+    config->force.simpleTechSavings = true;
+    const auto simple = world.observePlan();
+    require(off.compositionValue[7] == 0 && simple.compositionValue[7] == 0,
+            "Cheap custom OFF/Simple controls no longer have their historical unmapped accounting");
+    config->force.simpleTechSavings = false;
+    config->force.existingCompositionUnitChoice = true;
+    auto on = world.observePlan();
+    require(on.compositionValue[7] == int64_t(world.price(Unit_RocketTrike)) * 15
+                && on.nextCompositionSlot() < UnitMixPolicy::kOrnithopterSlot
+                && !on.compositionFactoryAdmits(Structure_LightFactory),
+            "Cheap custom owned-plus-queue control did not expose the overweight light family");
+    {
+        QuantBot::BuilderTurn turn(on.money);
+        turn.pStructure = idle;
+        turn.pBuilder = idle;
+        require(!world.bot->produceItemWithLogging(on, turn, Unit_RocketTrike, __LINE__, "fixture_custom_bypass")
+                    && idle->getProductionQueueSize() == 0,
+                "Low-priority cheap custom unit bypassed the selected advanced family");
+    }
+    for (int i = 0; i < 5; ++i) world.build();
+    require(world.queued(Unit_RocketTrike) == 3 && idle->getProductionQueueSize() == 0,
+            "Full parallel producer passes refilled an overweight custom family");
+    {
+        QuantBot::BuilderTurn turn(off.money);
+        turn.pStructure = idle;
+        turn.pBuilder = idle;
+        require(world.bot->produceItemWithLogging(off, turn, Unit_RocketTrike, __LINE__, "fixture_legacy_custom_control")
+                    && idle->getCurrentProducedItem() == Unit_RocketTrike && off.compositionValue[7] == 0,
+                "Standalone OFF no longer preserves legacy custom admission and accepted-order accounting");
+    }
+}
+
+inline void standaloneInfantryCapital(const char* mod, const char* playerClass) {
+    World world(mod, playerClass, false, Stage::Complete, Army::TinyTank, 8, true, HOUSE_ATREIDES);
+    world.closeMilitaryMarket();
+    for (int i = 0; i < 12; ++i) world.spawn(world.owner, Unit_Soldier, Coord(4 + i, 40));
+    world.cash(1000);
+    auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+    config->force.existingCompositionUnitChoice = true;
+    world.bot->configOverride = config;
+    auto on = world.observePlan();
+    require(on.infantryCount >= 3 && !world.bot->infantryQuotaAdmits(on, world.price(Unit_Soldier)),
+            "Infantry capital control has not filled its genuine aggregate quota");
+    // The candidate evaluator must agree with the unchanged Barracks producer,
+    // even on cash-funded arms where normal capital arbitration is bypassed.
+    on.sharedSpending = true;
+    on.capitalCandidates.clear();
+    world.bot->planCapitalCandidates(on);
+    for (const auto& candidate : on.capitalCandidates)
+        if (std::strcmp(candidate.kind, "military") == 0)
+            require(!isInfantryUnit(candidate.item),
+                    "Standalone capital reserved cash for an impossible overweight infantry order");
+    auto* barracks = world.producer(Structure_Barracks);
+    require(barracks, "Infantry capital control lacks its actual Barracks");
+    QuantBot::BuilderTurn turn(on.money);
+    turn.pStructure = barracks;
+    turn.pBuilder = barracks;
+    world.bot->buildBarracks(on, turn);
+    require(barracks->getProductionQueueSize() == 0,
+            "Standalone composition changed the exempt infantry producer's legacy quota");
+}
+
+inline void standaloneFactoryVet(const char* mod, const char* playerClass) {
+    constexpr std::array<Uint32, 3> factories{Structure_LightFactory, Structure_HeavyFactory, Structure_HighTechFactory};
+    {
+        World world(mod, playerClass, false, Stage::Complete, Army::TinyMixed, 8, true, HOUSE_ATREIDES);
+        world.closeMilitaryMarket();
+        auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+        config->force.existingCompositionUnitChoice = true;
+        world.bot->configOverride = config;
+        auto base = world.observePlan();
+        for (size_t supplier = 0; supplier < factories.size(); ++supplier) {
+            const auto& mask = base.compositionFactoryAvailable[supplier];
+            const auto found = std::find(mask.begin(), mask.end(), true);
+            require(found != mask.end(), "Factory final-vet fixture has no actual mapped supplier offer");
+            const size_t slot = size_t(found - mask.begin());
+            for (const auto mode : {std::pair{false, false}, std::pair{false, true}, std::pair{true, true}})
+                for (const bool enabled : {false, true})
+                    for (size_t candidate = 0; candidate < factories.size(); ++candidate)
+                        for (const char* rule : {"cash_factory_expansion", "light_unit_backlog",
+                                "heavy_unit_backlog", "air_unit_backlog", "heavy_production"}) {
+                            auto pass = base;
+                            pass.unitMix = {};
+                            pass.unitMix[slot] = 10000; // Labelled chosen-family caller control.
+                            pass.existingCompositionChoice = enabled;
+                            pass.sharedSpending = mode.first;
+                            pass.fundedCityProduction = mode.second;
+                            pass.money = 19999;
+                            QuantBot::BuilderTurn turn(pass.money);
+                            turn.pStructure = world.yard;
+                            turn.pBuilder = world.yard;
+                            world.bot->beginBuilderTurn(pass, turn);
+                            QuantBot::YardTurn yard;
+                            yard.itemID = factories[candidate];
+                            yard.structureRule = rule;
+                            yard.crimeServiceSite = Coord::Invalid();
+                            world.bot->vetYardChoice(pass, turn, yard);
+                            const bool admitted = !enabled || base.compositionFactoryAvailable[candidate][slot];
+                            require(yard.itemID == (admitted ? factories[candidate] : Uint32(NONE_ID)),
+                                    "Cash/backlog/funded final-yard admission disagrees with the actual next-family supplier");
+                        }
+        }
+    }
+    {
+        World world(mod, playerClass, false, Stage::FirstHeavy, Army::TinyTank, 8, true, HOUSE_ATREIDES);
+        world.closeMilitaryMarket();
+        auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+        config->force.existingCompositionUnitChoice = true;
+        world.bot->configOverride = config;
+        auto vetHeavy = [&](QuantBot::BuildPass& pass) {
+            pass.sharedSpending = false;
+            pass.fundedCityProduction = true;
+            pass.money = 19999;
+            QuantBot::BuilderTurn turn(pass.money);
+            turn.pStructure = world.yard;
+            turn.pBuilder = world.yard;
+            world.bot->beginBuilderTurn(pass, turn);
+            QuantBot::YardTurn yard;
+            yard.itemID = Structure_HeavyFactory;
+            yard.structureRule = "heavy_production";
+            yard.crimeServiceSite = Coord::Invalid();
+            world.bot->vetYardChoice(pass, turn, yard);
+            return yard.itemID;
+        };
+        auto first = world.observePlan();
+        require(first.itemCount[Structure_HeavyFactory] == 0
+                    && vetHeavy(first) == Structure_HeavyFactory,
+                "Standalone factory choice blocked a genuine first economic/MCV supplier");
+        world.yard->doProduceItem(Structure_HeavyFactory); // Labelled initial real supplier commitment.
+        auto pending = world.observePlan();
+        require(world.owner->getNumItems(Structure_HeavyFactory) == 0
+                    && pending.itemCount[Structure_HeavyFactory] == 1
+                    && vetHeavy(pending) == NONE_ID,
+                "Pending first supplier did not block an optional mismatched second copy");
+    }
+}
+
 
 enum class Project { HeavyFactory, HeavyUpgrade, IX, Starport, Palace };
 enum class StartCash { Zero, BelowQuote, ExactQuote };
@@ -971,6 +1297,11 @@ void runSimpleTechSavingProbe(const char* mod, const char* playerClass) {
         SimpleTechSavingProbe::composition(mod, playerClass, true, causalControlsOff, true);
     }
     SimpleTechSavingProbe::standaloneStarport(mod, playerClass);
+    SimpleTechSavingProbe::standaloneVariantAccounting(mod, playerClass);
+    SimpleTechSavingProbe::standaloneVariantSupplier(mod, playerClass);
+    SimpleTechSavingProbe::standaloneCustomBypass(mod, playerClass);
+    SimpleTechSavingProbe::standaloneInfantryCapital(mod, playerClass);
+    SimpleTechSavingProbe::standaloneFactoryVet(mod, playerClass);
     for (const auto goal : {SimpleTechSavingProbe::Project::HeavyFactory, SimpleTechSavingProbe::Project::HeavyUpgrade,
                             SimpleTechSavingProbe::Project::IX, SimpleTechSavingProbe::Project::Starport,
                             SimpleTechSavingProbe::Project::Palace}) {

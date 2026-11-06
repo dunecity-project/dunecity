@@ -2128,6 +2128,16 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         yardTurn.itemID=Structure_WindTrap; yardTurn.structureRule="campaign_planned_power";
         yardTurn.crimeServiceSite=Coord::Invalid();
     }
+    // Every optional military lane, including cash/backlog rules and funded
+    // parallel yards, must supply the current owned-plus-queued unit choice.
+    // The first supplier (or its replacement) still unlocks workers, MCVs,
+    // transports and the tech tree. Pending suppliers already cover bootstrap.
+    if ((yardTurn.itemID==Structure_LightFactory || yardTurn.itemID==Structure_HeavyFactory
+            || yardTurn.itemID==Structure_HighTechFactory)
+        && pass.itemCount[yardTurn.itemID]>0 && !pass.compositionFactoryAdmits(yardTurn.itemID)) {
+        yardTurn.itemID=NONE_ID;
+        yardTurn.crimeServiceSite=Coord::Invalid();
+    }
     if (pass.sharedSpending && !pass.fundedCityProduction
         && (yardTurn.itemID==Structure_LightFactory || yardTurn.itemID==Structure_HeavyFactory || yardTurn.itemID==Structure_HighTechFactory)
         && getHouse()->getNumItems(yardTurn.itemID)>0) {

@@ -33,6 +33,15 @@ instead of selecting a cheap alternative. Recompute the shared composition after
 every accepted order, including Starport bargains. Existing infantry quotas and
 economic/transport unit choices are unchanged.
 
+Standalone selection groups authored custom combat variants into the same ten
+families and counts their actual owned/queued nominal value. Actual builder
+offers supply fieldability, candidate prices and cached LF/HF/HTF supplier masks;
+a variant-only factory does not need an unavailable canonical unit. This does
+not aggregate new variant combat evidence into the existing learning model.
+The final optional-repeat-factory gate uses those masks in both shared-spending
+and funded-parallel modes. True first/rebuilt suppliers and economic/transport
+unit policies retain their existing admission.
+
 This switch does not change technology/economy priorities, construction
 installments, upgrade payment or capital reservations. It does not enable
 `SimpleTechSavings`, whose rejected combined experiment remains independently
