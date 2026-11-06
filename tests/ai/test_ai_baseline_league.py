@@ -1,4 +1,5 @@
 """Pure input/capture checks; never compile or run a game."""
+import base64
 import hashlib
 import importlib.util
 import json
@@ -97,6 +98,56 @@ class NativeLeagueInputs(unittest.TestCase):
             self.assertNotEqual((Path(snapshot) / '0-opening.ini').read_bytes(), (inputs / '0-opening.ini').read_bytes())
             with self.assertRaises(ValueError):
                 league.genome_receipt(SimpleNamespace(genome_phase_dir=inputs, style='gene-on'), out)
+
+    @staticmethod
+    def genome_args(item, **extra):
+        manifest = dict(schema_version=1, genomes=[item])
+        encoded = base64.urlsafe_b64encode(json.dumps(manifest).encode()).decode()
+        return SimpleNamespace(manifest_b64=encoded, genome=item['id'], game_options=None,
+                               style=None, genome_phase_dir=None, phase_minutes=[0, 10, 20], **extra)
+
+    def test_inline_genome_is_resolved_for_exact_native_houses_and_phases(self):
+        import genome_model
+        item = dict(id='candidate', values={'focus_fire': 0}, expression=[
+            dict(when=dict(phase=['late'], house=['atreides']), values={'focus_fire': 1})])
+        args = self.genome_args(item)
+        game = next(game for game in league.fixture_games() if game['mod'] == 'Dune2R'
+                    and game['format'] == '1v1')
+        with tempfile.TemporaryDirectory() as directory:
+            snapshot, digest = league.genome_receipt(args, Path(directory), game)
+            snapshot = Path(snapshot)
+            self.assertEqual(json.loads((snapshot / 'genome.json').read_text()), item)
+            self.assertIn('genome_digest=' + genome_model.genome_id(item),
+                          (snapshot / 'schedule.ini').read_text())
+            names = {number: name for name, number in league.HOUSE_NUMBERS.items()}
+            for house, _ in game['roster']:
+                for phase in genome_model.PHASES:
+                    context = dict(mod='dune2r', difficulty=game['difficulty'],
+                                   format='1v1', size=128, house=names[house], phase=phase)
+                    self.assertEqual((snapshot / ('%d-%s.ini' % (house, phase))).read_text(),
+                                     genome_model.render_ini(item, context))
+            self.assertEqual(len(digest), 64)
+
+    def test_inline_genome_cannot_change_historical_game_rules(self):
+        args = self.genome_args(dict(id='installments', values={'technology_installments': 1}))
+        game = next(game for game in league.fixture_games() if game['mod'] == 'dunecity'
+                    and game.get('research', 'off') == 'off')
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, 'frozen historical fixture'):
+                league.genome_receipt(args, Path(directory), game)
+
+    def test_inline_genome_requires_frozen_manifest_and_exclusive_treatment(self):
+        args = self.genome_args(dict(id='default', values={}))
+        args.style = 'existing-composition-unit-choice-on'
+        with self.assertRaisesRegex(ValueError, 'cannot be mixed'):
+            league.inline_genome(args)
+        args.style = None
+        args.genome = 'unknown'
+        with self.assertRaisesRegex(ValueError, 'Unknown inline genome'):
+            league.inline_genome(args)
+        args.genome = None
+        with self.assertRaisesRegex(ValueError, 'supplied together'):
+            league.inline_genome(args)
 
     def capture(self, events, cycle=100):
         with tempfile.TemporaryDirectory() as directory:

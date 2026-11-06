@@ -7,6 +7,7 @@ immutable. Missing historical research options are disclosed, never emulated.
 See docs/ai-baseline-gate.md for the independent-objective gate and provenance.
 """
 import argparse
+import base64
 from contextlib import contextmanager
 import configparser
 import csv
@@ -57,6 +58,7 @@ def fixture_games():
 
 
 def schedule(args):
+    inline_genome(args)
     return [game for game in fixture_games() if (not args.mod or game['mod'] == args.mod)
             and game['seed'] in args.seeds and game['difficulty'] in args.difficulties
             and game.get('research', 'off') == args.research
@@ -284,9 +286,80 @@ def style_receipt(args):
     return str(path), hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def genome_receipt(args, out):
+def inline_genome(args):
+    """The queue freezes command arguments, not paths to external genome files."""
+    encoded, label = getattr(args, 'manifest_b64', None), getattr(args, 'genome', None)
+    if not encoded and not label:
+        return None
+    if not encoded or not label:
+        raise ValueError('--manifest-b64 and --genome must be supplied together')
+    if getattr(args, 'style', None) or getattr(args, 'genome_phase_dir', None):
+        raise ValueError('An inline genome cannot be mixed with a style or external phase directory')
+    import genome_model
+    try:
+        data = base64.b64decode(encoded + '=' * (-len(encoded) % 4), altchars=b'-_', validate=True)
+        manifest = json.loads(data.decode('utf-8'))
+    except (ValueError, UnicodeError) as error:
+        raise ValueError('Invalid inline genome manifest: ' + str(error)) from error
+    if (not isinstance(manifest, dict) or set(manifest) != {'schema_version', 'genomes'}
+            or type(manifest['schema_version']) is not int or manifest['schema_version'] != 1
+            or not isinstance(manifest['genomes'], list)):
+        raise ValueError('Manifest must be {"schema_version":1,"genomes":[...]}')
+    registry, genomes = genome_model.load_registry(), {}
+    for item in manifest['genomes']:
+        genome_model.validate_genome(item, registry)
+        if item['id'] in genomes:
+            raise ValueError('Duplicate genome id: ' + item['id'])
+        genomes[item['id']] = item
+    if label not in genomes:
+        raise ValueError('Unknown inline genome: ' + label)
+    return genomes[label], registry
+
+
+def materialize_genome(args, game, directory):
+    """Use the ordinary genome schedule/INI convention on the exact native roster."""
+    import genome_model
+    item, registry = inline_genome(args)
+    phases = getattr(args, 'phase_minutes', (0, 10, 20))
+    if (len(phases) != 3 or phases[0] != 0 or not 0 < phases[1] < phases[2] <= 10000
+            or any(type(minute) is not int for minute in phases)):
+        raise ValueError('Genome phases need three increasing integer starts: 0 MID LATE')
+    options = configparser.ConfigParser(interpolation=None)
+    options.read(Path(args.game_options) if args.game_options else fixtures / game['game_options']['file'])
+    rules = genome_model.game_rules([item], registry)
+    for gene in registry:
+        if genome_model.is_game_rule(gene):
+            actual = int(options.getboolean('Game Options', gene['key'], fallback=bool(gene['default'])))
+            requested = rules[gene['id']]
+            if requested != actual:
+                raise ValueError('Genome game rule differs from the frozen historical fixture: ' + gene['id'])
+    parts = game['id'].split('/')
+    context = dict(mod=game['mod'].lower(), difficulty=game['difficulty'],
+                   format='ffa' if game['format'] == 'ffa6' else game['format'],
+                   size=int(parts[parts.index('matrix') + 2]))
+    names = {number: house for house, number in HOUSE_NUMBERS.items()}
+    directory.mkdir()
+    lines = ['[Schedule]', 'elapsed=false']
+    lines.extend('%s=%d' % pair for pair in zip(genome_model.PHASES, phases))
+    lines += ['', '[Genomes]'] + ['%d=%s' % (house, item['id']) for house, _ in game['roster']]
+    lines += ['', '[Provenance]', 'genome_digest=' + genome_model.genome_id(item)]
+    (directory / 'schedule.ini').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    for house, _ in game['roster']:
+        for phase in genome_model.PHASES:
+            expressed = dict(context, house=names[house], phase=phase)
+            (directory / ('%d-%s.ini' % (house, phase))).write_text(
+                genome_model.render_ini(item, expressed, registry), encoding='utf-8')
+    (directory / 'genome.json').write_text(json.dumps(item, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+    return directory
+
+
+def genome_receipt(args, out, game=None):
     """Snapshot adapter-materialized phase INIs; the queue does not freeze external dirs."""
     directory = getattr(args, 'genome_phase_dir', None)
+    if getattr(args, 'manifest_b64', None) or getattr(args, 'genome', None):
+        if game is None:
+            raise ValueError('An inline genome needs an exact fixture context')
+        directory = materialize_genome(args, game, Path(out) / 'inline-genome')
     if not directory:
         return '', ''
     if getattr(args, 'style', None):
@@ -302,6 +375,8 @@ def genome_receipt(args, out):
         data = path.read_bytes()
         (snapshot / path.name).write_bytes(data)
         digest.update(path.name.encode('utf-8') + b'\0' + data + b'\0')
+    if (directory / 'genome.json').is_file():
+        (snapshot / 'genome.json').write_bytes((directory / 'genome.json').read_bytes())
     return str(snapshot), digest.hexdigest()
 
 
@@ -363,7 +438,7 @@ def play(args, scratch, binary, game):
         options_path = Path(args.game_options) if args.game_options else fixtures / game['game_options']['file']
         options = option_receipt(options_path)
         style_path, style_sha = style_receipt(args)
-        phases_path, phases_sha = genome_receipt(args, out)
+        phases_path, phases_sha = genome_receipt(args, out, game)
         if options['sha256'] != game['game_options']['sha256']:
             raise ValueError('Requested options differ from exact fixture for ' + game['mod'])
         if options['research'] != game.get('research', 'off'):
@@ -485,6 +560,9 @@ parser.add_argument('--formats',nargs='+',choices=('1v1','ffa6'),default=['1v1',
 parser.add_argument('--spice',nargs='+',choices=('none','medium'),default=['none','medium'])
 parser.add_argument('--style',help='Committed hashed config gene overlay; no unhashed Play Style behaviours')
 parser.add_argument('--genome-phase-dir',type=Path,help='Internal: queued adapter materializes committed phase INIs per unit')
+parser.add_argument('--manifest-b64', help='Queue-frozen schema_version=1 genome manifest, paired with --genome')
+parser.add_argument('--genome', help='Apply this inline genome to every native roster house; frozen game rules must match')
+parser.add_argument('--phase-minutes', type=int, nargs=3, default=[0,10,20], metavar=('OPENING','MID','LATE'))
 parser.add_argument('--seeds',type=int,nargs='+',default=[9101,148680876,55001,77001,1841712204,8101,8202,8303])
 parser.add_argument('--difficulties',choices=('medium','hard','brutal'),nargs='+',default=['medium','hard','brutal'])
 parser.add_argument('--game-options',type=Path)

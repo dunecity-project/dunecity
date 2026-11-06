@@ -20,9 +20,16 @@ uncommitted source tree with a release-labelled archive.
    overlays change only native hashed config values; unhashed `[Play Style]`
    behaviours and constructor attack-timer changes are explicitly rejected.
    Requested style bytes and actual per-house config hashes remain in `games.csv`.
-   Use separate result directories. A queued genome adapter may instead supply
-   `--genome-phase-dir` from commit-pinned inline phase payloads materialized
-   inside each private unit. Arbitrary external directories are not queue-frozen.
+   Use separate result directories. For a genome, pass `--manifest-b64 BASE64_JSON
+   --genome LABEL` to the same harness. The inline manifest uses the ordinary
+   `{schema_version:1,genomes:[...]}` schema. Every roster house receives that
+   genome, resolved for its real house, mod, difficulty, format, size and phase;
+   `--phase-minutes 0 10 20` controls phase boundaries. Run the default inline
+   genome separately at the same pin as the OFF control. The harness materializes
+   the existing `--genome-phase-dir` convention inside each private queued unit;
+   arbitrary external directories are not queue-frozen. Game-rule genes must
+   match the exact frozen fixture: the adapter refuses, rather than silently
+   disabling, a genome that requires a different rule.
    The runner snapshots named INI bytes, records their SHA256, clears inherited
    phase environment, and rejects mixing phase inputs with `--style`. The pin
    must include the shared test-only `genome-phases.inc` helper. The ordinary `dunecity-audit.py` and mixed
@@ -76,6 +83,14 @@ Exit codes: **0** `DEFAULT_ON_ALLOWED`; **2** `BLOCKED_REGRESSION`; **3**
 `report.json` is authoritative for automation; `report.txt`,
 `release-metrics.csv.gz`, `best-historical.csv.gz` and
 `paired-comparisons.csv.gz` retain readable and compact numerical evidence.
+
+Historical whole-engine results are a reference track, not tournament fitness or
+a genetic feasibility verdict. Unsupported or rule-mismatched research/income
+objectives remain **UNVERIFIED**; an army-volume difference under different
+income rules does not establish an AI-policy defect. Report applicable matched
+objectives and historical limitations separately from the same-source held-out
+head-to-head and exact-save behaviour qualification. A descriptive per-metric
+historical best is not one attainable genome or a substitute for those checks.
 
 ## Exact initial contexts and historical execution
 
