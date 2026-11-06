@@ -175,8 +175,9 @@ class BehaviorContracts(unittest.TestCase):
     def test_private_revision_delta_round_trip_checks_every_original_byte(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
-            same = (runner.root / 'mods/dunecity/GameOptions.ini').read_bytes()
-            payloads = {'GameOptions.ini': same, 'QuantBot Config.ini': b'private exact config'}
+            source = next((runner.root / 'mods/dunecity').rglob('building.ini'))
+            relative = source.relative_to(runner.root / 'mods/dunecity').as_posix()
+            payloads = {relative: source.read_bytes(), 'QuantBot Config.ini': b'private exact config'}
             lines = ['DUNEWORKSHOP1', 'kind=mod', 'mod=']
             for relative, data in payloads.items():
                 lines.append('file=%s,%d,%s' % (runner.checksum(data), len(data), relative.encode().hex()))
@@ -187,7 +188,9 @@ class BehaviorContracts(unittest.TestCase):
             (original / 'manifest').write_bytes(manifest_bytes)
             (original / 'version').write_bytes(b'exact version')
             for relative, data in payloads.items():
-                (original / 'files' / relative).write_bytes(data)
+                target = original / 'files' / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
             saved = folder / 'save.dls'
             saved.write_bytes(name.encode() + b'\0')
             revisions = runner.freeze_revisions(folder / 'original', saved)
