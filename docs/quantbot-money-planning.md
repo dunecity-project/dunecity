@@ -465,12 +465,13 @@ joint 6 → 10, 4 → 9). See `factory-native-observations.json` and
    sum of the per-cycle drains may exceed income only by what actual cash
    covers until those drains finish. A start that would make any running lane
    crawl is refused; started work finishes before new work begins.
-3. **Army production keeps a guaranteed share** of cash and income
+3. **Army production has a soft planning share** of cash and income
    (`sensibleArmyShareBps` = 30%, the OFF bot's measured pooled military share)
    while the existing target/mix/caps admit units it can spend it on, capped by
-   what its running lines plus ready admitted producers can spend. Development
-   is funded from the rest; the army may additionally use spare funds that no
-   running lane or waiting higher-priority development want needs.
+   what its running lines plus ready admitted producers can spend. This is a
+   per-admission weight, not an exact house-wide debit allowance or saved ledger.
+   Development is funded from the rest; the army may use spare funds only when
+   actual running work and the selected pending want keep their required remainder.
 4. **Start before the money is all there.** Nothing waits for the full quote:
    a start needs only the part of its price that its share of income will not
    cover during its build. When no project is running and the army has no
@@ -588,14 +589,17 @@ Admission, first match wins:
    development: `a = 0`, retaining any higher-priority immediate cash floor;
    army: no pending development want (`sole_primary`).
 4. Army: `solvent_a(army lanes + candidate)` **and**
-   `solvent_10000(all lanes + candidate)` (`army_share`), or
+   `solvent_10000(all lanes + candidate + pending if immediate)` (`army_share`), or
    `solvent_10000(all lanes + candidate + pending)` (`spare_funds`).
 5. Development: `solvent_(10000-a)(development lanes + candidate + pending)` and
    `solvent_10000(all lanes + candidate + pending)` (`development_share`).
 
-Pending is included only for lower/equal-priority development and army spare
-funds, and is the highest-priority development want refused this pass. With
-telemetry enabled, starts trace `drain_budget_start` (rule, share, lanes) and
+Pending is included for lower/equal-priority development, army spare funds and
+every instant army purchase. It is the highest-priority want refused this pass.
+Each instant purchase rechecks the selected want's required remainder against
+actual house cash after all preceding debits, including another controller's.
+No paid import becomes a fake queued debt or another persistent savings ledger.
+With telemetry enabled, starts trace `drain_budget_start` (rule, share, lanes) and
 refusals `drain_budget_hold` (share, pending item, first deficit cycle).
 
 A pending genuinely up-front import/prepaid study records its immediate price

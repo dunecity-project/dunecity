@@ -117,10 +117,10 @@ struct QuantBot::BuildPass {
     };
     std::vector<SensibleDrain> sensibleDrains{};
     std::vector<std::pair<int64_t,int64_t>> sensibleDrainEnds{};
-    /// Army production's guaranteed share of cash and income, in basis points.
+    /// Army production's soft per-admission planning share, in basis points.
     int sensibleArmyShare{};
-    /// Highest-priority development want refused for money this pass. Lower
-    /// development starts and army spare-funds starts must leave it fundable.
+    /// Highest-priority want refused for money this pass. Lower development,
+    /// army spare-funds and instant purchases must leave it fundable.
     SensibleDrain sensiblePending{};
     std::array<SensibleDrain,2> sensibleExtras{}; ///< Candidate and pending scratch.
     bool militaryBudgetOverridden{};

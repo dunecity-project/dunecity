@@ -527,8 +527,8 @@ int64_t QuantBot::sensibleDeficit(BuildPass& pass, int64_t cash, int shareBps, S
 }
 
 // Every admitted start must keep all live work funded to completion: lanes
-// that cannot finish at full speed starve each other. Army production keeps
-// its guaranteed share; development uses the rest, highest priority first.
+// that cannot finish at full speed starve each other. The army's share is a
+// soft per-admission planning weight, not a separate house-wide debit ledger.
 bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
     int64_t unpaid, int64_t perCycle, int immediate, bool emergency, bool upgrade) {
     if (!pass.startWhatMakesSense) return true;
@@ -568,9 +568,12 @@ bool QuantBot::sensibleDrainAdmits(BuildPass& pass, Uint32 builder, Uint32 item,
     } else if (military) {
         // The nominal army share is not a second wallet: old saves, sole
         // starts and falling income can leave development using more than
-        // its share. Keep every actual lane solvent before adding a unit.
+        // its share. Instant purchases must also leave the pending want's
+        // required remainder, freshly checked against real house cash after
+        // every debit (including a preceding controller's purchase).
         if (armyShare > 0 && sensibleDeficit(pass,cash,armyShare,SensibleLanes::Military,1,paidNow) < 0
-            && (deficit = sensibleDeficit(pass,cash,10000,SensibleLanes::All,1,paidNow)) < 0)
+            && (deficit = sensibleDeficit(pass,cash,10000,SensibleLanes::All,
+                immediate > 0 ? withPending : 1,paidNow)) < 0)
             rule = "army_share";
         else if ((deficit = sensibleDeficit(pass,cash,10000,SensibleLanes::All,withPending,paidNow)) < 0)
             rule = "spare_funds";

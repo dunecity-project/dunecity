@@ -1135,6 +1135,60 @@ inline void immediateImportSaving(const char* playerClass) {
             "no_live_work=1 cheap_lot_held=1 native_debit_exact=1", price, price - 1);
 }
 
+// Repeated discounted military imports share the real wallet. A fresh pass
+// (as for another controller of this house) observes the first native debit
+// and reconstructs the higher-priority transport's pending cash floor.
+inline void immediateMilitaryRemainder(const char* playerClass) {
+    World world("dunecity", playerClass, false, Stage::Complete, Army::Empty, 8, false, HOUSE_HARKONNEN, 0);
+    configure(world, true);
+    auto* port = dynamic_cast<StarPort*>(world.producer(Structure_StarPort));
+    require(port && port->okToOrder(), "Repeated-import control lacks a real ready Starport");
+    auto& market = world.owner->getChoam();
+    market.availableItems.clear();
+    market.addItem(Unit_Carryall, 4);
+    market.availableItems.back().price = world.price(Unit_Carryall);
+    market.addItem(Unit_Tank, 4);
+    market.availableItems.back().price = 2; // Labelled native-market discount; the engine debits this exact quote.
+    port->updateBuildList();
+    const int transportPrice = world.bot->purchasePrice(port, Unit_Carryall);
+    const int militaryPrice = world.bot->purchasePrice(port, Unit_Tank);
+    require(port->isAvailableToBuild(Unit_Carryall) && port->isAvailableToBuild(Unit_Tank)
+                && militaryPrice > 1 && militaryPrice < transportPrice,
+            "Repeated-import control has no real discounted military/transport quotes");
+    world.cash(transportPrice + militaryPrice + militaryPrice / 2);
+    auto pass = observe(world);
+    const auto import = [&](QuantBot::BuildPass& plan, Uint32 item) {
+        QuantBot::BuilderTurn turn(plan.money);
+        turn.pStructure = port;
+        turn.pBuilder = port;
+        world.bot->beginBuilderTurn(plan, turn);
+        return world.bot->produceItemWithLogging(plan, turn, item, __LINE__, "fixture_import_remainder");
+    };
+    require(pass.sensibleArmyShare > 0 && pass.sensibleDrains.empty()
+                && !import(pass, Unit_Carryall)
+                && pass.sensiblePending.immediate == FixPoint(transportPrice).getRawValue(),
+            "The selected transport did not retain its development cash-floor claim beside army demand");
+    const auto spent = world.spentQ32(), cash = cashQ32(world);
+    require(import(pass, Unit_Tank) && world.queued(Unit_Tank) == 1
+                && cashQ32(world) == cash - FixPoint(militaryPrice).getRawValue()
+                && world.spentQ32() - spent == FixPoint(militaryPrice).getRawValue()
+                && pass.sensibleDrains.empty(),
+            "First military import did not debit exactly once while leaving the transport funded");
+    pass = observe(world);
+    require(!import(pass, Unit_Carryall) && pass.sensiblePending.immediate == FixPoint(transportPrice).getRawValue()
+                && shareOf(cashQ32(world), pass.sensibleArmyShare) >= FixPoint(militaryPrice).getRawValue()
+                && cashQ32(world) >= FixPoint(transportPrice).getRawValue()
+                && cashQ32(world) - FixPoint(militaryPrice).getRawValue() < FixPoint(transportPrice).getRawValue(),
+            "Fresh-pass control does not separate the reused nominal army weight from the required remainder");
+    require(!import(pass, Unit_Tank) && world.queued(Unit_Tank) == 1
+                && world.spentQ32() - spent == FixPoint(militaryPrice).getRawValue()
+                && cashQ32(world) == cash - FixPoint(militaryPrice).getRawValue(),
+            "A repeated instant purchase consumed the pending transport's required real cash remainder");
+    SDL_Log("START_WHAT_MAKES_SENSE_IMPORT_REMAINDER: transport=%d military=%d first_paid_once=1 "
+            "fresh_pass=1 nominal_weight_fits_second=1 second_held=1 pending_remainder_preserved=1 no_fake_debt=1",
+            transportPrice, militaryPrice);
+}
+
 inline void rollback(const char* playerClass) {
     World world("dunecity", playerClass, false, Stage::Complete, Army::Empty);
     configure(world, true);
@@ -1177,6 +1231,7 @@ void runStartWhatMakesSenseProbe(const char* playerClass) {
     underfundedPredecessor(playerClass);
     armyEntitlement(playerClass);
     immediateImportSaving(playerClass);
+    immediateMilitaryRemainder(playerClass);
     rollback(playerClass);
     SDL_Log("START_WHAT_MAKES_SENSE_PASS: difficulty=%s full_bot_power_light_civic=1 off_wait=1 zero_start=1 low_cash=1 no_cheap_fallback=1 threatened_first_factory=1 imminent_power_first=1 blackout_power_first=1 quotes_not_paid=1 finite_parallel_drains=1 army_share_parallel=1 army_share_all_lanes_solvent=1 civil_overbook_held=1 immediate_import_saving=1 underfunded_predecessor_first=1 blackout_emergency_exception=1 army_reserve_not_whole_prefix=1 army_entitlement_need_ratio_target_cap=1 fractional_pause_resume=1 sequential_foundations=1 rollback_actual_queue=1",
         playerClass);
