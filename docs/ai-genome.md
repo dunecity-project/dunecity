@@ -19,6 +19,8 @@ That first source pin is `b10df0c63cf6ade5eb5057f9086a1cfac719f25d`.
 The follow-up registry has 339 genes / 64 booleans: `CityCompactPower`
 (source `dc2aee77`), `ContinuousResearch` (`f82f13d9`) and
 `StartWhatMakesSense` (`d3098d9a`) are independent `0/1`, default-OFF genes.
+UnitChoice's `BufferedHeavyProduction` and `IncomeHeavyFactories` (source
+`e9f72ce3`, default OFF) bring the registry to 341 genes / 66 booleans.
 Every evaluation pin must include its complete parser/registry pair.
 
 The registry loader audits the real C++ reader, constructor and shipped default
@@ -89,6 +91,9 @@ summary/map/options receipts. Events, run logs, replays and large tables are
 parsed in scratch, then deleted with the game directory, so node archives stay
 small. Errored games, a deterministic 1-in-50 game-id audit sample
 (`--audit-every`) and elites raced with `--evidence full` keep complete traces.
+Measured on `abb7ef58` (four 30-game-minute Hard/DuneCity 1v1 games, no errors):
+458,704 bytes in total, **0.115 MB/game** including node archives, versus about
+13 MB/game with full capture.
 
 ## Screening and epistasis
 
