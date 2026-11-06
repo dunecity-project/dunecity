@@ -21,12 +21,12 @@ import time
 import types
 from collections import defaultdict
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
-from probe_profile import finish_game, probe_binary, require_free_space, restore_fixture_revisions, scratch_dir
+from probe_profile import finish_game, needed_revisions, probe_binary, require_free_space, restore_fixture_revisions, scratch_dir
 import genome_model
 
 
@@ -116,7 +116,84 @@ def append(path, fields, rows):
         writer.writerows(rows)
 
 
-def freeze(save, case_id, output):
+def revision_entries(manifest_bytes):
+    for line in manifest_bytes.decode('utf-8').splitlines():
+        if not line.startswith('file='):
+            continue
+        digest, size, encoded = line[5:].split(',', 2)
+        relative = bytes.fromhex(encoded).decode('utf-8')
+        path = PurePosixPath(relative)
+        if path.is_absolute() or '..' in path.parts or '\\' in relative or ':' in relative:
+            raise ValueError('Unsafe Workshop manifest path')
+        yield relative, digest, int(size)
+
+
+def revision_source(relative, digest):
+    source = root / 'mods/dunecity' / relative
+    data = source.read_bytes() if source.is_file() else b''
+    if checksum(data) != digest:
+        retired = root / 'tests/performance/data/eight-house-384/files' / (digest + '.png.gz')
+        data = gzip.decompress(retired.read_bytes()) if retired.is_file() else b''
+    return data if checksum(data) == digest else None
+
+
+def freeze_revisions(profile, save):
+    """Embed pinned manifests and only bytes absent from checksum-matching source.
+
+    This is the same source/retired-art resolution as restore_fixture_revisions;
+    no private profile paths, credentials or unrelated store entries travel.
+    """
+    store = Path(profile) / 'workshop/revisions'
+    result = {}
+    names = needed_revisions(store, saves=[save])
+    if not names:
+        raise ValueError('No pinned save revisions found in --freeze-profile')
+    for name in names:
+        folder = store / name
+        manifest_bytes = (folder / 'manifest').read_bytes()
+        if checksum(manifest_bytes) != name:
+            raise ValueError('Original Workshop manifest checksum mismatch')
+        files = {}
+        for relative, digest, size in revision_entries(manifest_bytes):
+            data = (folder / 'files' / relative).read_bytes()
+            if len(data) != size or checksum(data) != digest:
+                raise ValueError('Original Workshop payload checksum mismatch: ' + relative)
+            if revision_source(relative, digest) is None:
+                files[relative] = base64.b64encode(data).decode('ascii')
+        result[name] = dict(manifest=base64.b64encode(manifest_bytes).decode('ascii'),
+                            version=base64.b64encode((folder / 'version').read_bytes()).decode('ascii'), files=files)
+    return result
+
+
+def restore_input_revisions(input_path, profile):
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(input_path, encoding='utf-8')
+    if not config.has_section('Genome Revisions'):
+        return []
+    packed = config['Genome Revisions']
+    payload = gzip.decompress(base64.b64decode(packed['GzipBase64'], validate=True))
+    if checksum(payload) != packed['SHA256']:
+        raise ValueError('Frozen Workshop payload checksum mismatch')
+    revisions = json.loads(payload.decode('utf-8'))
+    for name, revision in revisions.items():
+        manifest_bytes = base64.b64decode(revision['manifest'], validate=True)
+        if checksum(manifest_bytes) != name:
+            raise ValueError('Frozen Workshop manifest checksum mismatch')
+        target = Path(profile) / 'workshop/revisions' / name
+        for relative, digest, size in revision_entries(manifest_bytes):
+            encoded = revision['files'].get(relative)
+            data = base64.b64decode(encoded, validate=True) if encoded is not None else revision_source(relative, digest)
+            if data is None or len(data) != size or checksum(data) != digest:
+                raise ValueError('Exact frozen Workshop content unavailable: ' + relative)
+            path = target / 'files' / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        (target / 'manifest').write_bytes(manifest_bytes)
+        (target / 'version').write_bytes(base64.b64decode(revision['version'], validate=True))
+    return sorted(revisions)
+
+
+def freeze(save, case_id, output, profile=None):
     case = definitions()[case_id]
     if not case['adapted']:
         raise ValueError('Reported issue has not been adapted')
@@ -129,6 +206,10 @@ def freeze(save, case_id, output):
     config['Research Lab Save'] = {'SHA256': digest,
         'GzipBase64': base64.b64encode(gzip.compress(data, mtime=0)).decode('ascii')}
     config['Genome Behavior'] = {'Case': case_id, 'Context': canonical(case['context'])}
+    if profile:
+        revisions = canonical(freeze_revisions(profile, save)).encode('utf-8')
+        config['Genome Revisions'] = {'SHA256': checksum(revisions),
+            'GzipBase64': base64.b64encode(gzip.compress(revisions, mtime=0)).decode('ascii')}
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open('w', encoding='utf-8', newline='\n') as stream:
@@ -437,6 +518,7 @@ def play(args, scratch, binary, key):
     saved.write_bytes(data)
     profile = out / 'fixture-profile'
     restore_fixture_revisions(profile, [saved])
+    restored_revisions = restore_input_revisions(args.game_options, profile)
     phases, run = out / 'phases', out / 'run'
     receipts = match.render_phase_inputs([(h, label) for h in range(12)], dict(context, difficulty='brutal'),
         {label: candidate}, phases, tuple(args.phase_minutes), registry, elapsed=True, difficulty_variants=True)
@@ -489,6 +571,7 @@ def play(args, scratch, binary, key):
             match.compressed_copy(path, destination / name)
             retained.append(dict(file=name, source_sha256=match.file_digest(path)))
     evidence = dict(schema_version=1, setup=setup, result=result, samples=samples, phase_receipts=receipts,
+        frozen_revision_hashes=restored_revisions,
         phase_configs=match.markers(lines, 'GENOME_CONFIG'), phase_applications=match.markers(lines, 'GENOME_PHASE'),
         genome=candidate, context=context, phase_minutes=args.phase_minutes, files=retained,
         command=command, runner_output=process.stdout + process.stderr, problems=problems)
@@ -548,6 +631,8 @@ parser.add_argument('--wall-timeout', type=int, default=3600)
 parser.add_argument('--capture-mib', type=int, default=1024)
 parser.add_argument('--phase-minutes', type=int, nargs=3, default=[0, 10, 20])
 parser.add_argument('--freeze', type=Path, metavar='PRIVATE_SAVE')
+parser.add_argument('--freeze-profile', type=Path,
+                    help='Original profile for pinned revisions missing from committed fixtures (freeze only)')
 parser.add_argument('--output', type=Path)
 parser.add_argument('--report', action='store_true')
 args = parser.parse_args()
@@ -555,7 +640,7 @@ try:
     if args.freeze:
         if not args.case or not args.output:
             raise ValueError('--freeze requires --case and --output')
-        print(canonical(freeze(args.freeze, args.case, args.output)))
+        print(canonical(freeze(args.freeze, args.case, args.output, args.freeze_profile)))
     else:
         raise SystemExit(report(args) if args.report else run(args))
 except ValueError as error:

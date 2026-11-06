@@ -1,7 +1,7 @@
 """Parser/measurement contracts only; synthetic rows are not native AI evidence."""
 import ast
 import base64
-import copy
+import configparser
 import gzip
 import json
 from pathlib import Path
@@ -171,6 +171,52 @@ class BehaviorContracts(unittest.TestCase):
             with gzip.open(str(path) + '.gz', 'wt') as stream:
                 stream.write('case,genome\nnotbuilding,default\n')
             self.assertEqual(runner.read(path), [{'case': 'notbuilding', 'genome': 'default'}])
+
+    def test_private_revision_delta_round_trip_checks_every_original_byte(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            same = (runner.root / 'mods/dunecity/GameOptions.ini').read_bytes()
+            payloads = {'GameOptions.ini': same, 'QuantBot Config.ini': b'private exact config'}
+            lines = ['DUNEWORKSHOP1', 'kind=mod', 'mod=']
+            for relative, data in payloads.items():
+                lines.append('file=%s,%d,%s' % (runner.checksum(data), len(data), relative.encode().hex()))
+            manifest_bytes = ('\n'.join(lines) + '\n').encode()
+            name = runner.checksum(manifest_bytes)
+            original = folder / 'original/workshop/revisions' / name
+            (original / 'files').mkdir(parents=True)
+            (original / 'manifest').write_bytes(manifest_bytes)
+            (original / 'version').write_bytes(b'exact version')
+            for relative, data in payloads.items():
+                (original / 'files' / relative).write_bytes(data)
+            saved = folder / 'save.dls'
+            saved.write_bytes(name.encode() + b'\0')
+            revisions = runner.freeze_revisions(folder / 'original', saved)
+            self.assertEqual(set(revisions[name]['files']), {'QuantBot Config.ini'})
+            data = runner.canonical(revisions).encode()
+            config = configparser.ConfigParser(interpolation=None)
+            config['Genome Revisions'] = {'SHA256': runner.checksum(data),
+                'GzipBase64': base64.b64encode(gzip.compress(data, mtime=0)).decode()}
+            frozen = folder / 'input.ini'
+            with frozen.open('w') as stream:
+                config.write(stream)
+            restored = folder / 'restored'
+            self.assertEqual(runner.restore_input_revisions(frozen, restored), [name])
+            for relative, original_data in payloads.items():
+                self.assertEqual((restored / 'workshop/revisions' / name / 'files' / relative).read_bytes(), original_data)
+            (original / 'files/QuantBot Config.ini').write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                runner.freeze_revisions(folder / 'original', saved)
+            config['Genome Revisions']['SHA256'] = '0' * 64
+            with frozen.open('w') as stream:
+                config.write(stream)
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                runner.restore_input_revisions(frozen, restored)
+
+    def test_revision_manifest_rejects_path_escape(self):
+        for relative in ('../escape', '/absolute', 'C:/absolute', 'folder\\escape'):
+            line = 'file=%s,1,%s\n' % ('0' * 64, relative.encode().hex())
+            with self.assertRaisesRegex(ValueError, 'Unsafe'):
+                list(runner.revision_entries(line.encode()))
 
 
 if __name__ == '__main__':

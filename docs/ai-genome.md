@@ -251,6 +251,15 @@ Non-QuantBot/shared-human houses are never overridden. An explicit game-rule
 gene changes Installments equally for all controllers after load; when absent,
 the save's own rule and existing paid countdowns are retained.
 
+For an original save whose pinned Workshop revision is not in the committed
+fixture store, add `--freeze-profile ORIGINAL_PROFILE` to the freeze command.
+The frozen INI carries its exact manifests/version plus only payload bytes not
+already available from checksum-matching source/retired artwork. Restoration
+verifies every original file's size and SHA-256; it never substitutes the current
+mod, downloads mutable content, or transports profile credentials. The private
+norocketturrets input needs this path (revision `d4a80b1c…`, four config files;
+902 unchanged files resolve from source).
+
 Snapshots at load/every minute/end and per-cycle changes observe ordinary play:
 no planner audit, RNG draw, scripted order or synthetic building site is added.
 Accepted orders, physical completions and later combat losses remain distinct;
