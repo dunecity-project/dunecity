@@ -307,7 +307,7 @@ void nativeFinancing(const char* playerClass, bool concrete) {
         clearOrders(world);
         configureFunding(world, growth, simple);
         world.cash(quote.start()); // Separate initial scenario boundary; no construction has started.
-        const auto pass = world.observePlan();
+        auto pass = world.observePlan();
         require(pass.forecastNetIncome > 0 && pass.money == quote.start(),
                 "Compact start boundary is not spendable with native positive income");
         if (growth) {
