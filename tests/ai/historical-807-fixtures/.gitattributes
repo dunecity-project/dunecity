@@ -1,2 +1,2 @@
 # Archived replay maps and OFF options are immutable byte-pinned test inputs.
-*.ini -text
+*.ini text eol=lf
