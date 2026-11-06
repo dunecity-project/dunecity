@@ -366,6 +366,9 @@ CityPowerSizing=1
 # Opt-in: prefer a legal funded Nuclear Plant when it uses fewer tiles and
 # credits per unit of power than wind, even for a small current shortfall.
 CityCompactPower=0
+# Independent opt-in: with CityCompactPower, start below the full reactor quote
+# only with the legal founded first installment and positive continuing income.
+CityCompactPowerInstallments=0
 # Preserve a tax-dependent seed town's existing four-minute working capital.
 # Viable spice economies retain normal budgets; only optional MCVs/producer upgrades are gated.
 # Military production and required power/supply are unchanged.

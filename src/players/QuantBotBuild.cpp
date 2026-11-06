@@ -1864,6 +1864,7 @@ bool QuantBot::preferCompactNuclear(BuildPass& pass, const BuilderBase* builder,
             -data[Structure_NuclearPlant][houseID].power, nuclearCost, nuclearSize.x * nuclearSize.y,
             -data[Structure_WindTrap][houseID].power, windCost, windSize.x * windSize.y)) return false;
     if (!pass.startWhatMakesSense && pass.money < nuclearCost) {
+        if (!botConfig().force.cityCompactPowerInstallments) return false;
         const int buildTicks = cityBuildTicks(pass, Structure_NuclearPlant);
         // A powered city may pay this compact capacity out of continuing income.
         // A blackout still needs the immediately useful recovery generator.

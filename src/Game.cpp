@@ -880,11 +880,11 @@ std::unique_ptr<QuantBotConfigTrial> Game::beginQuantBotConfigTrial(bool network
     // A warning-level, once-per-install attestation is visible even without Diagnostic Logs.
     SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
         "[QuantBotTrial] resolved_mod=\"%s\" revision=\"%s\" base=\"%s\" overlay=\"%s\" config_hash=%s "
-        "CityCompactPower=%d StartWhatMakesSense=%d FirstFactoryOwnPrerequisites=%d ContinuousResearch=%d SimpleTechSavings=%d",
+        "CityCompactPower=%d CityCompactPowerInstallments=%d StartWhatMakesSense=%d FirstFactoryOwnPrerequisites=%d ContinuousResearch=%d SimpleTechSavings=%d",
         ModManager::instance().getActiveModName().c_str(), gameInitSettings.getModRevisionHash().c_str(),
         basePath.c_str(), overlay, installed.getConfigHash().c_str(), int(force.cityCompactPower),
-        int(force.startWhatMakesSense), int(force.firstFactoryOwnPrerequisites),
-        int(force.continuousResearch), int(force.simpleTechSavings));
+        int(force.cityCompactPowerInstallments), int(force.startWhatMakesSense),
+        int(force.firstFactoryOwnPrerequisites), int(force.continuousResearch), int(force.simpleTechSavings));
     return trial;
 }
 

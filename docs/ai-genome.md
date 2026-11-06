@@ -23,9 +23,30 @@ UnitChoice's `BufferedHeavyProduction` and `IncomeHeavyFactories` (source
 `e9f72ce3`, default OFF) brought the QuantBot part to 341 genes / 66 booleans;
 `FirstFactoryOwnPrerequisites` (default OFF, `docs/quantbot-money-planning.md`)
 brings it to 342 genes / 67 booleans.
-The registry also holds one **game-rule gene**, `technology_installments`
-(343 rows in total). Every evaluation pin must include its complete
-parser/registry pair.
+The game-rule gene `technology_installments` brought the inventory to 343 rows;
+`OpeningMediumCap` added row 344. The independent
+`city_compact_power_installments` gene brings it to **345 genes / 70 booleans**:
+344 native QuantBot config keys and one whole-game rule. Every evaluation pin
+must include its complete parser/registry pair.
+
+### Compact-power selection versus financing
+
+`city_compact_power` / `CityCompactPower` selects compact nuclear power.
+`city_compact_power_installments` / `CityCompactPowerInstallments` independently
+enables its **underfunded native construction-installment path** while SWMS is
+OFF. Both are AI booleans, default OFF. With only CompactPower enabled, its
+fully funded path remains available; setting the financing flag does not change
+Technology Installments, research, saved payment state or the ordinary unit budget.
+The real parser, constructor and config hash inventory include both fields.
+
+Before this split, source `b3f39034` coupled that financing path to CompactPower.
+Its C2 passed all 13 native AllAgainst games but failed the 48-game health
+comparison, so it is **not a trial recommendation**. Those records and the
+343-key static overlays remain immutable and source-bound. A new-source
+financing-enabled chromosome must set the new gene explicitly, receive a new
+DNA and repeat its gates; never reinterpret the old sparse C2 label/DNA as that
+new chromosome. Post-split full static overlays inventory all 344 native keys,
+including the explicit financing value, and need fresh same-context native hashes.
 
 ### Game-rule genes
 
@@ -269,6 +290,11 @@ mod, downloads mutable content, or transports profile credentials. The private
 norocketturrets input needs this path (revision `d4a80b1c…`, four config files;
 902 unchanged files resolve from source).
 
+Continuation runs use atomically allocated short runtime directories inside
+leased scratch to preserve Windows path budget when staging exact Workshop
+files. Human-readable result IDs and evidence paths stay unchanged. Path-length
+arithmetic is not a native AI pass; old staging failures remain unverified.
+
 Snapshots at load/every minute/end and per-cycle changes observe ordinary play:
 no planner audit, RNG draw, scripted order or synthetic building site is added.
 Accepted orders, physical completions and later combat losses remain distinct;
@@ -301,8 +327,9 @@ actual failed LF assertion is that Ordos, with a legal offered plot, orders a
 Light Factory; the baseline ordered none before its yard was destroyed.
 
 New fixes, including independent heavy-capacity/buffered-production,
-ContinuousResearch, CityCompactPower and StartWhatMakesSense, start OFF. Heavy
-capacity keys enter the registry only after their genuine parser/logic lands.
+ContinuousResearch, CityCompactPower, CityCompactPowerInstallments and
+StartWhatMakesSense, start OFF. Keys enter the registry only after their genuine
+parser/logic lands.
 Technology Installments is a global human-and-AI payment rule: a whole-game
 genome rule shared by both arms, never a per-house switch. Preserve shipped
 defaults while collecting the second block.
@@ -363,14 +390,15 @@ A default recommendation requires all of:
 For an explicit offline normal-app trial, launch the **app executable** with
 `DUNECITY_QUANTBOT_OVERLAY=/absolute/profile/overlay.ini`; optionally use an
 isolated `DUNECITY_USERDIR` too. The external file uses ordinary QuantBot
-Config.ini sections/keys. The conservative C2 overlay is:
-
-```ini
-[Force Concentration]
-CityCompactPower=true
-FirstFactoryOwnPrerequisites=true
-StartWhatMakesSense=false
-```
+Config.ini sections/keys. Exact genome reproduction requires a complete,
+source-pinned **constant native configuration**, not an assumed two- or
+five-flag handwritten patch. Resolve the original mod's native base and all
+constructor fallbacks before applying the candidate; prove that the target
+phases are constant. Retain the canonical full INI and its SHA-256, and compare
+the installed native config FNV with the same-source, same-save/context phase
+proof. A file SHA, a game-options hash or another map's config hash is not that
+comparison. Financed compact power must explicitly include
+`CityCompactPowerInstallments=1`; funded-only compact power uses `0`.
 
 New games and existing saves first resolve their actual mod/pinned Workshop
 revision, then read fresh QuantBot defaults, the **normal config source selected
@@ -385,8 +413,9 @@ refused while the overlay is requested.
 
 One warning-level `[QuantBotTrial]` normal-runtime attestation, visible without
 Diagnostic Logs, reports the resolved mod/revision, base/overlay paths, installed
-config hash and actual CityCompactPower, StartWhatMakesSense,
-FirstFactoryOwnPrerequisites, ContinuousResearch and SimpleTechSavings values.
+config hash and actual CityCompactPower, CityCompactPowerInstallments,
+StartWhatMakesSense, FirstFactoryOwnPrerequisites, ContinuousResearch and
+SimpleTechSavings values.
 The owning Game restores the exact previous global config on exit or init/load
 failure, before a later lobby hash can use it.
 After restoration, the separate warning-level `[QuantBotTrialRestore]` exit
@@ -399,12 +428,13 @@ neither record appears when no trial was installed.
 This is a **static global whole-game overlay**, not per-house/phase genome
 execution or promotion. Saved QuantBot ratios, strategy/mix and timers are
 preserved: no reinitialization or save migration. The attested config hash
-describes the installed config, not all saved AI runtime state. C2's dynamic
-CompactPower + FirstFactory booleans with SWMS OFF are the intended old-save
-trial. The overlay is intentionally not saved/replayed: loading a trial save
-again requires the explicit env/file; unset the env for ordinary pinned/base
-behaviour. Candidate-native qualification clears this desktop overlay variable
-and applies only its independently recorded genome transport.
+describes the installed config, not all saved AI runtime state. Exact normal-app
+attestation and physical progress do not replace health, native behaviour or
+held-out strength gates. The overlay is intentionally not saved/replayed:
+loading a trial save again requires the explicit env/file; unset the env for
+ordinary pinned/base behaviour. Candidate-native qualification clears this
+desktop overlay variable and applies only its independently recorded genome
+transport.
 
 ## Commands and cluster operation
 

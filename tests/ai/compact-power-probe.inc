@@ -12,6 +12,7 @@ using TechProductionProbe::require;
 void seed(World& world, bool enabled, int credits = 2600) {
     auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
     config->force.cityCompactPower = enabled;
+    config->force.cityCompactPowerInstallments = false;
     config->force.startWhatMakesSense = false;
     world.bot->configOverride = config;
     world.configHash = config->getConfigHash();
@@ -53,6 +54,7 @@ ReactorQuote reactorQuote(World& world) {
 void configureFunding(World& world, bool growth, bool simple) {
     auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
     config->force.cityCompactPower = true;
+    config->force.cityCompactPowerInstallments = true;
     config->force.startWhatMakesSense = false;
     config->force.cityGrowthPower = growth;
     config->force.simpleTechSavings = simple;
@@ -271,6 +273,7 @@ void fundedTwoYards(const char* playerClass) {
 void nativeFinancing(const char* playerClass, bool concrete) {
     World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
     seed(world, true);
+    configureFunding(world, false, false);
     world.game->gameInitSettings.gameOptions.concreteRequired = concrete;
     world.yard->curUpgradeLev = world.yard->getMaxUpgradeLevel();
     world.owner->updateBuildLists();
@@ -296,7 +299,22 @@ void nativeFinancing(const char* playerClass, bool concrete) {
     fundingBoundaries(world, quote);
     {
         auto off = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+        off->force.cityCompactPower = true;
+        off->force.cityCompactPowerInstallments = false;
+        world.bot->configOverride = off;
+        world.cash(quote.full() - 1);
+        const auto pass = world.observePlan();
+        require(pass.forecastNetIncome > 0 && pass.money < quote.full(),
+                "Financing-OFF control lacks positive income or is already fully funded");
+        world.build();
+        require(world.queued(Structure_WindTrap) == 1 && world.queued(Structure_NuclearPlant) == 0,
+                "Financing-OFF compact city did not retain its underfunded legacy Windtrap choice");
+        clearOrders(world);
+    }
+    {
+        auto off = std::make_shared<QuantBotConfig>(world.bot->botConfig());
         off->force.cityCompactPower = false;
+        off->force.cityCompactPowerInstallments = true;
         world.bot->configOverride = off;
         world.cash(quote.start());
         world.build();
@@ -381,6 +399,7 @@ void controls(const char* playerClass) {
     {
         World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
         seed(world, true, 1999);
+        configureFunding(world, false, false);
         const auto quote = reactorQuote(world);
         const auto pass = world.observePlan();
         require(pass.forecastNetIncome <= 0 && pass.money >= quote.start() && pass.money < quote.full(),

@@ -359,6 +359,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityGrowthPower = true;
     force.cityPowerSizing = true;
     force.cityCompactPower = false;
+    force.cityCompactPowerInstallments = false;
     force.cityOpeningCapital = true;
     force.cityConstructionCapital = true;
     force.cityProductionPrerequisites = true;
@@ -686,6 +687,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
         iniFile.setBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
         iniFile.setBoolValue("Force Concentration", "CityCompactPower", force.cityCompactPower);
+        iniFile.setBoolValue("Force Concentration", "CityCompactPowerInstallments", force.cityCompactPowerInstallments);
         iniFile.setBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
         iniFile.setBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
         iniFile.setBoolValue("Force Concentration", "CityProductionPrerequisites", force.cityProductionPrerequisites);
@@ -839,6 +841,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
     force.cityPowerSizing = iniFile.getBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
     force.cityCompactPower = iniFile.getBoolValue("Force Concentration", "CityCompactPower", force.cityCompactPower);
+    force.cityCompactPowerInstallments = iniFile.getBoolValue("Force Concentration", "CityCompactPowerInstallments", force.cityCompactPowerInstallments);
     force.cityOpeningCapital = iniFile.getBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
     force.cityConstructionCapital = iniFile.getBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
     force.cityProductionPrerequisites = iniFile.getBoolValue("Force Concentration", "CityProductionPrerequisites", force.cityProductionPrerequisites);
@@ -1075,10 +1078,10 @@ QuantBotConfigTrial::~QuantBotConfigTrial() {
         const auto& force = g_quantBotConfig->force;
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
             "[QuantBotTrialRestore] state=initialized config_hash=%s "
-            "CityCompactPower=%d StartWhatMakesSense=%d FirstFactoryOwnPrerequisites=%d ContinuousResearch=%d SimpleTechSavings=%d",
+            "CityCompactPower=%d CityCompactPowerInstallments=%d StartWhatMakesSense=%d FirstFactoryOwnPrerequisites=%d ContinuousResearch=%d SimpleTechSavings=%d",
             g_quantBotConfig->getConfigHash().c_str(), int(force.cityCompactPower),
-            int(force.startWhatMakesSense), int(force.firstFactoryOwnPrerequisites),
-            int(force.continuousResearch), int(force.simpleTechSavings));
+            int(force.cityCompactPowerInstallments), int(force.startWhatMakesSense),
+            int(force.firstFactoryOwnPrerequisites), int(force.continuousResearch), int(force.simpleTechSavings));
     } catch(...) {
         // Restoration has already succeeded; hash allocation must not throw from teardown.
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
@@ -1410,6 +1413,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("cityGrowthPower", force.cityGrowthPower);
     addNamed("cityPowerSizing", force.cityPowerSizing);
     addNamed("cityCompactPower", force.cityCompactPower);
+    addNamed("cityCompactPowerInstallments", force.cityCompactPowerInstallments);
     addNamed("cityOpeningCapital", force.cityOpeningCapital);
     addNamed("cityConstructionCapital", force.cityConstructionCapital);
     addNamed("cityProductionPrerequisites", force.cityProductionPrerequisites);

@@ -72,7 +72,8 @@ and `config/QuantBot Config.ini.default`:
 - **OFF:** SimpleTechSavings, ExistingCompositionUnitChoice, CapacityMcvRunway,
   CityFirstFactorySaving, MoreRocketTurrets, SpendAtCap, OpeningCombatBudget,
   CampaignCombatBudget, Civ Wars Strategy. New candidates StartWhatMakesSense,
-  CityCompactPower and ContinuousResearch are independently default OFF.
+  CityCompactPower, CityCompactPowerInstallments and ContinuousResearch are
+  independently default OFF.
 - `MinMoneyForProduction=500` is configured/hashed/registered but no runtime
   production consumer was found; hard-coded thresholds below do not use it.
 - **Snapshot versus current cutover:** ContinuousResearch was config-only with a
@@ -773,10 +774,13 @@ paid completion and the hash.
 
 ### 5.8 Bounded compact financing with `StartWhatMakesSense` OFF
 
-`CityCompactPower` remains default OFF and is independent of the rejected global
-planner. With that gene ON and SWMS OFF, a powered city may start its genuinely
-qualifying compact reactor before banking the full quote. The existing
-`CityEconomyInvestmentPolicy::installmentOrder` decides admission from:
+`CityCompactPower` and `CityCompactPowerInstallments` independently default OFF.
+The former owns the legal, fully funded compact choice. With **both** genes ON
+and SWMS OFF, a powered city may start its genuinely qualifying compact reactor
+before banking the full quote. The financing flag alone cannot enable compact
+selection; with it OFF, compact admission still requires the complete quote.
+Fully funded choices and SWMS's own admission are unchanged. The existing
+`CityEconomyInvestmentPolicy::installmentOrder` decides the partial admission from:
 
 - this yard's actual reactor offer and complete legal slab plan, with each slab
   priced at this builder's actual offer;
@@ -819,10 +823,46 @@ native production payments with SWMS explicitly OFF. The existing 1,999-credit
 Windtrap control is retained with explicit no-income/start-budget preconditions,
 not interpreted as a universal full-reactor-price requirement.
 
-These are implemented regression cases, **not observed passing results**. Main
-must run the four focused native fixtures, the exact private-save continuations
-and the new same-rule paired smoke on a pinned integration revision. The
-48-game SWMS rejection and no-288/no-promotion decision in §7 remain in force.
+The split's changed regression cases are **not yet verified**. Main must run all
+four native fixtures and the exact private-save continuations on the new pinned
+integration revision. Existing `city-compact-power-{off,on}` styles explicitly
+keep financing OFF. New `city-compact-power-installments-{off,on}` styles both
+enable compact choice and differ only in the financing flag.
+
+At `b3f39034c6ee19b883ea6d08184148949e326958`, before the split, compact choice
+also enabled partial finance. In the original `nonuke` continuation with saved
+Technology Installments OFF, the ON target house accepted a 2,000-credit reactor
+at actual cash486 / planning cash227 / forecast net income43,879, then completed
+it after35.984s of native play. OFF built9 Windtraps and0 new reactors; ON built0
+Windtraps and1 new reactor, with native generator payments2,700 versus2,000.
+Both streams were complete and uncapped. This is financial/physical evidence,
+not army-health or strength acceptance.
+
+That source's separate, same-rule 24-pair/48-game health cohort kept Technology
+Installments ON in both arms and failed the unchanged aggregate gate:
+
+| Paired game-mean ON−OFF | Delta | 95% bootstrap interval |
+|---|---:|---:|
+| Army replacement value at20m | −403.452 | [−885.238, −61.071] |
+| Ground dispatches | −0.135417 | [−0.291667, −0.010417] |
+| Final kill value | −935.3125 | [−1826.354, −208.438] |
+
+All48 native games and captures completed without native errors or caps.
+Army20m has21 measured game pairs /60 house pairs; three paired games ended
+before20m, leaving12 censored house checkpoints per arm, with no imputation.
+Dispatch/kill cover all24 pairs /72 house pairs. Vanilla and Dune2R pairs are
+identical; the adverse differences occur in DuneCity. Full army value, unit mix,
+losses, kills, captures and natural outcomes are retained in
+`/Users/stefan/Documents/projects/outputs/compact-power-finance-20261107/b3f39034c6ee19b883ea6d08184148949e326958/health-readout.json`,
+alongside `nonuke-causal-readout.json`. No promotion or288 expansion follows.
+
+The old two-arm result cannot establish that funded compact choice is safe.
+The split requires one new immutable source and72 games across the **same24
+contexts**: compactOFF/financeOFF, compactON/financeOFF, compactON/financeON.
+Report both incremental contrasts and the combined contrast with the unchanged
+three-metric gate; do not pool the original saved-rule continuations into the
+health cohort or rewrite the old48-game evidence. The separate SWMS48-game
+rejection record and no-288/no-promotion decision in §7 also remain in force.
 
 The first integrated focused run at `77342e41` failed at the native start
 assertion, not because the working fleet lacked income: its retained full-bot
@@ -830,8 +870,8 @@ plan recorded 1 spendable credit, 5,556 net forecast income and actual 100/90
 power. [INFERENCE from source tracing] The earlier core-defence rule saved for
 its Windtrap power prerequisite and cleared the choice before final compact
 vetting could run. That same power selector now honors a genuinely orderable
-compact installment project; ordinary
-defence purchases and gene-OFF saving are unchanged. The fixture retains its
+compact installment project only with the financing gene ON; ordinary
+defence purchases and either gene-OFF saving are unchanged. The fixture retains its
 native order/payment/completion assertions and logs start inputs/results.
 
 ## 6. Required evidence before implementation promotion

@@ -141,7 +141,8 @@ struct QuantBotConfig {
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, ResearchLabProgression, ContinuousResearch,
-    /// CityGrowthPower, CityPowerSizing, CityCompactPower, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
+    /// CityGrowthPower, CityPowerSizing, CityCompactPower, CityCompactPowerInstallments,
+    /// CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
     /// StorageCapacity, FundedClassicProduction, TrooperSupport, SimpleTechSavings,
     /// FirstFactoryOwnPrerequisites, ExistingCompositionUnitChoice, BufferedHeavyProduction,
@@ -276,6 +277,10 @@ struct QuantBotConfig {
         /// per tile both dominate wind, even for a small immediate shortfall.
         /// Existing commitments, foundation costs and placement safety still apply.
         bool cityCompactPower;
+        /// Independent opt-in: allow a qualifying CityCompactPower reactor to
+        /// start below its full quote with the legal founded start budget and
+        /// positive continuing income. Fully funded choices are unchanged.
+        bool cityCompactPowerInstallments;
         /// Protect tax-dependent optional yards and producer upgrades with the
         /// existing four-minute working-capital forecast. Viable spice economies
         /// retain their normal budgets; military and required recovery are unchanged.

@@ -17,6 +17,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import types
 from collections import defaultdict
@@ -693,8 +694,9 @@ def play(args, scratch, binary, key):
     candidate, registry = manifest(args.manifest_b64)[label], genome_model.load_registry()
     identity = genome_model.genome_id(candidate)
     tag = case_id + '-' + label + '-' + identity[:12]
-    out = Path(scratch) / tag
-    out.mkdir(parents=True)
+    # Workshop staging needs a short Windows runtime path; keep the logical tag in results.
+    # mkdtemp atomically retries name collisions inside this game's existing leased root.
+    out = Path(tempfile.mkdtemp(prefix='g', dir=Path(scratch)))
     saved = out / 'original.dls'
     saved.write_bytes(data)
     profile = out / 'fixture-profile'
