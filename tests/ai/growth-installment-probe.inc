@@ -39,6 +39,7 @@
 #include <structures/ZoneStructure.h>
 #include <structures/ConstructionYard.h>
 #include <players/QuantBotBuildPolicy.h>
+#include <players/QuantBotBuildPass.h>
 #include <players/QuantBotSpendingPolicy.h>
 
 void runGrowthInstallmentProbe(Game& game) {
@@ -424,6 +425,43 @@ void runGrowthInstallmentProbe(Game& game) {
     const bool priorityOnly=std::getenv("BALANCE_CIVIC_PRIORITY_ONLY")!=nullptr;
 
     auto runPrerequisiteAndFundingCases=[&]() {
+    // The reported T2 city has positive income and legal land, but R/C demand
+    // is capped by civics above its current technology. Money planning must not
+    // bypass that human rule or mistake the cap for a lack of placement space.
+    // Use this real populated district, then restore its original technology
+    // before the paid prerequisite/placement cases below.
+    {
+        const int oldGameTech=game.techLevel, oldHouseTech=house->researchedTechLevel;
+        const int stadiumTech=game.objectData.data[Structure_Stadium][houseID].techLevel;
+        require(stadiumTech>2,"Civic technology case requires the DuneCity T2 lock");
+        setCredits(stadiumPrice+airportPrice);
+        auto civicAtTech=[&](int tech) {
+            game.techLevel=tech;house->researchedTechLevel=tech;
+            refreshYards();
+            QuantBot::BuildPass pass(bot->militaryUnitValue());
+            bot->resetBuildPass();bot->planBuildInventory(pass);bot->planBuildBudget(pass);
+            bot->planCityState(pass);bot->planStrategicReserve(pass);bot->planSpiceEconomy(pass);
+            bot->planPowerAndYards(pass);bot->planCityPopulation(pass);bot->planCivicNeedAndTrips(pass);
+            require(pass.civicStructuralNeed&DuneCity::NeedStadium,
+                "A real populated district did not retain its structural Stadium need");
+            bot->planningBuilder=yard->getObjectID();bot->clearPlacementCache(false,true);
+            return bot->planCivicForYard(pass,yard);
+        };
+        const auto locked=civicAtTech(2);
+        require(locked.order==NONE_ID && !locked.upgrade && !locked.pending
+                && std::string_view(locked.reason)=="civic_not_in_mod_or_tech",
+            "A T2 city bypassed the civic technology lock despite ample cash");
+        const auto unlocked=civicAtTech(stadiumTech);
+        require(unlocked.civic==Structure_Stadium && unlocked.order==withheldPrerequisite,
+            "Reaching Stadium technology did not expose the real missing prerequisite");
+        game.techLevel=oldGameTech;house->researchedTechLevel=oldHouseTech;
+        refreshYards();
+        bot->planningBuilder=NONE_ID;bot->clearPlacementCache(false,true);
+        SDL_Log("CITY_ZONING_CIVIC_TECH_PASS: locked_tech=2 unlock_tech=%d res_pop=%d "
+                "com_pop=%d prerequisite=%u cash=%d",
+            stadiumTech,sim->getHouseState(houseID).resPop,sim->getHouseState(houseID).comPop,
+            withheldPrerequisite,house->getCredits());
+    }
     // ---- 0. Prerequisite repair. The district is over the Stadium threshold and
     // the yard cannot build a Stadium at all, which is where the reported match's
     // other capped AIs were. The yard must buy the missing prerequisite rather
