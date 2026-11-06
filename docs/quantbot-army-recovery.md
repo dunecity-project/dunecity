@@ -7,48 +7,53 @@ Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 ## Independent existing-composition unit choice
 
 `[Force Concentration] ExistingCompositionUnitChoice` is an independent,
-persisted, multiplayer-hashed switch, **OFF after the standalone paired trial**.
-It changes unit/factory selection only: the owned plus accepted-queue **VALUE
-shares** move toward the existing target, without using a future military limit
-as a cheap-unit quota. Once an advanced supplier exists, light
-emergency/affordability filler is disabled. Human-order leases, saboteurs and
-unit-role ownership remain authoritative.
+persisted, multiplayer-hashed switch, **OFF while its throughput retuning is measured**.
+It changes unit/factory selection only: owned plus accepted-queue **VALUE shares**
+move toward the existing target, without using a future military limit as a
+cheap-unit quota. A light producer may fill its own underweight family, but
+cannot mint an overweight filler quota because another producer is busy.
+Human-order leases, saboteurs and unit-role ownership remain authoritative.
 
 The target remains the same configured/strategy prior or learned mix, expressed
 in basis points of vehicle/aircraft replacement **value**, not object counts.
-For each producible target slot at or below its existing share, add one unit's
-normal replacement price to its owned plus accepted-queue value, then sum the
-absolute differences between the resulting integer-basis-point value shares and
-the target shares. Choose the smallest post-order error; ties prefer the
-largest existing credit-value shortfall, then stable slot order. No cash balance
-or future cap enters that comparison. Empty/exactly balanced armies take the
-closest indivisible growth step; a whole unit can overshoot a small share.
+Each producer chooses the greatest positive current credit-value deficit among
+the families **that producer can actually build**:
+`target_bps * total_owned_and_queued_value - family_value * 10000`.
+Ties use stable slot order. This ranks current value-share shortfalls rather than
+the smallest cheap post-order error step. A family already at/over its target
+does not compete while another family is underweight. A whole order may cross
+the chosen target by that indivisible unit's value; the next order sees that
+commitment and cannot claim the old deficit again.
 
-This is the historical `nextExistingSlot` selector, unchanged for a causal
-unit-choice-only comparison, not a new maximum-deficit or cheapest-unit rule.
-Learned or supplier-limited targets can themselves be light-heavy. Busy or
-upgrading producers remain in the strategic comparison. If the selected supplier
-is busy, the unit unaffordable, or the military ceiling would be exceeded, wait
-instead of selecting a cheap alternative. Recompute the shared composition after
-every accepted order, including Starport bargains. Existing infantry quotas and
-economic/transport unit choices are unchanged.
+An empty or globally exactly balanced army uses the least post-order
+integer-basis-point error among that producer's actual offers, so discrete growth
+does not deadlock. This exception is not a future-cap filler allowance.
+Busy/upgrading suppliers remain strategically fieldable but no longer own other
+producers' choices. An unaffordable local choice still waits instead of falling
+back to a cheaper family. Existing infantry quotas and economic/transport unit
+choices are unchanged. Starport reselects after every accepted bargain.
 
 Standalone selection groups authored custom combat variants into the same ten
 families and counts their actual owned/queued nominal value. Actual builder
 offers supply fieldability, candidate prices and cached LF/HF/HTF supplier masks;
 a variant-only factory does not need an unavailable canonical unit. This does
 not aggregate new variant combat evidence into the existing learning model.
-The final optional-repeat-factory gate uses those masks in both shared-spending
-and funded-parallel modes. True first/rebuilt suppliers and economic/transport
-unit policies retain their existing admission.
+The final optional-repeat-factory gate uses local family deficits and those masks
+in both shared-spending and funded-parallel modes. The existing capital planner
+still requires all existing lines busy, no pending copy, funded extra capacity,
+cap room and a legal site before expansion. A funded saturated heavy lane can
+therefore admit another HF without a different producer's larger deficit vetoing
+it. First/rebuilt suppliers and economic/transport policies retain their gates.
 
 `--existing-composition-unit-choice-probe` runs this policy's engine cases in a
 separate process from `--simple-tech-saving-probe`. CTest registers Medium, Hard
 and Brutal cases for vanilla, DuneCity, Dune2R and Tornie; the latter exercises
 authored variants and variant-only suppliers. The paired unit-only military
-case gives both arms 9,999 credits, below the unrelated third-yard MCV wealth
-trigger, while retaining the huge military ceiling and real paid factory-unit
-completion and preserved-queue assertions. It does not change that MCV policy.
+case gives both arms 19,999 credits and four real mature yards: this satisfies
+the unchanged legacy wealth/MCV target while retaining the OFF cheap-order
+control. Real paid unit completion and finite old-queue assertions remain.
+An additional real-queue case checks two HFs can accept their local underweight
+unit while the globally largest deficit belongs to a busy LF.
 
 This switch does not change technology/economy priorities, construction
 installments, upgrade payment or capital reservations. It does not enable
@@ -58,6 +63,38 @@ pin `SimpleTechSavings=false` and differ only in the new flag. The probe's
 per-player build-site audit manifest records the effective flag and config hash.
 The historical Simple results below are not evidence for adopting unit choice
 alone.
+
+### Diagnosed bottleneck and retuning (2026-11-06)
+
+The rejected `a1bf0d0b` rule substantially closed the special-unit delivery gap,
+but Hard/Brutal matched alive-time army count fell 23.27 → 19.21 and total
+replacement value 7,171 → 5,884. On matched post-IX/positive-target intervals,
+Atreides Sonic live+queued share improved 13.17% → 20.58%, versus targets
+19.31% → 21.47%; its native lifetime built count rose 14.88 → 24.77.
+Thus a missing Sonic mapping or simply forcing more specials is not the
+identified throughput fix.
+
+Turn-sampled native producer exposure found mean HF count already increased
+0.826 → 1.109. Yet idle-ready HF time rose 46.65% → 51.76%; 34.25% of ON
+HF time had no eligible local military option because of the global composition
+choice. Post-IX it was still 28.62%. These are observed consecutive ≤10-second
+plan intervals, updated for accepted orders/upgrades, not inferred paid progress.
+
+The enemy-participant damage-path killing-blow value / built nominal replacement
+cost proxy was Sonic 1.498 → 1.693, versus light vehicles 0.911 → 0.663.
+This is not paid-cash ROI or a causal balance verdict; direct-destroy/crushing
+paths, exposure and Deviator reward attribution remain explicit. It does not
+support assuming light units are generally more efficient than Sonic.
+
+The retuned rule above removes cross-producer head-of-line blocking and changes
+the current-deficit ranking. Both switches remain OFF until a new source-pinned
+288-game paired cohort establishes higher unit value without consistently lower
+kills/decided matches **or lower total army value fielded**. No payment accounting,
+unit balance, learning-target weights or technology/economy policy was changed.
+Diagnostic scripts, per-house tables, four-seed sensitivity and raw-stream
+coverage are in
+`/Users/stefan/Documents/projects/outputs/unit-choice-20261106/throughput-diagnosis-a1bf0d0b/`.
+
 
 ### Measured unit-choice-only outcome (2026-11-06)
 

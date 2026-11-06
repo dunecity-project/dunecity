@@ -22,10 +22,12 @@ randomised, control and tuned arms.
 
 **Independent unit-choice experiment (2026-11-06).** The optional, persisted and
 multiplayer-hashed `[Force Concentration] ExistingCompositionUnitChoice` defaults
-to **false after its standalone paired trial was rejected**. It changes only unit/factory
-selection: move the owned plus accepted-queue **VALUE shares** toward the existing
-target, rather than treating the military limit as an opening cheap-unit quota.
-Once an advanced supplier exists, do not buy light emergency/affordability filler.
+to **false after its first standalone paired trial was rejected**. Its retuning
+lets each producer fill its own greatest positive existing **VALUE-share**
+deficit, not a military-limit quota or another producer's globally chosen slot.
+One whole unit may overshoot; the shared accepted queue prevents another copy.
+Empty/balanced armies take the least-error growth step. A light producer stays
+idle when its own families are full, not merely because heavy production is busy.
 It does not enable technology saving, change economy/tech priorities or payments,
 or alter human-order leases, saboteurs or other unit-role authority.
 `SimpleTechSavings` remains independently **false** after its rejected trial.

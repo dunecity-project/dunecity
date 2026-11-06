@@ -747,6 +747,76 @@ inline void standaloneFactoryVet(const char* mod, const char* playerClass) {
     }
 }
 
+inline void standaloneLocalProducers(const char* mod, const char* playerClass) {
+    World world(mod, playerClass, false, Stage::Complete, Army::Empty, 8, true);
+    auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+    config->force.existingCompositionUnitChoice = true;
+    world.bot->configOverride = config;
+    world.configHash = config->getConfigHash();
+    world.closeMilitaryMarket();
+    for (int i = 0; i < 3; ++i) addMatureYard(world);
+    world.cash(19999);
+    auto* heavy = world.producer(Structure_HeavyFactory);
+    auto* lightFactory = world.lights.front();
+    size_t heavySlot = UnitMixPolicy::kSlots, excessSlot = UnitMixPolicy::kSlots;
+    size_t lightSlot = UnitMixPolicy::kSlots;
+    for (size_t slot = 0; slot < UnitMixPolicy::kOrnithopterSlot; ++slot)
+        if (heavy && world.bot->campaignAvailableToBuild(heavy, vehicles[slot])) {
+            if (heavySlot == UnitMixPolicy::kSlots) heavySlot = slot;
+            else { excessSlot = slot; break; }
+        }
+    for (size_t slot = UnitMixPolicy::kFirstLightSlot; slot < vehicles.size(); ++slot)
+        if (world.bot->campaignAvailableToBuild(lightFactory, vehicles[slot])) { lightSlot = slot; break; }
+    if (excessSlot == UnitMixPolicy::kSlots || lightSlot == UnitMixPolicy::kSlots) {
+        notApplicable("unit_choice_local_producers", mod, playerClass, "no_two_canonical_heavy_families_and_light_offer");
+        return;
+    }
+    for (int i = 0; i < 10; ++i)
+        world.spawn(world.owner, vehicles[excessSlot], Coord(4 + i, 40));
+    // This real old commitment leaves the globally largest light deficit busy.
+    lightFactory->doProduceItem(vehicles[lightSlot]);
+    auto* second = static_cast<BuilderBase*>(world.place(Structure_HeavyFactory));
+    second->curUpgradeLev = second->getMaxUpgradeLevel();
+    second->updateBuildList();
+    world.owner->updateBuildLists();
+    auto pass = world.observePlan();
+    pass.unitMix = {}; // Labelled local-allocation control, not a new configured prior.
+    pass.unitMix[lightSlot] = 5000;
+    pass.unitMix[heavySlot] = pass.unitMix[excessSlot] = 2500;
+    pass.capitalCandidates.clear();
+    pass.capitalChoice = -1;
+    pass.sharedSpending = false;
+    require(pass.nextCompositionSlot() == lightSlot
+                && world.bot->localCompositionSlot(pass, heavy) == heavySlot
+                && world.bot->localCompositionSlot(pass, second) == heavySlot,
+            "Local-producer control does not separate the global light choice from eligible heavy deficits");
+    const int64_t committedBefore = pass.compositionValue[heavySlot];
+    {
+        QuantBot::BuilderTurn turn(pass.money);
+        turn.pStructure = heavy;
+        turn.pBuilder = heavy;
+        world.bot->buildHeavyFactory(pass, turn);
+    }
+    {
+        QuantBot::BuilderTurn turn(pass.money);
+        turn.pStructure = second;
+        turn.pBuilder = second;
+        world.bot->buildHeavyFactory(pass, turn);
+    }
+    require(heavy->getProductionQueueSize() == 1 && second->getProductionQueueSize() == 1
+                && heavy->getCurrentProducedItem() == vehicles[heavySlot]
+                && second->getCurrentProducedItem() == vehicles[heavySlot]
+                && pass.compositionValue[heavySlot] == committedBefore + 2 * world.price(vehicles[heavySlot])
+                && pass.compositionRevision == 2
+                && lightFactory->getProductionQueueSize() == 1
+                && lightFactory->getCurrentProducedItem() == vehicles[lightSlot] && !lightFactory->isOnHold(),
+            "A busy global-choice producer blocked parallel real heavy orders or lost their shared commitments");
+    require(pass.nextCompositionSlot() == lightSlot && pass.compositionFactoryAdmits(Structure_HeavyFactory),
+            "Capital capacity still answers to another producer's globally largest deficit");
+    SDL_Log("UNIT_CHOICE_PER_FACTORY: mod=%s difficulty=%s outcome=passed two_heavy_orders=1 old_light_queue_preserved=1",
+            mod, playerClass);
+}
+
 
 enum class Project { HeavyFactory, HeavyUpgrade, IX, Starport, Palace };
 enum class StartCash { Zero, BelowQuote, ExactQuote };
@@ -1347,10 +1417,11 @@ void runExistingCompositionUnitChoiceProbe(const char* mod, const char* playerCl
     SimpleTechSavingProbe::standaloneCustomBypass(mod, playerClass);
     SimpleTechSavingProbe::standaloneInfantryCapital(mod, playerClass);
     SimpleTechSavingProbe::standaloneFactoryVet(mod, playerClass);
+    SimpleTechSavingProbe::standaloneLocalProducers(mod, playerClass);
     const auto wall = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start).count();
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=existing_composition_unit_choice outcome=passed mod=%s difficulty=%s "
             "producer_scope=full_build paired_off=1 queued_composition=1 paid_factory_completion=1 "
-            "starport_acceptance=1 independent_technology_policy=1 wall_ms=%lld",
+            "starport_acceptance=1 per_factory_selection=1 independent_technology_policy=1 wall_ms=%lld",
             mod, playerClass, static_cast<long long>(wall));
 }

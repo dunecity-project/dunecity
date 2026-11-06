@@ -303,9 +303,9 @@ struct QuantBotConfig {
         /// Stateless existing-composition/economy-first installments, default OFF.
         /// No military hold or saved ledger; paired outcomes gate adoption.
         bool simpleTechSavings;
-        /// Independent unit/factory choice from owned plus queued value shares.
-        /// No light filler with an advanced supplier; no tech/economy changes.
-        /// Default OFF after the standalone value/performance outcome gate failed.
+        /// Per-producer choice from owned plus queued value-share deficits.
+        /// No overweight light filler; no tech/economy changes.
+        /// Default OFF until the retuned unit/army-value and performance gates pass.
         bool existingCompositionUnitChoice;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.

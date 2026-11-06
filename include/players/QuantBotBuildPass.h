@@ -240,9 +240,12 @@ struct QuantBot::BuildPass {
     // Actual LF/HF/HTF offers, including standalone-only variant suppliers.
     std::array<UnitMixPolicy::Slots, 3> compositionFactoryAvailable{};
     int compositionArmyValue{};
+    Uint32 compositionRevision{};
     bool usesCompositionChoice() const { return techSavings || existingCompositionChoice; }
     size_t nextCompositionSlot() const {
-        return UnitMixPolicy::nextExistingSlot(unitMix, compositionValue, compositionPrice, compositionAvailable);
+        return existingCompositionChoice
+            ? UnitMixPolicy::greatestExistingDeficitSlot(unitMix, compositionValue, compositionPrice, compositionAvailable)
+            : UnitMixPolicy::nextExistingSlot(unitMix, compositionValue, compositionPrice, compositionAvailable);
     }
     bool compositionFactoryAdmits(Uint32 factory) const {
         if (!existingCompositionChoice) return true;
@@ -253,8 +256,8 @@ struct QuantBot::BuildPass {
         case Structure_HighTechFactory: supplier = 2; break;
         default: return true;
         }
-        const size_t next = nextCompositionSlot();
-        return next < UnitMixPolicy::kSlots && compositionFactoryAvailable[supplier][next];
+        return UnitMixPolicy::greatestExistingDeficitSlot(
+            unitMix, compositionValue, compositionPrice, compositionFactoryAvailable[supplier]) < UnitMixPolicy::kSlots;
     }
 
     // planCapitalForecast()
@@ -381,6 +384,9 @@ struct QuantBot::BuilderTurn {
     bool workerProducer{};
     bool transportProducer{};
     bool capitalSupplier{};
+    // A pass-wide commitment revision invalidates this producer's local choice.
+    Uint32 compositionRevision{~Uint32{0}};
+    size_t compositionChoice{UnitMixPolicy::kSlots};
 
     // Set by reserveBuilderCash(); restored when the turn ends.
     RestoreReservedCredits reserve;

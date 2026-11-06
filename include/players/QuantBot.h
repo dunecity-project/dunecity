@@ -1720,7 +1720,10 @@ private:
     bool spendingEmergency(BuildPass& pass, Uint32 item);
     bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
     static size_t compositionSlot(Uint32 item, bool extendedVariants = false);
-    bool compositionAdmits(BuildPass& pass, Uint32 item);
+    size_t localCompositionSlot(const BuildPass& pass, const BuilderBase* builder) const;
+    size_t nextCompositionSlot(BuildPass& pass, BuilderTurn& turn) const;
+    bool compositionAdmits(BuildPass& pass, BuilderTurn& turn, Uint32 item);
+    bool compositionAdmits(BuildPass& pass, Uint32 item, size_t selectedSlot);
     /// Scores every producer's candidate purchases.
     void planCapitalCandidates(BuildPass& pass);
     /// Chooses the protected capital purchase for this pass.

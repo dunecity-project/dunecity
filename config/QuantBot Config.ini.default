@@ -395,9 +395,9 @@ TrooperSupport=1
 # Existing army composition; economy-first tech installments, no military hold.
 # Default OFF after the combined trial. No saved budget or format/protocol change.
 SimpleTechSavings=0
-# Independent unit/factory choice using owned plus queued VALUE shares.
-# No light filler once an advanced supplier exists; no tech/economy changes.
-# Standalone trial lowered kills/decisiveness; default OFF. SimpleTechSavings stays OFF.
+# Each producer fills its own existing owned plus queued VALUE-share deficit.
+# No overweight light filler; no tech/economy changes. SimpleTechSavings stays OFF.
+# Default OFF until retuned unit value, army value and performance gates pass.
 ExistingCompositionUnitChoice=0
 # Launchers back off two extra tiles (0 = old spacing, bounded to 0..2).
 # Hunt stand-off remains inside firing range; other unit types are unchanged.

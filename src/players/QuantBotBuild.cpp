@@ -2937,10 +2937,46 @@ size_t QuantBot::compositionSlot(Uint32 item, bool extendedVariants) {
     }
 }
 
-bool QuantBot::compositionAdmits(BuildPass& pass, Uint32 item) {
+size_t QuantBot::localCompositionSlot(const BuildPass& pass, const BuilderBase* builder) const {
+    UnitMixPolicy::Slots available{};
+    UnitMixPolicy::Weights prices{};
+    const int houseID = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    const bool port = builder->getItemID() == Structure_StarPort;
+    if (builder->getHealth() <= 0 || !builder->isActive()) return UnitMixPolicy::kSlots;
+    for (const auto& offer : builder->getBuildList()) {
+        const Uint32 item = offer.itemID;
+        const size_t slot = compositionSlot(item, true);
+        if (slot == UnitMixPolicy::kSlots || data[item][houseID].price <= 0
+            || !campaignAvailableToBuild(builder, item) || getHouse()->isUnitLimitReached(item)) continue;
+        const int value = data[item][houseID].price;
+        if (port && (getHouse()->getChoam().getNumAvailable(item) <= 0
+            || purchasePrice(builder, item) >= value)) continue;
+        available[slot] = true;
+        if (prices[slot] == 0 || value < prices[slot]) prices[slot] = value;
+    }
+    return UnitMixPolicy::greatestExistingDeficitSlot(pass.unitMix, pass.compositionValue, prices, available);
+}
+
+size_t QuantBot::nextCompositionSlot(BuildPass& pass, BuilderTurn& turn) const {
+    if (!pass.existingCompositionChoice) return pass.nextCompositionSlot();
+    if (turn.compositionRevision != pass.compositionRevision) {
+        turn.compositionChoice = localCompositionSlot(pass, turn.pBuilder);
+        turn.compositionRevision = pass.compositionRevision;
+    }
+    return turn.compositionChoice;
+}
+
+bool QuantBot::compositionAdmits(BuildPass& pass, BuilderTurn& turn, Uint32 item) {
+    const size_t choice = pass.existingCompositionChoice && compositionSlot(item, true) < UnitMixPolicy::kSlots
+        ? nextCompositionSlot(pass, turn) : UnitMixPolicy::kSlots;
+    return compositionAdmits(pass, item, choice);
+}
+
+bool QuantBot::compositionAdmits(BuildPass& pass, Uint32 item, size_t selectedSlot) {
     if (pass.existingCompositionChoice) {
         const size_t slot = compositionSlot(item, true);
-        return slot == UnitMixPolicy::kSlots || slot == pass.nextCompositionSlot();
+        return slot == UnitMixPolicy::kSlots || slot == selectedSlot;
     }
     if (!pass.techSavings || !QuantBotBuildPolicy::militaryItem(item)) return true;
     // A real emergency may use an available opening supplier, not refill an
@@ -3670,9 +3706,9 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                             capacity.reason="first_heavy_factory";
                         }
                     }
-                } else if (factory==Structure_LightFactory && int64_t(pass.lightVehicleValue)*10000
+                } else if (factory==Structure_LightFactory && !pass.existingCompositionChoice && int64_t(pass.lightVehicleValue)*10000
                     >= int64_t(pass.vehiclePlanValue)*pass.lightVehicleBps) capacity.reason="light_mix_satisfied";
-                else if (!pass.compositionFactoryAdmits(factory)) capacity.reason="existing_choice_other_producer";
+                else if (!pass.compositionFactoryAdmits(factory)) capacity.reason="existing_factory_mix_satisfied";
                 else if (pass.itemCount[factory]>actual) capacity.reason="factory_pending";
                 else if (busy<actual) capacity.reason="existing_line_available";
                 else if (!campaignAvailableToBuild(builder,factory)) capacity.reason="tech_unavailable";
@@ -3796,6 +3832,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             pass.capitalCandidates.push_back(mcv);
         }
         if (!ready) continue;
+        const size_t producerChoice = pass.existingCompositionChoice
+            ? localCompositionSlot(pass, builder) : UnitMixPolicy::kSlots;
         CapitalCandidate soldier;
         soldier.builder=builder->getObjectID();soldier.kind="military";
         int64_t bestDeficit=-1;
@@ -3820,7 +3858,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             else if (getHouse()->isUnitLimitReached(item)) reason="unit_limit";
             else if (port && getHouse()->getChoam().getNumAvailable(item)<=0) reason="sold_out";
             else if (port && price >= value) reason="not_discounted";
-            else if (pass.usesCompositionChoice() && !compositionAdmits(pass, item)) reason="existing_composition_satisfied";
+            else if (pass.usesCompositionChoice() && !compositionAdmits(pass, item, producerChoice)) reason="existing_composition_satisfied";
             else if (!compositionUnit && !port && (bps<=0 || deficit<=0)) reason="mix_satisfied";
             // Standalone choice does not give unmapped infantry a new army
             // entitlement: its producer will still refuse an overweight quota.

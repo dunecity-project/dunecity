@@ -35,22 +35,22 @@ TEST_CASE("Standalone unit choices compare existing value shares rather than uni
     // Equal object counts are not equal value shares: three additional cheap
     // commitments are needed to match the one existing 800-credit tank.
     for (int queued = 0; queued < 3; ++queued) {
-        REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kQuadSlot);
+        REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, available) == UnitMixPolicy::kQuadSlot);
         current[UnitMixPolicy::kQuadSlot] += prices[UnitMixPolicy::kQuadSlot];
     }
     REQUIRE(current[0] == current[UnitMixPolicy::kQuadSlot]);
     // Repeated choices stay near the VALUE ratio despite the 4:1 price gap.
     for (int order = 0; order < 100; ++order) {
-        const auto next = UnitMixPolicy::nextExistingSlot(target, current, prices, available);
+        const auto next = UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, available);
         REQUIRE(next < UnitMixPolicy::kSlots);
         current[next] += prices[next];
     }
     REQUIRE(std::abs(current[0] - current[UnitMixPolicy::kQuadSlot]) <= prices[0]);
     available.fill(false);
-    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kSlots);
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, available) == UnitMixPolicy::kSlots);
 }
 
-TEST_CASE("Standalone extraction preserves the historical indivisible value-share selector",
+TEST_CASE("Legacy Simple composition preserves the indivisible least-error selector",
           "[quantbot][production][composition][unit-choice]") {
     UnitMixPolicy::Mix target{};
     UnitMixPolicy::Weights current{}, prices{};
@@ -60,8 +60,8 @@ TEST_CASE("Standalone extraction preserves the historical indivisible value-shar
     current[0] = prices[0] = 300;
     prices[UnitMixPolicy::kQuadSlot] = 200;
     available[0] = available[UnitMixPolicy::kQuadSlot] = true;
-    // A 1% target is smaller than one whole quad. Keep that historical
-    // indivisible step rather than confounding this trial with a new selector.
+    // A 1% target is smaller than one whole quad. The separately rejected
+    // Simple policy retains its historical indivisible least-error step.
     REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kQuadSlot);
     current[UnitMixPolicy::kQuadSlot] += prices[UnitMixPolicy::kQuadSlot];
     REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == 0);
@@ -73,6 +73,67 @@ TEST_CASE("Standalone extraction preserves the historical indivisible value-shar
     current[0] = 800;
     current[UnitMixPolicy::kQuadSlot] = 200;
     REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == 0);
+}
+
+TEST_CASE("Each producer fills its own greatest existing value deficit without cross-producer blocking",
+          "[quantbot][production][composition][unit-choice]") {
+    UnitMixPolicy::Mix target{};
+    UnitMixPolicy::Weights current{}, prices{};
+    UnitMixPolicy::Slots all{}, heavy{}, light{}, air{};
+    target[0] = 3500;
+    target[1] = 1500;
+    target[UnitMixPolicy::kOrnithopterSlot] = 3000;
+    target[UnitMixPolicy::kQuadSlot] = 2000;
+    current[0] = prices[0] = 300;
+    current[1] = 1200;
+    prices[1] = prices[UnitMixPolicy::kOrnithopterSlot] = 600;
+    current[UnitMixPolicy::kQuadSlot] = prices[UnitMixPolicy::kQuadSlot] = 200;
+    all[0] = all[1] = all[UnitMixPolicy::kOrnithopterSlot] = all[UnitMixPolicy::kQuadSlot] = true;
+    heavy[0] = heavy[1] = light[UnitMixPolicy::kQuadSlot] = air[UnitMixPolicy::kOrnithopterSlot] = true;
+    // The global biggest deficit is air, but it does not own either ground line.
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, all) == UnitMixPolicy::kOrnithopterSlot);
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, heavy) == 0);
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, light) == UnitMixPolicy::kQuadSlot);
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, air) == UnitMixPolicy::kOrnithopterSlot);
+    // One whole commitment may overshoot; another LF cannot mint a fresh quota.
+    current[UnitMixPolicy::kQuadSlot] += prices[UnitMixPolicy::kQuadSlot];
+    REQUIRE(current[UnitMixPolicy::kQuadSlot] * 10000 > 1900 * target[UnitMixPolicy::kQuadSlot]);
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, light) == UnitMixPolicy::kSlots);
+    // Neither a missing offer nor a larger military cap permits cheap fallback.
+    heavy.fill(false);
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, heavy) == UnitMixPolicy::kSlots);
+}
+
+TEST_CASE("Factory choice ranks credit deficits rather than the smallest cheap error step",
+          "[quantbot][production][composition][unit-choice]") {
+    UnitMixPolicy::Mix target{};
+    UnitMixPolicy::Weights current{}, prices{};
+    UnitMixPolicy::Slots available{};
+    target[0] = 6000; target[1] = 3000; target[UnitMixPolicy::kQuadSlot] = 1000;
+    current[0] = 500; current[1] = 450; current[UnitMixPolicy::kQuadSlot] = 50;
+    prices[0] = 1600; prices[UnitMixPolicy::kQuadSlot] = 200;
+    available[0] = available[UnitMixPolicy::kQuadSlot] = true;
+    REQUIRE(UnitMixPolicy::nextExistingSlot(target, current, prices, available) == UnitMixPolicy::kQuadSlot);
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, available) == 0);
+}
+
+TEST_CASE("Local value-deficit growth does not deadlock empty or exactly balanced armies",
+          "[quantbot][production][composition][unit-choice]") {
+    UnitMixPolicy::Mix target{};
+    UnitMixPolicy::Weights current{}, prices{};
+    UnitMixPolicy::Slots available{};
+    target[0] = 8000; target[UnitMixPolicy::kQuadSlot] = 2000;
+    prices[0] = 800; prices[UnitMixPolicy::kQuadSlot] = 200;
+    available[0] = available[UnitMixPolicy::kQuadSlot] = true;
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, available) == 0);
+    current[0] = 800; current[UnitMixPolicy::kQuadSlot] = 200;
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, available) == 0);
+    // A sole fieldable family can keep a dispatchable army growing at 100%.
+    target.fill(0); current.fill(0); available.fill(false);
+    target[UnitMixPolicy::kQuadSlot] = 10000;
+    available[UnitMixPolicy::kQuadSlot] = true;
+    current[UnitMixPolicy::kQuadSlot] = 200;
+    REQUIRE(UnitMixPolicy::greatestExistingDeficitSlot(target, current, prices, available) == UnitMixPolicy::kQuadSlot);
 }
 
 TEST_CASE("QuantBot respects the single-palace option even in a large city", "[quantbot][production]") {
