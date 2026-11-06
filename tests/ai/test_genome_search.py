@@ -1,8 +1,11 @@
 """Synthetic search/statistics contracts; never evidence about AI game strength."""
+import argparse
 import copy
 from fractions import Fraction
 import random
 import unittest
+import tempfile
+from pathlib import Path
 
 import genome_model
 import genome_search as search
@@ -138,6 +141,49 @@ class GenomeSearchTests(unittest.TestCase):
 
     def test_mismatched_objective_coverage_is_not_dominance(self):
         self.assertFalse(search.dominates({'wins': 1}, {'wins': 0, 'research': 1}))
+
+    def test_incomplete_rotations_cannot_supply_a_seed_block(self):
+        rows = []
+        for game in range(4):
+            for arm, value in (('candidate', '4'), ('default', '0')):
+                rows.append(dict(id='shared-context', game_id=str(game), comparison_id='pair',
+                                 seed='1', mod='dunecity', difficulty='hard', research='off', format='1v1',
+                                 size='96', phase='all', base='cy', spice_level='medium', minute='-1',
+                                 metric='win_score', arm=arm, value=value, status='measured'))
+        incomplete, _, _ = search.responses(rows[:-2], require_rotations=True)
+        self.assertFalse(incomplete)
+        complete, _, _ = search.responses(rows, require_rotations=True)
+        self.assertEqual(next(iter(complete.values())), {'1': 4})
+        self.assertEqual(next(iter(complete))[2][-1], 'medium')
+
+    def test_game_identity_prevents_unrelated_control_pooling(self):
+        rows = []
+        for game, candidate, control in (('g1', 'a', 0), ('g2', 'b', 1)):
+            for arm, value in ((candidate, 4 if candidate == 'a' else 7), ('default', control)):
+                rows.append(dict(id='same-context', game_id=game, seed='1', metric='win_score',
+                                 minute='-1', phase='all', arm=arm, value=str(value), status='measured'))
+        values, _, _ = search.responses(rows)
+        self.assertEqual(next(v['1'] for k, v in values.items() if k[0] == 'a'), 4)
+        self.assertEqual(next(v['1'] for k, v in values.items() if k[0] == 'b'), 6)
+
+    def test_filler_exports_complete_immutable_four_game_cohorts(self):
+        plan = search.screen_plan(self.registry, self.genes[:1], fraction=False)
+        plan['protocol'] = dict(contexts=[dict(mod='vanilla', difficulty='hard', size=96,
+                                              base='cy', spice='medium', research='off')],
+                                seeds=[1], minutes=30, modes=['1v1'], phase_minutes=[0, 10, 20],
+                                houses=['harkonnen', 'atreides'])
+        plan['plan_sha256'] = search.digest(plan)
+        with tempfile.TemporaryDirectory() as directory:
+            args = argparse.Namespace(rev='1' * 40, plan=Path(directory) / 'plan.json.gz',
+                                      output=Path(directory) / 'results', tag='contract',
+                                      emit_backlog=Path(directory) / 'backlog.json')
+            search.save_json(args.plan, plan)
+            exported = search.emit_backlog(plan, args, self.registry)
+            self.assertEqual(len(exported['entries']), 1)
+            entry = exported['entries'][0]
+            self.assertEqual(entry['games'], 4)
+            self.assertEqual(entry['id'], search.digest(dict(revision=args.rev, command=entry['command'])))
+            self.assertEqual(entry['plan_sha256'], plan['plan_sha256'])
 
 
 if __name__ == '__main__':

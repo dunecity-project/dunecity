@@ -26,13 +26,14 @@ import genome_model
 ROOT = Path(__file__).resolve().parents[2]
 CONTROL = 'default'
 CONTEXT = ('mod', 'difficulty', 'research', 'format', 'size', 'phase', 'base', 'spice')
-OBJECTIVES = ('win_score', 'kill_value', 'survival_fraction', 'army_value_time_mean',
-              'economy_income', 'special_built', 'attack_count')
+OBJECTIVES = ('win_score', 'kill_value', 'alive_followup_minute', 'army_value_time_mean',
+              'special_built', 'attack_count', 'special_live_value_share', 'idle_money_time_mean',
+              'economy_stall_fraction', 'base_loss_fraction', 'population', 'research_level')
 QUALITY = ('adopt_light_factory', 'adopt_heavy_factory', 'adopt_ix', 'adopt_starport',
            'adopt_palace', 'special_built', 'attack_count', 'economy_stall_fraction', 'base_loss_fraction')
 CITY_QUALITY = ('zone_residential', 'zone_industrial', 'zone_commercial', 'population')
 LOWER_BETTER = frozenset(('economy_stall_fraction', 'base_loss_fraction', 'passive_fraction',
-                          'unused_credits_fraction', 'first_attack_minute'))
+                          'unused_credits_fraction', 'first_attack_minute', 'idle_money_time_mean'))
 
 
 def canonical(value):
@@ -197,7 +198,10 @@ def add_protocol(plan, args):
                     args.mods, args.difficulties, args.sizes, args.bases, args.spice, args.research)]
     plan['protocol'] = dict(contexts=contexts, seeds=args.seeds, minutes=args.minutes, modes=args.modes,
                             phase_minutes=[0, args.opening_end, args.mid_end],
-                            rotations='swap 1v1; four cyclic label rotations for four-house FFA', ships_defaults=False)
+                            houses=getattr(args, 'houses', ['harkonnen', 'atreides']),
+                            ffa_houses=getattr(args, 'ffa_houses', ['harkonnen', 'atreides', 'ordos', 'sardaukar']),
+                            rotations='1v1: genotype-to-house x house-to-slot (4); 4P: 4 x 4 (16)',
+                            ships_defaults=False)
     plan['plan_sha256'] = digest(plan)
     return plan
 
@@ -242,34 +246,51 @@ def simultaneous_intervals(effects, repetitions=4096, seed=20261106):
 
 
 def context_key(row, house=False):
-    return tuple(str(row.get(field, '')) for field in CONTEXT) + ((str(row.get('house', '')), ) if house else ())
+    values = [str(row.get(field, row.get('spice_level', '') if field == 'spice' else '')) for field in CONTEXT]
+    return tuple(values) + ((str(row.get('house', '')), ) if house else ())
 
 
 def arm_of(row):
     return row.get('genome_id') or row.get('arm') or row.get('label') or ''
 
 
+class ObservationFiles:
+    """Re-iterable streaming evidence; snapshots never become independent seeds."""
+
+    def __init__(self, paths):
+        files = set()
+        for path in paths:
+            path = Path(path)
+            files.update(path.rglob('observations-*.csv.gz') if path.is_dir() else [path])
+        self.files = tuple(sorted(files))
+
+    def __iter__(self):
+        sources = set()
+        for path in self.files:
+            opener = gzip.open if str(path).endswith('.gz') else open
+            with opener(str(path), 'rt', encoding='utf-8', newline='') as stream:
+                for row in csv.DictReader(stream):
+                    if row.get('schema_version', '1') != '1':
+                        raise ValueError('Unsupported observation schema in ' + str(path))
+                    if row.get('status') not in ('measured', 'unavailable', 'censored', 'not_applicable'):
+                        raise ValueError('Missing explicit evidence status in ' + str(path))
+                    if row.get('source_commit'):
+                        sources.add(row['source_commit'])
+                    if len(sources) > 1:
+                        raise ValueError('Do not pool native revisions: use ai-baseline-gate.py for history')
+                    yield row
+
+
 def observations(paths):
-    rows = []
-    for path in paths:
-        for row in load_rows(path):
-            if row.get('schema_version', '1') != '1':
-                raise ValueError('Unsupported observation schema in ' + str(path))
-            if row.get('status') not in ('measured', 'unavailable', 'censored', 'not_applicable'):
-                raise ValueError('Missing explicit evidence status in ' + str(path))
-            row['_source'] = str(path)
-            rows.append(row)
-    sources = {row.get('source_commit') for row in rows if row.get('source_commit')}
-    if len(sources) > 1:
-        raise ValueError('Do not pool native revisions: historical comparisons use ai-baseline-gate.py separately')
-    return rows
+    return ObservationFiles(paths)
 
 
-def responses(rows, house=False):
-    grouped = defaultdict(lambda: defaultdict(list))
+def responses(rows, house=False, require_rotations=False):
+    grouped = defaultdict(lambda: defaultdict(lambda: [Fraction(), 0]))
+    seen_games = defaultdict(set)
     unavailable = defaultdict(int)
     for row in rows:
-        if str(row.get('minute', '-1')) not in ('', '-1'):
+        if str(row.get('minute', '-1')) not in ('', '-1') and row.get('phase', 'all') == 'all':
             continue
         arm, metric, context = arm_of(row), row['metric'], context_key(row, house)
         if row['status'] != 'measured' or row.get('value', '') == '':
@@ -278,18 +299,36 @@ def responses(rows, house=False):
         if house and not row.get('comparison_id'):
             unavailable[(arm, metric, context)] += 1
             continue
-        game = row['comparison_id'] if house else row.get('id', '')
-        grouped[(game, row.get('seed', ''), metric, context)][arm].append(Fraction(row['value']))
+        game = row['comparison_id'] if house else (row.get('game_id') or row.get('id', ''))
+        cell = grouped[(game, row.get('seed', ''), metric, context)][arm]
+        cell[0] += Fraction(row['value'])
+        cell[1] += 1
+        if house:
+            seen_games[(game, row.get('seed', ''), metric, context, arm)].add(row.get('game_id') or row.get('id', ''))
     contrasts, absolute = defaultdict(lambda: defaultdict(list)), defaultdict(lambda: defaultdict(list))
     for (game, seed, metric, context), by_arm in grouped.items():
-        control = mean(by_arm.get(CONTROL, []))
-        for arm, values in by_arm.items():
-            absolute[(arm, metric, context)][seed].extend(values)
+        if house and require_rotations:
+            complete = all(len(seen_games[(game, seed, metric, context, arm)]) ==
+                           (12 if context[3] == 'ffa' and arm == CONTROL else 4 if context[3] == 'ffa' else 2)
+                           for arm in by_arm)
+            if not complete:
+                continue
+        control_cell = by_arm.get(CONTROL)
+        control = control_cell[0] / control_cell[1] if control_cell else None
+        for arm, (total, count) in by_arm.items():
+            value = total / count
+            absolute[(arm, metric, context)][seed].append(value)
             if arm != CONTROL and control is not None:
-                contrasts[(arm, metric, context)][seed].append(mean(values) - control)
+                contrasts[(arm, metric, context)][seed].append(value - control)
     reduce = lambda source: {key: {seed: mean(values) for seed, values in seeds.items()}
                              for key, seeds in source.items()}
-    return reduce(contrasts), reduce(absolute), unavailable
+    paired = reduce(contrasts)
+    if require_rotations and not house:
+        paired = {key: {seed: value for seed, value in seeds.items()
+                        if len(contrasts[key][seed]) == (16 if key[2][3] == 'ffa' else 4)}
+                  for key, seeds in paired.items()}
+        paired = {key: seeds for key, seeds in paired.items() if seeds}
+    return paired, reduce(absolute), unavailable
 
 
 def effect_contrasts(plan, measured):
@@ -333,7 +372,7 @@ def effect_contrasts(plan, measured):
 
 
 def effect_table(plan, rows, house=False):
-    measured, absolute, unavailable = responses(rows, house)
+    measured, absolute, unavailable = responses(rows, house, require_rotations=bool(plan.get('protocol')))
     effects, families = effect_contrasts(plan, measured), defaultdict(dict)
     for key, values in effects.items():
         families[key[2]][key] = values
@@ -379,28 +418,41 @@ def pareto_fronts(vectors):
 
 
 def fitness(absolute):
-    metrics, contexts = defaultdict(lambda: defaultdict(list)), defaultdict(set)
+    by_context, contexts = defaultdict(dict), defaultdict(set)
     for (arm, metric, context), seeds in absolute.items():
-        metrics[arm][metric].extend(seeds.values())
+        if context[5] not in ('', 'all'):
+            continue
+        by_context[(arm, context)][metric] = mean(seeds.values())
         contexts[arm].add(context)
     output = {}
-    for arm, values in metrics.items():
-        required = set(QUALITY)
-        if any(c[0] in ('dunecity', 'city') for c in contexts[arm]):
-            required.update(CITY_QUALITY)
-        if any(c[2] == 'on' for c in contexts[arm]):
-            required.add('research_level')
-        missing = sorted(required - set(values))
-        output[arm] = dict(objectives={m: rational(mean(values[m])) for m in OBJECTIVES if values.get(m)},
-                           missing_quality=missing, feasibility='unverified' if missing else 'requires_nonregression_gate',
-                           quality={m: rational(mean(values[m])) for m in required if values.get(m)})
+    for arm, strata in contexts.items():
+        pooled, missing, quality, detailed = defaultdict(list), [], {}, {}
+        for context in sorted(strata):
+            values = by_context[(arm, context)]
+            required = set(QUALITY)
+            if context[0] in ('dunecity', 'city'):
+                required.update(CITY_QUALITY)
+            if context[2] == 'on':
+                required.add('research_level')
+            label = '|'.join(context)
+            missing.extend(label + ':' + metric for metric in sorted(required - set(values)))
+            quality[label] = {metric: rational(values[metric]) for metric in required if metric in values}
+            detailed[label] = {metric: rational(values[metric]) for metric in OBJECTIVES if metric in values}
+            for metric in OBJECTIVES:
+                if metric in values:
+                    pooled[metric].append(values[metric])
+        output[arm] = dict(objectives={metric: rational(mean(values)) for metric, values in pooled.items()},
+                           context_objectives=detailed, missing_quality=missing,
+                           feasibility='unverified' if missing else 'requires_nonregression_gate',
+                           quality=quality)
     return output
 
 
 def map_elites(absolute):
     grouped, cells = defaultdict(dict), defaultdict(dict)
     for (arm, metric, context), values in absolute.items():
-        grouped[(arm, context)][metric] = mean(values.values())
+        if context[5] in ('', 'all'):
+            grouped[(arm, context)][metric] = mean(values.values())
     for (arm, context), metrics in grouped.items():
         if metrics.get('first_attack_minute', Fraction(10000)) < 10:
             style = 'rush'
@@ -410,7 +462,8 @@ def map_elites(absolute):
             style = 'economy'
         else:
             style = 'balanced'
-        vector = {m: metrics[m] for m in OBJECTIVES if m in metrics}
+        vector = {metric: (-metrics[metric] if metric in LOWER_BETTER else metrics[metric])
+                  for metric in OBJECTIVES if metric in metrics}
         if vector:
             cells['|'.join(context[:2] + (style,))][arm] = vector
     return {cell: pareto_fronts(vectors)[0] for cell, vectors in sorted(cells.items())}
@@ -419,7 +472,7 @@ def map_elites(absolute):
 def analyse(plan, rows):
     effects, absolute, unavailable = effect_table(plan, rows)
     candidates = fitness(absolute)
-    vectors = {arm: {m: Fraction(v) for m, v in data['objectives'].items()}
+    vectors = {arm: {m: (-Fraction(v) if m in LOWER_BETTER else Fraction(v)) for m, v in data['objectives'].items()}
                for arm, data in candidates.items() if data['objectives']}
     house_effects, _, _ = effect_table(plan, rows, True)
     return dict(schema_version=1, plan_sha256=plan.get('plan_sha256', digest(plan)), effects=effects,
@@ -525,7 +578,7 @@ def evolve(plan, report, registry, generation, population=24, offspring=24, seed
     step = max(1, min(step, max(len(g['levels']) - 1 for g in genes)))
     contexts = []
     for context in plan.get('protocol', {}).get('contexts', []):
-        when = {key: [value] for key, value in context.items() if key != 'size'}
+        when = {key: [value] for key, value in context.items() if key in ('mod', 'difficulty', 'format')}
         if 'size' in context:
             when.update(size_min=context['size'], size_max=context['size'])
         contexts.append(when)
@@ -611,9 +664,63 @@ def execution_batches(plan, max_manifest_bytes=24000):
         yield current, dict(schema_version=1, genomes=[genomes[name] for name in sorted(names)])
 
 
+def emit_backlog(plan, args, registry=None):
+    """Export once-only four-game cohorts; admission remains the runner's job."""
+    if not re.fullmatch(r'[0-9a-f]{40}', args.rev):
+        raise ValueError('Backlog publication requires a full immutable revision')
+    payload = {key: value for key, value in plan.items() if key != 'plan_sha256'}
+    plan_hash = digest(payload)
+    if plan.get('plan_sha256') != plan_hash:
+        raise ValueError('Plan digest does not match its immutable contents')
+    if registry is None:
+        source = subprocess.check_output(
+            ['git', 'show', args.rev + ':tests/ai/genome-registry.json'], cwd=str(ROOT), text=True)
+        registry = json.loads(source)
+    registry_hash = digest(registry)
+    if plan.get('registry_sha256') != registry_hash:
+        raise ValueError('Plan registry differs from the pinned registry')
+    protocol, entries = plan['protocol'], []
+    if '1v1' not in protocol['modes']:
+        raise ValueError('Idle filler supports complete 1v1 rotations only; submit FFA normally')
+    houses = protocol.get('houses', ['harkonnen', 'atreides'])
+    house_pairs = list(itertools.combinations(houses, 2))
+    if len(set(houses)) != len(houses) or not house_pairs:
+        raise ValueError('At least two distinct allowed houses are required')
+    for pairs, manifest in execution_batches(plan):
+        available = {item['id']: item for item in manifest['genomes']}
+        for pair in pairs:
+            inline = dict(schema_version=1, genomes=[available[name] for name in sorted(set(pair))])
+            encoded = base64.urlsafe_b64encode(canonical(inline).encode('utf-8')).decode('ascii')
+            for context in protocol['contexts']:
+                for index, seed in enumerate(protocol['seeds']):
+                    chosen_houses = house_pairs[index % len(house_pairs)]
+                    label = args.tag + '-' + digest(dict(pair=pair, context=context, seed=seed,
+                                                         houses=chosen_houses, revision=args.rev))[:20]
+                    results = str((args.output / label).resolve())
+                    command = ['python3', 'tests/ai/genome-match.py', '--manifest-b64', encoded,
+                               '--results', results, '--tag', label, '--pairs', ':'.join(pair),
+                               '--formats', '1v1', '--mods', context['mod'],
+                               '--difficulties', context['difficulty'], '--sizes', str(context['size']),
+                               '--bases', context['base'], '--spice', context['spice'],
+                               '--research', context['research'], '--seeds', str(seed),
+                               '--houses'] + list(chosen_houses)
+                    command += ['--minutes', str(protocol['minutes']), '--phase-minutes']
+                    command += [str(minute) for minute in protocol['phase_minutes']]
+                    entries.append(dict(id=digest(dict(revision=args.rev, command=command)),
+                                        command=command, results=results, games=4,
+                                        plan_sha256=plan_hash, manifest_sha256=digest(inline)))
+    backlog = dict(schema_version=1, revision=args.rev, cwd=str(ROOT),
+                   plan=str(args.plan.resolve()), plan_sha256=plan_hash,
+                   registry_sha256=registry_hash, entries=entries)
+    save_json(args.emit_backlog, backlog)
+    return backlog
+
+
 def run_plan(plan, args):
     if not re.fullmatch(r'[0-9a-fA-F]{7,40}', args.rev):
         raise ValueError('--rev must be an immutable SHA, not HEAD/a branch')
+    if getattr(args, 'emit_backlog', None):
+        return emit_backlog(plan, args)
     args.output.mkdir(parents=True, exist_ok=True)
     receipts = []
     protocol = plan['protocol']
@@ -635,10 +742,12 @@ def run_plan(plan, args):
                                '--seeds'] + [str(seed) for seed in protocol['seeds']]
                     command += ['--minutes', str(protocol['minutes']), '--phase-minutes'] + [str(m) for m in protocol['phase_minutes']]
                     if mode == '1v1':
-                        command += ['--pairs', ','.join(':'.join(pair) for pair in cohort)]
+                        command += ['--pairs', ','.join(':'.join(pair) for pair in cohort),
+                                    '--houses'] + protocol.get('houses', ['harkonnen', 'atreides'])
                     else:
                         candidate, opponent = cohort[0]
-                        command += ['--ffa', ','.join((candidate, opponent, opponent, opponent))]
+                        command += ['--ffa', ','.join((candidate, opponent, opponent, opponent)),
+                                    '--houses'] + protocol.get('ffa_houses', ['harkonnen', 'atreides', 'ordos', 'sardaukar'])
                     queue = ['agent-workspace', 'run', '--project', 'dunecity', '--owner', args.owner,
                              '--tests', '--wait', '--', 'dunecity-queue', 'submit', '--cwd', str(ROOT),
                              '--rev', args.rev, '--tag', label, '--owner', args.owner, '--priority', str(args.priority), '--'] + command
@@ -677,6 +786,8 @@ def parser():
         design.add_argument('--seeds', type=int, nargs='+', default=[110601, 110602, 110603, 110604])
         design.add_argument('--minutes', type=int, default=30)
         design.add_argument('--modes', nargs='+', choices=['1v1', 'ffa'], default=['1v1', 'ffa'])
+        design.add_argument('--houses', nargs='+', default=['harkonnen', 'atreides'])
+        design.add_argument('--ffa-houses', nargs=4, default=['harkonnen', 'atreides', 'ordos', 'sardaukar'])
         design.add_argument('--opening-end', type=int, default=10)
         design.add_argument('--mid-end', type=int, default=20)
     analysis = commands.add_parser('analyse')
@@ -702,12 +813,14 @@ def parser():
     run.add_argument('--tag', required=True)
     run.add_argument('--owner', default='omp:01a19231-0a3a-776c-b1f9-f6404e42fa1c:Genome')
     run.add_argument('--priority', type=int, default=0)
+    run.add_argument('--emit-backlog', type=Path,
+                     help='Publish immutable <=4-game filler entries instead of submitting')
     return parser
 
 
 def main():
     args = parser().parse_args()
-    registry = genome_model.load_registry()
+    registry = genome_model.load_registry() if args.command in ('screen', 'interactions', 'evolve') else None
     if args.command == 'screen':
         genes = selected_genes(registry, args.genes, args.switches_only)
         plan = add_protocol(screen_plan(registry, genes, not args.one_alternate, not args.no_fraction), args)

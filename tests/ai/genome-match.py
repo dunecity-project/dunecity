@@ -62,13 +62,13 @@ MODS = {'vanilla': 'vanilla', 'dune2r': 'Dune2R', 'dunecity': 'dunecity'}
 BASES = {'none': 0, 'cy': 0, 'outpost': 1, 'small': 2, 'medium': 3, 'large': 4, 'fortress': 5}
 SPICE = {'none': 0, 'low': 1, 'medium': 2, 'high': 3, 'very-high': 4}
 GAME_FIELDS = audit.GAME_FIELDS + (
-    'tag', 'mod', 'research', 'research_installments', 'map', 'map_width', 'map_height', 'context_id', 'comparison_id',
+    'tag', 'mod', 'research', 'technology_installments', 'map', 'map_width', 'map_height', 'context_id', 'comparison_id',
     'manifest_sha256', 'registry_sha256', 'manifest_b64', 'phase_schedule_sha256', 'phase_schedule_json',
     'phase_config_hashes', 'map_sha256', 'options_sha256', 'options_json', 'requested_options_sha256',
     'winner', 'winner_label', 'end_s', 'cycle', 'evidence', 'observations', 'fixtures', 'hash_scope')
-HOUSE_FIELDS = audit.HOUSE_FIELDS + ('genome_id', 'genome_digest', 'slot', 'comparison_id', 'research', 'research_installments', 'mod')
+HOUSE_FIELDS = audit.HOUSE_FIELDS + ('genome_id', 'genome_digest', 'slot', 'comparison_id', 'research', 'technology_installments', 'mod')
 ASSIGNMENT_FIELDS = ('id', 'context_id', 'house', 'slot', 'genome_id', 'genome_digest', 'comparison_id', 'difficulty',
-                     'mod', 'format', 'size', 'base', 'spice_level', 'research', 'research_installments',
+                     'mod', 'format', 'size', 'base', 'spice_level', 'research', 'technology_installments',
                      'manifest_sha256', 'phase_schedule_sha256')
 PHASE_FIELDS = ('id', 'house', 'genome_id', 'phase', 'start_minute', 'start_cycle', 'applied_cycle', 'config_hash', 'ini_sha256', 'applied')
 OBSERVATION_EXTRA = ('game_id', 'genome_id', 'genome_digest', 'comparison_id', 'format', 'size', 'base', 'spice_level',
@@ -236,7 +236,7 @@ def schedule(args):
                                map=name, map_width=width, map_height=height, size=max(width, height),
                                base=base if map_mod else 'map', army=army if map_mod else '', city=city if map_mod else '',
                                spice_level=spice if map_mod else 'map', research=args.research,
-                               research_installments=args.research_installments, research_pace=args.research_pace,
+                               technology_installments=args.technology_installments, research_pace=args.research_pace,
                                initial_tech=tech, limit=args.minutes, requested_options_sha256=options_sha)
                 match_context = {key: value for key, value in context.items() if key != 'tag'}
                 context_id = digest(dict(match_context, houses=[house for house, _ in sides]))
@@ -316,8 +316,8 @@ def phase_inputs(args, game, directory):
     if not options.has_section('Game Options'):
         options.add_section('Game Options')
     overrides = {'Research Lab': args.research == 'on'}
-    if args.research_installments is not None:
-        overrides['Research Installments'] = args.research_installments == 'on'
+    if args.technology_installments is not None:
+        overrides['Technology Installments'] = args.technology_installments == 'on'
     if args.research_pace is not None:
         overrides['Research Pace'] = args.research_pace
     for key, value in overrides.items():
@@ -535,7 +535,7 @@ def play(args, scratch, binary, game):
         options.read(options_path, encoding='utf-8')
     values = dict(options['Game Options']) if options.has_section('Game Options') else {}
     research = 'on' if values.get('research lab', '').lower() in ('true', '1') else 'off'
-    installments = values.get('research installments', '')
+    installments = values.get('technology installments', '')
     problems = []
     if process.returncode or not result or len(final) != len(game['sides']):
         problems.append('rc=' + str(process.returncode))
@@ -564,7 +564,7 @@ def play(args, scratch, binary, game):
                air_kill_unknown_attribution=capture['unknown_attribution'], capture_mib=args.capture_mib,
                **{field: game[field] for field in ('tag', 'mod', 'map', 'map_width', 'map_height', 'context_id', 'comparison_id',
                                                    'manifest_sha256', 'registry_sha256', 'manifest_b64')},
-               research=research, research_installments=installments, phase_schedule_sha256=digest(phase_schedule),
+               research=research, technology_installments=installments, phase_schedule_sha256=digest(phase_schedule),
                phase_schedule_json=canonical(phase_schedule), map_sha256=file_digest(map_path) if map_path.is_file() else '',
                options_sha256=file_digest(options_path) if options_path.is_file() else '', options_json=canonical(values),
                requested_options_sha256=file_digest(inputs / 'requested-options.ini'), winner=result.get('winner', ''),
@@ -575,7 +575,7 @@ def play(args, scratch, binary, game):
     if not row['error']:
         tables = tables_for_game(args, game, lines, summary, final, samples, capture)
         for house in tables['houses.csv'][1]:
-            house['research_installments'] = installments
+            house['technology_installments'] = installments
         fixture_path = results / ('fixtures-' + game['id'] + '.json')
         fixture = dict(schema_version=1, games=[dict(id=game['id'], context_id=game['context_id'], mod=game['mod'],
                        seed=game['seed'], difficulty=game['difficulty'], research=research,
@@ -595,7 +595,7 @@ def play(args, scratch, binary, game):
     assignments = [dict(id=game['id'], context_id=game['context_id'], house=vanilla.HOUSE_NUMBERS[house], slot=slot,
                         genome_id=label, genome_digest=genome_model.genome_id(genomes[label]), comparison_id=game['comparison_id'],
                         **{field: game[field] for field in ('difficulty', 'mod', 'format', 'size', 'base', 'spice_level', 'manifest_sha256')},
-                        research=research, research_installments=installments, phase_schedule_sha256=row['phase_schedule_sha256'])
+                        research=research, technology_installments=installments, phase_schedule_sha256=row['phase_schedule_sha256'])
                    for slot, (house, label) in enumerate(game['sides'], 1)]
     audit.append(results / 'assignments.csv', ASSIGNMENT_FIELDS, assignments)
     audit.append(results / 'config-phases.csv', PHASE_FIELDS, phase_rows)
@@ -663,7 +663,7 @@ parser.add_argument('--city', type=int, choices=range(6), help='Generator popula
 parser.add_argument('--spice', nargs='+', choices=tuple(SPICE), default=['none', 'medium'])
 parser.add_argument('--tech', type=int, choices=range(1, 10), help='Initial technology; default research-on1, research-off9')
 parser.add_argument('--research', choices=('off', 'on'), default='off')
-parser.add_argument('--research-installments', choices=('off', 'on'), help='Global hashed Game Option only; default mod rules')
+parser.add_argument('--technology-installments', choices=('off', 'on'), help='Global hashed human-and-AI rule; default mod rules')
 parser.add_argument('--research-pace', type=int, choices=range(4), help='Global research pace: Fast0, Normal1, Slow2, VerySlow3')
 parser.add_argument('--game-options', type=Path, help='Frozen requested Game Options INI over real mod defaults')
 parser.add_argument('--seeds', nargs='+', type=int, help='Fixed unsigned 32-bit seeds (required for games)')
@@ -674,9 +674,14 @@ parser.add_argument('--capture-mib', type=int, default=256)
 parser.add_argument('--jobs', type=int, default=1)
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--scores', type=Path, help='Merge canonical per-game observations, usually observations.csv.gz')
-args = parser.parse_args()
-try:
-    validate(args)
-    sys.exit(report(args) if args.report else run(args))
-except ValueError as error:
-    parser.error(str(error))
+def main(argv=None):
+    args = parser.parse_args(argv)
+    try:
+        validate(args)
+        return report(args) if args.report else run(args)
+    except ValueError as error:
+        parser.error(str(error))
+
+
+if __name__ == '__main__':
+    sys.exit(main())

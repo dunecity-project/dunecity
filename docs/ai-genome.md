@@ -52,7 +52,7 @@ bounds and opening/mid/late phase. Empty/absent dimensions match all; matching
 rules apply in list order, last assignment wins. Genotype SHA-256 excludes the
 human label but preserves ordered-rule semantics. Phase boundaries default to
 0/10/20 **game** minutes, never wall time. Continuations use elapsed loaded-save
-time. Global game rules (for example Research Installments) are context, **not
+time. Global game rules (for example Technology Installments) are context, **not
 per-house AI genes**.
 
 ## Mixed-genome games and provenance
@@ -135,9 +135,9 @@ slots aimed at the current champion. Opponent priorities are Laplace-smoothed
 squared loss rates with a nonzero exploration floor (integer arithmetic). Main
 candidates face the current default, a frozen champion and a prioritized hard
 opponent; duplicate opponents are not falsely counted as distinct. Initial
-racing uses two common seeds and both slot assignments per opponent. A four-player
-cohort gets four rotations. Elites receive additional held-out seed blocks and
-context coverage before any promotion recommendation.
+racing uses two common seeds and all four genotype-to-house × house-to-slot
+orientations per 1v1 house pair. A four-player cohort has 4 × 4 = 16 orientations.
+Elites receive additional held-out seed blocks and context coverage before promotion.
 
 Fitness is **not a weighted sum**. Report independent strength (placement/wins,
 kills, survival), army/economy and behaviour objectives, Pareto fronts and coverage.
@@ -151,10 +151,10 @@ feasible elites or releasable defaults until every hard gate is satisfied.
 
 Every reported issue becomes a permanent feasibility check. Private original
 saves are checksum-pinned and transported by the queue's frozen game-options
-mechanism; private bytes/profile copies stay out of git. Synthetic engine
-fixtures and machine-readable assertions are committed. A good tournament result
-cannot compensate for failing a required behaviour check; unavailable original
-inputs, incomplete traces or a changed controller/context cannot pass.
+mechanism; private bytes/profile copies stay out of git. Public synthetic engine
+fixtures exist, but the combined exact-save adapter and automatic hard-constraint
+ingestion are not complete. Consequently no genome is certified feasible and
+promotion remains blocked; tournament strength alone cannot clear this gate.
 
 The issue inventory includes notbuilding (Ordos LF order, research beyond T2,
 lawful demanded city growth), notbuildingresearchlab, problem1/ainonuclear,
@@ -225,6 +225,18 @@ priority; it must not invent repetitions, disable Air's playing guard, perform
 promotion or use dirty sources. Read the global compute/disk guard before
 submitting. Keep diagnostic evidence gzip-compressed and leased scratch bounded.
 
+`run --emit-backlog BACKLOG.json` exports immutable, once-only four-game 1v1
+cohorts rather than submitting. Each entry pins a full SHA, exact plan and
+registry digests, inline two-genome manifest, one common seed/context and an
+explicit two-house roster. The runner, not the producer, enforces idle admission.
+Do not put 16-game FFA cohorts into the four-game idle-filler contract.
+
+The shared native helper is `tests/ai/genome-phases.inc`; frozen-reference probes
+can include it without depending on formation-wave measurement. Historical
+comparisons must use the reference league's exact frozen fixtures/options, not
+assume independently generated maps match.
+
+
 ### Measured first pilot, not a throughput promise
 
 Eighteen default games on `df06ededc5f8080dca98a1b937f475a8d048eefb` completed:
@@ -235,8 +247,26 @@ timed out. The recorded multi-job wait was 704.62 seconds including preparation
 and shared-machine scheduling, not a controlled throughput benchmark. Evidence:
 `outputs/genome-20261106/default-pilot-corrected/`.
 
+### First existing-switch screening snapshot
+
+The committed `b10df0c6` cohort has 61 one-gene variants plus 128 resolution-IV
+fractional rows, four common seeds and four 1v1 orientations: **3,024 games** in
+Hard/DuneCity, 96-tile CY/no-army, medium spice, research OFF. Other contexts are
+separate unsubmitted filler entries, not measured coverage.
+
+The first recorded analysis saw 780 collected game rows with no game error.
+All 61 one-gene placement effects were available, but at most **two complete
+independent seed blocks**: none has a decisive interval. `CapacityMcvRunway=1`
+had a provisional paired ON-minus-OFF placement effect of `+1/2` over two seeds.
+That is an exploratory estimate, not a winner, win rate or promotion decision.
+The historical and exact-save feasibility gates have not been cleared.
+
+Evidence: `outputs/genome-20261106/screen-interim/`, including
+`per-gene-placement-effects.csv.gz`, complete metric/house tables and raw-backed
+`report.json.gz`. Transport-lost units are missing evidence, never AI losses.
+
 An exhaustive initial 61-switch/128-row fraction × nine mod/difficulty contexts ×
-four seeds × two assignments is 13,608 games before parameter/interaction races.
+four seeds × four orientations is 27,216 games before parameter/interaction races.
 Therefore the first table is produced for an explicit initial context and then
 expanded continuously; it must not imply that unmeasured contexts were tested.
 No first promotion date is promised while a required behaviour check fails.

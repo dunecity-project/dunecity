@@ -111,7 +111,7 @@ class GenomeMatchTests(unittest.TestCase):
             league['manifest'](base64.b64encode(raw).decode())
 
     def test_phase_transport_uses_matching_context_and_independent_native_default(self):
-        args = arguments('--research', 'on', '--research-installments', 'off')
+        args = arguments('--research', 'on', '--technology-installments', 'off')
         args.manifest_b64 = inline([dict(id='candidate', values={}, expression=[
             dict(when={'phase': ['mid'], 'house': ['harkonnen']}, values={'focus_fire': 0})])])
         game = league['schedule'](args)[0]
@@ -126,7 +126,7 @@ class GenomeMatchTests(unittest.TestCase):
             options = configparser.ConfigParser()
             options.read(directory / 'requested-options.ini')
             self.assertTrue(options.getboolean('Game Options', 'Research Lab'))
-            self.assertFalse(options.getboolean('Game Options', 'Research Installments'))
+            self.assertFalse(options.getboolean('Game Options', 'Technology Installments'))
 
     def test_saved_phase_helper_supports_all_houses_and_actual_difficulty_variants(self):
         _, genomes, registry, _ = league['manifest'](inline())
