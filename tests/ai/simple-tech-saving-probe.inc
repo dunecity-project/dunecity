@@ -355,12 +355,32 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
             require(addedCheap > 0, "Simple OFF did not reproduce the legacy future-funded cheap-unit quota");
             run.finish(true, "Legacy composition control failed");
         } else {
-            require(world.configHash != offHash && addedCheap == 0
-                        && heavy->getProductionQueueSize() == 1 && heavy->getCurrentProducedItem() == selected
-                        && world.queued(Structure_LightFactory) == 0,
-                    "Simple ON replaced the selected legal HF unit with a cheap unit or redundant light factory");
+            require(world.configHash != offHash, "Composition switch did not change the configuration hash");
+            require(unitChoiceOnly || addedCheap == 0,
+                    "Simple ON replaced the selected legal HF unit with a cheap unit");
+            if (unitChoiceOnly) {
+                // An overweight light group can still contain an absent, underweight
+                // family. Local factories may fill that deficit once, not mint a
+                // fresh quota for a family that is already at or above its target.
+                require(addedCheap >= 0, "Local composition choice cancelled an existing cheap commitment");
+                for (size_t slot = UnitMixPolicy::kFirstLightSlot; slot < vehicles.size(); ++slot) {
+                    const int64_t price = world.price(vehicles[slot]);
+                    const int64_t after = price
+                        * (world.owner->getNumItems(vehicles[slot]) + world.queued(vehicles[slot]));
+                    const int64_t added = after - plan.compositionValue[slot];
+                    const bool underweight = int64_t(plan.unitMix[slot]) * committedValue
+                        > plan.compositionValue[slot] * 10000;
+                    require(added >= 0 && (underweight ? added <= price : added == 0),
+                            "Local LF bought an overweight family or more than one indivisible deficit order");
+                }
+            }
+            require(heavy->getProductionQueueSize() == 1 && heavy->getCurrentProducedItem() == selected,
+                    "Composition choice did not queue the selected legal HF family");
+            require(world.queued(Structure_LightFactory) == 0,
+                    "Composition choice bought redundant LF capacity for the overweight light group");
+            const int queuedAfter = world.queuedLight();
             for (int i = 0; i < 5; ++i) world.build();
-            require(world.queuedLight() == queuedBefore,
+            require(world.queuedLight() == queuedAfter,
                     "Repeated/parallel producers minted fresh cheap quotas before any commitment completed");
             if (queuedControl)
                 for (size_t i = 0; i < 3; ++i)

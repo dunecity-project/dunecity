@@ -52,6 +52,9 @@ authored variants and variant-only suppliers. The paired unit-only military
 case gives both arms 19,999 credits and four real mature yards: this satisfies
 the unchanged legacy wealth/MCV target while retaining the OFF cheap-order
 control. Real paid unit completion and finite old-queue assertions remain.
+The local-rule check distinguishes an overweight light group from an absent,
+underweight light family: only the latter may accept one indivisible order.
+Repeated passes must not add another order before the shared commitment changes.
 An additional real-queue case checks two HFs can accept their local underweight
 unit while the globally largest deficit belongs to a busy LF.
 
