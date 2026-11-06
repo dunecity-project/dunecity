@@ -388,6 +388,9 @@ parser.add_argument('--compact-power-probe', action='store_true',
 parser.add_argument('--start-what-makes-sense-probe', action='store_true',
                     help='Verify zero-cash primary starts, real finite parallel drains, sequential '
                          'foundations and native fractional production payments with the switch OFF/ON')
+parser.add_argument('--first-factory-own-prerequisites-probe', action='store_true',
+                    help='Verify the first Light Factory on its own prerequisites OFF/ON: ahead of forecast-only '
+                         'power and growth, founded saving, blackout first, real paid completion')
 parser.add_argument('--existing-composition-unit-choice-probe', action='store_true',
                     help='Verify standalone owned/queued value-share selection, actual variants and factory choice '
                          'without enabling the technology-saving policy')
@@ -949,6 +952,7 @@ if args.trooper_support_probe: env['BALANCE_TROOPER_SUPPORT_PROBE'] = '1'
 if args.simple_tech_saving_probe: env['BALANCE_SIMPLE_TECH_SAVING_PROBE'] = '1'
 if args.compact_power_probe: env['BALANCE_COMPACT_POWER_PROBE'] = '1'
 if args.start_what_makes_sense_probe: env['BALANCE_START_WHAT_MAKES_SENSE_PROBE'] = '1'
+if args.first_factory_own_prerequisites_probe: env['BALANCE_FIRST_FACTORY_OWN_PREREQUISITES_PROBE'] = '1'
 if args.existing_composition_unit_choice_probe: env['BALANCE_EXISTING_COMPOSITION_UNIT_CHOICE_PROBE'] = '1'
 if args.research_lab_ai_probe: env['BALANCE_RESEARCH_LAB_AI_PROBE'] = '1'
 if args.growth_installment_probe or args.civic_priority_probe:

@@ -344,6 +344,9 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     }
     chooseYardCityFoundations(pass, turn, yardTurn);
     chooseYardCoreEconomy(pass, turn, yardTurn);
+    // Progressive spending's missing first factory is ordinary capital: it
+    // follows the power rules (FirstFactoryOwnPrerequisites runs it earlier).
+    chooseYardFirstFactory(pass, turn, yardTurn);
     chooseYardCityOpening(pass, turn, yardTurn);
     chooseYardServicesAndRefineries(pass, turn, yardTurn);
     // Existing civic, seed, worker/refining and first-port rules have first
@@ -814,6 +817,9 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
             .set("power_headroom",getHouse()->getProducedPower()-getHouse()->getPowerRequirement())
             .set("spendable",pass.money).set("continuing_income",pass.forecastNetIncome)
             .set("reserved",pass.civicReserveCost).set("rule",yardTurn.structureRule));
+    // The missing first ground producer outranks city growth and forecast
+    // power. Bootstrap, demanded civics and blackout recovery stay above it.
+    if (pass.firstFactoryOwnPrerequisites) chooseYardFirstFactory(pass, turn, yardTurn);
     // Honour the winning service before optional power headroom,
     // opening tech and production expansion. Required civics above and
     // actual blackout recovery stay ahead of it.
@@ -822,6 +828,7 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
         && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)!="trooper_support"
         && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)!="tech_progression"
         && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)!="tech_upgrade"
+        && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)!="first_factory"
         && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()) {
         const auto& service = pass.capitalCandidates[pass.capitalChoice];
         const bool defenceUpgrade=service.kind==std::string("defence_upgrade");
@@ -1166,6 +1173,21 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             step = prerequisite;
         }
     }
+}
+
+void QuantBot::chooseYardFirstFactory(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    if (yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic || !capitalPending(pass)) return;
+    const auto& factory = pass.capitalCandidates[pass.capitalChoice];
+    if (std::string_view(factory.kind) != "first_factory"
+        || factory.builder != turn.pBuilder->getObjectID() || !factory.site.isValid()
+        || !campaignAvailableToBuild(turn.pBuilder, factory.item)) return;
+    // The legacy plan saves the full founded quote, protected from cheaper
+    // lots; progressive spending starts it and lets admission pay.
+    yardTurn.itemID = pass.startWhatMakesSense || pass.money >= factory.price + factory.foundationCost
+        ? factory.item : NONE_ID;
+    yardTurn.crimeServiceSite = factory.site;
+    yardTurn.structureRule = yardTurn.itemID == NONE_ID ? "save_first_factory" : "first_factory";
+    yardTurn.skipRemainingStructureLogic = true;
 }
 
 void QuantBot::chooseYardCityOpening(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {

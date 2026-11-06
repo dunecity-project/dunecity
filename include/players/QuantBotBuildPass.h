@@ -97,6 +97,7 @@ struct QuantBot::BuildPass {
     // planBuildBudget()
     int money{};
     bool startWhatMakesSense{};
+    bool firstFactoryOwnPrerequisites{};
     bool threatenedFirstFactory{};
     bool powerBeforeFirstFactory{};
     Uint32 firstFactoryPriorityBuilder{NONE_ID};

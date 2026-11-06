@@ -74,6 +74,7 @@
 #include "zone-power-probe.inc"
 #include "tech-production-probe.inc"
 #include "simple-tech-saving-probe.inc"
+#include "first-factory-own-prerequisites-probe.inc"
 #include "research-lab-continuation-probe.inc"
 #include "research-lab-ai-probe.inc"
 #include "factory-continuation-probe.inc"
@@ -154,6 +155,10 @@ int runCampaignBalanceProbe() {
     }
     if(std::getenv("BALANCE_START_WHAT_MAKES_SENSE_PROBE")) {
         runStartWhatMakesSenseProbe(partnerClass.c_str());
+        return MENU_QUIT_DEFAULT;
+    }
+    if(std::getenv("BALANCE_FIRST_FACTORY_OWN_PREREQUISITES_PROBE")) {
+        runFirstFactoryOwnPrerequisitesProbe(partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
     if(std::getenv("BALANCE_RESEARCH_LAB_AI_PROBE")) {

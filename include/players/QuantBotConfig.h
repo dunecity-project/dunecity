@@ -144,8 +144,8 @@ struct QuantBotConfig {
     /// CityGrowthPower, CityPowerSizing, CityCompactPower, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
     /// StorageCapacity, FundedClassicProduction, TrooperSupport, SimpleTechSavings,
-    /// ExistingCompositionUnitChoice, BufferedHeavyProduction, IncomeHeavyFactories,
-    /// LauncherKiteExtraDistance, ExhaustedArmyDispatch;
+    /// FirstFactoryOwnPrerequisites, ExistingCompositionUnitChoice, BufferedHeavyProduction,
+    /// IncomeHeavyFactories, LauncherKiteExtraDistance, ExhaustedArmyDispatch;
     /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -316,6 +316,11 @@ struct QuantBotConfig {
         /// Start the highest sensible project without saving its full quote.
         /// Parallel orders share the live per-tick drain budget; default OFF.
         bool startWhatMakesSense;
+        /// A Custom house with no Light/Heavy Factory, owned or pending, buys the
+        /// Light Factory once its own prerequisites, power draw and a site allow it,
+        /// whether or not the Heavy Factory chain is legal; ahead of city growth and
+        /// forecast-only power, behind a real deficit. Default OFF.
+        bool firstFactoryOwnPrerequisites;
         /// Per-producer choice from owned plus queued value-share deficits.
         /// No overweight light filler; no tech/economy changes.
         /// Default OFF; behaviour, historical and Genome gates own promotion.

@@ -20,9 +20,11 @@ The follow-up registry has 339 genes / 64 booleans: `CityCompactPower`
 (source `dc2aee77`), `ContinuousResearch` (`f82f13d9`) and
 `StartWhatMakesSense` (`d3098d9a`) are independent `0/1`, default-OFF genes.
 UnitChoice's `BufferedHeavyProduction` and `IncomeHeavyFactories` (source
-`e9f72ce3`, default OFF) bring the QuantBot part to 341 genes / 66 booleans.
+`e9f72ce3`, default OFF) brought the QuantBot part to 341 genes / 66 booleans;
+`FirstFactoryOwnPrerequisites` (default OFF, `docs/quantbot-money-planning.md`)
+brings it to 342 genes / 67 booleans.
 The registry also holds one **game-rule gene**, `technology_installments`
-(342 rows in total). Every evaluation pin must include its complete
+(343 rows in total). Every evaluation pin must include its complete
 parser/registry pair.
 
 ### Game-rule genes

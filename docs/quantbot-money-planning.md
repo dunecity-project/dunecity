@@ -639,6 +639,44 @@ not this candidate's author.
   under the shared global installment rule start progressively; legacy
   global-OFF acceptance remains real and identical for humans.
 
+### 5.7 Missing first ground producer: `FirstFactoryOwnPrerequisites`
+
+Measured cause (S1 save; b8a627aa, 27a96f49 and 5093ebca continuations): house
+2 has a legal, sited Light Factory, but every capital plan lists it only as
+`production`/`bootstrap_managed_separately` with score 0, and
+`funded_factory_opening` is 0 in every plan. Within a build pass the only route
+to a first LF was that opening path, which walks the Heavy Factory chain and so
+requires the whole chain to be legal (HF tech 4 needs Radar and LF; the house is
+T2). No spending check ever refused an LF. It is a selection defect, not money.
+
+The independent hashed bool `[Force Concentration] FirstFactoryOwnPrerequisites=0`
+/ `force.firstFactoryOwnPrerequisites` (registry `first_factory_own_prerequisites`,
+default OFF) adds one capital candidate, kind `first_factory`, reason
+`missing_ground_producer`, score 5000 (the first heavy factory's city claim), when:
+
+- the house has no Light or Heavy Factory, owned or pending;
+- the yard may build the LF itself (own prerequisites, technology, permissions)
+  and has a legal site, whether or not the Heavy Factory chain is legal;
+- its own power draw fits actual generation net of queued consumers (only the
+  forecast reserve is outranked: a real deficit or blackout is answered first);
+- no unfinished spiceless seed economy holds the cash, and no threatened first
+  factory already has its own StartWhatMakesSense candidate.
+
+With the gene ON and StartWhatMakesSense OFF the candidate is protected one-off
+capital, like the city supply/construction claims: no zoning fallback or
+dedicated growth yard spends its savings. Its own yard runs it after storage,
+required research, civics, the seed economy and blackout recovery, and before
+forecast power and every growth rule. It buys at the full founded quote and
+otherwise saves (`save_first_factory`); legacy finance is unchanged.
+
+StartWhatMakesSense ranks the same candidate (built for it whether or not this
+gene is ON) at purpose priority 30. It is not urgent, so 5093ebca's urgent-only
+(<30) pre-emption still holds; its yard starts it at the ordinary purchase step
+after the power rules (rule `first_factory`). With both genes ON the earlier
+position applies. The fixture `quantbot_first_factory_own_prerequisites_{hard,brutal}`
+covers OFF/ON, forecast-only power and growth, founded saving, blackout first,
+paid completion and the hash.
+
 ## 6. Required evidence before implementation promotion
 
 These are required behavior/measurement gates, not assertions that an unobserved

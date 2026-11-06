@@ -904,6 +904,18 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --path-workers 1 --wall-timeout 240 --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/start-what-makes-sense-probe)
         set_tests_properties(quantbot_start_what_makes_sense PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # First Light Factory on its own prerequisites, independently OFF.
+        foreach(first_factory_difficulty IN ITEMS hard brutal)
+            add_test(NAME quantbot_first_factory_own_prerequisites_${first_factory_difficulty}
+                COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --first-factory-own-prerequisites-probe
+                --repeatable --mod dunecity --partner-difficulty ${first_factory_difficulty}
+                --seed 1841712204 --path-workers 1 --wall-timeout 240
+                --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/first-factory-own-prerequisites-${first_factory_difficulty}-probe)
+            set_tests_properties(quantbot_first_factory_own_prerequisites_${first_factory_difficulty}
+                PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        endforeach()
         # Stateless Simple policy, independently OFF pending outcome acceptance.
         foreach(simple_tech_mod IN ITEMS vanilla dunecity Dune2R)
             foreach(simple_tech_difficulty IN ITEMS medium hard brutal)

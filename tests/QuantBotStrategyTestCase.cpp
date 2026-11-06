@@ -579,6 +579,46 @@ TEST_CASE("Unit choice and heavy surplus and income capacity are independently h
     std::filesystem::remove(savedPath);
 }
 
+TEST_CASE("First factory by its own prerequisites is an independently hashed default-off gene",
+          "[ai][production][config][first-factory-own-prerequisites]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.firstFactoryOwnPrerequisites);
+    REQUIRE_FALSE(defaults.force.startWhatMakesSense);
+    const auto path=std::filesystem::temp_directory_path()/"quantbot-first-factory-own-prerequisites-test.ini";
+    const auto savedPath=std::filesystem::temp_directory_path()/"quantbot-first-factory-own-prerequisites-saved-test.ini";
+    std::array<std::string,4> hashes;
+    size_t count=0;
+    for (const bool progressive:{false,true}) for (const bool enabled:{false,true}) {
+        CAPTURE(progressive,enabled);
+        QuantBotConfig expected=defaults;
+        expected.force.startWhatMakesSense=progressive;
+        expected.force.firstFactoryOwnPrerequisites=enabled;
+        QuantBotConfig config=defaults;
+        config.force.startWhatMakesSense=progressive;
+        config.force.firstFactoryOwnPrerequisites=!enabled;
+        {
+            std::ofstream ini(path);
+            ini<<"[Force Concentration]\nFirstFactoryOwnPrerequisites="<<enabled<<'\n';
+        }
+        REQUIRE(config.applyOverrides(path.string()));
+        REQUIRE(config.force.firstFactoryOwnPrerequisites==enabled);
+        REQUIRE(config.force.startWhatMakesSense==progressive);
+        REQUIRE(config.getConfigHash()==expected.getConfigHash());
+        hashes[count++]=config.getConfigHash();
+        REQUIRE(config.save(savedPath.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(savedPath.string()));
+        REQUIRE(restored.force.firstFactoryOwnPrerequisites==enabled);
+        REQUIRE(restored.force.startWhatMakesSense==progressive);
+        REQUIRE(restored.getConfigHash()==expected.getConfigHash());
+    }
+    REQUIRE(count==hashes.size());
+    for (size_t first=0;first<count;++first) for (size_t second=first+1;second<count;++second)
+        REQUIRE(hashes[first]!=hashes[second]);
+    std::filesystem::remove(path);
+    std::filesystem::remove(savedPath);
+}
+
 TEST_CASE("Existing composition unit choice defaults off and independently round-trips both hashed states",
           "[ai][production][config][existing-composition-unit-choice]") {
     const QuantBotConfig defaults;

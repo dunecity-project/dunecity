@@ -988,6 +988,7 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     auto& data = currentGame->objectData.data;
     pass.money = getHouse()->getCredits();
     pass.startWhatMakesSense = botConfig().force.startWhatMakesSense;
+    pass.firstFactoryOwnPrerequisites = botConfig().force.firstFactoryOwnPrerequisites;
     const bool simple = simpleTechPolicyActive();
     pass.techSavings = simple;
     const auto& unitChoice = botConfig().force;
@@ -4332,6 +4333,29 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                         added,std::max(0,pass.militaryBudget-pass.militaryValue),capacity.cost);
                 if (actual==0) {
                     capacity.reason="bootstrap_managed_separately";
+                    // A house without any ground producer buys its first Light
+                    // Factory as ordinary capital once that factory's own
+                    // prerequisites, power draw and a site allow it. The funded
+                    // factory opening needs the whole Heavy Factory chain to be
+                    // legal, which a low-technology city never has. Progressive
+                    // spending ranks this same candidate by its shared priorities;
+                    // a threatened first factory already has its own candidate.
+                    // The seed economy still comes first.
+                    if (factory==Structure_LightFactory
+                        && (pass.firstFactoryOwnPrerequisites || pass.startWhatMakesSense)
+                        && !pass.threatenedFirstFactory && !cityBootstrapNeeded(pass)
+                        && pass.itemCount[Structure_LightFactory]==0 && pass.itemCount[Structure_HeavyFactory]==0
+                        && campaignAvailableToBuild(builder,factory)
+                        // Its own draw must fit actual generation net of queued
+                        // consumers: only forecast reserve is outranked.
+                        && (!pass.powerRules || getHouse()->getProducedPower()-getHouse()->getPowerRequirement()
+                            -pass.committedPowerDemand>=std::max(0,data[factory][houseID].power))) {
+                        capacity.site=findPlaceLocation(factory);
+                        if (capacity.site.isValid()) {
+                            capacity.kind="first_factory";capacity.score=5000;
+                            capacity.reason="missing_ground_producer";
+                        }
+                    }
                     // The seed economy comes first. Finalize the full founded
                     // quote below: only an already-funded multi-yard bootstrap
                     // may save for this first supplier before it is affordable.
@@ -4715,7 +4739,8 @@ Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
             boundedClaim |= std::string_view(candidate.reason)=="ground_threat"
                 || std::string_view(candidate.reason)=="early_rocket"
                 || std::string_view(candidate.kind)=="city_supply"
-                || std::string_view(candidate.kind)=="city_construction";
+                || std::string_view(candidate.kind)=="city_construction"
+                || std::string_view(candidate.kind)=="first_factory";
             if (protectedChoice<0 || candidate.score>pass.capitalCandidates[protectedChoice].score)
                 protectedChoice=int(i);
         }
@@ -4735,6 +4760,7 @@ Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
     // overlap shortfall they are a bounded one-off price (yard upgrades and a
     // Radar) that ends once paid, and plots or bargains bought from their
     // savings are what left a no-spice city with no turret at all.
+    // A missing first ground producer is the same kind of one-off price.
     pass.protectionCapital = pass.capitalChoice >= 0
         && (pass.capitalCandidates[pass.capitalChoice].reason == std::string("crime_prevention")
             || pass.capitalCandidates[pass.capitalChoice].reason == std::string("air_coverage")
@@ -4743,6 +4769,7 @@ Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
             || std::string_view(pass.capitalCandidates[pass.capitalChoice].reason)=="early_rocket"
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("city_supply")
             || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "city_construction"
+            || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "first_factory"
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_upgrade")
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_prerequisite"));
     // Existing emergency/supplier savings keep priority. First cover for a
@@ -4926,6 +4953,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("buffered_heavy_production",pass.bufferedHeavyProduction)
             .set("existing_composition_unit_choice",pass.existingCompositionChoice)
             .set("simple_tech_savings",pass.techSavings)
+            .set("first_factory_own_prerequisites",pass.firstFactoryOwnPrerequisites)
             .set("projected_cash",pass.cashFlow.projectedCash).set("cash_buffer",pass.cashBuffer)
             .set("net_burn_per_minute",pass.cashFlow.netBurnPerMinute).set("cash_runway_seconds",pass.cashFlow.runwaySeconds)
             .set("funds_parallel_production",pass.cashFlow.fundsParallelProduction).set("shared_priority",pass.sharedSpending)

@@ -1871,6 +1871,9 @@ private:
     void chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Core protection, power reserve, reactor and production recovery.
     void chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Buys, or saves the legacy founded quote for, the capital plan's pending
+    /// first_factory (missing first ground producer) on its own yard.
+    void chooseYardFirstFactory(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// City opening refineries, zones, vehicle factory and first transport.
     void chooseYardCityOpening(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Crime services, refineries and repair support.

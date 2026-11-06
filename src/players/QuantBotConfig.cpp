@@ -370,6 +370,7 @@ QuantBotConfig::QuantBotConfig() {
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
     force.simpleTechSavings = false;
     force.startWhatMakesSense = false;
+    force.firstFactoryOwnPrerequisites = false;
     force.existingCompositionUnitChoice = false;
     force.bufferedHeavyProduction = false;
     force.incomeHeavyFactories = false;
@@ -695,6 +696,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
         iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
         iniFile.setBoolValue("Force Concentration", "StartWhatMakesSense", force.startWhatMakesSense);
+        iniFile.setBoolValue("Force Concentration", "FirstFactoryOwnPrerequisites", force.firstFactoryOwnPrerequisites);
         iniFile.setBoolValue("Force Concentration", "ExistingCompositionUnitChoice", force.existingCompositionUnitChoice);
         iniFile.setBoolValue("Force Concentration", "BufferedHeavyProduction", force.bufferedHeavyProduction);
         iniFile.setBoolValue("Force Concentration", "IncomeHeavyFactories", force.incomeHeavyFactories);
@@ -846,6 +848,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.simpleTechSavings = iniFile.getBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
     force.startWhatMakesSense = iniFile.getBoolValue(
         "Force Concentration", "StartWhatMakesSense", force.startWhatMakesSense);
+    force.firstFactoryOwnPrerequisites = iniFile.getBoolValue(
+        "Force Concentration", "FirstFactoryOwnPrerequisites", force.firstFactoryOwnPrerequisites);
     force.existingCompositionUnitChoice = iniFile.getBoolValue(
         "Force Concentration", "ExistingCompositionUnitChoice", force.existingCompositionUnitChoice);
     force.bufferedHeavyProduction = iniFile.getBoolValue(
@@ -1362,6 +1366,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("trooperSupport", force.trooperSupport);
     addNamed("simpleTechSavings", force.simpleTechSavings);
     addNamed("startWhatMakesSense", force.startWhatMakesSense);
+    addNamed("firstFactoryOwnPrerequisites", force.firstFactoryOwnPrerequisites);
     addNamed("existingCompositionUnitChoice", force.existingCompositionUnitChoice);
     addNamed("bufferedHeavyProduction", force.bufferedHeavyProduction);
     addNamed("incomeHeavyFactories", force.incomeHeavyFactories);
