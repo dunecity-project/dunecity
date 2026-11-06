@@ -263,16 +263,16 @@ struct QuantBotConfig {
         /// instead of turning every affordable windtrap into a 2,000-credit reactor.
         /// Funded installment projects and emergency recovery retain their existing priority.
         bool cityPowerSizing;
+        /// Opt-in: prefer a legal funded reactor when its power per credit and
+        /// per tile both dominate wind, even for a small immediate shortfall.
+        /// Existing commitments, foundation costs and placement safety still apply.
+        bool cityCompactPower;
         /// Protect tax-dependent optional yards and producer upgrades with the
         /// existing four-minute working-capital forecast. Viable spice economies
         /// retain their normal budgets; military and required recovery are unchanged.
         bool cityOpeningCapital;
         /// Protect Hard/Brutal's affordable first heavy factory in a seeded tax
         /// city with a standing Starport. CityFirstFactorySaving optionally
-        /// Opt-in: prefer a legal funded reactor when its power per credit and
-        /// per tile both dominate wind, even for a small immediate shortfall.
-        /// Existing commitments, foundation costs and placement safety still apply.
-        bool cityCompactPower;
         /// permits forecast-funded saving; seed, power and recovery gates remain.
         bool cityConstructionCapital;
         /// Reserve a missing production prerequisite before the factory/repair

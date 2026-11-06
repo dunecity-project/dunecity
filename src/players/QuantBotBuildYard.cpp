@@ -2099,6 +2099,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
             : availableBaseFootprints >= QuantBotColonisationPolicy::kCrampedFootprints
                 ? std::max(availableBaseFootprints, windNeeded) : std::max(1, availableBaseFootprints);
         const int protectedCash = std::max({1000, pass.cityWorkingReserve, cityBootstrapReserve(pass)});
+        const bool compactNuclear = nuclearSite.isValid() && preferCompactNuclear(pass, turn.pBuilder);
+        const Uint32 priorGenerator = yardTurn.itemID;
         const bool nuclear = nuclearSite.isValid()
             && (compactNuclear || onInstallments(turn, Structure_NuclearPlant)
                 || (botConfig().force.cityPowerSizing || pass.techSavings
@@ -2107,8 +2109,11 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
                         windSites, cash, protectedCash, !getHouse()->hasPower() && !pass.techSavings)
                     : cash >= data[Structure_NuclearPlant][houseID].price));
         yardTurn.itemID = nuclear ? Structure_NuclearPlant : windSite.isValid() ? Structure_WindTrap : NONE_ID;
+        if (compactNuclear && yardTurn.itemID != priorGenerator)
+            yardTurn.crimeServiceSite = Coord::Invalid();
         if (yardTurn.itemID == NONE_ID) yardTurn.skipRemainingStructureLogic = true;
         traceDecision("city_generator_choice", AITelemetry::Record().set("item",yardTurn.itemID)
+            .set("builder",turn.pBuilder->getObjectID())
             .set("need",need).set("committed_demand",pass.committedPowerDemand).set("cash",cash)
             .set("forecast_growth",projectedPowerDemandGrowth).set("forecast_seconds",120)
             .set("zone_power_current",pass.currentZonePower).set("zone_power_mature",pass.matureZonePower)
@@ -2119,8 +2124,7 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
             .set("wind_needed",windNeeded).set("wind_site",windSite.isValid()).set("nuclear",nuclear)
             .set("installments",nuclear && onInstallments(turn, Structure_NuclearPlant))
             .set("sized_power",botConfig().force.cityPowerSizing).set("protected_cash",protectedCash)
-        const bool compactNuclear = nuclearSite.isValid() && preferCompactNuclear(pass, turn.pBuilder);
-        const Uint32 priorGenerator = yardTurn.itemID;
+            .set("compact_power",botConfig().force.cityCompactPower).set("compact_nuclear",compactNuclear)
             .set("wind_sites",windSites)
             .set("industrial_demand",pass.ownIndValve));
     }
@@ -2130,11 +2134,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         yardTurn.itemID=Structure_WindTrap; yardTurn.structureRule="campaign_planned_power";
         yardTurn.crimeServiceSite=Coord::Invalid();
     }
-        if (compactNuclear && yardTurn.itemID != priorGenerator)
-            yardTurn.crimeServiceSite = Coord::Invalid();
     // Every optional military lane, including cash/backlog rules and funded
     // parallel yards, must supply the current owned-plus-queued unit choice.
-            .set("builder",turn.pBuilder->getObjectID())
     // The first supplier (or its replacement) still unlocks workers, MCVs,
     // transports and the tech tree. Pending suppliers already cover bootstrap.
     if ((yardTurn.itemID==Structure_LightFactory || yardTurn.itemID==Structure_HeavyFactory
@@ -2145,7 +2146,6 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     }
     if (pass.sharedSpending && !pass.fundedCityProduction
         && (yardTurn.itemID==Structure_LightFactory || yardTurn.itemID==Structure_HeavyFactory || yardTurn.itemID==Structure_HighTechFactory)
-            .set("compact_power",botConfig().force.cityCompactPower).set("compact_nuclear",compactNuclear)
         && getHouse()->getNumItems(yardTurn.itemID)>0) {
         const bool fundedLane=std::any_of(pass.capitalCandidates.begin(),pass.capitalCandidates.end(),[&](const auto& c) {
             return c.builder==turn.pBuilder->getObjectID() && c.item==yardTurn.itemID && c.score>0;

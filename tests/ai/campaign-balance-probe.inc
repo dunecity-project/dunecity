@@ -147,11 +147,11 @@ int runCampaignBalanceProbe() {
         runTrooperSupportProbe();
         return MENU_QUIT_DEFAULT;
     }
-    if(std::getenv("BALANCE_RESEARCH_LAB_AI_PROBE")) {
     if(std::getenv("BALANCE_COMPACT_POWER_PROBE")) {
         runCompactPowerProbe(partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
+    if(std::getenv("BALANCE_RESEARCH_LAB_AI_PROBE")) {
         runResearchLabAIProbe(requestedMod.c_str(), partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }

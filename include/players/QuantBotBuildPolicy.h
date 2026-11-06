@@ -575,8 +575,6 @@ inline int openingSpiceRefineries(int sustainableHarvesters) {
 inline int fundedSpiceHarvesters(int sustainable, int refineries) {
     return std::max(0, std::min(sustainable, std::max(0, refineries) * 3));
 }
-// Compare useful capacity, available space and the ability to fund a larger
-// reserve. Small starts keep cheap wind; rich cities and blackout recovery
 // A compact generator must improve both constrained resources without making
 // either worse. Compare the whole output, not only today's small top-up.
 inline bool compactGeneratorDominates(int output, int price, int tiles,
@@ -591,6 +589,8 @@ inline bool compactGeneratorDominates(int output, int price, int tiles,
         && (cost < otherCost || space < otherSpace);
 }
 
+// Compare useful capacity, available space and the ability to fund a larger
+// reserve. Small starts keep cheap wind; rich cities and blackout recovery
 // prefer nuclear. Cash already committed to other work stays protected.
 inline bool preferNuclearPower(int need, int windOutput, int windPrice, int nuclearPrice,
                               int availableWindSites, int cash, int protectedCash, bool powerShortage = false) {

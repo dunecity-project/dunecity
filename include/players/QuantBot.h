@@ -1757,6 +1757,8 @@ private:
     AITelemetry::Record decisionState(BuildPass& pass);
     bool campaignPowerNeeded(BuildPass& pass, int nextDemand);
     bool powerGenerationPending(BuildPass& pass);
+    /// Opt-in compact power comparison, including actual legal foundation quotes.
+    bool preferCompactNuclear(BuildPass& pass, const BuilderBase* builder);
     Uint32 chooseCityZone(BuildPass& pass, const BuilderBase* builder, bool bootstrap, bool missingOnly = false);
     bool canBuildMilitaryVehicle(BuildPass& pass, const BuilderBase* factory);
     CivicPlan planCivicForYard(BuildPass& pass, const BuilderBase* yard);
@@ -1769,8 +1771,6 @@ private:
     bool troopContentExists(BuildPass& pass, const BuilderBase* builder);
     bool trooperOrderAdmitted(BuildPass& pass, Uint32 item, int value);
     Uint32 supportTrooperOrder(BuildPass& pass, const BuilderBase* builder, int money, int target);
-    /// Opt-in compact power comparison, including actual legal foundation quotes.
-    bool preferCompactNuclear(BuildPass& pass, const BuilderBase* builder);
     Uint32 trooperInfrastructureItem(BuildPass& pass, const BuilderBase* yard, bool requireCash);
     static int purchasePrice(const BuilderBase* builder, Uint32 item);
     QuantBotFoundationPolicy::Plan foundationPlan(const BuilderBase* builder, Uint32 item, Coord site, const std::vector<Uint32>& clearedZones = std::vector<Uint32>{});

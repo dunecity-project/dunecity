@@ -1272,6 +1272,33 @@ bool QuantBot::powerGenerationPending(BuildPass& pass) {
         || pass.itemCount[Structure_WindTrap] > getHouse()->getNumItems(Structure_WindTrap);
 }
 
+bool QuantBot::preferCompactNuclear(BuildPass& pass, const BuilderBase* builder) {
+    if (!botConfig().force.cityCompactPower || !pass.citySimEnabled
+        || powerGenerationPending(pass) || getHouse()->getNumItems(Structure_WindTrap) == 0
+        || !campaignAvailableToBuild(builder, Structure_NuclearPlant)) return false;
+    const Coord nuclearSite = findPlaceLocation(Structure_NuclearPlant);
+    if (!nuclearSite.isValid()) return false;
+    const auto nuclearFoundation = foundationPlan(builder, Structure_NuclearPlant, nuclearSite);
+    if (!nuclearFoundation.complete) return false;
+    int nuclearCost = purchasePrice(builder, Structure_NuclearPlant);
+    for (const auto& slab : nuclearFoundation.orders) nuclearCost += purchasePrice(builder, slab.item);
+    // Funding policy remains separate: this choice never borrows another
+    // queue's cash or invents a new income/reserve gate.
+    if (pass.money < nuclearCost) return false;
+    int windCost = purchasePrice(builder, Structure_WindTrap);
+    const Coord windSite = findPlaceLocation(Structure_WindTrap);
+    if (windSite.isValid()) {
+        const auto windFoundation = foundationPlan(builder, Structure_WindTrap, windSite);
+        for (const auto& slab : windFoundation.orders) windCost += purchasePrice(builder, slab.item);
+    }
+    const auto& data = currentGame->objectData.data;
+    const int houseID = getHouse()->getHouseID();
+    const Coord nuclearSize = getStructureSize(Structure_NuclearPlant), windSize = getStructureSize(Structure_WindTrap);
+    return QuantBotBuildPolicy::compactGeneratorDominates(
+        -data[Structure_NuclearPlant][houseID].power, nuclearCost, nuclearSize.x * nuclearSize.y,
+        -data[Structure_WindTrap][houseID].power, windCost, windSize.x * windSize.y);
+}
+
 Uint32 QuantBot::chooseCityZone(BuildPass& pass, const BuilderBase* builder, bool bootstrap, bool missingOnly) {
     if (!campaignAllowsZone(pass.itemCount[Structure_ZoneResidential]+pass.itemCount[Structure_ZoneCommercial]+pass.itemCount[Structure_ZoneIndustrial])) return Uint32(NONE_ID);
 
@@ -1511,33 +1538,6 @@ Uint32 QuantBot::chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, 
             + std::max(0,pass.itemCount[zone]-getHouse()->getNumItems(zone));
         const int demand = zone == Structure_ZoneResidential ? pass.ownResValve : industry ? pass.ownIndValve : pass.ownComValve;
         residential = setupInvestment(zone,site,power);
-bool QuantBot::preferCompactNuclear(BuildPass& pass, const BuilderBase* builder) {
-    if (!botConfig().force.cityCompactPower || !pass.citySimEnabled
-        || powerGenerationPending(pass) || getHouse()->getNumItems(Structure_WindTrap) == 0
-        || !campaignAvailableToBuild(builder, Structure_NuclearPlant)) return false;
-    const Coord nuclearSite = findPlaceLocation(Structure_NuclearPlant);
-    if (!nuclearSite.isValid()) return false;
-    const auto nuclearFoundation = foundationPlan(builder, Structure_NuclearPlant, nuclearSite);
-    if (!nuclearFoundation.complete) return false;
-    int nuclearCost = purchasePrice(builder, Structure_NuclearPlant);
-    for (const auto& slab : nuclearFoundation.orders) nuclearCost += purchasePrice(builder, slab.item);
-    // Funding policy remains separate: this choice never borrows another
-    // queue's cash or invents a new income/reserve gate.
-    if (pass.money < nuclearCost) return false;
-    int windCost = purchasePrice(builder, Structure_WindTrap);
-    const Coord windSite = findPlaceLocation(Structure_WindTrap);
-    if (windSite.isValid()) {
-        const auto windFoundation = foundationPlan(builder, Structure_WindTrap, windSite);
-        for (const auto& slab : windFoundation.orders) windCost += purchasePrice(builder, slab.item);
-    }
-    const auto& data = currentGame->objectData.data;
-    const int houseID = getHouse()->getHouseID();
-    const Coord nuclearSize = getStructureSize(Structure_NuclearPlant), windSize = getStructureSize(Structure_WindTrap);
-    return QuantBotBuildPolicy::compactGeneratorDominates(
-        -data[Structure_NuclearPlant][houseID].power, nuclearCost, nuclearSize.x * nuclearSize.y,
-        -data[Structure_WindTrap][houseID].power, windCost, windSize.x * windSize.y);
-}
-
         residential.annualIncome = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(zone,population,level),tax,land));
         if (zone != Structure_ZoneResidential) {
             // One C/I job supports eight residents. Credit only half the
@@ -3410,6 +3410,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     && !powerGenerationPending(pass)) {
                     Uint32 generator=NONE_ID;
                     Coord site=Coord::Invalid();
+                    const bool compactPower = preferCompactNuclear(pass, builder);
                     for (Uint32 item:{Structure_WindTrap,Structure_NuclearPlant}) {
                         if (!campaignAvailableToBuild(builder,item)) continue;
                         const Coord at=findPlaceLocation(item);
@@ -3691,7 +3692,6 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 supplier.builder=builder->getObjectID();supplier.item=Structure_HighTechFactory;
                 supplier.kind="transport_production";supplier.price=data[supplier.item][houseID].price;
                 supplier.cost=buildingCapitalCost(pass, supplier.item);supplier.site=findPlaceLocation(supplier.item);
-                    const bool compactPower = preferCompactNuclear(pass, builder);
                 if (supplier.site.isValid()) {
                     supplier.score=pass.itemCount[Unit_Carryall]==0 ? 5500 : 4500;
                     supplier.reason="transport_imports_unavailable";

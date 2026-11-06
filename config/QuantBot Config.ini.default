@@ -360,12 +360,12 @@ ResearchLabProgression=1
 CityGrowthPower=1
 # Size city reserve generation without consuming the seed town's working capital.
 CityPowerSizing=1
-# Preserve a tax-dependent seed town's existing four-minute working capital.
-# Viable spice economies retain normal budgets; only optional MCVs/producer upgrades are gated.
-# Military production and required power/supply are unchanged.
 # Opt-in: prefer a legal funded Nuclear Plant when it uses fewer tiles and
 # credits per unit of power than wind, even for a small current shortfall.
 CityCompactPower=0
+# Preserve a tax-dependent seed town's existing four-minute working capital.
+# Viable spice economies retain normal budgets; only optional MCVs/producer upgrades are gated.
+# Military production and required power/supply are unchanged.
 CityOpeningCapital=1
 # Hard/Brutal: protect a seeded tax city's already affordable first Heavy Factory.
 # Below-quote saving requires the separate opt-in CityFirstFactorySaving.
