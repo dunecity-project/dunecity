@@ -689,14 +689,9 @@ parser.add_argument('--audit-every', type=int, default=50,
 parser.add_argument('--jobs', type=int, default=1)
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--scores', type=Path, help='Merge canonical per-game observations, usually observations.csv.gz')
-def main(argv=None):
-    args = parser.parse_args(argv)
-    try:
-        validate(args)
-        return report(args) if args.report else run(args)
-    except ValueError as error:
-        parser.error(str(error))
-
-
-if __name__ == '__main__':
-    sys.exit(main())
+args = parser.parse_args()
+try:
+    validate(args)
+    sys.exit(report(args) if args.report else run(args))
+except ValueError as error:
+    parser.error(str(error))
