@@ -771,6 +771,59 @@ position applies. The fixture `quantbot_first_factory_own_prerequisites_{hard,br
 covers OFF/ON, forecast-only power and growth, founded saving, blackout first,
 paid completion and the hash.
 
+### 5.8 Bounded compact financing with `StartWhatMakesSense` OFF
+
+`CityCompactPower` remains default OFF and is independent of the rejected global
+planner. With that gene ON and SWMS OFF, a powered city may start its genuinely
+qualifying compact reactor before banking the full quote. The existing
+`CityEconomyInvestmentPolicy::installmentOrder` decides admission from:
+
+- this yard's actual reactor offer and complete legal slab plan, with each slab
+  priced at this builder's actual offer;
+- `pass.money`, after existing queue commitments and per-builder reserves, not
+  the raw house treasury;
+- the full slab quote plus the reactor's first installment as the start budget;
+- strictly positive `forecastNetIncome`, unless the complete package is already
+  funded outright. Income need not cover the full price within the forecast.
+
+Buildability, the owned initial Windtrap, cost/output and space/output dominance,
+legal reactor site, complete foundation and one-generator-pending guards remain
+mandatory. Fully funded compact choices keep their existing path. A short-funded
+compact capacity project does not replace immediate blackout recovery; the
+existing planned-reactor and emergency-Windtrap paths remain separate.
+
+Only a real `order` decision designates this yard's reactor for installments.
+That designation survives the below-100-credit yard entry, selected
+`city_growth_power` claim, final generator vetting, committed-price veto,
+affordable-zone fallback and founded-package/wrapper admission. Slabs queue and
+pay separately, so the reactor wrapper asks for its first installment only.
+The growth-power commitment uses one actual slab quote, not an estimate plus
+the same actual slabs again.
+
+The transient compact designation explicitly does **not** inherit
+SimpleTechSavings' selected-tech no-floor/no-quote-debit exemption. Every accepted
+slab and reactor still debits its entire offer from same-pass `pass.money` and
+books `capitalOrderedCost`; other yards and factories cannot reuse that money.
+Ordinary site reservation, pending/item counts and conservative legacy rollback
+are retained. Noncompact selected-tech behavior is unchanged. Factory, Starport,
+research and native human/AI payments, prices, credits, saves and protocols are
+not changed; this is not a new global forecast, wallet or army-share policy.
+
+`tests/ai/compact-power-probe.inc` extends the existing native
+`quantbot_compact_power_{easy,medium,hard,brutal}` fixtures. It covers actual
+start-budget boundaries, positive/dry/loss-making outlooks, fully funded
+exceptions, concrete/no-concrete/incomplete foundations, the CityGrowthPower ×
+SimpleTechSavings interaction, two-yard deduplication and ordinary same-pass
+factory quote accounting. Low-cash completion uses real harvesting income and
+native production payments with SWMS explicitly OFF. The existing 1,999-credit
+Windtrap control is retained with explicit no-income/start-budget preconditions,
+not interpreted as a universal full-reactor-price requirement.
+
+These are implemented regression cases, **not observed passing results**. Main
+must run the four focused native fixtures, the exact private-save continuations
+and the new same-rule paired smoke on a pinned integration revision. The
+48-game SWMS rejection and no-288/no-promotion decision in §7 remain in force.
+
 ## 6. Required evidence before implementation promotion
 
 These are required behavior/measurement gates, not assertions that an unobserved

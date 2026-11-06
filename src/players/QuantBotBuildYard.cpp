@@ -66,9 +66,14 @@ void QuantBot::buildConstructionYard(BuildPass& pass, BuilderTurn& turn) {
     if (installmentProject && !pass.techUpgrade) {
         turn.installmentProject = pass.techCandidate.item;
         turn.installmentProjectStartBudget = 0;
+        turn.compactPowerInstallment = false;
     }
+    int compactStartBudget = 0;
+    const bool compactEntry = !pass.startWhatMakesSense && getHouse()->getCredits() < 100
+        && !turn.pBuilder->isUpgrading() && turn.pBuilder->getProductionQueueSize() == 0
+        && preferCompactNuclear(pass, turn.pBuilder, &compactStartBudget) && compactStartBudget > 0;
     if (!turn.pBuilder->isUpgrading()
-        && (pass.startWhatMakesSense || getHouse()->getCredits() >= 100 || installmentProject)
+        && (pass.startWhatMakesSense || getHouse()->getCredits() >= 100 || installmentProject || compactEntry)
         && turn.pBuilder->getProductionQueueSize() < 1 && turn.pBuilder->getBuildListSize()) {
         // Campaign Build order, iterate through the buildings, if the number that exist
         // is less than the number that should exist, then build the one that is missing
@@ -476,9 +481,17 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
         && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)=="city_growth_power"
         && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()) {
         const auto& power=pass.capitalCandidates[pass.capitalChoice];
-        const bool funded=pass.startWhatMakesSense || pass.money>=power.price+power.foundationCost;
-        yardTurn.itemID=funded ? power.item : Uint32(NONE_ID);
-        yardTurn.structureRule=funded ? "city_growth_power" : "save_city_growth_power";
+        int compactStartBudget = 0;
+        const bool compact = power.item == Structure_NuclearPlant
+            && preferCompactNuclear(pass, turn.pBuilder, &compactStartBudget);
+        const bool funded = compact || pass.money >= power.price + power.foundationCost;
+        if (compact && compactStartBudget > 0) {
+            turn.installmentProject = Structure_NuclearPlant;
+            turn.installmentProjectStartBudget = compactStartBudget;
+            turn.compactPowerInstallment = true;
+        }
+        yardTurn.itemID = funded ? power.item : Uint32(NONE_ID);
+        yardTurn.structureRule = funded ? "city_growth_power" : "save_city_growth_power";
         yardTurn.skipRemainingStructureLogic=true;
     }
 
@@ -783,6 +796,7 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
                 yardTurn.serviceSavingHold = funding.reserve;
                 if (funding.order) {
                     turn.installmentProject = project;
+                    turn.compactPowerInstallment = false;
                     // Execution asks only for the installment: the foundation
                     // orders are queued and charged separately before it, so
                     // demanding their cost again here would double count them.
@@ -1007,7 +1021,7 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
     }
     // Accumulate reactor funds before optional orders consume them.
     // An actual blackout can still buy an immediately affordable windtrap.
-    if (pass.nuclearPlan && !(pass.protectionCapital && capitalPending(pass))
+    if (pass.nuclearPlan && !turn.compactPowerInstallment && !(pass.protectionCapital && capitalPending(pass))
         && getHouse()->hasPower() && !powerGenerationPending(pass)
         && campaignAvailableToBuild(turn.pBuilder,Structure_NuclearPlant)
         && (yardTurn.itemID == NONE_ID || yardTurn.itemID == Structure_WindTrap || yardTurn.itemID == Structure_NuclearPlant)
@@ -1020,7 +1034,10 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         const int price = data[Structure_NuclearPlant][houseID].price;
         const int foundationBudget = pass.startWhatMakesSense ? 0
             : std::max(0, buildingCapitalCost(pass, Structure_NuclearPlant) - price);
-        const auto funding = pass.startWhatMakesSense
+        int compactStartBudget = 0;
+        const bool compactOrder = preferCompactNuclear(pass, turn.pBuilder, &compactStartBudget)
+            && compactStartBudget > 0;
+        const auto funding = pass.startWhatMakesSense || compactOrder
             ? CityEconomyInvestmentPolicy::InstallmentOrder{true, false}
             : CityEconomyInvestmentPolicy::installmentOrder(
                 pass.money, price, foundationBudget, cityBuildTicks(pass, Structure_NuclearPlant),
@@ -1030,11 +1047,13 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             yardTurn.serviceSavingHold = funding.reserve;
             if (funding.order) {
                 turn.installmentProject = Structure_NuclearPlant;
+                turn.compactPowerInstallment = compactOrder;
                 // Execution asks only for the installment: the foundation
                 // orders are queued and charged separately before it, so
                 // demanding their cost again here would double count them.
-                turn.installmentProjectStartBudget = pass.startWhatMakesSense ? 0
-                    : CityEconomyInvestmentPolicy::firstInstallment(price,cityBuildTicks(pass, Structure_NuclearPlant));
+                turn.installmentProjectStartBudget = compactOrder ? compactStartBudget
+                    : pass.startWhatMakesSense ? 0
+                        : CityEconomyInvestmentPolicy::firstInstallment(price,cityBuildTicks(pass, Structure_NuclearPlant));
             }
             yardTurn.itemID = funding.order ? Structure_NuclearPlant : NONE_ID;
             yardTurn.structureRule = yardTurn.itemID == NONE_ID ? "save_nuclear_growth" : "nuclear_growth_investment";
@@ -2222,7 +2241,14 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
             : availableBaseFootprints >= QuantBotColonisationPolicy::kCrampedFootprints
                 ? std::max(availableBaseFootprints, windNeeded) : std::max(1, availableBaseFootprints);
         const int protectedCash = std::max({1000, pass.cityWorkingReserve, cityBootstrapReserve(pass)});
-        const bool compactNuclear = nuclearSite.isValid() && preferCompactNuclear(pass, turn.pBuilder);
+        int compactStartBudget = 0;
+        const bool compactNuclear = nuclearSite.isValid()
+            && preferCompactNuclear(pass, turn.pBuilder, &compactStartBudget);
+        if (compactNuclear && compactStartBudget > 0) {
+            turn.installmentProject = Structure_NuclearPlant;
+            turn.installmentProjectStartBudget = compactStartBudget;
+            turn.compactPowerInstallment = true;
+        }
         const Uint32 priorGenerator = yardTurn.itemID;
         const bool nuclear = nuclearSite.isValid()
             && (compactNuclear || onInstallments(turn, Structure_NuclearPlant)

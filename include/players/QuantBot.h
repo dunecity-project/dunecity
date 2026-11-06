@@ -1782,8 +1782,8 @@ private:
     AITelemetry::Record decisionState(BuildPass& pass);
     bool campaignPowerNeeded(BuildPass& pass, int nextDemand);
     bool powerGenerationPending(BuildPass& pass);
-    /// Opt-in compact power comparison, including actual legal foundation quotes.
-    bool preferCompactNuclear(BuildPass& pass, const BuilderBase* builder);
+    /// Opt-in compact comparison and actual founded funding; nonzero output designates a new installment start.
+    bool preferCompactNuclear(BuildPass& pass, const BuilderBase* builder, int* installmentStartBudget = nullptr);
     Uint32 chooseCityZone(BuildPass& pass, const BuilderBase* builder, bool bootstrap, bool missingOnly = false);
     bool canBuildMilitaryVehicle(BuildPass& pass, const BuilderBase* factory);
     CivicPlan planCivicForYard(BuildPass& pass, const BuilderBase* yard);

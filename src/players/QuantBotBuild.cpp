@@ -1838,20 +1838,19 @@ bool QuantBot::powerGenerationPending(BuildPass& pass) {
         || pass.itemCount[Structure_WindTrap] > getHouse()->getNumItems(Structure_WindTrap);
 }
 
-bool QuantBot::preferCompactNuclear(BuildPass& pass, const BuilderBase* builder) {
+bool QuantBot::preferCompactNuclear(BuildPass& pass, const BuilderBase* builder, int* installmentStartBudget) {
+    if (installmentStartBudget) *installmentStartBudget = 0;
     if (!botConfig().force.cityCompactPower || !pass.citySimEnabled
         || powerGenerationPending(pass) || getHouse()->getNumItems(Structure_WindTrap) == 0
         || !campaignAvailableToBuild(builder, Structure_NuclearPlant)) return false;
-    int nuclearCost = purchasePrice(builder, Structure_NuclearPlant);
-    if (!pass.startWhatMakesSense && pass.money < nuclearCost) return false;
+    const int price = purchasePrice(builder, Structure_NuclearPlant);
     const Coord nuclearSite = findPlaceLocation(Structure_NuclearPlant);
     if (!nuclearSite.isValid()) return false;
     const auto nuclearFoundation = foundationPlan(builder, Structure_NuclearPlant, nuclearSite);
     if (!nuclearFoundation.complete) return false;
-    for (const auto& slab : nuclearFoundation.orders) nuclearCost += purchasePrice(builder, slab.item);
-    // Funding policy remains separate: this choice never borrows another
-    // queue's cash or invents a new income/reserve gate.
-    if (!pass.startWhatMakesSense && pass.money < nuclearCost) return false;
+    int foundationCost = 0;
+    for (const auto& slab : nuclearFoundation.orders) foundationCost += purchasePrice(builder, slab.item);
+    const int nuclearCost = price + foundationCost;
     int windCost = purchasePrice(builder, Structure_WindTrap);
     const Coord windSite = findPlaceLocation(Structure_WindTrap);
     if (windSite.isValid()) {
@@ -1861,9 +1860,20 @@ bool QuantBot::preferCompactNuclear(BuildPass& pass, const BuilderBase* builder)
     const auto& data = currentGame->objectData.data;
     const int houseID = getHouse()->getHouseID();
     const Coord nuclearSize = getStructureSize(Structure_NuclearPlant), windSize = getStructureSize(Structure_WindTrap);
-    return QuantBotBuildPolicy::compactGeneratorDominates(
-        -data[Structure_NuclearPlant][houseID].power, nuclearCost, nuclearSize.x * nuclearSize.y,
-        -data[Structure_WindTrap][houseID].power, windCost, windSize.x * windSize.y);
+    if (!QuantBotBuildPolicy::compactGeneratorDominates(
+            -data[Structure_NuclearPlant][houseID].power, nuclearCost, nuclearSize.x * nuclearSize.y,
+            -data[Structure_WindTrap][houseID].power, windCost, windSize.x * windSize.y)) return false;
+    if (!pass.startWhatMakesSense && pass.money < nuclearCost) {
+        const int buildTicks = cityBuildTicks(pass, Structure_NuclearPlant);
+        // A powered city may pay this compact capacity out of continuing income.
+        // A blackout still needs the immediately useful recovery generator.
+        if (!getHouse()->hasPower()
+            || !CityEconomyInvestmentPolicy::installmentOrder(pass.money, price, foundationCost,
+                buildTicks, pass.forecastNetIncome).order) return false;
+        if (installmentStartBudget) *installmentStartBudget =
+            CityEconomyInvestmentPolicy::firstInstallment(price, buildTicks);
+    }
+    return true;
 }
 
 Uint32 QuantBot::chooseCityZone(BuildPass& pass, const BuilderBase* builder, bool bootstrap, bool missingOnly) {
@@ -4615,6 +4625,13 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         std::vector<Uint32> removed;
         if (site.isValid()) {
             redevelopmentZones(candidate.item,site,removed);
+            // Compact financing uses the actual founded offer once, not the
+            // footprint estimate already used to score this investment.
+            if (botConfig().force.cityCompactPower && candidate.item == Structure_NuclearPlant
+                && std::string_view(candidate.kind) == "city_growth_power") {
+                candidate.price = purchasePrice(builder, candidate.item);
+                candidate.foundationCost = 0;
+            }
             for (const auto& foundation:foundationPlan(builder,candidate.item,site,removed).orders)
                 candidate.foundationCost+=purchasePrice(builder,foundation.item);
         }

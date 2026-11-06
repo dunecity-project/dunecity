@@ -424,6 +424,8 @@ struct QuantBot::BuilderTurn {
     // beginBuilderTurn()
     Uint32 installmentProject{};
     int installmentProjectStartBudget{};
+    /// Compact starts still book full quotes, never the selected-tech cash exemption.
+    bool compactPowerInstallment{};
     bool emergencyFoundationOrder{};
     /// Foundation orders inherit their actual building's budget and emergency.
     Uint32 spendingItem{NONE_ID};

@@ -139,6 +139,7 @@ void QuantBot::beginBuilderTurn(BuildPass& pass, BuilderTurn& turn) {
     // admission for every order; this exception remains only for legacy finance.
     turn.installmentProject = NONE_ID;
     turn.installmentProjectStartBudget = 0;
+    turn.compactPowerInstallment = false;
     turn.emergencyFoundationOrder = false;
 }
 
@@ -161,7 +162,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     const bool immediatePurchase = turn.pBuilder->getItemID() == Structure_StarPort;
     const Uint32 spendingItem = turn.spendingItem == NONE_ID ? itemID : turn.spendingItem;
     const auto spendingBucket = QuantBotBuildPolicy::spendingBucket(spendingItem);
-    const bool techInstallment = pass.techSavings
+    const bool techInstallment = pass.techSavings && !turn.compactPowerInstallment
         && turn.installmentProject != NONE_ID && turn.installmentProject == spendingItem;
     if (!compositionAdmits(pass, turn, itemID) || !spendingAdmits(pass, spendingItem, quotedPrice)) return false;
     if (!pass.startWhatMakesSense && itemID==Unit_MCV
@@ -368,6 +369,7 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
     if (!pass.techUpgrade) {
         turn.installmentProject = pass.techCandidate.item;
         turn.installmentProjectStartBudget = 0;
+        turn.compactPowerInstallment = false;
     }
     if (pass.techUpgrade) {
         if (upgradeWithLogging(pass, turn, __LINE__)) pass.capitalConsumed = true;
@@ -427,8 +429,11 @@ bool QuantBot::queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 
     }
     int total=purchasePrice(turn.pBuilder,item);
     for(const auto& foundation:plan.orders)total+=purchasePrice(turn.pBuilder,foundation.item);
-    const bool techInstallment = pass.techSavings && onInstallments(turn, item);
-    if ((!pass.startWhatMakesSense && !techInstallment && pass.money < total)
+    const bool compactInstallment = turn.compactPowerInstallment && onInstallments(turn, item);
+    const bool techInstallment = pass.techSavings && !turn.compactPowerInstallment && onInstallments(turn, item);
+    const int acceptanceFloor = compactInstallment
+        ? total - purchasePrice(turn.pBuilder,item) + turn.installmentProjectStartBudget : total;
+    if ((!pass.startWhatMakesSense && !techInstallment && pass.money < acceptanceFloor)
         || !spendingAdmits(pass, item, total)) return false;
     const Uint32 previousSpendingItem = turn.spendingItem;
     turn.spendingItem = item;
