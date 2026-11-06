@@ -53,9 +53,44 @@
       "houses": [6], "colour_slot": 6,
       "checks": [{"id": "blue_rocket_cover", "type": "rocket_cover"}]
     },
-    {"id": "atreides_no_expand", "adapted": false, "save_sha256": "38cffd62e16da1c8d48473ed45b5d31970eea6585f463a059ea0b64a4b5e9b8d", "checks": []},
-    {"id": "purple_zero_power", "adapted": false, "save_sha256": "6717d4212849c49d4ebdee2bc2e59cf9e8ba863f85fd41a51fe59cd674f35d7c", "checks": []},
-    {"id": "sardaukar_lf", "adapted": false, "save_sha256": "abfe913844b7c30ff3ad34f2d23175a7b9008f8e126fa247e2a4e019992ee481", "checks": []},
-    {"id": "insufficient_rocket_turrets", "adapted": false, "checks": []}
+    {
+      "id": "atreides_no_expand", "adapted": true,
+      "save_sha256": "38cffd62e16da1c8d48473ed45b5d31970eea6585f463a059ea0b64a4b5e9b8d",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 256},
+      "game_rules": {"technology_installments": 0, "research_lab": 0}, "houses": [1],
+      "mod_revision": "27a8c8d92876c5001b7744c7252eca5971327edbc17cde5d5249e1d6351fb0f4",
+      "map_revision": "5043b9af16d5b44b6b47627d23989366b6d2b56c26200540cf41e35f8ca0afdc",
+      "checks": [{"id": "first_funded_hf_prompt_and_completed", "type": "heavy_factory_prompt"}]
+    },
+    {
+      "id": "purple_zero_power", "adapted": true,
+      "save_sha256": "6717d4212849c49d4ebdee2bc2e59cf9e8ba863f85fd41a51fe59cd674f35d7c",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 256},
+      "game_rules": {"technology_installments": 0, "unpowered_zones_vacate": 0},
+      "mod_revision": "27a8c8d92876c5001b7744c7252eca5971327edbc17cde5d5249e1d6351fb0f4",
+      "houses": [7], "colour_slot": 7, "controllers": 2,
+      "checks": [{"id": "original_unpowered_l1_legacy_floor", "type": "legacy_unpowered_floor", "initial_lots": 83}]
+    },
+    {
+      "id": "sardaukar_lf", "adapted": true,
+      "save_sha256": "abfe913844b7c30ff3ad34f2d23175a7b9008f8e126fa247e2a4e019992ee481",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 256},
+      "game_rules": {"technology_installments": 0, "research_lab": 0}, "houses": [4],
+      "mod_revision": "37d5ce34e477fc5ddbb21f2328cf9898bd6baa347c1311f0f4dec307cf066f38",
+      "map_revision": "6df51a24cd99a9bfb868d606f225f44b4dd89c65853b22dc0c29ceff55b995fa",
+      "checks": [
+        {"id": "new_light_factory_completed", "type": "light_factory_built"},
+        {"id": "new_city_or_yard_growth", "type": "city_or_yard_growth"}
+      ]
+    },
+    {
+      "id": "insufficient_rocket_turrets", "adapted": true,
+      "save_sha256": "6ab7c6f736e84a8ba02ea03888c862845abacafdb9b0496b74588f27431cfee8",
+      "minutes": 15, "context": {"mod": "dunecity", "format": "saved", "size": 160},
+      "game_rules": {"technology_installments": 0, "research_lab": 0}, "houses": [1],
+      "mod_revision": "2d643c000fcdd83701bc071c44210274a66ee6d69b717c784198dda1db9dafb2",
+      "map_revision": "ff068e3aa8514069dfee7fcb88acf1865e4cb2a4c2ebebb79e3e3a47508e3870",
+      "checks": [{"id": "new_rocket_turret_completed", "type": "rocket_built", "initial_rockets": 2}]
+    }
   ]
 }

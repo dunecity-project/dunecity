@@ -1067,6 +1067,23 @@ QuantBotConfigTrial::QuantBotConfigTrial(const std::string& basePath, const std:
 
 QuantBotConfigTrial::~QuantBotConfigTrial() {
     g_quantBotConfig = previous_;
+    if (!g_quantBotConfig) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[QuantBotTrialRestore] state=uninitialized");
+        return; // Do not initialize or allocate a config merely to attest its absence.
+    }
+    try {
+        const auto& force = g_quantBotConfig->force;
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+            "[QuantBotTrialRestore] state=initialized config_hash=%s "
+            "CityCompactPower=%d StartWhatMakesSense=%d FirstFactoryOwnPrerequisites=%d ContinuousResearch=%d SimpleTechSavings=%d",
+            g_quantBotConfig->getConfigHash().c_str(), int(force.cityCompactPower),
+            int(force.startWhatMakesSense), int(force.firstFactoryOwnPrerequisites),
+            int(force.continuousResearch), int(force.simpleTechSavings));
+    } catch(...) {
+        // Restoration has already succeeded; hash allocation must not throw from teardown.
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[QuantBotTrialRestore] state=initialized hash_attestation_failed=1");
+    }
 }
 
 std::string getQuantBotConfigFilepath() {

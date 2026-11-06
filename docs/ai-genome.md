@@ -226,9 +226,9 @@ feasible elites or releasable defaults until every hard gate is satisfied.
 ## Reported-save constraints
 
 Every reported issue becomes a permanent feasibility check.
-`genome-behavior-checks.json` registers ten required cases. Six exact-save
+`genome-behavior-checks.json` registers ten required cases. All ten exact-save
 adapters are implemented by `genome-behaviors.py` and the test-only
-`genome-behavior-probe.inc`:
+`genome-behavior-probe.inc`; adapter coverage is not a passing native receipt:
 
 | Save | Hard checks during 15 game minutes or an earlier fully observed native terminal |
 | --- | --- |
@@ -237,15 +237,19 @@ adapters are implemented by `genome-behaviors.py` and the test-only
 | nonuke_lowcash | Exact 160-map save `ee99099f…`, house 4 / colour slot 4, saved **Technology Installments OFF**. An authoritative compact-nuclear choice using the native **building-installments** route with spendable cash below the nuclear quote must accept a new nuclear order, produce a positive new-built delta and pay at least that accepted quote in native generator-spent telemetry. Existing standing nuclear plants never count; no funded low-cash opportunity is not applicable (whole case unverified). No global Wind Trap ban. |
 | notbuildingresearchlab | Houses 2 and 6 physically complete a Research Lab and start level-2 research. |
 | norocketturrets | The original loaded blue/cyan AI is **Neutral, house 6, visual colour slot 6** (RGB 28/164/171), not Atreides slot 1. It must order or build a rocket turret. The saved human/Fighter-shared Sardaukar house is never overridden. A mismatched/ambiguous blue roster is unverified. |
+| atreides_no_expand | At the first fully funded, legal native plan where Heavy Factory is eligible under the actual urgent-AA, producer and candidate precedence, accept that factory before cheap imports, then physically complete a new Heavy Factory. Eventual construction alone does not clear a missed eligible first opportunity; a higher-priority native need is not an HF opportunity. |
+| sardaukar_lf | Physically complete a new Light Factory **and** independent expansion: a new Residential, Industrial or Commercial completion, or a new owned Construction Yard UID at a successful MCV deployment's coordinates with increased yard count. Deployed yards do not increment the builder's built counter. An order, an unchanged standing count or the Light Factory itself is not expansion. |
+| insufficient_rocket_turrets | Distinct original `6ab7c6…` save: a positive post-load rocket-turret built-count delta is required. The two pre-existing turrets or a new order without completion cannot pass. |
+| purple_zero_power | Keep the original **Unpowered Zones Vacate OFF**, both original controllers and house 7 / colour 7. A genuine post-load native step for an original unpowered level-1 city lot must preserve population/level; its recorded score (including legacy −500) is diagnostic, not a pinned acceptance constant. Preserve original structure UIDs; combat losses are not free expansion vacancies. Producer opportunities count only when actually ready, legal and funded; no unconditional power restoration is required. Missing native exposure is unverified, never not-applicable or an automatic pass. |
 
 Building installments in `nonuke_lowcash` are the existing progressive construction
 payments, independent of the global Technology Installments research/upgrade rule;
 this save deliberately keeps that rule OFF.
 
-Atreides no-expand, purple zero-power, Sardaukar LF/expansion and insufficient
-rocket cover remain registered but **unadapted/unverified**. Consequently no
-genome is certified feasible and promotion remains blocked. An all-not-applicable
-case is unverified, not a pass. Tournament strength cannot clear these gates.
+Every case needs a complete native receipt for the actual candidate source and
+whole genotype; implementation of all adapters does not certify any genome.
+An all-not-applicable case is unverified, not a pass. Tournament strength and
+another genotype's passing continuation cannot clear these gates.
 
 Private original saves are checksum-pinned; `--freeze` writes an input INI for
 the queue's existing frozen `--game-options` transport. Private save bytes,
@@ -385,6 +389,12 @@ config hash and actual CityCompactPower, StartWhatMakesSense,
 FirstFactoryOwnPrerequisites, ContinuousResearch and SimpleTechSavings values.
 The owning Game restores the exact previous global config on exit or init/load
 failure, before a later lobby hash can use it.
+After restoration, the separate warning-level `[QuantBotTrialRestore]` exit
+record reports `state=uninitialized` without lazy initialization, or
+`state=initialized` with the actual restored hash and above flags. A post-restore
+hash-reporting failure records `hash_attestation_failed=1`, never a guessed hash.
+Unlike the `[QuantBotTrial]` install record, this attests teardown/restoration;
+neither record appears when no trial was installed.
 
 This is a **static global whole-game overlay**, not per-house/phase genome
 execution or promotion. Saved QuantBot ratios, strategy/mix and timers are
@@ -468,23 +478,23 @@ timed out. The recorded multi-job wait was 704.62 seconds including preparation
 and shared-machine scheduling, not a controlled throughput benchmark. Evidence:
 `outputs/genome-20261106/default-pilot-corrected/`.
 
-### First existing-switch screening snapshot
+### Completed existing-switch screen
 
-The committed `b10df0c6` cohort has 61 one-gene variants plus 128 resolution-IV
-fractional rows, four common seeds and four 1v1 orientations: **3,024 games** in
-Hard/DuneCity, 96-tile CY/no-army, medium spice, research OFF. Other contexts are
-separate unsubmitted filler entries, not measured coverage.
+The native-equivalent `b10df0c6` / `abb7ef58` cohort has 61 one-gene variants
+plus 128 resolution-IV fractional rows, four common seeds and four 1v1
+orientations: **3,024 completed games, zero game errors** in Hard/DuneCity,
+96-tile CY/no-army, medium spice, research OFF. This is not evidence for other
+mods, difficulties or research rules.
 
-The first recorded analysis saw 780 collected game rows with no game error.
-All 61 one-gene placement effects were available, but at most **two complete
-independent seed blocks**: none has a decisive interval. `CapacityMcvRunway=1`
-had a provisional paired ON-minus-OFF placement effect of `+1/2` over two seeds.
-That is an exploratory estimate, not a winner, win rate or promotion decision.
-The historical and exact-save feasibility gates have not been cleared.
+All 61 one-gene ON-minus-OFF placement effects have simultaneous 95% intervals
+containing zero. `CapacityMcvRunway` and `SmallMapYardCap` each have the largest
+point estimate, `+3/8 [−1/8, 7/8]`; neither is a demonstrated winner or a
+promotion decision. Placement scores are +1 for a 1v1 win and −1 for a loss,
+so a paired score difference is not a win-rate difference.
 
-Evidence: `outputs/genome-20261106/screen-interim/`, including
-`per-gene-placement-effects.csv.gz`, complete metric/house tables and raw-backed
-`report.json.gz`. Transport-lost units are missing evidence, never AI losses.
+Evidence: `outputs/genome-20261106/screen-final/`, including
+`per-gene-table.csv` (effects, intervals and house contrasts),
+`per-context-highlights.json` and raw-backed `report.json.gz`.
 
 An exhaustive initial 61-switch/128-row fraction × nine mod/difficulty contexts ×
 four seeds × four orientations is 27,216 games before parameter/interaction races.

@@ -2,6 +2,8 @@
 #include "genome-phases.inc"
 #include <structures/BuilderBase.h>
 #include <structures/ResearchLab.h>
+#include <structures/ZoneStructure.h>
+#include <dunecity/CityStructurePopulation.h>
 
 namespace GenomeBehavior {
 inline constexpr std::array<Uint32, 12> items = {{
@@ -16,12 +18,13 @@ inline constexpr std::array<const char*, 12> names = {{
 
 struct State {
     std::array<int, items.size()> owned{}, built{}, queued{}, available{};
-    int tech = 0, target = 0;
-    bool researchLegal = false, paused = false, alive = false, startWhatMakesSense = false;
+    int tech = 0, target = 0, readyYards = 0;
+    bool researchLegal = false, paused = false, alive = false, startWhatMakesSense = false, unpoweredZonesVacate = false;
     bool operator==(const State& other) const {
         return owned == other.owned && built == other.built && queued == other.queued && available == other.available
             && tech == other.tech && target == other.target && researchLegal == other.researchLegal
-            && paused == other.paused && alive == other.alive && startWhatMakesSense == other.startWhatMakesSense;
+            && paused == other.paused && alive == other.alive && startWhatMakesSense == other.startWhatMakesSense
+            && readyYards == other.readyYards && unpoweredZonesVacate == other.unpoweredZonesVacate;
     }
 };
 
@@ -33,6 +36,7 @@ std::array<State, NUM_HOUSES> observe(Game& game) {
         auto& state = result[h];
         state.tech = house->getTechLevel(); state.target = house->getTechResearchTarget();
         state.paused = house->isTechResearchPaused(); state.alive = house->isAlive();
+        state.unpoweredZonesVacate = game.getGameInitSettings().getGameOptions().unpoweredZonesVacate;
         for (const auto& player : house->getPlayerList()) if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
             state.startWhatMakesSense = bot->botConfig().force.startWhatMakesSense;
             break;
@@ -49,6 +53,9 @@ std::array<State, NUM_HOUSES> observe(Game& game) {
             state.researchLegal |= house->canStartTechResearch(structure->getObjectID());
         if (!structure->isABuilder()) continue;
         const auto* builder = static_cast<const BuilderBase*>(structure);
+        if (builder->getItemID() == Structure_ConstructionYard && builder->isActive()
+            && !builder->isUpgrading() && !builder->isOnHold() && builder->getProductionQueueSize() == 0)
+            ++state.readyYards;
         for (size_t i = 0; i < items.size(); ++i) {
             for (const auto& order : builder->getProductionQueue()) if (order.itemID == items[i]) ++state.queued[i];
             if (builder->getItemID() == Structure_ConstructionYard && builder->isAvailableToBuild(items[i])) ++state.available[i];
@@ -90,6 +97,7 @@ void emit(Game& game, int h, const State& state, const char* phase, Uint32 first
         .set("research_total_cycles", house->getTechResearchTotalCycles()).set("research_cost", house->getTechResearchCost())
         .set("start_what_makes_sense", state.startWhatMakesSense)
         .set("power", house->getProducedPower()).set("power_required", house->getPowerRequirement());
+    row.set("ready_yards", state.readyYards).set("unpowered_zones_vacate", state.unpoweredZonesVacate);
     for (size_t i = 0; i < items.size(); ++i) {
         row.set(names[i], state.owned[i]).set(std::string(names[i]) + "_built", state.built[i])
             .set(std::string(names[i]) + "_queued", state.queued[i]).set(std::string(names[i]) + "_available", state.available[i]);
@@ -98,6 +106,37 @@ void emit(Game& game, int h, const State& state, const char* phase, Uint32 first
     // The reported LF opportunity is pinned at load; do not repeatedly survey a 384x384 map.
     if (std::string_view(phase) == "loaded" && bots && !others)
         row.set("light_factory_sites", legalSites(*house, Structure_LightFactory));
+    const char* selected = std::getenv("BALANCE_GENOME_BEHAVIOR");
+    if (std::string_view(phase) == "loaded" && selected
+        && std::string_view(selected) == "atreides_no_expand" && h == 1) {
+        const auto& spec = game.objectData.data[Structure_HeavyFactory][h];
+        row.set("heavy_factory_sites", legalSites(*house, Structure_HeavyFactory))
+            .set("heavy_factory_price", spec.price).set("heavy_factory_power", spec.power);
+    }
+    if (std::string_view(phase) == "loaded" && selected
+        && std::string_view(selected) == "purple_zero_power" && h == 7) {
+        AITelemetry::Record zones;
+        for (const auto* building : structureList) {
+            const auto* zone = dynamic_cast<const ZoneStructure*>(building);
+            if (!zone || zone->getOwner() != house) continue;
+            const auto at = zone->getLocation();
+            const int level = currentGameMap->getTile(at.x, at.y)->getCityZoneDensity();
+            zones.set(std::to_string(zone->getObjectID()), AITelemetry::Record()
+                .set("item", zone->getItemID()).set("level", level)
+                .set("population", DuneCity::getStructurePopulation(zone, level))
+                .set("powered", zone->hasCityPower()));
+        }
+        row.set("zones", zones);
+    }
+    if (selected && std::string_view(selected) == "sardaukar_lf" && h == 4) {
+        AITelemetry::Record yards;
+        for (const auto* building : structureList) {
+            if (building->getOwner() != house || building->getItemID() != Structure_ConstructionYard) continue;
+            const auto at = building->getLocation();
+            yards.set(std::to_string(building->getObjectID()), AITelemetry::Record().set("x", at.x).set("y", at.y));
+        }
+        row.set("yard_locations", yards);
+    }
     if (const auto* sim = game.getCitySimulation()) {
         const auto& city = sim->getHouseState(h);
         row.set("population", city.getTotalPop() * 20).set("residential_demand", city.resValve)
@@ -122,6 +161,8 @@ void runGenomeBehavior(Game& game, int minutes) {
         .set("width", currentGameMap->getSizeX()).set("height", currentGameMap->getSizeY())
         .set("research", rules.researchLab).set("technology_installments", rules.technologyInstallments)
         .set("concrete_required", rules.concreteRequired).set("options_hash", rules.getHash());
+    setup.set("unpowered_zones_vacate", rules.unpoweredZonesVacate)
+        .set("mod_revision", init.getModRevisionHash()).set("map_revision", init.getMapRevisionHash());
     SDL_Log("GENOME_BEHAVIOR_SETUP: %s", setup.json().c_str());
     if (const char* directory = std::getenv("BALANCE_GENOME_PHASE_DIR")) {
         const std::string path(directory);

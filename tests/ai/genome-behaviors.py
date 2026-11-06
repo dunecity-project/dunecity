@@ -51,9 +51,10 @@ FIELDS = KEY + ('genome_digest', 'save_sha256', 'input_sha256', 'source_commit',
                 'probe_sha256', 'registry_sha256', 'checks_sha256', 'technology_installments',
                 'completed', 'telemetry', 'feasibility', 'wall_s', 'error', 'checks_file', 'evidence_file')
 CHECK_FIELDS = KEY + ('genome_digest', 'source_commit', 'house', 'check', 'status', 'reason', 'details')
-RESIDENTIAL, MCV, LIGHT_FACTORY, ROCKET = 20, 34, 7, 12
+RESIDENTIAL, MCV, LIGHT_FACTORY, HEAVY_FACTORY, ROCKET = 20, 34, 7, 4, 12
 R_EVENTS = ('zone_evaluation', 'capital_plan', 'production_order', 'drain_budget_hold')
-EVENTS = R_EVENTS + ('city_generator_choice', 'capture_limit', 'session_start', 'session_end')
+CITY_EVENTS = ('city_growth_sample', 'city_level_changed')
+EVENTS = R_EVENTS + CITY_EVENTS + ('city_generator_choice', 'mcv_deployment', 'capture_limit', 'session_start', 'session_end')
 CYCLES_PER_MINUTE = 3750
 
 
@@ -63,6 +64,10 @@ def canonical(value):
 
 def checksum(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def native_flag(value):
+    return type(value) in (bool, int, float) and value in (0, 1)
 
 
 @lru_cache(maxsize=1)
@@ -356,6 +361,123 @@ def evaluate_check(check, samples, events, setup, residential):
         return ('pass' if accepted else 'fail'), 'accepted_order_before_initial_yard_loss', {
             'order_cycles': accepted, 'initial_yard_loss': loss if loss != float('inf') else None,
             'legal_sites': first['light_factory_sites'], 'controllers': first['bots']}
+    if kind == 'heavy_factory_prompt':
+        if (setup['concrete_required'] or first['heavy_factory'] or first['heavy_factory_queued']
+                or not first['yard'] or not first['light_factory'] or not first['starport']
+                or not first['heavy_factory_available'] or not first['heavy_factory_sites']):
+            return 'unverified', 'original_funded_hf_opportunity_mismatch', {}
+        plans = [e for e in events if e['event'] == 'capital_plan']
+        required = ('mode', 'campaign', 'defending', 'ready_yards', 'spendable',
+                    'forecast_tax_per_minute', 'forecast_upkeep_per_minute', 'power_produced', 'power_required')
+        if any(any(k not in e['data'] for k in required) or e.get('seq') is None for e in plans):
+            return 'unverified', 'native_hf_opportunity_fields_missing', {}
+        opportunity = None
+        for plan in plans:
+            data = plan['data']
+            candidates = data['candidates']
+            if any('urgent' not in c or 'score' not in c or not native_flag(c['urgent']) for c in candidates.values()):
+                return 'unverified', 'native_hf_defence_priority_fields_missing_or_invalid', {}
+            defensive_priority = any(c['score'] > 0 and (
+                c['urgent'] and c.get('reason') in ('air_coverage', 'ground_threat', 'crime_prevention')
+                or c.get('reason') == 'secure_expansion') for c in candidates.values())
+            # Samples emitted after an update can include this plan's newly
+            # queued HF. Use the physical state preceding the native decision.
+            state = next(s for s in reversed(samples) if s['phase'] == 'loaded' or s['cycle'] < plan['cycle'])
+            if (state['heavy_factory'] or state['heavy_factory_queued'] or data['mode'] != 'dunecity'
+                    or data['campaign'] or data['defending'] or defensive_priority or not data['ready_yards']
+                    or data['forecast_tax_per_minute'] <= data['forecast_upkeep_per_minute']
+                    or data['power_produced'] - data['power_required'] < max(0, first['heavy_factory_power']) + 24):
+                continue
+            for candidate in data['candidates'].values():
+                if candidate['item'] != HEAVY_FACTORY:
+                    continue
+                quote = candidate['price'] + candidate['foundation_cost']
+                # The loaded physical opportunity and native full quote do not
+                # depend on a gene-enabled score or "first_heavy_factory" label.
+                if candidate['affordable'] and quote > 0 and data['spendable'] >= quote:
+                    opportunity = plan, candidate
+                    break
+            if opportunity:
+                break
+        if not opportunity:
+            return 'unverified', 'no_observed_fully_funded_first_hf_plan', {}
+        plan, candidate = opportunity
+        hf_orders = [e for e in orders if e['data'].get('item') == HEAVY_FACTORY]
+        if any('capital_plan' not in e['data'] or 'quoted_price' not in e['data'] for e in hf_orders):
+            return 'unverified', 'native_hf_order_plan_or_quote_missing', {}
+        prompt = [e for e in hf_orders if e['data']['capital_plan'] == plan['seq']
+                  and e['data']['quoted_price'] > 0]
+        completed = max(s['heavy_factory_built'] for s in samples) - first['heavy_factory_built']
+        return ('pass' if prompt and completed > 0 else 'fail'), 'first_funded_native_hf_plan_and_new_completion', {
+            'first_funded_plan': plan['seq'], 'first_funded_cycle': plan['cycle'],
+            'spendable': plan['data']['spendable'], 'full_quote': candidate['price'] + candidate['foundation_cost'],
+            'planner_reason': candidate.get('reason'), 'prompt_order_cycles': [e['cycle'] for e in prompt],
+            'all_hf_order_cycles': [e['cycle'] for e in hf_orders], 'new_hf_completions': completed,
+            'loaded_physical_sites': first['heavy_factory_sites']}
+    if kind == 'light_factory_built':
+        if first['light_factory'] or first['light_factory_queued'] or not first['yard'] or not first['light_factory_sites']:
+            return 'unverified', 'original_missing_lf_opportunity_mismatch', {}
+        completed = max(s['light_factory_built'] for s in samples) - first['light_factory_built']
+        return ('pass' if completed > 0 else 'fail'), 'new_physical_light_factory_completion', {
+            'new_lf_completions': completed, 'loaded_physical_sites': first['light_factory_sites']}
+    if kind == 'city_or_yard_growth':
+        zones = {name: max(s[name + '_built'] for s in samples) - first[name + '_built']
+                 for name in ('residential', 'industrial', 'commercial')}
+        deployments = [e for e in events if e['event'] == 'mcv_deployment' and e['data']['deployed']]
+        additional_yard = False
+        if max(s['yard'] for s in samples) > first['yard']:
+            # MCV deployment has no producing BuilderBase, so it does not
+            # increment yard_built. A successful request alone is not proof:
+            # match its coordinates to a new physical owned yard identity.
+            original = first['yard_locations']
+            additional_yard = any(
+                s['yard'] > first['yard'] and identity not in original
+                and any(e['cycle'] <= s['cycle'] and (at['x'], at['y']) == (e['data']['x'], e['data']['y'])
+                        for e in deployments)
+                for s in samples for identity, at in s['yard_locations'].items())
+        return ('pass' if any(n > 0 for n in zones.values()) or additional_yard else 'fail'), 'new_physical_city_or_additional_yard', {
+            'new_zone_completions': zones, 'additional_yard': additional_yard,
+            'successful_deployment_cycles': [e['cycle'] for e in deployments]}
+    if kind == 'legacy_unpowered_floor':
+        if setup['unpowered_zones_vacate'] != 0:
+            return 'unverified', 'original_legacy_vacancy_rule_mismatch', {}
+        if any(s['unpowered_zones_vacate'] != 0 for s in samples):
+            return 'fail', 'legacy_vacancy_rule_changed_during_continuation', {}
+        original = first['zones']
+        if any(not native_flag(z['powered']) for z in original.values()):
+            return 'unverified', 'original_zone_power_flag_invalid', {}
+        if (len(original) != check['initial_lots'] or any(
+                z['level'] != 1 or z['population'] <= 0 or z['powered'] for z in original.values())):
+            return 'unverified', 'original_unpowered_l1_lots_mismatch', {}
+        exposed, violations, scores = set(), [], []
+        steps = 0
+        required = ('object', 'item', 'powered', 'old_level', 'new_level', 'population_before', 'population_after')
+        for row in events:
+            if row['event'] not in CITY_EVENTS or row['cycle'] <= first['cycle']:
+                continue
+            data = row['data']
+            if any(k not in data for k in required):
+                return 'unverified', 'native_legacy_zone_step_fields_missing', {}
+            if not native_flag(data['powered']):
+                return 'unverified', 'native_legacy_zone_power_flag_invalid', {}
+            identity = str(data['object'])
+            if identity not in original or data['item'] != original[identity]['item']:
+                continue
+            if data['powered'] or data['old_level'] != 1 or data['population_before'] <= 0:
+                continue
+            steps += 1
+            exposed.add(identity)
+            if 'score' in data and len(scores) < 20:
+                scores.append(data['score'])
+            # Assert the real legacy consumer outcome, not an incidental score.
+            if data['new_level'] != 1 or data['population_after'] != data['population_before']:
+                violations.append({'cycle': row['cycle'], **data})
+        status = 'fail' if violations else 'pass' if steps else 'unverified'
+        return status, 'observed_original_unpowered_l1_native_steps', {
+            'original_lots': len(original), 'exposed_original_lots': len(exposed), 'native_steps': steps,
+            'violation_count': len(violations), 'violations': violations[:20],
+            'score_samples_diagnostic_only': scores,
+            'power_restoration_asserted': False, 'lost_lots_never_count_as_vacancy': True}
     if kind == 'research_progress':
         progressed = any(s['tech'] > first['tech'] or
             (s['research_target'] > first['tech'] and s['research_target'] != first['research_target']) or
@@ -423,6 +545,13 @@ def evaluate_check(check, samples, events, setup, residential):
         built = max(s['rocket_turret_built'] for s in samples) > first['rocket_turret_built']
         return ('pass' if accepted or built else 'fail'), 'blue_house_orders_or_builds_rocket', {
             'house': first['house'], 'colour_slot': first['colour_slot'], 'order_cycles': accepted, 'built': built}
+    if kind == 'rocket_built':
+        if first['rocket_turret'] != check['initial_rockets']:
+            return 'unverified', 'original_two_rocket_inventory_mismatch', {}
+        completed = max(s['rocket_turret_built'] for s in samples) - first['rocket_turret_built']
+        return ('pass' if completed > 0 else 'fail'), 'new_physical_rocket_turret_completion', {
+            'initial_rockets_ignored': first['rocket_turret'], 'new_rocket_completions': completed,
+            'accepted_orders_not_completions': sum(e['data'].get('item') == ROCKET for e in orders)}
     raise ValueError('Unknown behaviour assertion: ' + kind)
 
 
@@ -458,7 +587,9 @@ def evaluate_case(case, samples, events, setup, complete, applied, telemetry='co
                       'candidate_not_applied_to_original_controllers' if house not in applied else
                       'missing_loaded_or_finished_snapshot' if not initial.get(house) or
                       not any(s['phase'] == 'finished' for s in observations) else
-                      'shared_non_quantbot_controller' if initial[house]['other_controllers'] else '')
+                      'shared_non_quantbot_controller' if initial[house]['other_controllers'] else
+                      'original_controller_count_mismatch' if case.get('controllers') is not None
+                      and initial[house]['bots'] != case['controllers'] else '')
             if reason:
                 status, detail = 'unverified', {}
             else:
@@ -475,9 +606,12 @@ def project_event(row):
     name, data = row['event'], row.get('data') or {}
     if name not in EVENTS:
         return None
-    fields = {'production_order': ('item', 'accepted', 'quoted_price'), 'drain_budget_hold': ('item', 'priority'),
+    fields = {'production_order': ('item', 'accepted', 'quoted_price', 'capital_plan'), 'drain_budget_hold': ('item', 'priority'),
               'city_generator_choice': ('nuclear', 'nuclear_available', 'nuclear_site', 'cash', 'nuclear_price',
-                                       'compact_nuclear', 'installments')}
+                                       'compact_nuclear', 'installments'),
+              'mcv_deployment': ('mcv', 'x', 'y', 'deployed')}
+    for name_ in CITY_EVENTS:
+        fields[name_] = ('object', 'item', 'powered', 'old_level', 'new_level', 'population_before', 'population_after', 'score')
     if name in fields:
         data = {k: data[k] for k in fields[name] if k in data}
     elif name == 'zone_evaluation':
@@ -487,8 +621,11 @@ def project_event(row):
         candidates = data.get('candidates') or {}
         if not isinstance(candidates, dict):
             raise ValueError('Unsupported capital-plan candidate schema')
-        data = {'selected': data.get('selected'), 'candidates': {str(k): {f: c[f] for f in
-                ('item', 'affordable', 'kind', 'reason') if f in c} for k, c in candidates.items()}}
+        data = {k: data[k] for k in ('mode', 'campaign', 'defending', 'ready_yards', 'spendable',
+            'forecast_tax_per_minute', 'forecast_upkeep_per_minute', 'power_produced', 'power_required',
+            'ground_threat_value', 'ground_turret_goal', 'ground_turret_cover') if k in data}
+        data.update(selected=row['data'].get('selected'), candidates={str(k): {f: c[f] for f in
+            ('item', 'affordable', 'kind', 'reason', 'price', 'foundation_cost', 'urgent', 'score') if f in c} for k, c in candidates.items()})
     return {**{k: row.get(k) for k in ('session', 'cycle', 'house', 'player', 'seq')}, 'event': name, 'data': data}
 
 
@@ -566,7 +703,7 @@ def play(args, scratch, binary, key):
     phases, run = out / 'phases', out / 'run'
     receipts = match.render_phase_inputs([(h, label) for h in range(12)], dict(context, difficulty='brutal'),
         {label: candidate}, phases, tuple(args.phase_minutes), registry, elapsed=True, difficulty_variants=True)
-    env = dict(os.environ, BALANCE_GENOME_BEHAVIOR='1')
+    env = dict(os.environ, BALANCE_GENOME_BEHAVIOR=case_id)
     env.pop('BALANCE_TECHNOLOGY_INSTALLMENTS', None)
     if 'technology_installments' in candidate.get('values', {}):
         env['BALANCE_TECHNOLOGY_INSTALLMENTS'] = str(candidate['values']['technology_installments'])
@@ -594,10 +731,14 @@ def play(args, scratch, binary, key):
         problems.append('rc=%d/missing_result' % process.returncode)
     if not setup or (setup.get('mode'), setup.get('format'), max(setup.get('width', 0), setup.get('height', 0))) != (context['mod'], context['format'], context['size']):
         problems.append('saved_context_mismatch')
-    expected_installments = candidate.get('values', {}).get('technology_installments',
-        definitions()[case_id]['game_rules']['technology_installments'])
-    if setup.get('technology_installments') != expected_installments:
+    expected_rules = dict(definitions()[case_id]['game_rules'])
+    if 'technology_installments' in candidate.get('values', {}):
+        expected_rules['technology_installments'] = candidate['values']['technology_installments']
+    if any(setup.get({'research_lab': 'research'}.get(key, key)) != value for key, value in expected_rules.items()):
         problems.append('game_rule_mismatch')
+    if any(setup.get(key) != definitions()[case_id][key] for key in ('mod_revision', 'map_revision')
+           if key in definitions()[case_id]):
+        problems.append('original_revision_identity_mismatch')
     summary = json.loads((run / 'summary.json').read_text()) if (run / 'summary.json').is_file() else {}
     source = summary.get('sourceCommit', '')
     if len(source) != 40 or any(c not in '0123456789abcdef' for c in source):

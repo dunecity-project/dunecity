@@ -31,6 +31,11 @@ def sample(phase='loaded', house=2, **changes):
         bots=2, other_controllers=0, colour_slot=1, yard=1, light_factory=0, light_factory_sites=365,
         tech=2, research_target=0, research_remaining=0, research_start_legal=0,
         start_what_makes_sense=0, research_lab=0, rocket_turret_built=0)
+    row.update(ready_yards=1, heavy_factory=0, heavy_factory_queued=0, heavy_factory_built=0,
+        heavy_factory_available=1, heavy_factory_sites=4, heavy_factory_power=50, starport=1,
+        light_factory_queued=0, light_factory_built=0, yard_built=0, residential_built=0,
+        industrial_built=0, commercial_built=0, rocket_turret=0, unpowered_zones_vacate=0)
+    row['yard_locations'] = {'10': {'x': 1, 'y': 1}}
     row.update(changes)
     return row
 
@@ -57,12 +62,14 @@ class BehaviorContracts(unittest.TestCase):
         with self.assertRaises(ValueError):
             runner.manifest(encoded)
 
-    def test_ten_required_issues_six_adapted(self):
+    def test_all_ten_required_issues_have_native_adapters(self):
         cases = runner.definitions()
         self.assertEqual(len(cases), 10)
-        self.assertEqual(sum(c['adapted'] for c in cases.values()), 6)
-        with self.assertRaises(ValueError):
-            runner.schedule(runner.parser.parse_args(['--case', 'purple_zero_power']))
+        self.assertTrue(all(c['adapted'] for c in cases.values()))
+        for case in ('atreides_no_expand', 'purple_zero_power', 'sardaukar_lf', 'insufficient_rocket_turrets'):
+            self.assertEqual(runner.schedule(runner.parser.parse_args(['--case', case])), [(case, 'default')])
+        self.assertEqual(cases['insufficient_rocket_turrets']['save_sha256'],
+                         '6ab7c6f736e84a8ba02ea03888c862845abacafdb9b0496b74588f27431cfee8')
 
     def check(self, kind, samples=None, events=None, setup=None):
         return runner.evaluate_check({'type': kind}, samples or [sample(), sample('finished')],
@@ -78,6 +85,115 @@ class BehaviorContracts(unittest.TestCase):
         self.assertEqual(self.check('light_factory_order', rows, [accepted])[0], 'fail')
         rows[0]['light_factory_sites'] = 0
         self.assertEqual(self.check('light_factory_order', rows, [accepted])[0], 'unverified')
+
+    def test_funded_hf_requires_first_native_plan_and_new_completion(self):
+        rows = [sample(house=1, light_factory=1), sample('finished', house=1, light_factory=1, heavy_factory=1, heavy_factory_built=1)]
+        plan = event('capital_plan', dict(mode='dunecity', campaign=0, defending=0, ready_yards=1,
+            spendable=725, forecast_tax_per_minute=1457, forecast_upkeep_per_minute=129,
+            power_produced=600, power_required=518, selected=0, candidates={'0': dict(
+                item=4, price=600, foundation_cost=0, affordable=1, kind='production',
+                reason='bootstrap_managed_separately', urgent=0, score=0)}), house=1)
+        plan['seq'] = 7
+        order = event('production_order', dict(item=4, accepted=1, quoted_price=600, capital_plan=8), 190, 1)
+        self.assertEqual(self.check('heavy_factory_prompt', rows, [plan, order], {'concrete_required': 0})[0], 'fail')
+        order['data']['capital_plan'] = 7
+        self.assertEqual(self.check('heavy_factory_prompt', rows, [plan, order], {'concrete_required': 0})[0], 'pass')
+        projected = [runner.project_event(e) for e in (plan, order)]
+        self.assertEqual(self.check('heavy_factory_prompt', rows, projected, {'concrete_required': 0})[0], 'pass')
+        rows[-1]['heavy_factory_built'] = 0
+        self.assertEqual(self.check('heavy_factory_prompt', rows, projected, {'concrete_required': 0})[0], 'fail')
+        plan['data']['spendable'] = 599
+        self.assertEqual(self.check('heavy_factory_prompt', rows, [plan, order], {'concrete_required': 0})[0], 'unverified')
+
+    def test_funded_hf_defers_real_urgent_air_coverage_not_cheap_imports(self):
+        rows = [sample(house=1, light_factory=1), sample('finished', house=1, light_factory=1, heavy_factory=1, heavy_factory_built=1)]
+        data = dict(mode='dunecity', campaign=0, defending=0, ready_yards=1, spendable=725,
+            forecast_tax_per_minute=1457, forecast_upkeep_per_minute=129, power_produced=600,
+            power_required=518, ground_threat_value=0, ground_turret_goal=0, ground_turret_cover=0)
+        hf = dict(item=4, price=600, foundation_cost=0, affordable=1, kind='production',
+                  reason='bootstrap_managed_separately', urgent=0, score=0)
+        defence = dict(item=12, price=600, foundation_cost=0, affordable=1, kind='civic',
+                       reason='air_coverage', urgent=1, score=3000)
+        early = event('capital_plan', dict(data, selected=1, candidates={'0': hf, '1': defence}), house=1)
+        early['seq'] = 7
+        later = event('capital_plan', dict(data, selected=0, candidates={'0': hf}), 150, 1)
+        later['seq'] = 8
+        order = event('production_order', dict(item=4, accepted=1, quoted_price=600, capital_plan=8), 160, 1)
+        projected = [runner.project_event(e) for e in (early, later, order)]
+        self.assertEqual(projected[0]['data']['candidates']['1']['urgent'], 1)
+        self.assertEqual(self.check('heavy_factory_prompt', rows, projected, {'concrete_required': 0})[0], 'pass')
+        defence.update(reason='military_shortfall', urgent=0)
+        projected = [runner.project_event(e) for e in (early, later, order)]
+        self.assertEqual(self.check('heavy_factory_prompt', rows, projected, {'concrete_required': 0})[0], 'fail')
+
+    def test_lf_completion_and_real_growth_are_independent(self):
+        rows = [sample(house=4), sample('finished', house=4)]
+        order = event('production_order', {'item': 7, 'accepted': 1}, house=4)
+        self.assertEqual(self.check('light_factory_built', rows, [order])[0], 'fail')
+        self.assertEqual(self.check('city_or_yard_growth', rows, [order])[0], 'fail')
+        rows[-1].update(light_factory=1, light_factory_built=1)
+        self.assertEqual(self.check('light_factory_built', rows, [order])[0], 'pass')
+        self.assertEqual(self.check('city_or_yard_growth', rows, [order])[0], 'fail')
+        rows[-1]['residential_built'] = 1
+        self.assertEqual(self.check('city_or_yard_growth', rows)[0], 'pass')
+        rows[-1].update(residential_built=0, yard_built=1)
+        self.assertEqual(self.check('city_or_yard_growth', rows)[0], 'fail')
+        rows[-1].update(yard=2, yard_built=0, yard_locations={'10': {'x': 1, 'y': 1}, '20': {'x': 8, 'y': 8}})
+        self.assertEqual(self.check('city_or_yard_growth', rows)[0], 'fail')
+        deployed = event('mcv_deployment', {'mcv': 15, 'x': 8, 'y': 8, 'deployed': 1}, house=4)
+        self.assertEqual(self.check('city_or_yard_growth', rows, [deployed])[0], 'pass')
+        deployed['data']['x'] = 9
+        self.assertEqual(self.check('city_or_yard_growth', rows, [deployed])[0], 'fail')
+
+    def test_distinct_rocket_case_ignores_existing_guns_and_orders(self):
+        check = {'type': 'rocket_built', 'initial_rockets': 2}
+        rows = [sample(house=1, rocket_turret=2, rocket_turret_built=8),
+                sample('finished', house=1, rocket_turret=2, rocket_turret_built=8)]
+        order = event('production_order', {'item': 12, 'accepted': 1}, house=1)
+        self.assertEqual(runner.evaluate_check(check, rows, [order], {}, {})[0], 'fail')
+        rows[-1]['rocket_turret_built'] = 9
+        self.assertEqual(runner.evaluate_check(check, rows, [order], {}, {})[0], 'pass')
+        rows[0]['rocket_turret'] = 1
+        self.assertEqual(runner.evaluate_check(check, rows, [order], {}, {})[0], 'unverified')
+
+    def test_purple_legacy_floor_needs_real_original_unpowered_city_step(self):
+        check = {'type': 'legacy_unpowered_floor', 'initial_lots': 1}
+        original = {'1200': dict(item=20, level=1, population=16, powered=0)}
+        rows = [sample(house=7, colour_slot=7, zones=original), sample('finished', house=7, colour_slot=7)]
+        setup = {'unpowered_zones_vacate': 0}
+        self.assertEqual(runner.evaluate_check(check, rows, [], setup, {})[0], 'unverified')
+        step = event('city_growth_sample', dict(object=1200, item=20, powered=0, old_level=1,
+            new_level=1, population_before=16, population_after=16, score=-500), house=7)
+        self.assertEqual(runner.evaluate_check(check, rows, [step], setup, {})[0], 'pass')
+        self.assertEqual(runner.evaluate_check(check, rows, [runner.project_event(step)], setup, {})[0], 'pass')
+        step['data']['score'] = -600
+        self.assertEqual(runner.evaluate_check(check, rows, [runner.project_event(step)], setup, {})[0], 'pass')
+        step['data'].update(new_level=0, population_after=0)
+        self.assertEqual(runner.evaluate_check(check, rows, [step], setup, {})[0], 'fail')
+        step['data']['object'] = 9999
+        self.assertEqual(runner.evaluate_check(check, rows, [step], setup, {})[0], 'unverified')
+        rows[-1]['unpowered_zones_vacate'] = 1
+        self.assertEqual(runner.evaluate_check(check, rows, [], setup, {})[0], 'fail')
+
+    def test_malformed_power_flags_cannot_clear_projected_legacy_case(self):
+        case = dict(houses=[7], colour_slot=7, controllers=2,
+                    checks=[dict(id='legacy', type='legacy_unpowered_floor', initial_lots=1)])
+        original = {'1200': dict(item=20, level=1, population=16, powered=0)}
+        rows = [sample(house=7, colour_slot=7, zones=original), sample('finished', house=7, colour_slot=7)]
+        for invalid in (None, '0', [], {}, 2, -1):
+            step = event('city_growth_sample', dict(object=1200, item=20, powered=invalid, old_level=1,
+                new_level=1, population_before=16, population_after=16, score=-500), house=7)
+            checks, feasibility = runner.evaluate_case(case, rows, [runner.project_event(step)],
+                {'unpowered_zones_vacate': 0}, True, {7})
+            self.assertEqual((checks[0]['status'], feasibility), ('unverified', 'unverified'))
+            self.assertEqual(checks[0]['reason'], 'native_legacy_zone_power_flag_invalid')
+
+    def test_purple_preserves_both_original_controllers(self):
+        case = runner.definitions()['purple_zero_power']
+        rows = [sample(house=7, colour_slot=7, bots=1), sample('finished', house=7, colour_slot=7, bots=1)]
+        checks, feasibility = runner.evaluate_case(case, rows, [], {}, True, {7})
+        self.assertEqual(feasibility, 'unverified')
+        self.assertEqual(checks[0]['reason'], 'original_controller_count_mismatch')
 
     def test_research_needs_opportunity_not_fabricated_tech_requirement(self):
         self.assertEqual(self.check('research_progress')[0], 'not_applicable')
