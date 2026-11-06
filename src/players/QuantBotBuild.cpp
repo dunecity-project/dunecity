@@ -1557,11 +1557,12 @@ bool QuantBot::preferCompactNuclear(BuildPass& pass, const BuilderBase* builder)
     if (!botConfig().force.cityCompactPower || !pass.citySimEnabled
         || powerGenerationPending(pass) || getHouse()->getNumItems(Structure_WindTrap) == 0
         || !campaignAvailableToBuild(builder, Structure_NuclearPlant)) return false;
+    int nuclearCost = purchasePrice(builder, Structure_NuclearPlant);
+    if (!pass.startWhatMakesSense && pass.money < nuclearCost) return false;
     const Coord nuclearSite = findPlaceLocation(Structure_NuclearPlant);
     if (!nuclearSite.isValid()) return false;
     const auto nuclearFoundation = foundationPlan(builder, Structure_NuclearPlant, nuclearSite);
     if (!nuclearFoundation.complete) return false;
-    int nuclearCost = purchasePrice(builder, Structure_NuclearPlant);
     for (const auto& slab : nuclearFoundation.orders) nuclearCost += purchasePrice(builder, slab.item);
     // Funding policy remains separate: this choice never borrows another
     // queue's cash or invents a new income/reserve gate.
