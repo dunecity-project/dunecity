@@ -948,14 +948,26 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             if (!data[step][houseID].enabled || data[step][houseID].techLevel>getHouse()->getTechLevel()) break;
             if (step!=Structure_RocketTurret && pass.itemCount[step]>getHouse()->getNumItems(step)) break;
             if (campaignAvailableToBuild(turn.pBuilder,step)) {
+                // This is a real power prerequisite, not a separate defence
+                // purchase. Do not save a full windtrap quote when the compact
+                // alternative has already passed its actual founded start gate.
+                int compactStartBudget = 0;
+                const bool compactOrder = !pass.startWhatMakesSense && step == Structure_WindTrap
+                    && preferCompactNuclear(pass, turn.pBuilder, &compactStartBudget) && compactStartBudget > 0;
+                if (compactOrder) step = Structure_NuclearPlant;
                 int coverage=0;
                 const Coord site=step==Structure_RocketTurret
                     ? findCityTurretPlaceLocation(step,&coverage) : findPlaceLocation(step);
                 if (site.isValid() && (step!=Structure_RocketTurret || coverage>0)) {
                     const int cost=pass.startWhatMakesSense ? 0 : buildingCapitalCost(pass, step);
-                    if (pass.startWhatMakesSense || ((pass.money>=cost || pass.cashFlow.projectedCash>=cost)
+                    if (pass.startWhatMakesSense || ((compactOrder || pass.money>=cost || pass.cashFlow.projectedCash>=cost)
                         && spendingAdmits(pass,step,cost))) {
-                        yardTurn.itemID=pass.startWhatMakesSense || pass.money>=cost ? step : NONE_ID;
+                        yardTurn.itemID=pass.startWhatMakesSense || compactOrder || pass.money>=cost ? step : NONE_ID;
+                        if (compactOrder) {
+                            turn.installmentProject = Structure_NuclearPlant;
+                            turn.installmentProjectStartBudget = compactStartBudget;
+                            turn.compactPowerInstallment = true;
+                        }
                         if (yardTurn.itemID!=NONE_ID) yardTurn.crimeServiceSite=site;
                         yardTurn.serviceSavingHold=yardTurn.itemID==NONE_ID && proactiveSavingHold(pass, cost);
                         yardTurn.skipRemainingStructureLogic=true;

@@ -340,7 +340,18 @@ void nativeFinancing(const char* playerClass, bool concrete) {
                         && turn.installmentProjectStartBudget == quote.first,
                     "Selected growth-power claim held a genuinely funded compact start for its full quote");
         }
+        SDL_Log("COMPACT_POWER_START: difficulty=%s concrete=%d growth=%d simple=%d actual_cash=%d "
+                "preplan_cash=%d preplan_net_income=%d workers=%d price=%d foundation=%d start=%d "
+                "power=%d/%d coverage_shortfall=%d turret_power_ready=%d",
+                playerClass, int(concrete), int(growth), int(simple), world.owner->getCredits(),
+                pass.money, pass.forecastNetIncome, pass.actualHarvesters, quote.price, quote.foundation, quote.start(),
+                world.owner->getProducedPower(), world.owner->getPowerRequirement(),
+                world.bot->proactiveCoverageShortfall(pass), int(world.bot->hasPowerBufferForTurret(pass)));
         world.build();
+        SDL_Log("COMPACT_POWER_START_RESULT: difficulty=%s concrete=%d growth=%d simple=%d "
+                "nuclear_queued=%d wind_queued=%d yard_queue=%d actual_cash=%d",
+                playerClass, int(concrete), int(growth), int(simple), world.queued(Structure_NuclearPlant),
+                world.queued(Structure_WindTrap), world.yard->getProductionQueueSize(), world.owner->getCredits());
         require(world.queued(Structure_NuclearPlant) == 1 && world.queued(Structure_WindTrap) == 0,
                 "Full SWMS-OFF bot did not start a compact reactor at its actual founded start budget");
         world.build();

@@ -794,8 +794,8 @@ existing planned-reactor and emergency-Windtrap paths remain separate.
 
 Only a real `order` decision designates this yard's reactor for installments.
 That designation survives the below-100-credit yard entry, selected
-`city_growth_power` claim, final generator vetting, committed-price veto,
-affordable-zone fallback and founded-package/wrapper admission. Slabs queue and
+`city_growth_power` claim, core-defence power-prerequisite saving, final generator
+vetting, committed-price veto, affordable-zone fallback and founded-package/wrapper admission. Slabs queue and
 pay separately, so the reactor wrapper asks for its first installment only.
 The growth-power commitment uses one actual slab quote, not an estimate plus
 the same actual slabs again.
@@ -823,6 +823,16 @@ These are implemented regression cases, **not observed passing results**. Main
 must run the four focused native fixtures, the exact private-save continuations
 and the new same-rule paired smoke on a pinned integration revision. The
 48-game SWMS rejection and no-288/no-promotion decision in §7 remain in force.
+
+The first integrated focused run at `77342e41` failed at the native start
+assertion, not because the working fleet lacked income: its retained full-bot
+plan recorded 1 spendable credit, 5,556 net forecast income and actual 100/90
+power. [INFERENCE from source tracing] The earlier core-defence rule saved for
+its Windtrap power prerequisite and cleared the choice before final compact
+vetting could run. That same power selector now honors a genuinely orderable
+compact installment project; ordinary
+defence purchases and gene-OFF saving are unchanged. The fixture retains its
+native order/payment/completion assertions and logs start inputs/results.
 
 ## 6. Required evidence before implementation promotion
 
