@@ -3459,16 +3459,14 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
         pass.moderateCrimeProperties+=crime>=128;
         pass.dangerousCrimeProperties+=crime>=192;
     }
-    // The first response to aircraft is one bounded project, even while its
-    // Radar or yard upgrade occupies the queue and has no capital candidate.
+    // The existing first-cover unlock is one bounded project, even while its
+    // Radar, power prerequisite or yard upgrade leaves no capital candidate.
     // Price only unordered steps: planBuildBudget already booked every queued
     // remainder, including an upgrade in progress. Never reserve that debt twice.
     pass.firstAirDefenceReserve=0;
     pass.firstAirDefenceBuilder=NONE_ID;pass.firstAirDefenceUpgradeReserve=0;
     pass.firstAirDefenceStepCosts.fill(0);
-    if (!pass.startWhatMakesSense && botConfig().force.defencePrerequisites
-        && pass.citySimEnabled && gameMode==GameMode::Custom && pass.airEngaged
-        && pass.itemCount[Structure_RocketTurret]==0 && pass.routineRocketsAllowed) {
+    if (firstAirDefencePending(pass) && pass.itemCount[Structure_RocketTurret]==0) {
         for (const auto* builder:pass.capitalBuilders) {
             if (builder->getItemID()!=Structure_ConstructionYard || builder->getHealth()<=0) continue;
             const int technology=ModManager::instance().isTornieFamilyContentActive()
@@ -4334,8 +4332,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     early.site=findFrontBatteryPlaceLocation();
                 if (early.site.isValid()) pass.capitalCandidates.push_back(early);
             }
-            const bool ordinaryUnlockDue=(pass.airEngaged || (pass.uncoveredCoreAssets>0 && cityZones>=4
-                    && (!extraTaxCover || earlyRocketDue))) && pass.routineRocketsAllowed;
+            const bool ordinaryUnlockDue=pass.ordinaryRocketUnlockDemand()
+                && (!extraTaxCover || pass.airEngaged || earlyRocketDue);
             if ((botConfig().force.defencePrerequisites || groundDefenceDue) && pass.citySimEnabled && getHouse()->hasPower()
                 && (groundDefenceDue || ordinaryUnlockDue || earlyRocketDue)
                 && data[Structure_RocketTurret][houseID].enabled
@@ -4860,24 +4858,6 @@ Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
     const bool preferFundedBattery=mayPreferBattery && fundedBattery;
     pass.capitalPreferFundedBattery = preferFundedBattery;
     if (preferFundedBattery) pass.capitalChoice=withoutIdleTransport;
-    // Present service emergencies precede discretionary army/capacity/growth
-    // purchases, not genuine power recovery or the native income suppliers.
-    if (botConfig().force.defencePrerequisites && pass.capitalChoice>=0) {
-        const auto& selected=pass.capitalCandidates[pass.capitalChoice];
-        const auto kind=std::string_view(selected.kind);
-        if (kind=="military" || kind=="production" || kind=="production_upgrade"
-            || kind=="city_growth_power" || kind=="city_growth"
-            || DuneCity::isCityZoneStructure(selected.item)) {
-            int urgent=-1;
-            for (size_t i=0;i<pass.capitalCandidates.size();++i) {
-                const auto& candidate=pass.capitalCandidates[i];
-                if (candidate.score>0 && candidate.urgent && protectedCapital(candidate)
-                    && (urgent<0 || candidate.score>pass.capitalCandidates[urgent].score))
-                    urgent=int(i);
-            }
-            if (urgent>=0) pass.capitalChoice=urgent;
-        }
-    }
     // A bargain's return score must not divert the bounded safety/supplier
     // savings into the military-to-zoning interleave just before they are paid.
     if (pass.capitalChoice>=0
@@ -4898,6 +4878,35 @@ Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
                 protectedChoice=int(i);
         }
         if (boundedClaim) pass.capitalChoice=protectedChoice;
+    }
+    // Present service emergencies precede discretionary army/capacity/growth
+    // purchases, not genuine power recovery or the native income suppliers.
+    if (botConfig().force.defencePrerequisites && pass.capitalChoice>=0) {
+        const auto discretionary=[](const CapitalCandidate& candidate) {
+            const auto kind=std::string_view(candidate.kind);
+            return kind=="military" || kind=="production" || kind=="production_upgrade"
+                || kind=="city_growth_power" || kind=="city_growth"
+                || DuneCity::isCityZoneStructure(candidate.item);
+        };
+        if (discretionary(pass.capitalCandidates[pass.capitalChoice])) {
+            int urgent=-1;
+            for (size_t i=0;i<pass.capitalCandidates.size();++i) {
+                const auto& candidate=pass.capitalCandidates[i];
+                if (candidate.score>0 && candidate.urgent && protectedCapital(candidate)
+                    && (urgent<0 || candidate.score>pass.capitalCandidates[urgent].score))
+                    urgent=int(i);
+            }
+            if (urgent>=0) {
+                // Dropping a high-return discretionary winner must not hide
+                // an even higher-priority native power/supplier emergency.
+                for (size_t i=0;i<pass.capitalCandidates.size();++i) {
+                    const auto& candidate=pass.capitalCandidates[i];
+                    if (!discretionary(candidate) && !(preferFundedBattery && idleTransport(candidate))
+                        && candidate.score>pass.capitalCandidates[urgent].score) urgent=int(i);
+                }
+                pass.capitalChoice=urgent;
+            }
+        }
     }
     // Keep a demanded tax-producing lot funded alongside the army. Otherwise
     // saving for the next launcher repeatedly withholds even the last100 credits
@@ -5149,10 +5158,14 @@ bool QuantBot::capitalPending(BuildPass& pass) {
 }
 
 bool QuantBot::firstAirDefencePending(BuildPass& pass) {
+    // Demand owns this bounded project, not today's candidate or legal quote.
+    // Its queued first rocket also remains pending after queue debt took the cash.
+    const auto& rocket=currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()];
     return !pass.startWhatMakesSense && botConfig().force.defencePrerequisites
-        && pass.citySimEnabled && gameMode==GameMode::Custom && pass.airEngaged
+        && pass.citySimEnabled && gameMode==GameMode::Custom
+        && rocket.enabled && rocket.techLevel<=getHouse()->getTechLevel()
         && getHouse()->getNumItems(Structure_RocketTurret)==0
-        && (pass.firstAirDefenceReserve>0 || pass.itemCount[Structure_RocketTurret]>0);
+        && (pass.ordinaryRocketUnlockDemand() || pass.itemCount[Structure_RocketTurret]>0);
 }
 
 int QuantBot::capitalReserve(BuildPass& pass, Uint32 builder) {
@@ -5187,6 +5200,13 @@ int QuantBot::capitalReserve(BuildPass& pass, Uint32 builder) {
 bool QuantBot::firstAirDefenceCapitalAdmits(BuildPass& pass, const BuilderBase* builder,
     Uint32 item, int quotedCost, int alreadyReserved) {
     if (!firstAirDefencePending(pass)) return true;
+    // A native-offered component of this first-AA chain spends its own
+    // savings, even when ordinary core coverage is not an urgent candidate.
+    // These buildings are global prerequisites; yard upgrades are local and
+    // obtain their separate, included balance in upgradeWithLogging().
+    if (builder && builder->getItemID()==Structure_ConstructionYard && item<Num_ItemID
+        && pass.itemCount[item]==0 && pass.firstAirDefenceStepCosts[item]>0
+        && campaignAvailableToBuild(builder,item)) return true;
     // Existing queue debt was deducted before this pass, and a producer may
     // already have withheld the unordered AA cash. Neither is charged twice.
     const int extraReserve=std::max(0,pass.remainingFirstAirDefenceCash()-std::max(0,alreadyReserved));

@@ -893,20 +893,36 @@ spendable. That proves a selection failure, not upgrade completion: the retained
 negative control lacks the yard's health. The default arm also bought a
 240-credit import while Radar was queued, immediately before a 250-credit
 rocket candidate had only 32 spendable. These b3 failures remain negative evidence.
+SourceY's C3 continuation later paid its `core_coverage` upgrade and Radar, but
+queued a 2,000-credit Nuclear at 72300 with 267 spendable and power 500/499,
+without an AA candidate. That is first-project continuity failure, not evidence
+that aircraft were engaged at that instant.
 
 The repair reuses the existing protected service/supplier classes in capital
 selection and reservation. Canonically urgent services precede discretionary
 military, additional production and growth, not genuine power recovery or native
-income suppliers. The yard applies growth-power/plot claims after essential
-power and its selected protected service. Dangerous crime retains its existing
-priority; moderate crime cannot relabel the first urgent AA response as optional.
-The new arbitration and matching yard order are gated by `DefencePrerequisites`;
-OFF keeps the original military/growth interleave and early growth allocation.
+income suppliers. The original non-military emergency comparison runs before
+the urgent-service override. Only pending first-AA work or a real blackout
+defers the yard's growth-power/plot lane behind service and power arbitration;
+powered nonurgent cases retain their early allocation. Dangerous crime retains
+its existing priority; moderate crime cannot relabel urgent first AA as optional.
+The new arbitration/order is gated by `DefencePrerequisites`; OFF keeps the
+original military/growth interleave and early allocation.
 
-For live engaged aircraft and no owned/queued rocket, one useful, legal first-AA
-chain protects its **unordered** native upgrade, prerequisite, turret and actual
-foundation quotes from other producers. Queued prerequisites and the current
-upgrade remainder are already deducted from `money`, so are not reserved again.
+The first-AA project reuses the existing unlock demand: engaged aircraft, or
+uncovered core assets after the existing four-zone opening. This is the same
+predicate used by unlock candidates, not a new goal or saved latch. Until a
+rocket is physically owned, its demand survives an absent candidate, inadequate
+headroom or a temporarily unpriceable site. A useful legal chain protects its
+**unordered** native upgrade, prerequisite, turret and actual foundation quotes.
+Queued prerequisites and the current upgrade remainder are already deducted
+from `money`, so are not reserved again.
+An included AA component can spend its own savings even for nonurgent
+`core_coverage`: it need not fund that same quote twice or wait for the entire
+future chain. Native building/prerequisite offers share that global project;
+only its priced yard's included upgrade gets local upgrade access. Native
+affordability still applies, and another yard's unreserved upgrade gains no
+component allowance or extra release.
 The reserve survives a busy Radar/yard upgrade and is not waived to discretionary
 factory/Starport orders during a blackout. It records the priced chain's builder,
 included upgrade balance and actual per-step quotes. Same-pass releases remove
@@ -928,13 +944,18 @@ instead of ending the yard's turn repeatedly. Some power need does not license
 an unfunded Nuclear project when legal wind is available. No broader power
 selection model, credits, price, cap, goal or saved latch is added.
 
-`threat-turret-probe.inc` contains native consumers for chain-identity release,
-exact-cash first-Carryall supply, repeated nuclear-to-wind fallback and the OFF
-control, alongside the paid AA completion arm; these are not source-text wiring
-checks. The private reported-save observer also retains yard health,
-upgrade and full queue state at its existing blue-house-6 samples. Neither change
-establishes a passing replay: the original save still requires an actual newly
-placed rocket before natural loss under the unchanged continuation contract.
+`threat-turret-probe.inc` contains native chain-identity, first-Carryall, repeated
+nuclear-to-wind, OFF-control and paid AA completion consumers. The existing
+compact-power fixture adds whole-bot, no-air, positive-tax first-AA controls:
+the controls require `DefencePrerequisites` OFF to admit the financed reactor
+and ON to refuse it below Windtrap's native quote, retaining Windtrap at that
+quote despite no executable AA candidate.
+The unrelated compact paid-completion matrix remains intact; its direct forced
+selection-phase assertion is removed. The private reported-save observer retains
+yard health, upgrade and full queue state at its existing blue-house-6 samples.
+None of these additions establishes a passing replay: the original save still
+requires an actual newly placed rocket before natural loss under the unchanged
+continuation contract.
 
 ## 6. Required evidence before implementation promotion
 

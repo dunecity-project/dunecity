@@ -378,9 +378,14 @@ struct QuantBot::BuildPass {
     bool cityCoreInfrastructureReady{};
     bool routineRocketsUnrestricted{};
     bool routineRocketsAllowed{};
+    bool ordinaryRocketUnlockDemand() const {
+        const int cityZones=itemCount[Structure_ZoneResidential]+itemCount[Structure_ZoneCommercial]
+            +itemCount[Structure_ZoneIndustrial];
+        return routineRocketsAllowed && (airEngaged || (uncoveredCoreAssets>0 && cityZones>=4));
+    }
     int cityPlotPrice{};
     int rocketPowerBuffer{};
-    // Unordered balance of the urgent first-rocket prerequisite chain; queued debt is already booked in money.
+    // Unordered balance of the bounded first-rocket prerequisite chain; queued debt is already booked in money.
     int firstAirDefenceReserve{};
     Uint32 firstAirDefenceBuilder{NONE_ID};
     int firstAirDefenceUpgradeReserve{};

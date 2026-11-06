@@ -270,6 +270,96 @@ void fundedTwoYards(const char* playerClass) {
             playerClass, pass.money, secondQuote);
 }
 
+void firstAirDefenceFinancing(const char* playerClass) {
+    for (int boundary=0;boundary<3;++boundary) {
+        World world("dunecity",playerClass,false,Stage::NaturalOpening,Army::Empty);
+        configureFunding(world,true,false);
+        auto config=std::make_shared<QuantBotConfig>(world.bot->botConfig());
+        config->force.defencePrerequisites=boundary!=0;
+        world.bot->configOverride=config;world.configHash=config->getConfigHash();
+        // An authored tax-only city, not borrowed worker income or a forged
+        // forecast. Remove the opening world's actual spice before its census.
+        for (int y=4;y<30;++y) for (int x=38;x<62;++x) {
+            auto* tile=currentGameMap->getTile(x,y);
+            tile->setType(Terrain_Sand);tile->setSpice(0);
+        }
+        world.bot->lastCalculatedSpice=0;
+        world.placeAt(Structure_WindTrap,Coord(18,8));
+        for (Coord at:{Coord(3,18),Coord(10,18),Coord(17,18)}) world.placeAt(Structure_Refinery,at);
+        world.place(Structure_Radar);
+        for (int i=0;i<8;++i) world.place(Structure_Silo);
+        for (int x:{10,13})
+            static_cast<ZoneStructure*>(world.placeAt(Structure_ZoneResidential,Coord(x,26)))
+                ->setResidentialPopulation(40);
+        static_cast<ZoneStructure*>(world.placeAt(Structure_ZoneCommercial,Coord(16,26)))->setStartingLevel(3);
+        static_cast<ZoneStructure*>(world.placeAt(Structure_ZoneIndustrial,Coord(19,26)))->setStartingLevel(3);
+        world.placeAt(Structure_PoliceStation,Coord(10,29));
+        world.placeAt(Structure_PoliceStation,Coord(19,29));
+        world.placeAt(Structure_Stadium,Coord(10,23));
+        for (int y=2;y<37;++y) for (int x=2;x<37;++x)
+            if (!currentGameMap->getTile(x,y)->hasAStructure()) {
+                world.owner->placeStructure(NONE_ID,Structure_Road,x,y,true,true);
+                require(currentGameMap->getTile(x,y)->isRoad(),"First-AA city lacks its real service roads");
+            }
+        world.yard->curUpgradeLev=world.yard->getMaxUpgradeLevel();
+        world.game->gameCycleCount=MILLI2CYCLES(300000);
+        world.initializePhysicalCity();
+        while (!world.owner->hasPower()) world.place(Structure_WindTrap);
+        // Real initial consumers leave the city powered, but not the first
+        // rocket. No power counter, native price or planning result is patched.
+        const auto powered=world.observePlan();
+        const int load=world.game->objectData.data[Structure_Refinery][world.owner->getHouseID()].power;
+        require(load>0 && load<=powered.rocketPowerBuffer,"First-AA power loads cannot isolate native headroom");
+        const int maxLoads=world.owner->getProducedPower()/load+1;
+        for (int n=0;n<maxLoads;++n) {
+            world.initializePhysicalCity();
+            if (world.owner->getProducedPower()-world.owner->getPowerRequirement()<powered.rocketPowerBuffer) break;
+            world.place(Structure_Refinery);
+        }
+        // The existing city-growth power branch needs less than 24 spare
+        // power, not merely a rocket-buffer shortfall. Small real bank loads
+        // isolate both thresholds without turning this into a blackout.
+        const int margin=std::min(24,powered.rocketPowerBuffer);
+        const int smallLoad=world.game->objectData.data[Structure_Silo][world.owner->getHouseID()].power;
+        require(smallLoad>0 && smallLoad<=margin,"First-AA city has no native small power-load boundary");
+        for (int n=0,maxSmall=world.owner->getProducedPower()/smallLoad+1;n<maxSmall
+            && world.owner->getProducedPower()-world.owner->getPowerRequirement()>=margin;++n)
+            world.place(Structure_Silo);
+        const int wind=world.bot->purchasePrice(world.yard,Structure_WindTrap);
+        require(wind>1,"First-AA boundary lacks a native Windtrap quote");
+        world.cash(wind-(boundary==2 ? 0 : 1)); // Separate initial grants; never topped up during a build.
+        auto pass=world.observePlan();
+        require(world.enemy->getNumUnits()==0 && !pass.airEngaged
+            && world.owner->getNumItems(Structure_RocketTurret)==0
+            && world.owner->getNumItems(Structure_Radar)==1
+            && world.bot->campaignAvailableToBuild(world.yard,Structure_RocketTurret)
+            && world.owner->hasPower() && !world.bot->hasPowerBufferForTurret(pass)
+            && pass.forecastNetIncome>0 && pass.money==world.owner->getCredits()
+            && world.owner->getCapacity()>=pass.forecastNetIncome,
+            "First-AA boundary lacks native tax income, an unlocked first rocket or powered missing headroom");
+        require(std::none_of(pass.capitalCandidates.begin(),pass.capitalCandidates.end(),[](const auto& candidate) {
+            return candidate.score>0 && (candidate.item==Structure_RocketTurret
+                || std::string_view(candidate.kind)=="defence_upgrade"
+                || std::string_view(candidate.kind)=="defence_prerequisite");
+        }),"First-AA headroom boundary still has an executable AA capital candidate");
+        const int nuclear=world.bot->purchasePrice(world.yard,Structure_NuclearPlant);
+        require(nuclear>pass.money,"First-AA reactor control is already fully funded");
+        world.build(); // Every native candidate and producer participates.
+        if (boundary==0)
+            require(world.queued(Structure_NuclearPlant)==1,
+                "DefencePrerequisites-OFF control did not actually admit the competing native financed reactor");
+        else
+            require(world.queued(Structure_NuclearPlant)==0
+                && world.queued(Structure_WindTrap)==int(boundary==2),
+                "An absent first-AA candidate admitted a long reactor loan or lost the exact-quote Windtrap path");
+        SDL_Log("FIRST_AA_COMPACT_BOUNDARY: difficulty=%s defence=%d cash=%d wind_quote=%d nuclear_quote=%d "
+            "power=%d/%d forecast_net=%d air_engaged=%d nuclear_queued=%d wind_queued=%d whole_bot=1",
+            playerClass,int(boundary!=0),pass.money,wind,nuclear,world.owner->getProducedPower(),
+            world.owner->getPowerRequirement(),pass.forecastNetIncome,int(pass.airEngaged),
+            world.queued(Structure_NuclearPlant),world.queued(Structure_WindTrap));
+    }
+}
+
 void nativeFinancing(const char* playerClass, bool concrete) {
     World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
     seed(world, true);
@@ -328,36 +418,6 @@ void nativeFinancing(const char* playerClass, bool concrete) {
         auto pass = world.observePlan();
         require(pass.forecastNetIncome > 0 && pass.money == quote.start(),
                 "Compact start boundary is not spendable with native positive income");
-        if (growth) {
-            // Exercise the selected growth-power claim itself, independent of
-            // incidental ranking against other legitimate opening projects.
-            auto selected = pass;
-            int index = -1;
-            for (size_t i = 0; i < selected.capitalCandidates.size(); ++i) {
-                const auto& candidate = selected.capitalCandidates[i];
-                if (std::string_view(candidate.kind) == "city_growth_power"
-                    && candidate.builder == world.yard->getObjectID()
-                    && candidate.item == Structure_NuclearPlant && candidate.score > 0) {
-                    require(candidate.price == quote.price && candidate.foundationCost == quote.foundation,
-                            "Growth compact quote counted estimated and actual foundations together");
-                    index = int(i); break;
-                }
-            }
-            require(index >= 0, "Working compact city has no legal demanded growth-power candidate");
-            selected.capitalChoice = index;
-            selected.capitalInitialCount = selected.itemCount[Structure_NuclearPlant];
-            selected.capitalConsumed = false;
-            QuantBot::BuilderTurn turn(selected.money);
-            turn.pStructure = world.yard; turn.pBuilder = world.yard;
-            QuantBot::YardTurn yard;
-            world.bot->planningBuilder = world.yard->getObjectID();
-            world.bot->clearPlacementCache(false, true);
-            world.bot->startYardSelection(selected, turn, yard);
-            require(yard.itemID == Structure_NuclearPlant
-                        && world.bot->onInstallments(turn, Structure_NuclearPlant)
-                        && turn.installmentProjectStartBudget == quote.first,
-                    "Selected growth-power claim held a genuinely funded compact start for its full quote");
-        }
         SDL_Log("COMPACT_POWER_START: difficulty=%s concrete=%d growth=%d simple=%d actual_cash=%d "
                 "preplan_cash=%d preplan_net_income=%d workers=%d price=%d foundation=%d start=%d "
                 "power=%d/%d coverage_shortfall=%d turret_power_ready=%d",
@@ -485,6 +545,7 @@ void runCompactPowerProbe(const char* playerClass) {
                 world.configHash.c_str());
     }
     controls(playerClass);
+    firstAirDefenceFinancing(playerClass);
     nativeFinancing(playerClass, false);
     nativeFinancing(playerClass, true);
     fundedTwoYards(playerClass);

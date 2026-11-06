@@ -882,7 +882,23 @@ inline bool standaloneBufferedHeavy(const char* mod, const char* playerClass) {
                 && lightFactory->getProductionProgress().lround()>0
                 && lightFactory->getProductionProgress()<queuedPrice,
             "Buffered boundary control did not establish an actually partially paid native queue");
-    const int debt=queuedPrice-lightFactory->getProductionProgress().lround();
+    const int lightDebt=queuedPrice-lightFactory->getProductionProgress().lround();
+    int debt=0;
+    std::vector<std::pair<const BuilderBase*,int>> priorQueueProgress;
+    // A native tick may start other genuine work (for example a Tornie yard's
+    // autonomous Love Factory). Keep it and price every actual prior queue.
+    for (const auto* structure:structureList) {
+        const auto* builder=dynamic_cast<const BuilderBase*>(structure);
+        if (!builder || builder->getOwner()!=world.owner || builder->getItemID()==Structure_StarPort) continue;
+        int quotes=0;
+        for (const auto& offer:builder->getBuildList()) quotes+=offer.num*int(offer.price);
+        if (quotes<=0) continue;
+        const int progress=builder->getProductionProgress().lround();
+        debt+=std::max(0,quotes-progress);
+        priorQueueProgress.emplace_back(builder,progress);
+    }
+    require(lightDebt>0 && debt>=lightDebt,
+            "Buffered boundary did not retain its actual partially paid Light Factory obligation");
     const int price=world.bot->purchasePrice(heavy,vehicles[heavySlot]);
     require(world.bot->campaignAvailableToBuild(world.yard,Structure_RocketTurret),
             "Buffered boundary control lacks its legal protected-service quote");
@@ -961,9 +977,11 @@ inline bool standaloneBufferedHeavy(const char* mod, const char* playerClass) {
                 && lightFactory->getProductionQueueSize()==1 && !lightFactory->isOnHold(),
             "Exactly funded buffered Heavy order never received native payment or disturbed the prior queue");
     const auto paid=world.observePlan();
-    require(paid.queuedProductionCost==std::max(0,queuedPrice-lightFactory->getProductionProgress().lround())
-                +std::max(0,price-heavy->getProductionProgress().lround()),
-            "Following pass did not reserve each native unpaid queue remainder exactly once");
+    int expectedDebt=debt+price-heavy->getProductionProgress().lround();
+    for (const auto& [builder,progress]:priorQueueProgress)
+        expectedDebt-=builder->getProductionProgress().lround()-progress;
+    require(paid.queuedProductionCost==expectedDebt,
+            "Following pass did not reserve every prior native queue and the accepted Heavy quote exactly once");
     return true;
 }
 
@@ -1051,13 +1069,28 @@ inline void standaloneIncomeLegacyGrowth(const char* mod, const char* playerClas
     after=nativeCandidate(sharedOn);
     require(after && after->score==nativeScore && !after->incomeHeavyCapacity,
             "An additional income opportunity duplicated or replaced an already-positive native HF candidate");
+    // Supplier masks belong to a real U-enabled plan; I-only planning does not
+    // populate them. Discover the chosen family from these physical LF offers.
+    config->force.existingCompositionUnitChoice=true;
+    auto strict=world.observePlan();
+    config->force.existingCompositionUnitChoice=false;
     size_t lightSlot=UnitMixPolicy::kSlots;
-    for (size_t slot=UnitMixPolicy::kFirstLightSlot;slot<vehicles.size();++slot)
-        if (on.compositionFactoryAvailable[0][slot]) { lightSlot=slot;break; }
-    require(lightSlot<UnitMixPolicy::kSlots,"Legacy-growth U boundary has no actual Light Factory family");
-    auto strict=on;
-    strict.existingCompositionChoice=true;
+    for (const auto* factory:world.lights) {
+        for (const auto& offer:factory->getBuildList()) {
+            const size_t slot=world.bot->compositionSlot(offer.itemID,true);
+            if (slot>=UnitMixPolicy::kFirstLightSlot && slot<UnitMixPolicy::kSlots
+                && world.bot->campaignAvailableToBuild(factory,offer.itemID)
+                && strict.compositionFactoryAvailable[0][slot]
+                && !strict.compositionFactoryAvailable[1][slot]) { lightSlot=slot;break; }
+        }
+        if (lightSlot<UnitMixPolicy::kSlots) break;
+    }
+    require(strict.existingCompositionChoice && lightSlot<UnitMixPolicy::kSlots,
+            "Legacy-growth U boundary has no legal native LF-only family in its U-enabled plan");
     strict.unitMix={};strict.unitMix[lightSlot]=10000;
+    require(strict.compositionFactoryAdmits(Structure_LightFactory)
+                && !strict.compositionFactoryAdmits(Structure_HeavyFactory),
+            "Real LF/HF suppliers do not establish the intended strict native U boundary");
     auto rejected=additive;
     {
         QuantBot::BuilderTurn turn(strict.money);
@@ -1152,6 +1185,11 @@ inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
     auto pass=pressure();
     require(pass.heavyIncomeFactoryTarget==6 && !pass.existingCompositionChoice && !pass.techSavings,
             "Independent income capacity retained a one/two-factory ceiling or enabled another selection policy");
+    // Re-plan the boundary with U genuinely enabled so its supplier masks come
+    // from the real catalogues, rather than toggling a flag on an I-only pass.
+    config->force.existingCompositionUnitChoice=true;
+    pass=pressure();
+    config->force.existingCompositionUnitChoice=false;
     world.bot->chooseCapitalPlan(pass);
     require(pass.capitalChoice>=0 && pass.capitalCandidates[pass.capitalChoice].incomeHeavyCapacity
                 && std::string_view(pass.capitalCandidates[pass.capitalChoice].reason)=="income_heavy_capacity",
@@ -1159,8 +1197,8 @@ inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
     // Labelled source boundary: strict U has no positive local deficit at this
     // exactly committed single-family mix. Only the selected income addition
     // may admit another lane; merely leaving I on must not exempt legacy HFs.
-    pass.existingCompositionChoice=true;
-    require(!pass.compositionFactoryAdmits(Structure_HeavyFactory),
+    require(pass.existingCompositionChoice && pass.compositionFactoryAvailable[1][slot]
+                && !pass.compositionFactoryAdmits(Structure_HeavyFactory),
             "Additional-income boundary unexpectedly has a native strict-U capacity opportunity");
     const auto builder=pass.capitalCandidates[pass.capitalChoice].builder;
     const auto found=std::find_if(pass.capitalBuilders.begin(),pass.capitalBuilders.end(),

@@ -470,8 +470,11 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
         yardTurn.skipRemainingStructureLogic=true;
     }
 
-    // OFF retains the original early allocation, before service arbitration.
-    if (!botConfig().force.defencePrerequisites) chooseYardGrowthAllocation(pass,turn,yardTurn);
+    // Keep the native early growth lane unless first-AA work or a real
+    // blackout needs the service/power arbitration ahead of it.
+    if (!botConfig().force.defencePrerequisites
+        || (getHouse()->hasPower() && !firstAirDefencePending(pass)))
+        chooseYardGrowthAllocation(pass,turn,yardTurn);
 
     // Skip build order if something is already queued
     if (turn.pBuilder->getProductionQueueSize() > 0) {
@@ -882,9 +885,10 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
             yardTurn.skipRemainingStructureLogic = true;
         }
     }
-    // ON applies the same growth allocation only after protected services
-    // and genuine prerequisites; OFF keeps its original initialization order.
-    if (botConfig().force.defencePrerequisites) chooseYardGrowthAllocation(pass,turn,yardTurn);
+    // Only the deferred first-AA/blackout lane waits for protected services.
+    if (botConfig().force.defencePrerequisites
+        && (!getHouse()->hasPower() || firstAirDefencePending(pass)))
+        chooseYardGrowthAllocation(pass,turn,yardTurn);
     yardTurn.higherPriorityCapital = capitalPending(pass)
         && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()
         && pass.capitalCandidates[pass.capitalChoice].score > 2600;

@@ -392,7 +392,11 @@ bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int source
         && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)=="defence_upgrade";
     const Uint32 purpose=defenceUpgrade ? pass.capitalCandidates[pass.capitalChoice].item
         : turn.pBuilder->getItemID();
-    const bool airFunded=firstAirDefenceCapitalAdmits(pass,turn.pBuilder,purpose,price,turn.reserve.reserved);
+    const bool ownsAirUpgrade=defenceUpgrade
+        && pass.firstAirDefenceBuilder==turn.pBuilder->getObjectID()
+        && pass.firstAirDefenceUpgradeReserve>=price;
+    const bool airFunded=ownsAirUpgrade
+        || firstAirDefenceCapitalAdmits(pass,turn.pBuilder,purpose,price,turn.reserve.reserved);
     const bool affordable = pass.startWhatMakesSense || pass.money >= price;
     const bool funded=pass.startWhatMakesSense || canFundProductionUpgrade(pass,turn.pBuilder);
     const bool bucketFunded = spendingAdmits(pass, turn.pBuilder->getItemID(), price, true);

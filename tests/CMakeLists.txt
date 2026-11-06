@@ -487,13 +487,9 @@ if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --scenario-sides harkonnen:1:qBotMedium,atreides:2:qBotMedium
             --scenario-style city-construction-capital-off
             --skirmish size=160,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
-        add_test(NAME cross_platform_city_brutal COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/cross-platform-city-brutal
-            --scenario --mod dunecity --house harkonnen --local-spectator --seed 9101 --minutes 25
-            --capture-mib 256 --path-workers 1 --expect-digest 2bc949df2bf759d8
-            --scenario-sides harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal
-            --skirmish size=96,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
+        # The exact audited four-Brutal/96/CY/no-army/no-spice/9101/25-minute case is
+        # the canonical cluster's third same-source mini-reference parity case for
+        # native CTest and game preparation, not a frozen implementation digest.
         add_test(NAME tile_non_infantry_lookup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable --city-placement-probe
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/tile-non-infantry-lookup
@@ -502,7 +498,7 @@ if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --scenario-sides harkonnen:1:qBotEasy,atreides:2:qBotEasy
             --skirmish size=96,base=small,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
         set_tests_properties(tile_non_infantry_lookup PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        set_tests_properties(cross_platform_city_medium cross_platform_city_brutal PROPERTIES
+        set_tests_properties(cross_platform_city_medium PROPERTIES
             TIMEOUT 300 RUN_SERIAL TRUE ENVIRONMENT "BALANCE_DUNECITY_AUDIT=1")
     endif()
 endif()

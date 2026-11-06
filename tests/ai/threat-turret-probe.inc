@@ -418,6 +418,36 @@ void runThreatTurretProbe(Game& game) {
             bot->planCapitalCandidates(pass);bot->chooseCapitalPlan(pass);
             return pass;
         };
+        auto exactCoreAA=[&](Uint32 item,bool upgrade) {
+            const auto keepStored=house->storedCredits, keepStarting=house->startingCredits, keepCity=house->cityCredits;
+            const int quote=upgrade ? yard->getUpgradeCost() : bot->purchasePrice(yard,item);
+            require(quote>0,"Nonurgent first-AA component lacks a native quote");
+            aircraft->setVisible(house->getTeamID(),false);
+            house->storedCredits=0;house->cityCredits=0;house->startingCredits=quote;
+            auto exact=airPlan();
+            require(!exact.airEngaged && exact.money==quote
+                && exact.firstAirDefenceReserve>=quote
+                && (upgrade ? exact.firstAirDefenceBuilder==yard->getObjectID()
+                    && exact.firstAirDefenceUpgradeReserve>=quote : exact.firstAirDefenceStepCosts[item]>0)
+                && (exact.capitalChoice<0 || !exact.capitalCandidates[exact.capitalChoice].urgent),
+                "Exact-cash AA control is not a nonurgent, actually priced chain component");
+            const int remaining=exact.remainingFirstAirDefenceCash();
+            QuantBot::BuilderTurn turn(exact.money);turn.pStructure=yard;turn.pBuilder=yard;
+            bot->beginBuilderTurn(exact,turn);
+            const bool accepted=upgrade ? bot->upgradeWithLogging(exact,turn,__LINE__)
+                : bot->queueFoundedStructure(exact,turn,item,__LINE__,"first_aa_nonurgent_exact_quote");
+            // Match native founded callers: normal accepted item counts are caller-owned.
+            if (accepted && !upgrade) ++exact.itemCount[item];
+            require(accepted && exact.money==0
+                && (upgrade ? yard->isUpgrading() : yard->getCurrentProducedItem()==item)
+                && exact.remainingFirstAirDefenceCash()==remaining-quote,
+                "A nonurgent first-AA component could not spend its own exact native quote");
+            if (upgrade) yard->upgrading=false; // Independent initial-quote control; no payment tick advanced.
+            clear();
+            house->storedCredits=keepStored;house->startingCredits=keepStarting;house->cityCredits=keepCity;
+            aircraft->setVisible(house->getTeamID(),true);
+        };
+        exactCoreAA(Structure_RocketTurret,true);
         {
             // A busy upgraded yard prices Radar+rocket. An idle yard's newly
             // accepted upgrade was NOT part of that minimum and cannot release
@@ -557,6 +587,7 @@ void runThreatTurretProbe(Game& game) {
         }
         require(!yard->isUpgrading() && yard->getCurrentUpgradeLevel()>=rocketLevel,
             "The healthy funded AA yard did not finish its native paid upgrade");
+        exactCoreAA(Structure_Radar,false);
         auto radarPlan=airPlan();bot->buildProducer(radarPlan,yard);
         require(yard->getCurrentProducedItem()==Structure_Radar,
             "The AA upgrade did not hand its actual budget to native Radar production");
@@ -738,6 +769,7 @@ void runThreatTurretProbe(Game& game) {
                 "First-AA building did not physically complete with native payments and placement");
         };
         finishBuilding(Structure_Radar);
+        exactCoreAA(Structure_RocketTurret,false);
         // Powered is not the same as enough headroom for an operational rocket.
         // Its real enabling generator must still precede the protected turret.
         house->producedPower=house->getPowerRequirement();
