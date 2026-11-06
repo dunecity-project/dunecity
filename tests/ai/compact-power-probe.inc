@@ -46,23 +46,25 @@ void controls(const char* playerClass) {
         World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
         seed(world, true);
         world.bot->planningBuilder = world.yard->getObjectID();
-        world.bot->clearPlacementCache();
-        const Coord small = world.bot->findPlaceLocation(Structure_WindTrap);
-        require(small.isValid(), "Missing small generator control plot");
+        // Author a two-column strip beside the existing Windtrap: a 2x2
+        // building plus a complete two-tile frontage, never a 3x3 plot.
+        // Changing terrain alone retains road flags and can strand the old
+        // road network underneath an otherwise legal small footprint.
+        const Coord small(18, 11);
         for (int y = 0; y < currentGameMap->getSizeY(); ++y)
-            for (int x = 0; x < currentGameMap->getSizeX(); ++x)
-                if (!currentGameMap->getTile(x, y)->hasAStructure()) currentGameMap->getTile(x, y)->setType(Terrain_Sand);
-        for (int y = 0; y < 2; ++y) for (int x = 0; x < 2; ++x)
-            currentGameMap->getTile(small.x + x, small.y + y)->setType(Terrain_Rock);
-        bool frontage = false;
-        for (Coord edge : {Coord(small.x - 1, small.y), Coord(small.x + 2, small.y),
-                           Coord(small.x, small.y - 1), Coord(small.x, small.y + 2)})
-            if (currentGameMap->tileExists(edge) && !currentGameMap->getTile(edge)->hasAGroundObject()) {
-                currentGameMap->getTile(edge)->setType(Terrain_Rock);
-                frontage = true;
-                break;
+            for (int x = 0; x < currentGameMap->getSizeX(); ++x) {
+                auto* tile = currentGameMap->getTile(x, y);
+                if (!tile->hasAStructure()) {
+                    tile->setRoad(false);
+                    tile->setType(Terrain_Sand);
+                }
             }
-        require(frontage, "Small generator control lacks road frontage");
+        for (int y = small.y - 1; y < small.y + 2; ++y)
+            for (int x = small.x; x < small.x + 2; ++x)
+                currentGameMap->getTile(x, y)->setType(Terrain_Rock);
+        require(currentGameMap->okayToPlaceStructure(small.x, small.y, 2, 2,
+                    false, world.owner, false, Structure_WindTrap),
+                "Small generator control is not human-legal");
         world.bot->clearPlacementCache();
         require(world.bot->findPlaceLocation(Structure_NuclearPlant).isInvalid(),
                 "Small-plot control still admits a reactor");
