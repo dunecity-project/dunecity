@@ -129,8 +129,13 @@ void runCivMenu() {
 void runCivResearchGame(const GameInitSettings& init) {
     auto game = startMatch(init);
     skirmishRequire(init.getGameOptions().originalUnitDamage, "Civ Wars lost original unit damage");
-    SDL_Log("CIV_HUMAN_RESEARCH: event=setup originalUnitDamage=%d researchLab=%d civWars=%d",
-        int(init.getGameOptions().originalUnitDamage), int(init.getGameOptions().researchLab), int(init.isCivilizationWars()));
+    const bool installments = init.getGameOptions().technologyInstallments;
+    const char* expectedInstallments = std::getenv("SKIRMISH_RESEARCH_INSTALLMENTS");
+    skirmishRequire(expectedInstallments && *expectedInstallments == (installments ? '1' : '0'),
+                    "Civ Wars menu lost the selected Technology Installments rule");
+    SDL_Log("CIV_HUMAN_RESEARCH: event=setup originalUnitDamage=%d researchLab=%d civWars=%d installments=%d",
+        int(init.getGameOptions().originalUnitDamage), int(init.getGameOptions().researchLab),
+        int(init.isCivilizationWars()), int(installments));
     skirmishRequire(!game->isObserving() && pLocalHouse && pLocalPlayer
                     && dynamic_cast<HumanPlayer*>(pLocalPlayer), "Civ Wars did not seat the human controller");
     ResearchLab* lab = nullptr;
@@ -181,16 +186,27 @@ void runCivResearchGame(const GameInitSettings& init) {
     skirmishRequire(button.x >= 0 && button.x < getRendererWidth()
                     && button.y >= 0 && button.y < getRendererHeight(), "Research button lies outside the window");
     capture("zero-credits");
-    skirmishRequire(!panel->research.isEnabled() && !pLocalHouse->canStartTechResearch(lab->getObjectID()),
-                    "Zero-credit Civ Wars house unexpectedly offers research");
-    skirmishRequire(panel->status.getText() == "Needs 1000 credits\nTime: 2:00",
-                    "Unaffordable research does not explain its credit requirement");
-    click(button.x, button.y);
-    skirmishRequire(commands() == 0 && !pLocalHouse->isTechResearchActive(),
-                    "Unaffordable research click sent a command or spent credits");
-    SDL_Log("CIV_HUMAN_RESEARCH: event=unaffordable cycle=%u house=%d credits=%d tech=%d button=%d,%d enabled=%d",
-        game->getGameCycleCount(), pLocalHouse->getHouseID(), pLocalHouse->getCredits(), pLocalHouse->getTechLevel(),
-        button.x, button.y, int(panel->research.isEnabled()));
+    skirmishRequire(pLocalHouse->getCredits() == 0, "Generated Civ Wars human did not start with zero credits");
+    if(installments) {
+        skirmishRequire(panel->research.isEnabled() && pLocalHouse->canStartTechResearch(lab->getObjectID()),
+                        "Zero-credit installment research is not offered through the real Civ Wars sidebar");
+        SDL_Log("CIV_HUMAN_RESEARCH: event=zero_cash_ready cycle=%u house=%d credits=0 tech=%d enabled=1",
+            game->getGameCycleCount(), pLocalHouse->getHouseID(), pLocalHouse->getTechLevel());
+    } else {
+        skirmishRequire(!panel->research.isEnabled() && !pLocalHouse->canStartTechResearch(lab->getObjectID()),
+                        "Zero-credit legacy Civ Wars house unexpectedly offers research");
+        skirmishRequire(panel->status.getText() == "Needs full price"
+                        && panel->total.getText() == "Total: 1000 cr"
+                        && panel->drain.getText() == "Upfront payment"
+                        && panel->remaining.getText() == "Time: 2:00",
+                        "Unaffordable legacy research does not explain its full credit/time requirement");
+        click(button.x, button.y);
+        skirmishRequire(commands() == 0 && !pLocalHouse->isTechResearchActive(),
+                        "Unaffordable legacy research click sent a command or spent credits");
+        SDL_Log("CIV_HUMAN_RESEARCH: event=unaffordable cycle=%u house=%d credits=%d tech=%d button=%d,%d enabled=%d",
+            game->getGameCycleCount(), pLocalHouse->getHouseID(), pLocalHouse->getCredits(), pLocalHouse->getTechLevel(),
+            button.x, button.y, int(panel->research.isEnabled()));
+    }
     const Uint32 limit = game->getGameCycleCount()
         + civResearchWindow(pLocalHouse->getTechResearchCost(), pLocalHouse->techResearchCycles(2));
     while(game->getGameCycleCount() < limit && !pLocalHouse->canStartTechResearch(lab->getObjectID()))
@@ -214,6 +230,11 @@ void runCivResearchGame(const GameInitSettings& init) {
     // payment is covered by research_lab_probe; here require the GUI command and completion.
     skirmishRequire(pLocalHouse->isTechResearchActive() && pLocalHouse->getTechResearchTarget() == 2,
                     "Human GUI research command did not execute against the selected Lab");
+    skirmishRequire(pLocalHouse->isTechResearchInstallment() == installments,
+                    "Civ Wars human command did not capture the selected payment rule");
+    if(installments)
+        skirmishRequire(pLocalHouse->getTechResearchPaid() < FixPoint(cost),
+                        "Zero-credit Civ Wars research was charged its full quote at acceptance");
     gui.updateObjectInterface();
     capture("active");
     SDL_Log("CIV_HUMAN_RESEARCH: event=start cycle=%u house=%d credits=%d tech=%d target=%d lab=%u",
@@ -238,6 +259,23 @@ void runCivResearchGame(const GameInitSettings& init) {
 
 void runCivResearch() {
     CivWarsMenu menu;
+    const char* installments = std::getenv("SKIRMISH_RESEARCH_INSTALLMENTS");
+    skirmishRequire(installments && (*installments == '0' || *installments == '1'),
+                    "Civ Wars research fixture has no explicit payment rule");
+    skirmishRequire(RandomSkirmish::activateMod("CivWars"), "Cannot activate Civilization Wars research rules");
+    auto initialRules = menu.getMatchRules();
+    GameOptionsWindow rules(initialRules);
+    const bool wanted = *installments == '1';
+    if(rules.technologyInstallmentsCheckbox.isChecked() != wanted) {
+        rules.technologyInstallmentsCheckbox.handleMouseLeft(5, 5, true);
+        rules.technologyInstallmentsCheckbox.handleMouseLeft(5, 5, false);
+    }
+    skirmishRequire(rules.technologyInstallmentsCheckbox.isChecked() == wanted,
+                    "Civ Wars Game Rules checkbox did not select the payment rule");
+    rules.onOK();
+    menu.onChildWindowClose(&rules);
+    skirmishRequire(menu.getMatchRules().technologyInstallments == wanted,
+                    "Civ Wars menu did not keep the chosen payment rule");
     probeSelect(menu.teamsBox, 1);
     probeSelect(menu.sizeBox, 0);
     probeSelect(menu.houseBox, HOUSE_ATREIDES);

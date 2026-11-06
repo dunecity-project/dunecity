@@ -33,8 +33,8 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/skirmis
                original research deadline and at least ten game minutes with all QuantBot seats
   civ-2v2      the same four-house match and mirrored lane setup
   civ-3v3      the same six-house match and one lane per player
-  civ-research human selected from Civ Wars menu: zero-credit rejection, normal-income enablement,
-               real SDL Lab selection/research click, queued command and tech-2 completion
+  civ-research human selected from Civ Wars menu: both legacy full-price rejection and
+               zero-credit installment acceptance, normal income, real SDL Lab clicks and tech-2 completion
 
 Every match case asserts houses/teams, players per house, structure and unit counts, army value
 and power against the generator's own plan, and draws the loaded (and played) map. A smoke run
@@ -130,15 +130,23 @@ startup_noise = re.compile(r'Error loading|Warning: could not|libpng', re.IGNORE
 summary = []
 for case in args.cases.split(','):
     sizes = ((640, 480), (1280, 720)) if case in ('menu', 'civ-menu', 'civ-research', 'civ-1v1', 'civ-2v2', 'civ-3v3') else ((1024, 768),)
-    for width, height in sizes:
+    runs = [(width, height, payment) for width, height in sizes
+            for payment in (('off', 'on') if case == 'civ-research' else (None,))]
+    for width, height, payment in runs:
         label = case if len(sizes) == 1 else f'{case}-{width}'
+        if payment is not None:
+            label += '-' + payment
+        case_out = out / label if payment is not None else out
+        case_out.mkdir(exist_ok=True)
         profile = work / ('profile-' + label) / 'profile'
         profile.mkdir(parents=True)
         (profile / 'Dune City.ini').write_text(
             f'[Video]\nPhysical Width = {width}\nPhysical Height = {height}\nWidth = {width}\nHeight = {height}\n'
             f'Interface Height = {height}\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Skirmish tester\n')
         env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
-                   SKIRMISH_PROBE_OUT=str(out), SKIRMISH_PROBE_CASE=case, SKIRMISH_SOURCE_DIR=str(root))
+                   SKIRMISH_PROBE_OUT=str(case_out), SKIRMISH_PROBE_CASE=case, SKIRMISH_SOURCE_DIR=str(root))
+        if payment is not None:
+            env['SKIRMISH_RESEARCH_INSTALLMENTS'] = str(int(payment == 'on'))
         if case in ('allied-2v3', 'city-192', 'stefan-128', 'partner-support'):
             env['SKIRMISH_PROBE_SMOKE'] = '1'
         if case == 'render':
@@ -167,6 +175,7 @@ for case in args.cases.split(','):
         summary += [line[line.index('SKIRMISH_PROBE'):] for line in text.splitlines() if 'SKIRMISH_PROBE' in line]
         summary += [line[line.index('SKIRMISH_SMOKE'):] for line in text.splitlines() if 'SKIRMISH_SMOKE' in line]
         summary += [line[line.index('SKIRMISH_RENDER'):] for line in text.splitlines() if 'SKIRMISH_RENDER' in line]
+        summary += [line[line.index('CIV_HUMAN_RESEARCH'):] for line in text.splitlines() if 'CIV_HUMAN_RESEARCH' in line]
 
 (out / 'summary.txt').write_text('\n'.join(summary) + '\n')
 print('\n'.join(summary))

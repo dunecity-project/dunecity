@@ -1747,6 +1747,8 @@ private:
     void traceCapitalOutcome(BuildPass& pass);
     /// Match option and hashed policy switch; never consumes RNG or adds saved AI state.
     bool researchLabPolicyActive() const;
+    /// Continuous research requires installment legality; old-rule saves retain legacy planning.
+    bool continuousResearchActive() const;
     /// Break ordinary fleet/crime research vetoes; Civ Wars always retains progression.
     bool researchRequired(const BuildPass& pass) const;
     bool techInvestmentReady(BuildPass& pass);

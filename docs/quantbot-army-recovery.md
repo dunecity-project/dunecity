@@ -487,10 +487,12 @@ placement plus normal level-2 research startup ON. This is separate from
 the general tech-1 opening-fleet and full research-completion fixtures.
 
 `ContinuousResearch` is a separate hashed, default-OFF gene for an existing
-lab. ON starts each next study through level9 without capital reserves,
-income/crime/fleet readiness or army pacing; actual attacks on economic
-assets and blackouts may defer a start. The ordinary engine decides legal
-ownership, concurrent research and payment. New-game `Technology Installments`
+lab. With `Technology Installments` ON it starts each next study through
+level9 without capital reserves, income/crime/fleet readiness or army pacing;
+actual attacks on economic assets and blackouts may defer a start. With the
+rule OFF, starting still needs the full price, so the complete legacy research
+planner applies. The ordinary engine decides legal ownership, concurrent
+research and payment. New-game `Technology Installments`
 is a shared human/AI rule: studies and BuilderBase upgrades can start at any
 balance and pause rather than cancel when cash runs out. Old saves retain
 their upfront rule and already-paid research timers. The full AI fixture

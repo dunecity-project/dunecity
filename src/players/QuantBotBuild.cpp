@@ -163,7 +163,7 @@ void QuantBot::build(int militaryValue) {
         if (civWarsRules() || researchRequired(pass)) planTechResearch(pass);
         else startTechResearch(pass);
     } else if (!pass.startWhatMakesSense
-        && (botConfig().force.continuousResearch || (!civWarsRules() && !researchRequired(pass))))
+        && (continuousResearchActive() || (!civWarsRules() && !researchRequired(pass))))
         startTechResearch(pass);
 
     traceCapitalOutcome(pass);
@@ -401,6 +401,11 @@ bool QuantBot::researchLabPolicyActive() const {
         && botConfig().force.researchLab && !switchedOff() && !fighterOnly();
 }
 
+bool QuantBot::continuousResearchActive() const {
+    return currentGame && botConfig().force.continuousResearch
+        && currentGame->getGameInitSettings().getGameOptions().technologyInstallments;
+}
+
 bool QuantBot::researchRequired(const BuildPass& pass) const {
     return researchLabPolicyActive() && (currentGame->getGameInitSettings().isCivilizationWars()
         || (botConfig().force.researchLabProgression && getHouse()->getTechLevel() < 9
@@ -495,7 +500,7 @@ bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* buil
 }
 
 void QuantBot::planTechResearch(BuildPass& pass) {
-    if (botConfig().force.continuousResearch && researchLabPolicyActive()
+    if (continuousResearchActive() && researchLabPolicyActive()
         && getHouse()->getNumItems(Structure_ResearchLab) > 0) {
         startTechResearch(pass);
         return;
@@ -528,7 +533,7 @@ void QuantBot::planTechResearch(BuildPass& pass) {
 void QuantBot::startTechResearch(BuildPass& pass) {
     if (!researchLabPolicyActive() || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9) return;
     const int cost = getHouse()->getTechResearchCost();
-    if (botConfig().force.continuousResearch) {
+    if (continuousResearchActive()) {
         // Research is a continuous drain, not a capital purchase that must
         // await an opening fleet, a crime-free city or the full future quote.
         if (pass.defendingEconomy || pass.airEngaged || !getHouse()->hasPower()

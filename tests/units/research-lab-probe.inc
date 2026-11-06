@@ -72,6 +72,17 @@ std::unique_ptr<Game> researchGame(bool enabled, bool ai = false, int mapSize = 
     game->bReplay = true;
     game->initGame(init);
     game->bReplay = false;
+    if(!ai) {
+        // Offline loading adopts the last human seat, which here is the enemy.
+        // Seat the authored tester before creating the sidebar or issuing clicks.
+        auto* owner = game->getHouse(HOUSE_ATREIDES);
+        auto* controller = dynamic_cast<HumanPlayer*>(owner->getPlayerList().front().get());
+        researchRequire(controller && game->getPlayerByID(controller->getPlayerID()) == controller,
+                        "Research fixture has no registered Atreides human controller");
+        pLocalHouse = owner;
+        pLocalPlayer = controller;
+        researchRequire(game->canControlHouse(owner), "Research fixture did not seat its human controller");
+    }
     game->initializeGameLoop();
     // Generator presets cap opening cash at 20k; fund the complete L2-L9 timing fixture.
     if(!ai) game->getHouse(HOUSE_ATREIDES)->addUnstoredCredits(80000);

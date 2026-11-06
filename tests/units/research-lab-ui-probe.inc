@@ -62,11 +62,17 @@ void inside(const SDL_Rect& inner, const SDL_Rect& outer, const char* why) {
 
 ResearchLabInterface* select(Game& game, ResearchLab* lab) {
     require(currentGame == &game && lab && game.pInterface, "Research UI has no current lab/interface");
+    require(pLocalHouse == lab->getOwner() && pLocalPlayer
+            && pLocalPlayer->getHouse() == pLocalHouse
+            && game.getPlayerByID(pLocalPlayer->getPlayerID()) == pLocalPlayer
+            && game.canControlHouse(pLocalHouse),
+            "Research UI fixture did not seat the lab's registered human controller");
     game.unselectAll(game.selectedList);
     game.selectedList.clear();
     game.selectedList.insert(lab->getObjectID());
     lab->setSelected(true);
     game.selectionChanged();
+    // selectionChanged() creates the real panel; the next sidebar pass updates it.
     game.pInterface->updateObjectInterface();
     auto* panel = dynamic_cast<ResearchLabInterface*>(game.pInterface->pObjectContainer);
     require(panel && panel->update(), "Real selection did not open the Research Lab panel");
@@ -262,11 +268,17 @@ namespace ResearchLabUIProbe {
 
 BuilderInterface* selectUpgrade(Game& game, BuilderBase* builder) {
     require(currentGame == &game && builder && game.pInterface, "Upgrade UI has no current builder/interface");
+    require(pLocalHouse == builder->getOwner() && pLocalPlayer
+            && pLocalPlayer->getHouse() == pLocalHouse
+            && game.getPlayerByID(pLocalPlayer->getPlayerID()) == pLocalPlayer
+            && game.canControlHouse(pLocalHouse),
+            "Upgrade UI fixture did not seat the builder's registered human controller");
     game.unselectAll(game.selectedList);
     game.selectedList.clear();
     game.selectedList.insert(builder->getObjectID());
     builder->setSelected(true);
     game.selectionChanged();
+    // As in normal frames, update only after selectionChanged() attaches the panel.
     game.pInterface->updateObjectInterface();
     auto* panel = dynamic_cast<BuilderInterface*>(game.pInterface->pObjectContainer);
     require(panel && panel->update(), "Real selection did not open the builder's upgrade panel");

@@ -254,6 +254,11 @@ struct World {
         bot->planOpeningProduction(pass);
         bot->planDefenceCoverage(pass);
         bot->planTechSavings(pass);
+        // Funding checks consume the selected capital reserve. Complete the
+        // production evaluation before observing it, but issue no orders here.
+        bot->planCapitalCandidates(pass);
+        bot->chooseCapitalPlan(pass);
+        bot->planSensibleBudget(pass);
         return pass;
     }
 
@@ -438,6 +443,8 @@ inline void continuous(const char* mod, const char* playerClass, bool enabled, b
     World world(mod, playerClass, true, Control::ExistingLab, installments, enabled);
     const auto* lab = world.lab();
     require(lab && world.owner->getTechLevel() == 1, "Continuous fixture lacks its ordinary initial lab");
+    require(world.bot->continuousResearchActive() == (enabled && installments),
+            "Continuous policy ignored its shared Technology Installments dependency");
     world.owner->storedCredits = world.owner->startingCredits = world.owner->cityCredits = 0;
     require(world.owner->canStartTechResearch(lab->getObjectID()) == installments,
             "Human research eligibility did not follow the shared installment rule");
@@ -449,6 +456,20 @@ inline void continuous(const char* mod, const char* playerClass, bool enabled, b
         require(!world.owner->isTechResearchActive(), "Disabled policy or upfront engine invented an unfunded study");
         SDL_Log("CONTINUOUS_RESEARCH_CONTROL: mod=%s class=%s gene=%d installments=%d cash=0 active=0",
                 mod, playerClass, enabled, installments);
+        if (enabled && !installments) {
+            const int price = world.owner->getTechResearchCost();
+            world.owner->startingCredits = price;
+            require(world.owner->canStartTechResearch(lab->getObjectID()),
+                    "Legacy control did not have the human engine's full research price");
+            auto legacy = world.observePlan();
+            require(!world.bot->canFundTechInvestment(legacy, price),
+                    "Legacy capital reserve did not bind the funded control");
+            world.bot->startTechResearch(legacy);
+            require(!world.owner->isTechResearchActive() && world.owner->getCredits() == price,
+                    "Continuous gene bypassed the old-rule research planner");
+            SDL_Log("CONTINUOUS_RESEARCH_LEGACY_PASS: mod=%s class=%s full_price=%d legacy_reserve_preserved=1",
+                    mod, playerClass, price);
+        }
         return;
     }
     for (int target : {2, 3, 4}) {

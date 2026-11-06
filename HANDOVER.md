@@ -11,11 +11,12 @@
   setups load installments OFF. Already-paid research countdowns are never
   recharged or repriced. No extra BuilderBase or QuantBot saved fields.
 - Independent hashed `[Force Concentration] ContinuousResearch` is **default
-  OFF**, pending Genome promotion. ON starts the next study through tech9
-  without full-quote reserves, income/fleet/crime readiness or army pacing;
-  current attacks on economic assets and blackouts may defer a start. Normal
-  shared engine legality/payment remains authoritative. ResearchLabProgression
-  remains the separate lab-acquisition policy.
+  OFF**, pending Genome promotion. With **Technology Installments ON**, it starts
+  the next study through tech9 without full-quote reserves, income/fleet/crime
+  readiness or army pacing; current attacks on economic assets and blackouts
+  may defer a start. With the rule OFF, it retains the complete legacy research
+  planner. Shared human engine legality/payment remains authoritative;
+  ResearchLabProgression remains the separate lab-acquisition policy.
 - Private `notbuilding.dls`, SHA256 `277f2e52…9797c49`, initial cycle30088:
   all active controllers are QuantBot Brutal, Both; Ordos has two. All four
   houses own a legal tech1 lab at tech2 with power/income. Credits are
@@ -23,6 +24,12 @@
   918/1327/1016/1153 credits per minute. Ordos already has prepaid tech3 with
   8196cycles left. Others face full-price/capital-reserve gates; Neutral is
   specifically79 short of tech3's2000 plus its300 operating reserve.
+- Corrected-source `b8a627aa` four-arm private continuation (15 game minutes):
+  with both controls ON, Mercenary/Neutral/Rebels begin tech3 after
+  0.128/0.208/1.072 seconds; Mercenary/Rebels reach tech5 and are studying tech6
+  at the cutoff. Rule OFF/policy OFF reaches tech4/tech3 respectively.
+  Ordos's prepaid tech3 completes after exactly8196 timer updates in every arm;
+  Ordos/Neutral later lose their labs in combat, not to a research veto.
 - Real-save bytes stay under private `outputs/` and frozen queue transport.
   The old encoded crime save is removed; committed crime/continuous coverage
   uses synthetic real-engine worlds. Private continuation tooling records
@@ -31,7 +38,10 @@
 - Research and upgrade panels show paid progress/drain/paused state; real
   640×480 captures and ordinary human-button commands are required by the
   engine fixture. Evidence root: `../outputs/research-installments-20261106/`.
-
+- Physical fixtures observe the complete capital-selection lifecycle and seat
+  the registered human whose sidebar they exercise. Civ Wars covers both payment
+  rules at640×480 and1280×720 through its normal rules/start callbacks and actual
+  SDL Lab/research-button commands; legacy affordability checks remain intact.
 
 ## 2026-11-06 — Deterministic native input probes and bounded fatal-error exit (OMP MouseControls, unreleased)
 

@@ -256,10 +256,10 @@ struct QuantBotConfig {
         /// Treat research-enabled matches as technology progression, not optional
         /// capital behind the higher-tech opening fleet. Hashed; no saved state.
         bool researchLabProgression;
-        /// Keep an existing lab researching through level nine without capital,
-        /// income, crime or fleet readiness gates. Only live defence and blackouts
-        /// may defer a start; the normal human research/payment rules still apply.
-        /// Opt-in; genome evaluation promotes the default separately.
+        /// With Technology Installments enabled, keep an existing lab researching
+        /// through level nine without capital, income, crime or fleet readiness gates.
+        /// Only live defence and blackouts may defer a start. Old-rule matches retain
+        /// their complete legacy research planner. Opt-in; genome promotion is separate.
         bool continuousResearch;
         /// Reserve a legal generator before demanded city growth runs out of its 24-power
         /// headroom, instead of allowing military savings and bargains to starve it.
