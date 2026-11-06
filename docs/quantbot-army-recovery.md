@@ -42,6 +42,14 @@ The final optional-repeat-factory gate uses those masks in both shared-spending
 and funded-parallel modes. True first/rebuilt suppliers and economic/transport
 unit policies retain their existing admission.
 
+`--existing-composition-unit-choice-probe` runs this policy's engine cases in a
+separate process from `--simple-tech-saving-probe`. CTest registers Medium, Hard
+and Brutal cases for vanilla, DuneCity, Dune2R and Tornie; the latter exercises
+authored variants and variant-only suppliers. The paired unit-only military
+case gives both arms 9,999 credits, below the unrelated third-yard MCV wealth
+trigger, while retaining the huge military ceiling and real paid factory-unit
+completion and preserved-queue assertions. It does not change that MCV policy.
+
 This switch does not change technology/economy priorities, construction
 installments, upgrade payment or capital reservations. It does not enable
 `SimpleTechSavings`, whose rejected combined experiment remains independently

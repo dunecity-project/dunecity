@@ -897,6 +897,21 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
             endforeach()
         endforeach()
+        # Unit choice is a separate process from the rejected combined tech policy.
+        # Tornie exercises authored combat variants and variant-only suppliers.
+        foreach(unit_choice_mod IN ITEMS vanilla dunecity Dune2R Tornie)
+            foreach(unit_choice_difficulty IN ITEMS medium hard brutal)
+                add_test(NAME quantbot_existing_composition_unit_choice_${unit_choice_mod}_${unit_choice_difficulty}
+                    COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --existing-composition-unit-choice-probe --repeatable
+                    --mod ${unit_choice_mod} --partner-difficulty ${unit_choice_difficulty}
+                    --seed 1841712204 --no-ai-telemetry --path-workers 1
+                    --wall-timeout 550 --build-dir ${CMAKE_BINARY_DIR}
+                    --output-dir ${CMAKE_BINARY_DIR}/unit-choice-${unit_choice_mod}-${unit_choice_difficulty}-probe)
+                set_tests_properties(quantbot_existing_composition_unit_choice_${unit_choice_mod}_${unit_choice_difficulty}
+                    PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+            endforeach()
+        endforeach()
         # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
         # and saved partner state through the live Harkonnen level-9 fixture.
         foreach(pressure_mod IN ITEMS vanilla dunecity)

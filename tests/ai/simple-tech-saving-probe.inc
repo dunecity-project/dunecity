@@ -255,7 +255,10 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
         }
         addMatureYard(world);
         world.closeMilitaryMarket(); // Measured heavy completion must come from its real HF.
-        world.cash(19999);
+        // Unit-choice-only leaves the legacy wealth/MCV policy untouched.
+        // Below its third-yard cash trigger, both arms exercise the military
+        // selector instead of an unrelated, already-capped MCV branch.
+        world.cash(unitChoiceOnly ? 9999 : 19999);
         if (queuedControl) {
             // Labelled initial commitments, not the asserted bot's heavy order.
             for (auto* factory : world.lights) factory->doProduceItem(Unit_Quad);
@@ -306,8 +309,13 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
                         && int64_t(committedLight) * 10000 > int64_t(committedValue) * plan.lightVehicleBps,
                     "Factory composition still uses a future funded army instead of owned-plus-queued value");
             next = plan.nextCompositionSlot();
-            require(next < UnitMixPolicy::kOrnithopterSlot && heavy->isAvailableToBuild(vehicles[next])
-                        && world.price(vehicles[next]) > std::max({world.price(Unit_Trike),
+            const bool selectedHeavySupplier = unitChoiceOnly
+                ? next < UnitMixPolicy::kSlots && plan.compositionFactoryAvailable[1][next]
+                : next < UnitMixPolicy::kOrnithopterSlot && heavy->isAvailableToBuild(vehicles[next]);
+            const int selectedPrice = next < UnitMixPolicy::kSlots
+                ? (unitChoiceOnly ? int(plan.compositionPrice[next]) : world.price(vehicles[next])) : 0;
+            require(next < UnitMixPolicy::kOrnithopterSlot && selectedHeavySupplier
+                        && selectedPrice > std::max({world.price(Unit_Trike),
                             world.price(Unit_RaiderTrike), world.price(Unit_Quad)}),
                     "Overweight cheap share has no genuinely legal higher-value next HF unit");
             selected = vehicles[next];
@@ -1292,16 +1300,6 @@ void runSimpleTechSavingProbe(const char* mod, const char* playerClass) {
         SimpleTechSavingProbe::composition(mod, playerClass, false, causalControlsOff);
         SimpleTechSavingProbe::composition(mod, playerClass, true, causalControlsOff);
     }
-    for (const bool causalControlsOff : {false, true}) {
-        SimpleTechSavingProbe::composition(mod, playerClass, false, causalControlsOff, true);
-        SimpleTechSavingProbe::composition(mod, playerClass, true, causalControlsOff, true);
-    }
-    SimpleTechSavingProbe::standaloneStarport(mod, playerClass);
-    SimpleTechSavingProbe::standaloneVariantAccounting(mod, playerClass);
-    SimpleTechSavingProbe::standaloneVariantSupplier(mod, playerClass);
-    SimpleTechSavingProbe::standaloneCustomBypass(mod, playerClass);
-    SimpleTechSavingProbe::standaloneInfantryCapital(mod, playerClass);
-    SimpleTechSavingProbe::standaloneFactoryVet(mod, playerClass);
     for (const auto goal : {SimpleTechSavingProbe::Project::HeavyFactory, SimpleTechSavingProbe::Project::HeavyUpgrade,
                             SimpleTechSavingProbe::Project::IX, SimpleTechSavingProbe::Project::Starport,
                             SimpleTechSavingProbe::Project::Palace}) {
@@ -1326,5 +1324,29 @@ void runSimpleTechSavingProbe(const char* mod, const char* playerClass) {
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=simple_tech_saving outcome=passed mod=%s difficulty=%s "
             "producer_scope=full_build paid_progress=1 paired_off=1 queued_composition=1 "
             "single_legal_project=1 structure_installments=1 ordinary_upgrade_gate=1 stateless_policy=1 causal_controls_off=1 wall_ms=%lld",
+            mod, playerClass, static_cast<long long>(wall));
+}
+
+void runExistingCompositionUnitChoiceProbe(const char* mod, const char* playerClass) {
+    struct RestoreConfig {
+        QuantBotConfig saved = getQuantBotConfig();
+        ~RestoreConfig() { getQuantBotConfig() = saved; }
+    } restore;
+    const auto start = std::chrono::steady_clock::now();
+    for (const bool causalControlsOff : {false, true}) {
+        SimpleTechSavingProbe::composition(mod, playerClass, false, causalControlsOff, true);
+        SimpleTechSavingProbe::composition(mod, playerClass, true, causalControlsOff, true);
+    }
+    SimpleTechSavingProbe::standaloneStarport(mod, playerClass);
+    SimpleTechSavingProbe::standaloneVariantAccounting(mod, playerClass);
+    SimpleTechSavingProbe::standaloneVariantSupplier(mod, playerClass);
+    SimpleTechSavingProbe::standaloneCustomBypass(mod, playerClass);
+    SimpleTechSavingProbe::standaloneInfantryCapital(mod, playerClass);
+    SimpleTechSavingProbe::standaloneFactoryVet(mod, playerClass);
+    const auto wall = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+    SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=existing_composition_unit_choice outcome=passed mod=%s difficulty=%s "
+            "producer_scope=full_build paired_off=1 queued_composition=1 paid_factory_completion=1 "
+            "starport_acceptance=1 independent_technology_policy=1 wall_ms=%lld",
             mod, playerClass, static_cast<long long>(wall));
 }

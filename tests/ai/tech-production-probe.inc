@@ -513,6 +513,16 @@ struct PaidProduction {
         for (const Uint32 item : vehicles) unitsBuiltBefore[item] = world.owner->getNumBuiltItems(item);
         for (const Uint32 item : vehicles)
             if (!light(item)) heavyBuiltBefore += world.owner->getNumBuiltItems(item);
+        if (world.bot->botConfig().force.existingCompositionUnitChoice) {
+            heavyBuiltBefore = 0;
+            for (Uint32 item = Unit_FirstID; item <= ItemID_LastID; ++item) {
+                const auto slot = QuantBot::compositionSlot(item, true);
+                if (slot >= UnitMixPolicy::kSlots) continue;
+                unitsBuiltBefore[item] = world.owner->getNumBuiltItems(item);
+                if (slot < UnitMixPolicy::kOrnithopterSlot)
+                    heavyBuiltBefore += world.owner->getNumBuiltItems(item);
+            }
+        }
     }
 
     void observe() {
@@ -529,7 +539,9 @@ struct PaidProduction {
             if (builder->getProductionProgress() > 0) {
                 const Uint32 item = builder->getCurrentProducedItem();
                 if (builtBefore.count(item)) paidTechnology.insert(item);
-                if (std::find(vehicles.begin(), vehicles.end(), item) != vehicles.end() && !light(item))
+                if ((std::find(vehicles.begin(), vehicles.end(), item) != vehicles.end() && !light(item))
+                    || (world.bot->botConfig().force.existingCompositionUnitChoice
+                        && QuantBot::compositionSlot(item, true) < UnitMixPolicy::kOrnithopterSlot))
                     paidHeavyUnits.insert(item);
                 if ((builder->getItemID() == Structure_LightFactory || builder->getItemID() == Structure_HeavyFactory)
                     && unitsBuiltBefore.count(item)) paidFactoryUnits.insert(item);
@@ -558,6 +570,13 @@ struct PaidProduction {
     }
 
     int heavyCompleted() const {
+        if (world.bot->botConfig().force.existingCompositionUnitChoice) {
+            int total = 0;
+            for (const auto& [item, before] : unitsBuiltBefore)
+                if (QuantBot::compositionSlot(item, true) < UnitMixPolicy::kOrnithopterSlot)
+                    total += world.owner->getNumBuiltItems(item);
+            return total - heavyBuiltBefore;
+        }
         int total = 0;
         for (const Uint32 item : vehicles) if (!light(item)) total += world.owner->getNumBuiltItems(item);
         return total - heavyBuiltBefore;

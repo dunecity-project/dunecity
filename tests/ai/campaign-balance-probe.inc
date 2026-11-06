@@ -152,6 +152,10 @@ int runCampaignBalanceProbe() {
         runSimpleTechSavingProbe(requestedMod.c_str(), partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
+    if(std::getenv("BALANCE_EXISTING_COMPOSITION_UNIT_CHOICE_PROBE")) {
+        runExistingCompositionUnitChoiceProbe(requestedMod.c_str(), partnerClass.c_str());
+        return MENU_QUIT_DEFAULT;
+    }
     GameInitSettings init(humanHouse, settings.gameOptions, level);
     // Scenario matrix: a campaign mission other than the level's first (levels 2-8 have three).
     if (const char* mission = std::getenv("BALANCE_MISSION")) {
