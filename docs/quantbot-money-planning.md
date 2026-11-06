@@ -41,7 +41,7 @@ as shipped behavior.
 | Builder upgrade | Payment is progressive over 600 ticks. Under the shared global `Technology Installments=true` rule, `BuilderBase::canStartUpgrade()` accepts without full cash and progress pauses when the next payment is unaffordable. With the rule OFF, acceptance still needs the full quote; this is how legacy 9882/9883 saves load. | Never add an AI full-price gate. Respect the selected global human-and-AI acceptance rule; the AI gene does not retrofit legacy saves or grant a private exemption. |
 | Starport cargo | Paid on ordering; pending cargo must count toward fleet demand without charging it again (`QuantBotBuild.cpp:399-403`). | Its actual current build-list quote is a real immediate debit, not an installment. Stock and delivery remain real constraints. |
 | Research, legacy/prepaid mode | The whole next-level quote is required and paid at acceptance. Already-paid active research has no remaining cash drain. | Keep a real one-shot cost for a new prepaid study; never reserve an active prepaid timer's original price again. |
-| Research, global installment mode | Captures total cost/duration/mode; cumulative due is `floor(totalRaw*fundedTicks/duration)`. A partial next installment is retained; time advances only after it is funded. Pauses do not accumulate catch-up debt. `payCreditsExact` uses fractional balances. | Use captured unpaid cost and funded progress, not the next quote or full-price AI encumbrance. ResearchLabAI owns the shared `Technology Installments` rule for research AND upgrades: save 9884 / MOD19 / protocol113; new games ON, legacy 9882/83 OFF, no retroactive refund. |
+| Research, global installment mode | Captures total cost/duration/mode; cumulative due is `floor(totalRaw*fundedTicks/duration)`. A partial next installment is retained; time advances only after it is funded. Pauses do not accumulate catch-up debt. `payCreditsExact` uses fractional balances. | Use captured unpaid cost and funded progress, not the next quote or full-price AI encumbrance. ResearchLabAI owns the shared `Technology Installments` rule for research AND upgrades: save 9884 / MOD19 / protocol113; current new-game default OFF, legacy 9882/83 OFF, explicit ON applies equally to humans and AI, no retroactive refund. |
 | Repairs, upkeep, tools and conversions | Repairs/upkeep have their own tick/cadence gates; Scoutpost conversions and imports are real immediate charges. The legacy `CMD_CITY_TOOL/CityTool_Road` overlay in `CitySimulation.cpp:414-429` makes no credit withdrawal; queued Road structures are ordinary production. `House::payCredits` requires >=1 rounded displayed credit; structure repair progress requires >=5. | Include actual recurring drains and true immediate charges. Do not charge free overlay tools or reserve a whole future repair bill. Preserve real shared-engine tick gates. |
 
 Research's current Normal quote is `1000*(target-1)` credits and `target` minutes;
@@ -87,8 +87,9 @@ and `config/QuantBot Config.ini.default`:
   differ from registry 999/4; Tornie INIs override them.
 
 Evidence codes in the tables: **S1** exact initial `notbuilding` save audit,
-**S2** historical research/crime save, **T** rejected tech-saving cohorts,
-**U** unit-choice cash/throughput cohorts, **HIST** earlier isolated ablations.
+**S2** historical research/crime save, **S3** restored-revision `nonuke` audit,
+**T** rejected tech-saving cohorts, **U** unit-choice cash/throughput cohorts,
+**HIST** earlier isolated ablations.
 A dash means **source-proven rule, binding not measured in the cited saves**,
 not that the gate never binds. A measured treasury or model projection is not
 proof that an individual order was sustainable or that a gate caused its delay.
@@ -155,7 +156,7 @@ does not remove the common full-quote gate.
 | Y2 — Y:104-137; H:634-668 | Extra ground lane requires current lane, no pending duplicate, >=75% busy, deficit>=factory price and M>=reserve+factory+1000. Air adds capable line, air room and aircraft price. Targets also depend on wealth/income/losses; city HF target=max(1+creditsPerSecond/50,1+max(0,credits-2000)/2500), non-city1+credits/4000, clamped1..24. >=8000 plus loss/busy can raise it. | Built-in capacity rules; composition gene OFF changes demand path. Extra factories. | U; some funded classic plans omit unit/candidate detail, which is unknown not zero. |
 | Y3 — Y:192-298 | Campaign rebuild uses P4; yard upgrade M>1500; optional rocket M>3000. A city-zone M>200 branch appears unreachable through this non-city campaign caller [INFERENCE]. | Built-in campaign. Rebuilds, upgrades, turrets. | — |
 | Y4 — Y:305-423; B:2876-2930 | Storage uses A19. Selected city-growth generator holds unless full candidate price+foundation fits; dedicated growth requires full affordableCityZone. | StorageCapacity ON, CityGrowthPower ON. Vaults, power, R/I/C. | — |
-| Y5 — Y:547-601,889-961,2075-2123; H:581-594 | Deficit reactor has full D(nuclear) prefilter; otherwise wind. Planned reactor uses exact installment exception. City sizing requires M>=nuclear+max(1000,working,bootstrap) and shortage OR M>=5*nuclear+reserve OR insufficient wind sites OR wind package>=nuclear. Exact installment project bypasses final sizing veto. Main planning call uses hypothetical enough cash for sizing only; other paths use actual M. | CityPowerSizing ON; CityGrowthPower ON. Wind versus nuclear, not tech legality. | S1 T2 cannot legally order tech6 nuclear; no money-only nuclear diagnosis follows. |
+| Y5 — Y:547-601,889-961,2075-2123; H:581-594 | Deficit reactor has full D(nuclear) prefilter; otherwise wind. Planned reactor uses exact installment exception. City sizing requires M>=nuclear+max(1000,working,bootstrap) and shortage OR M>=5*nuclear+reserve OR insufficient wind sites OR wind package>=nuclear. Exact installment project bypasses final sizing veto. Main planning call uses hypothetical enough cash for sizing only; other paths use actual M. | CityPowerSizing ON; CityGrowthPower ON. Wind versus nuclear, not tech legality. | S1 T2 cannot legally order tech6 nuclear. S3 T9 can, but all four balances are below2000; H4 books a100 zoning quote against virtual M before generator selection sees M83. |
 | Y6 — Y:603-740 | Bootstrap storage/seed require full estimated capital, seed also leaves missing-storage price. Demanded civic upgrade can save if current/forecast covers full quote, starts only if current M fits. Civic structure uses E.installmentOrder: positive net income plus `M>=estimatedFoundation+max(1,price/buildTicks)`; with no positive income full price+foundation required. | Built-in demanded civic path; Simple OFF affects admission. Stadium, airport and chain. | S1 civic caps observed, not completion evidence. |
 | Y7 — Y:741-819 | Selected protected service needs full price+foundation; early rocket also leaves a residential lot. Defence/expansion upgrade holds for full quote. One-yard opening seed requires full capital and24power; otherwise fully estimated wind; profitable opening refinery holds for full capital. | Relevant capital/service genes ON. Services, unlocks and first economy. | S1 Neutral's selected urgent police outranks valid affordable C. |
 | Y8 — Y:823-888,963-1088 | Core/supplier step considered only if M or forecast covers estimated cost; only current cash starts. Heavy-recovery/first-factory/first-port prerequisite walk needs full data price unless exact installment project. Port ladder also has refinery/repair sequence and viable-spice/market requirements. | Built-in; CityProductionPrerequisites ON corrects footprint ownership, not this affordability. | — |
@@ -286,6 +287,43 @@ shortfall. Four/three dangerous-crime properties alone made the **old** readines
 predicate false despite9/8 Police Stations. The saved-crime fixture's documented
 OFF refusal versus ON real lab/research startup is evidence for that previous
 veto, not a claim the newer required-research exception still refuses it.
+
+### S3 — restored `nonuke`: full-price gating and earlier zoning, not a tech lock
+
+PowerPlants' read-only audit at source
+`d2bfb8296fe5dc701ae58c38ef85b177c55dcd94`, job
+`20261107T012721-nonuke-exact-restored-revision-1a6bd0`, records save SHA256
+`ee99099fdc0edef627394a046606d1ba3f8f9ff842445c732f381246db59431a`.
+The native revision
+`1a84d06fabab68d5342459e48c7a061f3d48975f920e4c4b6a0a559f6cc13d8f`
+was reconstructed and verified across906 files from the archived3710464d bundle.
+Receipts are `outputs/nonuke-20261107/audit-conclusion.json` and
+`revision-reconstruction.json`.
+
+This is a DuneCity city game (`city=1`), not Vanilla: four qBotBrutal houses at
+T9, loaded cycle96192, saved Technology Installments OFF. Nuclear is enabled
+and offered at yard level2 for every house. All houses already own reactors;
+the save's name does not establish zero nuclear construction.
+
+| House | Actual cash / virtual M | Current power surplus / reserve target | Existing Windtrap / Nuclear |
+| --- | --- | --- | --- |
+| Atreides1 |1452 /1133|3101 /2780|5 /4|
+| Sardaukar4 |356 /183|2014 /2525|27 /2|
+| Neutral6 |1307 /860|3783 /2489|25 /3|
+| Rebels7 |878 /303|2821 /2516|28 /2|
+
+All actual and virtual balances are below the2000 reactor quote, even before
+the1000 protected-cash rule. Only H4 asks for reserve power. Its dedicated
+growth yard first accepts an Industrial Zone at100; later generator selection
+sees M83, need511, no actual blackout, a legal Nuclear site, nuclear price2000
+and protected cash1000. It selects Windtrap but accepts neither generator.
+CityCompactPower OFF/ON yields the same audit choices and accepted orders:
+changing generator utility alone does not bypass the financial/yard ordering.
+
+Both arms finish at the loaded cycle with zero elapsed gameplay. These are
+same-pass observed selections, not paid/completed continuations or evidence
+that removing one gate alone improves the economy. Other houses' placement
+constraints remain separate; H1's audited AI Nuclear sites fail ground access.
 
 ### T — saving can improve one milestone while making the army passive
 
@@ -644,7 +682,7 @@ existing civil lanes exceed theirs; it waits until all actual work is funded.
 | FundedClassicProduction | Preserve its selected classic economy/utility routes; no separate cash gate or entitlement to hypothetical continuous maximum production.|
 | CityPowerSizing / CityCompactPower | Determine useful legal generator/footprint choice without cash+reserve filtering. Compact remains a separate default-OFF gene. PowerPlants' separate StartBeforeFunded experiment is superseded/held, not a second finance policy.|
 | ResearchLab / ResearchLabProgression / ContinuousResearch | Supply lab/study wants under their selected policy. Continuous alone is unchanged. With both genes ON, even continuous studies use the common bounded-drain admission (development share, priority 40); all actual accepted starts enter the same obligation model.|
-| Technology Installments global option | Humans and AI share research/upgrade acceptance/payment. New-gameON versus legacy-saveOFF is preserved; this is not an AI gene.|
+| Technology Installments global option | Humans and AI share research/upgrade acceptance/payment. Current new-game default and legacy saves are OFF; explicit ON is preserved as a global rule, not an AI gene. Both arms of the planner screen explicitly set ON.|
 | CityZoning / civic / storage / service policies | Keep actual demand, thresholds, benefit, recurring expense, legality, road and placement requirements; remove liquidity-only filters. No invented positive R/I/C demand.|
 | UnitChoice genes | Keep independently selected ratio/family/buffered-heavy/income-capacity wants and their trials. No new gene is enabled by this cutover. Actual current finance goes through one admission function.|
 | Campaign limits, roles, manual leases, saboteurs | Preserve authored permissions, difficulty/engine caps and manual/order authority. No whole-future-helper-fleet cash reserve.|
@@ -770,6 +808,20 @@ option in both arms. Its two seeds do not satisfy the8-seed promotion
 requirement. Separate exact-save and joint CityCompactPower interaction
 continuations do not inflate the288 count.
 
+The existing smoke screen's numeric rule is deliberately narrower than promotion:
+each paired ON-minus-OFF **mean** delta for `army_value_20m`, `dispatches` and
+`final_kill_value` must be at least0; a missing delta fails. This is the rule in
+`outputs/money-planning-20261106/swms-paired-readout.py:315-317`, not a claim of
+statistical equivalence or strength. Game-level95% CIs are reported separately;
+the smoke does not require their lower bounds to be nonnegative.
+`zero_cash_queue_20m`, paid-credit buckets and drain start/hold counts are
+required anti-starvation diagnostics, but no numeric acceptance margin for
+them was specified. Harness exit0 alone is never behavioral acceptance.
+The full288 harness recipe is
+`outputs/money-planning-20261106/commands.json`, `cohort.harness_argv`; its old
+b8 pin, output directories and job IDs are historical and must not be reused
+for a new source result.
+
 ### Tournament and historical gate
 
 Follow `tests/ai/genome-registry.json`'s independent bool/int gene schema and
@@ -787,6 +839,12 @@ special delivery, economy-stall/base-loss plus city R/I/C/population and actual
 research applicability. Use source/content/options/map-matched pairs and
 independent seed-block CIs; historical contrasts retain exact requested maps and
 options and remain whole-release comparisons, not invented cross-binary duels.
+
+HistoryLeague's gate correction at `4ca69705c863fc1dd94311689ea33ef6f8db8881`
+fixes the plug-in margin so identical arms pass. Gate reports produced before
+that correction are invalid and must be regenerated from unchanged observations;
+this does not require replaying games. The planner's b8 smoke/readout figures
+above are from its separate paired extraction, not ai-baseline-gate reports.
 
 Main/Genome require all exact-save/behavior hard checks complete and passing,
 held-out paired strength above default without meaningful context regression,
