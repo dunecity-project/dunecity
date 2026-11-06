@@ -198,7 +198,8 @@ def probe_source():
              'CONFIG_STYLE': 'configOverride' in headers['players/QuantBot.h']
                              and 'botConfig()' in headers['players/QuantBot.h']
                              and 'applyOverrides' in headers['players/QuantBotConfig.h'],
-             'GENOME_PHASE': (root / 'tests/ai/genome-phases.inc').is_file()}
+             'GENOME_PHASE': (root / 'tests/ai/genome-phases.inc').is_file(),
+             'NATIVES': 'isNatives()' in headers['House.h']}
     definitions = ''.join('#define BASELINE_HAS_%s %d\n' % (name, enabled) for name, enabled in flags.items())
     position = main.index('int main(')
     observer = (root / 'tests/ai/ai-baseline-observer.inc').as_posix()

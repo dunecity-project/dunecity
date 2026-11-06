@@ -103,6 +103,11 @@ against the source's unchanged native engine, AI and content objects. Its
 `ai-baseline-observer.inc` reads live/native cumulative ledgers; it does not issue
 orders, select units, recalculate targets, inject income, or import modern AI
 policies. Games cannot be started directly on the mini through this harness.
+A game is decided when every remaining house except team 0 shares one team.
+Sources with the hidden Natives house (worms and crime troopers, since
+`8dd7d191`) exclude it the same way the engine's own game-over check does:
+`House::isAlive()` is always true for Natives, so counting them would keep a
+finished 1v1 running to the time limit. Older sources have no Natives house.
 
 ```sh
 dunecity-queue submit --cwd "$STAGING" --rev "$HISTORICAL_BRIDGE_PIN" \

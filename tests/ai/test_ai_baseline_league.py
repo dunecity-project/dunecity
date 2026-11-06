@@ -66,6 +66,18 @@ class NativeLeagueInputs(unittest.TestCase):
         self.assertNotIn('#if defined( __clang__ ) || defined(__GNUG__) || defined( __GLIBCXX__ ) || defined( __GLIBCPP__ )', source)
         self.assertIn('#define BASELINE_HAS_GENOME_PHASE ', source)
 
+    def test_natives_never_count_as_a_contesting_team(self):
+        # isAlive() is always true for the Natives house (worms, crime troopers).
+        # Without this exclusion no 1v1 can end once natives exist.
+        house = (league.root / 'include/House.h').read_text()
+        source = league.probe_source()
+        enabled = int('isNatives()' in house)
+        self.assertIn('#define BASELINE_HAS_NATIVES %d\n' % enabled, source)
+        observer = (league.root / 'tests/ai/ai-baseline-observer.inc').read_text()
+        winner = observer[observer.index('inline int survivingTeam'):observer.index('inline void digest')]
+        self.assertIn('#if BASELINE_HAS_NATIVES', winner)
+        self.assertIn('if(house->isNatives()) continue;', winner)
+
     def test_genome_inputs_are_snapshotted_and_hashed_by_name_and_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory)

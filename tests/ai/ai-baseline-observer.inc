@@ -176,6 +176,11 @@ inline int survivingTeam(Game& game) {
     for(int h=0;h<NUM_HOUSES;++h) {
         const auto* house=game.getHouse(h);
         if(!house || !house->isAlive() || house->getTeamID()==0) continue;
+#if BASELINE_HAS_NATIVES
+        // Natives are always "alive" and never contest a win; the engine's own
+        // game-over check excludes them in the same way.
+        if(house->isNatives()) continue;
+#endif
         if(team && team!=house->getTeamID()) return 0;
         team=house->getTeamID();
     }
