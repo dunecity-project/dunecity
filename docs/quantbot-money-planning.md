@@ -325,6 +325,30 @@ same-pass observed selections, not paid/completed continuations or evidence
 that removing one gate alone improves the economy. Other houses' placement
 constraints remain separate; H1's audited AI Nuclear sites fail ground access.
 
+A separate native15-minute continuation at the same source and save is now
+complete: job `20261107T014632-nonuke-compact-only-swms-off-15m-e90114`,
+receipt `outputs/nonuke-20261107/continuation-comparison.json`. Both arms
+advance cycle96192→152442 (56250cycles); StartWhatMakesSense is explicitly0
+and saved Technology Installments remains0. Observed CityCompactPower flags
+are0/1, not merely requested overlays. Each arm accepts and completes12
+Windtraps, no Nuclear Plants, with3600 credits of native generator production
+payments (excluding foundations/upkeep). Outcomes are identical.
+
+H4 supplies the funding-policy evidence:81 distinct generator evaluations
+offer Nuclear and find an AI-approved site, but planning cash is0..612, below
+the legacy2000 full-price AI gate. It accepts9 Windtraps and pays2700 credits;
+there is no fully funded Nuclear refusal in this pair. H1 accepts the other3
+Windtraps but never has an approved Nuclear site. H6 never requests power;
+H7's power requests have no approved Nuclear site and yield no generator.
+The full-price condition is an AI start policy, **not human engine illegality**:
+ordinary generator construction already pays progressively for everyone.
+This does not establish that an unfunded reactor would finish safely or that
+the unified planner improves outcomes; the continuation isolates Compact only.
+
+Any later SWMS comparison must start from the base immutable
+`outputs/nonuke-20261107/nonuke-audit-with-revision.ini`, not this pair's
+derived input that explicitly freezes SWMS0.
+
 ### T — saving can improve one milestone while making the army passive
 
 `outputs/tech-saving-20261105/confirmation-analysis-8a89f35d/complete-decision-summary.txt`,
