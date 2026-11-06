@@ -46,11 +46,14 @@ void controls(const char* playerClass) {
         World world("dunecity", playerClass, false, Stage::NaturalOpening, Army::Empty);
         seed(world, true);
         world.bot->planningBuilder = world.yard->getObjectID();
-        // Author a two-column strip beside the existing Windtrap: a 2x2
-        // building plus a complete two-tile frontage, never a 3x3 plot.
+        // Author two separate two-column strips beside the existing Windtrap:
+        // each holds a 2x2 building plus a two-tile frontage, and the sand
+        // column between them means no 3x3 plot exists. As in the ordinary
+        // worlds, the light factory reserves its own production plot first;
+        // one lot alone would be that plot and leave no generator site.
         // Changing terrain alone retains road flags and can strand the old
         // road network underneath an otherwise legal small footprint.
-        const Coord small(18, 11);
+        const Coord small(18, 11), factoryLot(15, 11);
         for (int y = 0; y < currentGameMap->getSizeY(); ++y)
             for (int x = 0; x < currentGameMap->getSizeX(); ++x) {
                 auto* tile = currentGameMap->getTile(x, y);
@@ -59,12 +62,14 @@ void controls(const char* playerClass) {
                     tile->setType(Terrain_Sand);
                 }
             }
-        for (int y = small.y - 1; y < small.y + 2; ++y)
-            for (int x = small.x; x < small.x + 2; ++x)
-                currentGameMap->getTile(x, y)->setType(Terrain_Rock);
-        require(currentGameMap->okayToPlaceStructure(small.x, small.y, 2, 2,
-                    false, world.owner, false, Structure_WindTrap),
-                "Small generator control is not human-legal");
+        for (Coord lot : {small, factoryLot}) {
+            for (int y = lot.y - 1; y < lot.y + 2; ++y)
+                for (int x = lot.x; x < lot.x + 2; ++x)
+                    currentGameMap->getTile(x, y)->setType(Terrain_Rock);
+            require(currentGameMap->okayToPlaceStructure(lot.x, lot.y, 2, 2,
+                        false, world.owner, false, Structure_WindTrap),
+                    "Small generator control is not human-legal");
+        }
         world.bot->clearPlacementCache();
         require(world.bot->findPlaceLocation(Structure_NuclearPlant).isInvalid(),
                 "Small-plot control still admits a reactor");
