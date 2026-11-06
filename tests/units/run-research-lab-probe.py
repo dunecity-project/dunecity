@@ -107,7 +107,7 @@ with scratch_dir('research-lab-probe') as scratch:
     upgrade_legacy = [int(match.group(1)) for match in re.finditer(
         r'UPGRADE_LEGACY_LAYOUT_PASS: version=(\d+)', text)]
     if len(upgrade_totals) != 4 or len(upgrade_saves) != 2 or len(upgrade_ai_partial) != 2:
-        raise RuntimeError('Missing yard/factory upgrade cases: human+AI exact600, partial AI, or full-save continuation')
+        raise RuntimeError('Missing yard/factory upgrade cases: human+AI exact legacy-tick, partial AI, or full-save continuation')
     if sorted(upgrade_legacy) != [9882, 9882, 9883, 9883]:
         raise RuntimeError('Missing explicitly synthetic old-save yard/factory upgrade gate cases')
     if sum('RESEARCH_QUANTBOT_GENE: continuous_research=1' in line for line in lines) != 1:
@@ -145,7 +145,7 @@ with scratch_dir('research-lab-probe') as scratch:
         raise RuntimeError('Research fixture omitted required cases: ' + ', '.join(sorted(missing)))
     with (out / 'upgrades.csv').open(newline='') as handle:
         upgrades = list(csv.DictReader(handle))
-    exact = [(row['controller'], int(row['item'])) for row in upgrades if row['case'] == 'exact_600_ticks']
+    exact = [(row['controller'], int(row['item'])) for row in upgrades if row['case'] == 'exact_legacy_ticks']
     items = {item for _, item in exact}
     if len(items) != 2 or sorted(exact) != sorted((controller, item) for controller in ('human', 'quantbot') for item in items):
         raise RuntimeError('Upgrade CSV omitted or duplicated human/AI yard/factory exact-payment cases')

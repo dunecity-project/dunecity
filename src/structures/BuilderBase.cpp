@@ -963,17 +963,16 @@ bool BuilderBase::update() {
 
     if(upgrading == true) {
         FixPoint totalUpgradePrice = getUpgradeCost();
+        // The price is paid in equal per-tick shares over the nominal upgrade time.
+        const FixPoint totalUpgradeGameTicks = 30 * 100 / 5;
 
         const auto& options = currentGame->getGameInitSettings().getGameOptions();
         if(options.technologyInstallments) {
             const FixPoint remaining = std::max(FixPoint(0), totalUpgradePrice - upgradeProgress);
-            // Round the raw step upward, then clamp the last payment: a funded
-            // upgrade takes 600 cycles and never overpays by a fixed-point unit.
-            constexpr int duration = 30 * 100 / 5;
-            const auto totalRaw = totalUpgradePrice.getRawValue();
-            const FixPoint step = FixPoint::FromRawValue(
-                totalRaw / duration + (totalRaw % duration != 0));
-            const auto payment = owner->payCreditsExact(options.instantBuild ? remaining : std::min(remaining, step));
+            // The legacy rounded share, so a funded upgrade completes on the same tick with the
+            // rule on or off; only the last payment is clamped, so the total is exactly the price.
+            const FixPoint share = totalUpgradePrice / totalUpgradeGameTicks;
+            const auto payment = owner->payCreditsExact(options.instantBuild ? remaining : std::min(remaining, share));
             upgradeProgress += payment.total;
             upgradeProgressFromStartingCredits += payment.fromStarting;
         } else if(options.instantBuild == true) {
@@ -982,7 +981,6 @@ bool BuilderBase::update() {
             upgradeProgress += payment.total;
             upgradeProgressFromStartingCredits += payment.fromStarting;
         } else {
-            FixPoint totalUpgradeGameTicks = 30 * 100 / 5;
             const auto payment = owner->payCredits(totalUpgradePrice / totalUpgradeGameTicks);
             upgradeProgress += payment.total;
             upgradeProgressFromStartingCredits += payment.fromStarting;

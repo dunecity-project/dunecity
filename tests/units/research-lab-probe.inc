@@ -583,9 +583,13 @@ BuilderBase* upgradeBuilder(House* owner, int item) {
     return builder;
 }
 
+// The engine's per-tick share for both rules: the legacy rounded price/600.
 Sint64 upgradeStep(Sint64 total) {
-    constexpr int duration = 600;
-    return total / duration + (total % duration != 0);
+    return (FixPoint::FromRawValue(total) / FixPoint(30 * 100 / 5)).getRawValue();
+}
+
+int upgradeTicks(Sint64 amount, Sint64 step) {
+    return static_cast<int>(amount / step + (amount % step != 0));
 }
 
 FixPoint upgradeTick(BuilderBase* builder) {
@@ -624,6 +628,7 @@ void upgradeExactTotals(std::ostream& results) {
         auto* builder = upgradeBuilder(owner, item);
         const int level = builder->getCurrentUpgradeLevel(), cost = builder->getUpgradeCost();
         const Sint64 total = FixPoint(cost).getRawValue(), step = upgradeStep(total);
+        const int ticks = upgradeTicks(total, step);
         researchRequire(game->getGameInitSettings().getGameOptions().technologyInstallments
             && !game->getGameInitSettings().getGameOptions().instantBuild,
             "Exact upgrade fixture did not enable installments with normal build speed");
@@ -636,12 +641,12 @@ void upgradeExactTotals(std::ostream& results) {
             && researchBalance(owner).getRawValue() == total + 1,
             "Upgrade start charged cash before its ordinary per-tick payer");
         Sint64 paid = 0;
-        for(int tick = 1; tick <= 600; ++tick) {
+        for(int tick = 1; tick <= ticks; ++tick) {
             const Sint64 expected = std::min(total, step * tick);
             paid += upgradeTick(builder).getRawValue();
             researchRequire(paid == expected && researchBalance(owner).getRawValue() == total + 1 - expected,
                             "Upgrade did not charge the exact capped integer installment");
-            if(tick < 600)
+            if(tick < ticks)
                 researchRequire(builder->isUpgrading() && !builder->isUpgradePaused()
                     && builder->getCurrentUpgradeLevel() == level
                     && builder->getUpgradeProgress().getRawValue() == expected
@@ -651,11 +656,30 @@ void upgradeExactTotals(std::ostream& results) {
         researchRequire(paid == total && researchBalance(owner).getRawValue() == 1
             && !builder->isUpgrading() && builder->getCurrentUpgradeLevel() == level + 1
             && builder->getUpgradeProgress() == 0 && builder->getUpgradeProgressFromStartingCredits() == 0,
-            "Fully funded upgrade missed exactly 600 cycles, overpaid, or retained completed progress");
-        upgradeNote(results, "exact_600_ticks", ai ? "quantbot" : "human", *game, builder, paid);
-        SDL_Log("UPGRADE_INSTALLMENT_TOTAL: controller=%s item=%d cycles=600 cost=%d paid_raw=%lld",
-                ai ? "quantbot" : "human", item, cost, static_cast<long long>(paid));
+            "Fully funded upgrade missed its legacy completion tick, overpaid, or retained completed progress");
+        upgradeNote(results, "exact_legacy_ticks", ai ? "quantbot" : "human", *game, builder, paid);
         researchEnd(game);
+        // The same funded upgrade under the explicit legacy rule completes on the same tick.
+        game = researchGame(false, ai, 64, TechResearch::Pace::Normal, false, 9);
+        owner = game->getHouse(HOUSE_ATREIDES);
+        builder = upgradeBuilder(owner, item);
+        const int legacyLevel = builder->getCurrentUpgradeLevel();
+        researchRequire(builder->getUpgradeCost() == cost, "Legacy comparison changed the upgrade price");
+        researchEmptyCredits(owner);
+        // Legacy pays only while a whole credit is displayed: fund one spare credit.
+        owner->addUnstoredCredits(FixPoint(cost + 1));
+        if(ai) researchRequire(upgradeAIStart(owner, builder), "Legacy QuantBot upgrade API rejected the funded order");
+        else Command(owner->getPlayerList().front()->getPlayerID(), CMD_BUILDER_UPGRADE, builder->getObjectID()).executeCommand();
+        researchRequire(builder->isUpgrading(), "Legacy comparison did not start its funded upgrade");
+        int legacyTicks = 0;
+        while(builder->isUpgrading() && legacyTicks <= ticks) {
+            researchRequire(builder->update(), "Legacy upgrade supplier stopped updating");
+            ++legacyTicks;
+        }
+        researchRequire(!builder->isUpgrading() && builder->getCurrentUpgradeLevel() == legacyLevel + 1
+            && legacyTicks == ticks, "Funded installment upgrade completed on a different tick than the legacy rule");
+        SDL_Log("UPGRADE_INSTALLMENT_TOTAL: controller=%s item=%d cycles=%d legacy_cycles=%d cost=%d paid_raw=%lld",
+                ai ? "quantbot" : "human", item, ticks, legacyTicks, cost, static_cast<long long>(paid));
     }
 }
 
@@ -681,7 +705,11 @@ void upgradeAIPartials(std::ostream& results) {
                 "AI upgrade cancelled, changed level or lost paid progress while cash was empty");
         owner->addUnstoredCredits(FixPoint::FromRawValue(total - 1));
         Sint64 paid = 1;
-        for(int tick = 0; builder->isUpgrading() && tick < 600; ++tick) paid += upgradeTick(builder).getRawValue();
+        const int resumeTicks = upgradeTicks(total - 1, upgradeStep(total));
+        for(int tick = 0; tick < resumeTicks; ++tick) {
+            researchRequire(builder->isUpgrading(), "AI upgrade completed before its exact remaining installments");
+            paid += upgradeTick(builder).getRawValue();
+        }
         researchRequire(!builder->isUpgrading() && builder->getCurrentUpgradeLevel() == level + 1
             && paid == total && researchBalance(owner) == 0, "AI upgrade did not resume to the exact same total");
         upgradeNote(results, "ai_partial_resume_complete", "quantbot", *game, builder, paid);
@@ -1126,6 +1154,6 @@ int runResearchLabProbe() {
     researchRequire(seenLab >= 0 && owner->getTechLevel() >= 2, "Tech-1 QuantBot failed to build a lab and research");
     researchRequire(seenInstallment, "QuantBot did not expose an ordinary progressive research timer");
     researchEnd(game);
-    SDL_Log("RESEARCH_LAB_PROBE_PASS: technology installments; 32 exact research totals; human zero-cash UI; research/upgrade partial-save digest continuation; 600-cycle CY/factory upgrades human+QuantBot; pause/resume; captured research terms; synthetic9882/9883 old rules; original upfront cases; ownership/auth");
+    SDL_Log("RESEARCH_LAB_PROBE_PASS: technology installments; 32 exact research totals; human zero-cash UI; research/upgrade partial-save digest continuation; exact CY/factory upgrades on the legacy completion tick human+QuantBot; pause/resume; captured research terms; synthetic9882/9883 old rules; original upfront cases; ownership/auth");
     return MENU_QUIT_DEFAULT;
 }

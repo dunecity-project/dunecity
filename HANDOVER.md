@@ -6,7 +6,10 @@
   Research captures its mode/price/duration and pays exact cumulative 32.32 dues;
   insufficient cash preserves partial payment and pauses the countdown, without
   cancelling or accumulating catch-up debt. Upgrades use their existing saved
-  paid progress, exact capped installments and the same pause/resume semantics.
+  paid progress and the same pause/resume semantics. They pay the legacy rounded
+  price/600 share per tick, and only the last payment is clamped to the exact
+  remainder. A funded upgrade therefore completes on the same tick with the
+  rule ON or OFF, without legacy's sub-credit final overpayment.
 - **Save9884/MOD19, protocol113**: one game-rule bool and 17 captured-research
   bytes per house, included in state digests. Frozen9882/MOD17 and9883/MOD18
   setups load installments OFF. Already-paid research countdowns are never
@@ -37,8 +40,17 @@
   overlay the only difference): OFF reproduces every expected result (CY
   Brutal-v-Easy won at 31.66 min, FFA 90866 reaches the 60-minute exhaustion).
   ON fails both: Brutal needs 59.76 min (Easy army 5,550 vs 2,000 at minute 20)
-  and FFA 90866 ends in a 28.28-minute Brutal win. Hence default OFF; ON returns
-  only after the AI benefits at least as much and the unchanged gates pass.
+  and FFA 90866 ends in a 28.28-minute Brutal win. Measured cause: the decision
+  logs match until cycle 8025. QuantBot never starts an upgrade below full price.
+  The old ON payer rounded its share upward, so both opening CY upgrades
+  finished in 600 ticks instead of legacy's 601. Each second upgrade then
+  started 100 cycles earlier (8025/8079 instead of 8125/8179), and the chaotic
+  trajectories diverged. Easy's minute-16 army was smaller with ON (3,150) than
+  with OFF (3,700). In OFF, Brutal won the minute 17-20 fight (7,090 killed for
+  1,520 lost). In ON, the minute 19-24 fights took place under Easy's 14-15
+  rocket turrets (OFF: 9-10 at minutes 19-21). The ON payer now keeps
+  legacy timing (above). The default remains OFF until a paired multi-seed
+  comparison, rather than this one smoke game, shows ON is not consistently worse.
   ContinuousResearch=1 with the rule OFF now reproduces ContinuousResearch=0
   exactly on the private save (identical lab/tech transitions and finals).
 - Real-save bytes stay under private `outputs/` and frozen queue transport.
