@@ -24,7 +24,7 @@ sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import finish_game, probe_binary, require_free_space, restore_fixture_revisions, scratch_dir  # noqa: E402
 
 KEY = ('arm',)
-FIELDS = KEY + ('sha256', 'wall_s', 'error')
+FIELDS = KEY + ('sha256', 'technology_installments', 'wall_s', 'error')
 
 
 def read(path):
@@ -80,8 +80,9 @@ def power_summary(measurements, events_path):
 
 def compact_behavior_passes(summary):
     eligible = [row for row in summary if row['compact_choices']]
-    return bool(eligible) and all(not row['funded_nuclear_rejections'] and row['nuclear_orders']
-                                  for row in eligible) and any(row['built_nuclear'] for row in eligible)
+    return (bool(eligible) and all(not row['funded_nuclear_rejections'] for row in summary)
+            and all(row['nuclear_orders'] for row in eligible)
+            and any(row['built_nuclear'] and row['generator_spent'] > 0 for row in eligible))
 
 
 def schedule(args):
@@ -125,6 +126,11 @@ def play(args, scratch, binary, key):
     restore_fixture_revisions(source_profile, [saved])
     run = out / 'run'
     env = dict(os.environ, BALANCE_POWER_CONTINUATION='1')
+    env.pop('BALANCE_TECHNOLOGY_INSTALLMENTS', None)
+    env.pop('BALANCE_POWER_CONFIG', None)
+    env.pop('BALANCE_POWER_SAVE_AUDIT', None)
+    if args.technology_installments != 'saved':
+        env['BALANCE_TECHNOLOGY_INSTALLMENTS'] = '1' if args.technology_installments == 'on' else '0'
     if arm.startswith('audit'):
         env['BALANCE_POWER_SAVE_AUDIT'] = '1'
     if packed.has_section('Power Config'):
@@ -163,7 +169,8 @@ def play(args, scratch, binary, key):
     (results / (arm + '-power-summary.json')).write_text(json.dumps(summary, indent=2) + '\n')
     passed = process.returncode == 0 and any('POWER_SAVE_RESULT:' in line for line in lines)
     behavior = not args.verify_compact or arm.startswith('audit') or compact_behavior_passes(summary)
-    row = {'arm': arm, 'sha256': digest, 'wall_s': round(time.time() - started, 2),
+    row = {'arm': arm, 'sha256': digest, 'technology_installments': args.technology_installments,
+           'wall_s': round(time.time() - started, 2),
            'error': 'rc=' + str(process.returncode) if not passed else '' if behavior else 'compact_behavior'}
     path = results / 'games.csv'
     exists = path.exists()
@@ -179,10 +186,24 @@ def play(args, scratch, binary, key):
 def report(args):
     games = read(Path(args.results) / 'games.csv')
     failed = [row for row in games if row['error']]
+    behavior_failed = []
+    if args.verify_compact:
+        wanted = {arm for arm in args.arms if not arm.startswith('audit')}
+        seen = {row['arm'] for row in games}
+        behavior_failed.extend(sorted(wanted - seen))
+        for row in games:
+            if row['arm'] not in wanted or row['error']:
+                continue
+            path = Path(args.results) / (row['arm'] + '-power-summary.json')
+            if not path.exists() or not compact_behavior_passes(json.loads(path.read_text())):
+                behavior_failed.append(row['arm'])
+        print('Compact power behavior: %s%s' % (
+            'FAILED' if behavior_failed else 'PASS',
+            ' (' + ', '.join(behavior_failed) + ')' if behavior_failed else ''))
     print('Exact-save power continuations: %d passed, %d failed' % (len(games) - len(failed), len(failed)))
     for row in games:
         print('%s: sha256=%s wall=%ss error=%s' % (row['arm'], row['sha256'], row['wall_s'], row['error'] or 'none'))
-    return bool(failed)
+    return bool(failed or behavior_failed)
 
 
 def run(args):
@@ -202,6 +223,8 @@ parser.add_argument('--results', required=True)
 parser.add_argument('--game-options', help='Frozen save/candidate INI; required for play, not shared probe preparation')
 parser.add_argument('--arms', nargs='+', choices=('audit', 'baseline', 'audit-off', 'audit-on', 'off', 'on'), default=['audit', 'baseline'])
 parser.add_argument('--style-prefix', default='')
+parser.add_argument('--technology-installments', choices=('saved', 'off', 'on'), default='saved',
+                    help='Explicit post-load payment-rule audit; saved preserves the exact archived rules')
 parser.add_argument('--minutes', type=int, default=15)
 parser.add_argument('--wall-timeout', type=int, default=1800)
 parser.add_argument('--capture-mib', type=int, default=512)

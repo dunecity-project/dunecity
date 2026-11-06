@@ -884,6 +884,9 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         add_test(NAME quantbot_dunecity_audit_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_dunecity_audit.py)
         set_tests_properties(quantbot_dunecity_audit_parser PROPERTIES TIMEOUT 60)
+        add_test(NAME quantbot_power_continuation_parser COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_power_continuation.py)
+        set_tests_properties(quantbot_power_continuation_parser PROPERTIES TIMEOUT 60)
         foreach(compact_power_difficulty IN ITEMS easy medium hard brutal)
             add_test(NAME quantbot_compact_power_${compact_power_difficulty}
                 COMMAND ${Python3_EXECUTABLE}

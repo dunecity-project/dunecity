@@ -24,10 +24,11 @@ AITelemetry::Record roster(const House* house) {
 
 void snapshot(Game& game, const char* phase, Uint32 first) {
     ResearchLabContinuation::snapshot(game, phase);
-    SDL_Log("POWER_SAVE_SETUP: phase=%s cycle=%u elapsed=%u version=%u mod=%s revision=%s city=%d hash=%s",
+    SDL_Log("POWER_SAVE_SETUP: phase=%s cycle=%u elapsed=%u version=%u mod=%s revision=%s city=%d technology_installments=%d hash=%s",
         phase, game.getGameCycleCount(), game.getGameCycleCount() - first, game.getLoadedSavegameVersion(),
         game.getGameInitSettings().getModName().c_str(), game.getGameInitSettings().getModRevisionHash().c_str(),
-        game.isCitySimEnabled(), game.getGameInitSettings().getGameOptions().getHash().c_str());
+        game.isCitySimEnabled(), game.getGameInitSettings().getGameOptions().technologyInstallments,
+        game.getGameInitSettings().getGameOptions().getHash().c_str());
     for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game.getHouse(h))
         SDL_Log("POWER_SAVE_HOUSE: %s", AITelemetry::Record().set("phase", phase).set("house", h)
             .set("cycle", game.getGameCycleCount()).set("elapsed", game.getGameCycleCount() - first)

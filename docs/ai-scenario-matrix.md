@@ -642,9 +642,13 @@ Exact saves stay outside Git. `tests/ai/power-continuation.py` accepts a frozen
 `[Power Config] GzipBase64` applies a candidate QuantBot INI after load. Existing
 cluster input transport freezes both. Use source-pinned `dunecity-queue submit`
 and `--style-prefix city-compact-power --arms audit-off audit-on off on`.
+The default `--technology-installments saved` clears ambient overrides and keeps
+the original save's payment rules. Explicit `off`/`on` uses the shared validated
+post-load probe hook and must have a separate result directory/tag; native setup
+records the effective rule. It does not rewrite the private input save.
 `--verify-compact --arms on` requires eligible houses to order reactors, rejects
-funded wind substitutions and requires ordinary reactor completion. These two
-saves require no concrete, so the recorded reactor price is its founded quote.
+funded wind substitutions and requires ordinary paid reactor completion.
+These saves require no concrete, so the recorded reactor price is its founded quote.
 Outputs retain compressed native decisions, per-house minute/end power and
 credits, orders/completions and actual generator-production credit withdrawals
 (`generator_spent`, excluding grid upkeep and foundation orders).
