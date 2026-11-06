@@ -24,9 +24,11 @@ The bridge adds these tests/ai files:
 - this file: coverage and observer/harness documentation.
 No existing .cpp/header, config, mod, AI, test fixture or old campaign harness is
 changed. The only existing-file change is src/CMakeLists.txt: test builds on
-MSVC give FileClasses/GFXManager.cpp alone /Zc:ternary for C++17 conditional
-construction; ordinary release builds and simulation translation-unit flags
-are unchanged. The diagnostic main links against the original game source.
+MSVC give FileClasses/GFXManager.cpp alone /std:c++17 /Zc:ternary. The old
+feature probe otherwise falls back to C++14, without guaranteed copy elision
+for its noncopyable INIFile conditional. The original Clang build uses C++17.
+Ordinary release builds and all simulation translation-unit flags are unchanged.
+The diagnostic main links against the original game source.
 No local native build tree is created; the cluster prepares its existing trees.
 
 Exact inputs and genuine differences
