@@ -1698,6 +1698,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "df08c8c14126fd3f67fdb3a40ddffa178c429acbcb630de4e49441569e33a6a0.ini",
+      "map_sha256": "df08c8c14126fd3f67fdb3a40ddffa178c429acbcb630de4e49441569e33a6a0",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -1724,6 +1751,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "0a23f4cf8afda79d9f22d1220fcd6f058c92f4d65d055b920405120f16046f6f.ini",
+      "map_sha256": "0a23f4cf8afda79d9f22d1220fcd6f058c92f4d65d055b920405120f16046f6f",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -1747,6 +1801,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "ef2aa1cfecd1aa78b03bbf1f0c0c8470dd0e4c7e16aeeaee21c8e70b071b63c7.ini",
+      "map_sha256": "ef2aa1cfecd1aa78b03bbf1f0c0c8470dd0e4c7e16aeeaee21c8e70b071b63c7",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -1778,6 +1859,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "aba6d0e0e408d903b668779790d2f2c7327fb5279c55bfb624d83c45a1a2f5e2.ini",
+      "map_sha256": "aba6d0e0e408d903b668779790d2f2c7327fb5279c55bfb624d83c45a1a2f5e2",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8101",
       "mod": "dunecity",
       "seed": 8101,
@@ -1801,6 +1909,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "5d31f731211df936e7d513d7fb4def0a95edef343115d00128a182e0ab95280f.ini",
+      "map_sha256": "5d31f731211df936e7d513d7fb4def0a95edef343115d00128a182e0ab95280f",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -1830,6 +1965,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "e8c9574ef006b20c39ccd4dc35acd6124f2b8a7a246fc7fdd57c4882b591dfdd.ini",
+      "map_sha256": "e8c9574ef006b20c39ccd4dc35acd6124f2b8a7a246fc7fdd57c4882b591dfdd",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8303",
       "mod": "dunecity",
       "seed": 8303,
@@ -1856,6 +2018,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "8be7e99746c6a8dfbb202b7b055ceb8dec6d37b0ee7c72e9139247890f655970.ini",
+      "map_sha256": "8be7e99746c6a8dfbb202b7b055ceb8dec6d37b0ee7c72e9139247890f655970",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -1879,6 +2068,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "280764cb780eb63801b27709b52996f0190331e0a4cd0de3babb927c6f4b71c5.ini",
+      "map_sha256": "280764cb780eb63801b27709b52996f0190331e0a4cd0de3babb927c6f4b71c5",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -1910,6 +2126,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "df08c8c14126fd3f67fdb3a40ddffa178c429acbcb630de4e49441569e33a6a0.ini",
+      "map_sha256": "df08c8c14126fd3f67fdb3a40ddffa178c429acbcb630de4e49441569e33a6a0",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -1936,6 +2179,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "0a23f4cf8afda79d9f22d1220fcd6f058c92f4d65d055b920405120f16046f6f.ini",
+      "map_sha256": "0a23f4cf8afda79d9f22d1220fcd6f058c92f4d65d055b920405120f16046f6f",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -1959,6 +2229,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "ef2aa1cfecd1aa78b03bbf1f0c0c8470dd0e4c7e16aeeaee21c8e70b071b63c7.ini",
+      "map_sha256": "ef2aa1cfecd1aa78b03bbf1f0c0c8470dd0e4c7e16aeeaee21c8e70b071b63c7",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -1990,6 +2287,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "aba6d0e0e408d903b668779790d2f2c7327fb5279c55bfb624d83c45a1a2f5e2.ini",
+      "map_sha256": "aba6d0e0e408d903b668779790d2f2c7327fb5279c55bfb624d83c45a1a2f5e2",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8101",
       "mod": "dunecity",
       "seed": 8101,
@@ -2013,6 +2337,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "5d31f731211df936e7d513d7fb4def0a95edef343115d00128a182e0ab95280f.ini",
+      "map_sha256": "5d31f731211df936e7d513d7fb4def0a95edef343115d00128a182e0ab95280f",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -2042,6 +2393,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "e8c9574ef006b20c39ccd4dc35acd6124f2b8a7a246fc7fdd57c4882b591dfdd.ini",
+      "map_sha256": "e8c9574ef006b20c39ccd4dc35acd6124f2b8a7a246fc7fdd57c4882b591dfdd",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8303",
       "mod": "dunecity",
       "seed": 8303,
@@ -2068,6 +2446,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "8be7e99746c6a8dfbb202b7b055ceb8dec6d37b0ee7c72e9139247890f655970.ini",
+      "map_sha256": "8be7e99746c6a8dfbb202b7b055ceb8dec6d37b0ee7c72e9139247890f655970",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -2091,6 +2496,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "280764cb780eb63801b27709b52996f0190331e0a4cd0de3babb927c6f4b71c5.ini",
+      "map_sha256": "280764cb780eb63801b27709b52996f0190331e0a4cd0de3babb927c6f4b71c5",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -2122,6 +2554,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "df08c8c14126fd3f67fdb3a40ddffa178c429acbcb630de4e49441569e33a6a0.ini",
+      "map_sha256": "df08c8c14126fd3f67fdb3a40ddffa178c429acbcb630de4e49441569e33a6a0",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -2148,6 +2607,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "0a23f4cf8afda79d9f22d1220fcd6f058c92f4d65d055b920405120f16046f6f.ini",
+      "map_sha256": "0a23f4cf8afda79d9f22d1220fcd6f058c92f4d65d055b920405120f16046f6f",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -2171,6 +2657,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "ef2aa1cfecd1aa78b03bbf1f0c0c8470dd0e4c7e16aeeaee21c8e70b071b63c7.ini",
+      "map_sha256": "ef2aa1cfecd1aa78b03bbf1f0c0c8470dd0e4c7e16aeeaee21c8e70b071b63c7",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -2202,6 +2715,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "aba6d0e0e408d903b668779790d2f2c7327fb5279c55bfb624d83c45a1a2f5e2.ini",
+      "map_sha256": "aba6d0e0e408d903b668779790d2f2c7327fb5279c55bfb624d83c45a1a2f5e2",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8101",
       "mod": "dunecity",
       "seed": 8101,
@@ -2225,6 +2765,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "5d31f731211df936e7d513d7fb4def0a95edef343115d00128a182e0ab95280f.ini",
+      "map_sha256": "5d31f731211df936e7d513d7fb4def0a95edef343115d00128a182e0ab95280f",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -2254,6 +2821,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "e8c9574ef006b20c39ccd4dc35acd6124f2b8a7a246fc7fdd57c4882b591dfdd.ini",
+      "map_sha256": "e8c9574ef006b20c39ccd4dc35acd6124f2b8a7a246fc7fdd57c4882b591dfdd",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8303",
       "mod": "dunecity",
       "seed": 8303,
@@ -2280,6 +2874,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "8be7e99746c6a8dfbb202b7b055ceb8dec6d37b0ee7c72e9139247890f655970.ini",
+      "map_sha256": "8be7e99746c6a8dfbb202b7b055ceb8dec6d37b0ee7c72e9139247890f655970",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -2303,6 +2924,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "280764cb780eb63801b27709b52996f0190331e0a4cd0de3babb927c6f4b71c5.ini",
+      "map_sha256": "280764cb780eb63801b27709b52996f0190331e0a4cd0de3babb927c6f4b71c5",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -2349,6 +2997,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "4a22e1919d82818f140194693425fea55acee93853a139af66ee49641e187182.ini",
+      "map_sha256": "4a22e1919d82818f140194693425fea55acee93853a139af66ee49641e187182",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -2388,6 +3079,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "8d090fe9318278d16fcb77c18ba31d9e53d24f59224802912c6bb7acaf7f5756.ini",
+      "map_sha256": "8d090fe9318278d16fcb77c18ba31d9e53d24f59224802912c6bb7acaf7f5756",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "fremen:1:qBotBrutal,mercenary:2:qBotBrutal,harkonnen:3:qBotBrutal,atreides:4:qBotBrutal,ordos:5:qBotBrutal,sardaukar:6:qBotBrutal",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -2433,6 +3167,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "cf17f9193f723cc932298167e0b0bffade7c59a70ac90d20bd7eb603496b6688.ini",
+      "map_sha256": "cf17f9193f723cc932298167e0b0bffade7c59a70ac90d20bd7eb603496b6688",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "ordos:1:qBotBrutal,sardaukar:2:qBotBrutal,fremen:3:qBotBrutal,mercenary:4:qBotBrutal,harkonnen:5:qBotBrutal,atreides:6:qBotBrutal",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/77001",
       "mod": "dunecity",
       "seed": 77001,
@@ -2472,6 +3249,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "cb9306be52691c486b0a4cb8a8e9695b12e34cbdb00d35e7316b9b5a12fd1990.ini",
+      "map_sha256": "cb9306be52691c486b0a4cb8a8e9695b12e34cbdb00d35e7316b9b5a12fd1990",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "sardaukar:1:qBotBrutal,fremen:2:qBotBrutal,mercenary:3:qBotBrutal,harkonnen:4:qBotBrutal,atreides:5:qBotBrutal,ordos:6:qBotBrutal",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -2517,6 +3337,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "5d368305616705760ccacfddc0ff6493d858c2ea7b3e99a08650d5bc31763e97.ini",
+      "map_sha256": "5d368305616705760ccacfddc0ff6493d858c2ea7b3e99a08650d5bc31763e97",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "mercenary:1:qBotBrutal,harkonnen:2:qBotBrutal,atreides:3:qBotBrutal,ordos:4:qBotBrutal,sardaukar:5:qBotBrutal,fremen:6:qBotBrutal",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8202",
       "mod": "dunecity",
       "seed": 8202,
@@ -2556,6 +3419,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "6c83c7a3f6bacb2850aaa4597008841c8393b1e917126de1e6babd5d2557d34d.ini",
+      "map_sha256": "6c83c7a3f6bacb2850aaa4597008841c8393b1e917126de1e6babd5d2557d34d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -2601,6 +3507,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "cea8ba6b188624250e5da12b3956bc7d7880cb60c1370e0b7f9bb1e5be8cc0d0.ini",
+      "map_sha256": "cea8ba6b188624250e5da12b3956bc7d7880cb60c1370e0b7f9bb1e5be8cc0d0",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -2640,6 +3589,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "6e0c755c23e3b764ffc9ef766ce57ebfd964f4195580fbf4a3144fe7babe158d.ini",
+      "map_sha256": "6e0c755c23e3b764ffc9ef766ce57ebfd964f4195580fbf4a3144fe7babe158d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -2685,6 +3677,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "4a22e1919d82818f140194693425fea55acee93853a139af66ee49641e187182.ini",
+      "map_sha256": "4a22e1919d82818f140194693425fea55acee93853a139af66ee49641e187182",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -2724,6 +3759,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "8d090fe9318278d16fcb77c18ba31d9e53d24f59224802912c6bb7acaf7f5756.ini",
+      "map_sha256": "8d090fe9318278d16fcb77c18ba31d9e53d24f59224802912c6bb7acaf7f5756",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "fremen:1:qBotHard,mercenary:2:qBotHard,harkonnen:3:qBotHard,atreides:4:qBotHard,ordos:5:qBotHard,sardaukar:6:qBotHard",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -2769,6 +3847,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "cf17f9193f723cc932298167e0b0bffade7c59a70ac90d20bd7eb603496b6688.ini",
+      "map_sha256": "cf17f9193f723cc932298167e0b0bffade7c59a70ac90d20bd7eb603496b6688",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "ordos:1:qBotHard,sardaukar:2:qBotHard,fremen:3:qBotHard,mercenary:4:qBotHard,harkonnen:5:qBotHard,atreides:6:qBotHard",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/77001",
       "mod": "dunecity",
       "seed": 77001,
@@ -2808,6 +3929,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "cb9306be52691c486b0a4cb8a8e9695b12e34cbdb00d35e7316b9b5a12fd1990.ini",
+      "map_sha256": "cb9306be52691c486b0a4cb8a8e9695b12e34cbdb00d35e7316b9b5a12fd1990",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "sardaukar:1:qBotHard,fremen:2:qBotHard,mercenary:3:qBotHard,harkonnen:4:qBotHard,atreides:5:qBotHard,ordos:6:qBotHard",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -2853,6 +4017,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "5d368305616705760ccacfddc0ff6493d858c2ea7b3e99a08650d5bc31763e97.ini",
+      "map_sha256": "5d368305616705760ccacfddc0ff6493d858c2ea7b3e99a08650d5bc31763e97",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "mercenary:1:qBotHard,harkonnen:2:qBotHard,atreides:3:qBotHard,ordos:4:qBotHard,sardaukar:5:qBotHard,fremen:6:qBotHard",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8202",
       "mod": "dunecity",
       "seed": 8202,
@@ -2892,6 +4099,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "6c83c7a3f6bacb2850aaa4597008841c8393b1e917126de1e6babd5d2557d34d.ini",
+      "map_sha256": "6c83c7a3f6bacb2850aaa4597008841c8393b1e917126de1e6babd5d2557d34d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -2937,6 +4187,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "cea8ba6b188624250e5da12b3956bc7d7880cb60c1370e0b7f9bb1e5be8cc0d0.ini",
+      "map_sha256": "cea8ba6b188624250e5da12b3956bc7d7880cb60c1370e0b7f9bb1e5be8cc0d0",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -2976,6 +4269,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "6e0c755c23e3b764ffc9ef766ce57ebfd964f4195580fbf4a3144fe7babe158d.ini",
+      "map_sha256": "6e0c755c23e3b764ffc9ef766ce57ebfd964f4195580fbf4a3144fe7babe158d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -3021,6 +4357,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "4a22e1919d82818f140194693425fea55acee93853a139af66ee49641e187182.ini",
+      "map_sha256": "4a22e1919d82818f140194693425fea55acee93853a139af66ee49641e187182",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -3060,6 +4439,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "8d090fe9318278d16fcb77c18ba31d9e53d24f59224802912c6bb7acaf7f5756.ini",
+      "map_sha256": "8d090fe9318278d16fcb77c18ba31d9e53d24f59224802912c6bb7acaf7f5756",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "fremen:1:qBotMedium,mercenary:2:qBotMedium,harkonnen:3:qBotMedium,atreides:4:qBotMedium,ordos:5:qBotMedium,sardaukar:6:qBotMedium",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -3105,6 +4527,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "cf17f9193f723cc932298167e0b0bffade7c59a70ac90d20bd7eb603496b6688.ini",
+      "map_sha256": "cf17f9193f723cc932298167e0b0bffade7c59a70ac90d20bd7eb603496b6688",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "ordos:1:qBotMedium,sardaukar:2:qBotMedium,fremen:3:qBotMedium,mercenary:4:qBotMedium,harkonnen:5:qBotMedium,atreides:6:qBotMedium",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/77001",
       "mod": "dunecity",
       "seed": 77001,
@@ -3144,6 +4609,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "cb9306be52691c486b0a4cb8a8e9695b12e34cbdb00d35e7316b9b5a12fd1990.ini",
+      "map_sha256": "cb9306be52691c486b0a4cb8a8e9695b12e34cbdb00d35e7316b9b5a12fd1990",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "sardaukar:1:qBotMedium,fremen:2:qBotMedium,mercenary:3:qBotMedium,harkonnen:4:qBotMedium,atreides:5:qBotMedium,ordos:6:qBotMedium",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -3189,6 +4697,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "5d368305616705760ccacfddc0ff6493d858c2ea7b3e99a08650d5bc31763e97.ini",
+      "map_sha256": "5d368305616705760ccacfddc0ff6493d858c2ea7b3e99a08650d5bc31763e97",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "mercenary:1:qBotMedium,harkonnen:2:qBotMedium,atreides:3:qBotMedium,ordos:4:qBotMedium,sardaukar:5:qBotMedium,fremen:6:qBotMedium",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8202",
       "mod": "dunecity",
       "seed": 8202,
@@ -3228,6 +4779,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "6c83c7a3f6bacb2850aaa4597008841c8393b1e917126de1e6babd5d2557d34d.ini",
+      "map_sha256": "6c83c7a3f6bacb2850aaa4597008841c8393b1e917126de1e6babd5d2557d34d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -3273,6 +4867,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "cea8ba6b188624250e5da12b3956bc7d7880cb60c1370e0b7f9bb1e5be8cc0d0.ini",
+      "map_sha256": "cea8ba6b188624250e5da12b3956bc7d7880cb60c1370e0b7f9bb1e5be8cc0d0",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -3315,6 +4952,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "6e0c755c23e3b764ffc9ef766ce57ebfd964f4195580fbf4a3144fe7babe158d.ini",
+      "map_sha256": "6e0c755c23e3b764ffc9ef766ce57ebfd964f4195580fbf4a3144fe7babe158d",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/148680876",
       "mod": "dunecity",
       "seed": 148680876,
@@ -3338,6 +5018,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=148680876",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "de02c39c0dd08c94a0105437bb4990c628be180d77d70c17a12ee0840b01b245.ini",
+      "map_sha256": "de02c39c0dd08c94a0105437bb4990c628be180d77d70c17a12ee0840b01b245",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -3368,6 +5075,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "5db860d2c81f4033f714ce57e92a0c09265555453232dc3a03a5238a2f848086.ini",
+      "map_sha256": "5db860d2c81f4033f714ce57e92a0c09265555453232dc3a03a5238a2f848086",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -3391,6 +5125,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "1c7f786cfa5ff57679b57a33938d5f796de66781a07ca1eac6c612b53bc99cbb.ini",
+      "map_sha256": "1c7f786cfa5ff57679b57a33938d5f796de66781a07ca1eac6c612b53bc99cbb",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -3422,6 +5183,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "c26a3a0951f729389ff8f546f26774d4344ce831a2282b840832785b061a9607.ini",
+      "map_sha256": "c26a3a0951f729389ff8f546f26774d4344ce831a2282b840832785b061a9607",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8101",
       "mod": "dunecity",
       "seed": 8101,
@@ -3445,6 +5233,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "8b15a1e9b6b6c9814210cbcd5760f4017cddd87658b0d932a1ef482a2b7a2fb7.ini",
+      "map_sha256": "8b15a1e9b6b6c9814210cbcd5760f4017cddd87658b0d932a1ef482a2b7a2fb7",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -3474,6 +5289,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "0ba47b8c6a9cc97a46c4fc506f572a435395e3e27f7db27d40a52ccde3284538.ini",
+      "map_sha256": "0ba47b8c6a9cc97a46c4fc506f572a435395e3e27f7db27d40a52ccde3284538",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8303",
       "mod": "dunecity",
       "seed": 8303,
@@ -3500,6 +5342,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "1cd16c84d9d9f65d52c13c1ad999ef9429b50539bff6b48de2d1db18993e2a9e.ini",
+      "map_sha256": "1cd16c84d9d9f65d52c13c1ad999ef9429b50539bff6b48de2d1db18993e2a9e",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -3523,6 +5392,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "8568eb5faff9fa77c5a60e3a0c171f041be54139c52705287878eef727b3f4a2.ini",
+      "map_sha256": "8568eb5faff9fa77c5a60e3a0c171f041be54139c52705287878eef727b3f4a2",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -3554,6 +5450,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "de02c39c0dd08c94a0105437bb4990c628be180d77d70c17a12ee0840b01b245.ini",
+      "map_sha256": "de02c39c0dd08c94a0105437bb4990c628be180d77d70c17a12ee0840b01b245",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -3580,6 +5503,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "5db860d2c81f4033f714ce57e92a0c09265555453232dc3a03a5238a2f848086.ini",
+      "map_sha256": "5db860d2c81f4033f714ce57e92a0c09265555453232dc3a03a5238a2f848086",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -3603,6 +5553,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "1c7f786cfa5ff57679b57a33938d5f796de66781a07ca1eac6c612b53bc99cbb.ini",
+      "map_sha256": "1c7f786cfa5ff57679b57a33938d5f796de66781a07ca1eac6c612b53bc99cbb",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -3634,6 +5611,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "c26a3a0951f729389ff8f546f26774d4344ce831a2282b840832785b061a9607.ini",
+      "map_sha256": "c26a3a0951f729389ff8f546f26774d4344ce831a2282b840832785b061a9607",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8101",
       "mod": "dunecity",
       "seed": 8101,
@@ -3657,6 +5661,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "8b15a1e9b6b6c9814210cbcd5760f4017cddd87658b0d932a1ef482a2b7a2fb7.ini",
+      "map_sha256": "8b15a1e9b6b6c9814210cbcd5760f4017cddd87658b0d932a1ef482a2b7a2fb7",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -3686,6 +5717,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "0ba47b8c6a9cc97a46c4fc506f572a435395e3e27f7db27d40a52ccde3284538.ini",
+      "map_sha256": "0ba47b8c6a9cc97a46c4fc506f572a435395e3e27f7db27d40a52ccde3284538",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8303",
       "mod": "dunecity",
       "seed": 8303,
@@ -3712,6 +5770,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "1cd16c84d9d9f65d52c13c1ad999ef9429b50539bff6b48de2d1db18993e2a9e.ini",
+      "map_sha256": "1cd16c84d9d9f65d52c13c1ad999ef9429b50539bff6b48de2d1db18993e2a9e",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -3735,6 +5820,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "8568eb5faff9fa77c5a60e3a0c171f041be54139c52705287878eef727b3f4a2.ini",
+      "map_sha256": "8568eb5faff9fa77c5a60e3a0c171f041be54139c52705287878eef727b3f4a2",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -3766,6 +5878,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "de02c39c0dd08c94a0105437bb4990c628be180d77d70c17a12ee0840b01b245.ini",
+      "map_sha256": "de02c39c0dd08c94a0105437bb4990c628be180d77d70c17a12ee0840b01b245",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -3792,6 +5931,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "5db860d2c81f4033f714ce57e92a0c09265555453232dc3a03a5238a2f848086.ini",
+      "map_sha256": "5db860d2c81f4033f714ce57e92a0c09265555453232dc3a03a5238a2f848086",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/55001",
       "mod": "dunecity",
       "seed": 55001,
@@ -3815,6 +5981,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=55001",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "1c7f786cfa5ff57679b57a33938d5f796de66781a07ca1eac6c612b53bc99cbb.ini",
+      "map_sha256": "1c7f786cfa5ff57679b57a33938d5f796de66781a07ca1eac6c612b53bc99cbb",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -3846,6 +6039,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "c26a3a0951f729389ff8f546f26774d4344ce831a2282b840832785b061a9607.ini",
+      "map_sha256": "c26a3a0951f729389ff8f546f26774d4344ce831a2282b840832785b061a9607",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8101",
       "mod": "dunecity",
       "seed": 8101,
@@ -3869,6 +6089,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "8b15a1e9b6b6c9814210cbcd5760f4017cddd87658b0d932a1ef482a2b7a2fb7.ini",
+      "map_sha256": "8b15a1e9b6b6c9814210cbcd5760f4017cddd87658b0d932a1ef482a2b7a2fb7",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -3898,6 +6145,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "0ba47b8c6a9cc97a46c4fc506f572a435395e3e27f7db27d40a52ccde3284538.ini",
+      "map_sha256": "0ba47b8c6a9cc97a46c4fc506f572a435395e3e27f7db27d40a52ccde3284538",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8303",
       "mod": "dunecity",
       "seed": 8303,
@@ -3924,6 +6198,33 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "1cd16c84d9d9f65d52c13c1ad999ef9429b50539bff6b48de2d1db18993e2a9e.ini",
+      "map_sha256": "1cd16c84d9d9f65d52c13c1ad999ef9429b50539bff6b48de2d1db18993e2a9e",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -3947,6 +6248,33 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off",
+        "on"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "8568eb5faff9fa77c5a60e3a0c171f041be54139c52705287878eef727b3f4a2.ini",
+      "map_sha256": "8568eb5faff9fa77c5a60e3a0c171f041be54139c52705287878eef727b3f4a2",
+      "map_name": "2P - 128x128 - Random 2 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
         "on"
       ]
     },
@@ -3993,6 +6321,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "d4e0b7fd39adca02a96dcad22754fd3695546a53639470c991dbf2cbf827fca3.ini",
+      "map_sha256": "d4e0b7fd39adca02a96dcad22754fd3695546a53639470c991dbf2cbf827fca3",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -4032,6 +6403,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "2191f4151284821edde9197032934debcdefa25bb0e6673963eaa00b2c98abc5.ini",
+      "map_sha256": "2191f4151284821edde9197032934debcdefa25bb0e6673963eaa00b2c98abc5",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "fremen:1:qBotBrutal,mercenary:2:qBotBrutal,harkonnen:3:qBotBrutal,atreides:4:qBotBrutal,ordos:5:qBotBrutal,sardaukar:6:qBotBrutal",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4077,6 +6491,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "92ea3a78a6fde05c07932c00e668a0705eff57e3326133b4b5f148b320deafe2.ini",
+      "map_sha256": "92ea3a78a6fde05c07932c00e668a0705eff57e3326133b4b5f148b320deafe2",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "ordos:1:qBotBrutal,sardaukar:2:qBotBrutal,fremen:3:qBotBrutal,mercenary:4:qBotBrutal,harkonnen:5:qBotBrutal,atreides:6:qBotBrutal",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/77001",
       "mod": "dunecity",
       "seed": 77001,
@@ -4116,6 +6573,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "0c15951313a84c944d2c1b53ee8297102223928c59d46dc59929aded12b1a8c5.ini",
+      "map_sha256": "0c15951313a84c944d2c1b53ee8297102223928c59d46dc59929aded12b1a8c5",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "sardaukar:1:qBotBrutal,fremen:2:qBotBrutal,mercenary:3:qBotBrutal,harkonnen:4:qBotBrutal,atreides:5:qBotBrutal,ordos:6:qBotBrutal",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4161,6 +6661,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "6650055b74f81c194e14a8ce84242b5afdfabb7fd341d49392cd3f05a1b91bba.ini",
+      "map_sha256": "6650055b74f81c194e14a8ce84242b5afdfabb7fd341d49392cd3f05a1b91bba",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "mercenary:1:qBotBrutal,harkonnen:2:qBotBrutal,atreides:3:qBotBrutal,ordos:4:qBotBrutal,sardaukar:5:qBotBrutal,fremen:6:qBotBrutal",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8202",
       "mod": "dunecity",
       "seed": 8202,
@@ -4200,6 +6743,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "1f163e7a49d313ff933d0033792dded6c440f278734d678df9caa04de2a59c12.ini",
+      "map_sha256": "1f163e7a49d313ff933d0033792dded6c440f278734d678df9caa04de2a59c12",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4245,6 +6831,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "11c283d63448e6dd54014b062331115167d06676b3444dada484e949ec790709.ini",
+      "map_sha256": "11c283d63448e6dd54014b062331115167d06676b3444dada484e949ec790709",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -4284,6 +6913,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "f1f86a2bd4fd9bd8b1909babf2b6da624d400ff31d4bb9e6b4b1fde5bf5c34c4.ini",
+      "map_sha256": "f1f86a2bd4fd9bd8b1909babf2b6da624d400ff31d4bb9e6b4b1fde5bf5c34c4",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4329,6 +7001,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "d4e0b7fd39adca02a96dcad22754fd3695546a53639470c991dbf2cbf827fca3.ini",
+      "map_sha256": "d4e0b7fd39adca02a96dcad22754fd3695546a53639470c991dbf2cbf827fca3",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -4368,6 +7083,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "2191f4151284821edde9197032934debcdefa25bb0e6673963eaa00b2c98abc5.ini",
+      "map_sha256": "2191f4151284821edde9197032934debcdefa25bb0e6673963eaa00b2c98abc5",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "fremen:1:qBotHard,mercenary:2:qBotHard,harkonnen:3:qBotHard,atreides:4:qBotHard,ordos:5:qBotHard,sardaukar:6:qBotHard",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4413,6 +7171,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "92ea3a78a6fde05c07932c00e668a0705eff57e3326133b4b5f148b320deafe2.ini",
+      "map_sha256": "92ea3a78a6fde05c07932c00e668a0705eff57e3326133b4b5f148b320deafe2",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "ordos:1:qBotHard,sardaukar:2:qBotHard,fremen:3:qBotHard,mercenary:4:qBotHard,harkonnen:5:qBotHard,atreides:6:qBotHard",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/77001",
       "mod": "dunecity",
       "seed": 77001,
@@ -4452,6 +7253,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "0c15951313a84c944d2c1b53ee8297102223928c59d46dc59929aded12b1a8c5.ini",
+      "map_sha256": "0c15951313a84c944d2c1b53ee8297102223928c59d46dc59929aded12b1a8c5",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "sardaukar:1:qBotHard,fremen:2:qBotHard,mercenary:3:qBotHard,harkonnen:4:qBotHard,atreides:5:qBotHard,ordos:6:qBotHard",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4497,6 +7341,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "6650055b74f81c194e14a8ce84242b5afdfabb7fd341d49392cd3f05a1b91bba.ini",
+      "map_sha256": "6650055b74f81c194e14a8ce84242b5afdfabb7fd341d49392cd3f05a1b91bba",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "mercenary:1:qBotHard,harkonnen:2:qBotHard,atreides:3:qBotHard,ordos:4:qBotHard,sardaukar:5:qBotHard,fremen:6:qBotHard",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8202",
       "mod": "dunecity",
       "seed": 8202,
@@ -4536,6 +7423,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "1f163e7a49d313ff933d0033792dded6c440f278734d678df9caa04de2a59c12.ini",
+      "map_sha256": "1f163e7a49d313ff933d0033792dded6c440f278734d678df9caa04de2a59c12",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4581,6 +7511,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "11c283d63448e6dd54014b062331115167d06676b3444dada484e949ec790709.ini",
+      "map_sha256": "11c283d63448e6dd54014b062331115167d06676b3444dada484e949ec790709",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -4620,6 +7593,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "f1f86a2bd4fd9bd8b1909babf2b6da624d400ff31d4bb9e6b4b1fde5bf5c34c4.ini",
+      "map_sha256": "f1f86a2bd4fd9bd8b1909babf2b6da624d400ff31d4bb9e6b4b1fde5bf5c34c4",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4665,6 +7681,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/148680876/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 148680876,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "d4e0b7fd39adca02a96dcad22754fd3695546a53639470c991dbf2cbf827fca3.ini",
+      "map_sha256": "d4e0b7fd39adca02a96dcad22754fd3695546a53639470c991dbf2cbf827fca3",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 148680876",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=148680876",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/1841712204",
       "mod": "dunecity",
       "seed": 1841712204,
@@ -4704,6 +7763,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1841712204",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/1841712204/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 1841712204,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "2191f4151284821edde9197032934debcdefa25bb0e6673963eaa00b2c98abc5.ini",
+      "map_sha256": "2191f4151284821edde9197032934debcdefa25bb0e6673963eaa00b2c98abc5",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 1841712204",
+      "initial_tech": 1,
+      "sides": "fremen:1:qBotMedium,mercenary:2:qBotMedium,harkonnen:3:qBotMedium,atreides:4:qBotMedium,ordos:5:qBotMedium,sardaukar:6:qBotMedium",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=1841712204",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4749,6 +7851,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/55001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 55001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "92ea3a78a6fde05c07932c00e668a0705eff57e3326133b4b5f148b320deafe2.ini",
+      "map_sha256": "92ea3a78a6fde05c07932c00e668a0705eff57e3326133b4b5f148b320deafe2",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 55001",
+      "initial_tech": 1,
+      "sides": "ordos:1:qBotMedium,sardaukar:2:qBotMedium,fremen:3:qBotMedium,mercenary:4:qBotMedium,harkonnen:5:qBotMedium,atreides:6:qBotMedium",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=55001",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/77001",
       "mod": "dunecity",
       "seed": 77001,
@@ -4788,6 +7933,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=77001",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/77001/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 77001,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "0c15951313a84c944d2c1b53ee8297102223928c59d46dc59929aded12b1a8c5.ini",
+      "map_sha256": "0c15951313a84c944d2c1b53ee8297102223928c59d46dc59929aded12b1a8c5",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 77001",
+      "initial_tech": 1,
+      "sides": "sardaukar:1:qBotMedium,fremen:2:qBotMedium,mercenary:3:qBotMedium,harkonnen:4:qBotMedium,atreides:5:qBotMedium,ordos:6:qBotMedium",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=77001",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4833,6 +8021,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "6650055b74f81c194e14a8ce84242b5afdfabb7fd341d49392cd3f05a1b91bba.ini",
+      "map_sha256": "6650055b74f81c194e14a8ce84242b5afdfabb7fd341d49392cd3f05a1b91bba",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8101",
+      "initial_tech": 1,
+      "sides": "mercenary:1:qBotMedium,harkonnen:2:qBotMedium,atreides:3:qBotMedium,ordos:4:qBotMedium,sardaukar:5:qBotMedium,fremen:6:qBotMedium",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8101",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8202",
       "mod": "dunecity",
       "seed": 8202,
@@ -4872,6 +8103,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=8202",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8202/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "1f163e7a49d313ff933d0033792dded6c440f278734d678df9caa04de2a59c12.ini",
+      "map_sha256": "1f163e7a49d313ff933d0033792dded6c440f278734d678df9caa04de2a59c12",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8202",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8202",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -4917,6 +8191,49 @@
       ]
     },
     {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8303/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 8303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "11c283d63448e6dd54014b062331115167d06676b3444dada484e949ec790709.ini",
+      "map_sha256": "11c283d63448e6dd54014b062331115167d06676b3444dada484e949ec790709",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 8303",
+      "initial_tech": 1,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=8303",
+      "reference_research_cells": [
+        "on"
+      ]
+    },
+    {
       "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/9101",
       "mod": "dunecity",
       "seed": 9101,
@@ -4956,6 +8273,49 @@
       "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101",
       "reference_research_cells": [
         "off"
+      ]
+    },
+    {
+      "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/9101/t1",
+      "mod": "dunecity",
+      "research": "on",
+      "seed": 9101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "f1f86a2bd4fd9bd8b1909babf2b6da624d400ff31d4bb9e6b4b1fde5bf5c34c4.ini",
+      "map_sha256": "f1f86a2bd4fd9bd8b1909babf2b6da624d400ff31d4bb9e6b4b1fde5bf5c34c4",
+      "map_name": "6P - 128x128 - Random 6 starts DuneCity T1 9101",
+      "initial_tech": 1,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=1,credits=3000,seed=9101",
+      "reference_research_cells": [
+        "on"
       ]
     },
     {
@@ -8349,5 +11709,886 @@
       }
     ],
     "roster_policy": "Eight-seed audit order is original four followed by expansion four; expansion rosters use global seed index4..7. Map generation-only roster was index0..3; no generation behaviour rows are reused."
+  },
+  "on_options_by_mod": {
+    "dunecity": {
+      "file": "reference-city-research-on.ini",
+      "sha256": "aea6819dd478597499c1c5f89da0be951fb91bc6b41495e714c779037ce56469",
+      "city_effects": true,
+      "original_frozen_input_receipt": "/Users/stefan/.local/state/dunecity-queue/inputs/20261106T185909-baseline-current-research-on-t1-a3ef02.json"
+    }
+  },
+  "research_on_provenance": {
+    "native_source": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+    "input_job": "20261106T185909-baseline-current-research-on-t1-a3ef02",
+    "raw_replay_maps": 32,
+    "contexts": 96,
+    "receipts": [
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.85.8d2da3/probe-evidence.tar.gz",
+        "replay_member": "scratch/g0c9e86abcfd0/profile/replay/auto.rpl",
+        "replay_sha256": "4bad6e4eee3785231c706629b861cb5ff1f19393e82232c9cc5d8a661de853b3",
+        "map_sha256": "5d368305616705760ccacfddc0ff6493d858c2ea7b3e99a08650d5bc31763e97",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.84.e5ae08/probe-evidence.tar.gz",
+        "replay_member": "scratch/g527b863883d4/profile/replay/auto.rpl",
+        "replay_sha256": "4c79407537cad51c2f9c31484a38c75890948c4a54e7c4086b789092772fd455",
+        "map_sha256": "8d090fe9318278d16fcb77c18ba31d9e53d24f59224802912c6bb7acaf7f5756",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.82.76dd73/probe-evidence.tar.gz",
+        "replay_member": "scratch/g408895e2ee0c/profile/replay/auto.rpl",
+        "replay_sha256": "9a6c4467af31f9949abad7d76da97fafea4053dc51f09958d7e19590b4e74ca4",
+        "map_sha256": "cf17f9193f723cc932298167e0b0bffade7c59a70ac90d20bd7eb603496b6688",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.79.7c96e3/probe-evidence.tar.gz",
+        "replay_member": "scratch/g67fb19752afd/profile/replay/auto.rpl",
+        "replay_sha256": "54c8a131e4184d91f8968fd3647f73a3ab4ad73ec8ff420509ad53f3640ff4c0",
+        "map_sha256": "cea8ba6b188624250e5da12b3956bc7d7880cb60c1370e0b7f9bb1e5be8cc0d0",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.78.31a808/probe-evidence.tar.gz",
+        "replay_member": "scratch/g52b169271979/profile/replay/auto.rpl",
+        "replay_sha256": "8a3fd838ab613ee433330d3e5cc542b54d269bcbc0dd6f9ddd00371a4405a7a6",
+        "map_sha256": "6c83c7a3f6bacb2850aaa4597008841c8393b1e917126de1e6babd5d2557d34d",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.77.68867a/probe-evidence.tar.gz",
+        "replay_member": "scratch/g85d76dab8413/profile/replay/auto.rpl",
+        "replay_sha256": "3ff4fb044c99813fdc733a35ee675290a9ffb751d88324bfc9932833186e44c7",
+        "map_sha256": "5d368305616705760ccacfddc0ff6493d858c2ea7b3e99a08650d5bc31763e97",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.76.dd3fc5/probe-evidence.tar.gz",
+        "replay_member": "scratch/g89e32910069d/profile/replay/auto.rpl",
+        "replay_sha256": "216d0bd29c69a4daa1f8e057f389d828ac80a89adffe1e90522b099efe952093",
+        "map_sha256": "8d090fe9318278d16fcb77c18ba31d9e53d24f59224802912c6bb7acaf7f5756",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.75.23f86e/probe-evidence.tar.gz",
+        "replay_member": "scratch/gf7d6701b6730/profile/replay/auto.rpl",
+        "replay_sha256": "929d54184951d94fe9fa3769e01799dd19404ec99e73d801d6167cf5b82b526b",
+        "map_sha256": "cb9306be52691c486b0a4cb8a8e9695b12e34cbdb00d35e7316b9b5a12fd1990",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.74.8fadde/probe-evidence.tar.gz",
+        "replay_member": "scratch/g8b7fc3472f53/profile/replay/auto.rpl",
+        "replay_sha256": "fd3fa2534ec96a8de041fc27cc33ecca2d6d24edc6adb5c89fe933afbaf3b420",
+        "map_sha256": "cf17f9193f723cc932298167e0b0bffade7c59a70ac90d20bd7eb603496b6688",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.73.f99082/probe-evidence.tar.gz",
+        "replay_member": "scratch/g6095a1cc0f71/profile/replay/auto.rpl",
+        "replay_sha256": "795bb2a1b16ff9383b9b6e911f20a88b3b3ceb3779dc6f473ef3b0ab82f8f73c",
+        "map_sha256": "4a22e1919d82818f140194693425fea55acee93853a139af66ee49641e187182",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/medium/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.72.3c3425/probe-evidence.tar.gz",
+        "replay_member": "scratch/gf751e540bba0/profile/replay/auto.rpl",
+        "replay_sha256": "21ec17aa951a1aa075ea8cd8024c8fa03d9194f0884b4ec50f1404ca78fd8b47",
+        "map_sha256": "6e0c755c23e3b764ffc9ef766ce57ebfd964f4195580fbf4a3144fe7babe158d",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.80.06277e/probe-evidence.tar.gz",
+        "replay_member": "scratch/g91dac760ca8f/profile/replay/auto.rpl",
+        "replay_sha256": "d62502c65cf30205c81d6d4ecc34b3e7a5dd630b3e96d6ffda4e67843cd13a26",
+        "map_sha256": "6e0c755c23e3b764ffc9ef766ce57ebfd964f4195580fbf4a3144fe7babe158d",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.95.1b075c/probe-evidence.tar.gz",
+        "replay_member": "scratch/g26516244e8b6/profile/replay/auto.rpl",
+        "replay_sha256": "0067fa4f1bd8df3c3906dece6aab6ea4d189f65aee295530fdc9dc8af5539539",
+        "map_sha256": "cea8ba6b188624250e5da12b3956bc7d7880cb60c1370e0b7f9bb1e5be8cc0d0",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.94.214125/probe-evidence.tar.gz",
+        "replay_member": "scratch/g9bbbab60d022/profile/replay/auto.rpl",
+        "replay_sha256": "893bc0f986154334fe0d4d6ab32ebafb0c9794d9e924dbb844a5ea576503aa43",
+        "map_sha256": "6c83c7a3f6bacb2850aaa4597008841c8393b1e917126de1e6babd5d2557d34d",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.93.a344a3/probe-evidence.tar.gz",
+        "replay_member": "scratch/g9dcac1fec9df/profile/replay/auto.rpl",
+        "replay_sha256": "a8ed59308bd811fe54e33fcba209a86a61a4c2d31ab467651385ed13cf9e5fb7",
+        "map_sha256": "5d368305616705760ccacfddc0ff6493d858c2ea7b3e99a08650d5bc31763e97",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.71.c087d9/probe-evidence.tar.gz",
+        "replay_member": "scratch/g79a01f24268a/profile/replay/auto.rpl",
+        "replay_sha256": "51df4c1c3c41a407434971990e988fd02e44298da80863565536cba78c6ce32a",
+        "map_sha256": "8be7e99746c6a8dfbb202b7b055ceb8dec6d37b0ee7c72e9139247890f655970",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.92.5faae6/probe-evidence.tar.gz",
+        "replay_member": "scratch/gd1d7d3f079f7/profile/replay/auto.rpl",
+        "replay_sha256": "5a12402d57c3ddc9edaef5e183a529909932c1218ce3bb4b145382d545043ec9",
+        "map_sha256": "8d090fe9318278d16fcb77c18ba31d9e53d24f59224802912c6bb7acaf7f5756",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.91.8a0e21/probe-evidence.tar.gz",
+        "replay_member": "scratch/g48e6f8d79e20/profile/replay/auto.rpl",
+        "replay_sha256": "de68d698b8a26745b6a00f0604d9a4956ecaed89f434eeda2fa749d61e85231c",
+        "map_sha256": "cb9306be52691c486b0a4cb8a8e9695b12e34cbdb00d35e7316b9b5a12fd1990",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.90.a9a661/probe-evidence.tar.gz",
+        "replay_member": "scratch/g7c17cb2de31b/profile/replay/auto.rpl",
+        "replay_sha256": "2e4f1ac6fc7d2ca6af6620014d1c147f4940b40c87bb8bbe0ec5091197dd6264",
+        "map_sha256": "cf17f9193f723cc932298167e0b0bffade7c59a70ac90d20bd7eb603496b6688",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.89.082e2f/probe-evidence.tar.gz",
+        "replay_member": "scratch/g4785662c0140/profile/replay/auto.rpl",
+        "replay_sha256": "1223fec64fe1afdeed1ae52fdddefc53d0e3604882b67c312a5da833584d323f",
+        "map_sha256": "4a22e1919d82818f140194693425fea55acee93853a139af66ee49641e187182",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.88.98fad0/probe-evidence.tar.gz",
+        "replay_member": "scratch/g2a823251febd/profile/replay/auto.rpl",
+        "replay_sha256": "9fafbcb287222e1b0d99635d44e028e52d6956f8d7ad3f5a91609d0630b20e00",
+        "map_sha256": "6e0c755c23e3b764ffc9ef766ce57ebfd964f4195580fbf4a3144fe7babe158d",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.87.b7d0a2/probe-evidence.tar.gz",
+        "replay_member": "scratch/g8ed46a30e71a/profile/replay/auto.rpl",
+        "replay_sha256": "7c6dbd19a5f8bc8c7a71e5d6cfa6b5679d6d14d32d26b68b67b2f554dc26144f",
+        "map_sha256": "cea8ba6b188624250e5da12b3956bc7d7880cb60c1370e0b7f9bb1e5be8cc0d0",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.86.b715e0/probe-evidence.tar.gz",
+        "replay_member": "scratch/g89944d4727e6/profile/replay/auto.rpl",
+        "replay_sha256": "f0c5c17d522f8edf057234b2e2d6a00a486c6e6717689867da028b8bc97ab252",
+        "map_sha256": "6c83c7a3f6bacb2850aaa4597008841c8393b1e917126de1e6babd5d2557d34d",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.83.f5b091/probe-evidence.tar.gz",
+        "replay_member": "scratch/g81abaea53978/profile/replay/auto.rpl",
+        "replay_sha256": "b6d9ad1fd3d7555314cf704cb118a0f6dace827f925e883db9d069820bb45e74",
+        "map_sha256": "cb9306be52691c486b0a4cb8a8e9695b12e34cbdb00d35e7316b9b5a12fd1990",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.67.668d62/probe-evidence.tar.gz",
+        "replay_member": "scratch/g98691debfbe5/profile/replay/auto.rpl",
+        "replay_sha256": "a84aba9087a7c9ba591fa48270240384110f0dcab7f038a34cb94d6504f43251",
+        "map_sha256": "aba6d0e0e408d903b668779790d2f2c7327fb5279c55bfb624d83c45a1a2f5e2",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.68.563701/probe-evidence.tar.gz",
+        "replay_member": "scratch/g501aaa658ac0/profile/replay/auto.rpl",
+        "replay_sha256": "dc850ac96e3e538d307a48d1928e3402dc3fdc858ab9584bc1df87481248fe5d",
+        "map_sha256": "0a23f4cf8afda79d9f22d1220fcd6f058c92f4d65d055b920405120f16046f6f",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/ffa6/hard/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.81.277ed8/probe-evidence.tar.gz",
+        "replay_member": "scratch/g9fdd1c957a5a/profile/replay/auto.rpl",
+        "replay_sha256": "81bed66f79b7deb4a891dc461b49f4826cc09a78497310f37bfd7cce9925f847",
+        "map_sha256": "4a22e1919d82818f140194693425fea55acee93853a139af66ee49641e187182",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.61.551fea/probe-evidence.tar.gz",
+        "replay_member": "scratch/gb11f943d2ec9/profile/replay/auto.rpl",
+        "replay_sha256": "e5df226bd32e7c7ff50a583606c030ebeebb2183263ec7d13db29e01224a3588",
+        "map_sha256": "5d31f731211df936e7d513d7fb4def0a95edef343115d00128a182e0ab95280f",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.54.aaa11c/probe-evidence.tar.gz",
+        "replay_member": "scratch/g49fe1c083c49/profile/replay/auto.rpl",
+        "replay_sha256": "1500138aaee9f2f072a29c22faf6ad8dd5089ac88e675bd3c53605e9f7ade14c",
+        "map_sha256": "e8c9574ef006b20c39ccd4dc35acd6124f2b8a7a246fc7fdd57c4882b591dfdd",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.70.433821/probe-evidence.tar.gz",
+        "replay_member": "scratch/g25e53820cfa3/profile/replay/auto.rpl",
+        "replay_sha256": "ccbb131a0a3e68ef1ad3051820192221cb5e99a7104ad44881cab59e4addf27e",
+        "map_sha256": "e8c9574ef006b20c39ccd4dc35acd6124f2b8a7a246fc7fdd57c4882b591dfdd",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.69.1c2f2d/probe-evidence.tar.gz",
+        "replay_member": "scratch/gc11f86570c9c/profile/replay/auto.rpl",
+        "replay_sha256": "37cf29be78d39bea7662b71e4418409b9caaa098f9d2773b61e84622bc67dacc",
+        "map_sha256": "5d31f731211df936e7d513d7fb4def0a95edef343115d00128a182e0ab95280f",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.66.b98943/probe-evidence.tar.gz",
+        "replay_member": "scratch/g42f24e7a2bfa/profile/replay/auto.rpl",
+        "replay_sha256": "459e5643d15c5360940d76e52929b973b5b82e24d9da57d7cad8fc80e8683e68",
+        "map_sha256": "ef2aa1cfecd1aa78b03bbf1f0c0c8470dd0e4c7e16aeeaee21c8e70b071b63c7",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.65.ddf9f4/probe-evidence.tar.gz",
+        "replay_member": "scratch/g0c8cf06fc7d1/profile/replay/auto.rpl",
+        "replay_sha256": "1543857027cc5a7f554d337b9c204dcdf2a1241985d8e7e602a9f4b043221268",
+        "map_sha256": "df08c8c14126fd3f67fdb3a40ddffa178c429acbcb630de4e49441569e33a6a0",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/brutal/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.64.fe6cc6/probe-evidence.tar.gz",
+        "replay_member": "scratch/g7bbbe7ee9bce/profile/replay/auto.rpl",
+        "replay_sha256": "0e3a52e7d6367f4d7c4af0a517be5aa43a709009f9cda30a14ca46c1b9f56410",
+        "map_sha256": "280764cb780eb63801b27709b52996f0190331e0a4cd0de3babb927c6f4b71c5",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.34.e8a9e9/probe-evidence.tar.gz",
+        "replay_member": "scratch/g1a7a3d578d16/profile/replay/auto.rpl",
+        "replay_sha256": "6d2898375f938e07b2710dabbca73202fdbb88511a1a2d380bb04b398bd6f6c4",
+        "map_sha256": "92ea3a78a6fde05c07932c00e668a0705eff57e3326133b4b5f148b320deafe2",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.63.0e05b8/probe-evidence.tar.gz",
+        "replay_member": "scratch/g2742e42d5752/profile/replay/auto.rpl",
+        "replay_sha256": "5daa5ca446e5ae2abee2e7b82c0586ef7d3f2bc2a2eb4eed0f721e50aed98830",
+        "map_sha256": "8be7e99746c6a8dfbb202b7b055ceb8dec6d37b0ee7c72e9139247890f655970",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.37.166981/probe-evidence.tar.gz",
+        "replay_member": "scratch/g6fe9c813203e/profile/replay/auto.rpl",
+        "replay_sha256": "2de013b310d5a19a0f628dc44bd0b01da3cce3828315e3d11979a5ca14c51f70",
+        "map_sha256": "6650055b74f81c194e14a8ce84242b5afdfabb7fd341d49392cd3f05a1b91bba",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.62.f5ef2d/probe-evidence.tar.gz",
+        "replay_member": "scratch/g5aea4c053675/profile/replay/auto.rpl",
+        "replay_sha256": "af838eecadf863675031ad2cefae2062e8eaf24bf541b26ab3020bb7eeb2d9b7",
+        "map_sha256": "e8c9574ef006b20c39ccd4dc35acd6124f2b8a7a246fc7fdd57c4882b591dfdd",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.60.8e3df5/probe-evidence.tar.gz",
+        "replay_member": "scratch/ga0a8714b4c53/profile/replay/auto.rpl",
+        "replay_sha256": "80fce4d3ab784652220612880927643868d4d28f065e8c80d1768a563ecaf0ba",
+        "map_sha256": "0a23f4cf8afda79d9f22d1220fcd6f058c92f4d65d055b920405120f16046f6f",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.59.78e6f8/probe-evidence.tar.gz",
+        "replay_member": "scratch/g7332049d646a/profile/replay/auto.rpl",
+        "replay_sha256": "d194d3cbfe69e8f046076bf3e906750cdd68bf777e9500591b07d3a25a793cc3",
+        "map_sha256": "aba6d0e0e408d903b668779790d2f2c7327fb5279c55bfb624d83c45a1a2f5e2",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.58.8a82d3/probe-evidence.tar.gz",
+        "replay_member": "scratch/ga00c3ea1748a/profile/replay/auto.rpl",
+        "replay_sha256": "e4b138e78407a5ab72fb2006d031d64483623af3ef6c24fa2574fe7d8b32427a",
+        "map_sha256": "ef2aa1cfecd1aa78b03bbf1f0c0c8470dd0e4c7e16aeeaee21c8e70b071b63c7",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.57.f52793/probe-evidence.tar.gz",
+        "replay_member": "scratch/ga9602cd52a7c/profile/replay/auto.rpl",
+        "replay_sha256": "3465fa4be8e98ea37fd52a4880ba4bff31255041e726b52003a3d9fd10135bab",
+        "map_sha256": "df08c8c14126fd3f67fdb3a40ddffa178c429acbcb630de4e49441569e33a6a0",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.55.9c003c/probe-evidence.tar.gz",
+        "replay_member": "scratch/gdf576dded577/profile/replay/auto.rpl",
+        "replay_sha256": "52a8f20df9a4fb24e082fa0746e01a6265f10b56cb9d939da25ed2da0ddec6bc",
+        "map_sha256": "8be7e99746c6a8dfbb202b7b055ceb8dec6d37b0ee7c72e9139247890f655970",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/hard/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.56.312f84/probe-evidence.tar.gz",
+        "replay_member": "scratch/gbfb3a85e08b9/profile/replay/auto.rpl",
+        "replay_sha256": "62e2bbbd4086866479ba032949c7a4c225b1d28442e776966b332e68155f2207",
+        "map_sha256": "280764cb780eb63801b27709b52996f0190331e0a4cd0de3babb927c6f4b71c5",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.53.7ea3ad/probe-evidence.tar.gz",
+        "replay_member": "scratch/ga194391fd40d/profile/replay/auto.rpl",
+        "replay_sha256": "ea3f3a33c301ab76742512281693664ef35e82c966b1a2307cc1b6c4e57cb10e",
+        "map_sha256": "5d31f731211df936e7d513d7fb4def0a95edef343115d00128a182e0ab95280f",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.52.575b21/probe-evidence.tar.gz",
+        "replay_member": "scratch/g36433dbc3004/profile/replay/auto.rpl",
+        "replay_sha256": "01dcab47e1e8b725887871d6a4a0ff899f3020e89b0fcd73cd7a19963bd128bb",
+        "map_sha256": "0a23f4cf8afda79d9f22d1220fcd6f058c92f4d65d055b920405120f16046f6f",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.51.cbf24c/probe-evidence.tar.gz",
+        "replay_member": "scratch/g2a0a88f4fd32/profile/replay/auto.rpl",
+        "replay_sha256": "02c63707178f47dcc5674a1a478039322820028ebcdb299809fd906138631089",
+        "map_sha256": "aba6d0e0e408d903b668779790d2f2c7327fb5279c55bfb624d83c45a1a2f5e2",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.50.75414d/probe-evidence.tar.gz",
+        "replay_member": "scratch/g3698def0b592/profile/replay/auto.rpl",
+        "replay_sha256": "9a0714f801898c9568843e1c6852ab420dcb3f2b99280a3b54a4439410cb15e4",
+        "map_sha256": "ef2aa1cfecd1aa78b03bbf1f0c0c8470dd0e4c7e16aeeaee21c8e70b071b63c7",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.49.d49ca1/probe-evidence.tar.gz",
+        "replay_member": "scratch/g468747a33d88/profile/replay/auto.rpl",
+        "replay_sha256": "c7f5cdbb777bf220ffc33679728311ac63fe77ce69406c571613a1736b2b8838",
+        "map_sha256": "df08c8c14126fd3f67fdb3a40ddffa178c429acbcb630de4e49441569e33a6a0",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/medium/1v1/medium/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.48.d16002/probe-evidence.tar.gz",
+        "replay_member": "scratch/g2aed77a9139c/profile/replay/auto.rpl",
+        "replay_sha256": "dbff8d66e56338ac5b74d3c7ca0769041969133f9d662d7c50ecf61603104fac",
+        "map_sha256": "280764cb780eb63801b27709b52996f0190331e0a4cd0de3babb927c6f4b71c5",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.47.c4bed5/probe-evidence.tar.gz",
+        "replay_member": "scratch/gd9cbb04af9bf/profile/replay/auto.rpl",
+        "replay_sha256": "66516f61bcee426c26e3c67b0f844b8cc7ea9c476566e819d52a2c326a9144df",
+        "map_sha256": "11c283d63448e6dd54014b062331115167d06676b3444dada484e949ec790709",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.46.b1a5c3/probe-evidence.tar.gz",
+        "replay_member": "scratch/g6ca1b379895e/profile/replay/auto.rpl",
+        "replay_sha256": "ca9be110bb93af9db7ad5e4608bc038277da035cbe216292854d6c6d28d10c97",
+        "map_sha256": "1f163e7a49d313ff933d0033792dded6c440f278734d678df9caa04de2a59c12",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.45.22d545/probe-evidence.tar.gz",
+        "replay_member": "scratch/gdca18a835c95/profile/replay/auto.rpl",
+        "replay_sha256": "972f40d5ab28771d842568d7a9843b32114c9f514d4fa15f7121c9f9de844463",
+        "map_sha256": "6650055b74f81c194e14a8ce84242b5afdfabb7fd341d49392cd3f05a1b91bba",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.44.ab5afc/probe-evidence.tar.gz",
+        "replay_member": "scratch/g51086d5cad9d/profile/replay/auto.rpl",
+        "replay_sha256": "a347cf8d1f55622b857f3f222d6ad14fdfbf96acd0bf68b6d2eaca253048ad4e",
+        "map_sha256": "2191f4151284821edde9197032934debcdefa25bb0e6673963eaa00b2c98abc5",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.43.61b806/probe-evidence.tar.gz",
+        "replay_member": "scratch/gc91ef102087f/profile/replay/auto.rpl",
+        "replay_sha256": "1de5c98890bc0f67223abff5aac3e282d5ec6bb1771e20ce1199109289628c7d",
+        "map_sha256": "0c15951313a84c944d2c1b53ee8297102223928c59d46dc59929aded12b1a8c5",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.42.b0f188/probe-evidence.tar.gz",
+        "replay_member": "scratch/gcf91a6e00927/profile/replay/auto.rpl",
+        "replay_sha256": "205187ad5b2104c59995eb9cf5e5d5a4a4491c29826001e38c61f5cace0c04b6",
+        "map_sha256": "92ea3a78a6fde05c07932c00e668a0705eff57e3326133b4b5f148b320deafe2",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.41.05c848/probe-evidence.tar.gz",
+        "replay_member": "scratch/g2b6faf932f51/profile/replay/auto.rpl",
+        "replay_sha256": "4650a51b7fd4b8d51e21b19e9c5299ac89aa62e84a6dc798fd3fe40d0362f1d4",
+        "map_sha256": "d4e0b7fd39adca02a96dcad22754fd3695546a53639470c991dbf2cbf827fca3",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/brutal/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.40.4edc9d/probe-evidence.tar.gz",
+        "replay_member": "scratch/g85a4e64b627c/profile/replay/auto.rpl",
+        "replay_sha256": "155815b0ffa628a6eabf177e373785c2d7dcc4acf9a2c10c085ee4255884bb8d",
+        "map_sha256": "f1f86a2bd4fd9bd8b1909babf2b6da624d400ff31d4bb9e6b4b1fde5bf5c34c4",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.39.c83488/probe-evidence.tar.gz",
+        "replay_member": "scratch/gfde89d2606e3/profile/replay/auto.rpl",
+        "replay_sha256": "76cb2271d96eee3435663e72e760302e14536decd868cab45cc492d4ad4c28da",
+        "map_sha256": "11c283d63448e6dd54014b062331115167d06676b3444dada484e949ec790709",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.38.6be04b/probe-evidence.tar.gz",
+        "replay_member": "scratch/g8f4e5a3d82f3/profile/replay/auto.rpl",
+        "replay_sha256": "4457f5124a70a258534c98536fcf42290b64e2e197c241e291e38b430ba5ff02",
+        "map_sha256": "1f163e7a49d313ff933d0033792dded6c440f278734d678df9caa04de2a59c12",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.36.cf9d94/probe-evidence.tar.gz",
+        "replay_member": "scratch/ga84b4505e925/profile/replay/auto.rpl",
+        "replay_sha256": "32396e408b43356a6e6cbd193d1b78cb344789899663d8502a51f531c1cc4616",
+        "map_sha256": "2191f4151284821edde9197032934debcdefa25bb0e6673963eaa00b2c98abc5",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.35.606755/probe-evidence.tar.gz",
+        "replay_member": "scratch/g5ff0b8b4aad0/profile/replay/auto.rpl",
+        "replay_sha256": "d36f5fb9cc9b41d29c01e7e43ffa8f1e01f6466e7f638c9b299d3bdb26109299",
+        "map_sha256": "0c15951313a84c944d2c1b53ee8297102223928c59d46dc59929aded12b1a8c5",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.33.6d0ec1/probe-evidence.tar.gz",
+        "replay_member": "scratch/ge6cd25268e83/profile/replay/auto.rpl",
+        "replay_sha256": "ecba1563724ae8127d6d53ce95ecad3c6b1d50e1d3718d971c780fc23ff70ecd",
+        "map_sha256": "d4e0b7fd39adca02a96dcad22754fd3695546a53639470c991dbf2cbf827fca3",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/hard/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.32.07c140/probe-evidence.tar.gz",
+        "replay_member": "scratch/g7145388cf9a4/profile/replay/auto.rpl",
+        "replay_sha256": "451731e13d33ab2de9d20c2141f125dbedb8125709baa90f4af3374e2dacd157",
+        "map_sha256": "f1f86a2bd4fd9bd8b1909babf2b6da624d400ff31d4bb9e6b4b1fde5bf5c34c4",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.31.a31fc8/probe-evidence.tar.gz",
+        "replay_member": "scratch/g5656ffe0e277/profile/replay/auto.rpl",
+        "replay_sha256": "9327131bb8cbb7a8ac42d0a0b55c748d7b950d5e9456d29e5b92a7ff76f7d04a",
+        "map_sha256": "11c283d63448e6dd54014b062331115167d06676b3444dada484e949ec790709",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.22.f9ffad/probe-evidence.tar.gz",
+        "replay_member": "scratch/g2c731b9f3065/profile/replay/auto.rpl",
+        "replay_sha256": "c3ab9da36627702a7551ed7e84b118dbd9f7ca5173d71416b260a36715eef36b",
+        "map_sha256": "0ba47b8c6a9cc97a46c4fc506f572a435395e3e27f7db27d40a52ccde3284538",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.30.309e70/probe-evidence.tar.gz",
+        "replay_member": "scratch/gd8abf7a35b0e/profile/replay/auto.rpl",
+        "replay_sha256": "54d640669891d1d082419a5e74e026cd5ef92cbcede906e2beffb19531376ba6",
+        "map_sha256": "1f163e7a49d313ff933d0033792dded6c440f278734d678df9caa04de2a59c12",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.29.a02d5a/probe-evidence.tar.gz",
+        "replay_member": "scratch/ga09de59d1286/profile/replay/auto.rpl",
+        "replay_sha256": "6496ae826d97365e95df6905e7d12fe4df03207c36f9e6f43ffd57db06a5532c",
+        "map_sha256": "6650055b74f81c194e14a8ce84242b5afdfabb7fd341d49392cd3f05a1b91bba",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.28.ee3d97/probe-evidence.tar.gz",
+        "replay_member": "scratch/g8f8e0dda2363/profile/replay/auto.rpl",
+        "replay_sha256": "61047f0c4c112bccd8a47486d64d947289b22793af5a546daa920d185ced3d74",
+        "map_sha256": "2191f4151284821edde9197032934debcdefa25bb0e6673963eaa00b2c98abc5",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.27.d9028e/probe-evidence.tar.gz",
+        "replay_member": "scratch/g9d0ef8f937c3/profile/replay/auto.rpl",
+        "replay_sha256": "3b32196d949c3dd0aa3fcb39dac3ebf1852d6ecf36214651f35302bab5ff7e03",
+        "map_sha256": "0c15951313a84c944d2c1b53ee8297102223928c59d46dc59929aded12b1a8c5",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.26.31e8ed/probe-evidence.tar.gz",
+        "replay_member": "scratch/g105e4b22b4af/profile/replay/auto.rpl",
+        "replay_sha256": "f34a3f0f40ae98b9ed42ee03c4ab2de81beba836350fa64cabe90573fe165a16",
+        "map_sha256": "92ea3a78a6fde05c07932c00e668a0705eff57e3326133b4b5f148b320deafe2",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.7.71e9ee/probe-evidence.tar.gz",
+        "replay_member": "scratch/gdd02a329a2dd/profile/replay/auto.rpl",
+        "replay_sha256": "b2eddf5c26e77dfead31549936bf4369f2a3ae33c001e0abf6b87c2ee0ffae97",
+        "map_sha256": "1cd16c84d9d9f65d52c13c1ad999ef9429b50539bff6b48de2d1db18993e2a9e",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.25.6eaac3/probe-evidence.tar.gz",
+        "replay_member": "scratch/gdbfa1cf88c8c/profile/replay/auto.rpl",
+        "replay_sha256": "1e70f0236d56fa72a97a4f07e279c1e7ac5ef47734edc806524a2180e35360c2",
+        "map_sha256": "d4e0b7fd39adca02a96dcad22754fd3695546a53639470c991dbf2cbf827fca3",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/ffa6/medium/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.24.a637fc/probe-evidence.tar.gz",
+        "replay_member": "scratch/g52aec01c38c0/profile/replay/auto.rpl",
+        "replay_sha256": "51aaaf34bc165bc0902ccf561ff869526c382926bbf97dfa389f3297f5acb3ad",
+        "map_sha256": "f1f86a2bd4fd9bd8b1909babf2b6da624d400ff31d4bb9e6b4b1fde5bf5c34c4",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.23.bea723/probe-evidence.tar.gz",
+        "replay_member": "scratch/gc3ec879743fa/profile/replay/auto.rpl",
+        "replay_sha256": "31479e60a445313b237d5c9ecc149f969374103c89e54531c4b49ebe563772d2",
+        "map_sha256": "1cd16c84d9d9f65d52c13c1ad999ef9429b50539bff6b48de2d1db18993e2a9e",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.21.5152be/probe-evidence.tar.gz",
+        "replay_member": "scratch/g63e7fb5b3048/profile/replay/auto.rpl",
+        "replay_sha256": "ccabad419a59af8fc721322c3c44352e1a3d7087633aeca5df1002fca1cc81a6",
+        "map_sha256": "8b15a1e9b6b6c9814210cbcd5760f4017cddd87658b0d932a1ef482a2b7a2fb7",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.20.0ccbe0/probe-evidence.tar.gz",
+        "replay_member": "scratch/gcb5d83eda510/profile/replay/auto.rpl",
+        "replay_sha256": "4ca6d7a1f6b5ed2748b7358302255703f65faa91ab82428b42c41a4523562ec7",
+        "map_sha256": "5db860d2c81f4033f714ce57e92a0c09265555453232dc3a03a5238a2f848086",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.19.08f696/probe-evidence.tar.gz",
+        "replay_member": "scratch/gced045823800/profile/replay/auto.rpl",
+        "replay_sha256": "f0ccf93bd5ce7b358bd04c2ca9a8ad8e332881005f8577c11b4d958c5da757de",
+        "map_sha256": "c26a3a0951f729389ff8f546f26774d4344ce831a2282b840832785b061a9607",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.18.4a05fa/probe-evidence.tar.gz",
+        "replay_member": "scratch/gd551182bc284/profile/replay/auto.rpl",
+        "replay_sha256": "225a9d01fd2eb169b2ee1be4c8d1abe2b994b2a1ab44a89558d0a19dc966fe9d",
+        "map_sha256": "1c7f786cfa5ff57679b57a33938d5f796de66781a07ca1eac6c612b53bc99cbb",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.17.bda613/probe-evidence.tar.gz",
+        "replay_member": "scratch/g96adaf8808fa/profile/replay/auto.rpl",
+        "replay_sha256": "11a2cf3f0eda662936a90247526522168652e01366cacb53bed15b627ede88de",
+        "map_sha256": "de02c39c0dd08c94a0105437bb4990c628be180d77d70c17a12ee0840b01b245",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/brutal/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.16.ef40eb/probe-evidence.tar.gz",
+        "replay_member": "scratch/g631547cd3336/profile/replay/auto.rpl",
+        "replay_sha256": "38e82dc4ed55884cbae1702d5b4fed30381e43b53d9c6beeb2e6de6dd287177a",
+        "map_sha256": "8568eb5faff9fa77c5a60e3a0c171f041be54139c52705287878eef727b3f4a2",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8303/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.15.9721b0/probe-evidence.tar.gz",
+        "replay_member": "scratch/g81d66033bd6b/profile/replay/auto.rpl",
+        "replay_sha256": "efca430565b2f0f3d4b630b84cb9033e88a6753378a3946abfe729cd5730f737",
+        "map_sha256": "1cd16c84d9d9f65d52c13c1ad999ef9429b50539bff6b48de2d1db18993e2a9e",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.14.1eac86/probe-evidence.tar.gz",
+        "replay_member": "scratch/g37b74ef4060e/profile/replay/auto.rpl",
+        "replay_sha256": "b257e6e9e62cddd1697303b81c021a3504f4a2d27f250c417f375b3a95ac4b0c",
+        "map_sha256": "0ba47b8c6a9cc97a46c4fc506f572a435395e3e27f7db27d40a52ccde3284538",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.13.1f3204/probe-evidence.tar.gz",
+        "replay_member": "scratch/gffbb70c9faa0/profile/replay/auto.rpl",
+        "replay_sha256": "7edb74212df3586ed409dd3aa6ba43281e627d31afdf3305e259a509d872164f",
+        "map_sha256": "8b15a1e9b6b6c9814210cbcd5760f4017cddd87658b0d932a1ef482a2b7a2fb7",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.12.9484e4/probe-evidence.tar.gz",
+        "replay_member": "scratch/g63fd996c7b54/profile/replay/auto.rpl",
+        "replay_sha256": "64abe23d9567762eea9ee25bdab4cdb233148dacdabe386614df53bc92374c98",
+        "map_sha256": "5db860d2c81f4033f714ce57e92a0c09265555453232dc3a03a5238a2f848086",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.11.75db73/probe-evidence.tar.gz",
+        "replay_member": "scratch/g57775efc4714/profile/replay/auto.rpl",
+        "replay_sha256": "62ffc79473db6b8c8ca1153064eacede4edcd975ce96ea5121f3cd222e4bfdf4",
+        "map_sha256": "c26a3a0951f729389ff8f546f26774d4344ce831a2282b840832785b061a9607",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.10.bcb1d9/probe-evidence.tar.gz",
+        "replay_member": "scratch/gf6d4cf03d1a0/profile/replay/auto.rpl",
+        "replay_sha256": "f44c688d1d99247f65d23e87da27cf84986829e4282814c7838984089ad0e558",
+        "map_sha256": "1c7f786cfa5ff57679b57a33938d5f796de66781a07ca1eac6c612b53bc99cbb",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.9.a1bfa6/probe-evidence.tar.gz",
+        "replay_member": "scratch/g586520a96d44/profile/replay/auto.rpl",
+        "replay_sha256": "d999a10b040ce74898dc713776c9b47ea1fef24465d1fc565ba4d3fe6b66f269",
+        "map_sha256": "de02c39c0dd08c94a0105437bb4990c628be180d77d70c17a12ee0840b01b245",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/hard/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.8.1a91dc/probe-evidence.tar.gz",
+        "replay_member": "scratch/gceff4e042116/profile/replay/auto.rpl",
+        "replay_sha256": "4e178064f17da9d7f873b9e66eb8909bb92253e760e6ed7937b8f4098a02d565",
+        "map_sha256": "8568eb5faff9fa77c5a60e3a0c171f041be54139c52705287878eef727b3f4a2",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8202/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.6.ea1c5e/probe-evidence.tar.gz",
+        "replay_member": "scratch/g087c8ebdff8d/profile/replay/auto.rpl",
+        "replay_sha256": "97efd01d7faa2e4bc624e53b5bc49a15d7833364c409cad67278676edfe5d6af",
+        "map_sha256": "0ba47b8c6a9cc97a46c4fc506f572a435395e3e27f7db27d40a52ccde3284538",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/8101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.5.b49b8a/probe-evidence.tar.gz",
+        "replay_member": "scratch/gf934326628bf/profile/replay/auto.rpl",
+        "replay_sha256": "cd975c768b2e3cad807af3c4c7d37ee418f8a42c8f192872f37f059f477c9294",
+        "map_sha256": "8b15a1e9b6b6c9814210cbcd5760f4017cddd87658b0d932a1ef482a2b7a2fb7",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/1841712204/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.4.ce8e49/probe-evidence.tar.gz",
+        "replay_member": "scratch/g9c6d3dd715f7/profile/replay/auto.rpl",
+        "replay_sha256": "c7e8e3abb95ee064332e58cd0c0670c4b35765ffe6ec2840ae7f83efcb9610f8",
+        "map_sha256": "5db860d2c81f4033f714ce57e92a0c09265555453232dc3a03a5238a2f848086",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/77001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.3.d3d534/probe-evidence.tar.gz",
+        "replay_member": "scratch/gb066ba6cf2e4/profile/replay/auto.rpl",
+        "replay_sha256": "f3db27853b681c406bf3053a87639ee1d1b2960b92d0be8552d11d21f8f68152",
+        "map_sha256": "c26a3a0951f729389ff8f546f26774d4344ce831a2282b840832785b061a9607",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/55001/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.2.6d3c7b/probe-evidence.tar.gz",
+        "replay_member": "scratch/g673602c66b8c/profile/replay/auto.rpl",
+        "replay_sha256": "720e3e049f1aafde8bdbfbdd00547e19627b30f92bfe01a4b64359d7fbda6a2e",
+        "map_sha256": "1c7f786cfa5ff57679b57a33938d5f796de66781a07ca1eac6c612b53bc99cbb",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/148680876/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.1.96855e/probe-evidence.tar.gz",
+        "replay_member": "scratch/g0408eda76b69/profile/replay/auto.rpl",
+        "replay_sha256": "6ccefc95497019713fdd098c56fbc7f739b7667e6bb7af039cfef4cc8f5dc007",
+        "map_sha256": "de02c39c0dd08c94a0105437bb4990c628be180d77d70c17a12ee0840b01b245",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      },
+      {
+        "id": "matrix/cy-a0-c0/128/none/1v1/medium/40m/9101/t1",
+        "source_commit": "1fe274467bde8d2c2bdfc1f94424d3b4d01128ee",
+        "archive": "/Users/stefan/Documents/projects/outputs/baseline-league-20261106/releases/current-research-on-t1/cluster-evidence/20261106T185909-baseline-current-research-on-t1-a3ef02.0.41a599/probe-evidence.tar.gz",
+        "replay_member": "scratch/gea8d210fbcde/profile/replay/auto.rpl",
+        "replay_sha256": "adebb82d021ed61ec229d8dff1a41c4c4fdcc90176c0f41a865e15af5be27bde",
+        "map_sha256": "8568eb5faff9fa77c5a60e3a0c171f041be54139c52705287878eef727b3f4a2",
+        "prior_measurement_status": "legacy audit first-inactive latch; not independently replicated seed evidence"
+      }
+    ],
+    "comparison_scope": "Supported native researchON/T1 only; no researchOFF/T9 or pre-lab release equivalence. Native observer repetitions replace lifecycle-ambiguous audit measures, not extra independent trials."
   }
 }

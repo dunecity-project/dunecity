@@ -27,7 +27,8 @@ fixtures = root / 'tests/ai/baseline-fixtures'
 HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
 META = ('id', 'mod', 'difficulty', 'seed', 'reference_research_cells')
 HOUSE_FIELDS = ('cycle', 'minute', 'house', 'team', 'alive', 'credits', 'structures', 'army_units', 'army_value',
-    'kill_value', 'loss_value', 'tech_level', 'eliminated_cycle', 'harvesters', 'refineries', 'population',
+    'kill_value', 'loss_value', 'tech_level', 'first_inactive_cycle', 'terminal_inactive_since_cycle',
+    'revival_count', 'inactive_cycles', 'harvesters', 'refineries', 'population',
     'zone_residential', 'zone_industrial', 'zone_commercial', 'zone_residential_built', 'zone_industrial_built',
     'zone_commercial_built', 'power', 'need', 'built', 'structures_lost', 'base_hp', 'yards', 'yard_level',
     'queue', 'upgrading', 'waiting', 'research_enabled', 'research_target', 'research_remaining') + tuple(
@@ -44,12 +45,15 @@ GAME_FIELDS = META + ('release', 'baseline_release_source', 'source_commit', 'ma
 
 def fixture_games():
     manifest = json.loads((fixtures / 'manifest.json').read_text())
-    return [dict(game, game_options=manifest['off_options_by_mod'][game['mod']]) for game in manifest['games']]
+    return [dict(game, game_options=manifest[
+                'on_options_by_mod' if game.get('research', 'off') == 'on' else 'off_options_by_mod'][game['mod']])
+            for game in manifest['games']]
 
 
 def schedule(args):
     return [game for game in fixture_games() if (not args.mod or game['mod'] == args.mod)
-            and game['seed'] in args.seeds and game['difficulty'] in args.difficulties]
+            and game['seed'] in args.seeds and game['difficulty'] in args.difficulties
+            and game.get('research', 'off') == args.research]
 
 def read(path):
     path = Path(path)
@@ -229,8 +233,9 @@ def option_receipt(path):
     contents = Path(path).read_bytes()
     config = configparser.ConfigParser(interpolation=None)
     config.read_string(contents.decode('utf-8'))
-    if config.getboolean('Game Options', 'Research Lab', fallback=False):
-        raise ValueError('This historical lane is research OFF; ON requires a supported separate cohort')
+    research = config.getboolean('Game Options', 'Research Lab', fallback=False)
+    if research and 'getTechResearchTarget' not in (root / 'include/House.h').read_text():
+        raise ValueError('This native historical release has no Research Lab; cannot run ON as OFF')
     supported = {'game speed','concrete required','fog of war','start with explored map','instant build',
         'only one palace','rocket-turrets need power','sandworms respawn','killed sandworms drop spice',
         'manual carryall drops','maximum number of units override','maximum number of harvesters override',
@@ -243,7 +248,8 @@ def option_receipt(path):
         raise ValueError('Unreviewed baseline requested options: ' + ','.join(sorted(unknown)))
     header = (root / 'include/DataTypes.h').read_text()
     unsupported = {key:options[key] for key, token in optional.items() if key in options and token not in header}
-    return dict(sha256=hashlib.sha256(contents).hexdigest(), unsupported_requested_values=unsupported)
+    return dict(sha256=hashlib.sha256(contents).hexdigest(), unsupported_requested_values=unsupported,
+                research='on' if research else 'off')
 
 
 def parse(line, marker):
@@ -305,6 +311,8 @@ def play(args, scratch, binary, game):
         options = option_receipt(options_path)
         if options['sha256'] != game['game_options']['sha256']:
             raise ValueError('Requested options differ from exact fixture for ' + game['mod'])
+        if options['research'] != game.get('research', 'off'):
+            raise ValueError('Native fixture research treatment differs from requested option bytes')
         map_path = fixtures / 'maps' / game['map']
         map_sha = hashlib.sha256(map_path.read_bytes()).hexdigest()
         if map_sha != game['map_sha256']:
@@ -323,7 +331,7 @@ def play(args, scratch, binary, game):
         env = dict(os.environ,DUNECITY_USERDIR=str(profile),DUNECITY_AI_TELEMETRY='1',SDL_VIDEODRIVER='dummy',
             SDL_AUDIODRIVER='dummy',SDL_RENDER_DRIVER='software',DUNECITY_PATH_WORKERS='1',BASELINE_MOD=game['mod'],
             BASELINE_MAP=str(map_path),BASELINE_MAP_NAME=game['map_name'],BASELINE_SEED=str(game['seed']),
-            BASELINE_MINUTES=str(game['minutes']),BASELINE_SIDES=numeric_sides,
+            BASELINE_MINUTES=str(game['minutes']),BASELINE_SIDES=numeric_sides,BASELINE_TECH=str(game['initial_tech']),
             BASELINE_OPTIONS=str(options_path.resolve()),BASELINE_CAPTURE_MIB=str(args.capture_mib))
         error = ''
         try:
@@ -334,7 +342,7 @@ def play(args, scratch, binary, game):
                 error = 'native_rc='+str(process.returncode)
         except subprocess.TimeoutExpired:
             error = 'native_wall_timeout'
-        parsed = {name:[] for name in ('SETUP','RESULT','HOUSE','TECH','UNIT','ROSTER')}
+        parsed = {name:[] for name in ('SETUP','RESULT','HOUSE','TECH','UNIT','ROSTER','LIFECYCLE')}
         lines = (out/'run.log').read_text(errors='replace').splitlines()
         for line in lines:
             for name in parsed:
@@ -345,7 +353,7 @@ def play(args, scratch, binary, game):
         if len(parsed['SETUP']) != 1 or len(parsed['RESULT']) != 1:
             raise ValueError('Missing or duplicate native setup/result; '+error)
         setup_native, ending = parsed['SETUP'][0], parsed['RESULT'][0]
-        if int(setup_native['tech_level']) != 9 or int(setup_native['city_sim']) != int(game['mod']=='dunecity'):
+        if int(setup_native['tech_level']) != game['initial_tech'] or int(setup_native['city_sim']) != int(game['mod']=='dunecity'):
             raise ValueError('Native supported game settings do not match fixture')
         if sorted((int(r['house']),int(r['team'])) for r in parsed['ROSTER']) != sorted(map(tuple,game['roster'])):
             raise ValueError('Native roster differs from exact fixture')
@@ -356,21 +364,26 @@ def play(args, scratch, binary, game):
             session_start=cap['starts'],game_summary=cap['summaries'],telemetry_status=cap['status'],
             telemetry_reasons=cap['reasons']),sort_keys=True,indent=2)+'\n')
         meta = {key:game[key] for key in ('id','mod','difficulty','seed')}
-        meta['reference_research_cells'] = 'off'
+        meta['reference_research_cells'] = game.get('research', 'off')
         row = dict(meta,release=native['release'],baseline_release_source=native['source_commit'],source_commit=source_commit,
             map_sha256=map_sha,options_sha256=options['sha256'],probe_sha256=hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
             native_options_hash=setup_native['options_hash'],config_hash=setup_native['config_hash'],content_hash=setup_native['content_hash'],
             object_data_hash=setup_native['object_data_hash'],ai_content_hash=setup_native['ai_content_hash'],city_sim=setup_native['city_sim'],
             tech_level=setup_native['tech_level'],cycle=ending['cycle'],winner_team=ending['winner_team'],outcome=ending['outcome'],
             wall_s=round(time.monotonic()-started,3),host=platform.node(),native_capture='stream_certified' if not error else 'incomplete',
-            telemetry_status=cap['status'],telemetry_reasons=cap['reasons'],telemetry_events=cap['events'],research='off',
+            telemetry_status=cap['status'],telemetry_reasons=cap['reasons'],telemetry_events=cap['events'],research=game.get('research', 'off'),
             unsupported_options=json.dumps(options['unsupported_requested_values'],sort_keys=True),error=error)
         if error:
             (results/('failed-'+out.name+'.txt')).write_text(error+'\n'+'\n'.join(lines[-80:])+'\n')
             return row
         tech = {(r['cycle'],r['house'],r['name']):r for r in parsed['TECH']}
+        lifecycle = {(r['cycle'],r['house']):r for r in parsed['LIFECYCLE']}
         samples = []
         for sample in parsed['HOUSE']:
+            state = lifecycle[(sample['cycle'],sample['house'])]
+            sample.update({field:state[field] for field in ('terminal_inactive_since_cycle','revival_count','inactive_cycles')})
+            if int(sample['research_enabled']) != int(game.get('research', 'off') == 'on'):
+                raise ValueError('Native per-house research option differs from the exact fixture')
             for name in ('light','heavy','ix','starport','palace'):
                 measured = tech[(sample['cycle'],sample['house'],name)]
                 sample.update({name:measured['live'],name+'_built':measured['built'],
@@ -404,6 +417,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--results',required=True)
 parser.add_argument('--build-dir',type=Path,default=root/'build-int')
 parser.add_argument('--mod',choices=('dunecity','Dune2R','vanilla'))
+parser.add_argument('--research',choices=('off','on'),default='off')
 parser.add_argument('--seeds',type=int,nargs='+',default=[9101,148680876,55001,77001,1841712204,8101,8202,8303])
 parser.add_argument('--difficulties',choices=('medium','hard','brutal'),nargs='+',default=['medium','hard','brutal'])
 parser.add_argument('--game-options',type=Path)

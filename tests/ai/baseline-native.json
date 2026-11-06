@@ -5,6 +5,13 @@
     "research": "unsupported/off"
   },
   "native_tree": "43e15efe7e7e5b58e35613331a924f0af735f01d",
+  "observation_contract": "native_inventory_activity_episodes_v1",
+  "observation_fields": [
+    "first_inactive_cycle",
+    "terminal_inactive_since_cycle",
+    "revival_count",
+    "inactive_cycles"
+  ],
   "portability_repairs": [
     "src/FileClasses/GFXManager.cpp noncopyable INIFile conditional replaced by directly returned prvalues, same UI semantics for MSVC",
     "src/mod/Workshop.cpp saveMod metadata noncopyable INIFile conditional replaced by directly returned prvalues, same inactive Workshop persistence semantics",

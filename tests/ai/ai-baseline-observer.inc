@@ -32,11 +32,14 @@ inline const QuantBot* botOf(const House* house) {
 }
 struct Observer {
     std::array<std::array<int64_t,5>,NUM_HOUSES> firstOwned{},firstCompleted{};
-    std::array<int64_t,NUM_HOUSES> eliminated{};
+    std::array<int64_t,NUM_HOUSES> firstInactive{},terminalInactive{};
+    std::array<Uint32,NUM_HOUSES> lastCycle{},revivals{};
+    std::array<uint64_t,NUM_HOUSES> inactiveCycles{};
+    std::array<bool,NUM_HOUSES> seen{},wasAlive{};
     Observer() {
         for(auto& times:firstOwned) times.fill(-1);
         for(auto& times:firstCompleted) times.fill(-1);
-        eliminated.fill(-1);
+        firstInactive.fill(-1);terminalInactive.fill(-1);
     }
     void observe(Game& game) {
         const auto cycle=game.getGameCycleCount();
@@ -47,7 +50,17 @@ struct Observer {
                 if(firstOwned[h][i]<0 && house->getNumItems(techItems[i])>0) firstOwned[h][i]=cycle;
                 if(firstCompleted[h][i]<0 && house->getNumBuiltItems(techItems[i])>0) firstCompleted[h][i]=cycle;
             }
-            if(eliminated[h]<0 && !house->isAlive()) eliminated[h]=cycle;
+            const bool alive=house->isAlive();
+            if(seen[h] && cycle>lastCycle[h] && !wasAlive[h])
+                inactiveCycles[h]+=cycle-lastCycle[h];
+            if(alive) {
+                if(seen[h] && !wasAlive[h]) ++revivals[h];
+                terminalInactive[h]=-1;
+            } else {
+                if(firstInactive[h]<0) firstInactive[h]=cycle;
+                if(!seen[h] || wasAlive[h]) terminalInactive[h]=cycle;
+            }
+            seen[h]=true;wasAlive[h]=alive;lastCycle[h]=cycle;
         }
     }
     void sample(Game& game) const {
@@ -111,14 +124,17 @@ struct Observer {
             researchEnabled=int(game.getGameInitSettings().getGameOptions().researchLab);
             researchTarget=house->getTechResearchTarget();researchRemaining=house->getTechResearchRemaining();
 #endif
-            SDL_Log("BASELINE_HOUSE: cycle=%u minute=%u house=%d team=%d alive=%d credits=%d structures=%d army_units=%lld army_value=%lld kill_value=%d loss_value=%d tech_level=%d eliminated_cycle=%lld harvesters=%d refineries=%d population=%d zone_residential=%d zone_industrial=%d zone_commercial=%d zone_residential_built=%d zone_industrial_built=%d zone_commercial_built=%d power=%d need=%d built=%d structures_lost=%d base_hp=%d yards=%d yard_level=%d queue=%d upgrading=%d waiting=%d research_enabled=%d research_target=%d research_remaining=%d",
+            SDL_Log("BASELINE_HOUSE: cycle=%u minute=%u house=%d team=%d alive=%d credits=%d structures=%d army_units=%lld army_value=%lld kill_value=%d loss_value=%d tech_level=%d first_inactive_cycle=%lld harvesters=%d refineries=%d population=%d zone_residential=%d zone_industrial=%d zone_commercial=%d zone_residential_built=%d zone_industrial_built=%d zone_commercial_built=%d power=%d need=%d built=%d structures_lost=%d base_hp=%d yards=%d yard_level=%d queue=%d upgrading=%d waiting=%d research_enabled=%d research_target=%d research_remaining=%d",
                 cycle,cycle/MILLI2CYCLES(60000),h,house->getTeamID(),int(house->isAlive()),house->getCredits(),house->getNumStructures(),
                 static_cast<long long>(armyCount),static_cast<long long>(armyValue),house->getKillValue(),house->getLossValue(),tech,
-                static_cast<long long>(eliminated[h]),harvesters[h],refineries[h],population,
+                static_cast<long long>(firstInactive[h]),harvesters[h],refineries[h],population,
                 house->getNumItems(Structure_ZoneResidential),house->getNumItems(Structure_ZoneIndustrial),house->getNumItems(Structure_ZoneCommercial),
                 house->getNumBuiltItems(Structure_ZoneResidential),house->getNumBuiltItems(Structure_ZoneIndustrial),house->getNumBuiltItems(Structure_ZoneCommercial),
                 house->getProducedPower(),house->getPowerRequirement(),house->getNumBuiltStructures(),structuresLost,baseHp[h],
                 house->getNumItems(Structure_ConstructionYard),yardLevel[h],queue[h],upgrading[h],waiting[h],researchEnabled,researchTarget,researchRemaining);
+            SDL_Log("BASELINE_LIFECYCLE: cycle=%u house=%d terminal_inactive_since_cycle=%lld revival_count=%u inactive_cycles=%llu",
+                cycle,h,static_cast<long long>(terminalInactive[h]),revivals[h],
+                static_cast<unsigned long long>(inactiveCycles[h]));
             for(size_t i=0;i<techItems.size();++i)
                 SDL_Log("BASELINE_TECH: cycle=%u house=%d name=%s live=%d built=%d first_owned_cycle=%lld first_completed_cycle=%lld",
                     cycle,h,techNames[i],house->getNumItems(techItems[i]),house->getNumBuiltItems(techItems[i]),
@@ -177,7 +193,8 @@ int runAIBaselineProbe() {
     game->bReplay=false;
     AITelemetry::log().limit=std::stoull(std::getenv("BASELINE_CAPTURE_MIB"))*1024*1024;
     game->initializeGameLoop();
-    if(game->techLevel!=9) throw std::runtime_error("Historical comparison requires real map tech9");
+    if(game->techLevel!=std::stoi(std::getenv("BASELINE_TECH")))
+        throw std::runtime_error("Native initial map technology differs from the exact fixture");
     for(const auto& info:init.getHouseInfoList()) {
         const auto* house=game->getHouse(info.houseID);
         if(!house || !house->isAI() || house->getPlayerList().size()!=1 || !AIBaseline::botOf(house))
