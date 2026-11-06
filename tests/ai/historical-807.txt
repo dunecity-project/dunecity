@@ -22,13 +22,13 @@ The bridge adds these tests/ai files:
   reference-classic-research-off.ini and maps/*.ini: original archive provenance,
   per-mod original OFF bytes, 96 distinct game settings, 24 exact map payloads.
 - this file: coverage and observer/harness documentation.
-No existing .cpp/header, config, mod, AI, test fixture or old campaign harness is
-changed. The only existing-file change is src/CMakeLists.txt: test builds on
-MSVC give FileClasses/GFXManager.cpp alone /std:c++17 /Zc:ternary. The old
-feature probe otherwise falls back to C++14, without guaranteed copy elision
-for its noncopyable INIFile conditional. The original Clang build uses C++17.
-Ordinary release builds and all simulation translation-unit flags are unchanged.
-The diagnostic main links against the original game source.
+No gameplay .cpp/header, config, mod, AI, old test fixture or campaign harness
+is changed. The sole original-source portability change is the workshop
+preferences expression in FileClasses/GFXManager.cpp: a direct-prvalue-returning
+lambda replaces the same noncopyable INIFile conditional. The actual MSVC
+command already uses C++17; /Zc:ternary alone did not fix its C2280. No extra
+allocation, UI behavior or simulation translation-unit flag changes are added.
+The diagnostic main links against the original game source plus that UI-only fix.
 No local native build tree is created; the cluster prepares its existing trees.
 
 Exact inputs and genuine differences

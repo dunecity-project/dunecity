@@ -85,15 +85,6 @@ if(WIN32)
     )
 endif()
 
-# Historical comparison bridge, test builds only: the old MSVC feature probe
-# falls back to C++14. This graphics-only conditional needs C++17 guaranteed
-# copy elision for the noncopyable INIFile, as on the original Clang build.
-# Keep all historical gameplay translation-unit flags and source unchanged.
-if(DUNECITY_BUILD_TESTS AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/FileClasses/GFXManager.cpp"
-        APPEND PROPERTY COMPILE_OPTIONS /std:c++17 /Zc:ternary)
-endif()
-
 # Precompiled headers
 if(DUNECITY_ENABLE_PCH AND WIN32 AND MSVC)
     target_precompile_headers(dunecity
