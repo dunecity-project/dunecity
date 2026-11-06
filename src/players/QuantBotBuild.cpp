@@ -735,9 +735,14 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     pass.startWhatMakesSense = botConfig().force.startWhatMakesSense;
     const bool simple = simpleTechPolicyActive();
     pass.techSavings = simple;
-    pass.existingCompositionChoice = currentGame && botConfig().force.existingCompositionUnitChoice
+    const auto& unitChoice = botConfig().force;
+    const bool unitChoiceScope = currentGame
+        && (unitChoice.existingCompositionUnitChoice || unitChoice.bufferedHeavyProduction || unitChoice.incomeHeavyFactories)
         && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType) && !builderOnly()
         && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal);
+    pass.existingCompositionChoice = unitChoiceScope && unitChoice.existingCompositionUnitChoice;
+    pass.bufferedHeavyProduction = unitChoiceScope && unitChoice.bufferedHeavyProduction;
+    pass.incomeHeavyFactories = unitChoiceScope && unitChoice.incomeHeavyFactories;
     pass.militaryValue += pass.queuedMilitaryValue;
     // Effective military planning budget for this pass, computed once now that the
     // queue-inclusive army value and the cash are known. It equals the configured
@@ -2322,9 +2327,9 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             pass.lightVehicleCount += pass.itemCount[item];
         }
     }
-    if (pass.usesCompositionChoice() || AITelemetry::log().enabled()) {
+    if (pass.tracksComposition() || AITelemetry::log().enabled()) {
         for (Uint32 item = Unit_FirstID; item <= ItemID_LastID; ++item) {
-            const size_t slot = compositionSlot(item, pass.existingCompositionChoice);
+            const size_t slot = compositionSlot(item, pass.standaloneProduction());
             if (slot == UnitMixPolicy::kSlots) continue;
             pass.compositionValue[slot] += int64_t(pass.itemCount[item]) * data[item][houseID].price;
         }
@@ -2585,6 +2590,10 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     pass.existingMilitaryCapacity = 0; pass.constructionCapacity = 0; pass.readyYards = 0;
     pass.continuedMilitaryCost = 0; pass.continuedConstructionCost = 0;
     pass.activeProductionBurn = 0;
+    pass.heavyIncomeCapacity=pass.heavyIncomeFactoryCapacity=0;
+    pass.heavyIncomeDemand=pass.heavyIncomeFactoryTarget=0;
+    pass.heavyIncomePendingFactories=pass.heavyIncomeCommittedCapacity=0;
+    pass.allHeavyQueued=pass.incomeHeavyFactories && getHouse()->getNumItems(Structure_HeavyFactory)>0;
     for (const auto* structure:getStructureList()) {
         if (structure->getOwner()!=getHouse() || !structure->isABuilder()) continue;
         const auto* builder=static_cast<const BuilderBase*>(structure);
@@ -2595,6 +2604,9 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         const bool port=builder->getItemID()==Structure_StarPort;
         const bool yard=builder->getItemID()==Structure_ConstructionYard;
         const FixPoint speed=std::min(builder->getHealth()/builder->getMaxHealth(),builder->getBuildSpeedLimit());
+        const bool compositionHeavy=pass.incomeHeavyFactories && builder->getItemID()==Structure_HeavyFactory;
+        std::array<int,UnitMixPolicy::kOrnithopterSlot> heavyFamilyCapacity;
+        if (compositionHeavy) heavyFamilyCapacity.fill(0);
         for (const auto& offer:builder->getBuildList()) {
             const Uint32 item=offer.itemID;
             if (!port) unpaid+=offer.num*int(offer.price);
@@ -2614,6 +2626,12 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
                 || (item==Unit_Harvester && lastCalculatedSpice>0
                     && pass.itemCount[item]<(pass.citySimEnabled ? pass.fundedHarvesterTarget : pass.spiceHarvesterTarget)))
                 capacity=std::max(capacity,cost);
+            if (compositionHeavy) {
+                const size_t slot=compositionSlot(item,true);
+                if (slot<heavyFamilyCapacity.size() && pass.unitMix[slot]>0 && offer.price>0)
+                    heavyFamilyCapacity[slot]=std::max(heavyFamilyCapacity[slot],
+                        (FixPoint(offer.price)*CityEconomyInvestmentPolicy::horizonCycles/(buildtime*15)).lround());
+            }
             if (yard && (pass.citySimEnabled
                     ? (item==Structure_ZoneResidential && pass.ownResValve>0)
                         || (item==Structure_ZoneCommercial && pass.ownComValve>0)
@@ -2633,9 +2651,39 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         if (AITelemetry::log().enabled()) pass.capitalProducers.set(std::to_string(builder->getObjectID()),
             AITelemetry::Record().set("item",builder->getItemID()).set("queue",builder->getProductionQueueSize())
                 .set("upgrading",builder->isUpgrading()).set("hold",builder->isOnHold())
+                .set("upgrade_level",builder->getCurrentUpgradeLevel()).set("max_upgrade_level",builder->getMaxUpgradeLevel())
                 .set("current_item",builder->getCurrentProducedItem()).set("unpaid",unpaid)
                 .set("active_burn_per_minute",currentBurn).set("unit_capacity_cost",capacity)
                 .set("construction_capacity_cost",cityCapacity));
+        if (compositionHeavy) {
+            // Value shares require a harmonic throughput, not the fastest cheap
+            // offer or a worker's rate. Upgrade unlocks are planned separately.
+            FixPoint timePerValue=0;
+            int weight=0;
+            for (size_t slot=0;slot<heavyFamilyCapacity.size();++slot) if (heavyFamilyCapacity[slot]>0) {
+                timePerValue+=FixPoint(pass.unitMix[slot])/heavyFamilyCapacity[slot];
+                weight+=pass.unitMix[slot];
+            }
+            const int healthy=timePerValue>0 ? (FixPoint(weight)/timePerValue).lround() : 0;
+            if (builder->isActive()) {
+                pass.heavyIncomeCapacity+=(FixPoint(healthy)*speed).lround();
+                if (healthy>0) pass.heavyIncomeFactoryCapacity=pass.heavyIncomeFactoryCapacity>0
+                    ? std::min(pass.heavyIncomeFactoryCapacity,healthy) : healthy;
+            }
+            pass.allHeavyQueued &= builder->isActive() && builder->getProductionQueueSize()>0
+                && !builder->isUpgrading() && !builder->isOnHold();
+        }
+    }
+    if (pass.incomeHeavyFactories) {
+        int heavyBps=0;
+        for (size_t slot=0;slot<UnitMixPolicy::kOrnithopterSlot;++slot) heavyBps+=pass.unitMix[slot];
+        pass.heavyIncomeDemand=QuantBotSpendingPolicy::incomeShareDemand(pass.forecastNetIncome,heavyBps);
+        const int actual=getHouse()->getNumItems(Structure_HeavyFactory);
+        pass.heavyIncomePendingFactories=std::max(0,pass.itemCount[Structure_HeavyFactory]-actual);
+        pass.heavyIncomeCommittedCapacity=int(std::min<int64_t>(INT_MAX,
+            int64_t(pass.heavyIncomeCapacity)+int64_t(pass.heavyIncomePendingFactories)*pass.heavyIncomeFactoryCapacity));
+        pass.heavyIncomeFactoryTarget=QuantBotSpendingPolicy::factoryTargetForDemand(
+            actual,pass.heavyIncomeCapacity,pass.heavyIncomeFactoryCapacity,pass.heavyIncomeDemand);
     }
     pass.cashBuffer = pass.startWhatMakesSense ? 0
         : std::max(1000,pass.citySimEnabled ? pass.cityWorkingReserve : pass.economyReserve);
@@ -3256,8 +3304,9 @@ size_t QuantBot::compositionSlot(Uint32 item, bool extendedVariants) {
     }
 }
 
-size_t QuantBot::localCompositionSlot(const BuildPass& pass, const BuilderBase* builder) const {
+size_t QuantBot::localCompositionSlot(const BuildPass& pass, const BuilderBase* builder, int surplusBudget) const {
     UnitMixPolicy::Slots available{};
+    UnitMixPolicy::Slots surplus{};
     UnitMixPolicy::Weights prices{};
     const int houseID = getHouse()->getHouseID();
     const auto& data = currentGame->objectData.data;
@@ -3272,24 +3321,41 @@ size_t QuantBot::localCompositionSlot(const BuildPass& pass, const BuilderBase* 
         if (port && (getHouse()->getChoam().getNumAvailable(item) <= 0
             || purchasePrice(builder, item) >= value)) continue;
         available[slot] = true;
+        if (builder->getItemID()==Structure_HeavyFactory && int(offer.price)<=surplusBudget)
+            surplus[slot]=true;
         if (prices[slot] == 0 || value < prices[slot]) prices[slot] = value;
     }
-    return UnitMixPolicy::greatestExistingDeficitSlot(pass.unitMix, pass.compositionValue, prices, available);
+    return UnitMixPolicy::greatestExistingDeficitSlot(pass.unitMix, pass.compositionValue, prices, available, surplus);
 }
 
 size_t QuantBot::nextCompositionSlot(BuildPass& pass, BuilderTurn& turn) const {
     if (!pass.existingCompositionChoice) return pass.nextCompositionSlot();
-    if (turn.compositionRevision != pass.compositionRevision) {
-        turn.compositionChoice = localCompositionSlot(pass, turn.pBuilder);
+    const int surplusBudget=turn.pBuilder->getItemID()==Structure_HeavyFactory ? pass.compositionSurplusBudget() : -1;
+    if (turn.compositionRevision != pass.compositionRevision || turn.compositionSurplusBudget != surplusBudget) {
+        turn.compositionChoice = localCompositionSlot(pass, turn.pBuilder, surplusBudget);
         turn.compositionRevision = pass.compositionRevision;
+        turn.compositionSurplusBudget = surplusBudget;
     }
     return turn.compositionChoice;
 }
 
 bool QuantBot::compositionAdmits(BuildPass& pass, BuilderTurn& turn, Uint32 item) {
-    const size_t choice = pass.existingCompositionChoice && compositionSlot(item, true) < UnitMixPolicy::kSlots
-        ? nextCompositionSlot(pass, turn) : UnitMixPolicy::kSlots;
-    return compositionAdmits(pass, item, choice);
+    if (!pass.existingCompositionChoice && !pass.bufferedHeavyProduction)
+        return compositionAdmits(pass,item,UnitMixPolicy::kSlots);
+    const size_t slot=compositionSlot(item,true);
+    const size_t choice=pass.existingCompositionChoice && slot<UnitMixPolicy::kSlots
+        ? nextCompositionSlot(pass,turn) : UnitMixPolicy::kSlots;
+    if (pass.bufferedHeavyProduction && turn.pBuilder
+        && turn.pBuilder->getItemID()==Structure_HeavyFactory && slot<UnitMixPolicy::kSlots) {
+        const bool surplus=turn.bufferedHeavyOrder || (choice==slot
+            && localCompositionSlot(pass,turn.pBuilder,-1)!=slot);
+        if (surplus) {
+            const int budget=pass.compositionSurplusBudget();
+            return purchasePrice(turn.pBuilder,item)<=budget
+                && localCompositionSlot(pass,turn.pBuilder,budget)==slot;
+        }
+    }
+    return compositionAdmits(pass,item,choice);
 }
 
 bool QuantBot::compositionAdmits(BuildPass& pass, Uint32 item, size_t selectedSlot) {
@@ -3992,6 +4058,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 }
             }
             for (Uint32 factory:{Structure_LightFactory,Structure_HeavyFactory,Structure_HighTechFactory}) {
+                if (pass.incomeHeavyFactories && factory==Structure_HeavyFactory
+                    && getHouse()->getNumItems(factory)>0) continue;
                 CapitalCandidate capacity;
                 capacity.builder=builder->getObjectID();capacity.item=factory;capacity.kind="production";
                 capacity.price=data[factory][houseID].price;capacity.cost=buildingCapitalCost(pass, factory);
@@ -4156,7 +4224,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         }
         if (!ready) continue;
         const size_t producerChoice = pass.existingCompositionChoice
-            ? localCompositionSlot(pass, builder) : UnitMixPolicy::kSlots;
+            ? localCompositionSlot(pass, builder, building==Structure_HeavyFactory ? pass.compositionSurplusBudget() : -1)
+            : UnitMixPolicy::kSlots;
         CapitalCandidate soldier;
         soldier.builder=builder->getObjectID();soldier.kind="military";
         int64_t bestDeficit=-1;
@@ -4213,9 +4282,11 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         if (soldier.item!=NONE_ID) pass.capitalCandidates.push_back(soldier);
         if (AITelemetry::log().enabled()) pass.capitalUnitOptions.set(std::to_string(builder->getObjectID()),unitOptions);
     }
+    planCompositionHeavyCapacity(pass);
     for (auto& candidate:pass.capitalCandidates) if (isStructure(candidate.item) && candidate.score>0
         && candidate.kind!=std::string("expansion_upgrade") && candidate.kind!=std::string("defence_upgrade")
-        && std::string_view(candidate.kind)!="tech_progression" && std::string_view(candidate.kind)!="tech_upgrade") {
+        && std::string_view(candidate.kind)!="tech_progression" && std::string_view(candidate.kind)!="tech_upgrade"
+        && std::string_view(candidate.kind)!="production_upgrade") {
         const auto* builder=dynamic_cast<const BuilderBase*>(getObject(candidate.builder));
         if (!builder) continue;
         planningBuilder=candidate.builder;clearPlacementCache(false,true);
@@ -4256,6 +4327,77 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             pass.capitalCandidates.push_back(pass.techCandidate);
         }
     }
+}
+
+void QuantBot::planCompositionHeavyCapacity(BuildPass& pass) {
+    if (!pass.incomeHeavyFactories || getHouse()->getNumItems(Structure_HeavyFactory)==0
+        || !getHouse()->hasPower() || pass.defendingEconomy || pass.airEngaged
+        || pass.militaryValue>=pass.militaryBudget || getHouse()->isGroundUnitLimitReached()
+        || openingWorkersNeeded(pass) || needsFirstTransport(pass) || cityBootstrapNeeded(pass)) return;
+
+    const int house=getHouse()->getHouseID();
+    const auto& data=currentGame->objectData.data;
+    const int actual=getHouse()->getNumItems(Structure_HeavyFactory);
+    const bool funded=pass.cashFlow.fundsParallelProduction
+        && std::min(pass.money,pass.cashFlow.projectedCash)>=pass.nextHeavyRunway;
+    const bool expand=pass.allHeavyQueued && pass.heavyIncomeFactoryCapacity>0
+        && pass.heavyIncomeFactoryTarget>actual && pass.itemCount[Structure_HeavyFactory]==actual
+        && (pass.startWhatMakesSense || funded);
+    for (const auto* builder:pass.capitalBuilders) {
+        if (!builder->isActive() || builder->isUpgrading() || builder->isOnHold()
+            || builder->getProductionQueueSize()>0) continue;
+        if (builder->getItemID()==Structure_HeavyFactory) {
+            std::array<bool,UnitMixPolicy::kOrnithopterSlot> unlocks{};
+            int unlockBps=0;
+            int64_t deficit=0;
+            for (Uint32 item=Unit_FirstID;item<=ItemID_LastID;++item) {
+                const size_t slot=compositionSlot(item,true);
+                if (slot>=unlocks.size() || unlocks[slot] || pass.unitMix[slot]<=0) continue;
+                const auto& spec=data[item][builder->getTechnologyHouseID()];
+                if (!spec.enabled || spec.builder!=Structure_HeavyFactory
+                    || spec.techLevel>getHouse()->getTechLevel()
+                    || spec.upgradeLevel<=builder->getCurrentUpgradeLevel()
+                    || spec.upgradeLevel>builder->getMaxUpgradeLevel()) continue;
+                bool prerequisites=true;
+                for (Uint32 required=Structure_FirstID;required<spec.prerequisiteStructuresSet.size();++required)
+                    if (isStructure(required) && spec.prerequisiteStructuresSet[required]
+                        && getHouse()->getNumItems(required)==0) { prerequisites=false;break; }
+                if (!prerequisites) continue;
+                unlocks[slot]=true;
+                unlockBps+=pass.unitMix[slot];
+                deficit+=std::max<int64_t>(0,int64_t(pass.unitMix[slot])*pass.compositionArmyValue
+                    /10000-pass.compositionValue[slot]);
+            }
+            const int value=int(std::min<int64_t>(INT_MAX,std::max<int64_t>(deficit,
+                QuantBotSpendingPolicy::incomeShareDemand(pass.forecastNetIncome,unlockBps))));
+            const int price=builder->getUpgradeCost();
+            if (value<=0 || price<=0 || !canFundProductionUpgrade(pass,builder)
+                || (!pass.startWhatMakesSense && (!pass.cashFlow.fundsParallelProduction
+                    || int64_t(std::min(pass.money,pass.cashFlow.projectedCash))<int64_t(pass.cashBuffer)+price))) continue;
+            CapitalCandidate upgrade;
+            upgrade.builder=builder->getObjectID();upgrade.item=Structure_HeavyFactory;
+            upgrade.kind="production_upgrade";upgrade.reason="demanded_heavy_unlock";
+            upgrade.price=upgrade.cost=price;upgrade.capacity=value;
+            upgrade.score=std::max(1,QuantBotSpendingPolicy::productionScore(value,price,
+                pass.militaryValue,pass.militaryBudget));
+            pass.capitalCandidates.push_back(upgrade);
+        } else if (builder->getItemID()==Structure_ConstructionYard && expand
+            && campaignAvailableToBuild(builder,Structure_HeavyFactory)) {
+            planningBuilder=builder->getObjectID();
+            CapitalCandidate capacity;
+            capacity.builder=builder->getObjectID();capacity.item=Structure_HeavyFactory;
+            capacity.kind="production";capacity.reason="income_heavy_capacity";
+            capacity.price=data[Structure_HeavyFactory][house].price;
+            capacity.cost=buildingCapitalCost(pass,Structure_HeavyFactory);
+            capacity.capacity=std::min(pass.heavyIncomeFactoryCapacity,
+                pass.heavyIncomeDemand-pass.heavyIncomeCapacity);
+            capacity.site=findPlaceLocation(Structure_HeavyFactory);
+            capacity.score=capacity.site.isValid() ? std::max(1,QuantBotSpendingPolicy::productionScore(
+                capacity.capacity,capacity.cost,pass.militaryValue,pass.militaryBudget)) : 0;
+            if (capacity.score>0) pass.capitalCandidates.push_back(capacity);
+        }
+    }
+    planningBuilder=NONE_ID;
 }
 
 void QuantBot::chooseCapitalPlan(BuildPass& pass) {
@@ -4486,6 +4628,15 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("active_production_burn_per_minute",pass.activeProductionBurn)
             .set("construction_capacity_cost",pass.constructionCapacity).set("continued_construction_cost",pass.continuedConstructionCost)
             .set("continued_unit_cost",pass.continuedMilitaryCost).set("military_funding_after_construction",pass.militaryFunding)
+            .set("heavy_income_demand",pass.heavyIncomeDemand).set("heavy_income_capacity",pass.heavyIncomeCapacity)
+            .set("heavy_income_factory_capacity",pass.heavyIncomeFactoryCapacity)
+            .set("heavy_income_factory_target",pass.heavyIncomeFactoryTarget)
+            .set("heavy_income_pending_factories",pass.heavyIncomePendingFactories)
+            .set("heavy_income_committed_capacity",pass.heavyIncomeCommittedCapacity)
+            .set("income_heavy_factories",pass.incomeHeavyFactories)
+            .set("buffered_heavy_production",pass.bufferedHeavyProduction)
+            .set("existing_composition_unit_choice",pass.existingCompositionChoice)
+            .set("simple_tech_savings",pass.techSavings)
             .set("projected_cash",pass.cashFlow.projectedCash).set("cash_buffer",pass.cashBuffer)
             .set("net_burn_per_minute",pass.cashFlow.netBurnPerMinute).set("cash_runway_seconds",pass.cashFlow.runwaySeconds)
             .set("funds_parallel_production",pass.cashFlow.fundsParallelProduction).set("shared_priority",pass.sharedSpending)

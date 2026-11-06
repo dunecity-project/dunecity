@@ -807,8 +807,8 @@ inline void standaloneLocalProducers(const char* mod, const char* playerClass) {
     pass.capitalChoice = -1;
     pass.sharedSpending = false;
     require(pass.nextCompositionSlot() == lightSlot
-                && world.bot->localCompositionSlot(pass, heavy) == heavySlot
-                && world.bot->localCompositionSlot(pass, second) == heavySlot,
+                && world.bot->localCompositionSlot(pass, heavy, -1) == heavySlot
+                && world.bot->localCompositionSlot(pass, second, -1) == heavySlot,
             "Local-producer control does not separate the global light choice from eligible heavy deficits");
     const int64_t committedBefore = pass.compositionValue[heavySlot];
     {
@@ -837,6 +837,130 @@ inline void standaloneLocalProducers(const char* mod, const char* playerClass) {
             mod, playerClass);
 }
 
+
+inline bool standaloneBufferedHeavy(const char* mod, const char* playerClass) {
+    World world(mod,playerClass,false,Stage::Complete,Army::Empty,8,true,HOUSE_ATREIDES);
+    auto config=std::make_shared<QuantBotConfig>(world.bot->botConfig());
+    config->force.existingCompositionUnitChoice=true;
+    config->force.bufferedHeavyProduction=true;
+    config->force.incomeHeavyFactories=false;
+    config->force.startWhatMakesSense=false;
+    world.bot->configOverride=config;
+    world.closeMilitaryMarket();
+    auto* heavy=world.producer(Structure_HeavyFactory);
+    size_t heavySlot=UnitMixPolicy::kSlots, lightSlot=UnitMixPolicy::kSlots;
+    for (size_t slot=0;slot<UnitMixPolicy::kOrnithopterSlot;++slot)
+        if (heavy && world.bot->campaignAvailableToBuild(heavy,vehicles[slot])) { heavySlot=slot;break; }
+    for (size_t slot=UnitMixPolicy::kFirstLightSlot;slot<vehicles.size();++slot)
+        if (world.bot->campaignAvailableToBuild(world.lights.front(),vehicles[slot])) { lightSlot=slot;break; }
+    if (heavySlot==UnitMixPolicy::kSlots || lightSlot==UnitMixPolicy::kSlots) {
+        notApplicable("buffered_heavy_queue_budget",mod,playerClass,"no_canonical_heavy_and_light_offers");
+        return false;
+    }
+    auto* second=static_cast<BuilderBase*>(world.place(Structure_HeavyFactory));
+    second->curUpgradeLev=second->getMaxUpgradeLevel();second->updateBuildList();
+    completeInitialEconomicAssets(world);
+    secureInitialCityCore(world);
+    for (int i=0;i<2;++i) world.spawn(world.owner,vehicles[heavySlot],Coord(4+i,40));
+    world.cash(19999);
+    const int price=world.bot->purchasePrice(heavy,vehicles[heavySlot]);
+    const auto withMargin=[&](int margin) {
+        const auto before=world.observePlan();
+        world.cash(world.owner->getCredits()+before.cashBuffer+margin
+            -std::min(before.money,before.cashFlow.projectedCash));
+        auto pass=world.observePlan();
+        pass.unitMix={}; // Labelled ratio control: both real HFs are currently overweight.
+        pass.unitMix[heavySlot]=2000;pass.unitMix[lightSlot]=8000;
+        pass.sharedSpending=false;pass.capitalChoice=-1;pass.capitalCandidates.clear();
+        require(pass.compositionSurplusBudget()==margin,"Real cash-flow setup did not establish the requested surplus margin");
+        return pass;
+    };
+    const auto order=[&](QuantBot::BuildPass& pass,BuilderBase* producer) {
+        QuantBot::BuilderTurn turn(pass.money);
+        turn.pStructure=producer;turn.pBuilder=producer;turn.bufferedHeavyOrder=true;
+        return world.bot->produceItemWithLogging(pass,turn,vehicles[heavySlot],__LINE__,"buffered_heavy_value_choice");
+    };
+    auto low=withMargin(price-1);
+    require(world.bot->localCompositionSlot(low,heavy,-1)==UnitMixPolicy::kSlots
+                && !order(low,heavy) && heavy->getProductionQueueSize()==0,
+            "Overweight HF production spent the protected buffer when only the unit price was affordable");
+    auto funded=withMargin(price);
+    const int64_t before=funded.compositionValue[heavySlot];
+    require(world.bot->localCompositionSlot(funded,heavy,funded.compositionSurplusBudget())==heavySlot
+                && order(funded,heavy) && heavy->getProductionQueueSize()==1
+                && funded.compositionValue[heavySlot]==before+world.price(vehicles[heavySlot])
+                && funded.compositionSurplusBudget()==0 && !order(funded,second)
+                && second->getProductionQueueSize()==0 && !funded.techSavings,
+            "Buffered heavy production failed its real queue, shared quote budget or existing-value bookkeeping");
+    return true;
+}
+
+inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
+    World world(mod,playerClass,false,Stage::Complete,Army::Empty,8,true,HOUSE_ATREIDES);
+    auto config=std::make_shared<QuantBotConfig>(world.bot->botConfig());
+    config->force.existingCompositionUnitChoice=false;
+    config->force.bufferedHeavyProduction=false;
+    config->force.incomeHeavyFactories=true;
+    config->force.startWhatMakesSense=false;
+    world.bot->configOverride=config;
+    world.closeMilitaryMarket();
+    addMatureYard(world);
+    std::array<BuilderBase*,3> factories{world.producer(Structure_HeavyFactory),nullptr,nullptr};
+    for (size_t i=1;i<factories.size();++i) {
+        factories[i]=static_cast<BuilderBase*>(world.place(Structure_HeavyFactory));
+        factories[i]->curUpgradeLev=factories[i]->getMaxUpgradeLevel();factories[i]->updateBuildList();
+    }
+    size_t slot=UnitMixPolicy::kSlots;
+    for (size_t candidate=0;candidate<UnitMixPolicy::kOrnithopterSlot;++candidate)
+        if (factories[0] && world.bot->campaignAvailableToBuild(factories[0],vehicles[candidate])) { slot=candidate;break; }
+    if (slot==UnitMixPolicy::kSlots) {
+        notApplicable("income_heavy_capacity",mod,playerClass,"no_canonical_heavy_offer");
+        return false;
+    }
+    world.cash(100000);
+    completeInitialEconomicAssets(world);secureInitialCityCore(world);
+    world.place(Structure_WindTrap); // Labelled physical headroom for the additional factory.
+    for (auto* factory:factories) factory->doProduceItem(vehicles[slot]);
+    auto initial=world.observePlan();
+    world.cash(world.owner->getCredits()+std::max(0,initial.nextHeavyRunway
+        -std::min(initial.money,initial.cashFlow.projectedCash)));
+    const auto pressure=[&]() {
+        auto pass=world.observePlan();
+        pass.unitMix={};pass.unitMix[slot]=10000; // Labelled single-family income-pressure control.
+        world.bot->planCapitalForecast(pass);
+        require(pass.heavyIncomeFactoryCapacity>0 && pass.allHeavyQueued,
+                "Income capacity control did not observe three real saturated heavy factories");
+        pass.forecastNetIncome=pass.heavyIncomeCapacity+3*pass.heavyIncomeFactoryCapacity;
+        pass.heavyIncomeDemand=QuantBotSpendingPolicy::incomeShareDemand(pass.forecastNetIncome,10000);
+        pass.heavyIncomeFactoryTarget=QuantBotSpendingPolicy::factoryTargetForDemand(
+            3,pass.heavyIncomeCapacity,pass.heavyIncomeFactoryCapacity,pass.heavyIncomeDemand);
+        pass.capitalCandidates.clear();pass.capitalChoice=-1;
+        world.bot->planCompositionHeavyCapacity(pass);
+        return pass;
+    };
+    auto pass=pressure();
+    require(pass.heavyIncomeFactoryTarget==6 && !pass.existingCompositionChoice && !pass.techSavings,
+            "Independent income capacity retained a one/two-factory ceiling or enabled another selection policy");
+    world.bot->chooseCapitalPlan(pass);
+    require(pass.capitalChoice>=0 && std::string_view(pass.capitalCandidates[pass.capitalChoice].reason)=="income_heavy_capacity",
+            "Legal saturated heavy capacity did not become the selected real capital project");
+    const auto builder=pass.capitalCandidates[pass.capitalChoice].builder;
+    const auto found=std::find_if(pass.capitalBuilders.begin(),pass.capitalBuilders.end(),
+        [&](const auto* value) { return value->getObjectID()==builder; });
+    require(found!=pass.capitalBuilders.end(),"Selected heavy capital project has no actual construction yard");
+    QuantBot::BuilderTurn turn(pass.money);turn.pStructure=*found;turn.pBuilder=*found;
+    world.bot->beginBuilderTurn(pass,turn);
+    QuantBot::YardTurn yard;yard.isCitySim=world.game->isCitySimEnabled();
+    world.bot->chooseYardProductionLanes(pass,turn,yard);world.bot->vetYardChoice(pass,turn,yard);
+    require(yard.itemID==Structure_HeavyFactory,"Income-scaled factory choice was rejected by a legacy cap or final mix gate");
+    const_cast<BuilderBase*>(*found)->doProduceItem(Structure_HeavyFactory);
+    auto pending=pressure();
+    require(pending.itemCount[Structure_HeavyFactory]==4 && pending.heavyIncomePendingFactories==1
+                && std::none_of(pending.capitalCandidates.begin(),pending.capitalCandidates.end(),
+                    [](const auto& value) { return std::string_view(value.reason)=="income_heavy_capacity"; }),
+            "Another ready yard duplicated the real pending income-capacity factory");
+    return true;
+}
 
 enum class Project { HeavyFactory, HeavyUpgrade, IX, Starport, Palace };
 enum class StartCash { Zero, BelowQuote, ExactQuote };
@@ -1441,10 +1565,13 @@ void runExistingCompositionUnitChoiceProbe(const char* mod, const char* playerCl
     SimpleTechSavingProbe::standaloneInfantryCapital(mod, playerClass);
     SimpleTechSavingProbe::standaloneFactoryVet(mod, playerClass);
     SimpleTechSavingProbe::standaloneLocalProducers(mod, playerClass);
+    const bool bufferedChecked=SimpleTechSavingProbe::standaloneBufferedHeavy(mod,playerClass);
+    const bool incomeChecked=SimpleTechSavingProbe::standaloneIncomeHeavy(mod,playerClass);
     const auto wall = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start).count();
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=existing_composition_unit_choice outcome=passed mod=%s difficulty=%s "
             "producer_scope=full_build paired_off=1 queued_composition=1 paid_factory_completion=1 "
-            "starport_acceptance=1 per_factory_selection=1 independent_technology_policy=1 wall_ms=%lld",
-            mod, playerClass, static_cast<long long>(wall));
+            "starport_acceptance=1 per_factory_selection=1 independent_technology_policy=1 "
+            "buffered_heavy_queue_budget=%d income_factory_target_over_two=%d wall_ms=%lld",
+            mod,playerClass,int(bufferedChecked),int(incomeChecked),static_cast<long long>(wall));
 }

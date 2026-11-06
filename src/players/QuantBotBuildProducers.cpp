@@ -250,8 +250,8 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     doProduceItem(turn.pBuilder, itemID);
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
-        if (pass.usesCompositionChoice() || AITelemetry::log().enabled()) {
-            const size_t slot = compositionSlot(itemID, pass.existingCompositionChoice);
+        if (pass.tracksComposition() || AITelemetry::log().enabled()) {
+            const size_t slot = compositionSlot(itemID, pass.standaloneProduction());
             if (slot < UnitMixPolicy::kSlots) {
                 pass.compositionValue[slot] += data[itemID][houseID].price;
                 pass.compositionArmyValue += data[itemID][houseID].price;
@@ -299,7 +299,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
         .set("source_line", sourceLine).set("rule", rule).set("queue_before", before).set("queue_after", turn.pBuilder->getProductionQueueSize())
         .set("quoted_price", quotedPrice)
         .set("spending_bucket", QuantBotSpendingPolicy::bucketName(spendingBucket))
-        .set("composition_basis", pass.usesCompositionChoice() ? "existing_and_queued" : "funded_cap_headroom")
+        .set("composition_basis", pass.usesCompositionChoice() || turn.bufferedHeavyOrder ? "existing_and_queued" : "funded_cap_headroom")
         .set("composition_before", compositionBefore)
         .set("composition", [&]() {
             AITelemetry::Record mix;
@@ -825,6 +825,15 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
             .set("price",pass.capitalCandidates[pass.capitalChoice].price).set("spendable",pass.money)
             .set("reason",pass.itemCount[Unit_Carryall]==0 ? "saving_first_transport" : "saving_transport_capacity"));
         return true;
+    }
+    if (pass.incomeHeavyFactories && !turn.transportProducer && !turn.expansionProducer && capitalPending(pass)) {
+        const auto& choice=pass.capitalCandidates[pass.capitalChoice];
+        if (choice.builder==turn.pBuilder->getObjectID() && std::string_view(choice.kind)=="production_upgrade"
+            && turn.pBuilder->getProductionQueueSize()==0 && !turn.pBuilder->isUpgrading() && !turn.pBuilder->isOnHold()) {
+            if (turn.pBuilder->getHealth()<turn.pBuilder->getMaxHealth()) doRepair(turn.pBuilder);
+            else if (upgradeWithLogging(pass,turn,__LINE__)) pass.capitalConsumed=true;
+            return true;
+        }
     }
     const CapitalCandidate* localUnitChoice=nullptr;
     // A rich opening can fund its MCV now. Do not repeatedly buy
@@ -1424,7 +1433,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 doRepair(turn.pBuilder);
             }
         }
-        else if ((pass.startWhatMakesSense || pass.money > (pass.techSavings ? 0 : pass.citySimEnabled || pass.vanillaEconomy ? 500 : 2000))
+        else if ((pass.bufferedHeavyProduction || pass.startWhatMakesSense || pass.money > (pass.techSavings ? 0 : pass.citySimEnabled || pass.vanillaEconomy ? 500 : 2000))
             && pass.militaryValue < pass.militaryBudget && !getHouse()->isGroundUnitLimitReached()) {
             // Every heavy mix slot is a candidate with its own learned share and
             // committed value - each special its own slot since 9868, so a house
@@ -1452,23 +1461,41 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                     .set("deficit_scaled",int64_t(normalHorizon)*c.targetBps-int64_t(c.committedValue)*10000)
                     .set("expansion_deficit_scaled",int64_t(expansionHorizon)*c.targetBps-int64_t(c.committedValue)*10000));
             }
+            const bool bufferedCashOnly=pass.bufferedHeavyProduction && !pass.startWhatMakesSense
+                && pass.money<=(pass.techSavings ? 0 : pass.citySimEnabled || pass.vanillaEconomy ? 500 : 2000);
             int selected = -1;
             bool expansionFallback = false;
             size_t existingSlot = UnitMixPolicy::kSlots;
-            if (pass.usesCompositionChoice()) {
+            if (pass.usesCompositionChoice() && !bufferedCashOnly) {
                 existingSlot = nextCompositionSlot(pass, turn);
                 if (existingSlot < types.size() && candidates[existingSlot].available
                     && (pass.startWhatMakesSense || candidates[existingSlot].price <= pass.money)
                     && int64_t(pass.militaryValue) + candidates[existingSlot].price <= pass.militaryBudget)
                     selected = int(existingSlot);
-            } else {
+            } else if (!bufferedCashOnly) {
                 selected = QuantBotBuildPolicy::fundedDeficit(
                     candidates,pass.militaryValue,pass.money,pass.militaryBudget,pass.vehiclePlanValue,pass.startWhatMakesSense);
                 expansionFallback = selected < 0;
-                if (expansionFallback) selected = QuantBotBuildPolicy::capacityFill(
-                    candidates,pass.militaryValue,pass.money,pass.militaryBudget,pass.startWhatMakesSense);
+                if (expansionFallback && !pass.bufferedHeavyProduction)
+                    selected = QuantBotBuildPolicy::capacityFill(
+                        candidates,pass.militaryValue,pass.money,pass.militaryBudget,pass.startWhatMakesSense);
             }
+            if (pass.bufferedHeavyProduction && selected<0) {
+                const int budget=pass.compositionSurplusBudget();
+                const size_t slot=localCompositionSlot(pass,turn.pBuilder,budget);
+                if (budget>=0 && slot<types.size() && candidates[slot].available
+                    && purchasePrice(turn.pBuilder,types[slot])<=budget
+                    && int64_t(pass.militaryValue)+candidates[slot].price<=pass.militaryBudget) {
+                    selected=int(slot);
+                    existingSlot=slot;
+                    turn.bufferedHeavyOrder=true;
+                }
+            }
+            if (pass.bufferedHeavyProduction && pass.existingCompositionChoice && selected>=0
+                && localCompositionSlot(pass,turn.pBuilder,-1)!=size_t(selected))
+                turn.bufferedHeavyOrder=true;
             const char* allocationReason = selected < 0 ? (pass.startWhatMakesSense ? "no_sensible_capacity" : "no_affordable_capacity")
+                : turn.bufferedHeavyOrder ? "buffered_heavy_value_choice"
                 : pass.existingCompositionChoice ? "factory_value_deficit_choice"
                 : pass.techSavings ? (growthHeld ? "existing_army_composition_after_growth_hold" : "existing_army_composition")
                 : expansionFallback ? "available_factory_capacity" : pass.startWhatMakesSense ? "largest_sensible_deficit" : "largest_affordable_deficit";
@@ -1481,7 +1508,8 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             // the match capture. Keep a periodic heartbeat for diagnosis.
             const Uint32 allocationCycle = getGameCycleCount();
             const uint64_t allocationSignature = (uint64_t(selected + 1) << 40)
-                | (uint64_t(existingSlot + 1) << 8) | static_cast<uint64_t>(expansionFallback);
+                | (uint64_t(existingSlot + 1) << 8) | (uint64_t(turn.bufferedHeavyOrder) << 1)
+                | static_cast<uint64_t>(expansionFallback);
             const auto traceIt = lastHeavyAllocationTrace.find(turn.pBuilder->getObjectID());
             const bool allocationChanged = traceIt == lastHeavyAllocationTrace.end()
                 || traceIt->second.first != allocationSignature

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <climits>
 
 // Integer-only, recomputed from live state each planning pass. No saved timers,
 // random tie breaking, or assumption that forecast income is spendable today.
@@ -61,6 +62,16 @@ inline int additionalProduction(int funding, int existingCapacity, int addedCapa
 inline int productionScore(int additionalValue, int cost, int army, int target) {
     return additionalValue > 0 && cost > 0
         ? int(int64_t(additionalValue)*readiness(army,target)/(cost+additionalValue)) : 0;
+}
+// Capacity follows the live income share, not a fixed one/two-factory ceiling.
+inline int incomeShareDemand(int income, int shareBps) {
+    return int(int64_t(std::max(0,income))*std::clamp(shareBps,0,10000)/10000);
+}
+inline int factoryTargetForDemand(int actual, int capacity, int nextCapacity, int demand) {
+    actual=std::max(0,actual);
+    if (nextCapacity<=0 || demand<=capacity) return actual;
+    const int64_t missing=int64_t(demand)-std::max(0,capacity);
+    return int(std::min<int64_t>(INT_MAX,int64_t(actual)+(missing+nextCapacity-1)/nextCapacity));
 }
 inline int reserveForOther(int cash, int price, bool supplier, bool consumed, bool emergency) {
     return supplier || consumed || emergency ? 0 : std::min(std::max(0,cash),std::max(0,price));

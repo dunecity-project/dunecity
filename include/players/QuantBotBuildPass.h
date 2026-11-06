@@ -242,6 +242,8 @@ struct QuantBot::BuildPass {
     int vehiclePlanValue{};
     bool techSavings{}; // Stateless owned-composition and installment policy.
     bool existingCompositionChoice{}; // Independent unit/factory selection only.
+    bool bufferedHeavyProduction{};
+    bool incomeHeavyFactories{};
     bool techFundingPriority{};
     bool techProjectPending{};
     bool advancedGroundAvailable{};
@@ -253,9 +255,11 @@ struct QuantBot::BuildPass {
     int compositionArmyValue{};
     Uint32 compositionRevision{};
     bool usesCompositionChoice() const { return techSavings || existingCompositionChoice; }
+    bool standaloneProduction() const { return existingCompositionChoice || bufferedHeavyProduction || incomeHeavyFactories; }
+    bool tracksComposition() const { return techSavings || standaloneProduction(); }
     size_t nextCompositionSlot() const {
         return existingCompositionChoice
-            ? UnitMixPolicy::greatestExistingDeficitSlot(unitMix, compositionValue, compositionPrice, compositionAvailable)
+            ? UnitMixPolicy::greatestExistingDeficitSlot(unitMix, compositionValue, compositionPrice, compositionAvailable, {})
             : UnitMixPolicy::nextExistingSlot(unitMix, compositionValue, compositionPrice, compositionAvailable);
     }
     bool compositionFactoryAdmits(Uint32 factory) const {
@@ -268,7 +272,16 @@ struct QuantBot::BuildPass {
         default: return true;
         }
         return UnitMixPolicy::greatestExistingDeficitSlot(
-            unitMix, compositionValue, compositionPrice, compositionFactoryAvailable[supplier]) < UnitMixPolicy::kSlots;
+            unitMix, compositionValue, compositionPrice, compositionFactoryAvailable[supplier], {}) < UnitMixPolicy::kSlots;
+    }
+    // Legacy surplus retains the working buffer after present and projected
+    // commitments. Unified finance admits the selected quote by its live drain.
+    int compositionSurplusBudget() const {
+        if (!bufferedHeavyProduction) return -1;
+        if (startWhatMakesSense) return INT_MAX;
+        if (!cashFlow.fundsParallelProduction) return -1;
+        const int64_t projected=int64_t(cashFlow.projectedCash)-capitalOrderedCost;
+        return int(std::clamp<int64_t>(std::min<int64_t>(money,projected)-std::max(0,cashBuffer),-1,INT_MAX));
     }
 
     // planCapitalForecast()
@@ -299,6 +312,13 @@ struct QuantBot::BuildPass {
     int capacityMcvOrderedCost{};
     bool sharedSpending{};
     int militaryFunding{};
+    int heavyIncomeDemand{};
+    int heavyIncomeCapacity{};
+    int heavyIncomeFactoryCapacity{};
+    int heavyIncomeFactoryTarget{};
+    int heavyIncomePendingFactories{};
+    int heavyIncomeCommittedCapacity{};
+    bool allHeavyQueued{};
 
     // planCityBootstrap()
     int cityYards{};
@@ -398,6 +418,8 @@ struct QuantBot::BuilderTurn {
     // A pass-wide commitment revision invalidates this producer's local choice.
     Uint32 compositionRevision{~Uint32{0}};
     size_t compositionChoice{UnitMixPolicy::kSlots};
+    int compositionSurplusBudget{-2};
+    bool bufferedHeavyOrder{};
 
     // Set by reserveBuilderCash(); restored when the turn ends.
     RestoreReservedCredits reserve;

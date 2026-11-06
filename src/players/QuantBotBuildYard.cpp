@@ -150,12 +150,17 @@ void QuantBot::traceYardStatus(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         auto* balanceCity = currentGame ? currentGame->getCitySimulation() : nullptr;
         const int taxIncome = pass.citySimEnabled
             ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths, balanceCity ? balanceCity->getCityTax(getHouse()->getHouseID()) : DuneCity::kDefaultCityTaxRate, pass.ownAvgLandValue)) / 60 : 0;
-        int factoryTarget = QuantBotBuildPolicy::desiredHeavyFactories(pass.citySimEnabled, taxIncome, pass.money, getHouse()->getNumItems(Structure_HeavyFactory), pass.activeHeavyFactoryCount, recentFactoryLossCount());
-        if (pass.vanillaEconomy) factoryTarget = DuneCity::vanillaFactoryTarget(factoryTarget, getAIHarvesterCount(), pass.money);
+        int factoryTarget = pass.incomeHeavyFactories ? std::max(1,pass.heavyIncomeFactoryTarget)
+            : QuantBotBuildPolicy::desiredHeavyFactories(pass.citySimEnabled, taxIncome, pass.money, getHouse()->getNumItems(Structure_HeavyFactory), pass.activeHeavyFactoryCount, recentFactoryLossCount());
+        if (!pass.incomeHeavyFactories && pass.vanillaEconomy)
+            factoryTarget = DuneCity::vanillaFactoryTarget(factoryTarget, getAIHarvesterCount(), pass.money);
         const int tech = currentGame ? getHouse()->getTechLevel() : 8;
         const bool policyPrerequisites = pass.citySimEnabled || pass.vanillaEconomy || tech <= 4
             || (pass.itemCount[Structure_RepairYard] > 0 && (tech <= 6 || pass.itemCount[Structure_IX] > 0));
         const char* factoryReason = !campaignAvailableToBuild(turn.pBuilder,Structure_HeavyFactory) ? "unavailable"
+            : pass.incomeHeavyFactories ? (pass.itemCount[Structure_HeavyFactory]>=factoryTarget ? "income-target-met"
+                : !pass.allHeavyQueued && getHouse()->getNumItems(Structure_HeavyFactory)>0
+                    ? "heavy-capacity-not-saturated" : "income-capacity-shortfall")
             : !pass.startWhatMakesSense && pass.money <= std::max(2000, pass.economyReserve + data[Structure_HeavyFactory][houseID].price) ? "cash-reserve"
             : pass.militaryValue >= pass.militaryBudget ? "military-limit"
             : getHouse()->isGroundUnitLimitReached() ? "unit-limit"
@@ -1440,6 +1445,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     // keep their priority; queued factories count towards this target.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && pass.vanillaEconomy && gameMode == GameMode::Custom && !yardTurn.holdExtraHeavy
+        && (!pass.incomeHeavyFactories || pass.itemCount[Structure_HeavyFactory]==0)
         && !techProgressionPending
         && pass.itemCount[Structure_Refinery] > 0
         && pass.militaryValue < pass.militaryBudget && !getHouse()->isGroundUnitLimitReached()
@@ -1548,6 +1554,18 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         && findPlaceLocation(Structure_HighTechFactory).isValid()) {
         yardTurn.itemID = Structure_HighTechFactory; yardTurn.structureRule = "air_unit_backlog";
     }
+    // Income-scaled heavy capacity is an ordinary capital project, including
+    // rich classic houses which do not use the shared-spending branch above.
+    if (pass.incomeHeavyFactories && yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && !yardTurn.holdExtraHeavy && !techProgressionPending && capitalPending(pass)) {
+        const auto& choice=pass.capitalCandidates[pass.capitalChoice];
+        if (choice.builder==turn.pBuilder->getObjectID() && std::string_view(choice.reason)=="income_heavy_capacity"
+            && (pass.startWhatMakesSense || pass.money>=choice.price+choice.foundationCost)) {
+            yardTurn.itemID=Structure_HeavyFactory;
+            yardTurn.structureRule="income_heavy_capacity";
+            yardTurn.crimeServiceSite=choice.site;
+        }
+    }
     // Expand saturated light production before optional heavy capacity.
     // Pending factories count, so parallel yards add one lane at a time.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && yardTurn.lightBacklog
@@ -1559,6 +1577,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         yardTurn.itemID = Structure_LightFactory; yardTurn.structureRule = "light_unit_backlog";
     }
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && !yardTurn.holdExtraHeavy && yardTurn.heavyBacklog
+        && (!pass.incomeHeavyFactories || pass.itemCount[Structure_HeavyFactory]==0)
         && pass.itemCount[Structure_HeavyFactory] < 24
         && campaignAvailableToBuild(turn.pBuilder,Structure_HeavyFactory)
         && findPlaceLocation(Structure_HeavyFactory).isValid()) {
@@ -1850,6 +1869,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     //     Tech 7+: Require Repair Yard + IX
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && !yardTurn.holdExtraHeavy
+        && (!pass.incomeHeavyFactories || pass.itemCount[Structure_HeavyFactory]==0)
         && (pass.startWhatMakesSense || pass.money > std::max(2000, pass.economyReserve + data[Structure_HeavyFactory][houseID].price))
         && campaignAvailableToBuild(turn.pBuilder,Structure_HeavyFactory)) {
 
@@ -2155,12 +2175,27 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         yardTurn.itemID=Structure_WindTrap; yardTurn.structureRule="campaign_planned_power";
         yardTurn.crimeServiceSite=Coord::Invalid();
     }
+    if (pass.incomeHeavyFactories && yardTurn.itemID==Structure_HeavyFactory
+        && pass.itemCount[Structure_HeavyFactory]>0) {
+        const auto* choice=capitalPending(pass) ? &pass.capitalCandidates[pass.capitalChoice] : nullptr;
+        const bool admitted=choice && choice->builder==turn.pBuilder->getObjectID()
+            && std::string_view(choice->reason)=="income_heavy_capacity"
+            && pass.allHeavyQueued && pass.itemCount[Structure_HeavyFactory]==getHouse()->getNumItems(Structure_HeavyFactory)
+            && pass.itemCount[Structure_HeavyFactory]<pass.heavyIncomeFactoryTarget
+            && !pass.orderedThisTick.count(Structure_HeavyFactory)
+            && (pass.startWhatMakesSense || pass.money>=choice->price+choice->foundationCost);
+        if (!admitted) {
+            yardTurn.itemID=NONE_ID;
+            yardTurn.crimeServiceSite=Coord::Invalid();
+        }
+    }
     // Every optional military lane, including cash/backlog rules and funded
     // parallel yards, must supply the current owned-plus-queued unit choice.
     // The first supplier (or its replacement) still unlocks workers, MCVs,
     // transports and the tech tree. Pending suppliers already cover bootstrap.
     if ((yardTurn.itemID==Structure_LightFactory || yardTurn.itemID==Structure_HeavyFactory
             || yardTurn.itemID==Structure_HighTechFactory)
+        && !(pass.incomeHeavyFactories && yardTurn.itemID==Structure_HeavyFactory)
         && pass.itemCount[yardTurn.itemID]>0 && !pass.compositionFactoryAdmits(yardTurn.itemID)) {
         yardTurn.itemID=NONE_ID;
         yardTurn.crimeServiceSite=Coord::Invalid();

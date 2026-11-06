@@ -527,6 +527,58 @@ TEST_CASE("Simple tech savings defaults off and independently round-trips both h
     std::filesystem::remove(savedPath);
 }
 
+TEST_CASE("Unit choice and heavy surplus and income capacity are independently hashed default-off genes",
+          "[ai][production][config][existing-composition-unit-choice]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.existingCompositionUnitChoice);
+    REQUIRE_FALSE(defaults.force.bufferedHeavyProduction);
+    REQUIRE_FALSE(defaults.force.incomeHeavyFactories);
+    REQUIRE_FALSE(defaults.force.simpleTechSavings);
+    const auto path=std::filesystem::temp_directory_path()/"quantbot-heavy-capacity-genes-test.ini";
+    const auto savedPath=std::filesystem::temp_directory_path()/"quantbot-heavy-capacity-genes-saved-test.ini";
+    std::array<std::string,16> hashes;
+    size_t count=0;
+    for (const bool simple:{false,true}) for (unsigned mask=0;mask<8;++mask) {
+        CAPTURE(simple,mask);
+        QuantBotConfig expected=defaults;
+        expected.force.simpleTechSavings=simple;
+        expected.force.existingCompositionUnitChoice=(mask&1)!=0;
+        expected.force.bufferedHeavyProduction=(mask&2)!=0;
+        expected.force.incomeHeavyFactories=(mask&4)!=0;
+        QuantBotConfig config=defaults;
+        config.force.simpleTechSavings=simple;
+        config.force.existingCompositionUnitChoice=!expected.force.existingCompositionUnitChoice;
+        config.force.bufferedHeavyProduction=!expected.force.bufferedHeavyProduction;
+        config.force.incomeHeavyFactories=!expected.force.incomeHeavyFactories;
+        {
+            std::ofstream ini(path);
+            ini<<"[Force Concentration]\nExistingCompositionUnitChoice="<<expected.force.existingCompositionUnitChoice
+               <<"\nBufferedHeavyProduction="<<expected.force.bufferedHeavyProduction
+               <<"\nIncomeHeavyFactories="<<expected.force.incomeHeavyFactories<<'\n';
+        }
+        REQUIRE(config.applyOverrides(path.string()));
+        REQUIRE(config.force.existingCompositionUnitChoice==expected.force.existingCompositionUnitChoice);
+        REQUIRE(config.force.bufferedHeavyProduction==expected.force.bufferedHeavyProduction);
+        REQUIRE(config.force.incomeHeavyFactories==expected.force.incomeHeavyFactories);
+        REQUIRE(config.force.simpleTechSavings==simple);
+        REQUIRE(config.getConfigHash()==expected.getConfigHash());
+        hashes[count++]=config.getConfigHash();
+        REQUIRE(config.save(savedPath.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(savedPath.string()));
+        REQUIRE(restored.force.existingCompositionUnitChoice==expected.force.existingCompositionUnitChoice);
+        REQUIRE(restored.force.bufferedHeavyProduction==expected.force.bufferedHeavyProduction);
+        REQUIRE(restored.force.incomeHeavyFactories==expected.force.incomeHeavyFactories);
+        REQUIRE(restored.force.simpleTechSavings==simple);
+        REQUIRE(restored.getConfigHash()==expected.getConfigHash());
+    }
+    REQUIRE(count==hashes.size());
+    for (size_t first=0;first<count;++first) for (size_t second=first+1;second<count;++second)
+        REQUIRE(hashes[first]!=hashes[second]);
+    std::filesystem::remove(path);
+    std::filesystem::remove(savedPath);
+}
+
 TEST_CASE("Existing composition unit choice defaults off and independently round-trips both hashed states",
           "[ai][production][config][existing-composition-unit-choice]") {
     const QuantBotConfig defaults;

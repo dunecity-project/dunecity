@@ -1732,12 +1732,13 @@ private:
     bool sensibleResearchAdmits(BuildPass& pass, Uint32 lab, int cost);
     void sensibleResearchAccepted(BuildPass& pass, Uint32 lab, int cost, bool installments);
     static size_t compositionSlot(Uint32 item, bool extendedVariants = false);
-    size_t localCompositionSlot(const BuildPass& pass, const BuilderBase* builder) const;
+    size_t localCompositionSlot(const BuildPass& pass, const BuilderBase* builder, int surplusBudget) const;
     size_t nextCompositionSlot(BuildPass& pass, BuilderTurn& turn) const;
     bool compositionAdmits(BuildPass& pass, BuilderTurn& turn, Uint32 item);
     bool compositionAdmits(BuildPass& pass, Uint32 item, size_t selectedSlot);
     /// Scores every producer's candidate purchases.
     void planCapitalCandidates(BuildPass& pass);
+    void planCompositionHeavyCapacity(BuildPass& pass);
     /// Chooses the protected capital purchase for this pass.
     void chooseCapitalPlan(BuildPass& pass);
     /// Orders this pass's producers.

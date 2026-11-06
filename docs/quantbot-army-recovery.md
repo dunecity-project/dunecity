@@ -61,11 +61,12 @@ unit while the globally largest deficit belongs to a busy LF.
 This switch does not change technology/economy priorities, construction
 installments, upgrade payment or capital reservations. It does not enable
 `SimpleTechSavings`, whose rejected combined experiment remains independently
-**OFF**. The standalone `existing-composition-unit-choice-off/on` styles both
-pin `SimpleTechSavings=false` and differ only in the new flag. The probe's
-per-player build-site audit manifest records the effective flag and config hash.
-The historical Simple results below are not evidence for adopting unit choice
-alone.
+**OFF**. The current `existing-composition-unit-choice-off/on` styles both
+pin `SimpleTechSavings=false`; ON jointly enables the three independent
+selection/capacity candidates described below and OFF disables all three.
+The archived unit-choice-only cohorts used the one-switch styles at their own
+immutable source pins. Neither the historical Simple result nor the new joint
+trial identifies a single component's independent effect.
 
 ### Diagnosed bottleneck and retuning (2026-11-06)
 
@@ -167,6 +168,69 @@ rejected technology/economy policy and are not claimed fixed. No simulation
 policy changed after the study pin; later changes were test harness, fixture
 setup and documentation only. See `final-qualification-616d86d7.json` and
 `decision-a1bf0d0b.json` in the evidence root for exact sources and receipts.
+
+### Independent buffered-heavy and income-capacity candidates
+
+`BufferedHeavyProduction` and `IncomeHeavyFactories` are separately persisted,
+multiplayer-hashed booleans, each **default OFF**. Neither enables
+`ExistingCompositionUnitChoice` or `SimpleTechSavings`. The ratio-only switch
+retains its own per-factory rule and does not change the economy/technology
+planner; these additional candidates isolate the production-throughput changes.
+No candidate is promoted directly: behaviour checks, Genome's tournament and
+the historical-reference gate own promotion.
+
+With buffered-heavy production enabled, an otherwise idle HF may select its
+greatest current value deficit even when every locally offered family is
+overweight and a different producer owns the remaining shortfall. Zero-target,
+unavailable, capped and zero-price families do not become filler. A positive
+ordinary local deficit still outranks surplus spending. In legacy finance,
+both current spendable credits and the existing four-minute projection must
+cover the working buffer plus that actual quote; accepted orders consume this
+one shared allowance. The existing 500/2,000-credit military entry floors do
+not veto this fully buffered heavy-only path. No light-factory surplus mask is
+created. With `StartWhatMakesSense` enabled, its central live-drain admission
+replaces full-price funding checks, not composition or usefulness.
+
+Income-scaled heavy capacity uses the existing four-minute net-income forecast
+times the six heavy families' target value share. Each existing HF's legal
+military offers supply nominal value per production cycle, weighted by the
+target **value** mix using harmonic throughput; workers/MCVs do not supply a
+military rate. Actual capacity is health/speed adjusted. The conservative
+healthy current-HF template supplies one additional lane's modeled capacity.
+The target is actual HF count plus the ceiling of the positive remaining
+four-minute demand divided by that template. It has no one/two-factory ceiling.
+Pending HFs contribute separate committed-capacity telemetry and prevent a
+second yard duplicating an in-flight expansion.
+
+Extra HFs are ordinary capital candidates, including wealthy classic houses
+outside shared spending. All actual HFs must be busy, not held or upgrading;
+existing power, opening workers/transport/city bootstrap, military cap, funding,
+space and prerequisite rules remain. A true first/rebuilt HF keeps the existing
+bootstrap paths. Demanded, legally unlockable heavy-family upgrades are separate
+production-capital candidates; their selected real producer executes them.
+Legacy optional cash/backlog HF rules cannot bypass the income target.
+
+The engine fixture definitions include a real two-HF shared-quote-budget case
+and three saturated real HFs under a labelled single-family income-pressure
+control, selecting target six and rejecting another order while a real fourth
+HF is queued. These controlled fixtures are not natural-game throughput
+measurements. Natural HF counts, army value and outcome gates come from the
+source-pinned paired games.
+
+The causal Vanilla research-OFF comparison of `32adfb8a5^` and `32adfb8a5`
+did **not** establish the proposed direct Sonic-target loss: identical-input
+ten-slot mapped scores/targets and the 1v1 Sonic deliveries were unchanged.
+Therefore no speculative Sonic weight floor/restoration is included. The
+whole-release 1.0.807 target/delivery comparison remains a separate historical
+reference, not an isolated cutover effect.
+
+House `isAlive` can become true after an inactive episode. New measurement
+support retains current native alive flags and native game-end followup,
+resumes after observed revival, and never treats the first `eliminated_s` as a
+terminal death. Known first-inactive gaps, unknown later inactive-transition
+intervals, missing observations and final tails are not silently filled. The
+older first-inactive-censored analysis files remain preserved as historical
+methods, not corrected acceptance evidence.
 
 ## Stateless technology experiment and save compatibility
 

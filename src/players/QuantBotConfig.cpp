@@ -371,6 +371,8 @@ QuantBotConfig::QuantBotConfig() {
     force.simpleTechSavings = false;
     force.startWhatMakesSense = false;
     force.existingCompositionUnitChoice = false;
+    force.bufferedHeavyProduction = false;
+    force.incomeHeavyFactories = false;
     force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
     force.exhaustedArmyDispatch = true;
 
@@ -694,6 +696,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
         iniFile.setBoolValue("Force Concentration", "StartWhatMakesSense", force.startWhatMakesSense);
         iniFile.setBoolValue("Force Concentration", "ExistingCompositionUnitChoice", force.existingCompositionUnitChoice);
+        iniFile.setBoolValue("Force Concentration", "BufferedHeavyProduction", force.bufferedHeavyProduction);
+        iniFile.setBoolValue("Force Concentration", "IncomeHeavyFactories", force.incomeHeavyFactories);
         iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
         iniFile.setBoolValue("Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
 
@@ -844,6 +848,10 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         "Force Concentration", "StartWhatMakesSense", force.startWhatMakesSense);
     force.existingCompositionUnitChoice = iniFile.getBoolValue(
         "Force Concentration", "ExistingCompositionUnitChoice", force.existingCompositionUnitChoice);
+    force.bufferedHeavyProduction = iniFile.getBoolValue(
+        "Force Concentration", "BufferedHeavyProduction", force.bufferedHeavyProduction);
+    force.incomeHeavyFactories = iniFile.getBoolValue(
+        "Force Concentration", "IncomeHeavyFactories", force.incomeHeavyFactories);
     force.launcherKiteExtraDistance = std::clamp(iniFile.getIntValue(
         "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
     force.exhaustedArmyDispatch = iniFile.getBoolValue(
@@ -1355,6 +1363,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("simpleTechSavings", force.simpleTechSavings);
     addNamed("startWhatMakesSense", force.startWhatMakesSense);
     addNamed("existingCompositionUnitChoice", force.existingCompositionUnitChoice);
+    addNamed("bufferedHeavyProduction", force.bufferedHeavyProduction);
+    addNamed("incomeHeavyFactories", force.incomeHeavyFactories);
     addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
     addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);
     configStr += "|/FORCE|";

@@ -144,7 +144,8 @@ struct QuantBotConfig {
     /// CityGrowthPower, CityPowerSizing, CityCompactPower, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
     /// StorageCapacity, FundedClassicProduction, TrooperSupport, SimpleTechSavings,
-    /// ExistingCompositionUnitChoice, LauncherKiteExtraDistance, ExhaustedArmyDispatch;
+    /// ExistingCompositionUnitChoice, BufferedHeavyProduction, IncomeHeavyFactories,
+    /// LauncherKiteExtraDistance, ExhaustedArmyDispatch;
     /// optional keys, hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -317,8 +318,14 @@ struct QuantBotConfig {
         bool startWhatMakesSense;
         /// Per-producer choice from owned plus queued value-share deficits.
         /// No overweight light filler; no tech/economy changes.
-        /// Default OFF until the retuned unit/army-value and performance gates pass.
+        /// Default OFF; behaviour, historical and Genome gates own promotion.
         bool existingCompositionUnitChoice;
+        /// Buffered cash may keep an otherwise-idle HF growing its nearest value family.
+        /// Independent from ordinary ratio choice; never grants light-factory filler.
+        bool bufferedHeavyProduction;
+        /// Scale heavy capacity to its share of net income, with bounded unlock priority.
+        /// No fixed one/two-factory ceiling; economy, power, space and funding still apply.
+        bool incomeHeavyFactories;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.
         int launcherKiteExtraDistance;
