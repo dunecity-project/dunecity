@@ -7,7 +7,7 @@ Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 ## Independent existing-composition unit choice
 
 `[Force Concentration] ExistingCompositionUnitChoice` is an independent,
-persisted, multiplayer-hashed switch, **OFF pending measured paired outcomes**.
+persisted, multiplayer-hashed switch, **OFF after the standalone paired trial**.
 It changes unit/factory selection only: the owned plus accepted-queue **VALUE
 shares** move toward the existing target, without using a future military limit
 as a cheap-unit quota. Once an advanced supplier exists, light
@@ -58,6 +58,62 @@ pin `SimpleTechSavings=false` and differ only in the new flag. The probe's
 per-player build-site audit manifest records the effective flag and config hash.
 The historical Simple results below are not evidence for adopting unit choice
 alone.
+
+### Measured unit-choice-only outcome (2026-11-06)
+
+Decision: **keep `ExistingCompositionUnitChoice=false`**. The exact paired
+288-game/960-house/four-seed cohort is pinned to
+`a1bf0d0be51785f085748dfd1e89a5a8bb1b9975`, with `SimpleTechSavings=false`
+in both arms. The primary comparison below is Hard/Brutal, matched houses
+averaged within games and the six mod/research cells weighted equally.
+Intervals are paired game-bootstrap 95% CIs; the four shared seed blocks are
+reported separately in the evidence. These are symmetric global-OFF/global-ON
+selfplay results, not direct ON-versus-OFF winning skill.
+
+| Metric | OFF | ON | ON − OFF [95% CI] |
+|---|---:|---:|---:|
+| Native winning-house share | 21.18% | 13.54% | −7.64 pp [−11.98, −3.82] |
+| Native decided matches | 45.83% | 27.08% | −18.75 pp [−28.13, −10.42] |
+| Ground dispatches / house | 3.582 | 3.471 | −0.110 [−0.393, 0.181] |
+| Credited kill value / house | 43,309 | 36,922 | −6,388 [−8,361, −4,477] |
+| Live-object value, observed alive-time mean | 259.07 | 275.67 | +16.60 [10.66, 22.00] |
+| Live-object value, final nonempty matched population | 299.82 | 307.61 | +7.79 [−20.61, 34.28] |
+| Cheap / military accepted quote share | 28.80% | 20.14% | −8.66 pp [−10.09, −7.30] |
+| Latched economy stall | 31.51% | 38.63% | +7.12 pp [−2.78, 16.58] |
+| Latched bankrupt/empty queue | 34.98% | 35.33% | +0.35 pp [−6.34, 6.86] |
+| Latched missing Starport | 23.35% | 21.79% | −1.56 pp [−3.99, 0.78] |
+
+The alive-time value gain and kill-value loss have the same sign in all four
+pooled seed blocks. Kill-value point estimates are lower in all six Hard/Brutal
+mod/research cells. Thus the value rule reduced cheap spending and raised the
+observed-time unit value, but failed the “not consistently weaker” condition.
+Its dispatch result did **not** reproduce the combined trial's 3.58 → 0.99
+collapse; the other components or interactions are not identified by this trial.
+
+Completed-building adoption and selected paired-achiever timing:
+
+| Building | Completed OFF → ON | Adoption Δ [95% CI] | Paired completion minute OFF → ON | Time Δ [95% CI] |
+|---|---:|---:|---:|---:|
+| Heavy Factory | 83.33% → 84.20% | +0.87 pp [0.35, 1.48] | 11.52 → 11.38 | −0.14 [−0.32, 0.03] |
+| IX | 71.70% → 80.90% | +9.20 pp [5.64, 13.02] | 22.72 → 18.68 | −4.05 [−4.77, −3.26] |
+| Starport | 93.06% → 93.06% | 0 pp [0, 0] | 9.95 → 9.96 | +0.02 [−0.06, 0.10] |
+
+All 288 native captures and quote histories were complete; no sample or
+composition rows were missing. Final prices require both-arm nonempty armies
+(201/320 Hard/Brutal houses); missing-Starport eligibility is 304/320. Timing
+conditions on both arms completing: HF 242, IX 160 and SP 296 house pairs.
+Death and administrative censoring, lower/upper by-40 bounds, all Medium/Hard/
+Brutal cells and both pooling sensitivities remain explicit in the CSV evidence.
+Accepted quotes are commitments, not paid installment cash. All starts were T9;
+research-enabled arms do not demonstrate research acquisition.
+
+Evidence:
+`/Users/stefan/Documents/projects/outputs/unit-choice-20261106/analysis-a1bf0d0b/`
+(`report.txt`, `per-cell.csv`, `pooled.csv`, `seed-blocks.csv`, `map-blocks.csv`,
+and completed-building/coverage tables). Historical target mix and why the
+unchanged integer-L1 selector bought cheap units are separately preserved in
+`prior-target-mix-report.txt`, `prior-target-mix-by-house-difficulty-mod.csv`
+and `prior-cheap-choice-mechanisms.csv` in that evidence root's parent.
 
 ## Stateless technology experiment and save compatibility
 

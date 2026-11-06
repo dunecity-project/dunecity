@@ -305,7 +305,7 @@ struct QuantBotConfig {
         bool simpleTechSavings;
         /// Independent unit/factory choice from owned plus queued value shares.
         /// No light filler with an advanced supplier; no tech/economy changes.
-        /// Default OFF pending measured paired outcomes.
+        /// Default OFF after the standalone value/performance outcome gate failed.
         bool existingCompositionUnitChoice;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
         /// Clamped to 0..2; other units keep their existing retreat distance.
