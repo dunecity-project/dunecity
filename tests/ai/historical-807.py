@@ -291,7 +291,7 @@ def play(args, scratch, binary, game):
              'research': 'unsupported/off', 'initial_tech': 9, 'path_workers': 1}
     (out / 'setup.json').write_text(json.dumps(setup, indent=2) + '\n')
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
-        DUNECITY_PATH_WORKERS='1', H807_MOD=game['mod'], H807_MAP=str(map_file), H807_MAP_NAME=game['map_name'],
+        SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1', H807_MOD=game['mod'], H807_MAP=str(map_file), H807_MAP_NAME=game['map_name'],
         H807_SEED=str(game['seed']), H807_MINUTES=str(game.get('minutes', 40)), H807_SIDES=numeric_sides,
         H807_GAME_OPTIONS=str(options_path.resolve()), H807_CAPTURE_MIB=str(args.capture_mib))
     started = time.monotonic()
