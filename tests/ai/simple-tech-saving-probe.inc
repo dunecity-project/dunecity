@@ -371,6 +371,45 @@ inline void composition(const char* mod, const char* playerClass, bool queuedCon
     }
 }
 
+inline void standaloneStarport(const char* mod, const char* playerClass) {
+    World world(mod, playerClass, false, Stage::FirstHeavy, Army::TinyTank);
+    auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
+    config->force.existingCompositionUnitChoice = true;
+    world.bot->configOverride = config;
+    world.configHash = config->getConfigHash();
+    std::vector<StructureBase*> localFactories;
+    for (auto* structure : structureList)
+        if (structure->getOwner() == world.owner
+            && (structure->getItemID() == Structure_LightFactory
+                || structure->getItemID() == Structure_HighTechFactory))
+            localFactories.push_back(structure);
+    for (auto* factory : localFactories) {
+        factory->setVisible(VIS_ALL, false);
+        factory->destroy();
+    }
+    for (auto& offer : world.owner->getChoam().availableItems)
+        if (std::find(vehicles.begin(), vehicles.end(), offer.itemID) != vehicles.end())
+            offer.price = world.price(offer.itemID) * 3 / 4;
+    world.owner->updateBuildLists();
+    world.cash(19999);
+    Case run(world, "unit_choice_starport_only", mod, playerClass);
+    auto plan = world.observePlan();
+    const auto next = plan.nextCompositionSlot();
+    auto* port = world.producer(Structure_StarPort);
+    require(!plan.techSavings && plan.existingCompositionChoice
+                && !world.producer(Structure_HeavyFactory)
+                && !world.producer(Structure_LightFactory)
+                && !world.producer(Structure_HighTechFactory)
+                && port && next < vehicles.size()
+                && plan.unitMix[next] > 0 && plan.compositionAvailable[next]
+                && port->isAvailableToBuild(vehicles[next]),
+            "Standalone import-only supplier has no positive available composition target");
+    const int queuedBefore = world.queued(vehicles[next]);
+    world.build();
+    run.finish(world.queued(vehicles[next]) > queuedBefore,
+               "Standalone composition refused its selected real Starport bargain without a local factory");
+}
+
 enum class Project { HeavyFactory, HeavyUpgrade, IX, Starport, Palace };
 enum class StartCash { Zero, BelowQuote, ExactQuote };
 
@@ -931,6 +970,7 @@ void runSimpleTechSavingProbe(const char* mod, const char* playerClass) {
         SimpleTechSavingProbe::composition(mod, playerClass, false, causalControlsOff, true);
         SimpleTechSavingProbe::composition(mod, playerClass, true, causalControlsOff, true);
     }
+    SimpleTechSavingProbe::standaloneStarport(mod, playerClass);
     for (const auto goal : {SimpleTechSavingProbe::Project::HeavyFactory, SimpleTechSavingProbe::Project::HeavyUpgrade,
                             SimpleTechSavingProbe::Project::IX, SimpleTechSavingProbe::Project::Starport,
                             SimpleTechSavingProbe::Project::Palace}) {

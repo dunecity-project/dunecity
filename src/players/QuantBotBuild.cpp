@@ -1830,9 +1830,9 @@ void QuantBot::planUnitMix(BuildPass& pass) {
                     && builder->getItemID() == Structure_StarPort))) continue;
         for (size_t i=0; i<kSlots; ++i) {
             const bool producible = campaignAvailableToBuild(builder,mixItems[i]);
-            // A standalone choice switch must not change the learned/fixed
-            // target mix merely because a market offer exists.
-            if (builder->getItemID() != Structure_StarPort || pass.techSavings) available[i] |= producible;
+            // An actual import supplier participates in composition targets.
+            // Merely logging an OFF-arm market must not change its old mix.
+            if (builder->getItemID() != Structure_StarPort || pass.usesCompositionChoice()) available[i] |= producible;
             if ((pass.usesCompositionChoice() || AITelemetry::log().enabled()) && producible
                 && builder->getHealth() > 0 && builder->isActive()
                 && !getHouse()->isUnitLimitReached(mixItems[i])
