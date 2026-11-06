@@ -10,7 +10,7 @@ policy whole-army-base-scramble-v90, save 9852/runtime 7. It also says nothing w
 pushed or publicly published. There is no v1.0.807 tag: this is the approved,
 verified installed release baseline, not a claim of a tagged public release.
 
-Only new tests/ai files are added by the bridge:
+The bridge adds these tests/ai files:
 - historical-807.py: queue batch API, portable private-main compile/link recipe,
   immutable fixture scheduling, row extraction and read-only final report.
 - historical-807-observer.inc: custom-map diagnostic entry point; standalone
@@ -21,10 +21,12 @@ Only new tests/ai files are added by the bridge:
 - historical-807-fixtures/manifest.json, reference-options.ini and maps/*.ini:
   original archive provenance, 96 distinct game settings, 24 exact map payloads.
 - this file: coverage and observer/harness documentation.
-No existing source, config, mod, AI, CMake, test fixture or old campaign harness
-is changed. The diagnostic main links against the original game's engine
-objects. It never installs an altered engine/AI object. No local native build
-tree is created; the cluster prepares its existing pinned-source trees.
+No existing .cpp/header, config, mod, AI, test fixture or old campaign harness is
+changed. The only existing-file change is src/CMakeLists.txt: test builds on
+MSVC give FileClasses/GFXManager.cpp alone /Zc:ternary for C++17 conditional
+construction; ordinary release builds and simulation translation-unit flags
+are unchanged. The diagnostic main links against the original game source.
+No local native build tree is created; the cluster prepares its existing trees.
 
 Exact inputs and genuine differences
 ------------------------------------
@@ -85,6 +87,10 @@ those interfaces. Probe construction uses the original Ninja main-object/link
 recipes: macOS private app Resources point to the native build; Windows uses
 ABI-compatible clang-cl for only the private main, and links beside native data.
 No game is played during build_probe.
+Submit through configured staging --cwd, with --rev pointing to the immutable
+historical bridge commit. The coordinator rejects the historical source-only
+worktree as --cwd because it is not the configured native build checkout.
+
 
 The node unconditionally builds tests/ai/formation-duel.py for every game source,
 then lists and plays indices 0 and 1 with box:none, size=128, seed=7101, hard,
@@ -97,7 +103,39 @@ computeStateDigest; HISTORICAL_RESULT comes from the played native match.
 The installed queue compares those lines exactly to the mini's same-source
 reference (no historical relaxation, no pre-recorded expected answers). Builds,
 parity games and all campaign-comparison games are left for the parent to submit
-and qualify. This source bridge has not itself been compiled or game-tested.
+and qualify. The first parent submission failed preparation as detailed below;
+the repair has not been compiled or game-tested by this worker.
+
+First parent qualification and repair
+-------------------------------------
+Source aa0b6c384ad2dd1691ad7836cfbd89131754ca00 was accepted as three jobs
+20261106T154025-historical-807-dunecity-off-3c760a,
+20261106T154028-historical-807-dune2r-off-5db341 and
+20261106T154030-historical-807-vanilla-off-9287dd. Compute-watch at
+2026-11-06 15:58:10 AEDT reported 96 pending and zero running games.
+
+Mini/w0 and Pro/w3 built the original native engine, then the private observer
+failed at line 72: BuilderBase has no getProductionQueue in 807. The observer
+now reads 807's existing protected currentProductionQueue under the diagnostic
+main's existing access-control relaxation; no engine getter/header is added.
+
+PC/w3 native preparation failed at original GFXManager.cpp:7517, MSVC C2280:
+the legacy conditional operator requests the deleted INIFile copy constructor
+for the same-type prvalue expression used to open/create workshop-render.ini.
+The old source is unchanged. src/CMakeLists.txt enables the standard conditional
+operator for only that graphics translation unit, only in MSVC test builds.
+No global /permissive-, fast-math, gameplay compiler option or allocation/copy
+workaround is introduced. Microsoft documents /Zc:ternary as enforcing standard
+conditional-operator types and qualification:
+https://learn.microsoft.com/en-us/cpp/build/reference/zc-ternary?view=msvc-170
+The repaired native build still requires parent qualification; this is not a
+claim that the unexecuted repair already passes MSVC or cross-platform parity.
+
+Original AA jobs and machine logs are left intact. Durable copies of both Mac
+compiler logs, the mini prep tail, Windows error extraction and failure notes
+live under the diagnostic output directory as historical-807-aa-*. The reused
+Windows prep.log also contains earlier unrelated failures, which are not the
+AA blocker: the relevant C2280 block ends at 2026-11-06 15:41:36 failed.
 
 Observer semantics and estimators
 --------------------------------

@@ -69,7 +69,7 @@ struct Observer {
         for(const auto* structure:structureList) {
             if(structure->getHealth()<=0) continue;
             if(const auto* builder=dynamic_cast<const BuilderBase*>(structure))
-                for(const auto& order:builder->getProductionQueue())
+                for(const auto& order:builder->currentProductionQueue)
                     if(combatItem(order.itemID))
                         queued[structure->getOwner()->getHouseID()][singleItem(order.itemID)]+=productCount(order.itemID);
         }

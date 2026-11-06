@@ -85,6 +85,15 @@ if(WIN32)
     )
 endif()
 
+# Historical comparison bridge, test builds only: MSVC's legacy conditional
+# operator requests a deleted INIFile copy in workshop-render preferences.
+# Use the C++17 conditional semantics already used by Clang, for this graphics
+# translation unit only. Do not change the old source or gameplay compiler flags.
+if(DUNECITY_BUILD_TESTS AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/FileClasses/GFXManager.cpp"
+        APPEND PROPERTY COMPILE_OPTIONS /Zc:ternary)
+endif()
+
 # Precompiled headers
 if(DUNECITY_ENABLE_PCH AND WIN32 AND MSVC)
     target_precompile_headers(dunecity
