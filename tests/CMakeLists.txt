@@ -883,6 +883,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         add_test(NAME quantbot_dunecity_audit_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_dunecity_audit.py)
         set_tests_properties(quantbot_dunecity_audit_parser PROPERTIES TIMEOUT 60)
+        foreach(compact_power_difficulty IN ITEMS easy medium hard brutal)
+            add_test(NAME quantbot_compact_power_${compact_power_difficulty}
+                COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --compact-power-probe --repeatable
+                --mod dunecity --partner-difficulty ${compact_power_difficulty}
+                --seed 1841712204 --path-workers 1 --wall-timeout 240
+                --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/compact-power-${compact_power_difficulty}-probe)
+            set_tests_properties(quantbot_compact_power_${compact_power_difficulty}
+                PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        endforeach()
         # Stateless Simple policy, independently OFF pending outcome acceptance.
         foreach(simple_tech_mod IN ITEMS vanilla dunecity Dune2R)
             foreach(simple_tech_difficulty IN ITEMS medium hard brutal)

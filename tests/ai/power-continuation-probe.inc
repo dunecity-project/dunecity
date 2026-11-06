@@ -9,7 +9,16 @@ AITelemetry::Record stock(const House* house) {
     AITelemetry::Record result;
     for (Uint32 item : generators)
         result.set(getItemNameByID(item), AITelemetry::Record().set("count", house->getNumItems(item))
+            .set("item", item)
             .set("built", house->getNumBuiltItems(item)).set("queued", FactoryContinuation::queued(house, item)));
+    return result;
+}
+
+AITelemetry::Record roster(const House* house) {
+    AITelemetry::Record result;
+    for (const auto& player : house->getPlayerList())
+        result.set(std::to_string(player->getPlayerID()), AITelemetry::Record()
+            .set("name", player->getPlayername()).set("class", player->getPlayerclass()));
     return result;
 }
 
@@ -23,6 +32,7 @@ void snapshot(Game& game, const char* phase, Uint32 first) {
         SDL_Log("POWER_SAVE_HOUSE: %s", AITelemetry::Record().set("phase", phase).set("house", h)
             .set("cycle", game.getGameCycleCount()).set("elapsed", game.getGameCycleCount() - first)
             .set("credits", house->getCredits()).set("tech", house->getTechLevel())
+            .set("players", roster(house)).set("economy", AITelemetry::log().economyTotals(h))
             .set("produced", house->getProducedPower()).set("required", house->getPowerRequirement())
             .set("generators", stock(house)).json().c_str());
 }

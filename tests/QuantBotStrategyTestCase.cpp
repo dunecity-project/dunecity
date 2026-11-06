@@ -302,6 +302,27 @@ TEST_CASE("City construction capital defaults on and is loaded saved and hashed"
     REQUIRE(config.force.cityConstructionCapital);
     const auto enabledHash = config.getConfigHash();
     const auto path = std::filesystem::temp_directory_path() / "quantbot-city-construction-capital-test.ini";
+TEST_CASE("Compact city power is independent default-off loaded saved and hashed", "[ai][city][config]") {
+    QuantBotConfig config;
+    REQUIRE_FALSE(config.force.cityCompactPower);
+    const auto disabledHash = config.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-compact-power-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCityCompactPower=true\n";
+    }
+    REQUIRE(config.applyOverrides(path.string()));
+    REQUIRE(config.force.cityCompactPower);
+    REQUIRE(config.force.cityPowerSizing);
+    REQUIRE(config.getConfigHash() != disabledHash);
+    REQUIRE(config.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.force.cityCompactPower);
+    REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    std::filesystem::remove(path);
+}
+
     {
         std::ofstream ini(path);
         ini << "[Force Concentration]\nCityConstructionCapital=false\n";

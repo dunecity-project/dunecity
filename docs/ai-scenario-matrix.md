@@ -610,3 +610,42 @@ and restore the required population before checking locked/disabled/unrelated
 technology, exactly one prerequisite Starport, pending-order deduplication
 and resumed IX/Palace construction. Earlier campaign import and MCV-recovery
 checks keep their original population and assertions.
+
+## Compact city generation (candidate, 2026-11-06)
+
+`[Force Concentration] CityCompactPower` is independently hashed and **off by
+default**. When the ordinary city planner wants generation, it prefers a legal,
+funded Nuclear Plant if its complete power output costs no more per credit and
+uses no more ground per unit of power than wind, with at least one strict
+improvement. This compares whole generator capacity rather than charging all
+reactor capacity to today's small top-up. It does not alter human technology,
+prerequisites, construction payment, placement/blast safety or existing queues.
+The first prerequisite Windtrap and an unaffordable/unplaceable reactor's wind
+fallback remain. Funding remains a separate planner concern.
+
+The two private Air saves use save format **9883**, package **DuneCity1.0.864**
+and immutable Workshop revision `27a8c8d9…51fb0f4`. Both `65d227c7` and
+`3710464d` have that package version, so their headers cannot identify a unique
+source commit. The actual saved content offers Windtrap (300 credits, 100 power,
+2×2) and Nuclear (2,000 credits, 2,000 power, 3×3, technology 6, Windtrap
+prerequisite); the advanced windtraps are disabled.
+
+The committed synthetic `quantbot_compact_power_{easy,medium,hard,brutal}` probes
+start a physical 100-output/90-demand city on 2,600 credits. OFF/ON use the full
+bot, ordinary paid queues and normal placement. Separate controls cover a
+below-quote budget, technology 5, a legal 2×2-only plot and pending generation.
+Pure policy/config tests cover power-per-credit/ground comparisons, default OFF,
+loading, saving and hashing.
+
+Exact saves stay outside Git. `tests/ai/power-continuation.py` accepts a frozen
+`--game-options` INI containing `[Research Lab Save] SHA256/GzipBase64`; optional
+`[Power Config] GzipBase64` applies a candidate QuantBot INI after load. Existing
+cluster input transport freezes both. Use source-pinned `dunecity-queue submit`
+and `--style-prefix city-compact-power --arms audit-off audit-on off on`.
+`--verify-compact --arms on` requires eligible houses to order reactors, rejects
+funded wind substitutions and requires ordinary reactor completion. These two
+saves require no concrete, so the recorded reactor price is its founded quote.
+Outputs retain compressed native decisions, per-house minute/end power and
+credits, orders/completions and actual generator-production credit withdrawals
+(`generator_spent`, excluding grid upkeep and foundation orders).
+

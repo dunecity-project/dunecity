@@ -577,6 +577,20 @@ inline int fundedSpiceHarvesters(int sustainable, int refineries) {
 }
 // Compare useful capacity, available space and the ability to fund a larger
 // reserve. Small starts keep cheap wind; rich cities and blackout recovery
+// A compact generator must improve both constrained resources without making
+// either worse. Compare the whole output, not only today's small top-up.
+inline bool compactGeneratorDominates(int output, int price, int tiles,
+                                     int otherOutput, int otherPrice, int otherTiles) {
+    if (output <= 0 || price <= 0 || tiles <= 0
+        || otherOutput <= 0 || otherPrice <= 0 || otherTiles <= 0) return false;
+    const int64_t cost = int64_t(price) * otherOutput;
+    const int64_t otherCost = int64_t(otherPrice) * output;
+    const int64_t space = int64_t(tiles) * otherOutput;
+    const int64_t otherSpace = int64_t(otherTiles) * output;
+    return cost <= otherCost && space <= otherSpace
+        && (cost < otherCost || space < otherSpace);
+}
+
 // prefer nuclear. Cash already committed to other work stays protected.
 inline bool preferNuclearPower(int need, int windOutput, int windPrice, int nuclearPrice,
                               int availableWindSites, int cash, int protectedCash, bool powerShortage = false) {

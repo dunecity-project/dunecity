@@ -141,7 +141,7 @@ struct QuantBotConfig {
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, ResearchLabProgression,
-    /// CityGrowthPower, CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
+    /// CityGrowthPower, CityPowerSizing, CityCompactPower, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
     /// CityFirstFactorySaving, ThreatTurrets, MoreRocketTurrets, CityStarportSupply,
     /// StorageCapacity, FundedClassicProduction, TrooperSupport, SimpleTechSavings,
     /// ExistingCompositionUnitChoice, LauncherKiteExtraDistance, ExhaustedArmyDispatch;
@@ -269,6 +269,10 @@ struct QuantBotConfig {
         bool cityOpeningCapital;
         /// Protect Hard/Brutal's affordable first heavy factory in a seeded tax
         /// city with a standing Starport. CityFirstFactorySaving optionally
+        /// Opt-in: prefer a legal funded reactor when its power per credit and
+        /// per tile both dominate wind, even for a small immediate shortfall.
+        /// Existing commitments, foundation costs and placement safety still apply.
+        bool cityCompactPower;
         /// permits forecast-funded saving; seed, power and recovery gates remain.
         bool cityConstructionCapital;
         /// Reserve a missing production prerequisite before the factory/repair

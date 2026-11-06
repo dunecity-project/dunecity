@@ -27,11 +27,61 @@ KEY = ('arm',)
 FIELDS = KEY + ('sha256', 'wall_s', 'error')
 
 
-def rows(path):
+def read(path):
     if not path.exists():
         return []
     with path.open(newline='') as handle:
         return list(csv.DictReader(handle))
+
+
+def power_summary(measurements, events_path):
+    loaded = {row['data']['house']: row['data'] for row in measurements
+              if row['marker'] == 'POWER_SAVE_HOUSE' and row['data']['phase'] == 'loaded'}
+    finished = {row['data']['house']: row['data'] for row in measurements
+                if row['marker'] == 'POWER_SAVE_HOUSE' and row['data']['phase'] == 'finished'}
+    result = {}
+    for house, initial in loaded.items():
+        final = finished.get(house, initial)
+        result[house] = {
+            'house': house, 'start_credits': initial['credits'], 'end_credits': final['credits'],
+            'start_power': initial['produced'], 'start_required': initial['required'],
+            'end_power': final['produced'], 'end_required': final['required'],
+            'built_wind': final['generators']['Windtrap']['built'] - initial['generators']['Windtrap']['built'],
+            'built_nuclear': final['generators']['Nuclear']['built'] - initial['generators']['Nuclear']['built'],
+            'generator_spent': final.get('economy', {}).get('generator_spent', 0)
+                               - initial.get('economy', {}).get('generator_spent', 0),
+            'wind_orders': 0, 'nuclear_orders': 0, 'compact_choices': 0,
+            'funded_nuclear_rejections': 0, 'first_nuclear_order_elapsed_cycles': None,
+        }
+    if events_path.exists():
+        with gzip.open(events_path, 'rt') as stream:
+            for line in stream:
+                event = json.loads(line)
+                house, kind, data = event['house'], event['event'], event['data']
+                if house not in result:
+                    continue
+                row = result[house]
+                if kind == 'city_generator_choice':
+                    row['compact_choices'] += int(bool(data.get('compact_nuclear')))
+                    # The two archived saves use no concrete; their reactor's
+                    # complete founded quote is exactly its recorded price.
+                    row['funded_nuclear_rejections'] += int(
+                        not data['nuclear'] and data['nuclear_available'] and data['nuclear_site']
+                        and data['cash'] >= data['nuclear_price'])
+                elif kind == 'production_order' and data['accepted']:
+                    if data['item_name'] == 'Windtrap':
+                        row['wind_orders'] += 1
+                    elif data['item_name'] == 'Nuclear':
+                        row['nuclear_orders'] += 1
+                        if row['first_nuclear_order_elapsed_cycles'] is None:
+                            row['first_nuclear_order_elapsed_cycles'] = event['cycle'] - loaded[house]['cycle']
+    return list(result.values())
+
+
+def compact_behavior_passes(summary):
+    eligible = [row for row in summary if row['compact_choices']]
+    return bool(eligible) and all(not row['funded_nuclear_rejections'] and row['nuclear_orders']
+                                  for row in eligible) and any(row['built_nuclear'] for row in eligible)
 
 
 def schedule(args):
@@ -109,8 +159,12 @@ def play(args, scratch, binary, key):
         marker, body = line[line.index(prefix):].split(':', 1)
         measurements.append({'marker': marker, 'data': json.loads(body) if body.strip().startswith('{') else body.strip()})
     (results / (arm + '-measurements.json')).write_text(json.dumps(measurements, indent=2) + '\n')
+    summary = power_summary(measurements, results / (arm + '-events.jsonl.gz'))
+    (results / (arm + '-power-summary.json')).write_text(json.dumps(summary, indent=2) + '\n')
     passed = process.returncode == 0 and any('POWER_SAVE_RESULT:' in line for line in lines)
-    row = {'arm': arm, 'sha256': digest, 'wall_s': round(time.time() - started, 2), 'error': '' if passed else 'rc=' + str(process.returncode)}
+    behavior = not args.verify_compact or arm.startswith('audit') or compact_behavior_passes(summary)
+    row = {'arm': arm, 'sha256': digest, 'wall_s': round(time.time() - started, 2),
+           'error': 'rc=' + str(process.returncode) if not passed else '' if behavior else 'compact_behavior'}
     path = results / 'games.csv'
     exists = path.exists()
     with path.open('a', newline='') as handle:
@@ -118,12 +172,12 @@ def play(args, scratch, binary, key):
         if not exists:
             writer.writeheader()
         writer.writerow(row)
-    finish_game(scratch, out, not passed)
+    finish_game(scratch, out, not (passed and behavior))
     return row
 
 
 def report(args):
-    games = rows(Path(args.results) / 'games.csv')
+    games = read(Path(args.results) / 'games.csv')
     failed = [row for row in games if row['error']]
     print('Exact-save power continuations: %d passed, %d failed' % (len(games) - len(failed), len(failed)))
     for row in games:
@@ -135,7 +189,7 @@ def run(args):
     require_free_space()
     with scratch_dir('power-continuation', args.scratch) as scratch:
         binary = build_probe(args, scratch)
-        done = {row['arm'] for row in rows(Path(args.results) / 'games.csv') if not row['error']}
+        done = {row['arm'] for row in read(Path(args.results) / 'games.csv') if not row['error']}
         for key in schedule(args):
             if key[0] not in done:
                 play(args, scratch, binary, key)
@@ -154,5 +208,7 @@ parser.add_argument('--capture-mib', type=int, default=512)
 parser.add_argument('--scratch', type=Path)
 parser.add_argument('--rebuild', action='store_true')
 parser.add_argument('--report', action='store_true')
+parser.add_argument('--verify-compact', action='store_true',
+                    help='Require funded eligible houses to order reactors, no funded wind rejections, and paid completion')
 args = parser.parse_args()
 sys.exit(report(args) if args.report else run(args))

@@ -464,6 +464,12 @@ void BuilderBase::updateProductionProgress() {
                 }*/
 
             }
+            if (AITelemetry::log().enabled() && (currentProducedItem == Structure_WindTrap || currentProducedItem == Structure_NuclearPlant
+                || currentProducedItem == Structure_AdvancedWindTrap
+                || currentProducedItem == Structure_AdvancedWindTrapMK2
+                || currentProducedItem == Structure_AdvancedWindTrapMK3))
+                AITelemetry::log().account(owner->getHouseID(), "generator_spent",
+                    (productionProgress - oldProgress).getRawValue());
 
             if ((oldProgress == productionProgress) && (owner == pLocalHouse)) {
                 currentGame->addToNewsTicker(_("Not enough money"));

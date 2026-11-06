@@ -383,6 +383,8 @@ parser.add_argument('--trooper-support-probe', action='store_true',
 parser.add_argument('--simple-tech-saving-probe', action='store_true',
                     help='Verify independent ledger-free current/queued composition, immediate legal technology '
                          'installments and real paid progression/opening needs')
+parser.add_argument('--compact-power-probe', action='store_true',
+                    help='Verify compact generation OFF/ON through real paid construction, technology and legal plots')
 parser.add_argument('--existing-composition-unit-choice-probe', action='store_true',
                     help='Verify standalone owned/queued value-share selection, actual variants and factory choice '
                          'without enabling the technology-saving policy')
@@ -942,6 +944,7 @@ if args.city_placement_probe: env['BALANCE_CITY_PLACEMENT_PROBE'] = '1'
 if args.opening_economy_probe: env['BALANCE_OPENING_ECONOMY_PROBE'] = '1'
 if args.trooper_support_probe: env['BALANCE_TROOPER_SUPPORT_PROBE'] = '1'
 if args.simple_tech_saving_probe: env['BALANCE_SIMPLE_TECH_SAVING_PROBE'] = '1'
+if args.compact_power_probe: env['BALANCE_COMPACT_POWER_PROBE'] = '1'
 if args.existing_composition_unit_choice_probe: env['BALANCE_EXISTING_COMPOSITION_UNIT_CHOICE_PROBE'] = '1'
 if args.research_lab_ai_probe: env['BALANCE_RESEARCH_LAB_AI_PROBE'] = '1'
 if args.growth_installment_probe or args.civic_priority_probe:

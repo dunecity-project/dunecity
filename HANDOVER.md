@@ -17696,3 +17696,43 @@ reports engine 1.0.853 from 3885e067; all eight served artifact hashes passed
 download verification. Core engine hashes match the website repository; the
 delivery-layer loading-progress helper matches its canonical Git source.
 
+## 2026-11-06 — Compact city power candidate (OMP PowerPlants, unreleased)
+
+- Both private Air saves are format **9883 / DuneCity1.0.864**, exact Workshop
+  `27a8c8d92876c5001b7744c7252eca5971327edbc17cde5d5249e1d6351fb0f4`.
+  SHA-256: problem1 `3471c2f58cf449cf49fa38538db923877b94d9b3b668be68927d15e949e94db6`;
+  ainonuclear `91c8f0e23deff5bca62a29f36c714493fe000a11b5b6172608b535e7f6f7821b`.
+  Both candidate source commits `65d227c7` and `3710464d` use package 1.0.864;
+  the header does not record a unique Git identity. Neither save is committed.
+- The exact content's Windtrap is **300 / 100 power / 2×2**; Nuclear is
+  **2,000 / 2,000 power / 3×3**, technology 6, prerequisite Windtrap. Advanced
+  windtraps are disabled. Nuclear gives 20× the output for 6.67× the price and
+  2.25× the ground.
+- Diagnostic pin `68d07089`, problem1 on mini: all eight controllers audited as
+  Brutal, tech 8, normal Custom role. All had available Nuclear offers and AI
+  sites; human-legal nuclear lot counts by house 0–7 were
+  **17/24/73/28/42/41/19/23**. The 15-minute native continuation completed and
+  built **104 Windtraps + 14 Nuclear Plants**. Its scheduler report failed only
+  at read-only finalization (`read` API missing), not in either native game.
+- Native decisions prove **35 fully funded nuclear rejections** across all
+  eight houses. Examples: house 0 need 140/cash 2,196; house 6 need 203/cash
+  3,694; house 7 need 105/cash 3,750. `CityPowerSizing` required extra 1,000
+  working cash and/or charged the reactor's whole price against only the next
+  few Windtraps' worth of immediate need. Technology and placement were not
+  the cause. Initial lower-cash/queued-debt refusals were separately reported
+  to MoneyPlanner; this candidate introduces no replacement money model.
+- New independently hashed **CityCompactPower, default OFF**, compares complete
+  generation per credit and per tile, using actual legal foundation quotes.
+  The shared capital candidate and final yard choice agree; changing a Windtrap
+  to Nuclear also discards the old 2×2 site. Existing commitments, technology,
+  placement safety and first-Windtrap/pending-generation controls remain.
+- Added committed physical/paid OFF/ON fixtures for all four difficulties,
+  config/policy tests and private-save candidate input/behavior checks.
+  `generator_spent` records actual generation-production withdrawals for the
+  paired audit; it is observational only, not a simulation/save/protocol change.
+- Evidence: `../outputs/problem1-20261106/`, including exact hashes,
+  `problem1-baseline/refusal-summary.json`, native compressed decisions and
+  per-house endpoints. The first ainonuclear submission never played because
+  mini runner units repeatedly became “lost: unknown to the machine”; it is not
+  claimed as save/engine verification. Promotion remains Genome-owned.
+

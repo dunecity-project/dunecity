@@ -357,6 +357,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityGrowthPower = true;
     force.cityPowerSizing = true;
     force.cityOpeningCapital = true;
+    force.cityCompactPower = false;
     force.cityConstructionCapital = true;
     force.cityProductionPrerequisites = true;
     force.cityFirstFactorySaving = false;
@@ -681,6 +682,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CityProductionPrerequisites", force.cityProductionPrerequisites);
         iniFile.setBoolValue("Force Concentration", "CityFirstFactorySaving", force.cityFirstFactorySaving);
         iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
+        iniFile.setBoolValue("Force Concentration", "CityCompactPower", force.cityCompactPower);
         iniFile.setBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
         iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
         iniFile.setBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
@@ -830,6 +832,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
     force.storageCapacity = iniFile.getBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
     force.fundedClassicProduction = iniFile.getBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
+    force.cityCompactPower = iniFile.getBoolValue("Force Concentration", "CityCompactPower", force.cityCompactPower);
     force.trooperSupport = iniFile.getBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
     force.simpleTechSavings = iniFile.getBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
     force.existingCompositionUnitChoice = iniFile.getBoolValue(
@@ -1346,6 +1349,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);
     configStr += "|/FORCE|";
     addNamed("civWarsStrategy", civWarsStrategy);
+    addNamed("cityCompactPower", force.cityCompactPower);
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);
     addNamed("fixedMix", static_cast<int>(strategy.fixedMix));
