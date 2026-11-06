@@ -11,14 +11,23 @@ for a failed behaviour objective.
 Keep every new policy as an independent, hashed gene, initially OFF. Use
 `dunecity-queue submit --cwd "$STAGING" --rev "$COMMIT"` for immutable games;
 `agent-workspace run --project dunecity --owner "$OWNER" --tests --wait -- ...`
-is the coordinator wrapper. Never compare an uncommitted source tree with a
-release-labelled archive.
+is the coordinator wrapper. Submit without the queue-side `--wait`, then use
+`dunecity-queue wait JOB` outside the coordinator lock. Never compare an
+uncommitted source tree with a release-labelled archive.
 
-1. Run the unchanged `tests/ai/dunecity-audit.py` harness twice, with the policy's
-   OFF and ON styles. Keep `--attack-events --keep-telemetry`, identical
-   `--game-options` bytes and the historical fixture settings below. Use separate
-   result directories. Mixed-genome tournaments can instead supply their canonical
-   audit sidecars under `results/audit`; they do not replace this release track.
+1. Run `tests/ai/ai-baseline-league.py` twice at one current immutable bridge pin,
+   with the policy's committed `--style NAME-off` and `--style NAME-on`. These
+   overlays change only native hashed config values; unhashed `[Play Style]`
+   behaviours and constructor attack-timer changes are explicitly rejected.
+   Requested style bytes and actual per-house config hashes remain in `games.csv`.
+   Use separate result directories. A queued genome adapter may instead supply
+   `--genome-phase-dir` from commit-pinned inline phase payloads materialized
+   inside each private unit. Arbitrary external directories are not queue-frozen.
+   The runner snapshots named INI bytes, records their SHA256, clears inherited
+   phase environment, and rejects mixing phase inputs with `--style`. The pin
+   must include the shared test-only `genome-phases.inc` helper. The ordinary `dunecity-audit.py` and mixed
+   genome `results/audit` sidecars remain accepted inputs, but old first-inactivity
+   latches cannot certify every terminal FFA rank; missing evidence fails closed.
 2. Write a manifest with one entry per result directory, using the pinned source
    commit, native release source, actual research setting and exact fixture
    manifest. Do not relabel a research-OFF game as ON.
@@ -54,7 +63,9 @@ file paths, not descriptive labels):
 }
 ```
 
-Use `format: "historical"` for the native league CSVs. The importable API is
+Use `format: "historical"` for the native league CSVs. When one results directory
+contains several mods, supply an explicit `ids` array in each run entry selecting
+that mod's exact fixture IDs. Do not silently pool content families. The importable API is
 `ai_baseline_scorecard.scorecard(run)`, returning long-form observation rows;
 `write_observations` is the common CSV writer. The CLI is standard-library-only
 Python 3.9. Source/map/options mismatches and conflicting duplicates are errors,
@@ -69,7 +80,7 @@ Exit codes: **0** `DEFAULT_ON_ALLOWED`; **2** `BLOCKED_REGRESSION`; **3**
 ## Exact initial contexts and historical execution
 
 The fixture manifest is versioned under `tests/ai/baseline-fixtures/` alongside
-raw INI map bytes and two full requested-options files. Original maps were
+raw INI map bytes and three full requested-options files (City OFF/ON and classic OFF). Original maps were
 recovered from the replay's actual filedata, not regenerated in an old engine.
 Additional seed maps are generated once in a pinned current engine and frozen as
 exact replay bytes before any historical match is admitted. Map generation runs
@@ -114,8 +125,15 @@ Year and Starport Population are absent in early releases: requested unsupported
 values are disclosed, never emulated. City Effects is supported and must be ON
 for DuneCity and OFF for classic content. Research is OFF in the common lane.
 Technology9 is a starting condition, not successful research acquisition.
-Actual technology1/research-ON progression is a separate supported lane; absent
-historical support cannot be filled with zero, technology9, or an OFF run.
+Actual technology1/research-ON progression is a separate supported lane: the
+manifest contains 192 common OFF contexts on48 map payloads and96 City ON
+contexts on32 technology1 map payloads. Select the latter with `--research on
+--mod dunecity`; old native releases reject ON rather than silently running OFF.
+The same original eight-seed order is retained. Absent historical support cannot
+be filled with zero, technology9, or an OFF run. `--formats 1v1 --spice medium`
+selects a bounded exact-map lane; add `--difficulties` and `--seeds` without
+regenerating rosters. For example three difficulties and two seeds there mean
+six games, not six independent seeds.
 
 ## Independent behaviour scorecard
 
@@ -123,7 +141,7 @@ Every observation carries schema version, release label, diagnostic source pin,
 native source pin, arm, exact context, seed, content family, difficulty, research
 setting, house/team, full raw map/options SHA256, native content/object-data
 receipts, metric, minute, value, status and reason. Summary observations use
-minute-1. Status is `measured`, `unavailable`, `censored`, or `not_applicable`.
+`minute=-1`. Status is `measured`, `unavailable`, `censored`, or `not_applicable`.
 The context SHA256 hashes compact sorted-key JSON of
 `{id,mod,difficulty,research,seed}`; the exact raw map has its own independent
 receipt. No missing measurement is converted to zero.
@@ -132,7 +150,7 @@ receipt. No missing measurement is converted to zero.
 |---|---|
 | Strength | Native wins and team placement versus other AI houses, kill value, survival/base losses. A timeout is not a material win. |
 | Initiative | Exact nonempty native `ground_hunt` dispatches, first-attack indicator and minute; complete callback capture is required for an exact zero. |
-| Army | Present-owner healthy mobile-combat replacement value over observed time, plus fixed-minute checkpoints. No after-death army is invented; early living winners are censored at later checkpoints. |
+| Army | Present-owner healthy mobile-combat replacement value over the actual observed timeline, including inactivity and revival, plus fixed-minute checkpoints. Observed stocks always outrank synthetic zeros; post-horizon observations are censored unless an explicit native-declared-defeat convention applies. |
 | Production technology | LF/HF/IX/Starport/Palace adoption from native cumulative completions or proven ownership. Exact per-tick first ownership/completion is separate from first sampled observation. Unreached timing is censored, not-1 minutes. |
 | Special units | Native lifetime Sonic/Devastator/Deviator completions/deliveries and present-owner replacement-value share. Native built/lost ledgers are not money spent, nor are they current ownership after deviation. |
 | Economy | Harvesters/refineries, credits/idle-money observations, economy-stall exposure fraction, structural/base losses. Low cash by itself is not a stall. |
@@ -142,9 +160,23 @@ The economy-stall predicate retains the existing audit rule: a living yard-ownin
 house with cash below1,000 and no increase in cumulative structures built or
 population for four game minutes. Minute samples bound observations; they are
 not per-tick payment accounting. Exact native technology completion times are
-observed each simulation tick. A death before adoption is a competing event,
-not an ordinary administrative timeout. First-attack timing is conditional on
-an actual attack and must be read with its attack indicator/coverage.
+observed each simulation tick. Native-declared defeat before an event is a
+competing event; temporary inventory inactivity is not. First-attack timing is
+conditional on an actual attack and must be read with its indicator/coverage.
+
+`House::isAlive()` is a current inventory predicate, not an irreversible death
+latch: a late arrival can reactivate an otherwise empty house. The native
+observer therefore records `first_inactive_cycle`, resettable
+`terminal_inactive_since_cycle`, exact `revival_count`, and cumulative
+`inactive_cycles`. First inactivity remains diagnostic. Full-horizon actual
+samples supply means, money, population, harvesters and army exposure. A timeout
+house that is currently inactive still has administrative follow-up to the game
+end, not a fictitious permanent-death time. The last observed inactive episode
+can rank final inactive teams; it does not assert anything after the horizon.
+Legacy `eliminated_cycle`/`eliminated_s` first-false latches never become terminal
+proof: identifiable final standings remain usable, but unresolved old multi-team
+FFA placement/score is explicitly unavailable. Exact snapshots through a revival
+are never overwritten by post-first-inactivity zeros.
 
 ## Statistical and promotion rules
 
@@ -175,8 +207,7 @@ to the reference; adoption 0.10 absolute; individual special-unit value shares
 fractions 0.05 absolute (lower is better). All 23 hard objectives use final/summary
 minute=-1; fixed-minute checkpoints remain visible diagnostics. A zero-army
 value-share denominator is undefined, not a fabricated zero or a passing subset.
-The
-confidence interval for direction-adjusted benefit plus margin must be wholly
+The confidence interval for direction-adjusted benefit plus margin must be wholly
 nonnegative to pass. A wholly negative interval blocks promotion; an interval
 crossing zero is inconclusive, not evidence of equivalence. Core unsupported,
 unavailable, incomplete or selectively intersected seed coverage cannot pass.
@@ -185,7 +216,10 @@ Research-ON without a supported historical-ON comparator is explicitly
 
 ## Frozen measured reference and regression record
 
-The immutable release-pair manifest, compact observations, per-metric historical
-best, host/source receipts and measured release table are recorded with this
-change. Regenerating a reference must retain the previous reference and its full
+A reference consists of the immutable release/native-bridge manifest, compact
+observations, per-metric historical best, host/source receipts and measured
+release table. A partially completed league is not an authorized reference.
+Regenerating a reference must retain the previous reference and its full
 provenance; never replace a bad historical comparison with a switch-only pass.
+The measured reference inventory and numerical results are linked here only
+after the corresponding pinned games have completed.

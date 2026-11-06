@@ -5,19 +5,26 @@
 Input is the run object in the baseline-league manifest. Optional ``ids`` selects
 explicit game IDs, ``options_receipt`` supplies the queue's frozen full INI
 receipt, and ``diagnostics`` is a CLI-only output (never written by scorecard).
-Historical fixtures use games[]/off_options_by_mod from historical-807. Generic
-fixtures use games[] with id/mod/seed/difficulty/research, roster, map_sha256,
-options_sha256 and optional map_file/options_file paths relative to the fixture.
+Historical fixtures use games[] plus off_options_by_mod/on_options_by_mod receipts.
+Generic fixtures use games[] with id/mod/seed/difficulty/research, roster,
+map_sha256, options_sha256 and optional map_file/options_file paths. Optional
+genome_phases_sha256 pins are validated separately, never used as pairing keys;
+the native games table and optional run diagnostics retain that treatment receipt.
 
 Summary minute is -1. Checkpoints are exact samples, not nearest observations.
-A defeated house remains in every stock checkpoint denominator as measured zero;
-a surviving house after administrative game end is censored, not zero. First
-nonempty ground_hunt dispatch has a separate observed indicator and follow-up.
-Death without an event is a competing event, not administrative right censoring.
-Army/idle-money means are cycle-weighted left holds over the actual game duration,
-including zero exposure after death. They are sampled estimands, not tick-exact
-integrals. Economy stall uses the existing dunecity-audit.detect predicate and
-four-minute persistence; its denominator is eligible base-alive time after 4m.
+Actual samples always take precedence over inferred zeros. Only a team declared
+defeated by the native game result has an absorbing post-game zero; timeout
+inactivity is not death, and its future checkpoints are censored. isAlive() is
+a current inventory predicate: pending deliveries can revive an inactive house.
+First inactivity is retained separately from the start of the final inactive
+episode. Legacy first-inactive latches never masquerade as terminal timestamps;
+unidentified final-inactive FFA placement is unavailable, not material-adjudicated.
+First dispatch has an observed indicator; only native-declared defeat competes
+with its observation. Inactive timeout houses remain administratively censored.
+Army/idle-money means are cycle-weighted left holds over the actual, complete
+sample timeline, including observed revivals and any retained inactive inventory.
+Economy stall reuses audit.detect's predicate and four-minute persistence over
+eligible, currently active base exposure.
 
 Adoption is a native lifetime completed/delivered-building indicator (positive
 ownership is also evidence); sparse complete native built ledgers certify zero.
@@ -93,9 +100,12 @@ for _metric in ('win', 'placement', 'first_attack_observed', 'first_attack_minut
                 'alive_followup_minute', 'army_value', 'army_units', 'harvesters', 'refineries',
                 'idle_money', 'idle_money_time_mean', 'structures_lost',
                 'special_live_value_share', 'army_nonempty_minutes',
-                'army_nonempty_episodes', 'army_nonempty_snapshots'):
+                'army_nonempty_episodes', 'army_nonempty_snapshots', 'currently_active',
+                'declared_defeated', 'first_inactive_minute', 'terminal_inactive_since_minute',
+                'revival_count', 'revival_observed', 'active_minutes', 'inactive_minutes', 'inactive_time_fraction'):
     METRIC_DEFINITIONS[_metric] = _definition(_metric, 'lower' if _metric in (
-        'placement', 'first_attack_minute', 'idle_money', 'idle_money_time_mean', 'structures_lost') else 'higher')
+        'placement', 'first_attack_minute', 'idle_money', 'idle_money_time_mean',
+        'structures_lost', 'declared_defeated', 'inactive_minutes', 'inactive_time_fraction') else 'higher')
 for _metric in ('zone_residential', 'zone_industrial', 'zone_commercial', 'population'):
     METRIC_DEFINITIONS[_metric] = _definition(_metric, applicability='city')
 METRIC_DEFINITIONS['research_level'] = _definition('research_level', applicability='research_on')
@@ -530,16 +540,19 @@ class _Evidence:
             _require(alive in (0, 1), 'Invalid house alive: ' + game_id)
             if alive:
                 survivors.add(expected[house])
-            death = self.death(final)
-            _require((alive and death is None) or (not alive and death is not None and 0 <= death <= end + 4),
-                     'Missing/inconsistent elimination record: ' + game_id)
+            self._validate_lifecycle(final, end)
             samples = self.samples[(game_id, house)]
             _require(samples and min(samples) == 0 and max(samples) == end, 'Incomplete house snapshot endpoints: ' + game_id)
             for cycle, point in samples.items():
                 _require(0 <= cycle <= end and _integer(point.get('team'), 'sample team') == expected[house],
                          'Invalid snapshot cycle/team: ' + game_id)
                 _require(_integer(point.get('alive'), 'sample alive') in (0, 1), 'Invalid sample alive flag')
+                self._validate_lifecycle(point, cycle)
             _require(int(samples[end]['alive']) == alive, 'Final sample/house alive mismatch: ' + game_id)
+            for field in ('first_inactive_cycle', 'terminal_inactive_since_cycle', 'revival_count', 'inactive_cycles'):
+                if final.get(field, '') != '' and samples[end].get(field, '') != '':
+                    _require(_number(final[field], field) == _number(samples[end][field], field),
+                             'Final house/sample lifecycle mismatch: ' + game_id)
         winner = _integer(game.get('winner_team'), 'winner_team')
         outcome = game.get('outcome')
         _require(outcome in ('won', 'lost', 'decided', 'extinct', 'time_limit'), 'Unrecognized/unfinished native outcome: ' + game_id)
@@ -553,7 +566,19 @@ class _Evidence:
         for field in ('content_hash', 'object_data_hash'):
             receipt[field] = _hash(game.get(field), field, (16, 64))
         _hash(game.get('probe_sha256'), 'probe_sha256')
-        options = self.fixture.get('off_options_by_mod', {}).get(run['mod'], {}) if run['research'] == 'off' else {}
+        phase_hash = game.get('genome_phases_sha256', '')
+        receipt['genome_phases_sha256'] = _hash(phase_hash, 'genome_phases_sha256') if phase_hash else ''
+        for pin in (run.get('genome_phases_sha256'), fixture.get('genome_phases_sha256')):
+            if pin:
+                _require(receipt['genome_phases_sha256'] == _hash(pin, 'expected genome_phases_sha256'),
+                         'Genome phase schedule pin mismatch: ' + game_id)
+        options = self.fixture.get(run['research'] + '_options_by_mod', {}).get(run['mod'], {})
+        expected_options = fixture.get('options_sha256') or options.get('sha256')
+        if fixture:
+            _hash(expected_options, 'fixture options_sha256')
+        if fixture.get('options_sha256') and options.get('sha256'):
+            _require(fixture['options_sha256'] == options['sha256'],
+                     'Conflicting fixture options receipts: ' + game_id)
         option_path = fixture.get('options_file') or run.get('options_file')
         option_receipt = run.get('options_receipt') or options.get('original_frozen_input_receipt')
         option_bytes = None
@@ -563,7 +588,6 @@ class _Evidence:
             option_bytes = _receipt_bytes(option_receipt)
         elif options.get('file') and _path(self.fixture_base, options['file']).is_file():
             option_bytes = _receipt_bytes(_path(self.fixture_base, options['file']))
-        expected_options = fixture.get('options_sha256') or options.get('sha256')
         observed_options = game.get('options_sha256')
         observed_map = game.get('map_sha256')
         # Unchanged audit tables only carry engine FNV hashes. Recover exact raw
@@ -591,9 +615,7 @@ class _Evidence:
         receipt['options_sha256'] = _hash(observed_options, 'options_sha256')
         if fixture:
             _require(receipt['map_sha256'] == fixture.get('map_sha256'), 'Exact fixture map mismatch: ' + game_id)
-            _require((expected_options is not None or option_bytes is not None) and
-                     (expected_options is None or receipt['options_sha256'] == expected_options),
-                     'Full fixture options mismatch: ' + game_id)
+            _require(receipt['options_sha256'] == expected_options, 'Full fixture options mismatch: ' + game_id)
         if option_bytes is not None:
             _require(_sha(option_bytes) == receipt['options_sha256'], 'Full requested options hash mismatch: ' + game_id)
             settings = _options_settings(option_bytes)
@@ -648,33 +670,69 @@ class _Evidence:
         receipt['native_houses'] = self._native_houses(game_id) if need_native else None
 
     @staticmethod
-    def death(house):
-        if house.get('eliminated_cycle', '') != '':
-            value = _number(house['eliminated_cycle'], 'eliminated_cycle')
-            return value if value >= 0 else None
-        value = _number(house.get('eliminated_s'), 'eliminated_s')
+    def first_inactive_cycle(house):
+        for field in ('first_inactive_cycle', 'eliminated_cycle'):
+            if house.get(field, '') != '':
+                value = _number(house[field], field)
+                return value if value >= 0 else None
+        value = _number(house.get('eliminated_s'), 'legacy first-inactive seconds')
         return value * CYCLES_PER_MINUTE / 60 if value is not None and value >= 0 else None
+
+    @staticmethod
+    def terminal_cycle(house):
+        # Old eliminated_* fields latch FIRST isAlive()==false. They cannot
+        # establish the terminal episode, even when the final state is inactive.
+        value = _number(house.get('terminal_inactive_since_cycle'), 'terminal_inactive_since_cycle')
+        return value if value is not None and value >= 0 and int(house['alive']) == 0 else None
+
+    @classmethod
+    def _validate_lifecycle(cls, house, cycle):
+        if house.get('first_inactive_cycle', '') != '':
+            first_cycle = _integer(house['first_inactive_cycle'], 'first_inactive_cycle')
+            _require(-1 <= first_cycle <= cycle, 'First inactivity outside observation horizon')
+        first = cls.first_inactive_cycle(house)
+        _require(first is None or 0 <= first <= cycle + 4, 'First inactivity outside observation horizon')
+        explicitly_never_inactive = house.get('first_inactive_cycle', '') != '' and first is None
+        if house.get('terminal_inactive_since_cycle', '') != '':
+            terminal = _integer(house['terminal_inactive_since_cycle'], 'terminal_inactive_since_cycle')
+            active = _integer(house.get('alive'), 'lifecycle alive')
+            _require((active == 1 and terminal == -1) or
+                     (active == 0 and 0 <= terminal <= cycle),
+                     'Current activity/terminal-inactive episode mismatch')
+            _require(first is None or terminal < 0 or terminal >= first,
+                     'Terminal inactive episode precedes first inactivity')
+            _require(not explicitly_never_inactive or terminal < 0,
+                     'Terminal inactivity contradicts explicit no-inactivity record')
+        if house.get('revival_count', '') != '':
+            revivals = _integer(house['revival_count'], 'revival_count')
+            _require(revivals >= 0, 'Negative revival count')
+            _require(not explicitly_never_inactive or revivals == 0,
+                     'Revival count contradicts explicit no-inactivity record')
+            _require(not (int(house['alive']) == 1 and first is not None and revivals == 0),
+                     'Active house after first inactivity requires a revival')
+        if house.get('inactive_cycles', '') != '':
+            inactive = _integer(house['inactive_cycles'], 'inactive_cycles')
+            _require(0 <= inactive <= cycle, 'Inactive exposure exceeds observed cycles')
+            _require(not explicitly_never_inactive or inactive == 0,
+                     'Inactive exposure contradicts explicit no-inactivity record')
 
 
 def _value(point, field):
     return _number(point.get(field), field) if point else None
 
 
-def _mean(points, end, death, getter):
+def _mean(points, end, getter):
     ordered = sorted(points)
     if not ordered or ordered[0] != 0 or ordered[-1] != end:
         return None
     integral = 0.0
     for start, stop in zip(ordered, ordered[1:]):
-        if stop - start > CYCLES_PER_MINUTE and (death is None or start < death):
+        if stop - start > CYCLES_PER_MINUTE:
             return None
-        active_stop = min(stop, death) if death is not None else stop
-        if active_stop <= start:
-            continue
         value = getter(points[start])
         if value is None:
             return None
-        integral += value * (active_stop - start)
+        integral += value * (stop - start)
     return integral / end
 
 
@@ -685,7 +743,7 @@ def _idle_money(point):
     return fields[0] if fields[1] == 0 and fields[2] == 0 else 0
 
 
-def _stall_fraction(points, end, death):
+def _stall_fraction(points):
     # Exact economy_stall predicate/persistence/eligibility from audit.detect;
     # exposure integration is additional, not the old ever-stalled house flag.
     previous, since = None, None
@@ -706,9 +764,8 @@ def _stall_fraction(points, end, death):
     exposed = stalled = 0.0
     ordered = sorted(points)
     for start, stop in zip(ordered, ordered[1:]):
-        if stop - start > CYCLES_PER_MINUTE and (death is None or start < death):
+        if stop - start > CYCLES_PER_MINUTE:
             return None, 'missing_scheduled_stall_samples'
-        stop = min(stop, death) if death is not None else stop
         if stop > start and flags[start][0]:
             exposed += stop - start
             if flags[start][1]:
@@ -717,15 +774,16 @@ def _stall_fraction(points, end, death):
         None, 'no_eligible_base_exposure')
 
 
-def _house_rows(evidence, game_id, number, placings):
+def _house_rows(evidence, game_id, number, placings, placement_known):
     game, run = evidence.games[game_id], evidence.run
     house = evidence.houses[game_id][number]
     receipt = evidence.provenance[game_id]
     end = receipt['end']
     points = evidence.samples[(game_id, number)]
     final, initial = points[end], points[0]
-    death = evidence.death(house)
-    followup = min(end, death) if death is not None else end
+    terminal = evidence.terminal_cycle(house)
+    active = int(house['alive']) == 1
+    defeated = int(game['winner_team']) != 0 and int(house['team']) != int(game['winner_team'])
     native = (receipt['native_houses'] or {}).get(str(number))
     tech = evidence.tech.get((game_id, number), {})
     difficulty = house.get('difficulty') or game['difficulty']
@@ -761,18 +819,54 @@ def _house_rows(evidence, game_id, number, placings):
             emit(metric, minute, reason=reason)
         elif not available:
             emit(metric, reason='missing_exact_event_telemetry')
-        elif death is not None:
-            emit(metric, status='not_applicable', reason='competing_event_eliminated_without_event')
+        elif defeated:
+            emit(metric, status='not_applicable', reason='competing_event_native_declared_defeat_without_event')
         else:
-            emit(metric, followup / CYCLES_PER_MINUTE, status='censored', reason='administrative_game_end_without_event')
+            emit(metric, end / CYCLES_PER_MINUTE, status='censored', reason='administrative_game_end_without_event')
 
     placing = placings[number]
-    emit('win_score', placing.score, reason='match_score_native_team_placement_no_material_adjudication')
-    emit('placement', placing.place, reason='native_team_elimination_order')
+    emit('win_score', placing.score if placement_known else None, reason=(
+        'match_score_final_team_standing_rank_identified' if placement_known else 'terminal_inactivity_order_unrecorded'))
+    emit('placement', placing.place if placement_known else None, reason=(
+        'native_final_team_standing_rank_identified' if placement_known else 'terminal_inactivity_order_unrecorded'))
     emit('win', int(int(game['winner_team']) != 0 and int(house['team']) == int(game['winner_team'])),
          reason='native_winner_team_zero_preserves_no_winner')
     emit('kill_value', _value(house, 'kill_value'), reason='native_kill_value_not_enemy_loss_ledger')
-    emit('alive_followup_minute', followup / CYCLES_PER_MINUTE, reason='elimination' if death is not None else 'administrative_game_end')
+    emit('currently_active', int(active), reason='native_current_inventory_predicate_not_permanent_lifecycle')
+    emit('declared_defeated', int(defeated), reason='native_declared_winner_excludes_this_team')
+    emit('alive_followup_minute', end / CYCLES_PER_MINUTE,
+         reason='native_declared_defeat_observation_end' if defeated else 'administrative_game_end_inactivity_not_absorbing')
+    first_inactive = evidence.first_inactive_cycle(house)
+    first_recorded = any(house.get(field, '') != '' for field in (
+        'first_inactive_cycle', 'eliminated_cycle', 'eliminated_s'))
+    if first_inactive is not None:
+        emit('first_inactive_minute', first_inactive / CYCLES_PER_MINUTE,
+             reason='native_first_inactivity_not_permanent_defeat')
+    elif first_recorded:
+        emit('first_inactive_minute', end / CYCLES_PER_MINUTE, status='censored',
+             reason='no_inactivity_observed_before_administrative_end')
+    else:
+        emit('first_inactive_minute', reason='first_inactivity_unrecorded')
+    emit('terminal_inactive_since_minute', terminal / CYCLES_PER_MINUTE if terminal is not None else None,
+         status='not_applicable' if active else None,
+         reason='currently_active_no_terminal_inactive_episode' if active else (
+             'exact_final_inactive_episode_start' if terminal is not None else 'terminal_inactivity_timing_unrecorded'))
+    revivals = _value(house, 'revival_count')
+    emit('revival_count', revivals, reason='exact_native_inactive_to_active_transitions' if revivals is not None
+         else 'legacy_first_inactivity_does_not_count_revivals')
+    states = [int(point['alive']) for _, point in sorted(points.items())]
+    observed_revival = any(not before and after for before, after in zip(states, states[1:])) or (
+        active and first_inactive is not None)
+    revival_indicator = int(revivals > 0) if revivals is not None else 1 if observed_revival else (
+        0 if first_recorded and first_inactive is None else None)
+    emit('revival_observed', revival_indicator, reason='native_revival_count_or_positive_observed_revival_proof')
+    inactive = _value(house, 'inactive_cycles')
+    emit('inactive_minutes', inactive / CYCLES_PER_MINUTE if inactive is not None else None,
+         reason='exact_native_currently_inactive_cycle_exposure')
+    emit('active_minutes', (end - inactive) / CYCLES_PER_MINUTE if inactive is not None else None,
+         reason='exact_currently_active_cycle_exposure_not_a_permanent_survival_time')
+    emit('inactive_time_fraction', inactive / end if inactive is not None else None,
+         reason='exact_inactive_cycles_over_actual_game_duration')
     complete = game.get('telemetry_status') == 'complete' if run['format'] == 'historical' else (
         game.get('attack_telemetry') == '1' and game.get('air_kill_telemetry') == 'complete')
     callbacks = _csv_path(evidence.root / 'waves.csv').is_file()
@@ -797,19 +891,19 @@ def _house_rows(evidence, game_id, number, placings):
         emit('first_attack_observed', reason=reason)
     event_time('first_attack_minute', first, certified and (count == 0 or first is not None),
                'exact_nonempty_ground_hunt_cycle')
-    emit('army_value_time_mean', _mean(points, end, death, lambda point: _value(point, 'army_value')),
-         reason='sampled_left_hold_over_game_duration_including_defeat_zero')
+    emit('army_value_time_mean', _mean(points, end, lambda point: _value(point, 'army_value')),
+         reason='sampled_left_hold_actual_timeline_including_revivals')
     def army_present(point):
         value = _value(point, 'army_value')
         return None if value is None else int(value > 0)
 
-    exposure = _mean(points, end, death, army_present)
+    exposure = _mean(points, end, army_present)
     episodes = snapshots = None
     if exposure is not None:
         episodes = snapshots = 0
         previous = False
         for cycle, point in sorted(points.items()):
-            present = bool(army_present(point)) and (death is None or cycle < death)
+            present = bool(army_present(point))
             snapshots += int(present)
             episodes += int(present and not previous)
             previous = present
@@ -833,12 +927,14 @@ def _house_rows(evidence, game_id, number, placings):
         emit(metric, value, reason='native_final_stock' if value is not None else 'missing_native_stock_field')
         for minute in CHECKPOINTS:
             cycle = minute * CYCLES_PER_MINUTE
-            if death is not None and death <= cycle:
-                emit(metric, 0, reason='defeated_house_retained_as_zero', minute=minute)
+            if cycle in points:
+                emit(metric, getter(points[cycle]), reason='exact_checkpoint_sample', minute=minute)
+            elif cycle > end and defeated:
+                emit(metric, 0, reason='native_declared_defeated_team_absorbing_postgame_zero', minute=minute)
             elif cycle > end:
-                emit(metric, status='censored', reason='surviving_house_administrative_game_end', minute=minute)
+                emit(metric, status='censored', reason='administrative_game_end_without_declared_defeat', minute=minute)
             else:
-                emit(metric, getter(points.get(cycle)), reason='exact_checkpoint_sample' if cycle in points else 'missing_exact_checkpoint', minute=minute)
+                emit(metric, reason='missing_exact_checkpoint', minute=minute)
 
     actual = native.get('actual') if native else None
     stock('army_value', lambda point: _value(point, 'army_value'))
@@ -848,7 +944,7 @@ def _house_rows(evidence, game_id, number, placings):
     stock('refineries', lambda point: _value(point, 'refineries'), summary=(
         int(actual.get('10', 0)) if actual is not None else None))
     stock('idle_money', _idle_money)
-    emit('idle_money_time_mean', _mean(points, end, death, _idle_money), reason='sampled_idle_queue_and_no_upgrade_credits')
+    emit('idle_money_time_mean', _mean(points, end, _idle_money), reason='sampled_idle_queue_and_no_upgrade_credits')
     for metric, item in (('zone_residential', 20), ('zone_industrial', 22), ('zone_commercial', 21)):
         stock(metric, lambda point, field=metric: _value(point, field), 'city',
               int(actual.get(str(item), 0)) if actual is not None else None)
@@ -860,7 +956,7 @@ def _house_rows(evidence, game_id, number, placings):
                   for point in source.values()]
         values = [value for value in values if value is not None]
         emit('research_level', max(values) if values else None, reason='maximum_observed_native_research_tech_level')
-    stall, stall_reason = _stall_fraction(points, end, death)
+    stall, stall_reason = _stall_fraction(points)
     emit('economy_stall_fraction', stall,
          status='not_applicable' if stall_reason == 'no_eligible_base_exposure' else None, reason=stall_reason)
     losses = _value(final, 'structures_lost')
@@ -923,8 +1019,6 @@ def _house_rows(evidence, game_id, number, placings):
         emit(label + '_built', built, reason='native_original_house_lifetime_built_ledger')
 
     def share(cycle, items):
-        if death is not None and death <= cycle:
-            return None, 'not_applicable', 'no_live_army_denominator_after_elimination'
         denominator = _value(points.get(cycle), 'army_value')
         if denominator is None:
             return None, 'unavailable', 'missing_native_army_denominator'
@@ -950,8 +1044,12 @@ def _house_rows(evidence, game_id, number, placings):
         emit(metric, value, status=status, reason=reason)
         for minute in CHECKPOINTS:
             cycle = minute * CYCLES_PER_MINUTE
-            if cycle > end and (death is None or death > cycle):
-                emit(metric, status='censored', reason='surviving_house_administrative_game_end', minute=minute)
+            if cycle > end:
+                if defeated:
+                    emit(metric, status='not_applicable',
+                         reason='native_declared_defeated_team_no_postgame_army_denominator', minute=minute)
+                else:
+                    emit(metric, status='censored', reason='administrative_game_end_without_declared_defeat', minute=minute)
             else:
                 value, status, reason = share(cycle, items)
                 emit(metric, value, status=status, reason=reason, minute=minute)
@@ -969,11 +1067,21 @@ def scorecard(run):
     rows = []
     for game_id in sorted(evidence.games):
         houses = evidence.houses[game_id]
-        eliminated = {number: evidence.death(house) for number, house in houses.items() if house['alive'] == '0'}
+        end = evidence.provenance[game_id]['end']
+        eliminated = {number: evidence.terminal_cycle(house) for number, house in houses.items()
+                      if int(house['alive']) == 0}
         teams = {number: int(house['team']) for number, house in houses.items()}
-        placings = match_score.score_game(sorted(houses), eliminated, teams=teams)
+        inactive_teams = {team for team in teams.values()
+                          if all(int(houses[number]['alive']) == 0 for number in houses if teams[number] == team)}
+        ambiguous = len(inactive_teams) > 1 and any(
+            time is None and teams[number] in inactive_teams for number, time in eliminated.items())
+        # Placeholder times affect no surviving team's place/score. Suppress
+        # every unidentified inactive-team rank instead of inventing tie ranks.
+        placings = match_score.score_game(sorted(houses), {
+            number: time if time is not None else end for number, time in eliminated.items()}, teams=teams)
         for house in sorted(houses):
-            rows.extend(_house_rows(evidence, game_id, house, placings))
+            identified = not ambiguous or teams[house] not in inactive_teams
+            rows.extend(_house_rows(evidence, game_id, house, placings, identified))
     return rows
 
 
@@ -1011,7 +1119,9 @@ def main(argv=None):
                 identities.add(identity)
             rows.extend(observed)
             counts.append(dict(release=run['release'], arm=run['arm'], mod=run['mod'], research=run['research'],
-                               rows=len(observed), statuses=dict(sorted(Counter(row['status'] for row in observed).items()))))
+                               rows=len(observed), results=run['results'],
+                               genome_phases_sha256=run.get('genome_phases_sha256', ''),
+                               statuses=dict(sorted(Counter(row['status'] for row in observed).items()))))
         # Do not create or truncate an observations file until all runs succeed.
         write_observations(args.output, rows)
         if args.diagnostics:

@@ -46,7 +46,8 @@ class ScorecardTest(unittest.TestCase):
                              cycle=cycle, house=house, team=house + 1, alive=1,
                              credits=3000, structures=1, army_units=1, army_value=1000,
                              kill_value=100 * house, loss_value=0, tech_level=9,
-                             eliminated_cycle=-1, harvesters=1, refineries=1,
+                             first_inactive_cycle=-1, terminal_inactive_since_cycle=-1,
+                             revival_count=0, inactive_cycles=0, harvesters=1, refineries=1,
                              population=100, zone_residential=1, zone_industrial=2,
                              zone_commercial=3, power=100, need=0, built=0,
                              structures_lost=0, base_hp=400, yards=1, yard_level=0,
@@ -71,6 +72,31 @@ class ScorecardTest(unittest.TestCase):
                         baseline_release_source=self.native_source, arm='historical',
                         research='off', mod='dunecity', results=str(self.root),
                         format='historical', fixtures=str(self.fixture_path))
+
+    def expand_ffa(self, mod='dunecity'):
+        self.game_id = self.game_id.replace('/1v1/', '/ffa6/')
+        if mod != 'dunecity':
+            self.game_id = mod + '/' + self.game_id
+        for rows in (self.points, self.units):
+            template = [row for row in rows if row['house'] == 0]
+            for house in range(2, 6):
+                for row in template:
+                    clone = dict(row, house=house)
+                    if 'team' in clone:
+                        clone['team'] = house + 1
+                    rows.append(clone)
+            for row in rows:
+                row.update(id=self.game_id, mod=mod)
+        self.finals = [copy.deepcopy(point) for point in self.points if point['cycle'] == self.end]
+        self.game.update(id=self.game_id, mod=mod, city_sim=int(mod == 'dunecity'))
+        self.run['mod'] = mod
+        self.fixture['games'][0].update(id=self.game_id, mod=mod, city_effects=mod == 'dunecity',
+                                       roster=[[house, house + 1] for house in range(6)])
+
+    def strip_lifecycle_protocol(self):
+        for point in self.points + self.finals:
+            for field in ('first_inactive_cycle', 'terminal_inactive_since_cycle', 'revival_count', 'inactive_cycles'):
+                point.pop(field, None)
 
     def table(self, name, rows):
         fields = list(dict.fromkeys(field for row in rows for field in row))
@@ -178,9 +204,10 @@ class ScorecardTest(unittest.TestCase):
         self.units = [point for point in self.units if point['cycle'] <= self.end]
         for point in self.points:
             if point['house'] == 1:
-                point['eliminated_cycle'] = death if point['cycle'] >= death else -1
                 if point['cycle'] >= death:
-                    point.update(alive=0, army_value=0, army_units=0)
+                    point.update(alive=0, army_value=0, army_units=0,
+                                 first_inactive_cycle=death, terminal_inactive_since_cycle=death,
+                                 inactive_cycles=point['cycle'] - death)
         self.finals = [copy.deepcopy(point) for point in self.points if point['cycle'] == self.end]
         rows = self.rows()
         self.assertEqual(self.find(rows, 'army_value', 1, 10)['value'], 0)
@@ -188,7 +215,8 @@ class ScorecardTest(unittest.TestCase):
         self.assertEqual(self.find(rows, 'army_value', 0, 10)['status'], 'censored')
         self.assertEqual(self.find(rows, 'win_score', 1)['value'], -1)
         self.assertEqual(self.find(rows, 'win_score', 0)['value'], 1)
-        self.assertAlmostEqual(self.find(rows, 'army_value_time_mean', 1)['value'], 1000 * 4.5 / 8)
+        self.assertAlmostEqual(self.find(rows, 'army_value_time_mean', 1)['value'], 1000 * 5 / 8)
+        self.assertEqual(self.find(rows, 'harvesters', 1, 5)['value'], 1)
         dead_first = self.find(rows, 'first_attack_minute', 1)
         self.assertEqual((dead_first['status'], dead_first['value']), ('not_applicable', ''))
         self.assertIn('competing_event', dead_first['reason'])
@@ -256,12 +284,45 @@ class ScorecardTest(unittest.TestCase):
 
     def test_research_on_is_separate_and_native_max_is_measured(self):
         self.run['research'] = self.game['research'] = 'on'
+        on_bytes = self.options_bytes.replace(b'Research Lab = false', b'Research Lab = true')
+        on_sha = hashlib.sha256(on_bytes).hexdigest()
+        (self.root / 'research-on.ini').write_bytes(on_bytes)
+        (self.root / 'research-off.ini').write_bytes(self.options_bytes)
+        self.fixture['games'][0].pop('options_sha256')
+        self.fixture['off_options_by_mod'] = dict(dunecity=dict(
+            file='research-off.ini', sha256=self.options_sha, city_effects=True))
+        self.fixture['on_options_by_mod'] = dict(dunecity=dict(
+            file='research-on.ini', sha256=on_sha, city_effects=True))
+        self.game['options_sha256'] = on_sha
         for point in self.points + self.finals:
             point['research_enabled'] = 1
             point['tech_level'] = 2 if point['cycle'] < 20 * 3750 else 4
         rows = self.rows()
         self.assertEqual(self.find(rows, 'research_level')['value'], 4)
         self.assertTrue(all(row['research'] == 'on' for row in rows))
+        self.fixture['games'][0]['options_sha256'] = self.options_sha
+        self.save()
+        with self.assertRaisesRegex(scorecard.ScorecardError, 'Conflicting fixture options'):
+            scorecard.scorecard(self.run)
+        self.fixture['games'][0].pop('options_sha256')
+        self.fixture['on_options_by_mod']['dunecity'].pop('sha256')
+        self.save()
+        with self.assertRaisesRegex(scorecard.ScorecardError, 'fixture options_sha256'):
+            scorecard.scorecard(self.run)
+
+    def test_phase_schedule_pins_are_retained_without_changing_pairing_context(self):
+        self.game['genome_phases_sha256'] = self.run['genome_phases_sha256'] = 'f' * 64
+        before = self.rows()
+        evidence = scorecard._Evidence(self.run)
+        self.assertEqual(evidence.provenance[self.game_id]['genome_phases_sha256'], 'f' * 64)
+        self.game['genome_phases_sha256'] = self.run['genome_phases_sha256'] = 'e' * 64
+        self.run['arm'] = 'candidate'
+        after = self.rows()
+        self.assertEqual({row['context_sha256'] for row in before}, {row['context_sha256'] for row in after})
+        self.assertTrue(all(tuple(row) == scorecard.COLUMNS for row in after))
+        self.run['genome_phases_sha256'] = 'f' * 64
+        with self.assertRaisesRegex(scorecard.ScorecardError, 'phase schedule pin'):
+            scorecard.scorecard(self.run)
 
     def test_unsupported_historical_research_on_is_rejected(self):
         self.run['research'] = 'on'
@@ -281,6 +342,22 @@ class ScorecardTest(unittest.TestCase):
             with self.subTest(mutation=mutate):
                 self.game, self.finals = copy.deepcopy(original_game), copy.deepcopy(original_finals)
                 mutate()
+                self.save()
+                with self.assertRaises(scorecard.ScorecardError):
+                    scorecard.scorecard(self.run)
+
+    def test_new_lifecycle_counter_contradictions_fail_closed(self):
+        original = copy.deepcopy(self.finals)
+        mutations = [
+            dict(terminal_inactive_since_cycle=0),
+            dict(first_inactive_cycle=100, revival_count=0),
+            dict(inactive_cycles=self.end + 1),
+            dict(first_inactive_cycle=100, revival_count=1, inactive_cycles=10),
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                self.finals = copy.deepcopy(original)
+                self.finals[0].update(mutation)
                 self.save()
                 with self.assertRaises(scorecard.ScorecardError):
                     scorecard.scorecard(self.run)
@@ -322,6 +399,7 @@ class ScorecardTest(unittest.TestCase):
     def test_unchanged_audit_and_tech_sidecar_timing(self):
         self.run.update(format='audit', arm='off')
         self.game.update(attack_telemetry=1, air_kill_telemetry='complete', source_fingerprint='f' * 64)
+        self.strip_lifecycle_protocol()
         for point in self.points + self.finals:
             point['eliminated_s'] = -1.0
             for field in ('palace', 'palace_built', 'first_palace_owned_cycle', 'first_palace_completed_cycle'):
@@ -444,14 +522,130 @@ class ScorecardTest(unittest.TestCase):
 
     def test_extinct_timeout_preserves_no_winner_and_elimination_placement(self):
         for point in self.finals:
-            point.update(alive=0, eliminated_cycle=self.end, army_value=0)
+            point.update(alive=0, first_inactive_cycle=self.end,
+                         terminal_inactive_since_cycle=self.end, army_value=0)
         for point in self.points:
             if point['cycle'] == self.end:
-                point.update(alive=0, eliminated_cycle=self.end, army_value=0)
+                point.update(alive=0, first_inactive_cycle=self.end,
+                             terminal_inactive_since_cycle=self.end, army_value=0)
         rows = self.rows()
         self.assertEqual(self.find(rows, 'win')['value'], 0)
         self.assertEqual(self.find(rows, 'win', 1)['value'], 0)
         self.assertEqual(self.find(rows, 'placement')['value'], 1.5)
+
+    def test_legacy_first_inactive_then_final_active_preserves_actual_timeline(self):
+        self.expand_ffa('Dune2R')
+        self.strip_lifecycle_protocol()
+        for point in self.points + self.finals:
+            point['eliminated_cycle'] = -1
+            if point['house'] == 2 and point['cycle'] == self.end:
+                point.update(alive=1, structures=0, yards=0, army_units=1, army_value=60,
+                             eliminated_cycle=149498)
+        rows = self.rows()
+        self.assertEqual(self.find(rows, 'currently_active', 2)['value'], 1)
+        self.assertEqual(self.find(rows, 'first_inactive_minute', 2)['value'], 149498 / 3750)
+        self.assertEqual(self.find(rows, 'revival_observed', 2)['value'], 1)
+        self.assertEqual(self.find(rows, 'revival_count', 2)['status'], 'unavailable')
+        self.assertEqual(self.find(rows, 'alive_followup_minute', 2)['value'], 40)
+        self.assertEqual(self.find(rows, 'army_value', 2, 40)['value'], 60)
+        self.assertEqual(self.find(rows, 'army_value_time_mean', 2)['value'], 1000)
+        self.assertEqual(self.find(rows, 'first_attack_minute', 2)['status'], 'censored')
+        self.assertEqual(self.find(rows, 'placement', 2)['status'], 'measured')
+
+    def test_revival_and_terminal_inactivity_do_not_erase_observed_inventory(self):
+        self.expand_ffa()
+        self.end = 8 * 3750
+        self.game['cycle'] = self.end
+        self.points = [point for point in self.points if point['cycle'] <= self.end]
+        self.units = [point for point in self.units if point['cycle'] <= self.end]
+        first, revival, terminal = 4.5 * 3750, 6 * 3750, 7.5 * 3750
+        for point in self.points:
+            if point['house'] != 2:
+                continue
+            cycle = point['cycle']
+            inactive = first <= cycle < revival or cycle >= terminal
+            point.update(alive=int(not inactive), army_value=0 if inactive else 1000,
+                         credits=1200, harvesters=3, queue=0, upgrading=0,
+                         first_inactive_cycle=first if cycle >= first else -1,
+                         terminal_inactive_since_cycle=(
+                             terminal if cycle >= terminal else first if inactive else -1),
+                         revival_count=int(cycle >= revival),
+                         inactive_cycles=min(max(0, cycle - first), revival - first) + max(0, cycle - terminal))
+        self.finals = [copy.deepcopy(point) for point in self.points if point['cycle'] == self.end]
+        rows = self.rows()
+        self.assertEqual(self.find(rows, 'revival_count', 2)['value'], 1)
+        self.assertEqual(self.find(rows, 'inactive_minutes', 2)['value'], 2)
+        self.assertEqual(self.find(rows, 'inactive_time_fraction', 2)['value'], .25)
+        self.assertEqual(self.find(rows, 'alive_followup_minute', 2)['value'], 8)
+        self.assertEqual(self.find(rows, 'active_minutes', 2)['value'], 6)
+        self.assertEqual(self.find(rows, 'first_attack_minute', 2)['status'], 'censored')
+        self.assertEqual(self.find(rows, 'first_attack_minute', 2)['value'], 8)
+        self.assertEqual(self.find(rows, 'army_value_time_mean', 2)['value'], 1000 * 7 / 8)
+        self.assertEqual(self.find(rows, 'army_nonempty_episodes', 2)['value'], 2)
+        self.assertEqual(self.find(rows, 'idle_money_time_mean', 2)['value'], 1200)
+        self.assertEqual(self.find(rows, 'harvesters', 2, 5)['value'], 3)
+        self.assertEqual(self.find(rows, 'harvesters', 2)['value'], 3)
+        self.assertEqual(self.find(rows, 'harvesters', 2, 10)['status'], 'censored')
+        self.assertEqual(self.find(rows, 'population', 2, 10)['status'], 'censored')
+
+    def test_legacy_ffa_unidentified_inactive_order_only_censors_rank_metrics(self):
+        self.expand_ffa()
+        self.strip_lifecycle_protocol()
+        for point in self.points + self.finals:
+            point['eliminated_cycle'] = -1
+            if point['house'] in (2, 3) and point['cycle'] >= (point['house'] + 1) * 3750:
+                point.update(alive=0, eliminated_cycle=(point['house'] + 1) * 3750,
+                             army_value=0, army_units=0, harvesters=3, credits=1400, kill_value=275)
+        rows = self.rows()
+        for house in (2, 3):
+            for metric in ('placement', 'win_score'):
+                row = self.find(rows, metric, house)
+                self.assertEqual((row['status'], row['value']), ('unavailable', ''))
+                self.assertEqual(row['reason'], 'terminal_inactivity_order_unrecorded')
+            self.assertEqual(self.find(rows, 'win', house)['value'], 0)
+            self.assertEqual(self.find(rows, 'kill_value', house)['value'], 275)
+            self.assertEqual(self.find(rows, 'harvesters', house, 40)['value'], 3)
+            self.assertEqual(self.find(rows, 'terminal_inactive_since_minute', house)['status'], 'unavailable')
+            self.assertEqual(self.find(rows, 'alive_followup_minute', house)['value'], 40)
+            self.assertEqual(self.find(rows, 'first_attack_minute', house)['status'], 'censored')
+        self.assertEqual(self.find(rows, 'placement', 0)['status'], 'measured')
+
+    def test_exact_terminal_episodes_not_first_inactivity_determine_ffa_rank(self):
+        self.expand_ffa()
+        for point in self.points:
+            if point['house'] not in (2, 3):
+                continue
+            first = (2 if point['house'] == 2 else 4) * 3750
+            revival = first + 3750
+            terminal = (35 if point['house'] == 2 else 30) * 3750
+            cycle = point['cycle']
+            inactive = first <= cycle < revival or cycle >= terminal
+            point.update(alive=int(not inactive), army_value=0 if inactive else 1000,
+                         first_inactive_cycle=first if cycle >= first else -1,
+                         terminal_inactive_since_cycle=(
+                             terminal if cycle >= terminal else first if inactive else -1),
+                         revival_count=int(cycle >= revival),
+                         inactive_cycles=min(max(0, cycle - first), revival - first) + max(0, cycle - terminal))
+        self.finals = [copy.deepcopy(point) for point in self.points if point['cycle'] == self.end]
+        rows = self.rows()
+        self.assertEqual(self.find(rows, 'placement', 2)['value'], 5)
+        self.assertEqual(self.find(rows, 'placement', 3)['value'], 6)
+        self.assertGreater(self.find(rows, 'win_score', 2)['value'], self.find(rows, 'win_score', 3)['value'])
+
+    def test_legacy_duel_loser_rank_is_identified_without_terminal_timestamp(self):
+        self.strip_lifecycle_protocol()
+        self.game.update(outcome='decided', winner_team=1)
+        for point in self.points:
+            point['eliminated_cycle'] = -1
+            if point['house'] == 1 and point['cycle'] == self.end:
+                point.update(alive=0, eliminated_cycle=self.end, army_value=0, army_units=0)
+        self.finals = [copy.deepcopy(point) for point in self.points if point['cycle'] == self.end]
+        rows = self.rows()
+        self.assertEqual(self.find(rows, 'win_score', 0)['value'], 1)
+        self.assertEqual(self.find(rows, 'win_score', 1)['value'], -1)
+        self.assertEqual(self.find(rows, 'terminal_inactive_since_minute', 1)['status'], 'unavailable')
+        self.assertEqual(self.find(rows, 'alive_followup_minute', 1)['value'], 40)
+        self.assertEqual(self.find(rows, 'first_attack_minute', 1)['status'], 'not_applicable')
 
     def test_empty_army_share_is_undefined_with_exposure_not_invented_zero(self):
         for point in self.points + self.finals:
