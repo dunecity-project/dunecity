@@ -899,8 +899,8 @@ int runResearchLabProbe() {
     std::ofstream results(out + "/research.csv");
     std::ofstream upgrades(out + "/upgrades.csv");
     upgrades << "case,controller,item,cycle,level,active,progress_raw,provenance_raw,paused,cost,paid_raw,balance_raw,legacy_version\n";
-    researchRequire(SettingsClass::GameOptionsClass{}.technologyInstallments && effectiveGameOptions.technologyInstallments,
-                    "The isolated source-default profile did not enable technology installments");
+    researchRequire(!SettingsClass::GameOptionsClass{}.technologyInstallments && !effectiveGameOptions.technologyInstallments,
+                    "The isolated source-default profile did not keep technology installments off");
     results << "case,cycle,tech_level,target,remaining,lab,credits,pace,installment,total_cost,total_cycles,paid_raw,paused,balance_raw\n";
     auto note = [&](const char* name, const Game& game, const House* owner) {
         researchNote(results, name, game, owner);
