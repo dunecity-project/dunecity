@@ -17767,7 +17767,32 @@ delivery-layer loading-progress helper matches its canonical Git source.
   paired audit; it is observational only, not a simulation/save/protocol change.
 - Evidence: `../outputs/problem1-20261106/`, including exact hashes,
   `problem1-baseline/refusal-summary.json`, native compressed decisions and
-  per-house endpoints. The first ainonuclear submission never played because
-  mini runner units repeatedly became “lost: unknown to the machine”; it is not
-  claimed as save/engine verification. Promotion remains Genome-owned.
+  per-house endpoints. Corrected candidate pin **dc2aee77** (do not use the
+  malformed staged predecessor 974b2650), diagnostic/parser follow-up **48521a67**,
+  cheap pre-placement quote guard **1000d208**. The latter preserves the full
+  founded-price check and SWMS bypass; it avoids searching a 384×384 world when
+  legacy spendable cash cannot cover even the base reactor price.
+- Exact problem1 OFF/ON at dc2aee77: both audit arms and both 15-minute native
+  continuations **PASS**. Actual completed builds **104 Wind / 14 Nuclear →
+  65 Wind / 19 Nuclear**; gross completed-generator footprint **542 → 431 tiles**
+  (not final occupied land). Actual generator-production payments
+  **59,547 → 59,688 credits**, including unfinished production. Fully funded
+  Nuclear refusals **35 → 0**, with 15 compact choices. Every house ends with
+  positive power balance. Read-only persisted-evidence behavior check **PASS**;
+  `problem1-compact-pair/{off,on}-power-summary.json` records all eight houses.
+- ainonuclear: after the runner E2BIG fix, both candidate audit arms passed.
+  House 2 has **zero human-legal 3×3 lots**; house 4 has 100 human-legal lots but
+  its AI search rejects 98 for threat and four for ground access. These are
+  legitimate site constraints, not scoring refusals. The old baseline hit its
+  1,800-second wall bound after 13 simulated minutes; this is not a completed
+  15-minute result. Corrected independent OFF/ON job
+  `20261106T201308-compact-power-nuclear-long-bound-1e6332` preserves both completed
+  audits and uses the same 15 simulated minutes with a 3,600-second bound.
+- Checked committed source, not the dirty staging tree: all six changed C++
+  translation units at dc2aee77 passed syntax compilation; QuantBotBuild.cpp at
+  1000d208 also passed. Six Python parser contracts passed. Physical fixture
+  execution, mandatory pinned AI regressions and matched strength/historical
+  comparisons are not yet green evidence; do not claim promotion. Newer shared
+  f82/d309 probe bootstraps are separately failing and owned by ResearchLabAI /
+  MoneyPlanner. Promotion remains Genome-owned; CityCompactPower stays OFF.
 
