@@ -680,6 +680,7 @@ void upgradeExactTotals(std::ostream& results) {
             && legacyTicks == ticks, "Funded installment upgrade completed on a different tick than the legacy rule");
         SDL_Log("UPGRADE_INSTALLMENT_TOTAL: controller=%s item=%d cycles=%d legacy_cycles=%d cost=%d paid_raw=%lld",
                 ai ? "quantbot" : "human", item, ticks, legacyTicks, cost, static_cast<long long>(paid));
+        researchEnd(game);
     }
 }
 
