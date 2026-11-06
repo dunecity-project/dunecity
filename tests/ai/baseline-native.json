@@ -1,0 +1,23 @@
+{
+  "bridge_scope": "Private diagnostic main, read-only native observations, exact frozen maps and requested options; no AI/engine/content gameplay changes",
+  "capabilities": {
+    "local_observer": "native detached UI, no registered HumanPlayer",
+    "research": "unsupported/off"
+  },
+  "native_tree": "1f86c6dab8cd82b95b7823f17b8c724642387154",
+  "observation_contract": "native_inventory_activity_episodes_v1",
+  "observation_fields": [
+    "first_inactive_cycle",
+    "terminal_inactive_since_cycle",
+    "revival_count",
+    "inactive_cycles"
+  ],
+  "portability_repairs": [
+    "src/FileClasses/GFXManager.cpp noncopyable INIFile conditional replaced by directly returned prvalues, same UI semantics for MSVC",
+    "src/mod/Workshop.cpp saveMod metadata noncopyable INIFile conditional replaced by directly returned prvalues, same inactive Workshop persistence semantics",
+    "src/mod/ModManager.cpp writeModInfo noncopyable INIFile conditional replaced by directly returned prvalues, same inactive metadata persistence semantics"
+  ],
+  "release": "1.0.807",
+  "schema_version": 1,
+  "source_commit": "abdf71e70697a01cae2ba27ed86aa9bfc2103e97"
+}

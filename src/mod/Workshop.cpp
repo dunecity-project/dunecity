@@ -65,7 +65,10 @@ Revision saveMod(const std::string& modName) {
     auto& manager=ModManager::instance();
     if(!manager.isValidModName(modName)||!manager.modExists(modName)) throw std::runtime_error("Choose an installed mod first.");
     const fs::path path=manager.getModPath(modName), metadata=path/"workshop-revision.ini";
-    INIFile meta=fs::exists(metadata)?INIFile(metadata.string()):INIFile(false, std::string("Workshop revision"));
+    INIFile meta=[&]() -> INIFile {
+        if(fs::exists(metadata)) return INIFile(metadata.string());
+        return INIFile(false, std::string("Workshop revision"));
+    }();
     const auto knownHash=meta.getStringValue("Workshop","Hash","");
     if(meta.getBoolValue("Workshop","Immutable",false)) {
         auto r=store().get(knownHash);
