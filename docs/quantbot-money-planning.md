@@ -929,3 +929,16 @@ make native paid progress without up-front quote debits. Every case logs its
 observed choice before assertions. No planner rule changed, and neither failed
 receipt permits the gated8/48/288 continuations.
 
+At `44a766a6`, focused job `20261107T012639-factoryproof-swms-observable-e4980b`
+passed all three ON yard priority/payment cases: LF before forecast reserve at
+400/325 power, generator before90 queued consumer draw, and generator during
+the400/415 blackout. Mini then failed the later repeated-import setup (73.06s):
+with only a2-credit military offer, actual army capacity reserved21bps, not the
+nominal30% ceiling, so803 credits correctly funded the800-credit transport.
+The setup now supplies two real ready Starports and asserts its observed army
+and development shares actually straddle the intended cash boundary before
+testing exact native debits and the fresh-pass pending remainder. No finance
+rule changed. Pro timed out at240s while initializing further native worlds;
+this many-world functional fixture now allows600s execution/900s total, not a
+performance claim. The failed job remains failed and downstream gates stay shut.
+

@@ -901,9 +901,10 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         add_test(NAME quantbot_start_what_makes_sense COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --start-what-makes-sense-probe --repeatable
             --mod dunecity --partner-difficulty brutal --seed 1841712204
-            --path-workers 1 --wall-timeout 240 --build-dir ${CMAKE_BINARY_DIR}
+            --path-workers 1 --wall-timeout 600 --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/start-what-makes-sense-probe)
-        set_tests_properties(quantbot_start_what_makes_sense PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # Includes many independently initialized native worlds, not a timing benchmark.
+        set_tests_properties(quantbot_start_what_makes_sense PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # First Light Factory on its own prerequisites, independently OFF.
         foreach(first_factory_difficulty IN ITEMS hard brutal)
             add_test(NAME quantbot_first_factory_own_prerequisites_${first_factory_difficulty}

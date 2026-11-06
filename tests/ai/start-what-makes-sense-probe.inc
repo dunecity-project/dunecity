@@ -1161,13 +1161,18 @@ inline void immediateMilitaryRemainder(const char* playerClass) {
     configure(world, true);
     auto* port = dynamic_cast<StarPort*>(world.producer(Structure_StarPort));
     require(port && port->okToOrder(), "Repeated-import control lacks a real ready Starport");
+    // Two independently ready import lanes provide real army spending capacity.
+    // A lone two-credit offer cannot claim a nominal 30% of this city's income.
+    auto* secondPort = static_cast<StarPort*>(world.place(Structure_StarPort));
+    secondPort->curUpgradeLev = secondPort->getMaxUpgradeLevel();
+    require(secondPort->okToOrder(), "Repeated-import control lacks its second real ready import lane");
     auto& market = world.owner->getChoam();
     market.availableItems.clear();
     market.addItem(Unit_Carryall, 4);
     market.availableItems.back().price = world.price(Unit_Carryall);
     market.addItem(Unit_Tank, 4);
     market.availableItems.back().price = 2; // Labelled native-market discount; the engine debits this exact quote.
-    port->updateBuildList();
+    world.owner->updateBuildLists();
     const int transportPrice = world.bot->purchasePrice(port, Unit_Carryall);
     const int militaryPrice = world.bot->purchasePrice(port, Unit_Tank);
     require(port->isAvailableToBuild(Unit_Carryall) && port->isAvailableToBuild(Unit_Tank)
@@ -1175,6 +1180,11 @@ inline void immediateMilitaryRemainder(const char* playerClass) {
             "Repeated-import control has no real discounted military/transport quotes");
     world.cash(transportPrice + militaryPrice + militaryPrice / 2);
     auto pass = observe(world);
+    SDL_Log("START_WHAT_MAKES_SENSE_IMPORT_BOUNDARY: ports=2 cash=%d transport=%d military=%d army_share_bps=%d",
+            world.owner->getCredits(), transportPrice, militaryPrice, pass.sensibleArmyShare);
+    require(shareOf(cashQ32(world), 10000 - pass.sensibleArmyShare) < FixPoint(transportPrice).getRawValue()
+                && shareOf(cashQ32(world), pass.sensibleArmyShare) >= FixPoint(militaryPrice).getRawValue(),
+            "Real ready import capacity does not separate the transport floor from one military purchase");
     const auto import = [&](QuantBot::BuildPass& plan, Uint32 item) {
         QuantBot::BuilderTurn turn(plan.money);
         turn.pStructure = port;
