@@ -705,7 +705,7 @@ def emit_backlog(plan, args, registry=None):
                                '--research', context['research'], '--seeds', str(seed),
                                '--houses'] + list(chosen_houses)
                     command += ['--minutes', str(protocol['minutes']), '--phase-minutes']
-                    command += [str(minute) for minute in protocol['phase_minutes']]
+                    command += [str(minute) for minute in protocol['phase_minutes']] + ['--evidence', 'lean']
                     entries.append(dict(id=digest(dict(revision=args.rev, command=command)),
                                         command=command, results=results, games=4,
                                         plan_sha256=plan_hash, manifest_sha256=digest(inline)))
@@ -741,6 +741,7 @@ def run_plan(plan, args):
                                '--research', context['research'],
                                '--seeds'] + [str(seed) for seed in protocol['seeds']]
                     command += ['--minutes', str(protocol['minutes']), '--phase-minutes'] + [str(m) for m in protocol['phase_minutes']]
+                    command += ['--evidence', getattr(args, 'evidence', 'lean')]
                     if mode == '1v1':
                         command += ['--pairs', ','.join(':'.join(pair) for pair in cohort),
                                     '--houses'] + protocol.get('houses', ['harkonnen', 'atreides'])
@@ -813,6 +814,8 @@ def parser():
     run.add_argument('--tag', required=True)
     run.add_argument('--owner', default='omp:01a19231-0a3a-776c-b1f9-f6404e42fa1c:Genome')
     run.add_argument('--priority', type=int, default=0)
+    run.add_argument('--evidence', choices=('lean', 'full'), default='lean',
+                     help='full only for audit samples and elites being raced')
     run.add_argument('--emit-backlog', type=Path,
                      help='Publish immutable <=4-game filler entries instead of submitting')
     return parser

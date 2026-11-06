@@ -80,11 +80,15 @@ cached military limit and strategy/timer state when the corresponding config
 changes; it does not replay starting actions or replace a player.
 
 The harness reuses `dunecity-audit.py` detectors and
-`ai_baseline_scorecard.scorecard(run)`, not a second behaviour scorecard. Audit
+`ai_baseline_scorecard.scorecard(run)`, not a second behaviour scorecard. Full-evidence
 sidecars retain technology, actual production/spending, composition, attacks,
 wave engagement, R/I/C and research. Missing/censored/not-applicable values remain
-explicit. Flat per-game gzip traces, map/options receipts and observation files
-survive the queue's top-level collector; successful scratch is deleted promptly.
+explicit. Screening and evolution default to `--evidence lean`: games,
+assignments, config phases, `houses.csv`, gzip scorecard observations and small
+summary/map/options receipts. Events, run logs, replays and large tables are
+parsed in scratch, then deleted with the game directory, so node archives stay
+small. Errored games, a deterministic 1-in-50 game-id audit sample
+(`--audit-every`) and elites raced with `--evidence full` keep complete traces.
 
 ## Screening and epistasis
 

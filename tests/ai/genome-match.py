@@ -71,6 +71,8 @@ ASSIGNMENT_FIELDS = ('id', 'context_id', 'house', 'slot', 'genome_id', 'genome_d
                      'mod', 'format', 'size', 'base', 'spice_level', 'research', 'technology_installments',
                      'manifest_sha256', 'phase_schedule_sha256')
 PHASE_FIELDS = ('id', 'house', 'genome_id', 'phase', 'start_minute', 'start_cycle', 'applied_cycle', 'config_hash', 'ini_sha256', 'applied')
+# Lean evidence also always writes games, assignments, config phases and scorecard observations.
+LEAN_TABLES = ('houses.csv',)
 OBSERVATION_EXTRA = ('game_id', 'genome_id', 'genome_digest', 'comparison_id', 'format', 'size', 'base', 'spice_level',
                      'phase', 'manifest_sha256', 'phase_schedule_sha256')
 SAMPLE_FIELDS = audit.SAMPLE_FIELDS + ('refineries', 'zone_residential', 'zone_industrial', 'zone_commercial',
@@ -369,11 +371,12 @@ def compressed_copy(source, destination):
             shutil.copyfileobj(stream, target, 1024 * 1024)
 
 
-def retain_evidence(results, out, inputs, game):
+def retain_evidence(results, out, inputs, game, full=True):
     prefix = 'evidence-' + game['id']
-    paths = [(out / 'run.log', 'run.log'), (out / 'summary.json', 'summary.json')]
-    paths += [(path, f'events-{index}.jsonl') for index, path in enumerate(sorted((out / 'profile').rglob('events.jsonl')))]
-    paths += [(path, f'replay-{index}.rpl') for index, path in enumerate(sorted((out / 'profile').rglob('*.rpl')))]
+    paths = ([(out / 'run.log', 'run.log')] if full else []) + [(out / 'summary.json', 'summary.json')]
+    if full:
+        paths += [(path, f'events-{index}.jsonl') for index, path in enumerate(sorted((out / 'profile').rglob('events.jsonl')))]
+        paths += [(path, f'replay-{index}.rpl') for index, path in enumerate(sorted((out / 'profile').rglob('*.rpl')))]
     paths += [(path, 'input-' + path.name) for path in sorted(inputs.glob('*.ini'))]
     receipts = []
     for source, name in paths:
@@ -571,7 +574,11 @@ def play(args, scratch, binary, game):
                winner_label=next((label for house, label in game['sides'] if vanilla.HOUSE_NUMBERS[house] == int(result.get('winner', -1))), ''),
                end_s=end_s, observations='', fixtures='',
                hash_scope='effective_QuantBotConfig_getConfigHash_only;manifest_and_phase_schedule_separate;not_multiplayer_protocol')
-    row['evidence'] = row['diagnostics'] = retain_evidence(results, out, inputs, game)
+    # Lean screening keeps fitness rows; errors and a deterministic audit sample keep full traces.
+    audit_draw = int(hashlib.sha256(game['id'].encode('utf-8')).hexdigest()[:12], 16)
+    full = (args.evidence == 'full' or bool(row['error'])
+            or (args.audit_every > 0 and audit_draw % args.audit_every == 0))
+    row['evidence'] = row['diagnostics'] = retain_evidence(results, out, inputs, game, full)
     if not row['error']:
         tables = tables_for_game(args, game, lines, summary, final, samples, capture)
         for house in tables['houses.csv'][1]:
@@ -590,7 +597,8 @@ def play(args, scratch, binary, game):
         row['fixtures'] = fixture_path.name
         row['observations'] = observations(args, game, row, tables, fixture_path, inputs, results)
         for filename, (fields, entries) in tables.items():
-            audit.append(results / filename, fields, entries)
+            if full or filename in LEAN_TABLES:
+                audit.append(results / filename, fields, entries)
     _, genomes, _, _ = manifest(args.manifest_b64)
     assignments = [dict(id=game['id'], context_id=game['context_id'], house=vanilla.HOUSE_NUMBERS[house], slot=slot,
                         genome_id=label, genome_digest=genome_model.genome_id(genomes[label]), comparison_id=game['comparison_id'],
@@ -601,6 +609,9 @@ def play(args, scratch, binary, game):
     audit.append(results / 'config-phases.csv', PHASE_FIELDS, phase_rows)
     audit.append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, bool(row['error']))
+    if not full:
+        # The node archives remaining scratch: lean games leave no large traces behind.
+        shutil.rmtree(out, ignore_errors=True)
     shutil.rmtree(inputs)
     return row
 
@@ -671,6 +682,10 @@ parser.add_argument('--phase-minutes', nargs=3, type=int, default=[0, 10, 20], m
 parser.add_argument('--minutes', type=int, default=40)
 parser.add_argument('--wall-timeout', type=int, default=3600)
 parser.add_argument('--capture-mib', type=int, default=256)
+parser.add_argument('--evidence', choices=('lean', 'full'), default='lean',
+                    help='lean: fitness rows and small receipts; full: every trace and table')
+parser.add_argument('--audit-every', type=int, default=50,
+                    help='Lean only: deterministic 1-in-N full-capture audit sample; 0 disables')
 parser.add_argument('--jobs', type=int, default=1)
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--scores', type=Path, help='Merge canonical per-game observations, usually observations.csv.gz')
