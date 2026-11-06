@@ -137,9 +137,14 @@ plan records those alias groups; it does not present fractional product contrast
 as isolated causal interactions.
 
 Use fixed common seeds and mirrored/rotated assignments. Average houses and
-orientations within independent map-seed blocks before inference. Reports retain
-mod, difficulty, research, format, size, base, spice, phase and house strata;
-unsupported contexts are not pooled into a global harmful-gene conclusion.
+orientations within independent map-seed blocks before inference. Both fitness
+levels/quality and contrasts require the same complete cohort: exact comparison,
+map/options/content receipts, genotype digests and every unique house/slot
+assignment. Every requested 1v1 house pair must be complete (three houses mean
+twelve games, not four). Fragments from different comparisons, rules or options
+cannot form a complete seed. Reports retain mod, difficulty, research, format,
+size, base, spice, phase, house and native receipt strata; unsupported contexts
+are not pooled into a global harmful-gene conclusion.
 One-gene binary contrasts are ON minus OFF regardless of shipped default;
 parameter/fractional contrasts are explicitly alternative minus default.
 
@@ -183,22 +188,30 @@ counted as distinct. Initial racing uses two common seeds and all four
 genotype-to-house × house-to-slot orientations per 1v1 house pair. A
 four-player cohort has 4 × 4 = 16 orientations. Elites receive additional
 held-out seed blocks and context coverage before promotion: `race` refuses
-seeds used by the selecting plans and fewer than eight seeds.
+seeds from the entire recorded selection ancestry and fewer than eight seeds.
+Each round re-measures retained non-default parents against the same-source
+default on its new common seeds, so subsequent `(mu+lambda)` survival compares
+parents and children rather than silently discarding the parents.
 
 Genes outside the screened plan, for example newly registered default-OFF
 switches, enter a round through `evolve --seed-genes`: each gets one child, the
 best-ranked parent with that gene at its alternative level (dependent game
 rules closed), before ordinary tournament offspring fill the round. `evolve
---behaviour games.csv...` ranks genotypes feasible < unverified < infeasible
-before quality coverage and Pareto rank; a genotype is feasible only when every
-registered reported-save case passed on it.
+--behaviour games.csv... --evaluation-rev FULL_SHA` ranks genotypes feasible <
+unverified < infeasible before quality coverage and Pareto rank. Evidence must
+match that exact source, genotype, save/check/registry receipts and effective
+game rule (explicit genome value, otherwise the frozen save's registered rule).
+Missing, errored or capped runs remain unverified; retries never erase a measured
+failure. A genotype is feasible only when every registered case passed.
 
 Fitness is **not a weighted sum**. Report independent strength (placement/wins,
 kills, survival), army/economy and behaviour objectives, Pareto fronts and coverage.
-Maintain observed rush/tech/economy/balanced niches separately per mod/difficulty;
+Maintain observed rush/tech/economy/balanced niches separately per full context;
 keep a Pareto set in a niche rather than erasing a useful technology specialist
-because another chromosome rushes better. Missing objective coverage cannot
-establish dominance. Search may explore unverified candidates; they are not
+because another chromosome rushes better. Rule/options/content strata retain
+separate objective vectors and cannot numerically pool or dominate each other.
+A multi-rule control has no single pooled fitness summary. Missing objective
+coverage cannot establish dominance. Search may explore unverified candidates; they are not
 feasible elites or releasable defaults until every hard gate is satisfied.
 
 ## Reported-save constraints
@@ -301,7 +314,7 @@ python3 tests/ai/genome_search.py interactions --genes focus_fire converge \
 python3 tests/ai/genome_search.py evolve --plan SCREEN.json.gz \
   --report REPORT/report.json.gz --payoffs REPORT/payoffs.json --generation 1 \
   --seed-genes city_compact_power continuous_research --race-seeds 110601 110602 \
-  --behaviour BEHAVIOUR/games.csv --output ROUND1.json.gz
+  --behaviour BEHAVIOUR/games.csv --evaluation-rev FULL_COMMIT_SHA --output ROUND1.json.gz
 python3 tests/ai/genome_search.py race --plan SCREEN.json.gz ROUND1.json.gz \
   --elites ELITE... --seeds EIGHT_HELD_OUT_SEEDS... --output RACE.json.gz
 ```

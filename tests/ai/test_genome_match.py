@@ -3,10 +3,12 @@ import ast
 import base64
 from collections import Counter
 import configparser
+import csv
 import gzip
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -51,6 +53,32 @@ class GenomeMatchTests(unittest.TestCase):
         self.assertIn('probe', str(binary))
         with self.assertRaisesRegex(ValueError, 'manifest-b64'):
             league['schedule'](args)
+
+    def test_report_cli_needs_no_runtime_manifest_pairs_or_seeds(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            results = Path(temporary)
+            scores = results / 'observations.csv.gz'
+            outcome = subprocess.run([sys.executable, str(HARNESS), '--report', '--results', str(results),
+                                      '--scores', str(scores)], capture_output=True, text=True)
+            self.assertEqual(outcome.returncode, 0, outcome.stderr)
+            with gzip.open(scores, 'rt') as stream:
+                self.assertIn('slot', next(csv.reader(stream)))
+
+    def test_report_recovers_slots_from_original_assignment_receipts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            results = Path(temporary)
+            league['write_table'](results / 'games.csv', ('id', 'error', 'observations'),
+                                  [dict(id='g', error='', observations='observations-g.csv.gz')])
+            league['write_table'](results / 'assignments.csv', ('id', 'house', 'slot', 'genome_digest'),
+                                  [dict(id='g', house='1', slot='2', genome_digest='digest')])
+            with gzip.open(results / 'observations-g.csv.gz', 'wt', newline='') as stream:
+                writer = csv.DictWriter(stream, fieldnames=('game_id', 'house', 'genome_digest'))
+                writer.writeheader()
+                writer.writerow(dict(game_id='g', house='1', genome_digest='digest'))
+            args = arguments('--report', '--results', str(results), '--scores', str(results / 'merged.csv.gz'))
+            self.assertFalse(league['report'](args))
+            with gzip.open(args.scores, 'rt') as stream:
+                self.assertEqual(next(csv.DictReader(stream))['slot'], '2')
 
     def test_pairs_rotate_each_genome_over_house_and_slot(self):
         games = league['schedule'](arguments())

@@ -27,7 +27,8 @@ ROOT = Path(__file__).resolve().parents[2]
 BEHAVIOUR_CHECKS = Path(__file__).with_name('genome-behavior-checks.json')
 CONTROL = 'default'
 # Whole-game rules are context: genomes needing a rule are compared inside games played under it.
-CONTEXT = ('mod', 'difficulty', 'research', 'format', 'size', 'phase', 'base', 'spice', 'technology_installments')
+CONTEXT = ('mod', 'difficulty', 'research', 'format', 'size', 'phase', 'base', 'spice',
+           'technology_installments', 'options_sha256', 'content_hash', 'object_data_hash')
 OBJECTIVES = ('win_score', 'kill_value', 'alive_followup_minute', 'army_value_time_mean',
               'special_built', 'attack_count', 'special_live_value_share', 'idle_money_time_mean',
               'economy_stall_fraction', 'base_loss_fraction', 'population', 'research_level')
@@ -36,6 +37,8 @@ QUALITY = ('adopt_light_factory', 'adopt_heavy_factory', 'adopt_ix', 'adopt_star
 CITY_QUALITY = ('zone_residential', 'zone_industrial', 'zone_commercial', 'population')
 LOWER_BETTER = frozenset(('economy_stall_fraction', 'base_loss_fraction', 'passive_fraction',
                           'unused_credits_fraction', 'first_attack_minute', 'idle_money_time_mean'))
+HOUSE_NAMES = ('harkonnen', 'atreides', 'ordos', 'fremen', 'sardaukar', 'mercenary',
+               'neutral', 'rebels', 'custom', 'wildspade', 'kleshmersh', 'tharpique')
 
 
 def canonical(value):
@@ -358,54 +361,92 @@ def payoff_table(rows):
     return {opponent: record for opponent, record in sorted(table.items())}
 
 
-def responses(rows, house=False, require_rotations=False):
-    grouped = defaultdict(lambda: defaultdict(lambda: [Fraction(), 0]))
-    seen_games = defaultdict(set)
-    unavailable = defaultdict(int)
+def rotation_rosters(protocol, fmt, houses, candidate):
+    """Expected unique house-to-slot and genotype-to-house assignments."""
+    if fmt == '1v1':
+        orders = itertools.permutations(sorted(houses))
+        labels = ((candidate, CONTROL), (CONTROL, candidate))
+        return {tuple((str(slot), house, label) for slot, (house, label) in enumerate(zip(order, assignment), 1))
+                for order in orders for assignment in labels}
+    order = [str(HOUSE_NAMES.index(name)) for name in protocol.get(
+        'ffa_houses', ['harkonnen', 'atreides', 'ordos', 'sardaukar'])]
+    if set(order) != set(houses):
+        return set()
+    return {tuple((str(slot), house, candidate if index == chosen else CONTROL)
+                  for slot, (index, house) in enumerate(enumerate(order[shift:] + order[:shift]), 1))
+            for chosen in range(4) for shift in range(4)}
+
+
+def responses(rows, house=False, require_rotations=False, protocol=None, genomes=None):
+    """Complete, exact-receipt paired blocks supply both contrasts and fitness."""
+    protocol = protocol or {}
+    expected_digests = {name: genome_model.genome_id(item) for name, item in (genomes or {}).items()}
+    grouped = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [Fraction(), 0])))
+    rosters, unavailable = defaultdict(dict), defaultdict(int)
     for row in rows:
+        arm, metric, context = arm_of(row), row['metric'], context_key(row, house)
+        game = row.get('game_id') or row.get('id', '')
+        if expected_digests and row.get('genome_digest') != expected_digests.get(arm):
+            raise ValueError('Observation genotype differs from the selecting plan: ' + arm)
+        if row.get('slot') and row.get('house') is not None:
+            assignment = (str(row['slot']), str(row['house']), arm)
+            previous = rosters[game].setdefault(str(row['slot']), assignment)
+            if previous != assignment:
+                raise ValueError('Conflicting house/slot assignment in game ' + game)
         if str(row.get('minute', '-1')) not in ('', '-1') and row.get('phase', 'all') == 'all':
             continue
-        arm, metric, context = arm_of(row), row['metric'], context_key(row, house)
-        if row['status'] != 'measured' or row.get('value', '') == '':
+        if (row['status'] != 'measured' or row.get('value', '') == ''
+                or ((house or require_rotations) and not row.get('comparison_id'))
+                or (require_rotations and not row.get('slot'))):
             unavailable[(arm, metric, context)] += 1
             continue
-        if house and not row.get('comparison_id'):
-            unavailable[(arm, metric, context)] += 1
-            continue
-        game = row['comparison_id'] if house else (row.get('game_id') or row.get('id', ''))
-        cell = grouped[(game, row.get('seed', ''), metric, context)][arm]
+        comparison = row.get('comparison_id') or game
+        block = (comparison, row.get('seed', ''), metric, context, row.get('map_sha256', ''))
+        cell = grouped[block][game][arm]
         cell[0] += Fraction(row['value'])
         cell[1] += 1
-        if house:
-            seen_games[(game, row.get('seed', ''), metric, context, arm)].add(row.get('game_id') or row.get('id', ''))
-    contrasts, absolute = defaultdict(lambda: defaultdict(list)), defaultdict(lambda: defaultdict(list))
-    for (game, seed, metric, context), by_arm in grouped.items():
-        if house and require_rotations:
-            complete = all(len(seen_games[(game, seed, metric, context, arm)]) ==
-                           (12 if context[3] == 'ffa' and arm == CONTROL else 4 if context[3] == 'ffa' else 2)
-                           for arm in by_arm)
-            if not complete:
+    eligible = defaultdict(lambda: defaultdict(dict))
+    for (comparison, seed, metric, context, map_sha), games in grouped.items():
+        arms = {arm for values in games.values() for arm in values}
+        if CONTROL not in arms:
+            continue
+        for arm in arms - {CONTROL}:
+            signatures = {tuple(sorted(rosters[game].values(), key=lambda value: int(value[0])))
+                          for game in games}
+            houses = frozenset(value[1] for signature in signatures for value in signature)
+            if require_rotations:
+                expected = rotation_rosters(protocol, context[3], houses, arm)
+                if not expected or signatures != expected or len(games) != len(expected):
+                    continue
+                if not house and any(set(values) != {arm, CONTROL} for values in games.values()):
+                    continue
+            values = {label: [total / count for game in games.values()
+                              for name, (total, count) in game.items() if name == label]
+                      for label in (arm, CONTROL)}
+            if not all(values.values()):
                 continue
-        control_cell = by_arm.get(CONTROL)
-        control = control_cell[0] / control_cell[1] if control_cell else None
-        for arm, (total, count) in by_arm.items():
-            # Fitness uses the common same-source default opponent only; league games
-            # against champions/PFSP picks are payoff evidence, not comparable levels.
-            if control is None:
+            eligible[(arm, metric, context)][seed][(comparison, map_sha)] = (
+                houses, mean(values[arm]), mean(values[CONTROL]))
+    paired, absolute = {}, defaultdict(lambda: defaultdict(list))
+    for key, seeds in eligible.items():
+        arm, metric, context = key
+        for seed, blocks in seeds.items():
+            if require_rotations and context[3] == '1v1':
+                allowed = [str(HOUSE_NAMES.index(name)) for name in protocol.get('houses', ['harkonnen', 'atreides'])]
+                pairs = {frozenset(pair) for pair in itertools.combinations(allowed, 2)
+                         if not house or context[-1] in pair}
+                observed = [block[0] for block in blocks.values()]
+                if len(observed) != len(pairs) or set(observed) != pairs:
+                    continue
+            elif require_rotations and len(blocks) != 1:
                 continue
-            value = total / count
-            absolute[(arm, metric, context)][seed].append(value)
-            if arm != CONTROL:
-                contrasts[(arm, metric, context)][seed].append(value - control)
-    reduce = lambda source: {key: {seed: mean(values) for seed, values in seeds.items()}
-                             for key, seeds in source.items()}
-    paired = reduce(contrasts)
-    if require_rotations and not house:
-        paired = {key: {seed: value for seed, value in seeds.items()
-                        if len(contrasts[key][seed]) == (16 if key[2][3] == 'ffa' else 4)}
-                  for key, seeds in paired.items()}
-        paired = {key: seeds for key, seeds in paired.items() if seeds}
-    return paired, reduce(absolute), unavailable
+            level = mean(block[1] for block in blocks.values())
+            control = mean(block[2] for block in blocks.values())
+            paired.setdefault(key, {})[seed] = level - control
+            absolute[key][seed].append(level)
+            absolute[(CONTROL, metric, context)][seed].append(control)
+    return paired, {key: {seed: mean(values) for seed, values in seeds.items()}
+                    for key, seeds in absolute.items()}, unavailable
 
 
 def effect_contrasts(plan, measured):
@@ -453,7 +494,9 @@ def effect_contrasts(plan, measured):
 
 
 def effect_table(plan, rows, house=False):
-    measured, absolute, unavailable = responses(rows, house, require_rotations=bool(plan.get('protocol')))
+    measured, absolute, unavailable = responses(
+        rows, house, require_rotations=bool(plan.get('protocol')), protocol=plan.get('protocol'),
+        genomes={item['id']: item for item in plan.get('genomes', [])})
     effects, families = effect_contrasts(plan, measured), defaultdict(dict)
     for key, values in effects.items():
         families[key[2]][key] = values
@@ -498,6 +541,10 @@ def pareto_fronts(vectors):
     return fronts
 
 
+def rule_stratum(context):
+    return ';'.join(name + '=' + (value or 'unrecorded') for name, value in zip(CONTEXT[8:], context[8:]))
+
+
 def fitness(absolute):
     by_context, contexts = defaultdict(dict), defaultdict(set)
     for (arm, metric, context), seeds in absolute.items():
@@ -507,7 +554,7 @@ def fitness(absolute):
         contexts[arm].add(context)
     output = {}
     for arm, strata in contexts.items():
-        pooled, missing, quality, detailed = defaultdict(list), [], {}, {}
+        pooled, missing, quality, detailed = defaultdict(lambda: defaultdict(list)), [], {}, {}
         for context in sorted(strata):
             values = by_context[(arm, context)]
             required = set(QUALITY)
@@ -521,11 +568,15 @@ def fitness(absolute):
             detailed[label] = {metric: rational(values[metric]) for metric in OBJECTIVES if metric in values}
             for metric in OBJECTIVES:
                 if metric in values:
-                    pooled[metric].append(values[metric])
-        output[arm] = dict(objectives={metric: rational(mean(values)) for metric, values in pooled.items()},
+                    pooled[rule_stratum(context)][metric].append(values[metric])
+        rule_objectives = {rules: {metric: rational(mean(values)) for metric, values in metrics.items()}
+                           for rules, metrics in pooled.items()}
+        # A mixed-rule control has no honest single numerical summary. Selection
+        # vectors below retain the rule label, including for single-rule genomes.
+        summary = next(iter(rule_objectives.values())) if len(rule_objectives) == 1 else {}
+        output[arm] = dict(objectives=summary, rule_objectives=rule_objectives,
                            context_objectives=detailed, missing_quality=missing,
-                           feasibility='unverified' if missing else 'requires_nonregression_gate',
-                           quality=quality)
+                           feasibility='unverified' if missing else 'requires_nonregression_gate', quality=quality)
     return output
 
 
@@ -546,15 +597,16 @@ def map_elites(absolute):
         vector = {metric: (-metrics[metric] if metric in LOWER_BETTER else metrics[metric])
                   for metric in OBJECTIVES if metric in metrics}
         if vector:
-            cells['|'.join(context[:2] + (style,))][arm] = vector
+            cells['|'.join(context + (style,))][arm] = vector
     return {cell: pareto_fronts(vectors)[0] for cell, vectors in sorted(cells.items())}
 
 
 def analyse(plan, rows):
     effects, absolute, unavailable = effect_table(plan, rows)
     candidates = fitness(absolute)
-    vectors = {arm: {m: (-Fraction(v) if m in LOWER_BETTER else Fraction(v)) for m, v in data['objectives'].items()}
-               for arm, data in candidates.items() if data['objectives']}
+    vectors = {arm: {rules + '::' + metric: (-Fraction(value) if metric in LOWER_BETTER else Fraction(value))
+                     for rules, metrics in data['rule_objectives'].items() for metric, value in metrics.items()}
+               for arm, data in candidates.items() if data['rule_objectives']}
     house_effects, _, _ = effect_table(plan, rows, True)
     return dict(schema_version=1, plan_sha256=plan.get('plan_sha256', digest(plan)), effects=effects,
                 house_effects=house_effects, genomes=candidates, pareto_fronts=pareto_fronts(vectors),
@@ -731,6 +783,11 @@ def evolve(plan, report, registry, generation, population=24, offspring=24, seed
             if target != child['id']:
                 genome_model.game_rules([child, pool.get(target, genome(CONTROL))], registry)
                 matchups.append([child['id'], target])
+    # Re-measure parents on this round's same source/seeds, so the next survivor
+    # selection really compares mu+lambda rather than silently dropping mu.
+    for parent in parents:
+        if parent['id'] != CONTROL and [parent['id'], CONTROL] not in matchups:
+            matchups.append([parent['id'], CONTROL])
     protocol = copy.deepcopy(plan.get('protocol', {}))
     if seeds:
         protocol['seeds'] = list(seeds)
@@ -738,9 +795,14 @@ def evolve(plan, report, registry, generation, population=24, offspring=24, seed
                   genomes=list(pool.values()), hall_of_fame=frozen,
                   lineage=lineage, matchups=matchups, mutation_step=step,
                   adaptive_rule='integer 1/5 success rule on registered-level step',
-                  protocol=protocol, designs=[dict(stage='candidate', genome=child['id']) for child in children],
+                  protocol=protocol, designs=[dict(stage='candidate', genome=item['id'])
+                                              for item in parents + children if item['id'] != CONTROL],
                   search_genes=[g['id'] for g in genes], pfsp_weights=weights, parents=selected,
                   feasibility={name: verdict(name) for name in selected})
+    output['selection_seeds'] = sorted(set(plan.get('selection_seeds', []))
+                                       | set(plan.get('protocol', {}).get('seeds', []))
+                                       | set(protocol.get('seeds', [])))
+    output['selected_by'] = plan.get('plan_sha256', digest(plan))
     output['plan_sha256'] = digest(output)
     return output
 
@@ -934,6 +996,7 @@ def parser():
                            help='Genes outside the plan (e.g. new switches): one child each, best parent + alternative')
     evolution.add_argument('--behaviour', type=Path, nargs='+', default=[],
                            help='genome-behaviors.py games.csv results: feasible genomes rank first')
+    evolution.add_argument('--evaluation-rev', help='Exact 40-character candidate source required with --behaviour')
     evolution.add_argument('--race-seeds', type=int, nargs='+', help='Common seeds for this round (default: plan seeds)')
     race = commands.add_parser('race')
     race.add_argument('--plan', type=Path, required=True, nargs='+', help='Plans containing the elites')
@@ -954,25 +1017,41 @@ def parser():
     return parser
 
 
-def feasibility_table(paths, cases=None):
-    """Per-genotype hard behaviour verdicts from genome-behaviors.py games.csv files.
-
-    A genotype is feasible only when every registered case is feasible; any
-    infeasible case makes it infeasible; missing/errored cases leave it unverified.
-    """
-    if cases is None:
-        cases = sorted(case['id'] for case in load_json(BEHAVIOUR_CHECKS)['cases'])
-    verdicts = defaultdict(dict)
+def feasibility_table(paths, cases=None, source=None, genomes=(), registry=None):
+    """Exact-source/config hard checks; no stale passes or last-write-wins retries."""
+    if not source or not re.fullmatch(r'[0-9a-f]{40}', source):
+        raise ValueError('--behaviour requires --evaluation-rev with the exact full source SHA')
+    checks_sha = hashlib.sha256(BEHAVIOUR_CHECKS.read_bytes()).hexdigest() if cases is None else None
+    cases = load_json(BEHAVIOUR_CHECKS)['cases'] if cases is None else cases
+    definitions = {case['id']: case for case in cases}
+    known = {genome_model.genome_id(item): item for item in genomes}
+    registry_sha = digest(registry) if registry is not None else None
+    verdicts = defaultdict(lambda: defaultdict(list))
+    identities = set(known)
     for path in paths:
         for row in load_rows(path):
-            if not row.get('error'):
-                verdicts[row['genome_digest']][row['case']] = row['feasibility']
-    table = {}
-    for identity, by_case in sorted(verdicts.items()):
-        states = [by_case.get(case, 'unverified') for case in cases]
-        table[identity] = ('infeasible' if 'infeasible' in states
-                           else 'feasible' if all(state == 'feasible' for state in states) else 'unverified')
-    return table
+            identity, case_id = row.get('genome_digest', ''), row.get('case', '')
+            identities.add(identity)
+            if row.get('source_commit') != source or case_id not in definitions:
+                continue
+            case, item = definitions[case_id], known.get(identity)
+            rule = item.get('values', {}).get('technology_installments',
+                       case.get('game_rules', {}).get('technology_installments')) if item is not None else None
+            expected = {0: 'off', 1: 'on'}.get(rule)
+            valid = (item is not None and case.get('adapted', False) and expected is not None
+                     and row.get('technology_installments') == expected
+                     and row.get('completed') == '1' and row.get('telemetry') == 'complete'
+                     and not row.get('error')
+                     and (checks_sha is None or row.get('checks_sha256') == checks_sha)
+                     and (registry_sha is None or row.get('registry_sha256') == registry_sha)
+                     and (not case.get('save_sha256') or row.get('save_sha256') == case['save_sha256']))
+            state = row.get('feasibility', 'unverified') if valid else 'unverified'
+            verdicts[identity][case_id].append(state if state in FEASIBILITY_RANK else 'unverified')
+    def aggregate(states):
+        return ('infeasible' if 'infeasible' in states else 'feasible'
+                if states and all(state == 'feasible' for state in states) else 'unverified')
+    return {identity: aggregate([aggregate(verdicts[identity].get(case_id, [])) for case_id in definitions])
+            for identity in sorted(identities) if identity}
 
 
 def race_plan(plans, elites, seeds, registry):
@@ -983,7 +1062,8 @@ def race_plan(plans, elites, seeds, registry):
     missing = sorted(set(elites) - set(pool))
     if missing:
         raise ValueError('Unknown elites: ' + ', '.join(missing))
-    used = {seed for plan in plans for seed in plan.get('protocol', {}).get('seeds', [])}
+    used = {seed for plan in plans for seed in
+            list(plan.get('selection_seeds', [])) + list(plan.get('protocol', {}).get('seeds', []))}
     if set(seeds) & used or len(set(seeds)) < 8:
         raise ValueError('Racing needs at least eight seeds never used by the selecting plans')
     racers = [pool[name] for name in dict.fromkeys(elites) if name != CONTROL]
@@ -996,6 +1076,7 @@ def race_plan(plans, elites, seeds, registry):
                   designs=[dict(stage='candidate', genome=item['id']) for item in racers],
                   protocol=protocol, registry_sha256=digest(registry),
                   selected_by=[plan.get('plan_sha256') for plan in plans])
+    output['selection_seeds'] = sorted(used | set(seeds))
     output['plan_sha256'] = digest(output)
     return output
 
@@ -1026,10 +1107,15 @@ def main():
         (args.output / 'report.md').write_text(report_text(report), encoding='utf-8')
         print(report['recommendation'])
     elif args.command == 'evolve':
-        result = evolve(load_json(args.plan), load_json(args.report), registry, args.generation,
+        plan = load_json(args.plan)
+        feasibility = (feasibility_table(args.behaviour, source=args.evaluation_rev,
+                                        genomes=plan['genomes'], registry=registry) if args.behaviour else None)
+        result = evolve(plan, load_json(args.report), registry, args.generation,
                         args.population, args.offspring, args.seed, load_json(args.payoffs) if args.payoffs else None,
                         args.successes, args.attempts, args.mutation_step, args.seed_genes,
-                        feasibility_table(args.behaviour) if args.behaviour else None, args.race_seeds)
+                        feasibility, args.race_seeds)
+        result['behaviour_source_commit'] = args.evaluation_rev
+        result['plan_sha256'] = digest({key: value for key, value in result.items() if key != 'plan_sha256'})
         save_json(args.output, result)
         print(canonical(dict(generation=result['generation'], offspring=len(result['lineage']),
                              frozen_opponents=len(result['hall_of_fame']), matchups=len(result['matchups']))))

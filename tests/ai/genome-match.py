@@ -75,7 +75,7 @@ PHASE_FIELDS = ('id', 'house', 'genome_id', 'phase', 'start_minute', 'start_cycl
 # Lean evidence also always writes games, assignments, config phases and scorecard observations.
 LEAN_TABLES = ('houses.csv',)
 OBSERVATION_EXTRA = ('game_id', 'genome_id', 'genome_digest', 'comparison_id', 'format', 'size', 'base', 'spice_level',
-                     'phase', 'manifest_sha256', 'phase_schedule_sha256', 'technology_installments')
+                     'phase', 'manifest_sha256', 'phase_schedule_sha256', 'technology_installments', 'slot')
 SAMPLE_FIELDS = audit.SAMPLE_FIELDS + ('refineries', 'zone_residential', 'zone_industrial', 'zone_commercial',
                                       'tech_level', 'light', 'light_built', 'palace', 'palace_built')
 UNIT_FIELDS = audit.META + ('minute', 'cycle', 'house', 'item', 'built', 'lost', 'actual', 'live_value')
@@ -491,6 +491,7 @@ def observations(args, game, row, tables, fixture_path, inputs, results):
                baseline_release_source=row['source_commit'], arm='genome', research=row['research'], mod=game['mod'],
                results=str(snapshot), format='audit', fixtures=str(fixture_path.resolve()), ids=[game['id']])
     labels = {str(vanilla.HOUSE_NUMBERS[house]): label for house, label in game['sides']}
+    slots = {str(vanilla.HOUSE_NUMBERS[house]): slot for slot, (house, _) in enumerate(game['sides'], 1)}
     _, genomes, _, _ = manifest(args.manifest_b64)
     rows = []
     for observation in scorecard(run):
@@ -504,7 +505,7 @@ def observations(args, game, row, tables, fixture_path, inputs, results):
                            comparison_id=game['comparison_id'], format=game['format'], size=game['size'], base=game['base'],
                            spice_level=game['spice_level'], phase=phase, manifest_sha256=game['manifest_sha256'],
                            phase_schedule_sha256=row['phase_schedule_sha256'],
-                           technology_installments=row['technology_installments'])
+                           technology_installments=row['technology_installments'], slot=slots[str(observation['house'])])
         rows.append(observation)
     if not rows:
         raise ValueError('Canonical scorecard produced no observations')
@@ -657,6 +658,7 @@ def report(args):
     games = read(results / 'games.csv')
     good = [game for game in games if not game.get('error')]
     print(f'Genome games {len(good)}/{len(games)}; compressed evidence and genuine effective phase hashes retained')
+    assignments = {(row['id'], row['house']): row for row in read(results / 'assignments.csv')}
     if args.scores:
         from ai_baseline_scorecard import COLUMNS
         target = Path(args.scores)
@@ -666,7 +668,12 @@ def report(args):
             writer.writeheader()
             for game in good:
                 with gzip.open(results / game['observations'], 'rt', encoding='utf-8', newline='') as source:
-                    writer.writerows(csv.DictReader(source))
+                    for row in csv.DictReader(source):
+                        assignment = assignments.get((game['id'], row['house']))
+                        if assignment is None or assignment['genome_digest'] != row['genome_digest']:
+                            raise ValueError('Missing or conflicting house assignment for ' + game['id'])
+                        row['slot'] = assignment['slot']
+                        writer.writerow(row)
     return bool(games and len(good) != len(games))
 
 
@@ -729,7 +736,6 @@ parser.add_argument('--report', action='store_true')
 parser.add_argument('--scores', type=Path, help='Merge canonical per-game observations, usually observations.csv.gz')
 args = parser.parse_args()
 try:
-    validate(args)
     sys.exit(report(args) if args.report else run(args))
 except ValueError as error:
     parser.error(str(error))

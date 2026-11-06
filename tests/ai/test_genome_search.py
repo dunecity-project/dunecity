@@ -1,6 +1,7 @@
 """Synthetic search/statistics contracts; never evidence about AI game strength."""
 import argparse
 import copy
+import itertools
 from fractions import Fraction
 import random
 import unittest
@@ -19,6 +20,27 @@ class GenomeSearchTests(unittest.TestCase):
         cls.registry = registry
         cls.genes = [gene for gene in registry if gene['id'] in
                      ('focus_fire', 'converge', 'wave_readiness_percent', 'attack_timer_ms')]
+
+    @staticmethod
+    def rotation_rows(houses=('harkonnen', 'atreides'), fmt='1v1', **metadata):
+        rows = []
+        protocol = {'houses': list(houses), 'ffa_houses': list(houses)}
+        numeric = [str(search.HOUSE_NAMES.index(name)) for name in houses]
+        pairs = itertools.combinations(numeric, 2) if fmt == '1v1' else [numeric]
+        genomes = {'candidate': search.genome('candidate', {'focus_fire': 0}), 'default': search.genome('default')}
+        for pair in pairs:
+            comparison = 'pair-' + '-'.join(pair)
+            signatures = search.rotation_rosters(protocol, fmt, pair, 'candidate')
+            for index, signature in enumerate(sorted(signatures)):
+                game = comparison + '-g' + str(index)
+                for slot, house, arm in signature:
+                    rows.append(dict(id='context', game_id=game, comparison_id=comparison, slot=slot, house=house,
+                                     genome_digest=genome_model.genome_id(genomes[arm]), seed='1',
+                                     mod='dunecity', difficulty='hard', research='off', format=fmt, size='96',
+                                     phase='all', base='cy', spice_level='medium', minute='-1', metric='win_score',
+                                     arm=arm, value='4' if arm == 'candidate' else '0', status='measured',
+                                     **metadata))
+        return rows
 
     def test_resolution_four_balanced_orthogonal_and_no_main_pair_alias(self):
         genes = [{'id': 'gene_%d' % index} for index in range(61)]
@@ -144,18 +166,61 @@ class GenomeSearchTests(unittest.TestCase):
         self.assertFalse(search.dominates({'wins': 1}, {'wins': 0, 'research': 1}))
 
     def test_incomplete_rotations_cannot_supply_a_seed_block(self):
-        rows = []
-        for game in range(4):
-            for arm, value in (('candidate', '4'), ('default', '0')):
-                rows.append(dict(id='shared-context', game_id=str(game), comparison_id='pair',
-                                 seed='1', mod='dunecity', difficulty='hard', research='off', format='1v1',
-                                 size='96', phase='all', base='cy', spice_level='medium', minute='-1',
-                                 metric='win_score', arm=arm, value=value, status='measured'))
-        incomplete, _, _ = search.responses(rows[:-2], require_rotations=True)
+        rows = self.rotation_rows()
+        incomplete, absolute, _ = search.responses(rows[:-2], require_rotations=True)
         self.assertFalse(incomplete)
-        complete, _, _ = search.responses(rows, require_rotations=True)
+        self.assertFalse(absolute)
+        self.assertFalse(search.fitness(absolute))
+        complete, absolute, _ = search.responses(rows, require_rotations=True)
         self.assertEqual(next(iter(complete.values())), {'1': 4})
+        self.assertEqual({key[0] for key in absolute}, {'candidate', 'default'})
         self.assertEqual(dict(zip(search.CONTEXT, next(iter(complete))[2]))['spice'], 'medium')
+
+    def test_rotation_fragments_cannot_pool_across_receipts_or_comparisons(self):
+        for field in ('options_sha256', 'content_hash', 'object_data_hash', 'map_sha256', 'comparison_id'):
+            rows = self.rotation_rows()
+            for index, row in enumerate(rows):
+                row[field] = 'first' if index < 4 else 'second'
+            paired, absolute, _ = search.responses(rows, require_rotations=True)
+            self.assertFalse(paired, field)
+            self.assertFalse(absolute, field)
+        rows = self.rotation_rows()
+        for row in rows[-2:]:
+            row.update({key: rows[0 if row['arm'] == rows[0]['arm'] else 1][key]
+                        for key in ('slot', 'house')})
+        self.assertFalse(search.responses(rows, require_rotations=True)[0])
+
+    def test_three_house_and_ffa_cohorts_use_real_unique_assignments(self):
+        houses = ['harkonnen', 'atreides', 'ordos']
+        rows = self.rotation_rows(houses)
+        paired, _, _ = search.responses(rows, require_rotations=True, protocol={'houses': houses})
+        self.assertEqual(next(iter(paired.values())), {'1': 4})
+        self.assertFalse(search.responses(rows[:-8], require_rotations=True, protocol={'houses': houses})[0])
+        rows = self.rotation_rows(['harkonnen', 'atreides', 'ordos', 'sardaukar'], 'ffa')
+        paired, _, _ = search.responses(rows, require_rotations=True)
+        self.assertEqual(next(iter(paired.values())), {'1': 4})
+
+    def test_observation_digest_must_match_the_plan_genotype(self):
+        rows = self.rotation_rows()
+        rows[0]['genome_digest'] = 'different'
+        genomes = {'candidate': search.genome('candidate', {'focus_fire': 0}), 'default': search.genome('default')}
+        with self.assertRaisesRegex(ValueError, 'genotype differs'):
+            search.responses(rows, require_rotations=True, genomes=genomes)
+
+    def test_rule_and_option_strata_never_pool_for_selection_or_niches(self):
+        rows = self.rotation_rows(technology_installments='off', options_sha256='off-options')
+        on = self.rotation_rows(technology_installments='on', options_sha256='on-options')
+        for row in on:
+            row['game_id'] += '-on'
+            row['comparison_id'] += '-on'
+            row['value'] = '100' if row['arm'] == 'candidate' else '0'
+        _, absolute, _ = search.responses(rows + on, require_rotations=True)
+        candidate = search.fitness(absolute)['candidate']
+        self.assertEqual(candidate['objectives'], {})
+        self.assertEqual({values['win_score'] for values in candidate['rule_objectives'].values()}, {'4', '100'})
+        self.assertEqual(len(search.map_elites(absolute)), 2)
+        off_key, on_key = sorted(candidate['rule_objectives'])
+        self.assertFalse(search.dominates({off_key + '::win_score': 4}, {on_key + '::win_score': 1}))
 
     def test_game_identity_prevents_unrelated_control_pooling(self):
         rows = []
@@ -237,7 +302,10 @@ class GenomeSearchTests(unittest.TestCase):
         self.assertEqual(result['protocol']['seeds'], [7, 8])
         for record in result['lineage']:
             self.assertIn([record['genome'], search.CONTROL], result['matchups'])
-        self.assertEqual({d['genome'] for d in result['designs']}, {r['genome'] for r in result['lineage']})
+        expected = {r['genome'] for r in result['lineage']} | (set(result['parents']) - {search.CONTROL})
+        self.assertEqual({d['genome'] for d in result['designs']}, expected)
+        for parent in set(result['parents']) - {search.CONTROL}:
+            self.assertIn([parent, search.CONTROL], result['matchups'])
         verdicts = {genome_model.genome_id(g): 'infeasible' for g in plan['genomes'] if g['id'] == names[1]}
         ranked = search.evolve(plan, report, self.registry, 1, population=4, offspring=2, feasibility=verdicts)
         self.assertEqual(ranked['feasibility'][names[1]], 'infeasible')
@@ -272,13 +340,30 @@ class GenomeSearchTests(unittest.TestCase):
                 list(search.observations([path]))
             self.assertEqual(len(list(search.observations([path], ['a' * 40, 'b' * 40]))), 2)
 
-    def test_feasibility_requires_every_case_and_races_need_held_out_seeds(self):
+    def test_feasibility_is_exact_source_rule_bound_and_worst_retry_wins(self):
+        cases = [dict(id=case, adapted=True, game_rules={'technology_installments': 0}) for case in ('a', 'b')]
+        genomes = [search.genome('g%d' % index, dict(focus_fire=index % 2, converge=index // 2 % 2, bundle=index // 4))
+                   for index in range(6)]
+        identities = [genome_model.genome_id(item) for item in genomes]
+        rows = [dict(case=case, genome_digest=identity, source_commit='1' * 40, technology_installments='off',
+                     completed='1', telemetry='complete', feasibility='feasible', error='')
+                for identity in identities for case in ('a', 'b')]
+        rows[3]['feasibility'] = 'infeasible'
+        rows.append(dict(rows[3], feasibility='feasible'))
+        rows[5]['error'] = 'rc=1'
+        rows[6]['source_commit'] = rows[7]['source_commit'] = '2' * 40
+        rows[9]['technology_installments'] = 'on'
+        rows[11]['telemetry'] = 'capped'
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'games.csv'
-            path.write_text('case,genome_digest,feasibility,error\na,g1,feasible,\nb,g1,feasible,\n'
-                            'a,g2,feasible,\nb,g2,infeasible,\na,g3,feasible,\nb,g3,feasible,rc=1\n')
-            table = search.feasibility_table([path], ['a', 'b'])
-        self.assertEqual(table, {'g1': 'feasible', 'g2': 'infeasible', 'g3': 'unverified'})
+            search.write_rows(path, tuple(rows[0]), rows)
+            with self.assertRaisesRegex(ValueError, 'evaluation-rev'):
+                search.feasibility_table([path], cases, genomes=genomes)
+            table = search.feasibility_table([path], cases, source='1' * 40, genomes=genomes)
+        self.assertEqual([table[identity] for identity in identities],
+                         ['feasible', 'infeasible', 'unverified', 'unverified', 'unverified', 'unverified'])
+
+    def test_races_reject_all_ancestor_selection_seeds(self):
         plan = search.screen_plan(self.registry, self.genes[:1], parameter_sweeps=False, fraction=False)
         plan['protocol'] = dict(seeds=[1, 2], contexts=[], modes=['1v1'])
         elite = plan['genomes'][1]['id']
@@ -287,6 +372,12 @@ class GenomeSearchTests(unittest.TestCase):
         race = search.race_plan([plan], [elite], list(range(10, 18)), self.registry)
         self.assertEqual(race['matchups'], [[elite, search.CONTROL]])
         self.assertEqual(race['designs'], [dict(stage='candidate', genome=elite)])
+        plan['selection_seeds'] = [91, 92]
+        with self.assertRaisesRegex(ValueError, 'eight seeds'):
+            search.race_plan([plan], [elite], [91, 10, 11, 12, 13, 14, 15, 16], self.registry)
+        report = dict(pareto_fronts=[[g['id'] for g in plan['genomes']]], genomes={}, niches={})
+        evolved = search.evolve(plan, report, self.registry, 1, population=4, offspring=1, seeds=[3, 4])
+        self.assertEqual(evolved['selection_seeds'], [1, 2, 3, 4, 91, 92])
 
 
 if __name__ == '__main__':
