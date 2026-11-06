@@ -1851,6 +1851,10 @@ bool QuantBot::preferCompactNuclear(BuildPass& pass, const BuilderBase* builder,
     int foundationCost = 0;
     for (const auto& slab : nuclearFoundation.orders) foundationCost += purchasePrice(builder, slab.item);
     const int nuclearCost = price + foundationCost;
+    // A financed capacity project cannot borrow an unfinished first-AA
+    // project's cash. Let the existing power rules choose timely wind when
+    // it is available, rather than starting a larger unfunded reactor.
+    if (!firstAirDefenceCapitalAdmits(pass,builder,Structure_NuclearPlant,nuclearCost)) return false;
     int windCost = purchasePrice(builder, Structure_WindTrap);
     const Coord windSite = findPlaceLocation(Structure_WindTrap);
     if (windSite.isValid()) {
@@ -3455,6 +3459,70 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
         pass.moderateCrimeProperties+=crime>=128;
         pass.dangerousCrimeProperties+=crime>=192;
     }
+    // The first response to aircraft is one bounded project, even while its
+    // Radar or yard upgrade occupies the queue and has no capital candidate.
+    // Price only unordered steps: planBuildBudget already booked every queued
+    // remainder, including an upgrade in progress. Never reserve that debt twice.
+    pass.firstAirDefenceReserve=0;
+    pass.firstAirDefenceBuilder=NONE_ID;pass.firstAirDefenceUpgradeReserve=0;
+    pass.firstAirDefenceStepCosts.fill(0);
+    if (!pass.startWhatMakesSense && botConfig().force.defencePrerequisites
+        && pass.citySimEnabled && gameMode==GameMode::Custom && pass.airEngaged
+        && pass.itemCount[Structure_RocketTurret]==0 && pass.routineRocketsAllowed) {
+        for (const auto* builder:pass.capitalBuilders) {
+            if (builder->getItemID()!=Structure_ConstructionYard || builder->getHealth()<=0) continue;
+            const int technology=ModManager::instance().isTornieFamilyContentActive()
+                ? builder->getTechnologyHouseID() : builder->getOriginalHouseID();
+            planningBuilder=builder->getObjectID();clearPlacementCache(false,true);
+            int uncovered=0;
+            const Coord rocketSite=findCityTurretPlaceLocation(Structure_RocketTurret,&uncovered);
+            if (!rocketSite.isValid() || uncovered<=0) continue;
+            std::array<Uint32,Num_ItemID> steps{};
+            std::array<bool,Num_ItemID> seen{};
+            std::array<int,Num_ItemID> stepCosts{};
+            steps[0]=Structure_RocketTurret;seen[Structure_RocketTurret]=true;
+            size_t count=1;
+            int requiredLevel=builder->getCurrentUpgradeLevel();
+            int64_t cost=0;
+            bool feasible=true;
+            for (size_t step=0;step<count && feasible;++step) {
+                const Uint32 item=steps[step];
+                if (pass.itemCount[item]>0) continue;
+                const auto& spec=data[item][technology];
+                if (!spec.enabled || spec.techLevel>getHouse()->getTechLevel()
+                    || spec.builder!=int(Structure_ConstructionYard)) { feasible=false;break; }
+                requiredLevel=std::max(requiredLevel,int(spec.upgradeLevel));
+                const Coord site=item==Structure_RocketTurret ? rocketSite : findPlaceLocation(item);
+                if (!site.isValid()) { feasible=false;break; }
+                const auto foundation=foundationPlan(builder,item,site);
+                if (!foundation.complete) { feasible=false;break; }
+                // A locked item is not in the build list yet. Native yard
+                // building offers use this same production-house table price.
+                const int offered=purchasePrice(builder,item);
+                const int price=offered>0 ? offered : spec.price;
+                if (price<=0) { feasible=false;break; }
+                int64_t stepCost=price;
+                for (const auto& slab:foundation.orders) stepCost+=purchasePrice(builder,slab.item);
+                stepCosts[item]=int(std::min<int64_t>(INT_MAX,stepCost));
+                cost+=stepCost;
+                for (Uint32 prerequisite=Structure_FirstID;prerequisite<=Structure_LastID;++prerequisite)
+                    if (spec.prerequisiteStructuresSet[prerequisite] && !seen[prerequisite]) {
+                        seen[prerequisite]=true;steps[count++]=prerequisite;
+                    }
+            }
+            if (!feasible || requiredLevel>builder->getMaxUpgradeLevel()) continue;
+            const int pendingLevel=builder->getCurrentUpgradeLevel()+(builder->isUpgrading() ? 1 : 0);
+            const int upgradeReserve=int(std::min<int64_t>(INT_MAX,
+                int64_t(std::max(0,requiredLevel-pendingLevel))*builder->getUpgradeCost()));
+            cost+=upgradeReserve;
+            const int reserve=int(std::min<int64_t>(INT_MAX,cost));
+            if (pass.firstAirDefenceReserve==0 || reserve<pass.firstAirDefenceReserve) {
+                pass.firstAirDefenceReserve=reserve;pass.firstAirDefenceBuilder=builder->getObjectID();
+                pass.firstAirDefenceUpgradeReserve=upgradeReserve;pass.firstAirDefenceStepCosts=stepCosts;
+            }
+        }
+        planningBuilder=NONE_ID;clearPlacementCache(false,true);
+    }
 }
 
 int QuantBot::coreCoverageShortfall(BuildPass& pass) {
@@ -4208,9 +4276,12 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 CapitalCandidate service;
                 const int coreShortfall=proactiveCoverageShortfall(pass);
                 service.builder=builder->getObjectID();service.kind="civic";
-                if (pass.moderateCrimeProperties>0 && selectCityServiceInvestment(builder,
-                    std::max(data[Structure_PoliceStation][houseID].price,data[Structure_RocketTurret][houseID].price),
-                    true,service.item,service.site)) {
+                if (pass.moderateCrimeProperties>0
+                    && (pass.dangerousCrimeProperties>0 || !pass.airEngaged
+                        || !botConfig().force.defencePrerequisites || pass.itemCount[Structure_RocketTurret]>0)
+                    && selectCityServiceInvestment(builder,
+                        std::max(data[Structure_PoliceStation][houseID].price,data[Structure_RocketTurret][houseID].price),
+                        true,service.item,service.site)) {
                     service.score=pass.dangerousCrimeProperties>0 ? 6000 : 2500;
                     service.reason=pass.dangerousCrimeProperties>0 ? "crime_prevention" : "crime_maintenance";
                     service.urgent=pass.dangerousCrimeProperties>0;
@@ -4351,8 +4422,6 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 }
             }
             for (Uint32 factory:{Structure_LightFactory,Structure_HeavyFactory,Structure_HighTechFactory}) {
-                if (pass.incomeHeavyFactories && factory==Structure_HeavyFactory
-                    && getHouse()->getNumItems(factory)>0) continue;
                 CapitalCandidate capacity;
                 capacity.builder=builder->getObjectID();capacity.item=factory;capacity.kind="production";
                 capacity.price=data[factory][houseID].price;capacity.cost=buildingCapitalCost(pass, factory);
@@ -4674,14 +4743,19 @@ void QuantBot::planCompositionHeavyCapacity(BuildPass& pass) {
         || pass.militaryValue>=pass.militaryBudget || getHouse()->isGroundUnitLimitReached()
         || openingWorkersNeeded(pass) || needsFirstTransport(pass) || cityBootstrapNeeded(pass)) return;
 
-    const int house=getHouse()->getHouseID();
     const auto& data=currentGame->objectData.data;
     const int actual=getHouse()->getNumItems(Structure_HeavyFactory);
     const bool funded=pass.cashFlow.fundsParallelProduction
         && std::min(pass.money,pass.cashFlow.projectedCash)>=pass.nextHeavyRunway;
+    // I adds a missing opportunity; it must not rename or outrank a funded
+    // native HF candidate that the unchanged planner already supplies.
     const bool expand=pass.allHeavyQueued && pass.heavyIncomeFactoryCapacity>0
         && pass.heavyIncomeFactoryTarget>actual && pass.itemCount[Structure_HeavyFactory]==actual
-        && (pass.startWhatMakesSense || funded);
+        && (pass.startWhatMakesSense || funded)
+        && std::none_of(pass.capitalCandidates.begin(),pass.capitalCandidates.end(),[](const auto& candidate) {
+            return candidate.item==Structure_HeavyFactory && std::string_view(candidate.kind)=="production"
+                && candidate.score>0 && !candidate.incomeHeavyCapacity;
+        });
     for (const auto* builder:pass.capitalBuilders) {
         if (!builder->isActive() || builder->isUpgrading() || builder->isOnHold()
             || builder->getProductionQueueSize()>0) continue;
@@ -4722,18 +4796,27 @@ void QuantBot::planCompositionHeavyCapacity(BuildPass& pass) {
             pass.capitalCandidates.push_back(upgrade);
         } else if (builder->getItemID()==Structure_ConstructionYard && expand
             && campaignAvailableToBuild(builder,Structure_HeavyFactory)) {
-            planningBuilder=builder->getObjectID();
+            const auto existing=std::find_if(pass.capitalCandidates.begin(),pass.capitalCandidates.end(),
+                [&](const auto& candidate) {
+                    return candidate.builder==builder->getObjectID() && candidate.item==Structure_HeavyFactory
+                        && std::string_view(candidate.kind)=="production";
+                });
+            planningBuilder=builder->getObjectID();clearPlacementCache(false,true);
             CapitalCandidate capacity;
             capacity.builder=builder->getObjectID();capacity.item=Structure_HeavyFactory;
             capacity.kind="production";capacity.reason="income_heavy_capacity";
-            capacity.price=data[Structure_HeavyFactory][house].price;
+            capacity.incomeHeavyCapacity=true;
+            capacity.price=purchasePrice(builder,Structure_HeavyFactory);
             capacity.cost=buildingCapitalCost(pass,Structure_HeavyFactory);
             capacity.capacity=std::min(pass.heavyIncomeFactoryCapacity,
                 pass.heavyIncomeDemand-pass.heavyIncomeCapacity);
             capacity.site=findPlaceLocation(Structure_HeavyFactory);
             capacity.score=capacity.site.isValid() ? std::max(1,QuantBotSpendingPolicy::productionScore(
                 capacity.capacity,capacity.cost,pass.militaryValue,pass.militaryBudget)) : 0;
-            if (capacity.score>0) pass.capitalCandidates.push_back(capacity);
+            if (capacity.score>0) {
+                if (existing!=pass.capitalCandidates.end()) *existing=capacity;
+                else pass.capitalCandidates.push_back(capacity);
+            }
         }
     }
     planningBuilder=NONE_ID;
@@ -4750,6 +4833,15 @@ Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
         && pass.pickupQueue.empty() && pass.waitingRepairVehicles==0 && pass.itemCount[Unit_MCV]==0;
     const auto idleTransport=[](const auto& candidate) {
         return std::string_view(candidate.kind)=="transport_production" || candidate.item==Unit_Carryall;
+    };
+    // Use the same bounded service/supplier classes for selection and cash
+    // protection. A military return score cannot erase an active AA unlock.
+    const auto protectedCapital=[](const CapitalCandidate& candidate) {
+        const auto reason=std::string_view(candidate.reason), kind=std::string_view(candidate.kind);
+        return reason=="crime_prevention" || reason=="air_coverage" || reason=="secure_expansion"
+            || reason=="ground_threat" || reason=="early_rocket" || kind=="city_supply"
+            || kind=="city_construction" || kind=="first_factory"
+            || kind=="defence_upgrade" || kind=="defence_prerequisite";
     };
     bool fundedBattery=false;
     int withoutIdleTransport=-1;
@@ -4768,6 +4860,24 @@ Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
     const bool preferFundedBattery=mayPreferBattery && fundedBattery;
     pass.capitalPreferFundedBattery = preferFundedBattery;
     if (preferFundedBattery) pass.capitalChoice=withoutIdleTransport;
+    // Present service emergencies precede discretionary army/capacity/growth
+    // purchases, not genuine power recovery or the native income suppliers.
+    if (botConfig().force.defencePrerequisites && pass.capitalChoice>=0) {
+        const auto& selected=pass.capitalCandidates[pass.capitalChoice];
+        const auto kind=std::string_view(selected.kind);
+        if (kind=="military" || kind=="production" || kind=="production_upgrade"
+            || kind=="city_growth_power" || kind=="city_growth"
+            || DuneCity::isCityZoneStructure(selected.item)) {
+            int urgent=-1;
+            for (size_t i=0;i<pass.capitalCandidates.size();++i) {
+                const auto& candidate=pass.capitalCandidates[i];
+                if (candidate.score>0 && candidate.urgent && protectedCapital(candidate)
+                    && (urgent<0 || candidate.score>pass.capitalCandidates[urgent].score))
+                    urgent=int(i);
+            }
+            if (urgent>=0) pass.capitalChoice=urgent;
+        }
+    }
     // A bargain's return score must not divert the bounded safety/supplier
     // savings into the military-to-zoning interleave just before they are paid.
     if (pass.capitalChoice>=0
@@ -4778,11 +4888,12 @@ Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
             const auto& candidate=pass.capitalCandidates[i];
             if (candidate.score<=0 || std::string_view(candidate.kind)=="military") continue;
             if (preferFundedBattery && idleTransport(candidate)) continue;
-            boundedClaim |= std::string_view(candidate.reason)=="ground_threat"
-                || std::string_view(candidate.reason)=="early_rocket"
-                || std::string_view(candidate.kind)=="city_supply"
-                || std::string_view(candidate.kind)=="city_construction"
-                || std::string_view(candidate.kind)=="first_factory";
+            boundedClaim |= botConfig().force.defencePrerequisites ? protectedCapital(candidate)
+                : std::string_view(candidate.reason)=="ground_threat"
+                    || std::string_view(candidate.reason)=="early_rocket"
+                    || std::string_view(candidate.kind)=="city_supply"
+                    || std::string_view(candidate.kind)=="city_construction"
+                    || std::string_view(candidate.kind)=="first_factory";
             if (protectedChoice<0 || candidate.score>pass.capitalCandidates[protectedChoice].score)
                 protectedChoice=int(i);
         }
@@ -4804,16 +4915,7 @@ Uint32 QuantBot::chooseLegacyCapitalPlan(BuildPass& pass) {
     // savings are what left a no-spice city with no turret at all.
     // A missing first ground producer is the same kind of one-off price.
     pass.protectionCapital = pass.capitalChoice >= 0
-        && (pass.capitalCandidates[pass.capitalChoice].reason == std::string("crime_prevention")
-            || pass.capitalCandidates[pass.capitalChoice].reason == std::string("air_coverage")
-            || pass.capitalCandidates[pass.capitalChoice].reason == std::string("secure_expansion")
-            || pass.capitalCandidates[pass.capitalChoice].reason == std::string("ground_threat")
-            || std::string_view(pass.capitalCandidates[pass.capitalChoice].reason)=="early_rocket"
-            || pass.capitalCandidates[pass.capitalChoice].kind == std::string("city_supply")
-            || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "city_construction"
-            || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "first_factory"
-            || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_upgrade")
-            || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_prerequisite"));
+        && protectedCapital(pass.capitalCandidates[pass.capitalChoice]);
     // Existing emergency/supplier savings keep priority. First cover for a
     // genuinely uncovered core is a present loss, not optional overlap. Once
     // those are safe, the one infantry lane owns cash before repeat growth.
@@ -5046,20 +5148,68 @@ bool QuantBot::capitalPending(BuildPass& pass) {
         && pass.itemCount[pass.capitalCandidates[pass.capitalChoice].item]==pass.capitalInitialCount;
 }
 
+bool QuantBot::firstAirDefencePending(BuildPass& pass) {
+    return !pass.startWhatMakesSense && botConfig().force.defencePrerequisites
+        && pass.citySimEnabled && gameMode==GameMode::Custom && pass.airEngaged
+        && getHouse()->getNumItems(Structure_RocketTurret)==0
+        && (pass.firstAirDefenceReserve>0 || pass.itemCount[Structure_RocketTurret]>0);
+}
+
 int QuantBot::capitalReserve(BuildPass& pass, Uint32 builder) {
     if (pass.startWhatMakesSense) return 0;
-    if (!capitalPending(pass)) return 0;
-    const auto& candidate = pass.capitalCandidates[pass.capitalChoice];
+    // Yards retain their existing essential-economy and real power paths.
+    // A blackout is not permission for a port/factory to spend first-AA cash.
+    const auto* producer=dynamic_cast<const BuilderBase*>(getObject(builder));
+    const bool pending=capitalPending(pass);
+    const auto* choice=pending ? &pass.capitalCandidates[pass.capitalChoice] : nullptr;
+    const bool essentialSupplier=choice && choice->builder==builder
+        && !QuantBotBuildPolicy::militaryItem(choice->item) && spendingEmergency(pass,choice->item);
+    const int firstAirDefence=(producer && producer->getItemID()==Structure_ConstructionYard) || essentialSupplier
+        ? 0 : pass.remainingFirstAirDefenceCash();
+    if (!pending) return firstAirDefence;
+    const auto& candidate = *choice;
     int64_t cost = int64_t(candidate.price) + candidate.foundationCost;
-    if (pass.techSavings && !pass.techUpgrade && pass.capitalChoice == pass.techCandidateIndex) return 0;
+    if (pass.techSavings && !pass.techUpgrade && pass.capitalChoice == pass.techCandidateIndex) return firstAirDefence;
     const bool infrastructure = std::string_view(candidate.kind) == "trooper_support";
     if (infrastructure || std::string_view(candidate.kind) == "trooper_recruitment") {
         if (infrastructure) cost = std::max<int64_t>(cost, candidate.cost);
         cost += pass.cityWorCashReserve;
     }
-    return QuantBotSpendingPolicy::reserveForOther(INT_MAX, int(std::min<int64_t>(INT_MAX, cost)),
+    const bool airPowerPrerequisite=producer && producer->getItemID()==Structure_ConstructionYard
+        && firstAirDefencePending(pass)
+        && (getHouse()->getProducedPower()<getHouse()->getPowerRequirement()+pass.committedPowerDemand
+            || !hasPowerBufferForTurret(pass));
+    return std::max(firstAirDefence,QuantBotSpendingPolicy::reserveForOther(INT_MAX, int(std::min<int64_t>(INT_MAX, cost)),
         candidate.builder == builder, false,
-        !getHouse()->hasPower() || pass.itemCount[Structure_ConstructionYard] == 0);
+        !getHouse()->hasPower() || pass.itemCount[Structure_ConstructionYard] == 0 || airPowerPrerequisite));
+}
+
+bool QuantBot::firstAirDefenceCapitalAdmits(BuildPass& pass, const BuilderBase* builder,
+    Uint32 item, int quotedCost, int alreadyReserved) {
+    if (!firstAirDefencePending(pass)) return true;
+    // Existing queue debt was deducted before this pass, and a producer may
+    // already have withheld the unordered AA cash. Neither is charged twice.
+    const int extraReserve=std::max(0,pass.remainingFirstAirDefenceCash()-std::max(0,alreadyReserved));
+    if (int64_t(quotedCost)+extraReserve<=pass.money) return true;
+    if (item==Structure_WindTrap || item==Structure_NuclearPlant) {
+        const bool powerNeeded=!getHouse()->hasPower() || getHouse()->getProducedPower()
+            < getHouse()->getPowerRequirement()+pass.committedPowerDemand
+            || !hasPowerBufferForTurret(pass);
+        if (!powerNeeded) return false;
+        if (item==Structure_WindTrap) return true;
+        // A real need for some power is not a license for an underfunded
+        // Nuclear project when the canonical smaller prerequisite fits.
+        if (!builder) return false;
+        if (!campaignAvailableToBuild(builder,Structure_WindTrap)) return true;
+        const Coord windSite=findPlaceLocation(Structure_WindTrap);
+        return !windSite.isValid() || !foundationPlan(builder,Structure_WindTrap,windSite).complete;
+    }
+    if (spendingEmergency(pass,item)) return true;
+    if (builder && pass.protectionCapital && capitalPending(pass)) {
+        const auto& selected=pass.capitalCandidates[pass.capitalChoice];
+        if (selected.urgent && selected.builder==builder->getObjectID() && selected.item==item) return true;
+    }
+    return false;
 }
 
 void QuantBot::planBuildOrder(BuildPass& pass) {
@@ -5176,6 +5326,7 @@ int QuantBot::queueCityRoadRepairs(BuildPass& pass, BuilderTurn& turn, int limit
     if (limit <= 0) return 0;
     const auto* yard = turn.pBuilder;
     const auto sites = cityRoadRepairSites();
+    const int roadQuote=purchasePrice(yard,Structure_Road);
     int queued=0;
     AITelemetry::Record locations;
     for (const auto& site:sites) {
@@ -5183,7 +5334,11 @@ int QuantBot::queueCityRoadRepairs(BuildPass& pass, BuilderTurn& turn, int limit
         const int before = yard->getProductionQueueSize();
         if (pass.startWhatMakesSense) {
             if (!produceItemWithLogging(pass,turn,Structure_Road,__LINE__,"idle_yard_road_gaps")) break;
-        } else doProduceItem(yard,Structure_Road);
+        } else {
+            if (!firstAirDefenceCapitalAdmits(pass,yard,Structure_Road,
+                (queued+1)*roadQuote,turn.reserve.reserved)) break;
+            doProduceItem(yard,Structure_Road);
+        }
         if (yard->getProductionQueueSize() <= before) break;
         builderPlaceLocations[yard->getObjectID()].emplace_back(site.first,site.second);
         locations.set(std::to_string(queued),AITelemetry::Record().set("x",site.first).set("y",site.second));

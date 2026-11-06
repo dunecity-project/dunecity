@@ -1814,6 +1814,10 @@ private:
     bool proactiveSavingHold(BuildPass& pass, int price);
     bool capitalPending(BuildPass& pass);
     int capitalReserve(BuildPass& pass, Uint32 builder);
+    bool firstAirDefencePending(BuildPass& pass);
+    /// Optional native quotes may not borrow the pending first-AA project's cash.
+    bool firstAirDefenceCapitalAdmits(BuildPass& pass, const BuilderBase* builder, Uint32 item,
+        int quotedCost, int alreadyReserved = 0);
     // One producer's turn (QuantBotBuildProducers.cpp).
     /// Repairs a damaged structure under the repair policy.
     void buildRepair(BuildPass& pass, const StructureBase* pStructure);
@@ -1862,6 +1866,8 @@ private:
     bool buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Selection state, storage priority and protected growth.
     void startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    void chooseYardGrowthAllocation(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    bool firstAirDefenceGeneratorAdmits(BuildPass& pass, BuilderTurn& turn, Uint32 item, Coord site);
     /// Turret goals and counter-air defence.
     void chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Essential infrastructure, power recovery and economic generation.

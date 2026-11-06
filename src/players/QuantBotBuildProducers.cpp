@@ -164,6 +164,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     const auto spendingBucket = QuantBotBuildPolicy::spendingBucket(spendingItem);
     const bool techInstallment = pass.techSavings && !turn.compactPowerInstallment
         && turn.installmentProject != NONE_ID && turn.installmentProject == spendingItem;
+    if (!firstAirDefenceCapitalAdmits(pass,turn.pBuilder,spendingItem,quotedPrice,turn.reserve.reserved)) return false;
     if (!compositionAdmits(pass, turn, itemID) || !spendingAdmits(pass, spendingItem, quotedPrice)) return false;
     if (!pass.startWhatMakesSense && itemID==Unit_MCV
         && !canFundCapacityMcv(pass,quotedPrice,turn.pBuilder->getObjectID())) {
@@ -385,22 +386,30 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
 
 bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine) {
     const int price=turn.pBuilder->getUpgradeCost();
+    const bool defenceUpgrade=pass.capitalChoice>=0 && size_t(pass.capitalChoice)<pass.capitalCandidates.size()
+        && capitalPending(pass)
+        && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()
+        && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind)=="defence_upgrade";
+    const Uint32 purpose=defenceUpgrade ? pass.capitalCandidates[pass.capitalChoice].item
+        : turn.pBuilder->getItemID();
+    const bool airFunded=firstAirDefenceCapitalAdmits(pass,turn.pBuilder,purpose,price,turn.reserve.reserved);
     const bool affordable = pass.startWhatMakesSense || pass.money >= price;
     const bool funded=pass.startWhatMakesSense || canFundProductionUpgrade(pass,turn.pBuilder);
     const bool bucketFunded = spendingAdmits(pass, turn.pBuilder->getItemID(), price, true);
     const bool drainFunded = !pass.startWhatMakesSense
         || sensibleOrderAdmits(pass, turn.pBuilder, turn.pBuilder->getItemID(), price, true);
-    const bool accepted=affordable && funded && bucketFunded && drainFunded && doUpgrade(turn.pBuilder);
+    const bool accepted=airFunded && affordable && funded && bucketFunded && drainFunded && doUpgrade(turn.pBuilder);
     if (accepted) {
         if (pass.startWhatMakesSense) {
             pass.money = getHouse()->getCredits();
             sensibleOrderAccepted(pass, turn.pBuilder, turn.pBuilder->getItemID(), price, true);
         } else pass.money-=price;
         pass.capitalOrderedCost+=price;
+        if (defenceUpgrade && botConfig().force.defencePrerequisites) pass.capitalConsumed=true;
     }
     traceDecision("capital_upgrade",AITelemetry::Record().set("capital_plan",pass.capitalDecision)
         .set("builder",turn.pBuilder->getObjectID()).set("price",price).set("accepted",accepted)
-        .set("reason",!affordable ? "shared_cash_budget" : !bucketFunded ? "unplanned_technology" : !funded ? "city_working_capital"
+        .set("reason",!airFunded ? "first_air_defence_pending" : !affordable ? "shared_cash_budget" : !bucketFunded ? "unplanned_technology" : !funded ? "city_working_capital"
             : !drainFunded ? "higher_priority_production_drain" : accepted ? "technology_unlock" : "unavailable")
         .set("source_line",sourceLine));
     return accepted;
@@ -429,6 +438,7 @@ bool QuantBot::queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 
     }
     int total=purchasePrice(turn.pBuilder,item);
     for(const auto& foundation:plan.orders)total+=purchasePrice(turn.pBuilder,foundation.item);
+    if (!firstAirDefenceCapitalAdmits(pass,turn.pBuilder,item,total,turn.reserve.reserved)) return false;
     const bool compactInstallment = turn.compactPowerInstallment && onInstallments(turn, item);
     const bool techInstallment = pass.techSavings && !turn.compactPowerInstallment && onInstallments(turn, item);
     const int acceptanceFloor = compactInstallment

@@ -40,9 +40,13 @@ Technology Installments, research, saved payment state or the ordinary unit budg
 The real parser, constructor and config hash inventory include both fields.
 
 Before this split, source `b3f39034` coupled that financing path to CompactPower.
-Its C2 passed all 13 native AllAgainst games but failed the 48-game health
-comparison, so it is **not a trial recommendation**. Those records and the
-343-key static overlays remain immutable and source-bound. A new-source
+The negative 48-game health comparison measured **isolated C1**, with
+FirstFactoryOwnPrerequisites OFF and Technology Installments ON, not whole C2.
+Whole-C2 health remains **unmeasured**. Exact b3 C2 passed all 13 native
+AllAgainst games but is **INFEASIBLE: 9/10 saved cases pass, NoRocket fails**.
+C5's actual 0/13 native wins and harmful 192-game held-out result are unchanged.
+Neither is a trial recommendation. Their b3 records and 343-key static overlays
+remain immutable and source-bound. New-source
 financing-enabled chromosome must set the new gene explicitly, receive a new
 DNA and repeat its gates; never reinterpret the old sparse C2 label/DNA as that
 new chromosome. Post-split full static overlays inventory all 344 native keys,

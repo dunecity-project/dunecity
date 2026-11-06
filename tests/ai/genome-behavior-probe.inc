@@ -107,6 +107,37 @@ void emit(Game& game, int h, const State& state, const char* phase, Uint32 first
     if (std::string_view(phase) == "loaded" && bots && !others)
         row.set("light_factory_sites", legalSites(*house, Structure_LightFactory));
     const char* selected = std::getenv("BALANCE_GENOME_BEHAVIOR");
+    if (selected && std::string_view(selected) == "norocketturrets" && h == 6) {
+        // Retain material state at the existing loaded/change/minute/final
+        // samples only. In particular, a ready yard is not evidence that its
+        // health permits an upgrade; no extra planner or per-tick scan runs.
+        AITelemetry::Record yards;
+        int radarQueued = 0;
+        for (const auto* building : structureList) {
+            if (building->getOwner() != house || !building->isABuilder()) continue;
+            const auto* builder = static_cast<const BuilderBase*>(building);
+            for (const auto& order : builder->getProductionQueue())
+                radarQueued += order.itemID == Structure_Radar;
+            if (builder->getItemID() != Structure_ConstructionYard) continue;
+            AITelemetry::Record queue;
+            size_t index = 0;
+            for (const auto& order : builder->getProductionQueue())
+                queue.set(std::to_string(index++), AITelemetry::Record()
+                    .set("item", order.itemID).set("price", order.price));
+            const auto at = builder->getLocation();
+            yards.set(std::to_string(builder->getObjectID()), AITelemetry::Record()
+                .set("x", at.x).set("y", at.y).set("health", builder->getHealth().lround())
+                .set("health_raw", builder->getHealth().getRawValue()).set("max_health", builder->getMaxHealth())
+                .set("upgrade_level", builder->getCurrentUpgradeLevel()).set("max_upgrade_level", builder->getMaxUpgradeLevel())
+                .set("upgrading", builder->isUpgrading()).set("upgrade_cost", builder->getUpgradeCost())
+                .set("upgrade_progress_raw", builder->getUpgradeProgress().getRawValue())
+                .set("hold", builder->isOnHold()).set("repairing", builder->isRepairing())
+                .set("current_item", builder->getCurrentProducedItem())
+                .set("production_progress_raw", builder->getProductionProgress().getRawValue()).set("queue", queue));
+        }
+        row.set("construction_yards", yards).set("radar", house->getNumItems(Structure_Radar))
+            .set("radar_built", house->getNumBuiltItems(Structure_Radar)).set("radar_queued", radarQueued);
+    }
     if (std::string_view(phase) == "loaded" && selected
         && std::string_view(selected) == "atreides_no_expand" && h == 1) {
         const auto& spec = game.objectData.data[Structure_HeavyFactory][h];

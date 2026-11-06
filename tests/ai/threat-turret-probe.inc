@@ -26,6 +26,19 @@ void runThreatTurretProbe(Game& game) {
     const auto oldStructures=structureList;
     const auto oldUnits=unitList;
     const auto oldLosses=bot->recentStructureLosses;
+    const auto oldStored=house->storedCredits, oldStarting=house->startingCredits, oldCityCredits=house->cityCredits;
+    const auto oldPower=house->producedPower;
+    const auto oldNumStructures=house->numStructures, oldNumUnits=house->numUnits;
+    std::array<int,Num_ItemID> oldCounts{};
+    std::copy(std::begin(house->numItem),std::end(house->numItem),oldCounts.begin());
+    std::array<int,Num_ItemID> oldBuilt{};
+    std::copy(std::begin(house->numItemBuilt),std::end(house->numItemBuilt),oldBuilt.begin());
+    const auto oldMarket=house->getChoam().availableItems;
+    const auto oldCycle=game.gameCycleCount;
+    const auto oldSpice=bot->lastCalculatedSpice;
+    const bool oldConcrete=game.gameInitSettings.gameOptions.concreteRequired;
+    const bool oldInstant=game.gameInitSettings.gameOptions.instantBuild;
+    const bool oldInstallments=game.gameInitSettings.gameOptions.technologyInstallments;
     std::vector<StructureBase*> buildings;
     std::vector<UnitBase*> raiders;
     auto cleanup=[&] {
@@ -37,6 +50,16 @@ void runThreatTurretProbe(Game& game) {
         bot->recentStructureLosses=oldLosses;bot->dangerUpdated=std::numeric_limits<Uint32>::max();
         game.gameType=oldType;game.citySimEnabled_=oldCity;
         game.techLevel=oldTech;
+        house->storedCredits=oldStored;house->startingCredits=oldStarting;house->cityCredits=oldCityCredits;
+        house->producedPower=oldPower;
+        std::copy(oldCounts.begin(),oldCounts.end(),std::begin(house->numItem));
+        std::copy(oldBuilt.begin(),oldBuilt.end(),std::begin(house->numItemBuilt));
+        house->numStructures=oldNumStructures;house->numUnits=oldNumUnits;
+        house->getChoam().availableItems=oldMarket;
+        game.gameCycleCount=oldCycle;bot->lastCalculatedSpice=oldSpice;
+        game.gameInitSettings.gameOptions.concreteRequired=oldConcrete;
+        game.gameInitSettings.gameOptions.instantBuild=oldInstant;
+        game.gameInitSettings.gameOptions.technologyInstallments=oldInstallments;
         if (!hadSimulation) game.citySimulation_.reset();
     };
     try {
@@ -331,6 +354,442 @@ void runThreatTurretProbe(Game& game) {
             && established.capitalChoice>=0
             && established.capitalCandidates[established.capitalChoice].kind==std::string("city_supply"),
             "An established battery's remaining covers starved its first mobile supplier");
+        // A separate physical first-AA city. Existing fixture assets and their
+        // actual house counts agree; the detached scenario's inventory is not
+        // allowed to supply a phantom Radar or first rocket.
+        clear();
+        for (auto* unit:raiders) unit->setVisible(house->getTeamID(),false);
+        for (auto it=buildings.begin();it!=buildings.end();) {
+            if ((*it)->getItemID()==Structure_RocketTurret || (*it)->getItemID()==Structure_Radar) {
+                delete *it;it=buildings.erase(it);
+            } else ++it;
+        }
+        put(Structure_ZoneResidential,20,3);put(Structure_ZoneResidential,23,3);
+        put(Structure_ZoneCommercial,20,6);put(Structure_ZoneIndustrial,23,6);
+        auto* airPort=static_cast<BuilderBase*>(put(Structure_StarPort,20,18));
+        std::fill(std::begin(house->numItem),std::end(house->numItem),0);
+        for (const auto* building:buildings) ++house->numItem[building->getItemID()];
+        house->numStructures=int(buildings.size());house->numUnits=0;
+        house->update();
+        game.gameInitSettings.gameOptions.concreteRequired=false;
+        game.gameInitSettings.gameOptions.instantBuild=false;
+        game.gameInitSettings.gameOptions.technologyInstallments=false;
+        config->force.defencePrerequisites=true;config->force.moreRocketTurrets=false;
+        config->force.startWhatMakesSense=false;config->force.simpleTechSavings=false;
+        config->force.existingCompositionUnitChoice=false;config->force.bufferedHeavyProduction=false;
+        config->force.incomeHeavyFactories=false;config->force.firstFactoryOwnPrerequisites=false;
+        config->force.cityStarportSupply=false;config->force.threatTurrets=false;config->force.trooperSupport=false;
+        bot->lastCalculatedSpice=0;
+        const int technology=ModManager::instance().isTornieFamilyContentActive()
+            ? yard->getTechnologyHouseID() : yard->getOriginalHouseID();
+        const int rocketLevel=game.objectData.data[Structure_RocketTurret][technology].upgradeLevel;
+        require(rocketLevel>slabLevel,"First-AA fixture cannot isolate a native rocket upgrade");
+        yard->curUpgradeLev=rocketLevel-1;yard->upgrading=false;yard->setHealth(yard->getMaxHealth());
+        yard->updateBuildList();
+        // A real CHOAM offer at its native catalog price; acceptance still
+        // obtains the actual market/research quote from the Starport build list.
+        house->getChoam().availableItems.clear();
+        BuildItem offer;offer.itemID=Unit_Tank;offer.num=2;
+        offer.price=game.objectData.data[Unit_Tank][house->getHouseID()].price;
+        house->getChoam().availableItems.push_back(offer);airPort->updateBuildList();
+        const int importPrice=bot->purchasePrice(airPort,Unit_Tank);
+        const int radarPrice=bot->purchasePrice(yard,Structure_Radar);
+        const int rocketPrice=game.objectData.data[Structure_RocketTurret][technology].price;
+        const int upgradePrice=yard->getUpgradeCost();
+        require(importPrice>1 && radarPrice>0 && rocketPrice>0 && upgradePrice>0,
+            "First-AA fixture lacks actual native quotes");
+        // The completion arm uses one declared grant and native payments.
+        // Isolated quote-boundary arms below save and restore that balance.
+        house->storedCredits=0;house->cityCredits=0;
+        house->startingCredits=upgradePrice+radarPrice+rocketPrice+importPrice-1;
+        auto* aircraft=hostile->createUnit(Unit_Ornithopter);
+        require(aircraft,"First-AA aircraft creation failed");
+        aircraft->deploy(origin+Coord(15,14));aircraft->setVisible(house->getTeamID(),true);
+        raiders.push_back(aircraft);
+        auto airPlan=[&] {
+            bot->resetBuildPass();
+            QuantBot::BuildPass pass(0);
+            bot->planBuildInventory(pass);bot->planBuildBudget(pass);bot->planCityState(pass);
+            bot->planStrategicReserve(pass);bot->planSpiceEconomy(pass);bot->planPowerAndYards(pass);
+            bot->planCityPopulation(pass);bot->planCivicNeedAndTrips(pass);bot->planUnitMix(pass);
+            bot->planCapitalForecast(pass);bot->planCityBootstrap(pass);bot->planOpeningProduction(pass);
+            bot->planDefenceCoverage(pass);bot->planTechSavings(pass);
+            bot->planSensibleFirstFactory(pass);
+            bot->planCapitalCandidates(pass);bot->chooseCapitalPlan(pass);
+            return pass;
+        };
+        {
+            // A busy upgraded yard prices Radar+rocket. An idle yard's newly
+            // accepted upgrade was NOT part of that minimum and cannot release
+            // any of those reserved component quotes to a Starport.
+            const auto keepStored=house->storedCredits, keepStarting=house->startingCredits, keepCity=house->cityCredits;
+            const int keepYardLosses=house->numItemLosses[Structure_ConstructionYard];
+            const auto keepRecentLosses=bot->recentStructureLosses;
+            auto* pricedYard=static_cast<BuilderBase*>(put(Structure_ConstructionYard,8,18));
+            pricedYard->curUpgradeLev=pricedYard->getMaxUpgradeLevel();pricedYard->setHealth(pricedYard->getMaxHealth());
+            pricedYard->updateBuildList();pricedYard->doProduceItem(Structure_Road,false);
+            const int busyQuote=bot->purchasePrice(pricedYard,Structure_Road);
+            require(busyQuote>0 && pricedYard->getProductionQueueSize()==1,"The minimum-chain yard is not natively busy");
+            house->storedCredits=0;house->cityCredits=0;
+            house->startingCredits=busyQuote+upgradePrice+radarPrice+rocketPrice+importPrice-1;
+            auto unreservedUpgrade=airPlan();
+            unreservedUpgrade.nuclearPlan=false; // No unrelated reactor savings may mask the exact import boundary.
+            require(unreservedUpgrade.firstAirDefenceBuilder==pricedYard->getObjectID()
+                && unreservedUpgrade.firstAirDefenceUpgradeReserve==0
+                && unreservedUpgrade.firstAirDefenceReserve==radarPrice+rocketPrice
+                && unreservedUpgrade.capitalChoice>=0
+                && unreservedUpgrade.capitalCandidates[unreservedUpgrade.capitalChoice].builder==yard->getObjectID()
+                && std::string_view(unreservedUpgrade.capitalCandidates[unreservedUpgrade.capitalChoice].kind)=="defence_upgrade",
+                "The cheaper busy chain did not isolate the idle yard's unreserved upgrade");
+            bot->buildProducer(unreservedUpgrade,yard);
+            require(yard->isUpgrading()
+                && bot->capitalReserve(unreservedUpgrade,airPort->getObjectID())==radarPrice+rocketPrice,
+                "An upgrade outside the priced chain released protected Radar/rocket cash");
+            const auto credits=house->getStartingCredits()+house->getEarnedCredits();
+            {
+                QuantBot::BuilderTurn turn(unreservedUpgrade.money);turn.pStructure=airPort;turn.pBuilder=airPort;
+                bot->beginBuilderTurn(unreservedUpgrade,turn);bot->reserveBuilderCash(unreservedUpgrade,turn);
+                require(unreservedUpgrade.money==importPrice-1
+                    && !bot->produceItemWithLogging(unreservedUpgrade,turn,Unit_Tank,__LINE__,"unreserved_aa_upgrade_import"),
+                    "A Starport spent the unreserved-upgrade boundary's protected AA balance");
+            }
+            require(credits==house->getStartingCredits()+house->getEarnedCredits()
+                && airPort->getProductionQueueSize()==0,"The refused boundary import changed real credits or cargo");
+            yard->upgrading=false;
+            while (pricedYard->getProductionQueueSize()) pricedYard->doCancelItem(pricedYard->getCurrentProducedItem());
+            buildings.erase(std::find(buildings.begin(),buildings.end(),pricedYard));delete pricedYard;
+            house->numItemLosses[Structure_ConstructionYard]=keepYardLosses;
+            bot->recentStructureLosses=keepRecentLosses;
+            house->storedCredits=keepStored;house->startingCredits=keepStarting;house->cityCredits=keepCity;
+            clear();
+        }
+        {
+            // An actual working-fleet supplier retains its established 5500
+            // first-Carryall claim above the 3000 urgent AA unlock. Exercise
+            // native queue acceptance and the immediate CHOAM debit at exact cash.
+            const auto keepStored=house->storedCredits, keepStarting=house->startingCredits, keepCity=house->cityCredits;
+            const auto keepMarket=house->getChoam().availableItems;
+            const auto keepSpice=bot->lastCalculatedSpice;
+            const int keepHeavyLosses=house->numItemLosses[Structure_HeavyFactory];
+            const int keepWorkerLosses=house->numItemLosses[Unit_Harvester];
+            const auto keepRecentLosses=bot->recentStructureLosses;
+            auto* heavy=put(Structure_HeavyFactory,20,12);
+            auto* worker=house->createUnit(Unit_Harvester);require(worker,"First-transport worker creation failed");
+            worker->deploy(origin+Coord(15,6));raiders.push_back(worker);
+            // Positive cached spice is the existing first-transport demand
+            // input; this admission arm does not add income or change prices.
+            bot->lastCalculatedSpice=1;
+            BuildItem carry;carry.itemID=Unit_Carryall;carry.num=1;
+            carry.price=game.objectData.data[Unit_Carryall][house->getHouseID()].price;
+            house->getChoam().availableItems.push_back(carry);airPort->updateBuildList();
+            const int carryQuote=bot->purchasePrice(airPort,Unit_Carryall);
+            require(carryQuote>0,"The first transport has no native CHOAM quote");
+            house->storedCredits=0;house->cityCredits=0;house->startingCredits=carryQuote;
+            auto transport=airPlan();
+            require(bot->needsFirstTransport(transport) && transport.firstAirDefenceReserve>0
+                && transport.capitalChoice>=0 && transport.capitalCandidates[transport.capitalChoice].item==Unit_Carryall
+                && transport.capitalCandidates[transport.capitalChoice].builder==airPort->getObjectID(),
+                "Canonical essential first-Carryall selection did not outrank the AA unlock");
+            const auto before=house->getStartingCredits()+house->getEarnedCredits();
+            {
+                QuantBot::BuilderTurn turn(transport.money);turn.pStructure=airPort;turn.pBuilder=airPort;
+                bot->beginBuilderTurn(transport,turn);bot->reserveBuilderCash(transport,turn);
+                require(transport.money==carryQuote,"AA withholding took the selected first-Carryall supplier's exact quote");
+                bot->buildCapitalUnits(transport,turn);
+            }
+            require(airPort->getProductionQueueSize()==1 && airPort->getProductionQueue().front().itemID==Unit_Carryall
+                && before-house->getStartingCredits()-house->getEarnedCredits()==FixPoint(carryQuote),
+                "The essential Carryall did not enter a real paid native cargo queue");
+            airPort->doCancelItem(Unit_Carryall,false);
+            house->getChoam().availableItems=keepMarket;airPort->updateBuildList();
+            raiders.erase(std::find(raiders.begin(),raiders.end(),worker));worker->destroy();
+            buildings.erase(std::find(buildings.begin(),buildings.end(),heavy));delete heavy;
+            house->numItemLosses[Structure_HeavyFactory]=keepHeavyLosses;
+            house->numItemLosses[Unit_Harvester]=keepWorkerLosses;
+            bot->recentStructureLosses=keepRecentLosses;
+            bot->lastCalculatedSpice=keepSpice;
+            house->storedCredits=keepStored;house->startingCredits=keepStarting;house->cityCredits=keepCity;
+            clear();
+        }
+        auto urgent=airPlan();
+        require(urgent.airEngaged && urgent.capitalChoice>=0
+            && std::string_view(urgent.capitalCandidates[urgent.capitalChoice].kind)=="defence_upgrade"
+            && urgent.capitalCandidates[urgent.capitalChoice].urgent
+            && urgent.firstAirDefenceReserve==upgradePrice+radarPrice+rocketPrice,
+            "The physical first-AA city did not price its native urgent unlock chain");
+        auto competing=urgent.capitalCandidates[urgent.capitalChoice];
+        competing.builder=airPort->getObjectID();competing.item=Unit_Tank;
+        competing.price=importPrice;competing.kind="military";competing.reason="military_shortfall";
+        competing.urgent=false;competing.score=urgent.capitalCandidates[urgent.capitalChoice].score+1;
+        urgent.capitalCandidates.push_back(competing);
+        auto growth=competing;growth.builder=yard->getObjectID();growth.item=Structure_NuclearPlant;
+        growth.kind="city_growth_power";growth.reason="power_for_demanded_growth";growth.score=1;
+        growth.price=game.objectData.data[growth.item][technology].price;
+        growth.site=bot->findPlaceLocation(growth.item);urgent.capitalCandidates.push_back(growth);
+        bot->chooseCapitalPlan(urgent);
+        require(urgent.protectionCapital && !urgent.cityGrowthProtected
+            && std::string_view(urgent.capitalCandidates[urgent.capitalChoice].kind)=="defence_upgrade",
+            "Military/growth interleave displaced the affordable native urgent AA upgrade");
+        auto capacity=urgent;
+        capacity.capitalCandidates[capacity.capitalCandidates.size()-2].kind="production";
+        capacity.capitalCandidates[capacity.capitalCandidates.size()-2].item=Structure_HeavyFactory;
+        bot->chooseCapitalPlan(capacity);
+        require(std::string_view(capacity.capitalCandidates[capacity.capitalChoice].kind)=="defence_upgrade",
+            "Hypothetical production capacity displaced urgent AA service");
+        const auto powered=house->producedPower;
+        house->producedPower=0;
+        bot->buildProducer(urgent,yard);
+        require(yard->getProductionQueueSize()>0
+            && (yard->getCurrentProducedItem()==Structure_WindTrap || yard->getCurrentProducedItem()==Structure_NuclearPlant)
+            && !yard->isUpgrading(),"Urgent AA displaced genuine blackout recovery");
+        clear();house->producedPower=powered;
+        urgent=airPlan();bot->buildProducer(urgent,yard);
+        require(yard->isUpgrading(),"Selected urgent AA did not reach the native upgrade consumer");
+        require(bot->capitalReserve(urgent,airPort->getObjectID())==radarPrice+rocketPrice,
+            "The newly accepted AA upgrade quote was reserved again in the same pass");
+        ++game.gameCycleCount;require(yard->update(),"First-AA yard died before its first payment");
+        auto upgrading=airPlan();
+        require(yard->getUpgradeProgress()>0 && upgrading.queuedProductionCost>0
+            && upgrading.firstAirDefenceReserve==radarPrice+rocketPrice,
+            "An active yard upgrade lost the next AA steps or reserved its queued debt twice");
+        for (Uint32 tick=0;yard->isUpgrading() && tick<MILLI2CYCLES(60000);++tick) {
+            ++game.gameCycleCount;require(yard->update(),"First-AA yard died during native upgrade");
+        }
+        require(!yard->isUpgrading() && yard->getCurrentUpgradeLevel()>=rocketLevel,
+            "The healthy funded AA yard did not finish its native paid upgrade");
+        auto radarPlan=airPlan();bot->buildProducer(radarPlan,yard);
+        require(yard->getCurrentProducedItem()==Structure_Radar,
+            "The AA upgrade did not hand its actual budget to native Radar production");
+        require(bot->capitalReserve(radarPlan,airPort->getObjectID())==rocketPrice,
+            "The newly accepted Radar quote was reserved again in the same pass");
+        ++game.gameCycleCount;require(yard->update(),"First-AA Radar yard died before payment");
+        auto radarBusy=airPlan();
+        require(yard->getProductionProgress()>0 && radarBusy.queuedProductionCost>0
+            && radarBusy.firstAirDefenceReserve==rocketPrice
+            && radarBusy.money==std::max(0,house->getCredits()-radarBusy.queuedProductionCost),
+            "A partially paid Radar lost the next rocket or double-booked existing queue debt");
+        auto* spareYard=static_cast<BuilderBase*>(put(Structure_ConstructionYard,8,18));
+        spareYard->curUpgradeLev=spareYard->getMaxUpgradeLevel();
+        spareYard->setHealth(spareYard->getMaxHealth());spareYard->updateBuildList();
+        auto clearSpare=[&] {
+            while (spareYard->getProductionQueueSize()) spareYard->doCancelItem(spareYard->getCurrentProducedItem());
+            bot->builderPlaceLocations.erase(spareYard->getObjectID());
+            bot->reservedStructures.erase(spareYard->getObjectID());
+            bot->clearPlacementCache();
+        };
+        auto queuedCapital=[&](bool rocketPending) {
+            const bool keepCompact=config->force.cityCompactPower;
+            const bool keepFinance=config->force.cityCompactPowerInstallments;
+            config->force.cityCompactPower=true;config->force.cityCompactPowerInstallments=true;
+            auto pendingAA=airPlan();
+            const int freeCash=std::max(0,pendingAA.money-pendingAA.remainingFirstAirDefenceCash());
+            require(house->getNumItems(Structure_RocketTurret)==0 && pendingAA.queuedProductionCost>0
+                && pendingAA.itemCount[Structure_RocketTurret]==int(rocketPending)
+                && (rocketPending ? pendingAA.firstAirDefenceReserve==0 : pendingAA.firstAirDefenceReserve==rocketPrice)
+                && house->getProducedPower()-house->getPowerRequirement()
+                    >=pendingAA.committedPowerDemand+pendingAA.rocketPowerBuffer,
+                "Two-yard fixture does not separate protected AA debt from adequate current power");
+            auto nuclearStart=[&] {
+                auto pass=airPlan();
+                // Isolate this native quote from unrelated optional capital
+                // owners; the observed AA inventory, cash and debt stay intact.
+                pass.capitalChoice=-1;
+                bot->planningBuilder=spareYard->getObjectID();bot->clearPlacementCache(false,true);
+                const int quote=bot->purchasePrice(spareYard,Structure_NuclearPlant);
+                const int first=CityEconomyInvestmentPolicy::firstInstallment(
+                    quote,bot->cityBuildTicks(pass,Structure_NuclearPlant));
+                require(quote>freeCash && first>0 && pass.money>=first
+                    && bot->campaignAvailableToBuild(spareYard,Structure_NuclearPlant)
+                    && bot->cityAdmitsStructure(pass,Structure_NuclearPlant)
+                    && bot->findPlaceLocation(Structure_NuclearPlant).isValid()
+                    && bot->campaignAvailableToBuild(spareYard,Structure_WindTrap)
+                    && bot->findPlaceLocation(Structure_WindTrap).isValid(),
+                    "The competing Nuclear project is not a legal first-tick-funded, full-quote-unfunded start");
+                const auto credits=house->getStartingCredits()+house->getEarnedCredits();
+                QuantBot::BuilderTurn turn(pass.money);turn.pStructure=spareYard;turn.pBuilder=spareYard;
+                bot->beginBuilderTurn(pass,turn);bot->reserveBuilderCash(pass,turn);
+                require(pass.money>=first,"An unrelated reserve, not pending AA, blocked the first installment");
+                turn.installmentProject=Structure_NuclearPlant;turn.installmentProjectStartBudget=first;
+                turn.compactPowerInstallment=true;
+                require(!bot->queueFoundedStructure(pass,turn,Structure_NuclearPlant,__LINE__,"first_aa_competing_nuclear")
+                    && spareYard->getProductionQueueSize()==0
+                    && credits==house->getStartingCredits()+house->getEarnedCredits(),
+                    "Another yard borrowed pending first-AA cash for a financed Nuclear package");
+            };
+            nuclearStart();
+            if (rocketPending) {
+                // Native full-yard regression for the reviewed loop: a first
+                // rocket is queued, Windtrap cash exists, and the legacy
+                // positive-income nuclearPlan would otherwise reselect an
+                // inadmissible financed reactor on every visit.
+                const auto keepStored=house->storedCredits, keepStarting=house->startingCredits, keepCity=house->cityCredits;
+                const auto keepPower=house->producedPower;
+                const int windQuote=bot->purchasePrice(spareYard,Structure_WindTrap);
+                const int nuclearQuote=bot->purchasePrice(spareYard,Structure_NuclearPlant);
+                require(windQuote>0 && nuclearQuote>windQuote,"The generator boundary has no cheaper native wind quote");
+                house->storedCredits=0;house->cityCredits=0;
+                house->startingCredits=pendingAA.queuedProductionCost+windQuote;
+                house->producedPower=house->getPowerRequirement();
+                for (int visit=0;visit<2;++visit) {
+                    auto power=airPlan();
+                    power.capitalChoice=-1;power.protectionCapital=false;power.cityGrowthProtected=false;
+                    power.nuclearPlan=true;power.forecastNetIncome=std::max(power.forecastNetIncome,nuclearQuote);
+                    power.cityPowerReserve=std::max(power.cityPowerReserve,
+                        power.rocketPowerBuffer+power.committedPowerDemand);
+                    require(power.money==windQuote && power.firstAirDefenceReserve==0
+                        && power.itemCount[Structure_RocketTurret]>0 && bot->firstAirDefencePending(power),
+                        "Queued-rocket generator control did not retain real AA debt and exact Windtrap cash");
+                    bot->buildProducer(power,spareYard);
+                    require(spareYard->getProductionQueueSize()>0
+                        && spareYard->getCurrentProducedItem()==Structure_WindTrap,
+                        "The financed Nuclear veto ended the yard turn instead of retaining legal Windtrap fallback");
+                    clearSpare();
+                }
+                house->storedCredits=keepStored;house->startingCredits=keepStarting;house->cityCredits=keepCity;
+                house->producedPower=keepPower;
+            }
+            if (!rocketPending) {
+                // F1 is an actual full-build consumer: its Light Factory may
+                // fit M, but not free cash after the still-unordered rocket.
+                config->force.firstFactoryOwnPrerequisites=true;
+                auto firstLane=airPlan();
+                require(firstLane.capitalChoice>=0
+                    && std::string_view(firstLane.capitalCandidates[firstLane.capitalChoice].kind)=="first_factory"
+                    && firstLane.capitalCandidates[firstLane.capitalChoice].builder==spareYard->getObjectID()
+                    && firstLane.capitalCandidates[firstLane.capitalChoice].price<=firstLane.money
+                    && firstLane.capitalCandidates[firstLane.capitalChoice].price>freeCash,
+                    "The competing F1 factory does not straddle the native AA free-cash boundary");
+                bot->buildProducer(firstLane,spareYard);
+                require(spareYard->getProductionQueueSize()==0 && !spareYard->isUpgrading(),
+                    "F1 spent the first-rocket balance while the other yard's Radar was queued");
+                config->force.firstFactoryOwnPrerequisites=false;
+                // Some real power need is still not a reason to finance the
+                // larger reactor when a native Windtrap is timely and legal.
+                const auto keepPower=house->producedPower;
+                house->producedPower=house->getPowerRequirement();
+                nuclearStart();
+                auto power=airPlan();
+                power.capitalChoice=-1;
+                const int windQuote=bot->purchasePrice(spareYard,Structure_WindTrap);
+                require(power.money>=windQuote && windQuote>0,"The canonical power prerequisite is not fundable");
+                {
+                    QuantBot::BuilderTurn turn(power.money);turn.pStructure=spareYard;turn.pBuilder=spareYard;
+                    bot->beginBuilderTurn(power,turn);bot->reserveBuilderCash(power,turn);
+                    require(bot->queueFoundedStructure(power,turn,Structure_WindTrap,__LINE__,"first_aa_real_power")
+                        && spareYard->getCurrentProducedItem()==Structure_WindTrap,
+                        "First-AA protection blocked the canonical real power prerequisite");
+                }
+                clearSpare();house->producedPower=keepPower;
+            }
+            // The other yard is not globally disabled: an actual full founded
+            // quote fitting the remaining free cash still enters a real queue.
+            auto funded=airPlan();
+            funded.capitalChoice=-1;
+            Uint32 fundedItem=NONE_ID;
+            bot->planningBuilder=spareYard->getObjectID();bot->clearPlacementCache(false,true);
+            for (Uint32 item:{Structure_ZoneResidential,Structure_ZoneCommercial,Structure_ZoneIndustrial})
+                if (bot->campaignAvailableToBuild(spareYard,item) && bot->purchasePrice(spareYard,item)>0
+                    && bot->purchasePrice(spareYard,item)<=freeCash && bot->findPlaceLocation(item).isValid()) {
+                    fundedItem=item;break;
+                }
+            require(fundedItem!=NONE_ID,"The two-yard fixture has no legal fully funded free-cash control");
+            {
+                QuantBot::BuilderTurn turn(funded.money);turn.pStructure=spareYard;turn.pBuilder=spareYard;
+                bot->beginBuilderTurn(funded,turn);bot->reserveBuilderCash(funded,turn);
+                require(bot->queueFoundedStructure(funded,turn,fundedItem,__LINE__,"first_aa_fully_funded_parallel")
+                    && spareYard->getCurrentProducedItem()==fundedItem,
+                    "First-AA protection rejected a fully funded free-cash parallel project");
+            }
+            clearSpare();
+            config->force.cityCompactPower=keepCompact;config->force.cityCompactPowerInstallments=keepFinance;
+        };
+        queuedCapital(false);
+        house->producedPower=0;
+        auto blackedOut=airPlan();
+        const auto beforeImport=house->getStartingCredits()+house->getEarnedCredits();
+        const auto portQueue=airPort->getProductionQueueSize();
+        {
+            QuantBot::BuilderTurn turn(blackedOut.money);turn.pStructure=airPort;turn.pBuilder=airPort;
+            bot->beginBuilderTurn(blackedOut,turn);bot->reserveBuilderCash(blackedOut,turn);
+            require(blackedOut.firstAirDefenceReserve==rocketPrice && blackedOut.money<importPrice
+                && !bot->produceItemWithLogging(blackedOut,turn,Unit_Tank,__LINE__,"first_aa_native_import_boundary"),
+                "An unpowered discretionary import spent first-rocket savings while Radar was busy");
+        }
+        require(airPort->getProductionQueueSize()==portQueue
+            && beforeImport==house->getStartingCredits()+house->getEarnedCredits(),
+            "Refused first-AA import changed the real queue or credits");
+        config->force.defencePrerequisites=false;
+        require(airPlan().firstAirDefenceReserve==0,"DefencePrerequisites OFF retained the new first-AA hold");
+        config->force.defencePrerequisites=true;house->producedPower=powered;
+        auto finishBuilding=[&](Uint32 item) {
+            const int before=house->getNumBuiltItems(item);
+            const auto beforePayment=house->getStartingCredits()+house->getEarnedCredits();
+            auto pass=airPlan();
+            const int ticks=3*bot->cityBuildTicks(pass,item)+int(MILLI2CYCLES(60000));
+            for (int tick=0;house->getNumBuiltItems(item)==before && tick<ticks;++tick) {
+                ++game.gameCycleCount;require(yard->update(),"First-AA yard died during native construction");
+                if (yard->isWaitingToPlace()) { auto placement=airPlan();bot->buildProducer(placement,yard); }
+            }
+            for (auto* building:structureList)
+                if (building->getOwner()==house && building->getItemID()==item
+                    && std::find(buildings.begin(),buildings.end(),building)==buildings.end()) buildings.push_back(building);
+            require(house->getNumBuiltItems(item)>before && house->getNumItems(item)>0
+                && house->getStartingCredits()+house->getEarnedCredits()<beforePayment,
+                "First-AA building did not physically complete with native payments and placement");
+        };
+        finishBuilding(Structure_Radar);
+        // Powered is not the same as enough headroom for an operational rocket.
+        // Its real enabling generator must still precede the protected turret.
+        house->producedPower=house->getPowerRequirement();
+        auto powerPrerequisite=airPlan();bot->buildProducer(powerPrerequisite,yard);
+        require(yard->getProductionQueueSize()>0
+            && (yard->getCurrentProducedItem()==Structure_WindTrap || yard->getCurrentProducedItem()==Structure_NuclearPlant),
+            "Protected AA skipped the actual turret-power prerequisite");
+        clear();house->producedPower=powered;
+        // OFF retains the original one-yard military-to-growth arbitration
+        // and its early yard allocation, even with buildable urgent AA.
+        growth.item=Structure_WindTrap;growth.price=bot->purchasePrice(yard,Structure_WindTrap);
+        bot->planningBuilder=yard->getObjectID();growth.site=bot->findPlaceLocation(Structure_WindTrap);
+        {
+            config->force.defencePrerequisites=false;
+            auto legacy=airPlan();
+            const auto offer=std::find_if(legacy.capitalCandidates.begin(),legacy.capitalCandidates.end(),[](const auto& candidate) {
+                return candidate.item==Structure_RocketTurret && candidate.urgent
+                    && std::string_view(candidate.reason)=="air_coverage";
+            });
+            require(offer!=legacy.capitalCandidates.end() && growth.site.isValid() && legacy.money>=growth.price,
+                "The OFF control lacks native urgent rocket and affordable growth-power alternatives");
+            const auto air=*offer;
+            legacy.capitalCandidates={air,competing,growth};legacy.cityYards=1;
+            legacy.nuclearPlan=false;
+            bot->chooseCapitalPlan(legacy);
+            require(legacy.capitalChoice>=0
+                && std::string_view(legacy.capitalCandidates[legacy.capitalChoice].kind)=="city_growth_power",
+                "DefencePrerequisites OFF changed the original military-to-growth choice");
+            bot->buildProducer(legacy,yard);
+            require(yard->getProductionQueueSize()>0
+                && (yard->getCurrentProducedItem()==Structure_WindTrap || yard->getCurrentProducedItem()==Structure_NuclearPlant),
+                "DefencePrerequisites OFF lost the original early growth allocation to AA");
+            clear();config->force.defencePrerequisites=true;
+        }
+        auto firstRocket=airPlan();firstRocket.moderateCrimeProperties=1;
+        firstRocket.capitalCandidates.clear();firstRocket.capitalChoice=-1;
+        bot->planCapitalCandidates(firstRocket);
+        firstRocket.capitalCandidates.push_back(competing);firstRocket.capitalCandidates.push_back(growth);
+        firstRocket.cityYards=1;bot->chooseCapitalPlan(firstRocket);
+        require(firstRocket.capitalChoice>=0
+            && firstRocket.capitalCandidates[firstRocket.capitalChoice].item==Structure_RocketTurret
+            && firstRocket.capitalCandidates[firstRocket.capitalChoice].urgent,
+            "Moderate crime relabelled the first urgent AA response as optional service");
+        bot->buildProducer(firstRocket,yard);
+        require(yard->getCurrentProducedItem()==Structure_RocketTurret,
+            "The protected Radar-to-first-rocket budget did not reach native production");
+        require(bot->capitalReserve(firstRocket,airPort->getObjectID())==0,
+            "The accepted first rocket kept a second same-pass cash reservation");
+        queuedCapital(true);
+        finishBuilding(Structure_RocketTurret);
+        require(airPlan().firstAirDefenceReserve==0,"A physical first rocket retained the bounded AA hold");
+        SDL_Log("FIRST_AA_DEFENCE_PASS: upgrade=paid radar=paid_and_placed rocket=paid_and_placed import=held_during_blackout");
         starportRule=keepStarportRule;
         SDL_Log("THREAT_TURRET_PASS: observed=8 goal=%d local=%d site=%d,%d hidden=ignored cap=12 starport=saved_and_queued",
             on.groundTurretGoal,on.groundTurretCover,site.x,site.y);

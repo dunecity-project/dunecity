@@ -36,6 +36,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -65,6 +66,8 @@ struct QuantBot::CapitalCandidate {
     /// scored highly" and not "this is a protection candidate" - treating
     /// routine coverage as urgent is what starved required civics.
     bool urgent=false;
+    /// Only an additional income-derived HF, never a legacy production candidate.
+    bool incomeHeavyCapacity=false;
     Coord site=Coord::Invalid();
 };
 
@@ -290,11 +293,13 @@ struct QuantBot::BuildPass {
         return UnitMixPolicy::greatestExistingDeficitSlot(
             unitMix, compositionValue, compositionPrice, compositionFactoryAvailable[supplier], {}) < UnitMixPolicy::kSlots;
     }
-    // Legacy surplus retains the working buffer after present and projected
-    // commitments. Unified finance admits the selected quote by its live drain.
+    // Ordinary finance uses the pass's already-reserved cash and working buffer.
+    // Simple keeps its projected/exemption policy; unified finance uses live drain.
     int compositionSurplusBudget() const {
         if (!bufferedHeavyProduction) return -1;
         if (startWhatMakesSense) return INT_MAX;
+        if (!techSavings)
+            return int(std::clamp<int64_t>(int64_t(money)-std::max(0,cashBuffer),-1,INT_MAX));
         if (!cashFlow.fundsParallelProduction) return -1;
         const int64_t projected=int64_t(cashFlow.projectedCash)-capitalOrderedCost;
         return int(std::clamp<int64_t>(std::min<int64_t>(money,projected)-std::max(0,cashBuffer),-1,INT_MAX));
@@ -375,6 +380,11 @@ struct QuantBot::BuildPass {
     bool routineRocketsAllowed{};
     int cityPlotPrice{};
     int rocketPowerBuffer{};
+    // Unordered balance of the urgent first-rocket prerequisite chain; queued debt is already booked in money.
+    int firstAirDefenceReserve{};
+    Uint32 firstAirDefenceBuilder{NONE_ID};
+    int firstAirDefenceUpgradeReserve{};
+    std::array<int,Num_ItemID> firstAirDefenceStepCosts{};
     bool openingSupplierDue{};
     int moderateCrimeProperties{};
     int dangerousCrimeProperties{};
@@ -397,6 +407,22 @@ struct QuantBot::BuildPass {
     AITelemetry::Record capitalOrders{};
     int capitalInitialCount{};
     uint64_t capitalDecision{};
+    int remainingFirstAirDefenceCash() const {
+        if (itemCount[Structure_RocketTurret]>0) return 0;
+        int64_t reserve=firstAirDefenceReserve;
+        // Release only components actually priced in the chosen minimum chain.
+        // A different yard's local upgrade does not reduce that chain's bill;
+        // a queued global prerequisite does, at its reserved component quote.
+        if (capitalConsumed && capitalChoice>=0) {
+            const auto& accepted=capitalCandidates[capitalChoice];
+            const auto kind=std::string_view(accepted.kind);
+            if (kind=="defence_upgrade" && accepted.builder==firstAirDefenceBuilder)
+                reserve-=std::min(firstAirDefenceUpgradeReserve,accepted.price);
+            else if (kind=="defence_prerequisite")
+                reserve-=firstAirDefenceStepCosts[accepted.item];
+        }
+        return int(std::max<int64_t>(0,reserve));
+    }
 
     // planBuildOrder()
     // Give city construction first access to this pass's planning budget.
@@ -494,6 +520,7 @@ struct QuantBot::YardTurn {
 
     // chooseYardProductionLanes()
     bool cityIncomeReady{};
+    bool techProgressionPending{};
 };
 
 #endif // QUANTBOT_BUILD_PASS_H

@@ -839,7 +839,9 @@ Both streams were complete and uncapped. This is financial/physical evidence,
 not army-health or strength acceptance.
 
 That source's separate, same-rule 24-pair/48-game health cohort kept Technology
-Installments ON in both arms and failed the unchanged aggregate gate:
+Installments ON and `FirstFactoryOwnPrerequisites=0` in both arms. It measured
+the isolated compact-power component, not the whole C2 genome, and failed the
+unchanged aggregate gate:
 
 | Paired game-mean ON−OFF | Delta | 95% bootstrap interval |
 |---|---:|---:|
@@ -864,6 +866,14 @@ three-metric gate; do not pool the original saved-rule continuations into the
 health cohort or rewrite the old48-game evidence. The separate SWMS48-game
 rejection record and no-288/no-promotion decision in §7 also remain in force.
 
+The original b3 health48 and `86dd997e` split-power science72 both keep F1 OFF.
+The C1-only ON config hash is `e5679146…`, distinct from whole C2 with F1 ON,
+`9607…`. Their component-negative evidence therefore does **not** establish
+that whole C2 failed a health gate: whole-C2 health remains unmeasured. The
+separate C2 original-save NoRocket failure and its All Against Atreides result
+are not changed by this attribution correction. Additional F1-ON arms at the
+immutable diagnostic source are a separate, as-yet-unreported comparison.
+
 The first integrated focused run at `77342e41` failed at the native start
 assertion, not because the working fleet lacked income: its retained full-bot
 plan recorded 1 spendable credit, 5,556 net forecast income and actual 100/90
@@ -873,6 +883,58 @@ vetting could run. That same power selector now honors a genuinely orderable
 compact installment project only with the financing gene ON; ordinary
 defence purchases and either gene-OFF saving are unchanged. The fixture retains its
 native order/payment/completion assertions and logs start inputs/results.
+
+### 5.9 Existing first-AA selection and savings protection
+
+`DefencePrerequisites` remains the existing hashed, default-ON switch. In the
+original `norocketturrets` blue-house-6 continuation, b3 selected growth Nuclear
+at cycle 78700 while a 200-credit urgent AA upgrade was affordable with 977
+spendable. That proves a selection failure, not upgrade completion: the retained
+negative control lacks the yard's health. The default arm also bought a
+240-credit import while Radar was queued, immediately before a 250-credit
+rocket candidate had only 32 spendable. These b3 failures remain negative evidence.
+
+The repair reuses the existing protected service/supplier classes in capital
+selection and reservation. Canonically urgent services precede discretionary
+military, additional production and growth, not genuine power recovery or native
+income suppliers. The yard applies growth-power/plot claims after essential
+power and its selected protected service. Dangerous crime retains its existing
+priority; moderate crime cannot relabel the first urgent AA response as optional.
+The new arbitration and matching yard order are gated by `DefencePrerequisites`;
+OFF keeps the original military/growth interleave and early growth allocation.
+
+For live engaged aircraft and no owned/queued rocket, one useful, legal first-AA
+chain protects its **unordered** native upgrade, prerequisite, turret and actual
+foundation quotes from other producers. Queued prerequisites and the current
+upgrade remainder are already deducted from `money`, so are not reserved again.
+The reserve survives a busy Radar/yard upgrade and is not waived to discretionary
+factory/Starport orders during a blackout. It records the priced chain's builder,
+included upgrade balance and actual per-step quotes. Same-pass releases remove
+only a component that was included: another yard's local upgrade cannot reduce
+the cheaper busy yard's Radar/rocket balance. Selected essential economy
+suppliers retain their existing access **before** affordability/hold checks.
+A committed rocket adds no second reserve: native queue accounting owns its
+debt, but the physical first-AA project is still pending until placement.
+
+Other yards cannot start an optional/proactive package by borrowing that cash
+through a first-installment exception. One native-quote predicate checks the
+actual building-plus-foundation package before slabs and again at acceptance,
+subtracting neither queued debt nor an already-withheld producer reserve twice.
+Fully funded free-cash projects and canonical essential economy retain access.
+Real power need retains the timely Windtrap path. Nuclear quote admission is
+applied during generator selection, including the legacy `nuclearPlan`
+installment branch, so a refused reactor retains the legal Windtrap fallback
+instead of ending the yard's turn repeatedly. Some power need does not license
+an unfunded Nuclear project when legal wind is available. No broader power
+selection model, credits, price, cap, goal or saved latch is added.
+
+`threat-turret-probe.inc` contains native consumers for chain-identity release,
+exact-cash first-Carryall supply, repeated nuclear-to-wind fallback and the OFF
+control, alongside the paid AA completion arm; these are not source-text wiring
+checks. The private reported-save observer also retains yard health,
+upgrade and full queue state at its existing blue-house-6 samples. Neither change
+establishes a passing replay: the original save still requires an actual newly
+placed rocket before natural loss under the unchanged continuation contract.
 
 ## 6. Required evidence before implementation promotion
 

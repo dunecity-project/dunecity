@@ -848,54 +848,249 @@ inline bool standaloneBufferedHeavy(const char* mod, const char* playerClass) {
     world.bot->configOverride=config;
     world.closeMilitaryMarket();
     auto* heavy=world.producer(Structure_HeavyFactory);
-    size_t heavySlot=UnitMixPolicy::kSlots, lightSlot=UnitMixPolicy::kSlots;
+    auto* lightFactory=world.lights.front();
+    size_t heavySlot=UnitMixPolicy::kSlots, otherHeavySlot=UnitMixPolicy::kSlots, lightSlot=UnitMixPolicy::kSlots;
     for (size_t slot=0;slot<UnitMixPolicy::kOrnithopterSlot;++slot)
-        if (heavy && world.bot->campaignAvailableToBuild(heavy,vehicles[slot])) { heavySlot=slot;break; }
+        if (heavy && world.bot->campaignAvailableToBuild(heavy,vehicles[slot])) {
+            if (heavySlot==UnitMixPolicy::kSlots) heavySlot=slot;
+            else { otherHeavySlot=slot;break; }
+        }
     for (size_t slot=UnitMixPolicy::kFirstLightSlot;slot<vehicles.size();++slot)
-        if (world.bot->campaignAvailableToBuild(world.lights.front(),vehicles[slot])) { lightSlot=slot;break; }
-    if (heavySlot==UnitMixPolicy::kSlots || lightSlot==UnitMixPolicy::kSlots) {
-        notApplicable("buffered_heavy_queue_budget",mod,playerClass,"no_canonical_heavy_and_light_offers");
+        if (world.bot->campaignAvailableToBuild(lightFactory,vehicles[slot])) { lightSlot=slot;break; }
+    if (otherHeavySlot==UnitMixPolicy::kSlots || lightSlot==UnitMixPolicy::kSlots) {
+        notApplicable("buffered_heavy_queue_budget",mod,playerClass,"no_two_canonical_heavy_and_light_offers");
         return false;
     }
     auto* second=static_cast<BuilderBase*>(world.place(Structure_HeavyFactory));
     second->curUpgradeLev=second->getMaxUpgradeLevel();second->updateBuildList();
     completeInitialEconomicAssets(world);
     secureInitialCityCore(world);
+    // The native projection must not borrow hypothetical future spice receipts.
+    for (int y=0;y<currentGameMap->getSizeY();++y) for (int x=0;x<currentGameMap->getSizeX();++x) {
+        auto* tile=currentGameMap->getTile(x,y);
+        if (tile->isSpice() || tile->hasSpice()) { tile->setType(Terrain_Sand);tile->setSpice(0); }
+    }
+    world.bot->lastCalculatedSpice=0;
     for (int i=0;i<2;++i) world.spawn(world.owner,vehicles[heavySlot],Coord(4+i,40));
     world.cash(19999);
+    lightFactory->doProduceItem(vehicles[lightSlot]); // Labelled prior native commitment.
+    const int queuedPrice=world.bot->purchasePrice(lightFactory,vehicles[lightSlot]);
+    const Uint32 partialDeadline=world.game->getGameCycleCount()+MILLI2CYCLES(3000);
+    while (lightFactory->getProductionProgress().lround()==0
+        && world.game->getGameCycleCount()<partialDeadline) world.tick();
+    require(lightFactory->getProductionQueueSize()==1
+                && lightFactory->getProductionProgress().lround()>0
+                && lightFactory->getProductionProgress()<queuedPrice,
+            "Buffered boundary control did not establish an actually partially paid native queue");
+    const int debt=queuedPrice-lightFactory->getProductionProgress().lround();
     const int price=world.bot->purchasePrice(heavy,vehicles[heavySlot]);
-    const auto withMargin=[&](int margin) {
-        const auto before=world.observePlan();
-        world.cash(world.owner->getCredits()+before.cashBuffer+margin
-            -std::min(before.money,before.cashFlow.projectedCash));
-        auto pass=world.observePlan();
-        pass.unitMix={}; // Labelled ratio control: both real HFs are currently overweight.
+    require(world.bot->campaignAvailableToBuild(world.yard,Structure_RocketTurret),
+            "Buffered boundary control lacks its legal protected-service quote");
+    const int protectedQuote=world.bot->purchasePrice(world.yard,Structure_RocketTurret);
+    const auto isolate=[&](QuantBot::BuildPass& pass) {
+        pass.unitMix={}; // Labelled ratio control: the two real HFs are overweight.
         pass.unitMix[heavySlot]=2000;pass.unitMix[lightSlot]=8000;
         pass.sharedSpending=false;pass.capitalChoice=-1;pass.capitalCandidates.clear();
-        require(pass.compositionSurplusBudget()==margin,"Real cash-flow setup did not establish the requested surplus margin");
+        // A labelled outstanding service need uses the real yard offer's price.
+        pass.civicReserveCost=std::max(pass.civicReserveCost,protectedQuote);
+    };
+    const auto withMargin=[&](int margin) {
+        auto before=world.observePlan();
+        isolate(before);
+        int reserve=0;
+        {
+            QuantBot::BuilderTurn turn(before.money);
+            turn.pStructure=heavy;turn.pBuilder=heavy;
+            world.bot->reserveBuilderCash(before,turn);
+            reserve=turn.reserve.reserved;
+        }
+        require(before.queuedProductionCost==debt && reserve>=protectedQuote,
+                "Native queue remainder or protected-service reservation was not carried into the pass");
+        world.cash(debt+before.cashBuffer+reserve+margin);
+        auto pass=world.observePlan();
+        isolate(pass);
+        require(pass.money==world.owner->getCredits()-debt
+                    && pass.cashFlow.projectedCash<0 && !pass.cashFlow.fundsParallelProduction,
+                "Buffered boundary control did not isolate negative hypothetical runway from reserved real cash");
+        {
+            QuantBot::BuilderTurn turn(pass.money);
+            turn.pStructure=heavy;turn.pBuilder=heavy;
+            world.bot->reserveBuilderCash(pass,turn);
+            require(turn.reserve.reserved==reserve && pass.compositionSurplusBudget()==margin,
+                    "Reserved real cash did not establish the requested remaining quote allowance");
+        }
         return pass;
     };
     const auto order=[&](QuantBot::BuildPass& pass,BuilderBase* producer) {
         QuantBot::BuilderTurn turn(pass.money);
-        turn.pStructure=producer;turn.pBuilder=producer;turn.bufferedHeavyOrder=true;
+        turn.pStructure=producer;turn.pBuilder=producer;
+        world.bot->reserveBuilderCash(pass,turn);
+        turn.bufferedHeavyOrder=true;
         return world.bot->produceItemWithLogging(pass,turn,vehicles[heavySlot],__LINE__,"buffered_heavy_value_choice");
     };
     auto low=withMargin(price-1);
+    const int lowMoney=low.money;
     require(world.bot->localCompositionSlot(low,heavy,-1)==UnitMixPolicy::kSlots
-                && !order(low,heavy) && heavy->getProductionQueueSize()==0,
-            "Overweight HF production spent the protected buffer when only the unit price was affordable");
+                && !order(low,heavy) && heavy->getProductionQueueSize()==0 && low.money==lowMoney,
+            "Overweight HF production spent a protected need or working buffer below the real quote");
     auto funded=withMargin(price);
-    const int64_t before=funded.compositionValue[heavySlot];
-    require(world.bot->localCompositionSlot(funded,heavy,funded.compositionSurplusBudget())==heavySlot
-                && order(funded,heavy) && heavy->getProductionQueueSize()==1
-                && funded.compositionValue[heavySlot]==before+world.price(vehicles[heavySlot])
-                && funded.compositionSurplusBudget()==0 && !order(funded,second)
-                && second->getProductionQueueSize()==0 && !funded.techSavings,
-            "Buffered heavy production failed its real queue, shared quote budget or existing-value bookkeeping");
+    auto off=funded;
+    off.bufferedHeavyProduction=false;
+    require(off.compositionSurplusBudget()==-1 && !order(off,heavy) && heavy->getProductionQueueSize()==0,
+            "B OFF relaxed the unchanged strict local U selector");
+    auto priority=funded;
+    priority.unitMix[heavySlot]=1000;
+    priority.unitMix[otherHeavySlot]=5000;
+    priority.unitMix[lightSlot]=4000;
+    require(world.bot->localCompositionSlot(priority,heavy,price)==otherHeavySlot,
+            "Buffered surplus displaced a genuine positive local Heavy-family deficit");
+    const int moneyBefore=funded.money;
+    const int orderedBefore=funded.capitalOrderedCost;
+    const int64_t valueBefore=funded.compositionValue[heavySlot];
+    require(order(funded,heavy) && heavy->getProductionQueueSize()==1
+                && heavy->getCurrentProducedItem()==vehicles[heavySlot]
+                && funded.compositionValue[heavySlot]==valueBefore+world.price(vehicles[heavySlot])
+                && funded.compositionRevision==1 && funded.money==moneyBefore-price
+                && funded.capitalOrderedCost==orderedBefore+price && !order(funded,second)
+                && second->getProductionQueueSize()==0 && funded.money==moneyBefore-price && !funded.techSavings,
+            "Exactly funded Heavy order double-booked debt, restored its quote debit or let a second producer double spend");
+    const int64_t spentBefore=world.spentQ32();
+    const Uint32 paidDeadline=world.game->getGameCycleCount()+MILLI2CYCLES(3000);
+    while (heavy->getProductionProgress()<=0 && world.game->getGameCycleCount()<paidDeadline) world.tick();
+    require(heavy->getProductionProgress()>0 && world.spentQ32()>spentBefore
+                && lightFactory->getProductionQueueSize()==1 && !lightFactory->isOnHold(),
+            "Exactly funded buffered Heavy order never received native payment or disturbed the prior queue");
+    const auto paid=world.observePlan();
+    require(paid.queuedProductionCost==std::max(0,queuedPrice-lightFactory->getProductionProgress().lround())
+                +std::max(0,price-heavy->getProductionProgress().lround()),
+            "Following pass did not reserve each native unpaid queue remainder exactly once");
     return true;
 }
 
+inline void standaloneIncomeLegacyGrowth(const char* mod, const char* playerClass) {
+    World world(mod,playerClass,false,Stage::Complete,Army::TinyMixed,2,true,HOUSE_ATREIDES);
+    auto config=std::make_shared<QuantBotConfig>(world.bot->botConfig());
+    config->force.existingCompositionUnitChoice=false;
+    config->force.bufferedHeavyProduction=false;
+    config->force.incomeHeavyFactories=false;
+    config->force.startWhatMakesSense=false;
+    world.bot->configOverride=config;
+    world.closeMilitaryMarket();
+    secureInitialCityCore(world);
+    // Labelled rich-grant, depleted-field opening: cash is not recurring income.
+    for (int y=0;y<currentGameMap->getSizeY();++y) for (int x=0;x<currentGameMap->getSizeX();++x) {
+        auto* tile=currentGameMap->getTile(x,y);
+        if (tile->isSpice() || tile->hasSpice()) { tile->setType(Terrain_Sand);tile->setSpice(0); }
+    }
+    world.bot->lastCalculatedSpice=0;
+    if (auto* city=world.game->getCitySimulation()) city->setCityTax(world.owner->getHouseID(),0);
+    world.cash(90230);
+    auto* heavy=world.producer(Structure_HeavyFactory);
+    require(heavy && world.bot->campaignAvailableToBuild(heavy,Unit_MCV),
+            "Legacy-growth control lacks its legal economic Heavy Factory offer");
+    heavy->doProduceItem(Unit_MCV); // Labelled prior economic occupation, not military throughput.
+    require(heavy->getProductionQueueSize()==1 && heavy->getCurrentProducedItem()==Unit_MCV,
+            "Legacy-growth control did not occupy its sole HF with a real MCV queue");
+    auto off=world.observePlan();
+    const auto choose=[&](QuantBot::BuildPass& pass) {
+        QuantBot::BuilderTurn turn(pass.money);
+        turn.pStructure=world.yard;turn.pBuilder=world.yard;
+        world.bot->beginBuilderTurn(pass,turn);
+        world.bot->reserveBuilderCash(pass,turn);
+        QuantBot::YardTurn yard;
+        yard.isCitySim=world.game->isCitySimEnabled();
+        world.bot->planYardLanes(pass,turn,yard);
+        world.bot->startYardSelection(pass,turn,yard);
+        world.bot->chooseYardProductionLanes(pass,turn,yard);
+        world.bot->chooseYardTechAndExpansion(pass,turn,yard);
+        world.bot->vetYardChoice(pass,turn,yard);
+        return yard;
+    };
+    const auto native=choose(off);
+    require(off.itemCount[Structure_HeavyFactory]==1 && off.activeHeavyFactoryCount==1
+                && native.itemID==Structure_HeavyFactory
+                && std::string_view(native.structureRule)!="income_heavy_capacity",
+            "Rich early baseline no longer has a native cash/backlog Heavy Factory expansion");
+    config->force.incomeHeavyFactories=true;
+    auto on=world.observePlan();
+    require(on.heavyIncomeFactoryTarget==1 && on.heavyIncomePendingFactories==0
+                && on.money==off.money && on.queuedProductionCost==off.queuedProductionCost
+                && on.forecastNetIncome<=0,
+            "Legacy-growth comparison did not preserve identical cash/debt and a genuinely met low income target");
+    const auto additive=choose(on);
+    require(additive.itemID==native.itemID
+                && std::string_view(additive.structureRule)==std::string_view(native.structureRule),
+            "I replaced or vetoed a native-ready Heavy Factory because its nominal income target was met");
+    auto sharedOff=off, sharedOn=on;
+    for (auto* pass : {&sharedOff,&sharedOn}) {
+        pass->sharedSpending=true;pass->capitalChoice=-1;pass->capitalCandidates.clear();
+        world.bot->planCapitalCandidates(*pass);
+    }
+    const auto nativeCandidate=[&](const QuantBot::BuildPass& pass) -> const QuantBot::CapitalCandidate* {
+        const QuantBot::CapitalCandidate* result=nullptr;
+        for (const auto& candidate:pass.capitalCandidates)
+            if (candidate.builder==world.yard->getObjectID() && candidate.item==Structure_HeavyFactory
+                && std::string_view(candidate.kind)=="production") {
+                require(!result,"One yard/item has competing native and income Heavy Factory candidates");
+                result=&candidate;
+            }
+        return result;
+    };
+    const auto* before=nativeCandidate(sharedOff);
+    const auto* after=nativeCandidate(sharedOn);
+    require(before && after && before->score>0 && !after->incomeHeavyCapacity
+                && after->score==before->score && after->capacity==before->capacity
+                && after->price==before->price && after->cost==before->cost
+                && after->foundationCost==before->foundationCost
+                && std::string_view(after->reason)==std::string_view(before->reason),
+            "I suppressed or rescored the unchanged native generic Heavy Factory candidate");
+    const int nativeScore=after->score;
+    sharedOn.heavyIncomeDemand=sharedOn.heavyIncomeCapacity+3*sharedOn.heavyIncomeFactoryCapacity;
+    sharedOn.heavyIncomeFactoryTarget=4; // Labelled additional-pressure merge boundary.
+    world.bot->planCompositionHeavyCapacity(sharedOn);
+    after=nativeCandidate(sharedOn);
+    require(after && after->score==nativeScore && !after->incomeHeavyCapacity,
+            "An additional income opportunity duplicated or replaced an already-positive native HF candidate");
+    size_t lightSlot=UnitMixPolicy::kSlots;
+    for (size_t slot=UnitMixPolicy::kFirstLightSlot;slot<vehicles.size();++slot)
+        if (on.compositionFactoryAvailable[0][slot]) { lightSlot=slot;break; }
+    require(lightSlot<UnitMixPolicy::kSlots,"Legacy-growth U boundary has no actual Light Factory family");
+    auto strict=on;
+    strict.existingCompositionChoice=true;
+    strict.unitMix={};strict.unitMix[lightSlot]=10000;
+    auto rejected=additive;
+    {
+        QuantBot::BuilderTurn turn(strict.money);
+        turn.pStructure=world.yard;turn.pBuilder=world.yard;
+        world.bot->vetYardChoice(strict,turn,rejected);
+    }
+    require(rejected.itemID==NONE_ID,
+            "I-on legacy HF selection received the income-only exception to U's strict native supplier check");
+    const int moneyBefore=on.money;
+    const int quote=world.bot->purchasePrice(world.yard,Structure_HeavyFactory);
+    {
+        QuantBot::BuilderTurn turn(on.money);
+        turn.pStructure=world.yard;turn.pBuilder=world.yard;
+        world.bot->beginBuilderTurn(on,turn);
+        world.bot->reserveBuilderCash(on,turn);
+        require(world.bot->produceItemWithLogging(on,turn,additive.itemID,__LINE__,additive.structureRule)
+                    && world.yard->getProductionQueueSize()==1
+                    && world.yard->getCurrentProducedItem()==Structure_HeavyFactory,
+                "I-on legacy expansion did not enter its actual native construction queue");
+    }
+    require(on.money==moneyBefore-quote && heavy->getCurrentProducedItem()==Unit_MCV
+                && heavy->getProductionQueueSize()==1 && !heavy->isOnHold(),
+            "Legacy HF quote was not charged exactly once or replaced the prior economic queue");
+    const int64_t spentBefore=world.spentQ32();
+    const Uint32 deadline=world.game->getGameCycleCount()+MILLI2CYCLES(3000);
+    while (world.yard->getProductionProgress()<=0 && world.game->getGameCycleCount()<deadline) world.tick();
+    require(world.yard->getProductionProgress()>0 && world.spentQ32()>spentBefore
+                && heavy->getCurrentProducedItem()==Unit_MCV && !heavy->isOnHold(),
+            "I-on native legacy factory expansion never received actual engine payment");
+}
+
 inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
+    standaloneIncomeLegacyGrowth(mod,playerClass);
     World world(mod,playerClass,false,Stage::Complete,Army::Empty,8,true,HOUSE_ATREIDES);
     auto config=std::make_shared<QuantBotConfig>(world.bot->botConfig());
     config->force.existingCompositionUnitChoice=false;
@@ -942,6 +1137,7 @@ inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
     const auto pressure=[&]() {
         auto pass=world.observePlan();
         pass.unitMix={};pass.unitMix[slot]=10000; // Labelled single-family income-pressure control.
+        pass.capitalBuilders.clear(); // Reforecast the controlled mix once per actual producer.
         world.bot->planCapitalForecast(pass);
         require(pass.heavyIncomeFactoryCapacity>0 && pass.allHeavyQueued,
                 "Income capacity control did not observe three real saturated heavy factories");
@@ -957,8 +1153,15 @@ inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
     require(pass.heavyIncomeFactoryTarget==6 && !pass.existingCompositionChoice && !pass.techSavings,
             "Independent income capacity retained a one/two-factory ceiling or enabled another selection policy");
     world.bot->chooseCapitalPlan(pass);
-    require(pass.capitalChoice>=0 && std::string_view(pass.capitalCandidates[pass.capitalChoice].reason)=="income_heavy_capacity",
+    require(pass.capitalChoice>=0 && pass.capitalCandidates[pass.capitalChoice].incomeHeavyCapacity
+                && std::string_view(pass.capitalCandidates[pass.capitalChoice].reason)=="income_heavy_capacity",
             "Legal saturated heavy capacity did not become the selected real capital project");
+    // Labelled source boundary: strict U has no positive local deficit at this
+    // exactly committed single-family mix. Only the selected income addition
+    // may admit another lane; merely leaving I on must not exempt legacy HFs.
+    pass.existingCompositionChoice=true;
+    require(!pass.compositionFactoryAdmits(Structure_HeavyFactory),
+            "Additional-income boundary unexpectedly has a native strict-U capacity opportunity");
     const auto builder=pass.capitalCandidates[pass.capitalChoice].builder;
     const auto found=std::find_if(pass.capitalBuilders.begin(),pass.capitalBuilders.end(),
         [&](const auto* value) { return value->getObjectID()==builder; });
@@ -966,9 +1169,23 @@ inline bool standaloneIncomeHeavy(const char* mod, const char* playerClass) {
     QuantBot::BuilderTurn turn(pass.money);turn.pStructure=*found;turn.pBuilder=*found;
     world.bot->beginBuilderTurn(pass,turn);
     QuantBot::YardTurn yard;yard.isCitySim=world.game->isCitySimEnabled();
+    world.bot->planYardLanes(pass,turn,yard);
     world.bot->startYardSelection(pass,turn,yard);
-    world.bot->chooseYardProductionLanes(pass,turn,yard);world.bot->vetYardChoice(pass,turn,yard);
-    require(yard.itemID==Structure_HeavyFactory,"Income-scaled factory choice was rejected by a legacy cap or final mix gate");
+    world.bot->chooseYardProductionLanes(pass,turn,yard);
+    world.bot->chooseYardTechAndExpansion(pass,turn,yard);
+    auto withoutIncome=pass;
+    withoutIncome.incomeHeavyFactories=false;
+    auto nativeYard=yard;
+    {
+        QuantBot::BuilderTurn nativeTurn(withoutIncome.money);
+        nativeTurn.pStructure=*found;nativeTurn.pBuilder=*found;
+        world.bot->vetYardChoice(withoutIncome,nativeTurn,nativeYard);
+    }
+    require(nativeYard.itemID==NONE_ID,
+            "The additional-capacity control already passes the native strict-U gate without its income source");
+    world.bot->vetYardChoice(pass,turn,yard);
+    require(yard.itemID==Structure_HeavyFactory && std::string_view(yard.structureRule)=="income_heavy_capacity",
+            "The actual income-derived factory failed source-specific final admission or borrowed a native rule");
     require(world.bot->produceItemWithLogging(pass,turn,yard.itemID,__LINE__,yard.structureRule)
                 && turn.pBuilder->getProductionQueueSize()==1
                 && turn.pBuilder->getCurrentProducedItem()==Structure_HeavyFactory,

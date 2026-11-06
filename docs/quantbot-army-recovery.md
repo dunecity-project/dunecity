@@ -179,17 +179,34 @@ planner; these additional candidates isolate the production-throughput changes.
 No candidate is promoted directly: behaviour checks, Genome's tournament and
 the historical-reference gate own promotion.
 
+The 2026-11-07 revision deliberately changes these two experimental policy
+contracts; it is not an arithmetic-bug claim. The prior policy required
+projected four-minute funding for B and let I replace legacy HF growth.
+Source-pinned negative controls exposed those restrictions; their historical
+results remain evidence about the old contract, not outcomes of this revision.
+U's strict positive-local-deficit rule and the light/air/Starport selectors
+remain unchanged. B is the existing, bounded Heavy-only surplus mechanism,
+not a second ordinary fallback added to U.
+
 With buffered-heavy production enabled, an otherwise idle HF may select its
 greatest current value deficit even when every locally offered family is
 overweight and a different producer owns the remaining shortfall. Zero-target,
 unavailable, capped and zero-price families do not become filler. A positive
-ordinary local deficit still outranks surplus spending. In legacy finance,
-both current spendable credits and the existing four-minute projection must
-cover the working buffer plus that actual quote; accepted orders consume this
-one shared allowance. The existing 500/2,000-credit military entry floors do
-not veto this fully buffered heavy-only path. No light-factory surplus mask is
-created. With `StartWhatMakesSense` enabled, its central live-drain admission
-replaces full-price funding checks, not composition or usefulness.
+ordinary local deficit still outranks surplus spending. With both
+`StartWhatMakesSense` and `SimpleTechSavings` OFF, the allowance is the existing
+pass's remaining `money` minus the working buffer, even if hypothetical
+four-minute production projects a cash shortfall. Existing native queue and
+upgrade remainders have already been reserved once; the producer also withholds
+its protected needs before the final actual-quote recheck. Accepted quotes
+decrease that same shared `money`; neither queued debt nor accepted capital
+quotes are subtracted again, and reserve restoration does not refund orders.
+This retains the existing debt model's approximations, not a new cash ledger.
+`SimpleTechSavings` keeps its projected-funding and selected-tech exemption
+semantics, so the fully cash-funded statement does not apply to that mode.
+The existing 500/2,000-credit military entry floors do not veto this buffered
+heavy-only path. No light-factory surplus mask is created.
+With `StartWhatMakesSense` enabled, its central live-drain admission replaces
+full-price funding checks, not composition or usefulness.
 
 Income-scaled heavy capacity uses the existing four-minute net-income forecast
 times the six heavy families' target value share. Each existing HF's legal
@@ -202,20 +219,34 @@ four-minute demand divided by that template. It has no one/two-factory ceiling.
 Pending HFs contribute separate committed-capacity telemetry and prevent a
 second yard duplicating an in-flight expansion.
 
-Extra HFs are ordinary capital candidates, including wealthy classic houses
-outside shared spending. All actual HFs must be busy, not held or upgrading;
-existing power, opening workers/transport/city bootstrap, military cap, funding,
-space and prerequisite rules remain. A true first/rebuilt HF keeps the existing
-bootstrap paths. Demanded, legally unlockable heavy-family upgrades are separate
-production-capital candidates; their selected real producer executes them.
-Legacy optional cash/backlog HF rules cannot bypass the income target.
+Income-derived extra HFs are ordinary capital candidates, including wealthy
+classic houses outside shared spending. For that additional source, all actual
+HFs must be busy, not held or upgrading; existing power, opening workers/
+transport/city bootstrap, military cap, projected funding, space and prerequisite
+rules remain. The unchanged legacy cash/backlog HF rules and generic production
+candidate are still evaluated exactly as with I OFF. Income demand can add an
+opportunity, not suppress native-ready growth when the income target is already
+met or an existing HF is occupied by workers/MCVs. A positive legacy HF candidate
+keeps its source, score and priority; a same-yard/item income opportunity reuses
+the ordinary candidate slot rather than creating a competing duplicate.
+Only an actual income-derived selection receives the income-specific final vet
+and its capacity exception; legacy HFs still obey U's ordinary strict supplier
+check. First/rebuilt suppliers, shared spending, pending/one-pass deduplication
+and protected urgent service precedence remain. Demanded, legally unlockable
+heavy-family upgrades remain separate production-capital candidates executed
+by their selected real producer.
 
-The engine fixture definitions include a real two-HF shared-quote-budget case
-and three saturated real HFs under a labelled single-family income-pressure
-control, selecting target six and rejecting another order while a real fourth
-HF is queued. These controlled fixtures are not natural-game throughput
-measurements. Natural HF counts, army value and outcome gates come from the
-source-pinned paired games.
+The existing engine fixture now defines quote-minus-one rejection and exact-quote
+acceptance/payment despite negative projected cash, with a prior partially paid
+native queue, a protected-service quote, reserve restoration and a second real
+HF unable to spend the same allowance. It also defines a wealthy low-income
+legacy-growth comparison with one HF busy building an MCV, unchanged generic
+candidate scoring, and source-specific U admission. The three-saturated-HF
+labelled income-pressure control still checks target six, an actual income-source
+order where strict U alone has no capacity deficit, and rejection of a duplicate
+while a real fourth HF is queued. These are controlled regression
+definitions, not natural-game throughput or promotion measurements. Natural HF
+counts, army value and outcome gates require source-pinned paired games.
 
 The causal Vanilla research-OFF comparison of `32adfb8a5^` and `32adfb8a5`
 did **not** establish the proposed direct Sonic-target loss: identical-input
