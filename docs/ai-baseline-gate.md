@@ -232,3 +232,16 @@ Regenerating a reference must retain the previous reference and its full
 provenance; never replace a bad historical comparison with a switch-only pass.
 The measured reference inventory and numerical results are linked here only
 after the corresponding pinned games have completed.
+
+**Reference 2026-11-06** (all 192 exact OFF contexts, eight seeds, complete):
+`~/Documents/projects/outputs/baseline-league-20261106/reference/reference-manifest.json`.
+Native sources and diagnostic bridges: 1.0.792 `45e46718`/`481d2d87`, 1.0.807
+`abdf71e7`/`863d1ac6`, 1.0.843 `c2063599`/`19824cce`. Use
+`history-792-807-843-observations.csv.gz` with gate `4ca69705` or later and
+`--bootstrap-samples 50000`: the default 4999 cannot resolve the 109 core and
+226 diagnostic seed-set strata. Current `22190b86` OFF (and its City research-ON
+lane) is a measured point, not a release; it is `BLOCKED_REGRESSION` against
+this history, mainly versus 1.0.843 on army value, heavy-factory adoption,
+dispatches, kill value and city zones. Pinned 1v1 bisection places the DuneCity
+loss between `56ab59cd` (1.0.851, good) and `bf3ddf4f` (1.0.863, bad), and a
+separate classic-content army loss between 1.0.843 and `56ab59cd`.
