@@ -800,3 +800,15 @@ The inventory/conflict/design deliverable is complete. The candidate's compile,
 exact-save, mandatory regression and288-paired receipts are required before any
 behavioral success or promotion claim; they are recorded when actually observed.
 
+At `6877ef5366db4ef165a78b4965bd8527971bc944`, focused job
+`20261107T002924-first-factory-swms-final-cfe346` passed the independent
+FirstFactoryOwnPrerequisites hard/brutal fixtures (37.6/35.4 s). SWMS failed
+on mini and the queue's pro retry (47.6/205.1 s): its LF start passed, but the
+later civic-zero fractional-payment check failed. That helper granted every
+queue only 3 credits and called a payment fractional only when below 1 credit,
+assumptions invalid for the Stadium's native tick rate. The corrected helper
+sizes its declared income from the actual queue rate and checks nonzero 32.32
+fractional bits; no engine payment or planner rule changes. The failed receipts
+remain failed evidence, not a green gate. Gene-A exact styles explicitly force
+SWMS OFF in both arms so that independent qualification need not await SWMS.
+

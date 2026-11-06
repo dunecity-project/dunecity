@@ -104,20 +104,24 @@ inline void pauseAndResume(World& world, BuilderBase* builder, const char* label
         "An empty treasury paid for ordinary production");
     require(builder->getProductionProgress().getRawValue() == progress,
             "An empty treasury advanced ordinary production");
-    world.owner->addCredits(3_fix, false); // The actual house income API funds resumption.
+    const int64_t one = FixPoint(1).getRawValue();
+    const int64_t nativeRate = queueProfile(world, builder).perCycle;
+    require(nativeRate > 0, "Payment check has no native positive queue rate");
+    const int income = std::max(3, int((nativeRate * 12 + one - 1) / one));
+    world.owner->addCredits(FixPoint(income), false); // Declared income funds twelve actual native ticks.
     int64_t firstPaid = 0;
     bool fractionalPayment = false;
     for (int tick = 0; tick < 12 && !builder->isWaitingToPlace(); ++tick) {
         const auto paid = paidTick(world, builder);
         firstPaid += paid;
-        fractionalPayment |= paid > 0 && paid < FixPoint(1).getRawValue();
+        fractionalPayment |= paid > 0 && paid % one != 0;
     }
     require(firstPaid > 0 && fractionalPayment,
             "Arriving income did not resume real fractional production payments");
     world.cash(0);
     for (int tick = 0; tick < 12; ++tick) require(paidTick(world, builder) == 0,
         "A production quote was treated as previously paid cash after income stopped");
-    world.owner->addCredits(7_fix, false);
+    world.owner->addCredits(FixPoint(std::max(7, income)), false);
     int64_t resumedPaid = 0;
     for (int tick = 0; tick < 12 && !builder->isWaitingToPlace(); ++tick)
         resumedPaid += paidTick(world, builder);
