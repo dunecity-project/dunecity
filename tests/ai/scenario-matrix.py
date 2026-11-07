@@ -308,7 +308,8 @@ def schedule(args):
             if game['kind'] == 'campaign' and game.get('ai_only'):
                 game['ai_only'] = False
                 game['id'] += '#human-partner'
-                game['cell'] += '#human-partner'
+                name, mod = game['cell'].split('/')
+                game['cell'] = f'{name}#human-partner/{mod}'
     if getattr(args, 'cases', None):
         games = [game for game in games if re.search(args.cases, game['id'])]
     if args.shard:
