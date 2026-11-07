@@ -1,3 +1,53 @@
+## 2026-11-07 — Private feature-only MBA development install (GUI qualification held)
+
+- Source `940c301a84b55d0a4b92c13ff93626e3208bd159` preserves current gameplay,
+  campaign, city, Research Lab, fixed Research Pace, Mountain Scenery and shared
+  Technology Installments features. Installments remain **default OFF**; captured
+  payments, old-save migration and the corrected legacy upgrade completion tick
+  are unchanged. The load/next-mission path retains outgoing-world teardown.
+- AI policy/defaults are the previously installed
+  `3710464dd6c75a969d0246860636b358ee9afcf7`, **not pristine historical QuantBot**.
+  The only production AI adapter selects an active live lab and books research's
+  actual upfront payment (zero for installment studies, full quote when prepaid).
+  Later composition/supplier/capacity, compact-power, continuous-research, SWMS,
+  first-factory and first-rocket experiments and offline trial hooks are absent.
+  Existing `3710464d` policies, including its default-OFF SimpleTechSavings, remain.
+  Experimental fixture files/results/history are preserved, but obsolete compiled
+  callers/registrations are detached. No AI recovery plan or comparison games ran.
+- Deterministic policy separation uses **protocol114**; **save9884/MOD19** and
+  **1.0.864dev** remain unchanged. This is a private ad-hoc-signed development app,
+  not an official release; no push, publication or trial overlay was installed.
+- Reviewed source built once through the coordinator in shared `build-int`
+  (native Release, release identity OFF; 97.18 s). Focused committed CTest job
+  `20261107T105333-feature-only-mba-940c301a-f51856` passed **9/9** in 10m34s:
+  Air five tests, mini four. Coverage includes ordinary unit/protocol tests,
+  skirmish/CivWars generators, research/installment payments and inactive-lab
+  accounting, menu navigation and save round trips. These are feature/path tests,
+  not new AI baseline/outcome qualification. Pro/Windows PC did not run these
+  checks; other release platforms/channels were not packaged or published.
+- Installed on `Stefans-MacBook-Air.local` at `/Applications/dunecity.app`:
+  executable SHA256
+  `52a4710af04b867ec2436d8e400e2cc08652e641ba0d08c3aa99e96db7691295`.
+  Strict deep codesign and actual bundled SDL2/SDL3 hidden-window runtime checks
+  passed on the MBA. Portable packaging used the existing CMake install route.
+  MBA Documents/FileProvider attached FinderInfo to extracted bundles; the owned
+  candidate was copied outside FileProvider and metadata-cleared before final
+  signature verification. Clean archives use `ditto --noextattr --norsrc --noacl`.
+- Original app rollback: `/Applications/dunecity-before-feature-only-20261107.app`;
+  independent app/profile copies:
+  `~/Documents/DuneCity App Backups/feature-only-20261107/{dunecity.app,profile}`.
+  The original profile's **59,294 files**, including **58 save/mpsave/replay
+  files**, are byte-identical before/after installation; nothing was added or removed.
+- **Held:** actual interactive MBA feature-menu and in-game load-transition
+  qualification. The isolated installed-app launch logs Metal rendering, a real
+  800x600 window and entry to the main menu, but NSWorkspace/System Events omit
+  its PID (error -1719); Carbon foreground registration returns -600 and native
+  CTRL+P input produced no PNG. This is not claimed as a GUI/load pass.
+- Frozen app, clean ZIP and evidence:
+  `../outputs/install-feature-only-mba-20261107/`. Receipts under `evidence/` record
+  the exact source policy, signature/runtime results, rollback, complete bundle
+  manifest, focused test summary and unchanged-profile hashes.
+
 ## 2026-11-06 — Shared technology installments and continuous AI research (OMP ResearchLabAI, unreleased)
 
 - New hashed **Technology Installments** match rule, **default OFF** for new games
