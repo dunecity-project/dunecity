@@ -220,6 +220,12 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
             int(game.isObserving()),int(init.getGameOptions().researchLab),style && *style ? style : "default");
     if (const char* path = std::getenv("BALANCE_SCENARIO_DUMP_MAP"))
         std::ofstream(path, std::ios::binary) << init.getFiledata();
+    if (const char* path = std::getenv("BALANCE_SCENARIO_DUMP_OPTIONS")) {
+        INIFile options(true, "Complete effective scenario options");
+        writeGameOptionsToConfig(options, "Game Options", init.getGameOptions());
+        if (!options.saveChangesTo(path))
+            throw std::runtime_error("Cannot record effective scenario options");
+    }
     const char* genomeDirectory = std::getenv("BALANCE_GENOME_PHASE_DIR");
     if (genomeDirectory) {
         INIFile options(true, "Complete effective candidate qualification options");

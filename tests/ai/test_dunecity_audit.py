@@ -85,6 +85,51 @@ def house_row(house='0', difficulty='hard', **extra):
 
 
 class DuneCityAuditTests(unittest.TestCase):
+    def test_map_export_preserves_bytes_and_seat_identity_in_queue_receipts(self):
+        import base64
+        import hashlib
+        with tempfile.TemporaryDirectory() as temporary:
+            results = Path(temporary) / 'results'
+            results.mkdir()
+            out = Path(temporary) / 'scratch'
+            out.mkdir()
+            data = b'[MAP]\r\nBinary=\xff\x00\r\n' + b'x' * 100000
+            (out / 'export-map.ini').write_bytes(data)
+            (out / 'profile').mkdir()
+            settings = b'[Game Options]\r\nResearch Lab=false\r\n'
+            (out / 'profile/Dune City.ini').write_bytes(settings)
+            (out / 'export-options.ini').write_bytes(settings)
+            args = types.SimpleNamespace(results=results, export_maps=Path('maps'))
+            for seat in ('original', 'swapped'):
+                game = dict(id=f'sample/vanilla/001/{seat}', sample_case=1, candidate_seat=seat)
+                audit['export_maps'](args, out, game, ['probe'], {'options_hash': 'effective'}, {}, {}, 'probe-sha')
+                directory = results / 'maps' / hashlib.sha256(game['id'].encode()).hexdigest()
+                self.assertEqual((directory / 'map.ini').read_bytes(), data)
+                self.assertEqual((directory / 'profile/Dune City.ini').read_bytes(), settings)
+                self.assertEqual((directory / 'effective-options.ini').read_bytes(), settings)
+                provenance = json.loads((directory / 'provenance.json').read_bytes())
+                self.assertEqual(provenance['setup']['options_hash'], 'effective')
+            rows = audit['read'](results / 'export-maps.csv')
+            for seat in ('original', 'swapped'):
+                chunks = [row for row in rows if row['candidate_seat'] == seat and row['artifact'] == 'map.ini']
+                self.assertEqual(len(chunks), int(chunks[0]['chunks']))
+                decoded = b''.join(base64.b64decode(row['base64'])
+                                   for row in sorted(chunks, key=lambda row: int(row['chunk'])))
+                self.assertEqual(decoded, data)
+                self.assertEqual(hashlib.sha256(decoded).hexdigest(), chunks[0]['sha256'])
+                self.assertEqual(len(decoded), int(chunks[0]['bytes']))
+
+    def test_map_export_requires_nonempty_dump(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            args = types.SimpleNamespace(results=Path(temporary), export_maps=Path('maps'))
+            with self.assertRaisesRegex(RuntimeError, 'Map export missing'):
+                audit['export_maps'](args, Path(temporary), dict(id='missing'), [], {}, {}, {}, '')
+
+    def test_map_export_does_not_change_sample_schedule(self):
+        ordinary = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'vanilla'])
+        exporting = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'vanilla', '--export-maps', 'maps'])
+        self.assertEqual(audit['schedule'](ordinary), audit['schedule'](exporting))
+
     def test_balanced_sampler_respects_both_mods_and_every_factor_level(self):
         args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
         games = audit['schedule'](args)

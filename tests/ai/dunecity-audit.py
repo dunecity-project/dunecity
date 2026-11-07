@@ -8,6 +8,7 @@ Additive tech-*.csv/composition.csv sidecars retain replacement-price compositio
 accepted commitments, exact first-owned/completed technology and four-minute
 quote-budget opportunities without changing historical games/houses/samples CSVs.
 """
+import base64
 import argparse
 import configparser
 import csv
@@ -731,6 +732,51 @@ def command(args, binary, game, out):
     return cmd
 
 
+MAP_EXPORT_FIELDS = ('id', 'sample_case', 'candidate_seat', 'artifact', 'sha256', 'bytes',
+                     'chunk', 'chunks', 'base64')
+
+
+def export_maps(args, out, game, cmd, setup, generated, summary, probe_sha256):
+    """Persist exact bytes and queue-collectable CSV receipts before scratch cleanup."""
+    directory = Path(args.export_maps)
+    if not directory.is_absolute():
+        directory = Path(args.results) / directory
+    destination = directory / hashlib.sha256(game['id'].encode()).hexdigest()
+    source = out / 'export-map.ini'
+    if not source.is_file() or not source.stat().st_size:
+        raise RuntimeError(f'Map export missing for {game["id"]}')
+    artifacts = {'map.ini': source.read_bytes()}
+    options_source = out / 'export-options.ini'
+    if not options_source.is_file() or not options_source.stat().st_size:
+        raise RuntimeError(f'Effective options export missing for {game["id"]}')
+    artifacts['effective-options.ini'] = options_source.read_bytes()
+    if '--game-options' in cmd:
+        artifacts['requested-game-options.ini'] = Path(cmd[cmd.index('--game-options') + 1]).read_bytes()
+    for path in sorted((out / 'profile').rglob('*.ini')):
+        relative = path.relative_to(out / 'profile')
+        if not {'mods', 'workshop'}.intersection(relative.parts):
+            artifacts[(Path('profile') / relative).as_posix()] = path.read_bytes()
+    provenance = dict(schema_version=1, game=game, command=cmd, setup=setup, generated=generated,
+                      summary=summary, probe_sha256=probe_sha256,
+                      settings_note='Profile INIs and requested overlay retained; setup hashes are effective engine receipts.',
+                      artifacts={name: dict(sha256=hashlib.sha256(data).hexdigest(), bytes=len(data))
+                                 for name, data in artifacts.items()})
+    artifacts['provenance.json'] = json.dumps(provenance, sort_keys=True, indent=2).encode('utf-8')
+    rows = []
+    for name, data in artifacts.items():
+        target = destination / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        # Bound CSV fields below Python's default field-size limit.
+        chunks = [data[index:index + 32768] for index in range(0, len(data), 32768)] or [b'']
+        for index, chunk in enumerate(chunks):
+            rows.append(dict(id=game['id'], sample_case=game.get('sample_case', ''),
+                             candidate_seat=game.get('candidate_seat', ''), artifact=name,
+                             sha256=hashlib.sha256(data).hexdigest(), bytes=len(data),
+                             chunk=index, chunks=len(chunks), base64=base64.b64encode(chunk).decode('ascii')))
+    append(Path(args.results) / 'export-maps.csv', MAP_EXPORT_FIELDS, rows)
+
+
 def retain_telemetry(results, out):
     """Copy only durable diagnostics before ordinary managed-profile cleanup."""
     relative = Path('diagnostics') / out.name
@@ -759,9 +805,13 @@ def play(args, scratch, binary, game):
     telemetry = args.attack_events or getattr(args, 'keep_telemetry', False)
     probe_sha256 = hashlib.sha256(Path(binary).read_bytes()).hexdigest()
     started = time.monotonic()
-    process = subprocess.run(command(args, binary, game, out), cwd=root, capture_output=True, text=True,
-                             env=dict(os.environ, BALANCE_DUNECITY_AUDIT='1',
-                                      DUNECITY_TECH_SAVINGS_AUDIT='1'))
+    cmd = command(args, binary, game, out)
+    env = dict(os.environ, BALANCE_DUNECITY_AUDIT='1', DUNECITY_TECH_SAVINGS_AUDIT='1')
+    if getattr(args, 'export_maps', None):
+        out.mkdir(parents=True, exist_ok=True)
+        env['BALANCE_SCENARIO_DUMP_MAP'] = str((out / 'export-map.ini').resolve())
+        env['BALANCE_SCENARIO_DUMP_OPTIONS'] = str((out / 'export-options.ini').resolve())
+    process = subprocess.run(cmd, cwd=root, capture_output=True, text=True, env=env)
     log = out / 'run.log'
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []
     result = next((parse(line, 'SCENARIO_RESULT:') for line in lines if 'SCENARIO_RESULT:' in line), {})
@@ -815,6 +865,12 @@ def play(args, scratch, binary, game):
                air_kill_attribution=capture['attribution'], air_kill_unknown_attribution=capture['unknown_attribution'],
                capture_mib=getattr(args, 'capture_mib', 256), diagnostics='')
     results = Path(args.results)
+    if getattr(args, 'export_maps', None):
+        try:
+            export_maps(args, out, game, cmd, setup, generated, summary, probe_sha256)
+        except (OSError, RuntimeError) as exc:
+            error = ';'.join(filter(None, (error, f'map_export_failed:{exc}')))
+            row['error'] = error
     if error:
         (results / f'failed-{out.name}.txt').write_text(game['id'] + '\n' + process.stdout[-4000:] + '\n'
                                                        + process.stderr[-4000:] + '\n' + '\n'.join(lines[-80:]))
@@ -898,9 +954,12 @@ def run(args):
                          ('samples.csv', SAMPLE_FIELDS), ('waves.csv', ATTACK_FIELDS),
                          ('air-kills.csv', AIR_KILL_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
+    exported = {row['id'] for row in read(results / 'export-maps.csv')
+                if row['artifact'] == 'map.ini'} if getattr(args, 'export_maps', None) else None
     done = {r['id'] for r in read(results / 'games.csv') if not r['error']
             and (not (args.attack_events or args.keep_telemetry) or r.get('attack_telemetry') == '1')
-            and (not args.keep_telemetry or r.get('diagnostics') and (results / r['diagnostics']).is_dir())}
+            and (not args.keep_telemetry or r.get('diagnostics') and (results / r['diagnostics']).is_dir())
+            and (exported is None or r['id'] in exported)}
     todo = [game for game in schedule(args) if game['id'] not in done]
     print(f'{len(todo)} games to play ({len(done)} complete)', flush=True)
     if todo:
@@ -1564,6 +1623,10 @@ def compare(control, candidate):
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--results', type=Path)
+parser.add_argument('--export-maps', type=Path, metavar='DIR',
+                    help='Retain exact generated INI/settings in DIR (relative to results); '
+                         'export-maps.csv carries chunked base64 bytes for cluster collection. '
+                         'Decode each id/artifact by numeric chunk; verify bytes and sha256.')
 parser.add_argument('--build-dir', default=str(root / 'build-int'))
 parser.add_argument('--prebuilt-probe', type=Path, help='Use a frozen probe binary without building or leasing the checkout')
 parser.add_argument('--scratch')
