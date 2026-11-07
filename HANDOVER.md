@@ -1,4 +1,4 @@
-## 2026-11-07 — Private feature-only MBA development install (GUI qualification held)
+## 2026-11-07 — Private feature-only MBA development install (headless-first validation)
 
 - Source `940c301a84b55d0a4b92c13ff93626e3208bd159` preserves current gameplay,
   campaign, city, Research Lab, fixed Research Pace, Mountain Scenery and shared
@@ -38,11 +38,18 @@
   `~/Documents/DuneCity App Backups/feature-only-20261107/{dunecity.app,profile}`.
   The original profile's **59,294 files**, including **58 save/mpsave/replay
   files**, are byte-identical before/after installation; nothing was added or removed.
-- **Held:** actual interactive MBA feature-menu and in-game load-transition
-  qualification. The isolated installed-app launch logs Metal rendering, a real
-  800x600 window and entry to the main menu, but NSWorkspace/System Events omit
-  its PID (error -1719); Carbon foreground registration returns -600 and native
-  CTRL+P input produced no PNG. This is not claimed as a GUI/load pass.
+- Actual installed-app native capture:
+  `evidence/06-feature-research-installment-rules.png` under the evidence root
+  below shows Research Lab ON, Technology Installments OFF, Normal Research Pace
+  and Mountain Scenery ON, rendered by Metal at 1600x1200. Aqua-session launching
+  resolved the earlier SSH foreground-registration problem; input was guarded by
+  the owned foreground PID. This capture predates the user's UI-testing override.
+- **Manual in-game load/next-mission flow was not completed**: the user stopped
+  interactive MBA testing before any load was attempted. Headless
+  `save_roundtrip_probe` passed, but is not relabelled as a manual transition pass.
+  All owned GUI processes and temporary launch agents were stopped/removed.
+  Standing policy is now **MBA headless only**; graphical checks belong on other
+  computers, and most testing remains headless. No normal-profile app was launched.
 - Frozen app, clean ZIP and evidence:
   `../outputs/install-feature-only-mba-20261107/`. Receipts under `evidence/` record
   the exact source policy, signature/runtime results, rollback, complete bundle
