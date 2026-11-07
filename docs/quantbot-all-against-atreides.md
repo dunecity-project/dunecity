@@ -20,12 +20,30 @@ headless).
 
 ## Pass condition
 
-On every one of six fixed seeds (his match seed 1756374161 plus five more), Atreides must
-eliminate all four houses (`House::isAlive`, the engine's own defeat rule) within **40 game
-minutes**. A slow win counts as a failure, because a slow win is what he reported. A single seed
-is chaotic: his own game and a headless replay of its seed match cycle for cycle for 12 minutes,
-then end 46 minutes apart. That is why six seeds are needed. Do not raise the limit or drop a
-seed to get a change through.
+On every supplied seed, Atreides must eliminate all four houses (`House::isAlive`, the
+engine's own defeat rule) within **50 game minutes**. Stefan explicitly set this recovery
+limit on 2026-11-07, replacing the former 40-minute gate; a slow win still fails.
+The runner and `quantbot_all_against_atreides` CTest use 50 by default and retain all six
+fixed default seeds. The approved recovery plan's focused gate uses exactly
+**1756374161 and 906213928**, selected with the existing `--seeds` option:
+
+```sh
+dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag aaa-recovery -- \
+  python3 tests/ai/scenario-matrix.py --tier full --cells '^aaa/qb-v-4ah/vanilla$' \
+  --aaa-seeds 2 --check --build-dir build-int --results RESULTS
+```
+
+The queued form reuses the scenario-matrix cell with the same map, roster, options
+and 50-minute deadline; its first two fixed seeds are exactly the two above.
+The legacy `run-all-against-atreides.py --seeds 1756374161 906213928` selector is
+also supported, but that older report-rich driver is not itself a distributed
+batch harness (`--output-dir`, not `--results`). Do not submit it directly to
+`dunecity-queue submit`; use the category above, or the pinned CTest gate for all six.
+
+Commit the tooling first; the queue uses that immutable revision, not dirty source.
+The default game cap is 51 minutes; victory after minute 50 fails. Do not describe a
+two-seed recovery run as a completed six-seed CTest gate, drop seeds, or change the
+deadline to get a candidate through. Historical measurements below retain their original limits.
 
 The runner (`tests/ai/run-all-against-atreides.py`) builds one probe and plays three matches at
 once. For each seed it prints the winner, the game time, Atreides' credits, army value and units,

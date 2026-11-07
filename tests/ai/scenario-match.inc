@@ -6,9 +6,9 @@
 //     multiplayer map (BALANCE_SKIRMISH), every house given its own team and controller class
 //     (BALANCE_SCENARIO_SIDES "house:team:class,...", e.g. 1:2:qBotBrutal,0:1:AIPlayerHard), run
 //     until one team is left (House::isAlive, the engine's own defeat rule) or the time limit;
-//   - a campaign mission (no sides: the human seat's QuantBot partner against the campaign
-//     enemies, as run-campaign-balance.py sets them up), run until the mission's own win/lose
-//     conditions end it (Game::finished) or the time limit.
+//   - a campaign mission (no sides: the player house's QuantBot against campaign enemies,
+//     as run-campaign-balance.py sets them up), run until the mission's own win/lose
+//     conditions end it (Game::finished, including spice quotas) or the time limit.
 // Once a game minute every playing house is sampled (EliminationMatch::sample) and its army's
 // "sortie" measured: combat ground units more than kAwayTiles from every structure of their
 // house. Scenario triggers (reinforcements, time-outs) are counted as they fire. The end logs
@@ -213,11 +213,11 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     const auto checksums = ModManager::instance().getEffectiveChecksums();
     const char* style = std::getenv("BALANCE_SCENARIO_STYLE");
     SDL_Log("SCENARIO_SETUP: seed=%u cycle=%u config_hash=%s options_hash=%s map_hash=%016llx "
-            "map_hash_algorithm=fnv1a64 content_hash=%s object_data_hash=%s city_sim=%d observing=%d style=%s",
+            "map_hash_algorithm=fnv1a64 content_hash=%s object_data_hash=%s city_sim=%d observing=%d research_enabled=%d style=%s",
             init.getRandomSeed(), game.getGameCycleCount(), getQuantBotConfig().getConfigHash().c_str(),
             init.getGameOptions().getHash().c_str(), static_cast<unsigned long long>(mapHash.value()),
             checksums.combined.c_str(), checksums.objectData.c_str(), int(game.isCitySimEnabled()),
-            int(game.isObserving()), style && *style ? style : "default");
+            int(game.isObserving()),int(init.getGameOptions().researchLab),style && *style ? style : "default");
     if (const char* path = std::getenv("BALANCE_SCENARIO_DUMP_MAP"))
         std::ofstream(path, std::ios::binary) << init.getFiledata();
     const char* genomeDirectory = std::getenv("BALANCE_GENOME_PHASE_DIR");

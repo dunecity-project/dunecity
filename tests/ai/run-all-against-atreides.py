@@ -9,8 +9,8 @@ unit and harvester overrides 0, concrete required, explored map, worms respawn .
 watched by a local spectator so no human player is involved.
 
 Pass: on every seed Atreides eliminates every other house within --win-minutes of game
-time. The limit comes from the last good release (see docs/quantbot-all-against-atreides.md);
-a slow win is the regression Stefan reported, so "eventually wins" is not enough.
+time. Stefan's recovery gate sets the limit at 50 minutes (2026-11-07; see
+docs/quantbot-all-against-atreides.md); "eventually wins" is not enough.
 
 Each seed prints winner, game time, Atreides' credits/army/harvester curve, enemies alive,
 attack waves launched (ground_hunt: count, size) and defence responses (defence_response,
@@ -47,9 +47,10 @@ ROSTER = 'harkonnen:1,atreides:2,ordos:1,fremen:1,sardaukar:1'
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--seeds', type=int, nargs='+', default=list(DEFAULT_SEEDS))
+parser.add_argument('--seeds', type=int, nargs='+', default=list(DEFAULT_SEEDS),
+                    help='Exact seeds to play; recovery gate: 1756374161 906213928')
 parser.add_argument('--jobs', type=int, default=3, help='Matches played at once')
-parser.add_argument('--win-minutes', type=float, default=40.0,
+parser.add_argument('--win-minutes', type=float, default=50.0,
                     help='Atreides must have eliminated every other house by this game minute')
 parser.add_argument('--minutes', type=int, default=0,
                     help='Game-time cap per match (default: --win-minutes + 1, the result is decided then)')

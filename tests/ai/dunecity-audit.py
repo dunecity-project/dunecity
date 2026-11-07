@@ -9,11 +9,13 @@ accepted commitments, exact first-owned/completed technology and four-minute
 quote-budget opportunities without changing historical games/houses/samples CSVs.
 """
 import argparse
+import configparser
 import csv
 import hashlib
 import json
 import math
 import os
+import random
 import shutil
 import statistics
 import subprocess
@@ -34,7 +36,7 @@ import match_score  # noqa: E402
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
 HOUSE_IDS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
 CLASSES = {'easy': 'qBotEasy', 'medium': 'qBotMedium', 'hard': 'qBotHard', 'brutal': 'qBotBrutal'}
-SPICE = {'none': 0, 'low': 1, 'medium': 2}
+SPICE = {'none': 0, 'low': 1, 'medium': 2, 'high': 3}
 DETECTORS = ('economy_stall', 'power_deficit', 'no_ground_defence', 'missing_starport', 'missing_radar',
              'missing_heavy_factory', 'missing_ix', 'idle_under_attack', 'unused_credits',
              'bankrupt_queue_empty', 'early_no_fight', 'zero_harvesters', 'storage_full')
@@ -54,7 +56,8 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
                       'map_hash', 'content_hash', 'object_data_hash', 'ai_config_hashes', 'probe_sha256',
                       'source_commit', 'source_fingerprint', 'source_fingerprint_error',
                       'air_kill_telemetry', 'air_kill_telemetry_reasons', 'air_kill_attribution',
-                      'air_kill_unknown_attribution', 'capture_mib', 'diagnostics')
+                      'air_kill_unknown_attribution', 'capture_mib', 'diagnostics',
+                      'mod', 'candidate_house', 'candidate_seat', 'sample_case', 'sample_seed', 'research_enabled')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
@@ -133,6 +136,12 @@ TECH_TABLES = (('tech-samples.csv', TECH_SAMPLE_FIELDS), ('composition.csv', COM
                ('tech-orders.csv', TECH_ORDER_FIELDS), ('tech-opportunities.csv', TECH_PLAN_FIELDS),
                ('tech-houses.csv', TECH_HOUSE_FIELDS), ('cheap-paths.csv', CHEAP_PATH_FIELDS))
 lock = threading.Lock()
+SAMPLE_FACTORS = {
+    'format': ('1v1', '2v2', 'ffa4', 'ffa6'),
+    'difficulty': ('easy', 'medium', 'hard', 'brutal'),
+    'size': (96, 128, 160),
+}
+SAMPLE_STRATA = ('format', 'difficulty', 'size', 'spice_level', 'initial_tech', 'candidate_seat')
 
 
 def read(path):
@@ -528,7 +537,73 @@ def tech_audit(lines, samples, final, capture):
                      cheap_path_rows(orders, complete))))
 
 
+def balanced_draw(levels, count, rng):
+    """Independent shuffled factor decks: each level occurs floor/ceil(count / levels) times."""
+    whole, extra = divmod(count, len(levels))
+    draw = list(levels) * whole + rng.sample(list(levels), extra)
+    rng.shuffle(draw)
+    return draw
+
+
+def sample_schedule(args):
+    games = []
+    mods = ('vanilla', 'dunecity') if args.mod == 'both' else (args.mod,)
+    for mod in mods:
+        rng = random.Random(f'{args.sample_seed}/{mod}')
+        factors = dict(SAMPLE_FACTORS, spice_level=tuple(SPICE)[int(mod == 'vanilla'):],
+                       initial_tech=tuple(range(3 if mod == 'vanilla' else 1, 10)))
+        draws = {factor: balanced_draw(levels, args.cases, rng) for factor, levels in factors.items()}
+        for index in range(args.cases):
+            case = {factor: draw[index] for factor, draw in draws.items()}
+            seed = rng.getrandbits(32)
+            fmt, enemy = case['format'], case['difficulty']
+            count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
+            houses = list(HOUSES[:count])
+            shift = index % count
+            houses = houses[shift:] + houses[:shift]
+            teams = [1, 1, 2, 2] if fmt == '2v2' else list(range(1, count + 1))
+            size, spice, tech = case['size'], case['spice_level'], case['initial_tech']
+            spec = (f'size={size},base={args.base},army={args.army},city={args.city},'
+                    f'spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
+                    f'tech={tech},credits=3000,seed={seed}')
+            cell = (f'sample/{mod}/s{args.sample_seed}-n{args.cases}/{args.base}-a{args.army}-c{args.city}/'
+                    f'{index + 1:03d}/{size}/{spice}/{fmt}/{enemy}/t{tech}/{args.minutes}m/{seed}')
+            # Only the candidate controller moves. Houses, starts, map and enemy tier
+            # stay fixed; in 2v2 the other three seats (including its ally) use that tier.
+            for swapped, seat in enumerate((0, 2 if fmt == '2v2' else count - 1)):
+                sides = [(house, team, 'brutal' if i == seat else enemy)
+                         for i, (house, team) in enumerate(zip(houses, teams))]
+                games.append(dict(id=f'{cell}/{"swap" if swapped else "original"}', **case,
+                                  seed=seed, variant=args.variant, sides=sides, base=args.base, army=args.army,
+                                  city=args.city, limit=args.minutes, style=args.style or 'default', mod=mod,
+                                  minutes=args.minutes, skirmish=spec, candidate_house=HOUSE_IDS[houses[seat]],
+                                  candidate_seat='swapped' if swapped else 'original',
+                                  sample_case=index + 1, sample_seed=args.sample_seed,
+                                  require_research=mod == 'dunecity'))
+    return games
+
+
+def shard(text):
+    try:
+        k, n = (int(part) for part in text.split('/'))
+        if 1 <= k <= n:
+            return k, n
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError('--shard K/N with 1 <= K <= N')
+
+
 def schedule(args):
+    games = sample_schedule(args) if args.mode == 'sample' else matrix_schedule(args)
+    if args.shard:
+        k, n = args.shard
+        games = games[k - 1::n]
+    return games
+
+
+
+
+def matrix_schedule(args):
     games = []
     for size in args.sizes:
         for spice in args.spice:
@@ -623,15 +698,33 @@ def detect(samples):
 
 def command(args, binary, game, out):
     sides = ','.join(f'{house}:{team}:{CLASSES[level]}' for house, team, level in game['sides'])
+    tracked = next((house for house, _, _ in game['sides']
+                    if HOUSE_IDS[house] == game.get('candidate_house')), game['sides'][0][0])
     cmd = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
            '--prebuilt-probe', str(binary), '--output-dir', str(out), '--scenario', '--mod', game.get('mod', 'dunecity'),
            '--seed', str(game['seed']), '--minutes', str(game['minutes']),
            '--capture-mib', str(getattr(args, 'capture_mib', 256)),
-           '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--house', game['sides'][0][0],
+           '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--house', tracked,
            '--scenario-sides', sides, '--local-spectator', '--skirmish', game['skirmish']]
     if not (args.attack_events or getattr(args, 'keep_telemetry', False)):
         cmd += ['--no-ai-telemetry']
-    if args.game_options:
+    if game.get('require_research'):
+        # Overlay the ordinary rule, even at tech 9. Never grant a lab or lower
+        # the requested technology to make a research-disabled game look valid.
+        options = configparser.ConfigParser(strict=False, interpolation=None)
+        options.optionxform = str
+        if args.game_options:
+            with Path(args.game_options).open() as handle:
+                options.read_file(handle)
+        if not options.has_section('Game Options'):
+            options.add_section('Game Options')
+        options.set('Game Options', 'Research Lab', 'true')
+        path = out.with_suffix('.game-options.ini')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('w') as handle:
+            options.write(handle)
+        cmd += ['--game-options', str(path)]
+    if args.game_options and not game.get('require_research'):
         cmd += ['--game-options', str(args.game_options)]
     if args.style:
         cmd += ['--scenario-style', args.style]
@@ -649,6 +742,16 @@ def retain_telemetry(results, out):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
     return relative.as_posix()
+
+
+def research_verified(game, setup, lines):
+    if not game.get('require_research'):
+        return True
+    observed = [parse(line, 'DUNECITY_TECH_SAMPLE:') for line in lines if 'DUNECITY_TECH_SAMPLE:' in line]
+    initial = {int(item['house']): item for item in observed if item.get('cycle') == '0'}
+    required = {HOUSE_IDS[house] for house, _, _ in game['sides']}
+    return (setup.get('research_enabled') == '1' and set(initial) == required
+            and all(item.get('research_enabled') == '1' for item in observed))
 
 
 def play(args, scratch, binary, game):
@@ -689,11 +792,19 @@ def play(args, scratch, binary, game):
     add_air_kill_samples(list(air_final.values()), capture)
     missing = any('power' not in sample for sample in samples)
     error = '' if process.returncode == 0 and result and samples and not missing else f'rc={process.returncode};incomplete={int(missing)}'
+    research = setup.get('research_enabled', '')
+    if not research_verified(game, setup, lines):
+        error = ';'.join(filter(None, (error, 'research_enabled_not_verified')))
+    if 'candidate_house' in game and str(game['candidate_house']) not in {house['house'] for house in final}:
+        error = ';'.join(filter(None, (error, 'candidate_result_missing')))
     row = dict(metadata(game), sides=','.join(f'{h}:{t}:{d}' for h, t, d in game['sides']),
                map_seed=generated.get('map_seed', ''), terrain_attempts=generated.get('attempts', ''),
                skipped=generated.get('skipped', ''), outcome=result.get('outcome', ''), winner_team=result.get('winner_team', ''),
                minutes=result.get('minutes', ''), loop_ms=timing.get('loop_ms', ''),
                wall_s=round(time.monotonic() - started, 3), digest=digest, attack_telemetry=int(telemetry), error=error)
+    row.update(mod=game.get('mod', 'dunecity'), research_enabled=research,
+               **{field: game.get(field, '') for field in
+                  ('candidate_house', 'candidate_seat', 'sample_case', 'sample_seed')})
     row.update({field: setup.get(field, '') for field in (
         'config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
     row.update(ai_config_hashes=','.join(f'{item["house"]}:{item["config_hash"]}' for item in configs),
@@ -769,10 +880,12 @@ def build_probe(args, scratch):
         return args.prebuilt_probe
     out = scratch / 'probe'
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
-                    '--output-dir', str(out), '--scenario', '--mod', getattr(args, 'mod', 'dunecity'), '--skirmish',
+                    '--output-dir', str(out), '--scenario', '--mod', 'vanilla' if args.mod == 'both' else args.mod, '--skirmish',
                     'size=64,base=cy,army=0,spice=0', '--scenario-sides',
                     'harkonnen:1:qBotEasy,atreides:2:qBotEasy', '--house', 'harkonnen', '--local-spectator',
-                    '--minutes', '1', '--capture-mib', str(getattr(args, 'capture_mib', 256)), '--no-ai-telemetry'],
+                    '--minutes', '1', '--capture-mib', str(getattr(args, 'capture_mib', 256)), '--no-ai-telemetry',
+                    '--build-only'],
+                   # Prepare only: no unrequested warm-up game outside the sampled schedule.
                    cwd=root, check=True, capture_output=True, text=True)
     shutil.rmtree(out / 'profile', ignore_errors=True)
     return probe_binary(out)
@@ -800,6 +913,11 @@ def run(args):
                     row = future.result()
                     print(f'[{n}/{len(todo)}] {row["id"]}: {row["minutes"]} min {row["error"]}', flush=True)
     report([results])
+    if args.mode == 'sample':
+        selected = {game['id'] for game in schedule(args)}
+        rows = {row['id']: row for row in read(results / 'games.csv')}
+        if any(game_id not in rows or rows[game_id]['error'] for game_id in selected):
+            raise SystemExit(1)
 
 
 def load(directories, name, keys):
@@ -810,9 +928,105 @@ def load(directories, name, keys):
     return list(rows.values())
 
 
+def sample_groups(games):
+    groups = defaultdict(list)
+    for game in games:
+        if game.get('candidate_house', '') == '':
+            continue
+        groups[(game['mod'], 'all', 'all')].append(game)
+        for factor in SAMPLE_STRATA:
+            groups[(game['mod'], factor, str(game[factor]))].append(game)
+    return groups
+
+
+def sample_coverage(games):
+    """List-mode coverage counts cases once, then shows both candidate seats."""
+    for mod in ('vanilla', 'dunecity'):
+        rows = [game for game in games if game['mod'] == mod]
+        if not rows:
+            continue
+        cases = {game['sample_case']: game for game in rows}
+        print(f'{mod}: {len(cases)} sampled cases / {len(rows)} games')
+        for factor in SAMPLE_STRATA[:-1]:
+            counts = defaultdict(int)
+            for game in cases.values():
+                counts[game[factor]] += 1
+            print(f'  {factor}: ' + ', '.join(f'{level}={count}' for level, count in sorted(counts.items())))
+        seats = defaultdict(int)
+        for game in rows:
+            seats[game['candidate_seat']] += 1
+        print('  candidate seats: ' + ', '.join(f'{seat}={count}' for seat, count in sorted(seats.items())))
+        if mod == 'dunecity':
+            print('  research: required at every initial tech level, including 9; verified from engine telemetry at run time')
+
+
+def sample_report(games, houses):
+    by_house = {(row['id'], row['house']): row for row in houses}
+    print('Sampler: one Brutal candidate seat; difficulty strata describe the other controllers. '
+          'Errors/missing candidate evidence are unmeasured, never counted as losses or zero scores.')
+    print('| Mod | Factor | Stratum | Games | Measured | Candidate wins | Draws | Mean score | Mean min | Research verified |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
+    for (mod, factor, level), rows in sorted(sample_groups(games).items()):
+        measured = [(game, by_house[(game['id'], str(game['candidate_house']))]) for game in rows
+                    if not game['error'] and (game['id'], str(game['candidate_house'])) in by_house]
+        wins = sum(house['won'] == '1' for _, house in measured)
+        draws = sum(house['drawn'] == '1' for _, house in measured)
+        score = f'{statistics.mean(float(house["score"]) for _, house in measured):+.3f}' if measured else 'unmeasured'
+        minutes = f'{statistics.mean(float(game["minutes"]) for game, _ in measured):.2f}' if measured else 'unmeasured'
+        research = f'{sum(game.get("research_enabled") == "1" for game, _ in measured)}/{len(rows)}' if mod == 'dunecity' else 'n/a'
+        print(f'| {mod} | {factor} | {level} | {len(rows)} | {len(measured)} | {wins} | {draws} | {score} | {minutes} | {research} |')
+
+
+def sample_comparison(control, candidate):
+    games = [{row['id']: row for row in load([directory], 'games.csv', ('id',))
+              if row.get('candidate_house', '') != ''} for directory in (control, candidate)]
+    houses = [{(row['id'], row['house']): row for row in load([directory], 'houses.csv', ('id', 'house'))}
+              for directory in (control, candidate)]
+    common = games[0].keys() & games[1].keys()
+    same = ('seed', 'mod', 'candidate_house', *SAMPLE_STRATA,
+            'map_hash', 'options_hash', 'content_hash', 'object_data_hash')
+    valid = [key for key in sorted(common) if all(not arm[key]['error'] for arm in games)
+             and all(games[0][key].get(field, '') != '' and
+                     games[0][key].get(field) == games[1][key].get(field) for field in same)
+             and all((key, arm[key]['candidate_house']) in source for arm, source in zip(games, houses))]
+    print(f'Sampler matched candidate seats {len(valid)}/{len(common)} common; '
+          f'control-only {len(games[0].keys() - games[1].keys())}, '
+          f'candidate-only {len(games[1].keys() - games[0].keys())}. '
+          'Pairing requires identical factors, map, options and content, not identical policy/source hashes.')
+    print('Intervals resample sampled cases, keeping the two swapped seats together; '
+          'no supported regression is not proof of equivalence.')
+    print('| Mod | Factor | Stratum | Matched/available seats | Cases | Score control -> candidate | Paired delta [95% CI] | Candidate wins control -> candidate | Verdict |')
+    print('|---|---|---|---|---|---|---|---|---|')
+    matched = set(valid)
+    available = {**games[0], **games[1]}
+    for (mod, factor, level), group in sorted(sample_groups(available.values()).items()):
+        rows = [game for game in group if game['id'] in matched]
+        if not rows:
+            print(f'| {mod} | {factor} | {level} | 0/{len(group)} | 0 | unmeasured | unmeasured | unmeasured | unmeasured |')
+            continue
+        by_case = defaultdict(list)
+        for game in rows:
+            key = (game['id'], game['candidate_house'])
+            by_case[(game['sample_seed'], game['sample_case'])].append([source[key] for source in houses])
+        pairs = [(statistics.mean(float(pair[1]['score']) for pair in group),
+                  statistics.mean(float(pair[0]['score']) for pair in group),
+                  all(pair[1]['drawn'] == '1' for pair in group),
+                  all(pair[0]['drawn'] == '1' for pair in group)) for group in by_case.values()]
+        result = match_score.compare(pairs, 9101)
+        wins = [sum(source[(game['id'], game['candidate_house'])]['won'] == '1' for game in rows)
+                for source in houses]
+        print(f'| {mod} | {factor} | {level} | {len(rows)}/{len(group)} | {len(pairs)} | '
+              f'{result.control:+.3f} -> {result.candidate:+.3f} | '
+              f'{result.difference:+.3f} [{result.low:+.3f}, {result.high:+.3f}] | '
+              f'{wins[0]} -> {wins[1]} | {result.verdict} |')
+
+
 def report(directories):
     games = load(directories, 'games.csv', ('id',))
     houses = load(directories, 'houses.csv', ('id', 'house'))
+    if any(game.get('candidate_house', '') != '' for game in games):
+        sample_report(games, houses)
+        return
     completed = [game for game in games if not game['error']]
     print(f'Games {len(completed)}/{len(games)}, houses {len(houses)}, '
           f'time limits {sum(game["winner_team"] == "0" for game in completed)}; '
@@ -1298,6 +1512,10 @@ def tech_comparison(control, candidate):
 
 
 def compare(control, candidate):
+    if any(game.get('candidate_house', '') != ''
+           for game in load([control, candidate], 'games.csv', ('id',))):
+        sample_comparison(control, candidate)
+        return
     old = {(row['id'], row['house']): row for row in load([control], 'houses.csv', ('id', 'house'))}
     new = {(row['id'], row['house']): row for row in load([candidate], 'houses.csv', ('id', 'house'))}
     common = sorted(old.keys() & new.keys())
@@ -1359,14 +1577,18 @@ parser.add_argument('--formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6
 parser.add_argument('--difficulties', nargs='+', choices=('medium', 'hard', 'brutal'), default=['medium', 'hard', 'brutal'])
 parser.add_argument('--seeds', nargs='+', type=int, default=[9101, 148680876])
 parser.add_argument('--minutes', type=int, default=30)
-parser.add_argument('--mod', choices=('dunecity', 'Dune2R', 'vanilla'), default='dunecity',
-                    help='Content family; classic games have a distinct id prefix, with identical audit telemetry')
+parser.add_argument('--mod', choices=('dunecity', 'Dune2R', 'vanilla', 'both'), default='dunecity',
+                    help='Content family; --mode sample accepts vanilla, dunecity or both')
 parser.add_argument('--tech', type=int, choices=range(1, 10), default=9,
                     help='Initial house technology; non-9 runs have distinct ids and recorded initial_tech metadata')
 parser.add_argument('--base', choices=('cy', 'small', 'medium', 'large', 'fortress'), default='medium')
 parser.add_argument('--army', type=int, choices=range(7), default=2)
 parser.add_argument('--city', type=int, choices=range(6), default=0)
-parser.add_argument('--mode', choices=('matrix', 'ladder'), default='matrix')
+parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='matrix',
+                    help='sample: balanced seeded factor draws, each played from two candidate seats')
+parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
+parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
 parser.add_argument('--style', help='QuantBot switch overlay from tests/ai/play-styles/ (same-build A/B)')
@@ -1384,6 +1606,10 @@ if not 1 <= args.minutes <= 120 or any(not 0 <= seed <= 0xffffffff for seed in a
     parser.error('Use 1-120 game minutes and unsigned 32-bit seeds')
 if not 256 <= args.capture_mib <= 4096:
     parser.error('Use 256-4096 MiB of capture space')
+if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:
+    parser.error('Use positive --cases and an unsigned 32-bit --sample-seed')
+if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and args.mod == 'Dune2R':
+    parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
 if args.compare:
     compare(*args.compare)
 elif args.report_dirs:
@@ -1391,8 +1617,12 @@ elif args.report_dirs:
 elif args.list:
     games = schedule(args)
     for game in games:
-        print(game['id'], game['skirmish'])
+        candidate = (f'candidate_house={game["candidate_house"]} seat={game["candidate_seat"]} '
+                     f'research_required={int(game["require_research"])}') if args.mode == 'sample' else ''
+        print(game['id'], game['skirmish'], candidate)
     print(f'{len(games)} games, {sum(len(game["sides"]) for game in games)} houses, {args.minutes} game minutes')
+    if args.mode == 'sample':
+        sample_coverage(games)
 elif not args.results:
     parser.error('--results is required to play games')
 else:

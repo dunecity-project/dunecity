@@ -7,16 +7,19 @@ all-QuantBot simulation. No human controller, fixture cash, artificial reinforce
 combat orders are introduced. `dunecity-audit.inc` is a probe-only, read-only sampler, enabled only
 by `BALANCE_DUNECITY_AUDIT`. Ordinary game/probe runs do not pay for these extra measurements.
 
-The initial matrix is 3 map sizes (96/128/160), 3 spice levels (None/Low/Medium), 3 formats
-(1v1/2v2/4-house FFA), 3 mirror difficulties (Medium/Hard/Brutal), and 2 fixed seeds
-(9101, 148680876): **162 games / 540 AI-house histories**, capped at 30 game minutes.
+The exhaustive `--mode matrix` is 3 map sizes (96/128/160), 4 spice levels
+(None/Low/Medium/**High**), 3 formats (1v1/2v2/4-house FFA), 3 mirror difficulties
+(Medium/Hard/Brutal), and 2 fixed seeds (9101, 148680876):
+**216 games / 720 AI-house histories**, capped at 30 game minutes. Use
+`--spice none low medium` to reproduce the former 162-game matrix.
 Each start has a Medium base, the Small 2,500-credit army, no prebuilt city, 3,000 credits,
 High rock and tech 9. These are specified starting conditions, not a claim to cover every
 Random Skirmish base/city/army choice. Generated terrain retries and skipped start items are
 recorded in `games.csv`. Changing starts/length changes game ids, so resume cannot mix those setups.
 
 ```sh
-dunecity-queue submit --tag dunecity-audit-baseline --cwd "$PWD" --   python3 tests/ai/dunecity-audit.py --results /path/to/audit/baseline --style dunecity-audit-control
+dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag dunecity-audit-baseline -- \
+  python3 tests/ai/dunecity-audit.py --build-dir build-int --results RESULTS --style dunecity-audit-control
 python3 tests/ai/dunecity-audit.py --report /path/to/audit/baseline
 python3 tests/ai/dunecity-audit.py --compare /path/to/audit/control /path/to/audit/candidate
 ```
@@ -35,10 +38,9 @@ Use a separate results directory for every config arm:
 - `--style dunecity-audit-opening-capital-off` disables **only CityOpeningCapital**.
 - `--style dunecity-audit-storage-off` disables **only StorageCapacity**.
 - `--prebuilt-probe FILE` uses an already-built, frozen probe without compiling.
-  For a bounded local fallback, copy the committed app/probe bundles outside `build-int`,
-  pass the frozen executable here and run at `nice -n 10 --jobs 2`; do not hold an
-  `agent-workspace --tests` lease for a long matrix. Keep the source hash/binary SHA256
-  receipt with the CSVs. Ordinary games never execute the controlled fixture branches.
+  Submit real games through the committed cluster queue; do not run a local mini batch
+  or create a separate private build tree. Keep source/binary identity with the CSVs.
+  Ordinary games never execute the controlled fixture branches.
 - `--attack-events` enables the runner's existing AI telemetry and retains nonempty
   `ground_hunt` dispatches in `waves.csv`. Reports include first dispatch time among
   attackers, attacking/measured houses, dispatches per ten alive-house minutes,
@@ -54,6 +56,73 @@ Every complete run writes `games.csv`, `houses.csv` and per-minute `samples.csv`
 written last. Resume skips only complete game ids. Failure logs and failed leased scratch survive
 for inspection; successful game profiles/bulk are removed through the existing scratch helpers.
 No fresh private build tree is created.
+
+## Balanced recovery skirmish sampler
+
+Use the same harness with **`--mode sample`**, not the exhaustive cross product.
+Default: **48 sampled cases per selected mod**, each run with the candidate in two
+opposite seats (**96 games/mod; 192 with `--mod both`**). `--mod` accepts
+`vanilla`, `dunecity`, or `both` in this mode; its ordinary default remains `dunecity`.
+`--cases N` changes the count per mod; `--sample-seed` (default **9101**) fixes both
+the shuffled factor draws and the 32-bit map/game seeds.
+
+| Factor | Vanilla | DuneCity |
+|---|---|---|
+| Format | 1v1, 2v2, FFA4, FFA6 | same |
+| Other AI difficulty | QuantBot Easy, Medium, Hard, Brutal | same |
+| Map size | 96, 128, 160 | same |
+| Spice | Low, Medium, High (never None) | None, Low, Medium, High |
+| Initial tech | 3–9 | 1–9 |
+| Research Lab rule | mod/game options | **always enabled, including initial tech 9** |
+
+Each factor is drawn from an independently shuffled balanced deck: within a mod,
+every level occurs either `floor(N/levels)` or `ceil(N/levels)` times. This is a
+seeded stratified sample, not all combinations. The original and swapped runs
+keep identical houses, teams, starts, terrain, initial tech and game seeds; only
+the **one Brutal candidate controller** moves to the opposite team's seat. Every
+other controller uses the sampled enemy tier, including the candidate's ally
+in 2v2. FFA4/6 use the last seat for the swap; 2v2 swaps slots 1 and 3.
+This avoids mistaking the other houses' results for the candidate's results.
+
+Starts and the default 30-minute limit reuse the audit's `--base`, `--army`,
+`--city` and `--minutes` options. The legacy `--sizes`, `--spice`, `--formats`,
+`--difficulties`, `--seeds` and `--tech` selections configure matrix/ladder runs;
+sample mode uses the complete factor domains above.
+
+```sh
+python3 tests/ai/dunecity-audit.py --mode sample --mod both --list
+python3 tests/ai/dunecity-audit.py --mode sample --mod both --cases 48 --sample-seed 9101 --list --shard 1/4
+dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag skirmish-recovery -- \
+  python3 tests/ai/dunecity-audit.py --mode sample --mod both --cases 48 --sample-seed 9101 \
+  --build-dir build-int --results RESULTS
+python3 tests/ai/dunecity-audit.py --report RESULTS
+python3 tests/ai/dunecity-audit.py --compare CONTROL CANDIDATE
+```
+
+Commit before submission; never submit dirty source or run this batch on the mini.
+`--shard K/N` partitions the same ordered schedule; use distinct shard result
+directories and `--report DIR1 DIR2 ...` to combine them.
+
+The DuneCity sample overlays the normal `[Game Options] Research Lab = true`
+rule after any supplied game-options file. It does **not** grant a free physical
+lab, reduce tech 9 to tech 8, or invent tech 10. `ScenarioMatch` passes these game
+options directly; the menu's tech-9 checkbox suppression is not used. At run time,
+the harness requires `research_enabled=1` in `SCENARIO_SETUP` **and** the existing
+`DUNECITY_TECH_SAMPLE` rows: every starting house must be observed at cycle 0,
+and every captured research flag must remain enabled. Missing/disabled telemetry
+records `research_enabled_not_verified`, retains failure evidence and fails the
+sample run. Merely setting the INI or printing `research_required=1` in `--list`
+does not verify research.
+
+New game columns retain mod, sampled case/seed, candidate house/seat and observed
+research enablement; use a **fresh results directory** after this schema change.
+Reports split candidate wins, draws, placement score, game length, errors/missing
+evidence and research verification by **each factor stratum and mod**, plus the
+overall mod result. Paired reports require identical case IDs, factors, maps,
+options and content (policy/source hashes may differ). Intervals resample whole
+sampled cases, keeping swapped seats together, rather than treating every house
+or both seats as independent evidence. Inspect every stratum against the control;
+“no supported regression” is not equivalence or permission to enable a candidate.
 
 ## Automatic detectors
 

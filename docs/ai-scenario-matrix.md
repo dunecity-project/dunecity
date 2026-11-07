@@ -24,12 +24,13 @@ Every game is a real match played headless to its end by the balance probe:
   `symmetric`); its mode (vanilla or DuneCity city simulation) follows `--mod` as in the menu.
   `base=cy` is a Construction Yard only start: each start's MCV is deployed where the map put it before
   the first cycle (`SCENARIO_CY_START`), no army, the menu's default 3,000 credits.
-- **Campaign missions** (no sides; `--house`, `--level`, optional `--mission`): the human seat is shared
-  by an idle human player and a QuantBot partner of `--partner-difficulty`; the enemies are the campaign's
-  default enemy AI (QuantBot Easy, `HouseChoiceMenu` `kEnemyAIClasses[0]`), or with
-  `--enemy-ai campaign` the "scenario settings" `CampaignAIPlayer`. The game runs until the mission's own
-  win/lose conditions end it (`Game::finished`: conquest or harvest quota; the DuneCity economic victory
-  is removed on `fix/remove-economic-victory`) or the time limit.
+- **Campaign missions** (no sides; `--house`, `--level`, optional `--mission`): the full-tier
+  vanilla gate uses a sole Brutal QuantBot on the player house, authored scenario-settings
+  `CampaignAIPlayer` opponents and `--campaign-ai-only`. No human is registered or issues orders.
+  A detached, command-disabled UI identity anchors the campaign's player house, without enabling
+  observer match-end semantics. The real mission's win/lose conditions (`Game::finished`) decide
+  conquest, loss and spice-quota victory; no forced conquest or scripted orders substitute for them.
+  DuneCity partner-difficulty diagnostics and the existing smoke campaign cells retain their prior setup.
 - Game rules come from the mod (`ModManager::loadEffectiveGameOptions`) as a new Custom Game takes them;
   `--game-options` (All against Atreides: Stefan's own options) applies on top.
 - Once a game minute every house is sampled, and its **sortie** measured: combat ground units more than
@@ -107,13 +108,13 @@ by the seed's index so every controller plays every house; map-named houses (All
 |---|---|---|
 | `skirmish` | 13 Random Skirmish cells: 1v1, 3-8 player FFA, 2v2, 3v3, 4v4; MCV only, small, medium and fortress bases; no, small and large armies; 8 vanilla, 5 DuneCity; QuantBot difficulties mixed with AI Player; 4 seeds each | decided, eliminations, idle armies; team cells with a stronger team must be won by it; placement score per controller (QB > QH > QM > QE) |
 | `cy` | 7 Construction Yard only cells: 1v1 QH v AH, QH v QM, QB v QE (40 min), QH mirror; 4P FFA vanilla and DuneCity; 2v2 mirror | as above |
-| `aaa` | All against Atreides, 6 quantbot_all_against_atreides seeds each: vanilla Brutal v 4 AI Player Hard (win within 40 min), the same in DuneCity (win within 40 min), the reverse Atreides Medium v 4 QuantBot Hard (must lose) | expected winner |
-| `campaign` | Atreides, Harkonnen and Ordos; levels 1-9: the level's first mission and, for levels 2-8, the second (missions 1-22 of `CampaignControls`); vanilla and DuneCity; partner Hard (2 seeds), Medium and Easy (1 seed); vanilla first missions also against `CampaignAIPlayer` | the mission loads and runs; Hard must win; how (conquest/quota); triggers fired |
+| `aaa` | All against Atreides: vanilla Brutal v 4 AI Player Hard (6 fixed seeds, win within **50 min**); DuneCity (6 seeds, win within its 60-min cap); saved Dune2R rules (7 seeds, unchanged 40-min gate); reverse vanilla Atreides Medium v 4 QuantBot Hard (6 seeds, must lose) | expected winner |
+| `campaign` | Vanilla: every real mission ID **1–22**, Atreides/Harkonnen/Ordos, one fixed seed per mission (**66 games**); sole Brutal player against authored `CampaignAIPlayer`. DuneCity retains Hard/Medium/Easy partner diagnostics, now also covering all 22 IDs | vanilla and Hard-partner missions must be won by their native conditions; conquest/quota and triggers reported |
 | `ladder` | Every adjacent pair (QB v QH, QH v QM, QM v QE) plus QB v QM and QH v QE. Long maps (the decision): Random Skirmish 128x128 (75 min) and 160x160 (90 min), vanilla and DuneCity, medium bases, no army, 18 seeds each played twice with the houses swapped (`#swap`; each side keeps its start): 144 games per pair. Short maps (reported): 96x96 small bases vanilla and DuneCity, Habbanya-Penny, a vanilla CY 96x96 start, 9 seeds x both houses: 72 per pair | the stronger QuantBot's placement score interval above 0 over the long maps (the interval resamples seeds); game length per cell |
 | `mp` | The most-played bundled maps (dunelegacy.com usage statistics, all time, 2026-10-18): 1v1 Habbanya-Penny (364 games), Tuono-Orac (104), Sihaya-Chvrches (82); 2v2 Sihaya-Toto (113), Deserted (105), 4P DuneCity (68, DuneCity mod); 3v3 Sihaya-Lenka (536), Full Wormage, Alkozeltser 4 (265, 256x256: 2 seeds, 80 min). QH teams v QH teams (4 seeds), and QH teams v AH teams on the 2v2/3v3 maps (must win) | decided, idle armies, expected winner |
 
-Time limits: 60 game minutes (7-8 player and 256x256 maps 80; All against Atreides vanilla 41, as the
-mandatory test; campaign 80).
+Time limits: 60 game minutes (7-8 player and 256x256 maps 80; All against Atreides vanilla 51,
+with victory required by 50; saved Dune2R remains 40; campaign 80).
 
 ### Flags
 
@@ -123,7 +124,7 @@ check (k/n with a Wilson 95% interval) and these flags, and collects every probl
 - **crash**: the probe failed or left no result;
 - **time-out**: two or more teams alive at the limit; **nobody eliminated** in a game of 3+ houses;
 - **idle**: a house that lasted 20+ game minutes without a single sortie minute or kill;
-- **campaign not finished / lost** (the Hard partner must win every mission);
+- **campaign not finished / lost** (the vanilla Brutal player and DuneCity Hard partner must win every mission);
 - **inverted**: an expectation's interval wholly below 50%, or the ladder's strong side scoring below 0.
 
 ## Tiers
@@ -141,40 +142,55 @@ check (k/n with a Wilson 95% interval) and these flags, and collects every probl
 
 Every game must also finish without a crash. 10 games, three at a time.
 
-**Full** (`--tier full`, 1,739 games, 1,080 of them ladder): the whole matrix.
+**Full** (`--tier full`): the whole matrix; `--list` prints the current schedule and counts.
 
 ## Running
 
+### Complete vanilla campaign recovery gate
+
+`run-campaign-matrix.py` is a thin entry point to the existing `campaign` category,
+not a separate campaign convention. It selects `player-brutal-v-campaign-ai/vanilla`,
+enforces native wins (`--check`), forwards the scenario-matrix options and writes the
+same `games.csv` / `houses.csv` evidence.
+
 ```sh
-# smoke, as ctest runs it
-python3 tests/ai/scenario-matrix.py --tier smoke --fresh --jobs 3 --build-dir build --results build/scenario-matrix-smoke
-# full tier, one machine
-python3 tests/ai/scenario-matrix.py --tier full --jobs 8 --results ~/Documents/projects/dunecity-results/scenario-matrix/<tag>
-# a slice: --categories ladder campaign, --seeds-per-cell 2, --cells 'QB-v-QM|3v3' (regex on
-# category/cell/mod), --ladder-seeds 9 (72 long ladder games per pair), --list (print the plan)
-# report over any number of results directories (e.g. the four shards)
+python3 tests/ai/run-campaign-matrix.py --list
+python3 tests/ai/run-campaign-matrix.py --list --shard 1/4
+dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag campaign-recovery -- \
+  python3 tests/ai/scenario-matrix.py --tier full --categories campaign \
+  --cells '^campaign/player-brutal-v-campaign-ai/vanilla$' --check --build-dir build-int --results RESULTS
+```
+
+Coverage per house: L1=mission 1; L2=2/3/4; L3=5/6/7; L4=8/9/10; L5=11/12/13;
+L6=14/15/16; L7=17/18/19; L8=20/21; L9=22. The previous first/second-only
+enumeration skipped **4, 7, 10, 13, 16 and 19** in every house. Mission 22 is the
+final mission, not another L8 branch. Each mission keeps its deterministic
+mission-specific seed from `seeds_for`; `--list` exposes those seeds.
+`--shard K/N` partitions the same ordered 66-game plan without replacing seeds or
+opponents. Merge shard directories with the existing `--report DIR1 DIR2 ...`.
+The default 80-minute cap is not a victory condition: unfinished quotas and other
+unfinished missions fail. Historical smoke expectations are unchanged.
+
+For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
+seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;
+see [sampler factors and research verification](quantbot-dunecity-audit.md#balanced-recovery-skirmish-sampler).
+
+```sh
+# Real games run only through the committed cluster queue, never a local mini batch.
+dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag sm-smoke -- \
+  python3 tests/ai/scenario-matrix.py --tier smoke --jobs 3 --build-dir build-int --results RESULTS
+# Full tier: change --tier smoke to --tier full; --categories / --cells select a slice.
+# --seeds-per-cell limits seeds without replacing them; --list prints the plan.
 python3 tests/ai/scenario-matrix.py --report DIR1 DIR2 ...
-# A/B of a candidate config switch: the same games with every QuantBot playing a play style
-# (tests/ai/play-styles/<style>.ini, e.g. allyjoin = [Force Concentration] JoinAllyWaves=true);
-# compare per game id with a run without --style
-python3 tests/ai/scenario-matrix.py --tier full --categories team --style allyjoin --results DIR
+# Same-source switch A/B: add --style NAME to the queued candidate arm, then compare.
+python3 tests/ai/scenario-matrix.py --compare CONTROL CANDIDATE
 ```
 
-Split across the four machines with `--shard K/N` (every N-th game from the K-th), each into its own
-results directory, then `--report` all of them:
+The queue distributes the existing harness over the cluster, including headless-only
+Air commands; it never submits the dirty checkout. For explicit independent shards,
+add `--shard K/N`, give each shard a distinct results directory, and combine them
+with `--report`. Do not launch simultaneous local batches or create another build tree.
 
-```sh
-dunecity-pro sync $PWD && dunecity-pro run --jobs 8 sm-<tag>-s1 scenario-matrix --tier full --shard 1/4
-dunecity-air sync $PWD && dunecity-air run --jobs 7 sm-<tag>-s2 scenario-matrix --tier full --shard 2/4
-# PC: bundle the branch to C:\dunecity\deps, fetch + checkout in C:\dunecity\src, detach build.ps1, then
-#   ps-batch.ps1 -Tag sm-<tag>-s3 -Harness scenario-matrix -Jobs 8 -ArgsFile <file: --tier full --shard 3/4>
-dunecity-queue submit --slots 3 --cwd $PWD --tag sm-<tag>-s4 --owner <you> -- \
-    python3 tests/ai/scenario-matrix.py --tier full --shard 4/4 --results <dir> --jobs 3
-dunecity-pro pull sm-<tag>-s1 <dir1>; dunecity-air pull sm-<tag>-s2 <dir2>   # PC: scp C:\dunecity\results\sm-<tag>-s3\*.csv
-```
-
-The runners' `run-batch.sh` accepts `scenario-matrix` as a harness (added 2026-10-18). Parity: the
-smoke tier on the Pro, the Air and the PC gives the same final digest for every game as on the mini.
 
 ## Machines and time
 

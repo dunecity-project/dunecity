@@ -4,6 +4,7 @@ import contextlib
 import csv
 import io
 import json
+from collections import Counter
 from pathlib import Path
 import tempfile
 import types
@@ -84,6 +85,89 @@ def house_row(house='0', difficulty='hard', **extra):
 
 
 class DuneCityAuditTests(unittest.TestCase):
+    def test_balanced_sampler_respects_both_mods_and_every_factor_level(self):
+        args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
+        games = audit['schedule'](args)
+        self.assertEqual(len(games), 192)
+        self.assertEqual(games, audit['schedule'](args))
+        for mod in ('vanilla', 'dunecity'):
+            rows = [game for game in games if game['mod'] == mod]
+            self.assertEqual(len(rows), 96)
+            originals = [game for game in rows if game['candidate_seat'] == 'original']
+            self.assertEqual(len(originals), 48)
+            levels = dict(audit['SAMPLE_FACTORS'],
+                          spice_level=('low', 'medium', 'high') if mod == 'vanilla' else tuple(audit['SPICE']),
+                          initial_tech=tuple(range(3 if mod == 'vanilla' else 1, 10)))
+            for factor, expected in levels.items():
+                counts = Counter(game[factor] for game in originals)
+                self.assertEqual(set(counts), set(expected), (mod, factor))
+                self.assertLessEqual(max(counts.values()) - min(counts.values()), 1, (mod, factor, counts))
+            for game in rows:
+                self.assertEqual(game['require_research'], mod == 'dunecity')
+                self.assertIn(f'tech={game["initial_tech"]},', game['skirmish'])
+                self.assertIn(f'spice={audit["SPICE"][game["spice_level"]]},', game['skirmish'])
+                if mod == 'vanilla':
+                    self.assertNotEqual(game['spice_level'], 'none')
+                    self.assertGreaterEqual(game['initial_tech'], 3)
+        changed = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both', '--sample-seed', '42'])
+        self.assertNotEqual(games, audit['schedule'](changed))
+        # Arbitrary case counts still have floor/ceil factor balance, not just multiples of 48.
+        args.cases = 53
+        for mod in ('vanilla', 'dunecity'):
+            rows = [game for game in audit['schedule'](args)
+                    if game['mod'] == mod and game['candidate_seat'] == 'original']
+            self.assertEqual(len(rows), 53)
+            for factor in audit['SAMPLE_STRATA'][:-1]:
+                counts = Counter(game[factor] for game in rows)
+                self.assertLessEqual(max(counts.values()) - min(counts.values()), 1)
+
+    def test_sampler_swaps_only_the_candidate_seat_and_shards_cover_the_same_cases(self):
+        args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both', '--cases', '13'])
+        games = audit['schedule'](args)
+        self.assertEqual(len(games), 52)
+        for original, swapped in zip(games[::2], games[1::2]):
+            self.assertEqual(original['skirmish'], swapped['skirmish'])
+            self.assertEqual(original['seed'], swapped['seed'])
+            self.assertEqual([side[:2] for side in original['sides']], [side[:2] for side in swapped['sides']])
+            teams = []
+            for game in (original, swapped):
+                candidate = next(side for side in game['sides']
+                                 if audit['HOUSE_IDS'][side[0]] == game['candidate_house'])
+                self.assertEqual(candidate[2], 'brutal')
+                self.assertTrue(all(level == game['difficulty'] for house, _, level in game['sides']
+                                    if audit['HOUSE_IDS'][house] != game['candidate_house']))
+                teams.append(candidate[1])
+            self.assertNotEqual(original['candidate_house'], swapped['candidate_house'])
+            self.assertNotEqual(*teams)
+        shard_ids = []
+        for k in range(1, 5):
+            args.shard = k, 4
+            shard_ids.extend(game['id'] for game in audit['schedule'](args))
+        self.assertEqual(Counter(shard_ids), Counter(game['id'] for game in games))
+
+    def test_dunecity_sampler_requires_observed_research_even_at_tech_nine(self):
+        args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'dunecity'])
+        game = next(game for game in audit['schedule'](args) if game['initial_tech'] == 9)
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / 'game'
+            args.game_options = Path(directory) / 'options.ini'
+            args.game_options.write_text('[Game Options]\nResearch Lab = false\nConcrete Required = false\n')
+            command = audit['command'](args, Path('unused-probe'), game, out)
+            options = audit['configparser'].ConfigParser()
+            options.read(command[command.index('--game-options') + 1])
+            self.assertTrue(options.getboolean('Game Options', 'Research Lab'))
+            self.assertFalse(options.getboolean('Game Options', 'Concrete Required'))
+            self.assertIn('tech=9,', command[command.index('--skirmish') + 1])
+        lines = [f'DUNECITY_TECH_SAMPLE: house={audit["HOUSE_IDS"][house]} cycle=0 research_enabled=1'
+                 for house, _, _ in game['sides']]
+        self.assertTrue(audit['research_verified'](game, dict(research_enabled='1'), lines))
+        self.assertFalse(audit['research_verified'](game, {}, lines))
+        self.assertFalse(audit['research_verified'](game, dict(research_enabled='0'), lines))
+        self.assertFalse(audit['research_verified'](game, dict(research_enabled='1'), lines[:-1]))
+        self.assertFalse(audit['research_verified'](
+            game, dict(research_enabled='1'), lines + [lines[0].replace('cycle=0 research_enabled=1',
+                                                                       'cycle=3750 research_enabled=0')]))
+
     def test_initial_technology_changes_the_real_skirmish_without_colliding_with_default_ids(self):
         options = ['--sizes', '96', '--spice', 'medium', '--formats', '1v1',
                    '--difficulties', 'hard', '--seeds', '9101']

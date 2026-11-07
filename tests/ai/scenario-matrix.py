@@ -13,10 +13,10 @@ Every game is a real match played headless to its end by the balance probe (run-
             against four AI Player Hard, his Game Options, the quantbot_all_against_atreides seeds),
             the same in the DuneCity mod, and the reverse sanity check (Atreides QuantBot Medium
             against four QuantBot Hard must lose).
-  campaign  Atreides, Harkonnen and Ordos missions of levels 1-9 (the level's first mission, and the
-            second for levels 2-8), vanilla and DuneCity: the human seat's QuantBot partner against the
-            campaign's default enemy AI (QuantBot Easy, as the campaign menu starts it; one cell with
-            the "scenario settings" CampaignAIPlayer). Hard must win; Easy and Medium are reported.
+  campaign  Vanilla: all 22 authored missions for Atreides, Harkonnen and Ordos, one fixed
+            seed each; a sole Brutal QuantBot controls the player house against CampaignAIPlayer,
+            with native mission victory including quotas. DuneCity retains the partner-difficulty
+            diagnostics; smoke retains its existing three campaign games.
   ladder    QuantBot against QuantBot 1v1, every adjacent pair (Brutal v Hard, Hard v Medium, Medium v
             Easy) plus Brutal v Medium and Hard v Easy. Decided on long games: Random Skirmish 128x128
             and 160x160, vanilla and DuneCity, medium bases, 75/90 minutes; the short maps (96x96,
@@ -176,23 +176,23 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
     aaa = lambda name, mod, codes, **kw: cells.append(match(
         'aaa', name, mod, [(code, 2 if house == 'atreides' else 1) for house, code in zip(aaa_houses, codes)],
         path=AAA_MAP, houses=aaa_houses, rotate=False, **kw))
-    aaa('qb-v-4ah', 'vanilla', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_OPTIONS, minutes=41,
-        expect=('wins', 2, 40), full=6)
-    # Stefan's 40-minute rule is for his vanilla setup; in DuneCity Atreides must win within the cap.
+    aaa('qb-v-4ah', 'vanilla', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_OPTIONS, minutes=51,
+        expect=('wins', 2, 50), full=6)
+    # Stefan's 50-minute recovery rule is for vanilla; in DuneCity Atreides must win within the cap.
     aaa('qb-v-4ah', 'dunecity', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_OPTIONS, minutes=60,
         expect=('wins', 2), full=6)
     aaa('qb-v-4ah-saved', 'Dune2R', ['AH', 'QB', 'AH', 'AH', 'AH'], options=AAA_DUNE2R_OPTIONS,
         minutes=40, expect=('wins', 2, 40), full=7)
     aaa('reverse-qm-v-4qh', 'vanilla', ['QH', 'QM', 'QH', 'QH', 'QH'], options=AAA_OPTIONS, minutes=60,
         expect=('loses', 2), smoke=1, full=6)
-    # 4. Campaign (built per mission in schedule()).
-    for mod in ('vanilla', 'dunecity'):
-        for partner in ('hard', 'medium', 'easy'):
-            cells.append(dict(category='campaign', name=f'partner-{partner}', kind='campaign', mod=mod,
-                              partner=partner, enemy_ai='quantbot', minutes=80, full=2 if partner == 'hard' else 1,
-                              smoke=0))
-    cells.append(dict(category='campaign', name='partner-hard-v-campaign-ai', kind='campaign', mod='vanilla',
-                      partner='hard', enemy_ai='campaign', minutes=80, full=1, smoke=0, first_only=True))
+    # 4. Campaign (built per mission in schedule()). The vanilla recovery gate is
+    # one actual scenario-settings campaign, not a difficulty-substituted skirmish.
+    cells.append(dict(category='campaign', name='player-brutal-v-campaign-ai', kind='campaign', mod='vanilla',
+                      partner='brutal', enemy_ai='campaign', ai_only=True, minutes=80, full=1, smoke=0))
+    for partner in ('hard', 'medium', 'easy'):
+        cells.append(dict(category='campaign', name=f'partner-{partner}', kind='campaign', mod='dunecity',
+                          partner=partner, enemy_ai='quantbot', minutes=80, full=2 if partner == 'hard' else 1,
+                          smoke=0))
     # 5. Difficulty ladder: the stronger QuantBot must win. Every adjacent pair, plus Brutal v Medium and
     # Hard v Easy; in the full tier both houses of every seed (each side keeps its start).
     # Long maps (the decision, Stefan 2026-10-20: "don't test on such short timelines"): Random
@@ -242,15 +242,17 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
     return cells
 
 
-def campaign_missions(first_only):
-    """(level, mission) per level: the first, and for levels 2-8 the second (CampaignControls)."""
-    out = []
-    for level in range(1, 10):
-        first = 1 if level == 1 else 22 if level == 9 else (level - 1) * 3 - 1
-        out.append((level, first))
-        if 2 <= level <= 8 and not first_only:
-            out.append((level, first + 1))
-    return out
+def campaign_missions():
+    """Every real mission ID once: L1=1, L2–7=three each, L8=20/21, L9=22.
+
+    The former first/second-only enumeration silently skipped 4/7/10/13/16/19.
+    Mission 22 is the final mission, not a third level-8 branch.
+    """
+    out = [(1, 1)]
+    for level in range(2, 9):
+        first = (level - 1) * 3 - 1
+        out.extend((level, mission) for mission in range(first, min(first + 3, 22)))
+    return out + [(9, 22)]
 
 
 def seeds_for(category, cell_name, count):
@@ -280,7 +282,7 @@ def schedule(args):
             continue
         if cell['kind'] == 'campaign':
             for house in ('atreides', 'harkonnen', 'ordos'):
-                for level, mission in campaign_missions(cell.get('first_only', False)):
+                for level, mission in campaign_missions():
                     for seed in seeds_for('campaign', f'{house}{mission}', count):
                         games.append(campaign_game(cell, house, level, mission, seed))
             continue
@@ -341,13 +343,14 @@ def match_game(cell, index, seed, suffix=''):
 
 
 def campaign_game(cell, house, level, mission, seed):
-    enemy = 'campaign AI' if cell['enemy_ai'] == 'campaign' else 'QE'
+    enemy = 'CampaignAIPlayer' if cell['enemy_ai'] == 'campaign' else 'QE'
     return dict(id=f'campaign/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}', category='campaign',
                 cell=f'{cell["name"]}/{cell["mod"]}', kind='campaign', seed=seed, mod=cell['mod'],
                 map=f'{house} level {level} mission {mission}', house=house, level=level, mission=mission,
-                partner=cell['partner'], enemy_ai=cell['enemy_ai'], minutes=cell['minutes'],
+                partner=cell['partner'], enemy_ai=cell['enemy_ai'], ai_only=cell.get('ai_only', False),
+                minutes=cell['minutes'],
                 sides=[(house, 1, 'Q' + cell['partner'][0].upper()), ('enemies', 2, enemy)],
-                expect=('campaign_won',) if cell['partner'] == 'hard' else None)
+                expect=('campaign_won',) if cell.get('ai_only') or cell['partner'] == 'hard' else None)
 
 
 # ---- Playing ----------------------------------------------------------------------------
@@ -411,7 +414,9 @@ def command(args, binary, game, out):
         cmd += ['--game-options', str(options_path)]
     if game['kind'] == 'campaign':
         cmd += ['--house', game['house'], '--level', str(game['level']), '--mission', str(game['mission']),
-                '--partner-difficulty', game['partner'], '--enemy-difficulty', 'easy', '--enemy-ai', game['enemy_ai']]
+                '--partner-difficulty', game['partner'], '--enemy-ai', game['enemy_ai']]
+        if game.get('ai_only'):
+            cmd += ['--campaign-ai-only']
         return cmd
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
@@ -542,7 +547,7 @@ def build_probe(args, scratch):
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                     '--output-dir', str(probe), '--scenario', '--skirmish', skirmish_spec(64, 'cy', 0),
                     '--scenario-sides', 'harkonnen:1:qBotEasy,atreides:2:qBotEasy', '--house', 'harkonnen',
-                    '--local-spectator', '--minutes', '1', '--capture-mib', '256', '--no-ai-telemetry'],
+                    '--local-spectator', '--minutes', '1', '--capture-mib', '256', '--no-ai-telemetry', '--build-only'],
                    cwd=root, check=True, capture_output=True, text=True)
     shutil.rmtree(probe / 'profile', ignore_errors=True)
     return probe_binary(probe)
@@ -944,7 +949,7 @@ def compare(args):
 
 
 def campaign_report(rows, houses, problems):
-    print('| Mod | Partner | Enemy | Missions | Won | Lost | Not finished | Crash | Win by conquest/quota '
+    print('| Mod | Player/partner | Enemy | Missions | Won | Lost | Not finished | Crash | Win by conquest/quota '
           '| Mean min (won) | Triggers fired |')
     print('|---|---|---|---|---|---|---|---|---|---|---|')
     by_cell = defaultdict(list)
@@ -967,15 +972,15 @@ def campaign_report(rows, houses, problems):
         for g in gs:
             if g['error']:
                 problems.append(f'campaign {g["id"]}: crash ({g["error"]})')
-            elif partner == 'hard' and g['outcome'] != 'won':
-                problems.append(f'campaign {g["id"]}: Hard partner {g["outcome"]} at {g["minutes"]} min')
+            elif g['expect'] == 'campaign_won' and g['outcome'] != 'won':
+                problems.append(f'campaign {g["id"]}: {partner} {g["outcome"]} at {g["minutes"]} min')
     print()
-    # Per mission (Hard partner): which missions do not end in a win.
-    print('Hard partner per mission (W won, L lost, T not finished, X crash; q = quota win):\n')
+    # Per required mission: losses and unfinished games are never counted as wins.
+    print('Required campaign missions (W won, L lost, T not finished, X crash; q = quota win):\n')
     grid = defaultdict(str)
     for g in rows:
         name, mod = g['cell'].split('/')
-        if name != 'partner-hard':
+        if g['expect'] != 'campaign_won':
             continue
         house, mission = g['id'].split('/')[3].split('-m')
         mark = 'X' if g['error'] else {'won': 'W', 'lost': 'L', 'time_limit': 'T'}.get(g['outcome'], '?')
@@ -1002,7 +1007,7 @@ def shard(text):
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--tier', choices=('smoke', 'full'), default='full')
-parser.add_argument('--build-dir', default=str(root / 'build'))
+parser.add_argument('--build-dir', default=str(root / 'build-int'))
 parser.add_argument('--results', help='Directory for games.csv and houses.csv (games already there are skipped)')
 parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories '
                                       '(default: leased agent scratch, removed after a successful batch)')
@@ -1039,7 +1044,7 @@ parser.add_argument('--style', help='A play style (tests/ai/play-styles/<style>.
                                     'arm of a candidate config switch; compare with a run without it (same seeds)')
 parser.add_argument('--compare', dest='compare_dirs', nargs=2, metavar=('CONTROL', 'CANDIDATE'),
                     help='Paired A/B of two results directories over their common game ids (ladder: the stronger '
-                         'side; team: the Hard team; campaign: the Hard partner won)')
+                         'side; team: the Hard team; campaign: the required player/partner won)')
 parser.add_argument('--manifest-b64', help='Inline genome manifest for candidate-specific mandatory AllAgainst gates')
 parser.add_argument('--genome', help='Actual candidate id; overrides only the Brutal Atreides, never allied Hard opponents')
 parser.add_argument('--qualification-source', help='Exact full candidate source SHA; stale/default receipts cannot qualify')

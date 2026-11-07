@@ -6,6 +6,7 @@
 #include <sand.h>
 #include <mod/ModManager.h>
 #include <players/QuantBotConfig.h>
+#include <players/HumanPlayer.h>
 #include <units/HarvesterHelpers.h>
 #include <memory>
 #include <cstdlib>
@@ -214,7 +215,10 @@ int runCampaignBalanceProbe() {
         WorkshopGameContent::resolveMod(saved, false);
         init = GameInitSettings(loadSave);
     }
-    const bool localSpectator=std::getenv("BALANCE_LOCAL_SPECTATOR")!=nullptr;
+    const bool campaignAiOnly=std::getenv("BALANCE_CAMPAIGN_AI_ONLY")!=nullptr;
+    // Bootstrap the engine's detached UI identity without registering a human.
+    // The campaign then uses its player house, not observer match-win semantics.
+    const bool localSpectator=std::getenv("BALANCE_LOCAL_SPECTATOR")!=nullptr || campaignAiOnly;
     init.setLocalSpectator(localSpectator);
     init.setMultiplePlayersPerHouse(!localSpectator);
     std::vector<std::pair<int,int>> roster;
@@ -271,6 +275,24 @@ int runCampaignBalanceProbe() {
     }
     if(localSpectator && (!game->isObserving() || !game->getGameInitSettings().isLocalSpectator()))
         throw std::runtime_error("Custom diagnostic did not create the real local observer");
+    if(campaignAiOnly) {
+        pLocalHouse=game->getHouse(humanHouse);
+        if(!pLocalHouse || pLocalHouse->getPlayerList().size()!=1
+           || pLocalHouse->getPlayerList().front()->getPlayerclass()!=partnerClass)
+            throw std::runtime_error("AI-only campaign did not create its sole candidate controller");
+        for(int h=0;h<NUM_HOUSES;++h)
+            if(const House* house=game->getHouse(h))
+                for(const auto& player : house->getPlayerList())
+                    if(dynamic_cast<HumanPlayer*>(player.get()))
+                        throw std::runtime_error("AI-only campaign registered a human controller");
+        game->spectatorViewPlayer=std::make_unique<HumanPlayer>(pLocalHouse,settings.general.playerName);
+        game->spectatorViewPlayer->playerID=Player::OBSERVER_PLAYER_ID;
+        pLocalPlayer=game->spectatorViewPlayer.get(); // Detached: cannot issue registered commands.
+        game->localObserver=false;
+        game->gameInitSettings.setLocalSpectator(false);
+        SDL_Log("PROBE_CONFIG: campaign_ai_only=1 house=%d player=%s enemy=%s registered_humans=0 native_victory=1",
+            int(humanHouse),partnerClass.c_str(),enemyClass.c_str());
+    }
     // This diagnostic can retain a full hour of every house's decisions.
     // The normal game capture limit is deliberately unchanged.
     if(std::getenv("BALANCE_CAPTURE_MIB"))

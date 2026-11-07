@@ -463,6 +463,9 @@ parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy wo
 parser.add_argument('--scenario', action='store_true',
                     help='AI scenario matrix game (tests/ai/scenario-matrix.py, scenario-match.inc): a campaign mission '
                          'to its own end, or with --scenario-sides a match on --custom-map/--skirmish until one team is left')
+parser.add_argument('--campaign-ai-only', action='store_true',
+                    help='Campaign scenario: sole QuantBot on the player house, authored CampaignAIPlayer enemies, '
+                         'no registered human; retain native mission victory including quotas')
 parser.add_argument('--scenario-sides',
                     help='Scenario match: house:team:class per house (class as PlayerFactory names it, e.g. '
                          'atreides:2:qBotBrutal,harkonnen:1:AIPlayerHard); on --custom-map one per map slot')
@@ -475,7 +478,7 @@ parser.add_argument('--scenario-style',
                          '(tests/ai/play-styles/<style>.ini) every QuantBot plays by, '
                          'e.g. a candidate config switch (test-only: not saved or hashed)')
 parser.add_argument('--mission', type=int, choices=range(1, 23),
-                    help='Campaign mission number instead of the --level\'s first (levels 2-8 have three each)')
+                    help='Campaign mission number instead of the --level\'s first (all real IDs 1–22)')
 parser.add_argument('--seed', type=int, default=486409243)
 parser.add_argument('--minutes', type=int, default=20)
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
@@ -567,6 +570,9 @@ if args.scenario:
                      'a campaign scenario neither.')
     if args.mission and args.scenario_sides:
         parser.error('--mission is for campaign scenarios.')
+if args.campaign_ai_only and (not args.scenario or args.scenario_sides or args.local_spectator
+                             or args.enemy_ai != 'campaign'):
+    parser.error('--campaign-ai-only needs a campaign --scenario and --enemy-ai campaign, without --local-spectator.')
 
 
 def team_number(brain, default):
@@ -1004,6 +1010,7 @@ if args.scenario:
                                                  for house, team, player_class in scenario_sides)
     if args.skirmish: env['BALANCE_SKIRMISH'] = args.skirmish
     if args.mission: env['BALANCE_MISSION'] = str(args.mission)
+    if args.campaign_ai_only: env['BALANCE_CAMPAIGN_AI_ONLY'] = '1'
 if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
 env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
