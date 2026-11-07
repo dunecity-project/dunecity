@@ -190,8 +190,8 @@ def play(args, scratch, binary, game):
                    win_type=('quota' if int(ending['quota']) > 0 and int(ending['win_flags']) & 4 and
                              any(h['alive'] == '1' for h in final if h['team'] != '1') else 'conquest')
                              if game['family'] == 'campaign' and ending['outcome'] == 'won' else '')
-        digests = [parse(line, 'PROBE_DIGEST:') for line in lines if 'PROBE_DIGEST:' in line]
-        row['digest'] = digests[-1].get('digest', '') if digests else ''
+        digests = [line.split('PROBE_DIGEST:', 1)[1].strip() for line in lines if 'PROBE_DIGEST:' in line]
+        row['digest'] = digests[-1] if digests else ''
         row['winner'] = '+'.join(sorted({house['players'] for house in final if house['team'] == row['winner_team']}))
         ids = [int(house['house']) for house in final]
         eliminated = {int(house['house']): float(house['eliminated_s']) for house in final if house['alive'] == '0'}
@@ -269,7 +269,36 @@ def compare(args):
                        for field in ('options_hash', 'content_hash')]
         print('| %s | %s | %s | %s | %s | %s |' %
               ((family, len(keys)) + tuple('/'.join(map(str, count_rows(group))) for group in groups) + tuple(differences)))
-    print('Sample candidate-seat placement scores are in houses.csv; missing tactical/economy metrics remain empty.')
+    houses = [{(row['id'], row['house']): row for row in read(Path(directory) / 'houses.csv')}
+              for directory in args.compare_dirs]
+    strata = defaultdict(list)
+    factors = ('format', 'difficulty', 'size', 'spice_level', 'initial_tech', 'candidate_seat')
+    for key, row in native.items():
+        if not key.startswith('sample/vanilla/') or key not in controls:
+            continue
+        if any(row.get(factor) != controls[key].get(factor) for factor in factors):
+            continue
+        strata[('all', 'all')].append(key)
+        for factor in factors:
+            strata[(factor, row[factor])].append(key)
+    if strata:
+        print('\nNative-context sample references; no identical-rule regression inference:')
+        print('| Factor | Stratum | Matched IDs | Control W/L/T/E | Native W/L/T/E | Mean score control -> native | Strict option exclusions |')
+        print('|---|---|---:|---|---|---|---:|')
+        for (factor, level), keys in sorted(strata.items()):
+            means = []
+            for source, observed in zip((controls, native), houses):
+                values = [float(observed[(key, source[key]['candidate_house'])]['score']) for key in keys
+                          if not source[key].get('error') and (key, source[key]['candidate_house']) in observed
+                          and observed[(key, source[key]['candidate_house'])].get('score', '') != '']
+                means.append('%+.3f (%d/%d)' % (sum(values) / len(values), len(values), len(keys))
+                             if values else 'unmeasured')
+            counts = ['/'.join(map(str, count_rows([source[key] for key in keys])))
+                      for source in (controls, native)]
+            excluded = sum(native[key].get('unsupported_options', '{}') != '{}' for key in keys)
+            print('| %s | %s | %s | %s | %s | %s | %s |' %
+                  (factor, level, len(keys), counts[0], counts[1], ' -> '.join(means), excluded))
+    print('Missing tactical/economy metrics remain empty. Context differences are enumerated per game.')
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--results')
