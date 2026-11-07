@@ -1051,17 +1051,18 @@ for line in events.open() if events else ():
     if row['event'] == 'session_start': metadata = row['data']
     if row['event'] == 'ground_hunt': attacks.append(row)
     if row['event'] == 'game_summary': final.append(row)
-    # The pressure fixture switches difficulty in-engine and checks each tier
-    # itself; its Hard/Brutal waves must not inherit the CLI's default Easy cap.
-    if not args.pressure_probe and row['event']=='ground_hunt' and row['data'].get('campaign_limited') and args.enemy_difficulty in ('easy','medium','hard'):
+    # The pressure fixture switches difficulty in-engine and checks each tier itself.
+    # Otherwise use the sending controller's recorded bounds, not the CLI enemy
+    # difficulty: an AI-only campaign also has a player-side QuantBot. Negative
+    # bounds mean unlimited (Brutal), not a cap already exceeded by every wave.
+    if not args.pressure_probe and row['event']=='ground_hunt' and row['data'].get('campaign_limited'):
         d=row['data']
+        unit_cap, value_cap, budget = d['alliance_unit_cap'], d['alliance_value_cap'], d['attack_budget']
         # Caps apply to this dispatch. Surviving units from older waves are
         # deliberately allowed alongside it after the repeat timer expires.
-        if (d['members']>d['alliance_unit_cap']
-                or d['value']>d['alliance_value_cap']
-                or d['alliance_units']>d['alliance_unit_cap']
-                or d['alliance_value']>d['alliance_value_cap']
-                or d['alliance_value']>d['attack_budget']):
+        if ((unit_cap >= 0 and max(d['members'], d['alliance_units']) > unit_cap)
+                or (value_cap >= 0 and max(d['value'], d['alliance_value']) > value_cap)
+                or (budget >= 0 and d['alliance_value'] > budget)):
             raise RuntimeError('Automatic campaign force exceeded its wave budget')
 summary = {'result':results[0],'sourceCommit':source_commit,
            'workingTreeModified':source_modified,
