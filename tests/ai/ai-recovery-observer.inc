@@ -79,7 +79,9 @@ inline void sample(Game& game,const std::map<int,Track>& tracks,const char* mark
 
 int runAIRecoveryProbe() {
     const bool campaign=std::string(std::getenv("RECOVERY_FAMILY"))=="campaign";
-    const bool humanSeat=std::string(std::getenv("RECOVERY_FAMILY"))=="aaa";
+    const bool humanSeat=std::string(std::getenv("RECOVERY_FAMILY"))=="aaa"
+        || (campaign && std::getenv("RECOVERY_CAMPAIGN_HUMAN_PARTNER")
+            && std::string(std::getenv("RECOVERY_CAMPAIGN_HUMAN_PARTNER"))=="1");
     const int tracked=std::stoi(std::getenv("RECOVERY_HOUSE"));
     const auto seed=static_cast<Uint32>(std::stoul(std::getenv("RECOVERY_SEED")));
     if(!ModManager::instance().setActiveMod("vanilla") || ModManager::instance().getActiveModName()!="vanilla")
@@ -90,7 +92,7 @@ int runAIRecoveryProbe() {
         applyGameOptionsFromConfig(INIFile(options),"Game Options",settings.gameOptions);
     settings.general.playerName="Historical recovery idle view";
     settings.general.diagnosticLogs=true;settings.network.metaServer="http://127.0.0.1:1/";
-    auto game=campaign?AIRecovery::initCampaign(tracked,std::stoi(std::getenv("RECOVERY_MISSION")),seed)
+    auto game=campaign?AIRecovery::initCampaign(tracked,std::stoi(std::getenv("RECOVERY_MISSION")),seed,humanSeat)
                       :AIRecovery::initMatch(humanSeat,seed);
     game->initializeGameLoop();
     const int requestedTech=std::stoi(std::getenv("RECOVERY_TECH"));

@@ -2,8 +2,9 @@
 """Native 1.0.796/807 recovery references, never a policy port (cluster-only games).
 
 Definitions are frozen from d253e015 in ai-recovery-fixtures/manifest.json. AAA
-uses the pre-820 idle HumanPlayer sharing Atreides; campaign uses one registered
-QuantBot and detached UI only, retaining native authored victory and quotas.
+uses the pre-820 idle HumanPlayer sharing Atreides. Campaign keeps native authored
+victory/quotas in two distinct arms: AI-only (including its native role defect),
+or --campaign-human-partner with an idle registered human and one Brutal QuantBot.
 Skirmish uses exact current-generated custom-map bytes with native TechLevel,
 and the owner's 2026-11-08 90-minute cap (unchanged factors, seeds and maps).
 No engine/AI object is rebuilt specially: only the private main is compiled.
@@ -52,7 +53,8 @@ HOUSE_NUMBERS = league.HOUSE_NUMBERS
 CLASSES = {'QB': 'qBotBrutal', 'QH': 'qBotHard', 'QM': 'qBotMedium', 'QE': 'qBotEasy', 'AH': 'AIPlayerHard',
            'brutal': 'qBotBrutal', 'hard': 'qBotHard', 'medium': 'qBotMedium', 'easy': 'qBotEasy'}
 EXTRA = ('release', 'baseline_release_source', 'family', 'host', 'cycle', 'map_sha256', 'requested_options_sha256',
-         'unsupported_options', 'native_options_hash', 'initial_native_tech', 'observer', 'comparability')
+         'unsupported_options', 'native_options_hash', 'initial_native_tech', 'observer', 'comparability',
+         'campaign_arm', 'registered_humans', 'allied_with_human', 'campaign_enemy')
 def fields(table):
     return tuple(dict.fromkeys(MANIFEST['schemas']['scenario'][table] + MANIFEST['schemas']['sample'][table] + list(EXTRA)))
 GAME_FIELDS, HOUSE_FIELDS, SAMPLE_FIELDS = (fields(table) for table in ('GAME', 'HOUSE', 'SAMPLE'))
@@ -82,6 +84,15 @@ def append(path, columns, rows):
 
 def schedule(args):
     games = [dict(g) for g in MANIFEST['games'] if g['family'] in args.family]
+    for game in games:
+        if game['family'] != 'campaign':
+            continue
+        game['campaign_arm'] = 'human-partner' if args.campaign_human_partner else 'ai-only'
+        if args.campaign_human_partner:
+            game['ai_only'] = False
+            game['id'] += '#human-partner'
+            name, mod = game['cell'].split('/')
+            game['cell'] = name + '#human-partner/' + mod
     if args.smoke:
         seen, smoke = set(), []
         for game in games:
@@ -137,6 +148,8 @@ def play(args, scratch, binary, game):
                release=native['release'], host=platform.node(), error='', outcome='', winner_team='',
                comparability='whole_native_release', attack_telemetry=0, research_enabled=0,
                observer='idle_shared_atreides_human' if game['family'] == 'aaa' else 'detached_unregistered_UI')
+    if game.get('campaign_arm') == 'human-partner':
+        row['observer'] = 'idle_shared_campaign_human'
     row['sides'] = ' '.join('%s:%s:%s' % tuple(side) for side in game['sides'])
     row['probe_sha256'] = hashlib.sha256(Path(binary).read_bytes()).hexdigest()
     failed = True
@@ -158,6 +171,7 @@ def play(args, scratch, binary, game):
             env.pop(key, None)
         if game['family'] == 'campaign':
             env['RECOVERY_MISSION'] = str(game['mission'])
+            env['RECOVERY_CAMPAIGN_HUMAN_PARTNER'] = str(int(not game.get('ai_only', True)))
         else:
             path = fixtures / game['map_file']
             row['map_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -186,6 +200,11 @@ def play(args, scratch, binary, game):
         if game['family'] != 'campaign' and {(house['house'], house['team']) for house in final} != {
                 (str(HOUSE_NUMBERS[h]), str(team)) for h, team, _ in game['sides']}:
             raise ValueError('Native house/team roster differs from frozen definition')
+        if game['family'] == 'campaign':
+            roles = [parse(line, 'RECOVERY_CAMPAIGN_ROLE:') for line in lines if 'RECOVERY_CAMPAIGN_ROLE:' in line]
+            if len(roles) != 1 or int(roles[0]['registered_humans']) != int(not game.get('ai_only', True)):
+                raise ValueError('Missing or inconsistent native campaign role receipt')
+            row.update({field: roles[0][field] for field in ('registered_humans', 'allied_with_human', 'campaign_enemy')})
         row.update(ending)
         row.update({key: setup[key] for key in ('config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
         row.update(native_options_hash=setup['options_hash'], initial_native_tech=setup['tech_level'],
@@ -251,7 +270,8 @@ def report(args):
                 continue
             counts = count_rows(family_rows)
             gate = sum(not r.get('error') and r['outcome'] == 'won' and float(r['minutes']) <= 50 for r in family_rows) if family == 'aaa' else ''
-            print('| %s | %s | %s | %s | %s | %s | %s | %s |' % ((Path(directory).name, family, len(family_rows)) + counts + (gate,)))
+            label = Path(directory).parent.name + '/' + Path(directory).name
+            print('| %s | %s | %s | %s | %s | %s | %s | %s |' % ((label, family, len(family_rows)) + counts + (gate,)))
     if not args.report_dirs:
         good = {r['id'] for r in rows if not r.get('error')}
         missing = {g['id'] for g in schedule(args)} - good
@@ -261,15 +281,18 @@ def report(args):
 def compare(args):
     controls, native = ({r['id']: r for r in read(Path(directory) / 'games.csv')} for directory in args.compare_dirs)
     print('Whole-native-release reference; different content/engine/options are disclosed, not policy-isolated evidence.')
-    print('| Family | Common IDs | Control W/L/T/E | Native W/L/T/E | Option hashes differ | Content hashes differ |')
+    print('| Family | Common IDs | Control W/L/T/E | Native W/L/T/E | Option hashes differ/measured | Content hashes differ/measured |')
     print('|---|---:|---|---|---:|---:|')
     for family in ('aaa', 'campaign', 'skirmish'):
         keys = [key for key, row in native.items() if row.get('family') == family and key in controls]
         if not keys:
             continue
         groups = [[source[key] for key in keys] for source in (controls, native)]
-        differences = [sum(controls[key].get(field) != native[key].get(field) for key in keys)
-                       for field in ('options_hash', 'content_hash')]
+        differences = []
+        for field in ('options_hash', 'content_hash'):
+            measured = [key for key in keys if controls[key].get(field) and native[key].get(field)]
+            differences.append('%d/%d' % (sum(controls[key][field] != native[key][field] for key in measured), len(measured))
+                               if measured else 'unmeasured')
         print('| %s | %s | %s | %s | %s | %s |' %
               ((family, len(keys)) + tuple('/'.join(map(str, count_rows(group))) for group in groups) + tuple(differences)))
     houses = [{(row['id'], row['house']): row for row in read(Path(directory) / 'houses.csv')}
@@ -309,6 +332,8 @@ parser.add_argument('--family', nargs='+', choices=('aaa', 'campaign', 'skirmish
 parser.add_argument('--build-dir', type=Path, default=root / 'build-int')
 parser.add_argument('--wall-timeout', type=int, default=1800)
 parser.add_argument('--smoke', action='store_true')
+parser.add_argument('--campaign-human-partner', action='store_true',
+                    help='Idle human + native Brutal QuantBot campaign diagnostic; distinct #human-partner IDs')
 parser.add_argument('--shard')
 parser.add_argument('--list', action='store_true')
 parser.add_argument('--report', nargs='+', dest='report_dirs')
