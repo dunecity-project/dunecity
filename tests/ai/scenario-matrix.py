@@ -32,8 +32,11 @@ of one game that must reproduce its final state digest; ctest scenario_matrix_sm
 full run splits across machines; --report reads one or more results directories and prints the
 summary table. Games already in games.csv are skipped; each game's run directory is deleted as
 soon as its rows are written. Smoke timeouts retain their engine log in timeout-*.log;
---attack-events keeps raw engine logs under diagnostics/. Scores are tests/ai/match_score.py
-placement scores.
+--attack-events keeps raw engine logs under diagnostics/; --keep-telemetry additionally retains
+the complete events.jsonl. --cases filters game IDs, and --campaign-human-partner adds an idle
+human seat to the vanilla campaign diagnostic without changing its win expectation. These
+diagnostic games have distinct IDs and cannot stand in for the AI-only gate. Scores use
+tests/ai/match_score.py placement scores.
 """
 import argparse
 import configparser
@@ -300,6 +303,14 @@ def schedule(args):
                 games.append(match_game(cell, index, seed, '#swap'))
     for cell in smoke_campaigns() if args.tier == 'smoke' and (not args.categories or 'campaign' in args.categories) else ():
         games.append(cell)
+    if getattr(args, 'campaign_human_partner', False):
+        for game in games:
+            if game['kind'] == 'campaign' and game.get('ai_only'):
+                game['ai_only'] = False
+                game['id'] += '#human-partner'
+                game['cell'] += '#human-partner'
+    if getattr(args, 'cases', None):
+        games = [game for game in games if re.search(args.cases, game['id'])]
     if args.shard:
         k, n = args.shard
         games = [g for i, g in enumerate(games) if i % n == k - 1]
@@ -392,7 +403,7 @@ def command(args, binary, game, out):
            '--prebuilt-probe', str(binary), '--output-dir', str(out), '--scenario', '--mod', game['mod'],
            '--seed', str(game['seed']), '--minutes', str(game['minutes']), '--capture-mib', '256',
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1']
-    if not getattr(args, 'attack_events', False):
+    if not (getattr(args, 'attack_events', False) or getattr(args, 'keep_telemetry', False)):
         cmd += ['--no-ai-telemetry']
     if getattr(args, 'style', None):
         cmd += ['--scenario-style', args.style]
@@ -492,10 +503,14 @@ def play(args, scratch, binary, game):
         append(results / 'games.csv', GAME_FIELDS, [row])
         finish_game(scratch, out, True)
         return row
-    if getattr(args, 'attack_events', False):
+    if getattr(args, 'attack_events', False) or getattr(args, 'keep_telemetry', False):
         diagnostic = results / 'diagnostics' / out.name / 'run.log'
         diagnostic.parent.mkdir(parents=True, exist_ok=True)
         diagnostic.write_text('\n'.join(lines) + '\n')
+        if getattr(args, 'keep_telemetry', False):
+            events = next(out.rglob('events.jsonl'), None)
+            if events:
+                shutil.copyfile(events, diagnostic.with_name('events.jsonl'))
     elif args.tier == 'smoke' and row['outcome'] == 'time_limit':
         (results / f'timeout-{out.name}.log').write_text('\n'.join(lines) + '\n')
     # Placement scores (match_score): teams are entrants; in a campaign only the partner's side counts.
@@ -525,7 +540,7 @@ def play(args, scratch, binary, game):
                 samples.setdefault((sample['house'], sample['cycle']), {}).update(sample)
     metadata = {key: game[key] for key in ('id', 'category', 'cell', 'seed')}
     append(results / 'samples.csv', SAMPLE_FIELDS, [dict(metadata, **sample) for sample in samples.values()])
-    if getattr(args, 'attack_events', False):
+    if getattr(args, 'attack_events', False) or getattr(args, 'keep_telemetry', False):
         events = next(out.rglob('events.jsonl'), None)
         waves = []
         if events:
@@ -1016,6 +1031,10 @@ parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this 
 parser.add_argument('--minutes', type=int, choices=range(1, 121),
                     help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
+parser.add_argument('--cases', help='Only scheduled game IDs matching this regular expression (diagnostic subset)')
+parser.add_argument('--campaign-human-partner', action='store_true',
+                    help='Diagnostic: add the pre-existing idle human seat to AI-only campaign cells; '
+                         'keeps the win expectation and labels results #human-partner, never AI-only gate evidence')
 parser.add_argument('--game-options', type=Path,
                     help='Overlay this INI after each cell\'s own game options; use a distinct results '
                          'directory for each comparison arm')
@@ -1036,6 +1055,8 @@ parser.add_argument('--economy-samples', action='store_true',
                     help='Retain read-only city economy diagnostics in samples.csv')
 parser.add_argument('--attack-events', action='store_true',
                     help='Retain ground attack/defence events in waves.csv and raw engine logs in diagnostics/')
+parser.add_argument('--keep-telemetry', action='store_true',
+                    help='Retain the complete AI events.jsonl alongside --attack-events diagnostics')
 parser.add_argument('--list', action='store_true', help='Print the scheduled games and exit')
 parser.add_argument('--report', dest='report_dirs', nargs='+', metavar='RESULTS',
                     help='Print the summary table of these results directories')
