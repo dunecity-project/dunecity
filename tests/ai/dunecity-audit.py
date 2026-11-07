@@ -808,7 +808,6 @@ def play(args, scratch, binary, game):
     cmd = command(args, binary, game, out)
     env = dict(os.environ, BALANCE_DUNECITY_AUDIT='1', DUNECITY_TECH_SAVINGS_AUDIT='1')
     if getattr(args, 'export_maps', None):
-        out.mkdir(parents=True, exist_ok=True)
         env['BALANCE_SCENARIO_DUMP_MAP'] = str((out / 'export-map.ini').resolve())
         env['BALANCE_SCENARIO_DUMP_OPTIONS'] = str((out / 'export-options.ini').resolve())
     process = subprocess.run(cmd, cwd=root, capture_output=True, text=True, env=env)
