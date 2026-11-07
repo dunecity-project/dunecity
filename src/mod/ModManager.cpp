@@ -2213,7 +2213,10 @@ bool ModManager::writeModInfo(const std::string& modPath, const ModInfo& info) c
     const auto path = std::filesystem::path(modPath) / MOD_INI_FILE;
     const auto temp = (path.parent_path() / ".mod-metadata-writing").string();
     try {
-        INIFile ini = std::filesystem::exists(path) ? INIFile(path.string()) : INIFile(false, std::string("Mod metadata"));
+        INIFile ini = [&]() -> INIFile {
+            if(std::filesystem::exists(path)) return INIFile(path.string());
+            return INIFile(false, std::string("Mod metadata"));
+        }();
         ini.setStringValue("Mod", "Display Name", info.displayName);
         ini.setStringValue("Mod", "Author", info.author);
         ini.setStringValue("Mod", "Description", info.description);

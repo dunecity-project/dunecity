@@ -7514,7 +7514,10 @@ bool GFXManager::setEnhancedUnitRenderMode(int itemID, int house,
 
     try {
         const std::string path = ModManager::instance().getModPath(ModManager::instance().getActiveModName()) + "/workshop-render.ini";
-        INIFile config = std::filesystem::exists(path) ? INIFile(path) : INIFile(false, std::string("Mod sprite rendering"));
+        INIFile config = [&]() -> INIFile {
+            if(std::filesystem::exists(path)) return INIFile(path);
+            return INIFile(false, std::string("Mod sprite rendering"));
+        }();
         const std::string configKey = enhancedRenderModeConfigKey(
             itemID, house, state, direction);
         if(mode == EnhancedRenderMode::FullAnimation) {
