@@ -42,7 +42,7 @@ inline std::unique_ptr<Game> initCampaign(int house, int mission, Uint32 seed) {
         GameInitSettings::HouseInfo info(side, h == house ? 1 : 2);
         info.graphicsSkin = init.getCampaignGraphicsSkin();
         info.addPlayerInfo(GameInitSettings::PlayerInfo(
-            h == house ? settings.general.playerName : getHouseNameByNumber(side),
+            getHouseNameByNumber(side),
             h == house ? "qBotBrutal" : "CampaignAIPlayer"));
         init.addHouseInfo(info);
     }
