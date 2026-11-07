@@ -270,6 +270,21 @@ jobs:
             exit 1
           }
 
+      - name: Check installer desktop shortcut
+        run: |
+          # The fixture installer on this disposable runner: a default silent install must
+          # create the desktop shortcut and the uninstaller must remove it.
+          $installer = Get-ChildItem installer-preflight/package -Filter *.exe | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP 'dunecity-installer-preflight'
+          $link = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Dune City.lnk'
+          $install = Start-Process $installer.FullName -ArgumentList '/S', "/D=$dir" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
+          if (-not (Test-Path $link)) { throw 'The installer did not create the desktop shortcut' }
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath
+          if ($target -ne (Join-Path $dir 'dunecity.exe')) { throw "The desktop shortcut points to '$target'" }
+          $uninstall = Start-Process (Join-Path $dir 'Uninstall.exe') -ArgumentList '/S', "_?=$dir" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0 -or (Test-Path $link)) { throw 'The uninstaller did not remove the desktop shortcut' }
+
       - name: Set Windows dependency cache location
         id: windows-vcpkg-cache
         run: |

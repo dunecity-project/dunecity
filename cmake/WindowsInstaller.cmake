@@ -27,4 +27,14 @@ set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [=[
     Delete "$INSTDIR\dunecity-installed.txt"
 ]=])
 set(CPACK_PACKAGE_EXECUTABLES "dunecity;Dune City")
+# CPack's own desktop links (CPACK_CREATE_DESKTOP_LINKS) are created only from the PATH
+# options page, which this installer does not show (CPACK_NSIS_MODIFY_PATH OFF), so they
+# would never appear. Create the desktop shortcut beside the Start Menu shortcut instead:
+# the Start Menu page's "Do not create shortcuts" box then governs both.
+set(CPACK_NSIS_CREATE_ICONS_EXTRA [=[
+    CreateShortCut "$DESKTOP\Dune City.lnk" "$INSTDIR\dunecity.exe"
+]=])
+set(CPACK_NSIS_DELETE_ICONS_EXTRA [=[
+    Delete "$DESKTOP\Dune City.lnk"
+]=])
 
