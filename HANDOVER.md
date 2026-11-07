@@ -1,3 +1,28 @@
+## 2026-11-07 - Combined 1.0.865 candidate: Linux startup and civic transparency
+
+Unpublished integration branch `release/1.0.865-civic-linux-20261107` preserves
+both sibling commits: Linux candidate `677e075d` and transparency `c932a5f1`.
+Neither is assumed to include the other. All three desktop version files agree
+on 1.0.865 via the official check. Android candidate metadata is 0.2.34 /
+1000554; public Android remains 0.2.33 until its separate acceptance gate.
+
+PRED Windows validation of the actual combined tree: 120,944 assertions in ten
+native C++ cases passed via CTest, including real SDL dummy-driver recovery
+and target-texture rendering. Nine video-runtime checker unit tests and seven
+Android payload tests pass. Freshly compiled terrain-policy SDL rendering
+passes 120 cases (40 shipped frames, eight houses, three zooms). These are not
+physical Linux Mint/NVIDIA, Mac performance, Android phone or iOS tests.
+Fresh combined-branch CI is required; the green #121 run tested only c932a5f1.
+
+Android signing update supersedes the earlier missing-key report: PRED's
+existing standard debug keystore public certificate exactly matches upgrade
+SHA-256 a29825bfecef94665244e1963e3c7dc64eadb387ae52820a793d26e193c21b60.
+No key was exported, replaced or uploaded. Phone install/test and Stefan's
+explicit publication gate remain required. The Mac mini builder is offline,
+claw.local does not resolve from PRED, and the online Pro lacks the builder
+label. Do not reroute signing/labels. iOS remains Stefan's own build/signing
+handoff. No stable tag, website deployment or platform publication is claimed.
+
 ## 2026-11-07 - Civic transparency: retain terrain under Police/Nuclear/Stadium/Airport
 
 Source-only fix based on freshly fetched upstream `897249cf`, preserving older
