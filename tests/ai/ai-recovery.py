@@ -4,7 +4,8 @@
 Definitions are frozen from d253e015 in ai-recovery-fixtures/manifest.json. AAA
 uses the pre-820 idle HumanPlayer sharing Atreides; campaign uses one registered
 QuantBot and detached UI only, retaining native authored victory and quotas.
-Skirmish uses exact current-generated custom-map bytes with native TechLevel.
+Skirmish uses exact current-generated custom-map bytes with native TechLevel,
+and the owner's 2026-11-08 90-minute cap (unchanged factors, seeds and maps).
 No engine/AI object is rebuilt specially: only the private main is compiled.
 
 CSV adapter: games/houses/samples use the union of the frozen scenario-matrix
@@ -178,6 +179,8 @@ def play(args, scratch, binary, game):
         setup, ending = setup[0], endings[0]
         if setup['seed'] != str(game['seed']) or setup['city_sim'] != '0':
             raise ValueError('Native setup does not match recovery definition')
+        if game.get('reference_map_hash') and setup['map_hash'] != game['reference_map_hash']:
+            raise ValueError('Native map bytes differ from the current-engine export receipt')
         if str(game['candidate_house']) not in {house['house'] for house in final}:
             raise ValueError('Missing candidate house result')
         if game['family'] != 'campaign' and {(house['house'], house['team']) for house in final} != {
