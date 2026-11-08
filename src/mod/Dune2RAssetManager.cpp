@@ -34,6 +34,7 @@
 #include <memory>
 #include <set>
 #include <sstream>
+#include <vector>
 
 namespace {
 
@@ -278,7 +279,9 @@ std::string Dune2RAssetManager::sha256File(const std::string& filename) {
         return {};
     }
     Sha256 sha;
-    std::array<unsigned char, 64 * 1024> buffer{};
+    // Heap buffer: this hash runs under Workshop verification during Game::initGame, where
+    // 1.0.864's Windows stack ran out entering a 64 KB frame.
+    std::vector<unsigned char> buffer(64 * 1024);
     while(input) {
         input.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
         const std::streamsize read = input.gcount();

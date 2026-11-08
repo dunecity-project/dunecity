@@ -30,6 +30,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 
 ObjectData::ObjectData()
 {
@@ -328,14 +329,15 @@ void ObjectData::loadFromINIFile(const std::string& filename, bool preferUserCon
 }
 
 void ObjectData::applyNeutralVanillaRules() {
-    ObjectData vanilla;
-    vanilla.loadFromINIFile(getDuneLegacyDataDir() + "/config/ObjectData.ini.default", false, false);
+    // Heap-owned: ObjectData is ~100 KB and this runs while a mod loads under Game::initGame.
+    const auto vanilla = std::make_unique<ObjectData>();
+    vanilla->loadFromINIFile(getDuneLegacyDataDir() + "/config/ObjectData.ini.default", false, false);
     for(int item = 0; item < Num_ItemID; ++item) {
-        if(isTornieExclusiveItem(item)) vanilla.data[item][HOUSE_NEUTRAL].enabled = false;
+        if(isTornieExclusiveItem(item)) vanilla->data[item][HOUSE_NEUTRAL].enabled = false;
     }
-    *this = vanilla;
+    *this = *vanilla;
     for(int item = 0; item < Num_ItemID; ++item)
-        for(auto& houseData : data[item]) houseData = vanilla.data[item][HOUSE_NEUTRAL];
+        for(auto& houseData : data[item]) houseData = vanilla->data[item][HOUSE_NEUTRAL];
 }
 
 void ObjectData::save(OutputStream& stream) const
