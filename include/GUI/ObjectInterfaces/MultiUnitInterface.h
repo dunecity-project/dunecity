@@ -56,7 +56,7 @@ public:
 protected:
     MultiUnitInterface() : ObjectInterface() {
         const int buttonGap = getRendererHeight() < 540 ? 2 : 6;
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = getHouseColorRGB(getHouseVisualHouse(currentGame->getInterfaceHouseID()), 3);
 
         addWidget(&topBox,Point(0,0),Point(SIDEBARWIDTH - 25,UnitActionBar::kPanelTop));
 

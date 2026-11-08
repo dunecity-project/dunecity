@@ -45,7 +45,7 @@ CustomGameStatsMenu::CustomGameStatsMenu() : MenuBase()
     resize(size);
     setWindowWidget(&windowWidget);
 
-    const Uint32 localHouseColor = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+    const Uint32 localHouseColor = getHouseColorRGB(getHouseVisualHouse(currentGame->getInterfaceHouseID()), 3);
     showTaxStatistics = currentGame->isCitySimEnabled()
         && ModManager::instance().getContentBase(currentGame->getGameInitSettings().getModName()) == "dunecity";
     const int columns = showTaxStatistics ? 4 : 3;

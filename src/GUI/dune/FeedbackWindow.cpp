@@ -107,7 +107,7 @@ FeedbackWindow::FeedbackWindow(Submit send) : Window(0, 0, 560, 440), send(std::
     const auto& init = currentGame->getGameInitSettings();
     context = "DuneCity " + std::string(DUNECITY_DISPLAY_VERSION) + "\nPlatform: " + SDL_GetPlatform()
         + "\nMod: " + init.getModName()
-        + "\nHouse: " + getHouseNameByNumber(static_cast<HOUSETYPE>(pLocalHouse->getHouseID()));
+        + "\nHouse: " + (pLocalHouse ? getHouseNameByNumber(static_cast<HOUSETYPE>(pLocalHouse->getHouseID())) : _("Spectator"));
     if(init.getMission() > 0) context += "\nLevel: " + std::to_string(missionNumberToLevelNumber(init.getMission()))
         + " / Scenario: " + std::to_string(init.getMission());
     context += "\nAI players:";

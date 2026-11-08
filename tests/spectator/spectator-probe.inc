@@ -181,22 +181,26 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
         }
     require(controllers == static_cast<int>(game.playerID2Player.size()),
             "The observer consumed a controller slot in the player registry");
-    require(pLocalPlayer != nullptr && pLocalHouse != nullptr,
-            "The observer still needs a view anchor for the sidebar and camera");
+    require(pLocalPlayer != nullptr && pLocalHouse == nullptr && pLocalPlayer->getHouse() == nullptr,
+            "The observer belongs to a player's house instead of having a houseless identity");
+    require(game.getOutcomeHouse() == nullptr && game.getInterfaceHouseID() == HOUSE_NEUTRAL,
+            "The custom observer acquired an outcome side or a faction's interface");
+    for(const House* house : houses)
+        require(!game.canControlHouse(house), "The observer can control a participant's house");
     require(pLocalPlayer->getPlayerID() == Player::OBSERVER_PLAYER_ID,
             "The observer identity does not hold the reserved controller id");
     require(game.getPlayerByID(Player::OBSERVER_PLAYER_ID) == nullptr,
             "The reserved observer id resolves to a registered controller");
 
     // ------------------------------------------- the minimap is a view, not a radar building
-    // The anchor faction deliberately has no radar here, so this is the case where keying the
-    // minimap off the view house's installation (or its power) would leave an observer blind.
+    // The first faction deliberately has no radar here. The houseless observer must still
+    // have its own minimap, independent of that faction's installations or power.
     for(StructureBase* structure : structureList)
-        if(structure->getOwner() == pLocalHouse && structure->getItemID() == Structure_Radar)
+        if(structure->getOwner() == houses.front() && structure->getItemID() == Structure_Radar)
             structure->setHealth(0);
     advance(game, 5);
-    require(!pLocalHouse->hasRadarOn(),
-            "Fixture needs the view house to have no working radar for the minimap check");
+    require(!houses.front()->hasRadarOn(),
+            "Fixture needs the first faction to have no working radar for the minimap check");
     game.pInterface->getRadarView().update();
     const auto radarMode = game.pInterface->getRadarView().currentRadarMode;
     require(radarMode == RadarView::RadarMode::RadarOn
@@ -214,7 +218,7 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
                 "Could not seed a factory for the production panel check");
     }
     require(seedGroundUnit(second) != nullptr, "Could not deploy a unit for order checks");
-    require(seedGroundUnit(first) != nullptr, "Could not deploy a view-house unit");
+    require(seedGroundUnit(first) != nullptr, "Could not deploy a first-faction unit");
     advance(game, 20);
 
     // ------------------------------------------------- cycles advance, no observer defeat
@@ -228,15 +232,14 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
     require(!game.finished, "An observer won the match it is only watching");
 
     // --------------------------------- viewing neutrality: the option protects no AI faction
-    // immortalHumanPlayer is on for this fixture. The guards key off pLocalHouse, which here
-    // anchors an AI faction - so without the authority check, watching would make that faction
-    // invulnerable and change the result of the match being observed.
+    // immortalHumanPlayer is on deliberately. Neither a local house pointer nor the detached
+    // identity may accidentally protect the first AI faction (the former observer anchor).
     require(game.getGameInitSettings().getGameOptions().immortalHumanPlayer,
             "Fixture needs the immortal-human option enabled to prove viewing neutrality");
     require(!game.localHumanImmortalityApplies(),
             "The immortal-human option still claims to apply while observing");
     {
-        StructureBase* anchorBuilding = anyStructureOf(pLocalHouse);
+        StructureBase* anchorBuilding = anyStructureOf(first);
         require(anchorBuilding != nullptr, "Fixture needs a building owned by the view house");
         const FixPoint healthBefore = anchorBuilding->getHealth();
         anchorBuilding->handleDamage(40, NONE_ID, second);
@@ -250,10 +253,10 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
                 "Watching made the other faction's building immortal");
     }
     {
-        // The spice-bloom guard shares the same authority. Stand a view-house unit on a bloom.
+        // The spice-bloom guard shares the same authority. Stand a first-faction unit on a bloom.
         UnitBase* victim = nullptr;
         for(UnitBase* candidate : unitList)
-            if(candidate->getOwner() == pLocalHouse && candidate->isAGroundUnit()
+            if(candidate->getOwner() == first && candidate->isAGroundUnit()
                && candidate->isActive() && currentGameMap->tileExists(candidate->getLocation())
                && candidate->getItemID() != Unit_Sandworm) { victim = candidate; break; }
         if(victim != nullptr) {
@@ -331,7 +334,7 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
     for(int y = 0; y < currentGameMap->getSizeY(); ++y)
         for(int x = 0; x < currentGameMap->getSizeX(); ++x) {
             Tile* tile = currentGameMap->getTile(x, y);
-            if(!tile->hasAnObject() || tile->isExploredByTeam(pLocalHouse->getTeamID())) continue;
+            if(!tile->hasAnObject() || tile->isExploredByTeam(first->getTeamID())) continue;
             if(tile->getRadarColor(pLocalHouse, true) == COLOR_BLACK) ++radarBlack;
             else ++radarOwnerColours;
         }
@@ -343,9 +346,9 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
     // ------------------------------------------- selecting and inspecting every owner's work
     StructureBase* unseen = nullptr;
     for(StructureBase* structure : structureList) {
-        if(structure->getOwner() == pLocalHouse) continue;
+        if(structure->getOwner() == first) continue;
         Tile* tile = currentGameMap->getTile(structure->getLocation());
-        if(tile && !tile->isExploredByTeam(pLocalHouse->getTeamID())) { unseen = structure; break; }
+        if(tile && !tile->isExploredByTeam(first->getTeamID())) { unseen = structure; break; }
     }
     require(unseen != nullptr, "Fixture needs a foreign structure outside the view house's exploration");
     game.selectedList.clear();
@@ -503,11 +506,11 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
     }
 
     {
-        // Unit orders against the *view* house: the case the reserved controller id exists for,
-        // because the detached identity is attached to exactly that house.
+        // Orders against the first faction, formerly borrowed by the detached view identity.
+        // The observer now fails both the ownership check and reserved-id authorization.
         UnitBase* unit = nullptr;
         for(UnitBase* candidate : unitList)
-            if(candidate->getOwner() == pLocalHouse && candidate->isRespondable()
+            if(candidate->getOwner() == first && candidate->isRespondable()
                && candidate->getHealth() > 0) { unit = candidate; break; }
         require(unit != nullptr, "Fixture needs a live view-house unit for the order check");
         const Coord destinationBefore = unit->getDestination();
@@ -517,7 +520,10 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
               {unit->getObjectID(), static_cast<Uint32>(elsewhere.x),
                static_cast<Uint32>(elsewhere.y), 1u});
         require(unit->getDestination() == destinationBefore,
-                "An observer gave a movement order to the house it is anchored to");
+                "An observer gave a movement order to the first faction");
+        pLocalPlayer->doMove2Pos(unit, elsewhere.x, elsewhere.y, true);
+        require(unit->getDestination() == destinationBefore,
+                "The houseless observer passed a direct Player ownership check");
     }
 
     {
@@ -580,7 +586,8 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
         game.bCheatsEnabled = true;
         const bool debugBefore = debug;
         const bool immortalBefore = game.getGameInitSettings().getGameOptions().immortalHumanPlayer;
-        const auto creditsBefore = pLocalHouse->getCredits();
+        std::vector<int> creditsBefore;
+        for(const House* house : houses) creditsBefore.push_back(house->getCredits());
         const std::size_t worldBefore = explorationFingerprint();
         // "cheat" (enable), "money" (credits), "debug", "muaddib" (immortality), "win".
         for(const char* typed : {"cheat", "money", "debug", "muaddib", "win"}) {
@@ -590,8 +597,9 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
             entered.keysym.sym = SDLK_RETURN;
             game.handleChatInput(entered);
         }
-        require(pLocalHouse->getCredits() == creditsBefore,
-                "A chat cheat gave an observer's view house credits");
+        for(size_t i = 0; i < houses.size(); ++i)
+            require(houses[i]->getCredits() == creditsBefore[i],
+                    "A chat cheat gave a watched faction credits");
         require(debug == debugBefore, "A chat cheat turned on debug mode while observing");
         require(game.getGameInitSettings().getGameOptions().immortalHumanPlayer == immortalBefore,
                 "A chat cheat toggled immortality while observing");
@@ -715,6 +723,8 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
     require(!reloaded->isSpectating(), "The reloaded local observer looks like a network spectator");
     require(pLocalPlayer != nullptr && pLocalPlayer->getPlayerID() == Player::OBSERVER_PLAYER_ID,
             "The reloaded observer identity lost the reserved controller id");
+    require(pLocalHouse == nullptr && pLocalPlayer->getHouse() == nullptr,
+            "A reloaded observer acquired a participant's house");
     require(reloaded->getPlayerByID(Player::OBSERVER_PLAYER_ID) == nullptr,
             "The reloaded observer id was registered as a controller");
     require(reloaded->gameCycleCount == cycleAtSave, "The reload resumed at a different cycle");
@@ -773,6 +783,8 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
     require(pLocalPlayer && pLocalPlayer->getPlayerID() == Player::OBSERVER_PLAYER_ID
             && restarted->getPlayerByID(Player::OBSERVER_PLAYER_ID) == nullptr,
             "A restarted observer acquired a registered controller");
+    require(pLocalHouse == nullptr && pLocalPlayer->getHouse() == nullptr,
+            "A restarted observer acquired a participant's house");
     const auto restartedHouses = housesWithControllers(*restarted);
     require(restartedHouses.size() == houses.size(), "Restarting lost an observed faction");
     for(House* house : restartedHouses)
@@ -782,6 +794,29 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
     advance(*restarted, 10);
     require(restarted->gameCycleCount > 0, "The restarted observed match did not advance");
     restarted.reset();
+    currentGame = nullptr;
+    pLocalPlayer = nullptr;
+    pLocalHouse = nullptr;
+
+    // Play the engine's actual recorded all-AI replay. GameInitSettings does not serialize
+    // the local spectator flag, so restoration must notice that there is no local human.
+    char replayPath[FILENAME_MAX];
+    fnkdat("replay/auto.rpl", replayPath, FILENAME_MAX, FNKDAT_USER);
+    auto replayed = std::make_unique<Game>();
+    currentGame = replayed.get();
+    replayed->initReplay(replayPath);
+    replayed->initializeGameLoop();
+    replayed->bPause = false;
+    require(replayed->isReplay() && replayed->isLocalObserver() && replayed->isObserving(),
+            "An all-AI replay did not restore observation");
+    require(pLocalHouse == nullptr && pLocalPlayer && pLocalPlayer->getHouse() == nullptr,
+            "An all-AI replay acquired a participant's house");
+    require(replayed->getPlayerByID(Player::OBSERVER_PLAYER_ID) == nullptr,
+            "The replay registered its observer as a controller");
+    advance(*replayed, 10);
+    replayed->drawScreen();
+    require(replayed->gameCycleCount > 0, "The observed replay did not advance");
+    replayed.reset();
     currentGame = nullptr;
     pLocalPlayer = nullptr;
     pLocalHouse = nullptr;

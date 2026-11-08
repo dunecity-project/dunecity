@@ -1324,6 +1324,13 @@ void Game::initReplay(const std::string& filename) {
     cmdManager.load(fs);
 
     initGame(loadedGameInitSettings);
+    // The local-only Spectate setting is deliberately absent from serialized settings.
+    // An all-AI replay therefore has no local human seat to restore.
+    if(!pLocalPlayer) {
+        localObserver = true;
+        gameInitSettings.setLocalSpectator(true);
+        setupSpectatorView();
+    }
 }
 
 
@@ -3015,8 +3022,9 @@ void Game::drawScreen()
     const auto* actionTile=actionTarget && currentGameMap->tileExists(actionTarget->getLocation())
         ? currentGameMap->getTile(actionTarget->getLocation()) : nullptr;
     const bool showTarget=actionTarget && actionTile && !SDL_TICKS_PASSED(SDL_GetTicks(),actionIndicatorUntil)
-        && actionTarget->isVisible(pLocalHouse->getTeamID()) && actionTile->isExploredByTeam(pLocalHouse->getTeamID())
-        && !actionTile->isFoggedByTeam(pLocalHouse->getTeamID());
+        && (isObserving() || (pLocalHouse && actionTarget->isVisible(pLocalHouse->getTeamID())
+            && actionTile->isExploredByTeam(pLocalHouse->getTeamID())
+            && !actionTile->isFoggedByTeam(pLocalHouse->getTeamID())));
     if(showTarget && (SDL_GetTicks()/100)%2==0) actionTarget->drawSelectionBox();
     if(!showTarget && (indicatorFrame != NONE_ID) && (screenborder->isInsideScreen(indicatorPosition, Coord(TILESIZE,TILESIZE)) == true)) {
         SDL_Texture* pUIIndicator = pGFXManager->getUIGraphic(UI_Indicator);
@@ -3621,7 +3629,7 @@ std::vector<PlacementReservation::Footprint> Game::pendingReservationFootprints(
 
 void Game::drawReservationGhosts()
 {
-    // Owner-only: pLocalHouse is the player's house, or the house an observer is viewing.
+    // Planned construction belongs to the local participant, never an observer.
     if(pLocalHouse == nullptr) {
         return;
     }
@@ -3768,7 +3776,7 @@ void Game::runMainLoop() {
     initializeGameLoop();
     
     // Update Discord Rich Presence for in-game status
-    std::string houseName = pLocalHouse ? getHouseNameByNumber(static_cast<HOUSETYPE>(pLocalHouse->getHouseID())) : "Unknown";
+    std::string houseName = isObserving() ? "Spectating" : pLocalHouse ? getHouseNameByNumber(static_cast<HOUSETYPE>(pLocalHouse->getHouseID())) : "Unknown";
     std::string mapName = gameInitSettings.getFilename();
     // Extract just the map name from the path
     size_t lastSlash = mapName.find_last_of("/\\");
@@ -4867,7 +4875,7 @@ void Game::onOptions()
             toggleMatchPause();
         }
         if(menuPause) menuPause->closed = false;
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = getHouseColorRGB(getHouseVisualHouse(getInterfaceHouseID()), 3);
         pInGameMenu = std::make_unique<InGameMenu>((isNetworkGameType(gameType)), color);
         bMenu = true;
         pauseGame("options");
@@ -5021,7 +5029,7 @@ bool Game::setZoomStep(int step, int screenX, int screenY, bool announce) {
 
 void Game::onMentat()
 {
-    pInGameMentat = std::make_unique<MentatHelp>(pLocalHouse->getHouseID(), techLevel, gameInitSettings.getMission());
+    pInGameMentat = std::make_unique<MentatHelp>(getInterfaceHouseID(), techLevel, gameInitSettings.getMission());
     bMenu = true;
     pauseGame("mentat");
 }
@@ -5575,10 +5583,10 @@ bool Game::loadSaveGame(InputStream& stream) {
     else if(spectatorViewPlayer) {
         // A network observer that has been promoted to a real controller reloads into this same
         // Game. The seat search above has already attached the real human, so drop the detached
-        // UI identity rather than leaving a second HumanPlayer pointing at the view house.
+        // UI identity rather than leaving a second HumanPlayer after promotion.
         spectatorViewPlayer.reset();
     }
-    if(!pLocalPlayer || !pLocalHouse) THROW(std::runtime_error, "Cannot assign the local co-op player.");
+    if(!pLocalPlayer || (!isObserving() && !pLocalHouse)) THROW(std::runtime_error, "Cannot assign the local co-op player.");
 
     debug = stream.readBool();
     bCheatsEnabled = stream.readBool();
@@ -5675,7 +5683,8 @@ bool Game::loadSaveGame(InputStream& stream) {
     if(bMultiplayerLoad) {
         unselectAll(selectedList);
         selectedList.clear();
-        screenborder->setNewScreenCenter(pLocalHouse->getCenterOfMainBase()*TILESIZE);
+        if(pLocalHouse) screenborder->setNewScreenCenter(pLocalHouse->getCenterOfMainBase()*TILESIZE);
+        else setupView();
     }
 
     // load city simulation state (version 9807+)
@@ -6161,9 +6170,18 @@ void Game::endObservationWithoutHost() {
 }
 
 void Game::setGameWon() {
-    // An observer takes no side: its view house winning or losing is not the end of its game.
-    // It ends once the whole match is decided (checkWatchedGameDecided, setWatchedGameOver).
-    if(isObserving()) return;
+    // A campaign's authored objective is independent of who is watching it. Network viewers
+    // follow the host; only a local campaign observer ends on the mission's native rules.
+    if(isObserving()) {
+        if(localObserver && gameType == GameType::Campaign && !bQuitGame && !finished) {
+            won = true;
+            finished = true;
+            finishedLevelCycle = gameCycleCount;
+            const House* objective = getOutcomeHouse();
+            watchedWinnerTeam = objective ? objective->getTeamID() : 0;
+        }
+        return;
+    }
     if(!bQuitGame && !finished) {
         AchievementEvents::finish(true);
         won = true;
@@ -6175,7 +6193,15 @@ void Game::setGameWon() {
 
 
 void Game::setGameLost() {
-    if(isObserving()) return;
+    if(isObserving()) {
+        if(localObserver && gameType == GameType::Campaign && !bQuitGame && !finished) {
+            won = false;
+            finished = true;
+            finishedLevelCycle = gameCycleCount;
+            watchedWinnerTeam = 0;
+        }
+        return;
+    }
     if(!bQuitGame && !finished) {
         AchievementEvents::finish(false);
         won = false;
@@ -6240,6 +6266,10 @@ void Game::setWatchedGameOver(int winningTeam, bool timeUp) {
 }
 
 std::string Game::watchedResultText() const {
+    if(localObserver && gameType == GameType::Campaign && finished) {
+        const std::string name = getHouseNameByNumber(gameInitSettings.getHouseID());
+        return fmt::sprintf(won ? _("House %s completed its mission") : _("House %s failed its mission"), name);
+    }
     if(watchedWinnerTeam <= 0) return watchedTimeUp ? _("Time is up - no winner") : _("No house is left standing");
     // The houses that took part (a player each); a map's spare houses only as a fallback.
     std::vector<int> members;
@@ -7037,7 +7067,7 @@ bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
     const bool queued = (mod & KMOD_SHIFT) != 0;
     const Tile* pTile = currentGameMap->tileExists(xPos, yPos) ? currentGameMap->getTile(xPos, yPos) : nullptr;
     const ObjectBase* pClicked = (pTile != nullptr && pTile->hasAnObject()) ? pTile->getObject() : nullptr;
-    const bool bloom = pClicked == nullptr && pTile != nullptr && pTile->isSpiceBloom()
+    const bool bloom = pLocalHouse && pClicked == nullptr && pTile != nullptr && pTile->isSpiceBloom()
         && pTile->isExploredByTeam(pLocalHouse->getTeamID());
     const bool fireAtGround = (mod & KMOD_CTRL) != 0 || bloom;
     UnitBase* pResponder = nullptr;
@@ -7152,7 +7182,7 @@ bool Game::handleSelectedObjectsCaptureClick(int xPos, int yPos) {
     }
 
     StructureBase* pStructure = dynamic_cast<StructureBase*>(pTile->getGroundObject());
-    if((pStructure != nullptr) && (pStructure->canBeCaptured()) && (pStructure->getOwner()->getTeamID() != pLocalHouse->getTeamID())) {
+    if(pLocalHouse && (pStructure != nullptr) && (pStructure->canBeCaptured()) && (pStructure->getOwner()->getTeamID() != pLocalHouse->getTeamID())) {
         InfantryBase* pResponder = nullptr;
         const bool queued = (SDL_GetModState() & KMOD_SHIFT) != 0;
 
@@ -7690,9 +7720,9 @@ void Game::drawCityOverlay(int x1, int y1, int x2, int y2) {
 
     switch (currentCityOverlay_) {
         case DuneCity::CityOverlayMode::PowerGrid: {
-            // Until a per-tile grid exists, zones use their owning house's
-            // live growth predicate. Roads retain the viewed-house fallback.
-            const bool housePower = pLocalHouse->hasPower();
+            // Zones use their owning house's live growth predicate. A neutral observer's
+            // roads read the grid instead of borrowing another faction's power.
+            const bool housePower = pLocalHouse && pLocalHouse->hasPower();
             constexpr uint8_t level = 200;
             int rOn = 0, gOn = 255, bOn = 0;     // green = powered
             int rOff = 255, gOff = 0, bOff = 0;  // red   = no power
@@ -7704,7 +7734,8 @@ void Game::drawCityOverlay(int x1, int y1, int x2, int y2) {
                     Tile* t = currentGameMap->getTile(x, y);
                     if (t->hasCityZone() || t->isRoad()) {
                         const auto* zone = dynamic_cast<const ZoneStructure*>(t->getNonInfantryGroundObject());
-                        const bool powered = zone ? zone->hasCityPower() : housePower;
+                        const bool powered = zone ? zone->hasCityPower()
+                            : (pLocalHouse ? housePower : powerMap.worldGet(x, y) != 0);
                         if (powered)
                             drawOverlayBlock(x, y, blockSize, level, rOn, gOn, bOn, rOn, gOn, bOn);
                         else
@@ -7877,7 +7908,7 @@ void Game::drawCityRoads(int x1, int y1, int x2, int y2) {
             return;
         }
 
-        if (!debug && !tile.isExploredByTeam(pLocalHouse->getTeamID())) {
+        if (!debug && !isObserving() && !tile.isExploredByTeam(pLocalHouse->getTeamID())) {
             return;
         }
 
@@ -8586,12 +8617,23 @@ void Game::toggleMovementPaths() {
 
 bool Game::isSpectating() const { return pNetworkManager && pNetworkManager->isSpectating(); }
 
+int Game::getInterfaceHouseID() const {
+    return pLocalHouse ? pLocalHouse->getHouseID() : HOUSE_NEUTRAL;
+}
+
+House* Game::getOutcomeHouse() const {
+    if(pLocalHouse) return pLocalHouse;
+    if(isObserving() && (gameType == GameType::Campaign || gameType == GameType::CampaignCoop))
+        return house[gameInitSettings.getHouseID()].get();
+    return nullptr;
+}
+
 bool Game::localHumanImmortalityApplies() const {
     if(!gameInitSettings.getGameOptions().immortalHumanPlayer) return false;
     const GameType type = gameInitSettings.getGameType();
     if(isNetworkGameType(type) || type == GameType::LoadMultiplayer) return false;
-    // An observer has no human controller: pLocalPlayer is the detached view identity and
-    // pLocalHouse belongs to an AI. Require a real, registered human controller on that house.
+    // Observation never supplies a human controller. A participant's house must actually
+    // have a registered human before the option can protect it.
     if(isObserving() || pLocalHouse == nullptr) return false;
     for(const auto& player : pLocalHouse->getPlayerList()) {
         if(dynamic_cast<const HumanPlayer*>(player.get()) != nullptr
@@ -8603,17 +8645,12 @@ bool Game::localHumanImmortalityApplies() const {
 }
 
 void Game::setupSpectatorView() {
-    // Observation has no simulation player, controller slot or ownership. The UI's
-    // legacy non-null HumanPlayer pointer uses a detached, unregistered view object.
+    // Observation has no simulation player, controller slot or house. The detached identity
+    // only stores local selection groups and chat identity; it owns no faction's objects.
     pLocalHouse=nullptr;
-    for(const auto& h : house) if(h && !h->getPlayerList().empty()) { pLocalHouse=h.get(); break; }
-    if(!pLocalHouse) THROW(std::runtime_error,"There is no house to observe.");
-    spectatorViewPlayer=std::make_unique<HumanPlayer>(pLocalHouse,getLocalPlayerName());
-    // The view object is attached to a real house so the sidebar, minimap and cursor keep a
-    // non-null anchor, which means Player::doXxx-style ownership checks would pass for that
-    // house. Stamp the reserved controller id instead: it is never registered, so every
-    // Command this identity emits is refused by Command::executeCommand, without touching
-    // the command queue shared by the AI's city tools.
+    spectatorViewPlayer=std::make_unique<HumanPlayer>(nullptr,getLocalPlayerName());
+    // Keep the reserved id as a second boundary: a view callback must never enqueue an
+    // authorized command, including city commands that do not carry an acting object.
     spectatorViewPlayer->playerID=Player::OBSERVER_PLAYER_ID;
     pLocalPlayer=spectatorViewPlayer.get();
 }

@@ -781,12 +781,15 @@ for case in cases:
                 need(observed.get('stats_caption_colour_matches') == '1'
                      and observed.get('stats_winner_row') == 'House ' + winner
                      and observed.get('stats_winner_colour_matches') == '1'
-                     and observed.get('stats_local_colour_matches') == '1'
                      and observed.get('stats_natives_hidden') == '1',
                      role + ': actual statistics caption/rows/colours incorrect')
-                if role != 'Viewer':
-                    need(observed.get('stats_local_row') == ('House Atreides' if role == 'Host' else 'House Harkonnen'),
-                         role + ': statistics show the wrong local player row')
+                if role == 'Viewer':
+                    need(observed.get('observer_houseless') == '1' and observed.get('stats_local_row') == '',
+                         'Viewer: the observer acquired a local house or player statistics row')
+                else:
+                    need(observed.get('stats_local_colour_matches') == '1'
+                         and observed.get('stats_local_row') == ('House Atreides' if role == 'Host' else 'House Harkonnen'),
+                         role + ': statistics show the wrong local player row or colour')
     if viewer:
         need(viewer.get('join_failure', '') == '', 'viewer failed: ' + viewer.get('join_failure', ''))
         need(viewer.get('finished') == '1' and viewer.get('quit') == '0' and viewer.get('finished_level') == '1',

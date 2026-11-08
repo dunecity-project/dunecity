@@ -331,7 +331,7 @@ void Palace::doLaunchDeathhand(int x, int y) {
 
     if(getOwner() != pLocalHouse) {
         currentGame->addToNewsTicker(_("@DUNE.ENG|81#Missile is approaching"));
-        soundPlayer->playVoice(MissileApproaching, pLocalHouse->getHouseID());
+        soundPlayer->playVoice(MissileApproaching, currentGame->getInterfaceHouseID());
     }
 
     specialWeaponTimer = getMaxSpecialWeaponTimer();
@@ -475,7 +475,7 @@ bool Palace::spawnSaboteur() {
         saboteur->doSetAttackMode(HUNT);
         SDL_Log("PALACE: Saboteur attack mode after setting: %d", saboteur->getAttackMode());
         currentGame->addToNewsTicker(_("@DUNE.ENG|79#Saboteur is approaching"));
-        soundPlayer->playVoice(SaboteurApproaching, pLocalHouse->getHouseID());
+        soundPlayer->playVoice(SaboteurApproaching, currentGame->getInterfaceHouseID());
     }
 
     return true;

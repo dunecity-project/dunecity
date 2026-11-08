@@ -660,8 +660,9 @@ static void checkQuotaWin(House& house) {
     if((currentGame->winFlags & WINLOSEFLAGS_QUOTA) == 0 || house.getQuota() == 0) return;
     // A player only ends on its own house's quota (original rule). An observer has no house:
     // any house that meets its quota wins the match for its team.
-    const bool observing = currentGame->isObserving();
-    if(&house != pLocalHouse && !observing) return;
+    const House* outcomeHouse = currentGame->getOutcomeHouse();
+    const bool observing = currentGame->isObserving() && outcomeHouse == nullptr;
+    if(&house != outcomeHouse && !observing) return;
     const FixPoint banked = currentGame->isCitySimEnabled() ? house.getEarnedCredits() : house.getStoredCredits();
     if(banked < house.getQuota()) return;
     if(observing) currentGame->setWatchedGameOver(house.getTeamID());
@@ -1340,7 +1341,10 @@ AITelemetry::Record House::deviationRewardStats() const {
 }
 
 void House::win() {
-    if(getTeamID() == pLocalHouse->getTeamID()) {
+    const House* outcomeHouse = currentGame->getOutcomeHouse();
+    if(outcomeHouse == nullptr) {
+        currentGame->setWatchedGameOver(getTeamID());
+    } else if(getTeamID() == outcomeHouse->getTeamID()) {
         currentGame->setGameWon();
     } else {
         currentGame->setGameLost();
@@ -1359,20 +1363,21 @@ void House::lose(bool bSilent) {
         }
     }
 
-    if((getTeamID() == pLocalHouse->getTeamID()) && ((currentGame->winFlags & WINLOSEFLAGS_HUMAN_HAS_BUILDINGS) != 0)) {
+    const House* outcomeHouse = currentGame->getOutcomeHouse();
+    if(outcomeHouse && (getTeamID() == outcomeHouse->getTeamID()) && ((currentGame->winFlags & WINLOSEFLAGS_HUMAN_HAS_BUILDINGS) != 0)) {
 
         bool finished = true;
 
         for(int i=0; i < NUM_HOUSES; i++) {
             House* pHouse = currentGame->getHouse(i);
-            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() == pLocalHouse->getTeamID()) {
+            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() == outcomeHouse->getTeamID()) {
                 finished = false;
                 break;
             }
         }
 
         if(finished) {
-            // pLocalHouse is destroyed and this is a game finish condition
+            // The objective house's team is destroyed and this is a game finish condition.
             if((currentGame->loseFlags & WINLOSEFLAGS_HUMAN_HAS_BUILDINGS) != 0) {
                 // house has won
                 currentGame->setGameWon();
@@ -1382,13 +1387,13 @@ void House::lose(bool bSilent) {
             }
         }
 
-    } else if((currentGame->winFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0) {
-        //if the only players left are on the thisPlayers team, pLocalHouse has won
+    } else if(outcomeHouse && (currentGame->winFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0) {
+        // If only the objective house's team remains, its native victory rule applies.
         bool finished = true;
 
         for(int i=0; i < NUM_HOUSES; i++) {
             House* pHouse = currentGame->getHouse(i);
-            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() != 0 && !pHouse->isNatives() && pHouse->getTeamID() != pLocalHouse->getTeamID()) {
+            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() != 0 && !pHouse->isNatives() && pHouse->getTeamID() != outcomeHouse->getTeamID()) {
                 finished = false;
                 break;
             }

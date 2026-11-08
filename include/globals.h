@@ -88,8 +88,8 @@ EXTERN std::unique_ptr<NetworkManager>      pNetworkManager;            ///< man
 EXTERN Game*                currentGame;                ///< the current running game
 EXTERN ScreenBorder*        screenborder;               ///< the screen border for the current running game
 EXTERN Map*                 currentGameMap;             ///< the map for the current running game
-EXTERN House*               pLocalHouse;                ///< the house of the human player that is playing the current running game on this computer
-EXTERN HumanPlayer*         pLocalPlayer;               ///< the player that is playing the current running game on this computer
+EXTERN House*               pLocalHouse;                ///< the local participant's house; nullptr for an observer
+EXTERN HumanPlayer*         pLocalPlayer;               ///< local human, or an unregistered, houseless observer identity
 
 EXTERN RobustList<UnitBase*>       unitList;            ///< the list of all units
 EXTERN RobustList<StructureBase*>  structureList;       ///< the list of all structures

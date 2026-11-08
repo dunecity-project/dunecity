@@ -430,7 +430,7 @@ int runSpectatorEndProbe() {
            << "stats_presented=" << (next == GAME_CUSTOM_GAME_STATS ? 1 : 0) << "\n";
     if(next == GAME_CUSTOM_GAME_STATS) {
         CustomGameStatsMenu stats;
-        const Uint32 localColour = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        const Uint32 localColour = getHouseColorRGB(getHouseVisualHouse(game->getInterfaceHouseID()), 3);
         const auto& winnerRow = stats.houseStat[se.winner];
         result << "stats_text=" << stats.resultLabel.getText() << "\n"
                << "stats_colour=" << stats.resultLabel.textcolor << "\n"
@@ -441,9 +441,10 @@ int runSpectatorEndProbe() {
                << "stats_winner_row=" << winnerRow.houseName.getText() << "\n"
                << "stats_winner_colour=" << winnerRow.houseName.textcolor << "\n"
                << "stats_winner_colour_matches=" << (winnerRow.houseName.textcolor == getHouseColorRGB(getHouseVisualHouse(se.winner), 3) ? 1 : 0) << "\n"
-               << "stats_local_row=" << stats.houseStat[pLocalHouse->getHouseID()].houseName.getText() << "\n"
-               << "stats_local_colour=" << stats.houseStat[pLocalHouse->getHouseID()].houseName.textcolor << "\n"
-               << "stats_local_colour_matches=" << (stats.houseStat[pLocalHouse->getHouseID()].houseName.textcolor == localColour ? 1 : 0) << "\n"
+               << "stats_local_row=" << (pLocalHouse ? stats.houseStat[pLocalHouse->getHouseID()].houseName.getText() : "") << "\n"
+               << "stats_local_colour=" << (pLocalHouse ? stats.houseStat[pLocalHouse->getHouseID()].houseName.textcolor : 0) << "\n"
+               << "stats_local_colour_matches=" << (pLocalHouse && stats.houseStat[pLocalHouse->getHouseID()].houseName.textcolor == localColour ? 1 : 0) << "\n"
+               << "observer_houseless=" << (game->isObserving() && !pLocalHouse && pLocalPlayer && !pLocalPlayer->getHouse() ? 1 : 0) << "\n"
                << "stats_natives_hidden=" << (stats.houseStat[HOUSE_NATIVES].houseName.getText().empty() ? 1 : 0) << "\n";
     }
     // The statistics screen keeps the network running (MenuBase pumps it) until the player

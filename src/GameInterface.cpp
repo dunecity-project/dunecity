@@ -141,7 +141,7 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
 
     setWindowWidget(&windowWidget);
 
-    const int interfaceHouse = pLocalHouse->getHouseID();
+    const int interfaceHouse = currentGame->getInterfaceHouseID();
 
     // top bar
     SDL_Texture* pTopBarTex = pGFXManager->getUIGraphic(UI_TopBar, interfaceHouse);
@@ -653,7 +653,9 @@ void GameInterface::draw(Point position) {
     int yCount2 = 0;
 
     //draw power level indicator
-    if (!pLocalHouse->isPowerRequired()) {
+    if (pLocalHouse == nullptr) {
+        yCount2 = 0;
+    } else if (!pLocalHouse->isPowerRequired()) {
         yCount2 = powerIndicatorPos.h + 1;
     } else if (pLocalHouse->getPowerRequirement() == 0)    {
         if (pLocalHouse->getProducedPower() > 0) {
@@ -679,7 +681,7 @@ void GameInterface::draw(Point position) {
     }
 
     //draw spice level indicator
-    if (pLocalHouse->getCapacity() == 0) {
+    if (pLocalHouse == nullptr || pLocalHouse->getCapacity() == 0) {
         yCount2 = 0;
     } else {
         yCount2 = lround((pLocalHouse->getEarnedCredits()/pLocalHouse->getCapacity())*spiceIndicatorPos.h);
@@ -699,7 +701,7 @@ void GameInterface::draw(Point position) {
     }
 
     //draw credits
-    const auto credits = pLocalHouse->getCredits();
+    const auto credits = pLocalHouse ? pLocalHouse->getCredits() : 0;
     const auto CreditsBuffer = std::to_string((credits < 0) ? 0 : credits);
     const auto NumDigits = CreditsBuffer.length();
     SDL_Texture* digitsTex = pGFXManager->getUIGraphic(UI_CreditsDigits);
