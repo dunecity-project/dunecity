@@ -313,7 +313,7 @@ bool AmbientAirplane::crashWouldHit(int teamID, FixPoint lead) const
     const int minY = std::max(0, (std::min(from.y, to.y) - spread) / TILESIZE);
     const int maxY = std::min(mapH - 1, (std::max(from.y, to.y) + spread) / TILESIZE);
     std::set<Uint32> ownIDs;
-    const auto collect = [&](const std::list<Uint32>& objects) {
+    const auto collect = [&](const auto& objects) {
         for(Uint32 id : objects) {
             const ObjectBase* object = currentGame->getObjectManager().getObject(id);
             if(object != nullptr && object != this && object->getOwner()->getTeamID() == teamID

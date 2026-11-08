@@ -54,8 +54,10 @@ inline void snapshot(Game& game, bool final = false) {
         for (const auto& tile : map->tiles) {
             tileDamage += bytes(tile.damage);
             tileCorpses += bytes(tile.deadUnits);
-            tileOccupants += tile.assignedAirUnitList.size() + tile.assignedInfantryList.size()
-                + tile.assignedUndergroundUnitList.size() + tile.assignedNonInfantryGroundObjectList.size();
+            tileOccupants += std::distance(tile.assignedAirUnitList.begin(), tile.assignedAirUnitList.end())
+                + std::distance(tile.assignedInfantryList.begin(), tile.assignedInfantryList.end())
+                + std::distance(tile.assignedUndergroundUnitList.begin(), tile.assignedUndergroundUnitList.end())
+                + std::distance(tile.assignedNonInfantryGroundObjectList.begin(), tile.assignedNonInfantryGroundObjectList.end());
         }
     }
     size_t history = bytes(game.cmdManager.timeslot), commands = 0, occupiedCycles = 0;

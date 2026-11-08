@@ -332,7 +332,7 @@ void InfantryBase::checkPos() {
                         for(int j = capturedStructureLocation.y; j < capturedStructureLocation.y + pCapturedStructure->getStructureSizeY(); j++) {
 
                             // make a copy of infantry list to avoid problems of modifying the list during iteration (!)
-                            const std::list<Uint32> infantryList = currentGameMap->getTile(i,j)->getInfantryList();
+                            const auto infantryList = currentGameMap->getTile(i,j)->getInfantryList();
                             for(const Uint32& infantryID : infantryList) {
                                 if(infantryID != getObjectID()) {
                                     ObjectBase* pObject = currentGame->getObjectManager().getObject(infantryID);

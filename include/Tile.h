@@ -27,7 +27,8 @@
 #include <misc/OutputStream.h>
 #include <fixmath/FixPoint.h>
 
-#include <list>
+#include <forward_list>
+#include <iterator>
 #include <vector>
 #include <algorithm>
 
@@ -373,19 +374,19 @@ public:
     ObjectBase* getObjectWithID(Uint32 objectID) const;
 
 
-    const std::list<Uint32>& getAirUnitList() const {
+    const std::forward_list<Uint32>& getAirUnitList() const {
         return assignedAirUnitList;
     }
 
-    const std::list<Uint32>& getInfantryList() const {
+    const std::forward_list<Uint32>& getInfantryList() const {
         return assignedInfantryList;
     }
 
-    const std::list<Uint32>& getUndergroundUnitList() const {
+    const std::forward_list<Uint32>& getUndergroundUnitList() const {
         return assignedUndergroundUnitList;
     }
 
-    const std::list<Uint32>& getNonInfantryGroundObjectList() const {
+    const std::forward_list<Uint32>& getNonInfantryGroundObjectList() const {
         return assignedNonInfantryGroundObjectList;
     }
 
@@ -431,7 +432,14 @@ public:
     bool hasAnObject() const noexcept { return (hasAGroundObject() || hasAnAirUnit() || hasAnUndergroundUnit()); }
 
     bool hasSpice() const noexcept { return (spice > 0); }
-    bool infantryNotFull() const noexcept { return (assignedInfantryList.size() < NUM_INFANTRY_PER_TILE); }
+    bool infantryNotFull() const noexcept {
+        auto it = assignedInfantryList.begin();
+        for (int count = 0; count < NUM_INFANTRY_PER_TILE; ++count) {
+            if (it == assignedInfantryList.end()) return true;
+            ++it;
+        }
+        return false;
+    }
     bool isConcrete() const noexcept { return (type == Terrain_Slab); }
     bool isExploredByHouse(int houseID) const { return houseID >= 0 && houseID < NUM_HOUSES && explored[houseID]; }
     bool isExploredByTeam(int teamID) const;
@@ -534,10 +542,12 @@ private:
     std::vector<DAMAGETYPE>         damage;                         ///< damage positions
     std::vector<DEADUNITTYPE>       deadUnits;                      ///< dead units
 
-    std::list<Uint32>   assignedAirUnitList;                      ///< all the air units on this tile
-    std::list<Uint32>   assignedInfantryList;                     ///< all infantry units on this tile
-    std::list<Uint32>   assignedUndergroundUnitList;              ///< all underground units on this tile
-    std::list<Uint32>   assignedNonInfantryGroundObjectList;      ///< all structures/vehicles on this tile
+    // Forward links keep the successor valid while squash()/setType() remove
+    // the current occupant. Most tiles are empty: no tail, size or reverse links.
+    std::forward_list<Uint32> assignedAirUnitList;
+    std::forward_list<Uint32> assignedInfantryList;
+    std::forward_list<Uint32> assignedUndergroundUnitList;
+    std::forward_list<Uint32> assignedNonInfantryGroundObjectList;
 
     Uint32      lastAccess[NUM_HOUSES];    ///< contains for every team when this tile was seen last by this house
     bool        explored[NUM_HOUSES];      ///< contains for every team if this tile is explored
