@@ -354,6 +354,17 @@ class DuneCityAuditTests(unittest.TestCase):
             game, setup, configs, [lines[0].replace('house=2', 'house=0')]))
         self.assertTrue(audit['seat_styles_verified']({}, {}, [], []))
 
+    def test_explicit_sample_map_seed_range_preserves_factors(self):
+        ordinary = audit['parser'].parse_args(['--mode', 'sample', '--cases', '12'])
+        explicit = audit['parser'].parse_args([
+            '--mode', 'sample', '--cases', '12', '--game-seed-base', '1210000'])
+        before, after = audit['sample_schedule'](ordinary), audit['sample_schedule'](explicit)
+        self.assertEqual({g['seed'] for g in after}, set(range(1210000, 1210012)))
+        for old, new in zip(before, after):
+            self.assertEqual(new['seed'], 1210000 + new['sample_case'] - 1)
+            for key in ('format', 'size', 'spice_level', 'initial_tech', 'difficulty', 'candidate_house'):
+                self.assertEqual(old[key], new[key])
+
     def test_all_control_seat_styles_preserve_the_native_schedule_and_transport(self):
         ordinary = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
         control = audit['parser'].parse_args([
