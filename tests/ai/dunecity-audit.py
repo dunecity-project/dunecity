@@ -81,7 +81,8 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost'
 ) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
 BOOM_FIELDS = ('boom_phase', 'boom_stop_minute', 'boom_own_army', 'boom_enemy_army', 'boom_near_army',
-               'boom_own_economy', 'boom_leader_economy', 'boom_army_ratio_bps', 'boom_economy_ratio_bps')
+               'boom_own_economy', 'boom_leader_economy', 'boom_army_ratio_bps', 'boom_economy_ratio_bps',
+               'boom_reachable_spice_share', 'boom_refinery_cap', 'boom_harvester_cap', 'boom_current_workers')
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required') + BOOM_FIELDS
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 AIR_KILL_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'attacker', 'victim_house', 'object', 'item',

@@ -14,9 +14,33 @@ struct Observation {
     int stopMinute{};
     int64_t ownArmy{}, enemyArmy{}, nearArmy{}, ownEconomy{}, leaderEconomy{};
     int armyRatioBps{}, economyRatioBps{};
+    int64_t reachableSpiceShare{}, refineryCap{}, harvesterCap{};
+    int currentWorkers{};
 };
 
 struct Targets { int workers{}, refineries{}, factories{}; };
+struct SpiceCaps { int64_t refineries{}, workers{}; };
+
+inline int spicePerRefineryLevel(int value) { return value == 8000 ? 8000 : 4000; }
+inline SpiceCaps spiceCaps(int64_t share, int perRefinery) {
+    share = std::max<int64_t>(0, share);
+    const int level = spicePerRefineryLevel(perRefinery);
+    return {share / level, 2 * share / level};
+}
+// Split each tile between equally near structures before summing a house's claims.
+inline int64_t spiceTileShare(int64_t spice, int nearest, int ownNearest) {
+    return ownNearest > 0 ? spice / nearest * ownNearest : 0;
+}
+inline Plan spiceGatedPlan(Plan plan, const SpiceCaps& cap, int refineries, int workers) {
+    if (plan == Plan::Refinery && cap.refineries <= refineries) return Plan::None;
+    if (plan == Plan::Harvester && cap.workers <= workers) return Plan::None;
+    return plan;
+}
+inline Targets capSpiceTargets(Targets target, const SpiceCaps& cap) {
+    target.refineries = int(std::min<int64_t>(target.refineries, cap.refineries));
+    target.workers = int(std::min<int64_t>(target.workers, cap.workers));
+    return target;
+}
 
 // Count the original occupied controllers. An asymmetric two-team survival game is not an FFA.
 inline bool rosterScope(int allies, int enemies, bool severalEnemyTeams) {

@@ -373,6 +373,9 @@ VanillaRefineryBoom=0
 VanillaGreedyBoom=0
 VanillaReactiveBoom=0
 VanillaBoomFfaOnly=0
+# Default-OFF reachable-spice gate for the refinery/harvester openings; fixed levels 4000/8000.
+VanillaBoomSpiceGate=0
+VanillaBoomSpicePerRefinery=4000
 VanillaHarvesterBoomWorkers=8
 VanillaRefineryBoomRefineries=4
 VanillaGreedyBoomMinutes=6

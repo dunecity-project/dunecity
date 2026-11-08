@@ -760,12 +760,12 @@ TEST_CASE("Vanilla FFA switches default off and independently persist every hash
 TEST_CASE("Vanilla boom families default off and persist independent hashed combinations",
           "[ai][vanilla][strategy][config]") {
     const QuantBotConfig defaults;
-    const std::array<bool QuantBotConfig::ForceSettings::*, 5> members{
+    const std::array<bool QuantBotConfig::ForceSettings::*, 6> members{
         &QuantBotConfig::ForceSettings::vanillaHarvesterBoom, &QuantBotConfig::ForceSettings::vanillaRefineryBoom,
         &QuantBotConfig::ForceSettings::vanillaGreedyBoom, &QuantBotConfig::ForceSettings::vanillaReactiveBoom,
-        &QuantBotConfig::ForceSettings::vanillaBoomFfaOnly};
-    const std::array<const char*, 5> names{"VanillaHarvesterBoom", "VanillaRefineryBoom", "VanillaGreedyBoom",
-        "VanillaReactiveBoom", "VanillaBoomFfaOnly"};
+        &QuantBotConfig::ForceSettings::vanillaBoomFfaOnly, &QuantBotConfig::ForceSettings::vanillaBoomSpiceGate};
+    const std::array<const char*, 6> names{"VanillaHarvesterBoom", "VanillaRefineryBoom", "VanillaGreedyBoom",
+        "VanillaReactiveBoom", "VanillaBoomFfaOnly", "VanillaBoomSpiceGate"};
     for (const auto member : members) REQUIRE_FALSE(defaults.force.*member);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-bold-config-test.ini";
     std::map<std::string, unsigned> hashes;
@@ -793,15 +793,18 @@ TEST_CASE("Vanilla boom families default off and persist independent hashed comb
 }
 
 TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai][vanilla][strategy][config]") {
-    const std::array<int QuantBotConfig::ForceSettings::*, 5> members{
+    const std::array<int QuantBotConfig::ForceSettings::*, 6> members{
         &QuantBotConfig::ForceSettings::vanillaHarvesterBoomWorkers,
         &QuantBotConfig::ForceSettings::vanillaRefineryBoomRefineries,
         &QuantBotConfig::ForceSettings::vanillaGreedyBoomMinutes,
         &QuantBotConfig::ForceSettings::vanillaReactiveArmyRatioBps,
-        &QuantBotConfig::ForceSettings::vanillaReactiveEconomyRatioBps};
-    const std::array<const char*, 5> names{"VanillaHarvesterBoomWorkers", "VanillaRefineryBoomRefineries",
-        "VanillaGreedyBoomMinutes", "VanillaReactiveArmyRatioBps", "VanillaReactiveEconomyRatioBps"};
-    const std::array<std::vector<int>, 5> levels{{{8, 12}, {4, 6}, {6, 10, 12}, {6000, 9000}, {12000, 15000}}};
+        &QuantBotConfig::ForceSettings::vanillaReactiveEconomyRatioBps,
+        &QuantBotConfig::ForceSettings::vanillaBoomSpicePerRefinery};
+    const std::array<const char*, 6> names{"VanillaHarvesterBoomWorkers", "VanillaRefineryBoomRefineries",
+        "VanillaGreedyBoomMinutes", "VanillaReactiveArmyRatioBps", "VanillaReactiveEconomyRatioBps",
+        "VanillaBoomSpicePerRefinery"};
+    const std::array<std::vector<int>, 6> levels{{{8, 12}, {4, 6}, {6, 10, 12}, {6000, 9000}, {12000, 15000},
+                                               {4000, 8000}}};
     const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-boom-level-test.ini";
     const QuantBotConfig defaults;
     for (size_t i = 0; i < members.size(); ++i) for (const int value : levels[i]) {
@@ -823,6 +826,90 @@ TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai]
         REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
     }
     std::filesystem::remove(path);
+}
+
+TEST_CASE("Vanilla boom spice level accepts only 4000 or 8000 and persists its normalization",
+          "[ai][vanilla][strategy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.vanillaBoomSpicePerRefinery == 4000);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-boom-spice-test.ini";
+    for (const int value : {-1, 0, 3999, 4001, 6000, 7999, 8001, 100000}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nVanillaBoomSpicePerRefinery=" << value << '\n';
+        }
+        QuantBotConfig loaded;
+        loaded.force.vanillaBoomSpicePerRefinery = 8000;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.vanillaBoomSpicePerRefinery == 4000);
+        REQUIRE(loaded.getConfigHash() == defaults.getConfigHash());
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.vanillaBoomSpicePerRefinery == 4000);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Vanilla spice caps split ties before summing and gate only affordable new boom capacity",
+          "[ai][vanilla][strategy]") {
+    using namespace QuantBotVanillaPolicy;
+    REQUIRE(spiceTileShare(10, 3, 1) == 3);
+    REQUIRE(spiceTileShare(10, 3, 2) == 6);
+    REQUIRE(spiceTileShare(10, 3, 3) == 9);
+    REQUIRE(spiceTileShare(10, 0, 0) == 0);
+    REQUIRE(spiceTileShare(9000000001LL, 2, 1) == 4500000000LL);
+    for (const int level : {4000, 8000}) {
+        REQUIRE(spicePerRefineryLevel(level) == level);
+        const auto empty = spiceCaps(0, level);
+        REQUIRE(empty.refineries == 0);
+        REQUIRE(empty.workers == 0);
+        REQUIRE(spiceGatedPlan(Plan::Refinery, empty, 0, 0) == Plan::None);
+        REQUIRE(spiceGatedPlan(Plan::Harvester, empty, 0, 0) == Plan::None);
+        const auto crumbs = spiceCaps(1999, level);
+        REQUIRE(crumbs.refineries == 0);
+        REQUIRE(crumbs.workers == 0);
+        REQUIRE(spiceGatedPlan(Plan::Refinery, crumbs, 0, 0) == Plan::None);
+        REQUIRE(spiceGatedPlan(Plan::Harvester, crumbs, 0, 0) == Plan::None);
+        const auto below = spiceCaps(level - 1, level);
+        REQUIRE(below.refineries == 0);
+        REQUIRE(below.workers == 1);
+        REQUIRE(spiceGatedPlan(Plan::Refinery, below, 0, 0) == Plan::None);
+        const auto one = spiceCaps(level, level);
+        REQUIRE(one.refineries == 1);
+        REQUIRE(one.workers == 2);
+        REQUIRE(spiceGatedPlan(Plan::Refinery, one, 0, 0) == Plan::Refinery);
+        REQUIRE(spiceGatedPlan(Plan::Refinery, one, 1, 0) == Plan::None);
+        REQUIRE(spiceGatedPlan(Plan::Harvester, one, 1, 1) == Plan::Harvester);
+        REQUIRE(spiceGatedPlan(Plan::Harvester, one, 1, 2) == Plan::None);
+        const auto odd = spiceCaps(level + level / 2, level);
+        REQUIRE(odd.refineries == 1);
+        REQUIRE(odd.workers == 3); // Not twice the rounded-down refinery cap.
+        REQUIRE(spiceGatedPlan(Plan::Harvester, odd, 1, 2) == Plan::Harvester);
+        REQUIRE(spiceGatedPlan(Plan::Harvester, odd, 1, 3) == Plan::None);
+        const auto limited = capSpiceTargets(targets(Plan::Refinery, 8, 6, 8, 50), odd);
+        REQUIRE(limited.refineries == 1);
+        REQUIRE(limited.workers == 3);
+        REQUIRE(limited.factories == 1);
+        const auto before = spiceCaps(3 * level, level), after = spiceCaps(3 * level - 1, level);
+        REQUIRE(spiceGatedPlan(Plan::Refinery, before, 2, 4) == Plan::Refinery);
+        REQUIRE(spiceGatedPlan(Plan::Refinery, after, 2, 4) == Plan::None);
+        REQUIRE(spiceGatedPlan(Plan::Harvester, before, 2, 5) == Plan::Harvester);
+        REQUIRE(spiceGatedPlan(Plan::Harvester, after, 2, 5) == Plan::None);
+        const auto sustainable = targets(Plan::Refinery, 8, 6, 8, 3);
+        const auto unchanged = capSpiceTargets(sustainable, spiceCaps(20 * level, level));
+        REQUIRE(unchanged.workers == sustainable.workers);
+        REQUIRE(unchanged.refineries == sustainable.refineries);
+        for (const Plan other : {Plan::None, Plan::GreedyEconomy, Plan::GreedyArmy,
+                                 Plan::ReactiveEconomy, Plan::ReactiveArmy})
+            REQUIRE(spiceGatedPlan(other, empty, 0, 0) == other);
+    }
+    for (const int value : {-1, 0, 3999, 4001, 6000, 7999, 8001})
+        REQUIRE(spicePerRefineryLevel(value) == 4000);
+    const auto large = spiceCaps(8000000001LL, 8000);
+    REQUIRE(large.refineries == 1000000);
+    REQUIRE(large.workers == 2000000);
 }
 
 TEST_CASE("Vanilla boom phases preserve scope and convert greedy spending at the declared stop",

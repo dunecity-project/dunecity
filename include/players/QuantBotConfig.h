@@ -241,6 +241,9 @@ struct QuantBotConfig {
         bool vanillaReactiveBoom;
         /// At least three original occupied hostile controllers and multiple hostile teams.
         bool vanillaBoomFfaOnly;
+        /// Cap refinery/harvester openings by their nearest-base share of reachable remaining spice.
+        bool vanillaBoomSpiceGate;
+        int vanillaBoomSpicePerRefinery;       ///< 4000 or 8000; other values normalize to 4000.
         int vanillaHarvesterBoomWorkers;       ///< 8 or 12, with two refineries.
         int vanillaRefineryBoomRefineries;     ///< 4 or 6, with two workers per refinery.
         int vanillaGreedyBoomMinutes;          ///< Stop at 6, 10 or 12 minutes; fund army until minute 20.

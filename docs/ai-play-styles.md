@@ -128,6 +128,24 @@ test-only behaviour.
 | `armor` | mass armour | 70% of the mix from tank 65 / siege 20 / launcher 15 |
 | `counter` | counter-composition | 60% of the mix towards counters of the remembered enemy army (light → tanks/siege, armour → launchers/siege, launchers → quads/tanks, air → launchers) |
 
+### Vanilla spice-gated refinery cells (test-only)
+
+`vanilla-boom-refinery-6-spice-{4000,8000}` copies the six-refinery FFA opening, adding
+`VanillaBoomSpiceGate=1` and the named `VanillaBoomSpicePerRefinery` level. Both keys are hashed;
+the gate defaults off, the level defaults to 4000, and any value other than 8000 normalizes to 4000.
+`vanilla-boom-refinery-6` explicitly keeps the gate off; `vanilla-boom-off` disables every family.
+Each ordinary build pass measures the remaining spice in vehicle-terrain regions occupied by our
+yard/refinery footprints. Each tile belongs to the nearest live yard/refinery of any house in that
+region (squared distance to the footprint); tied structures each receive integer `spice / ties`.
+No fog knowledge, saved state or decision cache is added. The refinery cap is `share / level`,
+the worker cap is `2 * share / level`; the existing sustainable limit still applies. A refinery
+opening runs only when its cap exceeds current refineries, a harvester opening only when its worker
+cap exceeds current harvesters. Otherwise the plan is off and native planning runs unchanged.
+Active targets are capped, without cancelling accepted orders. The audit's append-only
+`boom_reachable_spice_share`, `boom_refinery_cap`, `boom_harvester_cap` and `boom_current_workers`
+fields record the last build pass (zero when the gate is off/out of scope); reading them never runs planning.
+This is only a remaining-resource gate, not a refinery-efficiency or rich-map army-timing fix.
+
 ### Vanilla refinery/greedy compound cells (test-only)
 
 `vanilla-boom-refinery-6-greedy-{6,10,12}` enables the existing `VanillaRefineryBoom` and

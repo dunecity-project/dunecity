@@ -1048,11 +1048,12 @@ class DuneCityAuditTests(unittest.TestCase):
 
     def test_boom_receipt_suffix_is_append_only_and_survives_csv_with_large_values(self):
         fields = ('boom_phase', 'boom_stop_minute', 'boom_own_army', 'boom_enemy_army', 'boom_near_army',
-                  'boom_own_economy', 'boom_leader_economy', 'boom_army_ratio_bps', 'boom_economy_ratio_bps')
+                  'boom_own_economy', 'boom_leader_economy', 'boom_army_ratio_bps', 'boom_economy_ratio_bps',
+                  'boom_reachable_spice_share', 'boom_refinery_cap', 'boom_harvester_cap', 'boom_current_workers')
         old_fields = audit['META'] + audit['SAMPLE_VALUES'] + ('flags', 'refineries', 'power_required')
         self.assertEqual(audit['SAMPLE_FIELDS'], old_fields + fields)
         values = ('military', '15', '5000000001', '6000000002', '2000000003',
-                  '9000000004', '7000000005', '9000', '15000')
+                  '9000000004', '7000000005', '9000', '15000', '9000000006', '2250000', '4500000', '12')
         suffix = ' '.join(f'{field}={value}' for field, value in zip(fields, values))
         line = ('DUNECITY_AUDIT: minute=20 cycle=75000 house=0 power=100 need=150 spice=10000 '
                 'refineries=4 power_required=0 ' + suffix)
@@ -1076,6 +1077,8 @@ class DuneCityAuditTests(unittest.TestCase):
                 sample = dict(baseline)
                 sample.update({field: '0' for field in audit['BOOM_FIELDS']})
                 sample['boom_phase'] = phase
+                sample.update(boom_reachable_spice_share='9000000006', boom_refinery_cap='2250000',
+                              boom_harvester_cap='4500000', boom_current_workers='12')
                 self.assertEqual(audit['detect']([sample]), expected)
                 self.assertEqual(sample['boom_phase'], phase)
                 self.assertEqual(sample['flags'], expected_sample['flags'])

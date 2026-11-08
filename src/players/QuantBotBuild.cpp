@@ -866,8 +866,70 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
         ? CityEconomyInvestmentPolicy::factoryHarvesterTarget(pass.spiceHarvesterTarget,harvesterLimit)
         : QuantBotBuildPolicy::fundedSpiceHarvesters(pass.mapSpiceHarvesterTarget,getAIRefineryBays());
     pass.vanillaPlan = vanillaBoldPlan(vanillaBoomReceipt);
+    const auto& force = botConfig().force;
+    const bool spiceGate = force.vanillaBoomSpiceGate
+        && (force.vanillaHarvesterBoom || force.vanillaRefineryBoom) && vanillaBoomGame();
+    QuantBotVanillaPolicy::SpiceCaps spiceCap;
+    if (spiceGate) {
+        // Build-pass scratch only: live simulation state, not fog memory, saved state or a survey cache.
+        // A structure claims once per terrain region occupied by its footprint, not once per tile.
+        struct Anchor { const StructureBase* structure; int region; bool own; };
+        std::vector<Anchor> anchors;
+        anchors.reserve(getStructureList().size());
+        bool ownReachable = false;
+        for (const auto* structure : getStructureList()) {
+            const auto item = structure->getItemID();
+            if ((item != Structure_ConstructionYard && item != Structure_Refinery) || structure->getHealth() <= 0)
+                continue;
+            const bool own = structure->getOwner() == getHouse();
+            const Coord origin = structure->getLocation(), size = structure->getStructureSize();
+            const auto first = anchors.size();
+            for (int y = origin.y; y < origin.y + size.y; ++y)
+                for (int x = origin.x; x < origin.x + size.x; ++x) {
+                    const int region = getMap().vehicleTerrainRegion(Coord(x, y));
+                    if (!region || std::any_of(anchors.begin() + first, anchors.end(),
+                        [region](const Anchor& anchor) { return anchor.region == region; })) continue;
+                    anchors.push_back({structure, region, own});
+                    ownReachable |= own;
+                }
+        }
+        int64_t share = 0;
+        if (ownReachable) for (int y = 0; y < getMap().getSizeY(); ++y)
+            for (int x = 0; x < getMap().getSizeX(); ++x) {
+                const auto spice = getMap().getTile(x, y)->getSpice().lround();
+                if (spice <= 0) continue;
+                const Coord at(x, y);
+                const int region = getMap().vehicleTerrainRegion(at);
+                if (!region) continue;
+                int64_t best = std::numeric_limits<int64_t>::max();
+                int nearest = 0, ownNearest = 0;
+                for (const auto& anchor : anchors) {
+                    if (anchor.region != region) continue;
+                    const Coord point = anchor.structure->getClosestPoint(at);
+                    const int64_t dx = int64_t(x) - point.x, dy = int64_t(y) - point.y;
+                    const int64_t distance = dx * dx + dy * dy;
+                    if (distance < best) {
+                        best = distance;
+                        nearest = 1;
+                        ownNearest = anchor.own;
+                    } else if (distance == best) {
+                        ++nearest;
+                        ownNearest += anchor.own;
+                    }
+                }
+                share += QuantBotVanillaPolicy::spiceTileShare(spice, nearest, ownNearest);
+            }
+        spiceCap = QuantBotVanillaPolicy::spiceCaps(share, force.vanillaBoomSpicePerRefinery);
+        const int currentWorkers = getAIHarvesterCount();
+        pass.vanillaPlan = QuantBotVanillaPolicy::spiceGatedPlan(pass.vanillaPlan, spiceCap,
+            getHouse()->getNumItems(Structure_Refinery), currentWorkers);
+        vanillaBoomReceipt.plan = pass.vanillaPlan;
+        vanillaBoomReceipt.reachableSpiceShare = share;
+        vanillaBoomReceipt.refineryCap = spiceCap.refineries;
+        vanillaBoomReceipt.harvesterCap = spiceCap.workers;
+        vanillaBoomReceipt.currentWorkers = currentWorkers;
+    }
     if (pass.vanillaPlan != QuantBotVanillaPolicy::Plan::None) {
-        const auto& force = botConfig().force;
         const int sustainable = std::min(harvesterLimit, pass.spiceShare / 2000);
         const int workerPrice = std::max(1, data[Unit_Harvester][houseID].price);
         const int64_t economicGap = std::max<int64_t>(0,
@@ -877,6 +939,9 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
             + int(std::min<int64_t>(harvesterLimit, (economicGap + workerPrice - 1) / workerPrice)));
         pass.vanillaBoomTargets = QuantBotVanillaPolicy::targets(pass.vanillaPlan,
             force.vanillaHarvesterBoomWorkers, force.vanillaRefineryBoomRefineries, reactiveWorkers, sustainable);
+        if (spiceGate && (pass.vanillaPlan == QuantBotVanillaPolicy::Plan::Refinery
+                          || pass.vanillaPlan == QuantBotVanillaPolicy::Plan::Harvester))
+            pass.vanillaBoomTargets = QuantBotVanillaPolicy::capSpiceTargets(pass.vanillaBoomTargets, spiceCap);
         pass.spiceHarvesterTarget = pass.mapSpiceHarvesterTarget = pass.fundedHarvesterTarget
             = pass.vanillaBoomTargets.workers;
         pass.vanillaBoomArmy = QuantBotVanillaPolicy::armyPhase(pass.vanillaPlan);
