@@ -360,18 +360,18 @@ VanillaFfaFullWaves=0
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0
 # Establish campaign player-side combat production before repeat refinery expansion.
-# Independent hashed candidate; OFF preserves the economy-first opening.
-CampaignMilitaryOpening=0
-# Size campaign player-side readiness to enemy strength without a fifteen-minute delay.
-# Independent hashed candidate; OFF preserves the old fixed opening threshold.
-CampaignAdaptiveReadiness=0
+# Hashed; OFF preserves the economy-first opening.
+CampaignMilitaryOpening=1
+# Size classic campaign player-side readiness to enemy strength without a fifteen-minute delay.
+# Hashed; OFF preserves the old fixed opening threshold. City campaigns are unchanged.
+CampaignAdaptiveReadiness=1
 # Fund campaign player-side ground production before economic savings during live base attacks.
-# Independent hashed candidate; real prices, military budgets and unit limits stay unchanged.
-CampaignThreatProduction=0
+# Hashed; real prices, military budgets and unit limits stay unchanged.
+CampaignThreatProduction=1
 # Campaign opening Light Factories wait until the first unit and protected cash are funded.
-CampaignFundedLightOpening=0
+CampaignFundedLightOpening=1
 # Before heavy-factory technology, fund campaign light growth from real uncommitted cash.
-CampaignLightWorkingCash=0
+CampaignLightWorkingCash=1
 # Protect a second refinery's founded quote from low-tech light units until it is queued.
 CampaignLightIncomeSeed=0
 ResearchLab=1

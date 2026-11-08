@@ -542,7 +542,8 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
     int required = std::max(0, configuredThreshold);
     // The opening must size against a whole opposing alliance, not one of
     // its houses. OFF retains the established post-opening per-house rule.
-    const bool adaptive = botConfig().force.campaignAdaptiveReadiness;
+    const bool adaptive = botConfig().force.campaignAdaptiveReadiness
+        && !currentGame->isCitySimEnabled();
     if (isAlliedWithHuman() && !isCampaignEnemy()
         && (adaptive || getGameCycleCount() >= MILLI2CYCLES(15 * 60000))) {
         int strongest = 0;

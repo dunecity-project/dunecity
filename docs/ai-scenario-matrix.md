@@ -197,7 +197,7 @@ the redundant remaining OFF games were cancelled with integrator approval. The s
 remains default off pending owner review.
 
 The independent, hashed `[Force Concentration]` candidates
-`CampaignMilitaryOpening` and `CampaignAdaptiveReadiness` also default off.
+`CampaignMilitaryOpening` and `CampaignAdaptiveReadiness` originally defaulted off.
 The first establishes one available combat producer after the first refinery,
 before repeat refinery/storage/Starport expansion, preserving power and live
 air-defence priority. It walks the actual prerequisite tree and saves for the
@@ -212,7 +212,7 @@ Use `campaign-opening-off` / `campaign-opening-on` for the paired combination;
 change. These styles do not enable `CampaignPlayerHouse`: add that switch only
 when comparing the AI-only role-fixed arm.
 
-`CampaignThreatProduction` is a separate default-off hashed candidate for the
+`CampaignThreatProduction` was initially a separate default-off hashed candidate for the
 remaining funding hold: while a visible enemy is actually firing at the
 campaign player's buildings or harvesters, ground producers plan before
 economic expansion and can spend economic savings on replacements. A heavy
@@ -231,7 +231,7 @@ Measured on `e26bd898` (2026-11-08), all 66 human-partner missions:
 | Military opening + threat production | 60 | 6 | +0.12 [−0.09,+0.33] |
 | All three | 61 | 5 | +0.15 [−0.06,+0.36] |
 
-**All remain default off and are rejected for default adoption.** All three
+**Those original combinations were rejected for default adoption.** All three
 rescue nine original losses (Atreides 2/5/6/9/20, Harkonnen 21/22, Ordos 5/6),
 but lose four prior wins (Atreides 16/21, Ordos 2/21); Ordos 4 still loses.
 The strict same-build vanilla sample (`7c2ed4dd`, 48 cases × two seats) matches
@@ -266,11 +266,11 @@ Readiness plus threat is the first clean campaign improvement: it preserves all
 56 control wins. Its paired score difference is +0.0303, with normal 95% interval
 [-0.0291,+0.0897], so the one-mission gain is not an established aggregate
 statistical improvement. Neither isolated switch rescues Harkonnen 21. AAA2
-passes with both original control digests; defaults remain OFF pending the
-cross-mode adoption gate.
+passes with both original control digests. These isolated arms are not the
+adopted defaults; the five-switch combination below is the accepted set.
 
-Independent default-off hashed light-production candidates investigate the
-observed idle factory. `CampaignFundedLightOpening` leaves normal yard economy
+Independent hashed light-production candidates investigated the observed idle
+factory. `CampaignFundedLightOpening` leaves normal yard economy
 active until the opening Light Factory, a legal first vehicle, and the
 producer's protected cash can all be funded together; it does not wait for a
 particular delivered-worker count. Its completed paired 66-mission run is
@@ -294,16 +294,29 @@ digests, within 50 minutes. The remaining losses are Atreides 6/9/20, Harkonnen
 (56/59), but those references win A6/A9 (both) and A20/H22 (1.0.807); preserving
 those historical mission wins is not yet established.
 
+The round commit adopts exactly five defaults ON: `CampaignMilitaryOpening`,
+`CampaignAdaptiveReadiness`, `CampaignThreatProduction`,
+`CampaignFundedLightOpening`, and `CampaignLightWorkingCash`, together with the
+protocol/save version bump. All five are confined to non-city campaigns;
+AdaptiveReadiness explicitly excludes city simulation so city campaigns retain
+control behaviour. `CampaignPlayerHouse` and `CampaignLightIncomeSeed` remain
+OFF. The constructor, shipped INI and registry defaults agree. Historical
+ablation styles explicitly override the adopted settings, and
+`campaign-opening-off` explicitly disables all five plus IncomeSeed for digest
+comparison with the original control.
+
 Working cash without the factory gate starts O4 replacement production at
 2.92 min and buys 36 Raiders, but never dispatches: the one-worker army grows
 slower than its readiness requirement (3,990 versus 5,000 at 19.21 min), then
-loses at 40.51 min. The next independent default-OFF candidate,
-`CampaignLightIncomeSeed`, protects only the second refinery's founded quote
-from working-cash light production until that refinery is queued. It does not
-wait for a delivered worker, change factory admission, or alter OFF behaviour.
-`campaign-light-income-seed-on` isolates this from the working-cash arm; this
-fourth code variation is prepared for the integrator's shared second round,
-not counted as a measured win. Full paired results and decisions live in
+loses at 40.51 min. The independent default-OFF candidate `CampaignLightIncomeSeed`
+protects only the second refinery's founded quote from working-cash light
+production until that refinery is queued. It does not wait for worker delivery
+or change factory admission. Its diagnostic style
+`campaign-light-income-seed-on` (funded factory gate OFF) wins O4 by conquest at
+**17.71 min**, digest `f8d68a18d4f2a43a`, on `a764605b`; that one-mission result is
+not counted as an improvement to the 61W set. `campaign-defaults-income-seed-on`
+enables only IncomeSeed on top of the adopted defaults for the paired full-set
+and AAA gate. Full results and decisions live in
 `~/Documents/projects/outputs/ai-tuning-20261108/CampaignLane/ledger.md`.
 
 

@@ -706,11 +706,46 @@ TEST_CASE("Vanilla FFA switches default off and independently persist every hash
     std::filesystem::remove(path);
 }
 
-TEST_CASE("Campaign opening switches default off and independently round-trip their hashes",
+TEST_CASE("Accepted campaign defaults retain an explicit all-off control",
+          "[ai][campaign][production][config]") {
+    const QuantBotConfig defaults;
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-all-off-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\n"
+            << "CampaignMilitaryOpening=0\nCampaignAdaptiveReadiness=0\n"
+            << "CampaignThreatProduction=0\nCampaignFundedLightOpening=0\n"
+            << "CampaignLightWorkingCash=0\nCampaignLightIncomeSeed=0\n";
+    }
+    QuantBotConfig expected = defaults;
+    expected.force.campaignMilitaryOpening = false;
+    expected.force.campaignAdaptiveReadiness = false;
+    expected.force.campaignThreatProduction = false;
+    expected.force.campaignFundedLightOpening = false;
+    expected.force.campaignLightWorkingCash = false;
+    expected.force.campaignLightIncomeSeed = false;
+    QuantBotConfig control;
+    REQUIRE(control.applyOverrides(path.string()));
+    REQUIRE_FALSE(control.force.campaignMilitaryOpening);
+    REQUIRE_FALSE(control.force.campaignAdaptiveReadiness);
+    REQUIRE_FALSE(control.force.campaignThreatProduction);
+    REQUIRE_FALSE(control.force.campaignFundedLightOpening);
+    REQUIRE_FALSE(control.force.campaignLightWorkingCash);
+    REQUIRE_FALSE(control.force.campaignLightIncomeSeed);
+    REQUIRE(control.getConfigHash() == expected.getConfigHash());
+    REQUIRE(control.getConfigHash() != defaults.getConfigHash());
+    REQUIRE(control.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.getConfigHash() == control.getConfigHash());
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign opening switches default on and independently round-trip both hashed states",
           "[ai][campaign][opening][config]") {
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.campaignMilitaryOpening);
-    REQUIRE_FALSE(defaults.force.campaignAdaptiveReadiness);
+    REQUIRE(defaults.force.campaignMilitaryOpening);
+    REQUIRE(defaults.force.campaignAdaptiveReadiness);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-opening-test.ini";
     const auto savedPath = std::filesystem::temp_directory_path() / "quantbot-campaign-opening-saved-test.ini";
     for (const bool production : {false, true}) {
@@ -728,7 +763,7 @@ TEST_CASE("Campaign opening switches default off and independently round-trip th
             REQUIRE(loaded.force.campaignMilitaryOpening == production);
             REQUIRE(loaded.force.campaignAdaptiveReadiness == readiness);
             REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
-            REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (!production && !readiness));
+            REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (production && readiness));
             REQUIRE(loaded.force.campaignPlayerHouse == defaults.force.campaignPlayerHouse);
             REQUIRE(loaded.save(savedPath.string()));
             QuantBotConfig restored;
@@ -742,10 +777,10 @@ TEST_CASE("Campaign opening switches default off and independently round-trip th
     std::filesystem::remove(savedPath);
 }
 
-TEST_CASE("Campaign threat production defaults off and independently round-trips both hashed states",
+TEST_CASE("Campaign threat production defaults on and independently round-trips both hashed states",
           "[ai][campaign][production][config]") {
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.campaignThreatProduction);
+    REQUIRE(defaults.force.campaignThreatProduction);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-threat-test.ini";
     for (const bool enabled : {false, true, false}) {
         QuantBotConfig expected = defaults;
@@ -758,9 +793,9 @@ TEST_CASE("Campaign threat production defaults off and independently round-trips
         REQUIRE(config.applyOverrides(path.string()));
         REQUIRE(config.force.campaignThreatProduction == enabled);
         REQUIRE(config.getConfigHash() == expected.getConfigHash());
-        REQUIRE((config.getConfigHash() == defaults.getConfigHash()) == !enabled);
-        REQUIRE_FALSE(config.force.campaignMilitaryOpening);
-        REQUIRE_FALSE(config.force.campaignAdaptiveReadiness);
+        REQUIRE((config.getConfigHash() == defaults.getConfigHash()) == enabled);
+        REQUIRE(config.force.campaignMilitaryOpening == defaults.force.campaignMilitaryOpening);
+        REQUIRE(config.force.campaignAdaptiveReadiness == defaults.force.campaignAdaptiveReadiness);
         REQUIRE(config.save(path.string()));
         QuantBotConfig restored;
         REQUIRE(restored.applyOverrides(path.string()));
@@ -773,7 +808,7 @@ TEST_CASE("Campaign threat production defaults off and independently round-trips
 TEST_CASE("Campaign light working cash independently persists both hashed states",
           "[ai][campaign][production][config]") {
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.campaignLightWorkingCash);
+    REQUIRE(defaults.force.campaignLightWorkingCash);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-working-cash-test.ini";
     for (const bool enabled : {false, true, false}) {
         QuantBotConfig expected = defaults;
@@ -786,7 +821,7 @@ TEST_CASE("Campaign light working cash independently persists both hashed states
         REQUIRE(loaded.applyOverrides(path.string()));
         REQUIRE(loaded.force.campaignLightWorkingCash == enabled);
         REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
-        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == !enabled);
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == enabled);
         REQUIRE(loaded.save(path.string()));
         QuantBotConfig restored;
         REQUIRE(restored.applyOverrides(path.string()));
@@ -811,8 +846,8 @@ TEST_CASE("Campaign light income seed independently persists both hashed states"
         QuantBotConfig loaded;
         REQUIRE(loaded.applyOverrides(path.string()));
         REQUIRE(loaded.force.campaignLightIncomeSeed == enabled);
-        REQUIRE_FALSE(loaded.force.campaignLightWorkingCash);
-        REQUIRE_FALSE(loaded.force.campaignFundedLightOpening);
+        REQUIRE(loaded.force.campaignLightWorkingCash == defaults.force.campaignLightWorkingCash);
+        REQUIRE(loaded.force.campaignFundedLightOpening == defaults.force.campaignFundedLightOpening);
         REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
         REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == !enabled);
         REQUIRE(loaded.save(path.string()));
@@ -827,7 +862,7 @@ TEST_CASE("Campaign light income seed independently persists both hashed states"
 TEST_CASE("Campaign funded light opening independently persists both hashed states",
           "[ai][campaign][production][config]") {
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.campaignFundedLightOpening);
+    REQUIRE(defaults.force.campaignFundedLightOpening);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-funded-light-test.ini";
     for (const bool enabled : {false, true, false}) {
         QuantBotConfig expected = defaults;
@@ -840,7 +875,7 @@ TEST_CASE("Campaign funded light opening independently persists both hashed stat
         REQUIRE(loaded.applyOverrides(path.string()));
         REQUIRE(loaded.force.campaignFundedLightOpening == enabled);
         REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
-        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == !enabled);
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == enabled);
         REQUIRE(loaded.save(path.string()));
         QuantBotConfig restored;
         REQUIRE(restored.applyOverrides(path.string()));

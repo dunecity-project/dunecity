@@ -347,11 +347,11 @@ QuantBotConfig::QuantBotConfig() {
     force.openingCombatBudget = false;
     force.campaignCombatBudget = false;
     force.campaignPlayerHouse = false;
-    force.campaignMilitaryOpening = false;
-    force.campaignAdaptiveReadiness = false;
-    force.campaignThreatProduction = false;
-    force.campaignFundedLightOpening = false;
-    force.campaignLightWorkingCash = false;
+    force.campaignMilitaryOpening = true;
+    force.campaignAdaptiveReadiness = true;
+    force.campaignThreatProduction = true;
+    force.campaignFundedLightOpening = true;
+    force.campaignLightWorkingCash = true;
     force.campaignLightIncomeSeed = false;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;

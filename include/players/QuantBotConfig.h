@@ -234,20 +234,20 @@ struct QuantBotConfig {
         /// even when its QuantBot is the sole controller. Authored enemy houses are unchanged.
         bool campaignPlayerHouse;
         /// Campaign player-side openings establish a combat producer before repeat refineries.
-        /// Independent, hashed candidate; OFF retains the existing economy-first opening.
+        /// Hashed; default on. OFF retains the existing economy-first opening.
         bool campaignMilitaryOpening;
-        /// Campaign player-side readiness scales to enemy strength from the first wave.
-        /// Independent, hashed candidate; OFF retains the fifteen-minute fixed opening floor.
+        /// Classic campaign player-side readiness scales to enemy strength from the first wave.
+        /// Hashed; default on. OFF retains the fifteen-minute fixed opening floor; cities are unchanged.
         bool campaignAdaptiveReadiness;
         /// A campaign player's ground producers can spend economic savings while
-        /// visible attackers are firing on its income/base. Independent, hashed; default off.
+        /// visible attackers are firing on its income/base. Hashed; default on.
         bool campaignThreatProduction;
         /// Delay the campaign opening Light Factory until its first unit and
-        /// ordinary producer cash protection are funded. Independent, hashed; default off.
+        /// ordinary producer cash protection are funded. Hashed; default on.
         bool campaignFundedLightOpening;
         /// Before heavy-factory technology, campaign light production funds growth
         /// from real uncommitted cash instead of a 2,000-credit economic buffer.
-        /// Independent, hashed candidate; default off.
+        /// Hashed; default on. OFF retains the 2,000-credit economic buffer.
         bool campaignLightWorkingCash;
         /// Working-cash light production protects the second refinery's quote
         /// until that refinery is queued, without waiting for worker delivery.
