@@ -252,10 +252,43 @@ Evidence: `~/Documents/projects/outputs/ai-recovery-20261108/fixes/CampaignOpeni
 `bounded-seed13/`, `bounded-seed-aaa2/`). These results do not pass the
 all-missions-win recovery gate.
 
+The next campaign tuning round isolates `campaign-threat-production-on`,
+`campaign-adaptive-readiness-on`, and `campaign-readiness-threat-on` across the
+same 66 human-partner missions. The last style deliberately omits the military
+opening; the previous 61 wins therefore do not establish that a factory-first
+opening is necessary.
+
+Two independent default-off hashed light-production candidates investigate the
+observed idle factory. `CampaignFundedLightOpening` leaves normal yard economy
+active until the opening Light Factory, a legal first vehicle, and the
+producer's protected cash can all be funded together; it does not wait for a
+particular delivered-worker count. `CampaignAffordableLight` lets a light
+producer under the existing live-base-attack funding rule order a legal unit
+at its actual price instead of imposing the unrelated 700-credit entry floor.
+Prices, commitments, army budgets, unit limits, noncampaign games, and both
+OFF paths retain their existing rules. Styles `campaign-light-funded-on`,
+`campaign-light-affordable-on`, and `campaign-light-combined-on` isolate and
+combine them with the existing three campaign switches. The paired variant
+ledger lives in `~/Documents/projects/outputs/ai-tuning-20261108/CampaignLane/ledger.md`;
+no default adoption follows from a diagnostic subset.
+
+
 
 For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
 seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;
 see [sampler factors and research verification](quantbot-dunecity-audit.md#balanced-recovery-skirmish-sampler).
+
+For a sampler candidate/control comparison, use **`--candidate-style NAME`**,
+not `--style`: only the sampled candidate seat receives that INI; opponents
+retain their native QuantBot config even when they are Brutal too. Both seat
+assignments keep the same maps, seeds, rosters and IDs. `games.csv` records the
+candidate style and every house's effective config hash. Missing candidate
+application or a changed opponent hash is an error, not a measured game.
+The transport reuses the probe's per-house config inputs with one constant
+overlay for the whole game; no genome search or changing phases is involved.
+`--style` remains available for explicitly **all-QuantBot** experiments and is
+mutually exclusive with `--candidate-style`. Campaign/AAA `--style` comparisons
+do not change their non-QuantBot opponents.
 
 ```sh
 # Real games run only through the committed cluster queue, never a local mini batch.
