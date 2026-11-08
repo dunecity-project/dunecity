@@ -785,6 +785,12 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
     if (pass.techSavings && pass.militaryEmergency) protectedCash = 0;
     if (turn.pBuilder->getItemID()==Structure_ConstructionYard
         && storageExpansionItem(pass,turn.pBuilder)!=NONE_ID) protectedCash=0;
+    // Commitments were already removed from pass.money. During a live attack,
+    // spend the remaining economic savings on real ground replacements first.
+    const Uint32 producer = turn.pBuilder->getItemID();
+    if (pass.campaignThreatProduction
+        && (producer == Structure_LightFactory || producer == Structure_HeavyFactory
+            || producer == Structure_Barracks || producer == Structure_WOR)) protectedCash = 0;
     turn.reserve.reserved = pass.money - QuantBotBuildPolicy::spendableCredits(pass.money,protectedCash);
     pass.money -= turn.reserve.reserved;
 }

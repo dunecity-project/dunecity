@@ -242,6 +242,7 @@ struct QuantBot::BuildPass {
     std::set<Uint32> orderedThisTick{};
     bool roadMaintenanceAttempted{};
     bool defendingEconomy{};
+    bool campaignThreatProduction{};
     std::vector<CapitalCandidate> capitalCandidates{};
     AITelemetry::Record capitalProducers{};
     AITelemetry::Record capitalUnitOptions{};

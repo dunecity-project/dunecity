@@ -1459,6 +1459,7 @@ int QuantBot::workerAnnualIncome(BuildPass& pass) {
 bool QuantBot::factoryPrefersHarvester(BuildPass& pass, const BuilderBase* factory) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.campaignThreatProduction && canBuildMilitaryVehicle(pass, factory)) return false;
     if (harvesterInvestmentReserve(pass) > 0) return true;
     const int workers=pass.itemCount[Unit_Harvester],refs=pass.itemCount[Structure_Refinery];
     if (QuantBotSpendingPolicy::marginalSpice(pass.spiceShare,
@@ -2227,6 +2228,9 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
             && (victim->isAStructure() || QuantBotInternal::harvesterItem(victim->getItemID())
                 || victim->getItemID()==Unit_RebelHarvester)) pass.defendingEconomy=true;
     }
+    pass.campaignThreatProduction = botConfig().force.campaignThreatProduction && pass.defendingEconomy
+        && !pass.citySimEnabled && !builderOnly()
+        && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman();
     pass.forecastTax = pass.citySimEnabled ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,
         currentGame->getCitySimulation()->getCityTax(getHouse()->getHouseID()),pass.ownAvgLandValue)) : 0;
     pass.forecastUpkeep = pass.citySimEnabled ? getHouse()->getPowerRequirement()/8
@@ -4106,6 +4110,12 @@ void QuantBot::planBuildOrder(BuildPass& pass) {
             if (pass.capitalChoice>=0 && pass.capitalCandidates[pass.capitalChoice].item==Unit_Carryall
                 && pass.capitalCandidates[pass.capitalChoice].builder==structure->getObjectID()
                 && getHouse()->hasPower()) priority=7;
+            // A visible attacker firing on the base is a current replacement
+            // need, not a reason to finish the helper's optional worker fleet.
+            const Uint32 item = structure->getItemID();
+            if (pass.campaignThreatProduction
+                && (item == Structure_LightFactory || item == Structure_HeavyFactory
+                    || item == Structure_Barracks || item == Structure_WOR)) priority = 8;
             pass.planningOrder.emplace_back(priority,structure->getObjectID());
         }
     std::stable_sort(pass.planningOrder.begin(), pass.planningOrder.end(),
