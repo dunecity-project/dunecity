@@ -217,6 +217,36 @@ remain enforced; without a live attack, normal economic priorities resume.
 `campaign-threat-production-on` isolates it; `campaign-opening-funded-on`
 enables all three opening/readiness/funding candidates.
 
+Measured on `e26bd898` (2026-11-08), all 66 human-partner missions:
+
+| Opening switches | Won | Lost | Paired score difference [95% CI] |
+|---|---:|---:|---|
+| Control, all off | 56 | 10 | — |
+| Military opening | 55 | 11 | −0.03 [−0.24,+0.18] |
+| Military opening + threat production | 60 | 6 | +0.12 [−0.09,+0.33] |
+| All three | 61 | 5 | +0.15 [−0.06,+0.36] |
+
+**All remain default off and are rejected for default adoption.** All three
+rescue nine original losses (Atreides 2/5/6/9/20, Harkonnen 21/22, Ordos 5/6),
+but lose four prior wins (Atreides 16/21, Ordos 2/21); Ordos 4 still loses.
+The strict same-build vanilla sample (`7c2ed4dd`, 48 cases × two seats) matches
+all 96 OFF/ON digests: score +0.203 in both arms, zero difference in every
+factor stratum. Vanilla AAA remains 2/2 at 36.47/34.54 minutes, digest-identical
+to control; four OFF campaign checks also retain the control digests.
+
+Regression telemetry shows an early Light Factory occupying capital while idle
+until minutes 8–12 (Ordos 2 never orders a military unit), delaying workers,
+imports and replacement strength. A single bounded attempt (`31f12e62`) reused
+the capital planner's delivered-worker seed before that factory. It won 7/13:
+only Atreides 16 was repaired; Atreides 21 and Ordos 2/21 still lost, and rescued
+Atreides 20 plus Ordos 5/6 became losses. AAA remained 2/2. The attempt was
+rejected and its source edit reverted, not promoted or tuned further.
+
+Evidence: `~/Documents/projects/outputs/ai-recovery-20261108/fixes/CampaignOpening/`
+(`paired-results.json`, `paired-campaign-cases.csv`, `*-comparison.txt`,
+`bounded-seed13/`, `bounded-seed-aaa2/`). These results do not pass the
+all-missions-win recovery gate.
+
 
 For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
 seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;
