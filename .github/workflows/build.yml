@@ -440,6 +440,11 @@ jobs:
             throw "Compiler cache hit rate $rate% is below 90% or fewer than 100 hits; caching is not working"
           }
 
+      - name: Check nested game stack budgets
+        run: |
+          python scripts/check-windows-nested-game-stack.py --build-dir build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Verify secure relay support
         run: |
           $game = Get-ChildItem build -Recurse -Filter dunecity.exe | Select-Object -First 1
