@@ -288,7 +288,8 @@ def schedule(args):
         if cell['kind'] == 'campaign':
             for house in ('atreides', 'harkonnen', 'ordos'):
                 for level, mission in campaign_missions():
-                    for seed in seeds_for('campaign', f'{house}{mission}', count):
+                    seed_index = getattr(args, 'campaign_seed_index', 0)
+                    for seed in seeds_for('campaign', f'{house}{mission}', count + seed_index)[seed_index:]:
                         games.append(campaign_game(cell, house, level, mission, seed))
             continue
         seeds = aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
@@ -1033,6 +1034,8 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--campaign-seed-index', type=int, choices=(0, 1, 2), default=0,
+                    help='Full campaign seed index: 0 preserves the official gate; 1/2 are fresh qualification seeds')
 parser.add_argument('--minutes', type=int, choices=range(1, 121),
                     help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')

@@ -50,6 +50,37 @@ class CampaignCoverageTests(unittest.TestCase):
             shard_ids.extend(game['id'] for game in matrix['schedule'](args))
         self.assertEqual(Counter(shard_ids), Counter(game['id'] for game in games))
 
+    def test_campaign_seed_indices_preserve_official_gate_and_select_fresh_seeds(self):
+        common = [
+            '--tier', 'full', '--categories', 'campaign', 'aaa',
+            '--cells', '^(campaign/player-brutal-v-campaign-ai/vanilla|aaa/qb-v-4ah/vanilla)$',
+            '--seeds-per-cell', '1', '--aaa-seeds', '2']
+        official = matrix['schedule'](matrix['parser'].parse_args(common))
+        explicit_zero = matrix['schedule'](
+            matrix['parser'].parse_args(common + ['--campaign-seed-index', '0']))
+        self.assertEqual(official, explicit_zero)
+        self.assertEqual(len(official), 68)
+        official_campaign = [game for game in official if game['category'] == 'campaign']
+        official_aaa = [game for game in official if game['category'] == 'aaa']
+        seen_campaign_ids = {game['id'] for game in official_campaign}
+        for index in (1, 2):
+            games = matrix['schedule'](
+                matrix['parser'].parse_args(common + ['--campaign-seed-index', str(index)]))
+            self.assertEqual(len(games), 68)
+            self.assertEqual([game for game in games if game['category'] == 'aaa'], official_aaa)
+            campaign = [game for game in games if game['category'] == 'campaign']
+            self.assertEqual(len(campaign), 66)
+            fresh_ids = {game['id'] for game in campaign}
+            self.assertTrue(seen_campaign_ids.isdisjoint(fresh_ids))
+            seen_campaign_ids.update(fresh_ids)
+            for original, fresh in zip(official_campaign, campaign):
+                self.assertEqual(fresh['seed'], original['seed'] + 1009 * index)
+                self.assertEqual(fresh['house'], original['house'])
+                self.assertEqual(fresh['mission'], original['mission'])
+                self.assertFalse(fresh['ai_only'])
+                self.assertTrue(fresh['id'].endswith('#human-partner'))
+                self.assertEqual(fresh['expect'], ('campaign_won',))
+
     def test_ai_only_diagnostic_drops_the_human_seat(self):
         args = matrix['parser'].parse_args([
             '--tier', 'full', '--categories', 'campaign', '--campaign-ai-only',

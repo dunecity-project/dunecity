@@ -1588,3 +1588,32 @@ TEST_CASE("Strategy: each special has its own slot, share and learning", "[ai][s
     for (const int share : mix) total += share;
     REQUIRE(total == 10000);
 }
+
+TEST_CASE("Crowded campaign worker budget defaults off and round-trips both hashed states",
+          "[ai][campaign][config][economy]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignCrowdedWorkerBudget);
+    REQUIRE(defaults.force.campaignIdleCashFactory);
+    REQUIRE(defaults.force.campaignIdleCashFactoryCredits == 2000);
+    QuantBotConfig enabled = defaults;
+    enabled.force.campaignCrowdedWorkerBudget = true;
+    REQUIRE(enabled.getConfigHash() != defaults.getConfigHash());
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-crowded-workers-test.ini";
+    for (const bool state : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignCrowdedWorkerBudget=" << state << "\n";
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignCrowdedWorkerBudget == state);
+        REQUIRE_FALSE(loaded.force.campaignCombatBudget);
+        REQUIRE(loaded.getConfigHash() == (state ? enabled : defaults).getConfigHash());
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignCrowdedWorkerBudget == state);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}

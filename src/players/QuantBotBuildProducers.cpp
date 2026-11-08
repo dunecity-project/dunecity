@@ -1523,6 +1523,7 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             if (getHouse()->getMaxHarvesters() > 0)
                 workerTarget = getHouse()->getMaxHarvesters();
         }
+        if (campaignCrowdedWorkerBudgetActive()) workerTarget = std::min(workerTarget, 6);
         // The shared reservation protects the next construction,
         // transport or combat order. Spend the remainder on useful
         // workers without applying a second arbitrary half-cash cap.

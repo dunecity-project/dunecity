@@ -179,6 +179,8 @@ public:
     bool openingCombatBudgetActive() const;
     /// CampaignCombatBudget: the human's Hard/Brutal partner funds its first wave before fleet growth.
     bool campaignCombatBudgetActive() const;
+    /// Six-worker first-wave budget only against at least three configured enemy houses.
+    bool campaignCrowdedWorkerBudgetActive() const;
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;

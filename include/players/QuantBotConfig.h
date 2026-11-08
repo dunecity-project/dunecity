@@ -275,6 +275,9 @@ struct QuantBotConfig {
         /// Save the first campaign light factory's founded quote and first unit before extra refineries.
         /// Independent hashed candidate, default off.
         bool campaignFactoryRunway;
+        /// Six-worker first-wave budget for classic campaign support facing at least three enemy houses.
+        /// Independent hashed candidate, default off; no mission, map-name or seed condition.
+        bool campaignCrowdedWorkerBudget;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

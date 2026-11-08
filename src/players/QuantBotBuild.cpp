@@ -999,6 +999,7 @@ int QuantBot::harvesterInvestmentReserve(BuildPass& pass) {
         && market.getPrice(Unit_Harvester) < data[Unit_Harvester][houseID].price
         && getHouse()->getMaxHarvesters() > 0) target = getHouse()->getMaxHarvesters();
     if (getHouse()->getMaxHarvesters() > 0) target = std::min(target, getHouse()->getMaxHarvesters());
+    if (campaignCrowdedWorkerBudgetActive()) target = std::min(target, 6);
     return std::max(0, target-pass.itemCount[Unit_Harvester]) * data[Unit_Harvester][houseID].price;
 }
 
@@ -1126,7 +1127,8 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
     pass.colonisationNeeded = colonisationMcvDue(pass.itemCount[Unit_MCV],pass.yardLimit);
     // Optional construction capacity must not occupy the first heavy factory while a small start
     // is funding its first combat wave. A lost yard or exhausted home rock can still buy an MCV.
-    pass.postponeCapacityMcv = (openingCombatBudgetActive() || campaignCombatBudgetActive())
+    pass.postponeCapacityMcv = (openingCombatBudgetActive() || campaignCombatBudgetActive()
+        || campaignCrowdedWorkerBudgetActive())
         && pass.itemCount[Structure_ConstructionYard] > 0 && !pass.rockExpansionNeeded && !pass.colonisationNeeded;
     if (pass.postponeCapacityMcv) pass.cityYardTarget = std::min(pass.cityYardTarget, pass.cityConstructionCapacity);
 }
