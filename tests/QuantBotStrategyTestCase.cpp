@@ -20,6 +20,40 @@
 
 using namespace QuantBotStrategy;
 
+TEST_CASE("Income technology timing defaults off and round-trips both rate levels",
+          "[ai][strategy][tech-income]") {
+    using namespace QuantBotBuildPolicy;
+    QuantBotConfig native;
+    REQUIRE(native.force.techIncomeTiming == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-tech-income-test.ini";
+    for (int level : {0, 1, 2}) {
+        QuantBotConfig config;
+        config.force.techIncomeTiming = level;
+        REQUIRE((config.getConfigHash() == native.getConfigHash()) == (level == 0));
+        REQUIRE(config.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.techIncomeTiming == level);
+        REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    }
+    std::filesystem::remove(path);
+    REQUIRE(incomeTechnologyAdmitted(0, 0, 1000));
+    REQUIRE_FALSE(incomeTechnologyAdmitted(1, 199, 1000));
+    REQUIRE(incomeTechnologyAdmitted(1, 200, 1000));
+    REQUIRE_FALSE(incomeTechnologyAdmitted(2, 299, 1000));
+    REQUIRE(incomeTechnologyAdmitted(2, 300, 1000));
+    REQUIRE_FALSE(incomeTechnologyAdmitted(1, 0, 0));
+    REQUIRE(incomeTechnologyAdmitted(2, 1000000000, 2000000000));
+    REQUIRE(incomeTechnologySafe(1000, 1000, false));
+    REQUIRE_FALSE(incomeTechnologySafe(999, 1000, false));
+    REQUIRE_FALSE(incomeTechnologySafe(10000, 0, true));
+    REQUIRE(incomeTechnologyProject(Structure_IX, false, 0));
+    REQUIRE_FALSE(incomeTechnologyProject(Structure_IX, false, 1));
+    REQUIRE(incomeTechnologyProject(Structure_HeavyFactory, true, 1));
+    REQUIRE_FALSE(incomeTechnologyProject(Structure_ConstructionYard, true, 1));
+    REQUIRE_FALSE(incomeTechnologyProject(Structure_Refinery, false, 0));
+}
+
 namespace {
 
 std::array<bool, kMixCount> allEligible() {
