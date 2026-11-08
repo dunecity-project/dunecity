@@ -17,14 +17,21 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Frames that remain live while a match nested under the menus runs: MSVC symbol prefix and object.
+# Frames that remain live while a match nested under the menus runs, plus frames entered below
+# them while Game::initGame activates and verifies the match's mod: MSVC symbol prefix and object.
 NESTED_GAME_FRAMES = {
     '?playCustomGame@@': 'Menu/PlaySetup.cpp.obj',
     '?showMenu@CustomGamePlayers@@': 'Menu/CustomGamePlayers.cpp.obj',
     '?onNext@CustomGamePlayers@@': 'Menu/CustomGamePlayers.cpp.obj',
+    '?onNext@CustomGameMenu@@': 'Menu/CustomGameMenu.cpp.obj',
+    '?onChildWindowClose@CustomGameMenu@@': 'Menu/CustomGameMenu.cpp.obj',
+    '?hostCoopGame@SinglePlayerSkirmishMenu@@': 'Menu/SinglePlayerSkirmishMenu.cpp.obj',
+    '?openLobby@CoopCampaignMenu@@': 'Menu/CoopCampaignMenu.cpp.obj',
     '?update@CrossplayMenu@@': 'Menu/CrossplayMenu.cpp.obj',
     '?startSinglePlayerGame@@': 'sand.cpp.obj',
     '?startMultiPlayerGame@@': 'sand.cpp.obj',
+    '?reloadAllObjectGraphicsForActiveMod@GFXManager@@': 'FileClasses/GFXManager.cpp.obj',
+    '?sha256File@Dune2RAssetManager@@': 'mod/Dune2RAssetManager.cpp.obj',
 }
 # Leave room for game initialization and mod graphics loading below the menus.
 # This per-frame guard catches oversized locals; it is not a whole-program stack bound.

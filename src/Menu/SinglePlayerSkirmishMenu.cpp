@@ -337,7 +337,8 @@ void SinglePlayerSkirmishMenu::hostCoopGame(GameInitSettings init) {
             init.setScenarioData(data);
         }
         if(ownNetwork) pNetworkManager = std::make_unique<NetworkManager>(settings.network.serverPort, settings.network.metaServer);
-        CustomGamePlayers(init, true, coopNetworkDropDown.getSelectedEntryIntData() == 1).showMenu();
+        // Heap-owned: the lobby (~437 KB on MSVC) stays live for the whole match it starts.
+        std::make_unique<CustomGamePlayers>(init, true, coopNetworkDropDown.getSelectedEntryIntData() == 1)->showMenu();
     } catch(const std::exception& error) {
         openWindow(MsgBox::create(error.what()));
     }
