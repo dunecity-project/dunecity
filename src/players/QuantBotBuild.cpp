@@ -1052,6 +1052,11 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
     if (botConfig().force.cityPowerGrowthHorizon && pass.citySimEnabled
         && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
         && lastCalculatedSpice > 0
+        && CityEconomyInvestmentPolicy::largeCitySpiceScope(
+            std::count_if(currentGame->getGameInitSettings().getHouseInfoList().begin(),
+                currentGame->getGameInitSettings().getHouseInfoList().end(),
+                [](const auto& house) { return !house.playerInfoList.empty(); }),
+            currentGame->getGameInitSettings().getInitialSpiceTilePermille(),true)
         && pass.money < int64_t(buildingCapitalCost(pass,Structure_WindTrap))
             + std::max(1000,pass.cityWorkingReserve)) {
         const int zonePower = std::max({DuneCity::getZonePower(Structure_ZoneResidential,3),
@@ -1249,6 +1254,11 @@ void QuantBot::planCivicNeedAndTrips(BuildPass& pass) {
     pass.citySpiceTransition = botConfig().force.citySpiceTransition && pass.citySimEnabled
         && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
         && lastCalculatedSpice > 0
+        && CityEconomyInvestmentPolicy::largeCitySpiceScope(
+            std::count_if(currentGame->getGameInitSettings().getHouseInfoList().begin(),
+                currentGame->getGameInitSettings().getHouseInfoList().end(),
+                [](const auto& house) { return !house.playerInfoList.empty(); }),
+            currentGame->getGameInitSettings().getInitialSpiceTilePermille(),false)
         && CityEconomyInvestmentPolicy::spiceTransitionDue(pass.spiceShare,pass.actualHarvesters,
             getAIRefineryBays(),workerAnnualIncome(pass),pass.bayAnnualIncome);
     if (pass.citySpiceTransition) {

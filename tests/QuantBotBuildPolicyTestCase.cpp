@@ -295,6 +295,23 @@ TEST_CASE("City opening grows beyond two workers before optional tech", "[quantb
     CHECK_FALSE(preferFactoryHarvester(2,120,300,80000,300,true));
 }
 
+TEST_CASE("City scoped economy uses initial spice density and occupied houses", "[quantbot][city][economy]") {
+    using namespace CityEconomyInvestmentPolicy;
+    CHECK(largeCitySpiceScope(5,150,true));
+    CHECK(largeCitySpiceScope(6,1000,true));
+    CHECK_FALSE(largeCitySpiceScope(4,180,true));
+    CHECK_FALSE(largeCitySpiceScope(6,149,true));
+    CHECK_FALSE(largeCitySpiceScope(6,0,true));
+    CHECK_FALSE(largeCitySpiceScope(6,-1,true));
+    CHECK(largeCitySpiceScope(5,1,false));
+    CHECK(largeCitySpiceScope(6,90,false));
+    CHECK_FALSE(largeCitySpiceScope(4,60,false));
+    CHECK_FALSE(largeCitySpiceScope(6,91,false));
+    CHECK_FALSE(largeCitySpiceScope(6,180,false));
+    CHECK_FALSE(largeCitySpiceScope(6,0,false));
+    CHECK_FALSE(largeCitySpiceScope(6,-1,false));
+}
+
 TEST_CASE("Spice transition uses the working fleet and finite remaining fields", "[quantbot][city][economy]") {
     using namespace CityEconomyInvestmentPolicy;
     CHECK(spiceTransitionDue(4800,2,1,300,600));

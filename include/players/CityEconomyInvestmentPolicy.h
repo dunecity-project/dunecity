@@ -72,6 +72,14 @@ inline bool openingRefineryInvestment(bool brutal, int workers, int target, int 
 // threshold, and nothing has to be stored in the save to notice.
 inline bool spiceEconomyViable(int sustainableWorkers) { return sustainableWorkers > 0; }
 
+// Stable initial field density and occupied house roster, never surviving
+// competitors or a generator label. Medium density and unavailable grids are
+// outside both experimental scopes; depletion cannot reclassify a rich map.
+inline bool largeCitySpiceScope(int occupiedHouses, int initialTilePermille, bool highSpice) {
+    return occupiedHouses >= 5 && (highSpice ? initialTilePermille >= 150
+        : initialTilePermille > 0 && initialTilePermille <= 90);
+}
+
 // Start the tax transition two planning horizons before the current working
 // fleet exhausts its share. This deliberately tests earlier reinvestment than
 // the existing four-minute marginal-spice ROI gate. Queued workers are not

@@ -127,6 +127,25 @@ sampled cases, keeping swapped seats together, rather than treating every house
 or both seats as independent evidence. Inspect every stratum against the control;
 “no supported regression” is not equivalence or permission to enable a candidate.
 
+### Scoped city economy experiments (round 3)
+
+`CityPowerGrowthHorizon` and `CitySpiceTransition` remain hashed, default OFF.
+Both require noncampaign Custom city mode, remaining spice and at least five
+initially occupied houses. Count the saved starting roster, not survivors.
+PowerGrowthHorizon additionally requires initial spice-field tile density
+of at least 15%; SpiceTransition requires density greater than zero and at
+most 9%. Medium density belongs to neither scope. All prior cash, working-fleet,
+power and depletion-horizon conditions remain unchanged.
+
+Density is measured from the original explicit `[MAP]` tile grid, including
+thin/thick coloured fields but excluding blooms. It is not the generator's
+`Spice` provenance label. Cached setup metadata is reconstructed from saved
+scenario bytes and invalidated when those bytes change; no new save state is
+introduced. Seed-only legacy maps or unavailable/incomplete grids are outside
+scope. Harvesting and eliminations cannot change the initial classification.
+Qualify each arm on fresh seeds with balanced seats and economy telemetry;
+require digest identity out of scope before the paired all-strata city96 gate.
+
 ### DuneCity population result at the time limit (2026-11-08)
 
 This is **test scoring only**, not a new in-game win condition or an AI policy change.
