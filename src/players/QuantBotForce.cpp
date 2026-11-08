@@ -103,10 +103,24 @@ int QuantBot::forceBits() const {
         | (force.finishWhenLeading ? kForceFinishLeading : 0);
 }
 
+bool QuantBot::vanillaMultiEnemyGame() const {
+    if (!autonomousCustomArmy() || currentGame->isCitySimEnabled()
+        || currentGame->getGameInitSettings().getModName() != "vanilla") return false;
+    int firstEnemy = -1;
+    for (const auto& house : currentGame->getGameInitSettings().getHouseInfoList()) {
+        if (house.playerInfoList.empty() || house.team == getHouse()->getTeamID()) continue;
+        if (firstEnemy < 0) firstEnemy = house.team;
+        else if (house.team != firstEnemy) return true;
+    }
+    return false;
+}
+
+
 int QuantBot::waveReadinessPercent() const {
     if (!autonomousCustomArmy()) return 100;
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
+    if (botConfig().force.vanillaFfaFullWaves && vanillaMultiEnemyGame()) return 100;
     // A small start buys one full wave before its tempo starts splitting production into raids.
     // This ends only when that wave actually launches, not when its first heavy factory stands.
     if (openingCombatBudgetActive()) return 100;
@@ -273,7 +287,8 @@ int64_t QuantBot::groundValueOf(const std::vector<Uint32>& ids) const {
 
 std::vector<Uint32> QuantBot::homeReserve(const std::vector<Uint32>& ids) const {
     std::vector<Uint32> kept;
-    const int share = Force::reserveShareBps(ownGroundArmyValue(), enemyThreatEstimate());
+    int share = Force::reserveShareBps(ownGroundArmyValue(), enemyThreatEstimate());
+    if (botConfig().force.vanillaFfaReserve && vanillaMultiEnemyGame()) share = std::max(share, 2500);
     if (share <= 0) return kept;
     const Coord home = protectedRally.isValid() ? protectedRally : findBaseCentre(getHouse()->getHouseID());
     if (home.isInvalid()) return kept;
@@ -718,12 +733,18 @@ bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
 int QuantBot::finishTargetTeam() const {
     // Ordered by team id (std::map), scanned in list order: the same choice on every peer.
     std::map<int, Force::TeamStrength> teams;
+    const bool nearby = botConfig().force.vanillaFfaNearbyTarget && vanillaMultiEnemyGame();
+    const Coord home = nearby ? findBaseCentre(getHouse()->getHouseID()) : Coord::Invalid();
     for (const auto* structure : getStructureList()) {
         if (!knownEnemyStructure(structure)) continue;
         auto& team = teams[structure->getOwner()->getTeamID()];
         team.team = structure->getOwner()->getTeamID();
         ++team.structures;
         if (structure->canAttack()) ++team.turrets;
+        if (home.isValid()) {
+            const int distance = tiles(home, structure->getLocation());
+            team.distance = team.structures == 1 ? distance : std::min(team.distance, distance);
+        }
     }
     for (const auto& [id, sighting] : enemySightings)
         if (const auto* unit = getObject(id); unit && unit->getOwner()) {
@@ -732,7 +753,8 @@ int QuantBot::finishTargetTeam() const {
         }
     const Force::TeamStrength* weakest = nullptr;
     for (const auto& [id, team] : teams)
-        if (!weakest || Force::weakerTeam(team, *weakest)) weakest = &team;
+        if (!weakest || (home.isValid() ? Force::nearerOpportunity(team, *weakest)
+                                        : Force::weakerTeam(team, *weakest))) weakest = &team;
     return weakest ? weakest->team : -1;
 }
 

@@ -351,6 +351,11 @@ Strategy=false
 # absent. It only acts when the match's Research Lab game option is enabled.
 # Basic income, power, defence and accepted production commitments keep their funding first.
 [Force Concentration]
+# Independent vanilla multi-enemy tuning; inert in 1v1, two-team matches, cities and campaigns.
+VanillaFfaWeakestTarget=0
+VanillaFfaNearbyTarget=0
+VanillaFfaReserve=0
+VanillaFfaFullWaves=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0
@@ -363,6 +368,12 @@ CampaignAdaptiveReadiness=0
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Independent hashed candidate; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=0
+# Campaign opening Light Factories wait until the first unit and protected cash are funded.
+CampaignFundedLightOpening=0
+# Live campaign base attacks admit light replacements at their real price instead of 700 credits.
+CampaignAffordableLight=0
+# Before heavy-factory technology, fund campaign light growth from real uncommitted cash.
+CampaignLightWorkingCash=0
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.
@@ -386,6 +397,14 @@ CityProductionPrerequisites=1
 # Requires forecast net income covering the founded quote plus queued debt.
 # Default off: the combined geometry/saving trial failed combat and ladder gates.
 CityFirstFactorySaving=0
+# Experimental: direct base attacks keep military capital ahead of ordinary city growth.
+CityThreatBudget=0
+# Experimental: extend bounded reactive ground cover to city zones, not just the core.
+CityZoneDefence=0
+# Experimental: fund the first high-tech IX/prerequisite before repeatable capacity.
+CityAdvancedTech=0
+# Experimental: keep city research funded after the opening fleet reaches its target.
+CityContinuousResearch=0
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
 # Experimental 3-rocket baseline (4 for Hard+ at 16 structures), with a full income budget.

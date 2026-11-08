@@ -337,6 +337,10 @@ QuantBotConfig::QuantBotConfig() {
     // 1.0.848"): 4P DuneCity self-play time-outs 16 -> 13 of 24, first elimination median 37.6 ->
     // 31.3 min; level head-to-head, on Fortress, /weak, CY and the difficulty ladder.
     force.finishWhenLeading = true;
+    force.vanillaFfaWeakestTarget = false;
+    force.vanillaFfaNearbyTarget = false;
+    force.vanillaFfaReserve = false;
+    force.vanillaFfaFullWaves = false;
     // Candidate (fix/ladder-campaign, docs/ai-scenario-matrix.md "Team games"): team waves join an
     // ally's fresh wave.
     force.joinAllyWaves = false;
@@ -671,6 +675,10 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
         iniFile.setBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
         iniFile.setBoolValue("Force Concentration", "CampaignThreatProduction", force.campaignThreatProduction);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaWeakestTarget", force.vanillaFfaWeakestTarget);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaNearbyTarget", force.vanillaFfaNearbyTarget);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaReserve", force.vanillaFfaReserve);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaFullWaves", force.vanillaFfaFullWaves);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
         iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -825,6 +833,10 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.deathHandTurrets = iniFile.getBoolValue("Force Concentration", "DeathHandTurrets", force.deathHandTurrets);
     force.spreadVsDeathHand = iniFile.getBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
     force.defencePrerequisites = iniFile.getBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
+    force.vanillaFfaWeakestTarget = iniFile.getBoolValue("Force Concentration", "VanillaFfaWeakestTarget", force.vanillaFfaWeakestTarget);
+    force.vanillaFfaNearbyTarget = iniFile.getBoolValue("Force Concentration", "VanillaFfaNearbyTarget", force.vanillaFfaNearbyTarget);
+    force.vanillaFfaReserve = iniFile.getBoolValue("Force Concentration", "VanillaFfaReserve", force.vanillaFfaReserve);
+    force.vanillaFfaFullWaves = iniFile.getBoolValue("Force Concentration", "VanillaFfaFullWaves", force.vanillaFfaFullWaves);
     force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
     civWarsStrategy = iniFile.getBoolValue("Civ Wars", "Strategy", civWarsStrategy);
     force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);

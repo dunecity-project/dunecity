@@ -208,6 +208,17 @@ struct QuantBotConfig {
         /// remembered army sends its ground waves at the weakest known house (FinishWeakest's
         /// choice) instead of the nearest.
         bool finishWhenLeading;
+        /// Independent default-off vanilla multi-enemy candidates. Their original roster
+        /// must contain at least two hostile teams: duels, two-team games and campaigns are inert.
+        /// Hunt towards the weakest known rival even before our army leads the field.
+        bool vanillaFfaWeakestTarget;
+        /// Add travel cost to remembered rival strength, preferring a nearby opportunity.
+        bool vanillaFfaNearbyTarget;
+        /// Keep at least 25% of an available wave nearest the protected rally; real defence
+        /// ownership and exhausted-economy finishing remain authoritative.
+        bool vanillaFfaReserve;
+        /// Wait for full readiness rather than the strategy's smaller repeated waves.
+        bool vanillaFfaFullWaves;
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.
