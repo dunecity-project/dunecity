@@ -65,6 +65,22 @@ class ProbeLifecycleTests(unittest.TestCase):
         probe.discard_profile_assets(profile,telemetry=True)
         self.assertFalse((profile/'ai-decisions').exists());self.assertTrue((profile/'Dune City.log').exists())
 
+    def test_removes_readonly_revision_before_reusing_probe_output(self):
+        out=self.repo/'probe'
+        immutable=out/'profile/workshop/revisions/abc/files/GameOptions.ini'
+        immutable.parent.mkdir(parents=True);immutable.write_text('snapshot')
+        immutable.chmod(0o444)
+        probe.remove_tree(out)
+        self.assertFalse(out.exists())
+        out.mkdir(exist_ok=False)
+        probe.remove_tree(out)
+        probe.remove_tree(out)
+
+    def test_remove_tree_does_not_hide_real_errors(self):
+        with patch.object(probe.shutil,'rmtree',side_effect=PermissionError('still locked')):
+            with self.assertRaisesRegex(PermissionError,'still locked'):
+                probe.remove_tree(self.repo/'probe')
+
     def test_prune_runs_keeps_the_newest(self):
         for i in range(5):
             run=self.repo/('run-%d'%i);run.mkdir();os.utime(run,(1000+i,1000+i))

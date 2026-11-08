@@ -59,7 +59,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
-from probe_profile import finish_game, headless_asset_arguments, probe_binary, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import finish_game, headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
 import genome_qualification  # noqa: E402
 
@@ -452,7 +452,7 @@ def win_type(result, houses, campaign):
 
 def play(args, scratch, binary, game):
     out = scratch / f'g{abs(hash(game["id"])) % 10**10}'
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
     started = time.time()
     env = dict(os.environ)
     candidate_dir = out.with_suffix('.candidate')
@@ -461,7 +461,7 @@ def play(args, scratch, binary, game):
         env.pop('BALANCE_SCENARIO_STYLE', None)
         env.pop('BALANCE_GENOME_PHASE_DIR', None)
         env.pop('DUNECITY_QUANTBOT_OVERLAY', None)
-        shutil.rmtree(candidate_dir, ignore_errors=True)
+        remove_tree(candidate_dir)
         genome_qualification.prepare(args, game, candidate_dir)
         env['BALANCE_SCENARIO_DUMP_MAP'] = str(candidate_dir / 'map.ini')
     if getattr(args, 'economy_samples', False):
@@ -500,7 +500,7 @@ def play(args, scratch, binary, game):
     results = Path(args.results)
     if getattr(args, 'genome', None):
         row.update(genome_qualification.capture(args, game, candidate_dir, lines, result, houses, binary, row, summary))
-        shutil.rmtree(candidate_dir, ignore_errors=True)
+        remove_tree(candidate_dir)
     if row['error']:
         (results / f'failed-{out.name}.txt').write_text(game['id'] + '\n' + outcome.stdout[-4000:] + '\n'
                                                        + outcome.stderr[-4000:] + '\n' + '\n'.join(lines[-80:]))
@@ -562,20 +562,20 @@ def play(args, scratch, binary, game):
 
 def build_probe(args, scratch):
     probe = scratch / 'probe'
-    shutil.rmtree(probe, ignore_errors=True)
+    remove_tree(probe)
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                     '--output-dir', str(probe), '--scenario', '--skirmish', skirmish_spec(64, 'cy', 0),
                     '--scenario-sides', 'harkonnen:1:qBotEasy,atreides:2:qBotEasy', '--house', 'harkonnen',
                     '--local-spectator', '--minutes', '1', '--capture-mib', '256', '--no-ai-telemetry', '--build-only'],
                    cwd=root, check=True, capture_output=True, text=True)
-    shutil.rmtree(probe / 'profile', ignore_errors=True)
+    remove_tree(probe / 'profile')
     return probe_binary(probe)
 
 
 def run(args):
     results = Path(args.results)
     if args.fresh:
-        shutil.rmtree(results, ignore_errors=True)
+        remove_tree(results)
     results.mkdir(parents=True, exist_ok=True)
     done = {r['id'] for r in read(results / 'games.csv') if not r['error']}
     if (results / 'games.csv').exists():

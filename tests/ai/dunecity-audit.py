@@ -32,7 +32,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
-from probe_profile import finish_game, headless_asset_arguments, probe_binary, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import finish_game, headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
 
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
@@ -992,6 +992,7 @@ def build_probe(args, scratch):
     if args.prebuilt_probe:
         return args.prebuilt_probe
     out = scratch / 'probe'
+    remove_tree(out)
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
                     '--output-dir', str(out), '--scenario', '--mod', 'vanilla' if args.mod == 'both' else args.mod, '--skirmish',
                     'size=64,base=cy,army=0,spice=0', '--scenario-sides',
@@ -1000,7 +1001,7 @@ def build_probe(args, scratch):
                     '--build-only'],
                    # Prepare only: no unrequested warm-up game outside the sampled schedule.
                    cwd=root, check=True, capture_output=True, text=True)
-    shutil.rmtree(out / 'profile', ignore_errors=True)
+    remove_tree(out / 'profile')
     return probe_binary(out)
 
 

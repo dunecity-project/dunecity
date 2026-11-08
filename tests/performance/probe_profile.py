@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -36,6 +37,25 @@ DISPOSABLE_PROFILE_ASSETS = ('mods', 'workshop/revisions')
 FAILED_GAMES_KEEP = 5
 _failed_lock = threading.Lock()
 HASH = re.compile(rb'[0-9a-f]{64}')
+
+
+def remove_tree(path):
+    """Remove a private probe tree, including read-only Windows snapshots."""
+    def retry_readonly(function, filename, error):
+        if isinstance(error, FileNotFoundError):
+            return
+        if (sys.platform != 'win32' or not isinstance(error, PermissionError)
+                or function not in (os.unlink, os.rmdir)):
+            raise error
+        os.chmod(filename, stat.S_IWRITE)
+        function(filename)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=retry_readonly)
+    else:
+        def onerror(function, filename, exc_info):
+            retry_readonly(function, filename, exc_info[1])
+        shutil.rmtree(path, onerror=onerror)
 
 def headless_asset_arguments():
     """Batch-only opt-in; direct CTest/UI probes retain the normal asset loader."""
@@ -114,7 +134,7 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
         if staged is not None:
             for path in staged.rglob('*'):
                 path.chmod(0o755 if path.is_dir() else 0o644)
-            shutil.rmtree(staged)
+            remove_tree(staged)
 
 
 
@@ -213,7 +233,7 @@ def scratch_dir(purpose, explicit=None):
         if managed:
             scratch.finish(path, not failed)
         elif not failed:
-            shutil.rmtree(path, ignore_errors=True)
+            remove_tree(path)
 
 
 def finish_game(scratch, out, failed):
@@ -231,7 +251,7 @@ def finish_game(scratch, out, failed):
                 discard_profile_assets(out / 'profile', telemetry=True)
                 out.rename(kept / out.name)
                 return
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
 
 
 def require_free_space(min_gb=None):
@@ -262,7 +282,7 @@ def discard_profile_assets(profile, telemetry=False):
     for name in names:
         path = Path(profile) / name
         if path.is_dir() and not path.is_symlink():
-            shutil.rmtree(path, ignore_errors=True)
+            remove_tree(path)
 
 
 def prune_runs(parent, prefix, keep):
@@ -270,7 +290,7 @@ def prune_runs(parent, prefix, keep):
     runs = sorted((p for p in Path(parent).glob(prefix + '*') if p.is_dir() and not p.is_symlink()),
                   key=lambda p: p.stat().st_mtime)
     for stale in runs[:max(0, len(runs) - keep)]:
-        shutil.rmtree(stale, ignore_errors=True)
+        remove_tree(stale)
 
 
 def clone_tree(source, destination):

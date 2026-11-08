@@ -41,7 +41,7 @@ if not WINDOWS:
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import copy_revisions, discard_profile_assets, prune_runs, shared_headless_mods  # noqa: E402
+from probe_profile import copy_revisions, discard_profile_assets, prune_runs, remove_tree, shared_headless_mods  # noqa: E402
 
 
 def run_strategy_processes(command, runs, workers, timeout):
@@ -782,7 +782,7 @@ else:
         lock_exclusive(lock)   # concurrent probes build one binary, once
         rebuilt = False
         if not current(entry/'manifest.json'):
-            shutil.rmtree(entry, ignore_errors=True)
+            remove_tree(entry)
             staging = Path(tempfile.mkdtemp(prefix='staging-', dir=cache))
             names = {'@SOURCE@': str(staging/'balance-main.cpp'), '@OBJECT@': str(staging/('balance-main'+object_suffix)),
                      '@BINARY@': str(staging/executable), '@STAGING@': str(staging),
@@ -827,14 +827,14 @@ else:
                 os.rename(staging, entry)
                 rebuilt = True
             finally:
-                shutil.rmtree(staging, ignore_errors=True)
+                remove_tree(staging)
         else:
             (out/'build.log').write_text(f'Reused {entry}\n')
         os.utime(entry)
         # Keep the four most recently used binaries (other configurations, e.g. --stats-ui-probe).
         stale_entries = sorted((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)[:-4]
         for stale in stale_entries:
-            shutil.rmtree(stale, ignore_errors=True)
+            remove_tree(stale)
         if WINDOWS:
             # Windows finds the game data beside the executable (SDL_GetBasePath), so the probe
             # runs from the game's own output directory rather than a per-run copy.

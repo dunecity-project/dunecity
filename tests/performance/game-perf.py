@@ -44,7 +44,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import require_free_space, scratch_dir  # noqa: E402
+from probe_profile import remove_tree, require_free_space, scratch_dir  # noqa: E402
 
 DATA = root / 'tests/performance/data'
 SCENARIOS = {
@@ -316,7 +316,7 @@ def run_menu_launch(args, scratch):
                   other_ms=max(0.0, frame['sum_ms'] / frame['count'] - sum(per_frame.values())),
                   windows=windows, wall_s=round(time.time() - started, 1), host=os.uname().nodename,
                   load=os.getloadavg()[0], time=time.strftime('%Y-%m-%d %H:%M:%S'))
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
     return result
 
 
@@ -399,7 +399,7 @@ def run_one(args, scratch, index):
                   minutes=args.minutes, source=str(source), commit=commit, wall_s=round(time.time() - started, 1),
                   render_every=args.render_every, path_workers=args.path_workers, host=os.uname().nodename,
                   load=os.getloadavg()[0], time=time.strftime('%Y-%m-%d %H:%M:%S'))
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
     return result
 
 

@@ -76,6 +76,11 @@ to normal private-profile installation without replacing the shared data. Each g
 active-mod pointer and Workshop snapshots stay private. Custom maps/options, loaded
 saves, custom mods and fixture probes do not use shared payloads.
 
+Probe cleanup preserves immutable revision files while games use them, then clears
+the Windows ReadOnly bit only when deleting a private disposable tree. Real
+permission/locked-file errors still propagate; output directories must still be
+new. Cleanup never changes permissions in the published shared mod payload.
+
 For opt-in start-up attribution, the shared simulation-throughput harness records
 `ASSET_STARTUP` phases: `bundled_mods`, `graphics`, `sounds`, `voices`, `activate_mod`
 and `probe_setup`. Phases are inclusive (`sounds` contains `voices`), and

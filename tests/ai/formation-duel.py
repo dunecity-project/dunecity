@@ -20,7 +20,6 @@ succeeds, and refuses to start below the free-space floor (DUNECITY_MIN_FREE_GB,
 import argparse
 import csv
 import itertools
-import shutil
 import statistics
 import subprocess
 import sys
@@ -32,7 +31,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import finish_game, headless_asset_arguments, probe_binary, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import finish_game, headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
 
 # 'none' is the control: plain engine-Hunt waves without a formation (WaveFormation=None).
@@ -135,14 +134,14 @@ def build_probe(args, scratch):
                 return binary
         except OSError:
             pass
-    shutil.rmtree(probe, ignore_errors=True)
+    remove_tree(probe)
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                     '--output-dir', str(probe), '--duel-map-size', '64', '--duel-map-seed', '1',
                     '--duel-sides', 'atreides:box,harkonnen:box', '--local-spectator', '--enemy-difficulty', 'hard',
                     '--partner-difficulty', 'hard', '--minutes', '1', '--capture-mib', '256',
                     *headless_asset_arguments()],
                    cwd=root, check=True, capture_output=True, text=True)
-    shutil.rmtree(probe / 'profile', ignore_errors=True)
+    remove_tree(probe / 'profile')
     return probe_binary(probe)
 
 
@@ -151,7 +150,7 @@ def play(args, scratch, binary, key):
     # Flat: a label with a slash (none+F/weak) would nest one game's run directory inside
     # another's (none+F), whose clean-up then deletes it mid-game.
     out = scratch / '-'.join(key).replace('/', '_')
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
     command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(out), '--duel-map-size', size,
                '--duel-map-seed', seed, '--duel-sides', f'{house_a}:{shape_a},{house_b}:{shape_b}',

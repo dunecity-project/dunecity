@@ -18,7 +18,6 @@ See docs/headless-performance.md.
 import argparse
 import json
 import os
-import shutil
 import statistics
 import struct
 import subprocess
@@ -29,7 +28,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import headless_asset_arguments, probe_binary, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 
 # size, map/match seed, house:shape,house:shape (formation-duel.py's houses for these seeds).
 GAMES = (('128', '7101', 'atreides:none,harkonnen:none'),
@@ -77,14 +76,14 @@ def run_measured(command, console):
 
 def build_probe(args, scratch):
     probe = scratch / 'probe'
-    shutil.rmtree(probe, ignore_errors=True)
+    remove_tree(probe)
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
                     '--output-dir', str(probe), '--duel-map-size', '64', '--duel-map-seed', '1',
                     '--duel-sides', 'atreides:none,harkonnen:none', '--local-spectator', '--enemy-difficulty', 'hard',
                     '--partner-difficulty', 'hard', '--minutes', '1', '--capture-mib', '256',
                     *headless_asset_arguments()],
                    cwd=root, check=True, capture_output=True, text=True)
-    shutil.rmtree(probe / 'profile', ignore_errors=True)
+    remove_tree(probe / 'profile')
     return probe_binary(probe)
 
 
@@ -98,7 +97,7 @@ def field(line, name):
 def play(args, scratch, probe, game, jobs, index):
     size, seed, sides = game
     out = scratch / f'{args.label}-j{jobs}-{index}-{size}-{seed}'
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
     command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
                '--prebuilt-probe', str(probe), '--output-dir', str(out), '--duel-map-size', size,
                '--duel-map-seed', seed, '--duel-sides', sides, '--local-spectator', '--enemy-difficulty', 'hard',
@@ -135,7 +134,7 @@ def play(args, scratch, probe, game, jobs, index):
     if returncode != 0 or not timing:
         row['error'] = output[-2000:] + '\n'.join(lines[-30:])
     if not args.keep:
-        shutil.rmtree(out, ignore_errors=True)
+        remove_tree(out)
     return row
 
 
