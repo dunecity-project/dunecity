@@ -239,7 +239,7 @@ inline void sample(Game& game) {
                 "demand=%d built=%d structures_lost=%d base_hp=%d yards=%d yard_level=%d queue=%d upgrading=%d "
                 "waiting=%d fronts=%s gun=%d rocket=%d radar=%d radar_built=%d starport=%d starport_built=%d "
                 "heavy=%d heavy_built=%d ix=%d ix_built=%d fighters=%d moving=%d targeting=%d enemies=%d "
-                "enemy_value=%d covered_enemies=%d spice=%d",
+                "enemy_value=%d covered_enemies=%d spice=%d refineries=%d power_required=%d",
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getCredits(),
                 house->getProducedPower(), house->getPowerRequirement(), population, tax, demand,
                 house->getNumBuiltStructures(), structuresLost, structureHP,
@@ -250,7 +250,8 @@ inline void sample(Game& game) {
                 house->getNumBuiltItems(Structure_StarPort), house->getNumItems(Structure_HeavyFactory),
                 house->getNumBuiltItems(Structure_HeavyFactory), house->getNumItems(Structure_IX),
                 house->getNumBuiltItems(Structure_IX), fighters, moving, targeting, enemies, enemyValue,
-                coveredEnemies, bot->lastCalculatedSpice);
+                coveredEnemies, bot->lastCalculatedSpice, house->getNumItems(Structure_Refinery),
+                int(house->isPowerRequired()));
         // BuilderBase expands a squad into 3 (or 5) Unit_Trooper objects before
         // informWasBuilt is called for each single. Never multiply that ledger
         // again. Queue entries still describe products, so expand only those.
