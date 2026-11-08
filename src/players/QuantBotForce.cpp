@@ -240,6 +240,102 @@ int64_t QuantBot::teamGroundArmyValue() const {
     return team;
 }
 
+int QuantBot::vultureOpportunity() {
+    const int level = botConfig().force.ffaVultureLevel;
+    if (level == 0 || !autonomousCustomArmy() || lastCalculatedSpice <= 0) return -1;
+    const auto& init = currentGame->getGameInitSettings();
+    if (init.getModName() != "vanilla" && init.getModName() != "dunecity") return -1;
+    // Scope is the original occupied controller roster, not surviving runtime houses.
+    std::array<int, NUM_HOUSES> teams;
+    teams.fill(-1);
+    int count = 0;
+    for (const auto& info : init.getHouseInfoList()) {
+        if (info.playerInfoList.empty()) continue;
+        const int h = static_cast<int>(info.houseID);
+        if (h < 0 || h >= NUM_HOUSES) return -1;
+        for (const int team : teams) if (team == info.team) return -1;
+        teams[h] = info.team;
+        ++count;
+    }
+    if (count != 4 && count != 6) return -1;
+    const int mine = getHouse()->getHouseID();
+    std::array<int64_t, NUM_HOUSES> army{};
+    std::array<std::array<bool, NUM_HOUSES>, NUM_HOUSES> shooting{};
+    int64_t strike = 0;
+    for (const auto* unit : getUnitList()) {
+        if (!groundFighter(unit)) continue;
+        const int h = unit->getOwner()->getHouseID();
+        if (h < 0 || h >= NUM_HOUSES || teams[h] < 0) continue;
+        army[h] += healthValue(unit);
+        if (h == mine) {
+            if (unit->isRespondable()
+                && unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::LiveDefence}) == UnitRole::Free)
+                strike += healthValue(unit);
+            continue;
+        }
+        const auto* target = unit->getTarget();
+        if (!target || !target->isAUnit() || !groundFighter(static_cast<const UnitBase*>(target))
+            || !unit->isInWeaponRange(target)) continue;
+        const int other = target->getOwner()->getHouseID();
+        if (other < 0 || other >= NUM_HOUSES || other == mine || other == h || teams[other] < 0) continue;
+        shooting[h][other] = true;
+    }
+    int weakest = -1, opponent = -1;
+    bool fighting = false;
+    for (int a = 0; a < NUM_HOUSES; ++a)
+        for (int b = a + 1; b < NUM_HOUSES; ++b) {
+            if (!shooting[a][b] || !shooting[b][a]) continue;
+            fighting = true;
+            const int loser = army[a] <= army[b] ? a : b;
+            if (weakest < 0 || army[loser] < army[weakest]) {
+                weakest = loser;
+                opponent = loser == a ? b : a;
+            }
+        }
+    if (!fighting) return -1;
+    const auto losses = [&](int h) {
+        int lost = 0;
+        const House* house = getHouse(h);
+        if (house) for (int item = ItemID_FirstID; item < Num_ItemID; ++item)
+            if (mobileCombatItem(item)) lost += house->getNumLostItems(item);
+        return lost;
+    };
+    const bool attack = Force::vultureStrike(level, strike, army[weakest]);
+    traceDecision("ffa_vulture", AITelemetry::Record()
+        .set("decision", attack ? "strike" : "hold").set("level", level)
+        .set("strike_force", strike).set("target_house", weakest).set("rival_house", opponent)
+        .set("target_army", weakest < 0 ? -1 : army[weakest])
+        .set("rival_army", opponent < 0 ? -1 : army[opponent])
+        .set("target_losses", losses(weakest)).set("rival_losses", losses(opponent)));
+    return attack ? teams[weakest] : -2;
+}
+
+const ObjectBase* QuantBot::vultureObjective(const UnitBase* lead, int team) const {
+    if (!lead) return nullptr;
+    const StructureBase* chosen = nullptr;
+    int best = std::numeric_limits<int>::max();
+    for (const auto* structure : getStructureList()) {
+        if (!structure->getOwner() || structure->getOwner()->getTeamID() != team
+            || structure->getHealth() <= 0) continue;
+        switch (structure->getItemID()) {
+            case Structure_Wall: case Structure_Slab1: case Structure_Slab4:
+            case Structure_Road: case Structure_PowerLine: continue;
+            default: break;
+        }
+        int score = tiles(lead->getLocation(), structure->getLocation());
+        switch (structure->getItemID()) {
+            case Structure_ConstructionYard: case Structure_HeavyFactory:
+            case Structure_LightFactory: case Structure_HighTechFactory: case Structure_Refinery:
+                score -= Force::kFinishPriorityTiles; break;
+            default: break;
+        }
+        if (score >= best || !groundAttackReachable(lead, structure)) continue;
+        best = score;
+        chosen = structure;
+    }
+    return chosen;
+}
+
 const ObjectBase* QuantBot::allyWaveObjective() const {
     if (!botConfig().force.joinAllyWaves || difficulty < Difficulty::Hard || !autonomousCustomArmy()) return nullptr;
     const Uint32 now = getGameCycleCount();

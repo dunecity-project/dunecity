@@ -234,6 +234,9 @@ struct QuantBotConfig {
         /// In vanilla FFA with at least five original players, fund up to eight sustainable
         /// workers and ordinary readiness before optional IX/Palace savings or orders.
         bool vanillaFfaFundedTech;
+        /// Default-off FFA vulture timing: 0 native, 1 strike below 60%, 2 below 90%.
+        /// Uses current mutual rival combat and true army values, never unsaved history.
+        int ffaVultureLevel;
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.

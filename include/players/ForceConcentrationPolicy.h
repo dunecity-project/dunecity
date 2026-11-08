@@ -18,6 +18,13 @@
 
 namespace ForceConcentrationPolicy {
 
+/// Vulture levels are discrete: the weaker rival must be strictly below this share
+/// of the deployable strike force. No history, floating point or simulation RNG.
+inline bool vultureStrike(int level, int64_t strikeForce, int64_t rivalArmy) {
+    const int percent = level == 1 ? 60 : level == 2 ? 90 : 0;
+    return percent > 0 && strikeForce > 0 && rivalArmy * 100 < strikeForce * percent;
+}
+
 // ---- Focus fire --------------------------------------------------------------------------------
 
 /// What a target is, best first: an enemy fighter shoots back, a turret shoots back but cannot

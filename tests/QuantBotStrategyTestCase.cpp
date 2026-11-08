@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <players/QuantBotBuildPolicy.h>
+#include <players/ForceConcentrationPolicy.h>
 
 #include <players/QuantBotConfig.h>
 #include <players/QuantBotStrategy.h>
@@ -13,6 +14,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <set>
 
 // QuantBot strategies (docs/ai-play-styles.md, "Strategies"): the pick is a pure function of the
 // game seed, the house and the config, so every peer, replay and reload plays the same strategy;
@@ -753,6 +755,31 @@ TEST_CASE("Vanilla FFA switches default off and independently persist every hash
         for (const auto member : members) REQUIRE((restored.force.*member) == (expected.force.*member));
         REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
     }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("FFA vulture levels persist and use strict deterministic force thresholds",
+          "[ai][force][ffa][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.ffaVultureLevel == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-vulture-config-test.ini";
+    std::set<std::string> hashes;
+    for (int level = 0; level <= 2; ++level) {
+        QuantBotConfig expected = defaults;
+        expected.force.ffaVultureLevel = level;
+        REQUIRE(hashes.insert(expected.getConfigHash()).second);
+        REQUIRE(expected.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.ffaVultureLevel == level);
+        REQUIRE(restored.getConfigHash() == expected.getConfigHash());
+    }
+    REQUIRE_FALSE(ForceConcentrationPolicy::vultureStrike(0, 1000, 0));
+    REQUIRE_FALSE(ForceConcentrationPolicy::vultureStrike(1, 0, 0));
+    REQUIRE(ForceConcentrationPolicy::vultureStrike(1, 1000, 599));
+    REQUIRE_FALSE(ForceConcentrationPolicy::vultureStrike(1, 1000, 600));
+    REQUIRE(ForceConcentrationPolicy::vultureStrike(2, 1000, 899));
+    REQUIRE_FALSE(ForceConcentrationPolicy::vultureStrike(2, 1000, 900));
     std::filesystem::remove(path);
 }
 

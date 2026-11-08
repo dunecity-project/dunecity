@@ -1126,3 +1126,30 @@ are unchanged; protocol 99 is not consumed. No revised-branch build, ctest, all-
 ladder result is claimed. The parent owns combined acceptance on `build-int`, including
 `quantbot_match_score`, `quantbot_strategy`, all-against-Atreides and the ladder; test-only candidate
 styles must not be treated as shipped defaults.
+
+## Experimental FFA vulture timing (2026-11-08)
+
+`ffa-vulture-off`, `ffa-vulture-60`, and `ffa-vulture-90` select the hashed,
+default-OFF `FfaVultureLevel` (0/1/2). On Vanilla/DuneCity original FFA4/FFA6
+occupied-controller rosters, with spice remaining, mutual live ground-unit
+targets inside weapon range identify rivals currently fighting. Fresh ground
+dispatch waits while the weaker fighting rival's true health-weighted army is
+at least 60%/90% of our deployable strike force. Below that share it directs the
+wave to that rival's reachable production/core structures, using full knowledge.
+Existing defence, production, readiness and recovery gates retain authority;
+already deployed hunters are not recalled. Outside scope and OFF retain native
+dispatch. OFF adds nothing to the config hash. No protocol or save changes.
+
+This first screen deliberately uses current mutual combat, **not recent-loss
+history**: the integrator rejected unversioned conditional save state. Telemetry
+`ffa_vulture` records hold/strike, both true armies, deployable force and both
+rivals' cumulative combat-unit losses. It does not claim those losses happened
+inside a rolling window.
+
+`dunecity-audit.py --mode sample --sample-ffa --mod both --cases 6
+--sample-seed 1190000 --candidate-style ffa-vulture-60` schedules 24 games:
+two seats per case, six cases per mod, balanced FFA4/FFA6, 96/128/160,
+L/M/H spice, tech 3/6/9, Hard/Brutal rivals. Unlike the general sampler this
+option uses sequential map seeds (Vanilla first, then DuneCity), so the lane's
+reserved seed range is respected. Use the same command with OFF and 90 for
+paired arms; `--keep-telemetry --attack-events` retains mechanism/economy evidence.

@@ -782,7 +782,12 @@ void QuantBot::attack(int militaryValue) {
         return;
     }
 
-    launchGroundHunt();
+    const int vultureTeam = vultureOpportunity();
+    if (vultureTeam == -2) {
+        attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(15000)));
+        return;
+    }
+    launchGroundHunt(vultureTeam);
     if (isCampaignEnemy()) tryLaunchOrnithopterStrike(diffSettings, config);
 }
 
@@ -918,7 +923,7 @@ int QuantBot::waveFormationShape() const {
     return waveFormationOverride != kNoWaveFormationOverride ? waveFormationOverride : botConfig().waveFormation;
 }
 
-void QuantBot::launchGroundHunt() {
+void QuantBot::launchGroundHunt(int vultureTeam) {
     if (builderOnly()) return;
     const bool limited = isCampaignEnemy();
     const bool custom = !isCampaignGameType(currentGame->gameType);
@@ -948,7 +953,7 @@ void QuantBot::launchGroundHunt() {
         && vanillaMultiEnemyGame();
     const bool ffaSingleFront = botConfig().force.vanillaFfaSingleFront && recoveryActive()
         && vanillaMultiEnemyGame() && lastCalculatedSpice > 0;
-    const bool ffaDirected = ffaTargeting || ffaSingleFront;
+    const bool ffaDirected = ffaTargeting || ffaSingleFront || vultureTeam >= 0;
     // JoinAllyWaves: the objective of an allied wave that has just left; ours joins it.
     const ObjectBase* allyFront=wholeArmy ? allyWaveObjective() : nullptr;
     std::vector<Uint32> existingHunters;
@@ -1272,6 +1277,11 @@ void QuantBot::launchGroundHunt() {
         for (const auto id : selected) {
             const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
             if (unit && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
+        }
+        if (vultureTeam >= 0) {
+            observedFront = vultureObjective(lead, vultureTeam);
+            // Do not silently send the patient army to an unrelated rival.
+            if (!observedFront) return;
         }
         if (ffaSingleFront && !allyFront) {
             const auto* previous = dynamic_cast<const StructureBase*>(getObject(customWave.front));
