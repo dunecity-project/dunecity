@@ -126,8 +126,15 @@ def play(args, scratch, binary, game):
            '--path-workers', '1', '--no-ai-telemetry', '--wall-timeout', str(args.wall_timeout)] + case
     if args.ai_telemetry:
         cmd.remove('--no-ai-telemetry')
+    if args.runner_profile:
+        cmd = [sys.executable, '-m', 'cProfile', '-o', str(evidence / 'runner.pstats')] + cmd[1:]
     env['BALANCE_DUNECITY_AUDIT'] = '1'
     rc, cpu, _ = measure_runner(cmd, evidence / 'runner.log', env=env, cwd=root)
+    if args.runner_profile and (evidence / 'runner.pstats').exists():
+        import pstats
+        with (evidence / 'runner-profile.txt').open('w') as stream:
+            pstats.Stats(str(evidence / 'runner.pstats'), stream=stream).strip_dirs().sort_stats('cumulative').print_stats(100)
+        (evidence / 'runner.pstats').unlink()
     parse_started = time.process_time()
     lines = (out / 'run.log').read_text(errors='replace').splitlines() if (out / 'run.log').exists() else []
     shutil.copy2(out / 'run.log', evidence / 'run.log') if (out / 'run.log').exists() else None
@@ -177,7 +184,7 @@ def report(args):
     print('|---|---|---:|---:|---:|---:|---:|---:|')
     for host, case in sorted({(row['host'], row['case']) for row in rows}):
         group = [row for row in rows if row['host'] == host and row['case'] == case]
-        mean = lambda key: statistics.mean(float(row[key]) for row in group if row[key] not in ('', 'None'))
+        mean = lambda key: statistics.mean([float(row[key]) for row in group if row[key] not in ('', 'None')] or [float('nan')])
         print(f'| {host} | {case} | {len(group)} | {mean("cpu_s"):.3f} | {mean("wall_s"):.3f} | '
               f'{mean("peak_rss_mib"):.1f} | {mean("steady_rss_mib"):.1f} | {mean("runner_cpu_s"):.3f} |')
     expected = {game['id'] for game in schedule(args)}
@@ -235,6 +242,7 @@ parser.add_argument('--heap-tools', action='store_true')
 parser.add_argument('--malloc-stacks', action='store_true')
 parser.add_argument('--headless-assets', action='store_true')
 parser.add_argument('--ai-telemetry', action='store_true')
+parser.add_argument('--runner-profile', action='store_true', help='Retain a cProfile table for the Python launcher')
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--compare', nargs=2)
 parser.add_argument('--bench-export', type=Path)
