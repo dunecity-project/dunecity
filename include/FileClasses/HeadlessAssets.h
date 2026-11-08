@@ -4,8 +4,18 @@
 #include <SDL_log.h>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 
 namespace HeadlessAssets {
+
+// Explicit process-wide opt-in. The probe runner excludes rendered/UI fixtures.
+inline bool enabled() {
+    static const bool value = [] {
+        const char* mode = std::getenv("DUNECITY_HEADLESS_ASSETS");
+        return mode != nullptr && std::strcmp(mode, "1") == 0;
+    }();
+    return value;
+}
 
 // Profiling only: nested phases are inclusive (sounds includes voices).
 class StartupTimer {

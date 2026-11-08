@@ -41,7 +41,7 @@ if not WINDOWS:
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import copy_revisions, discard_profile_assets, prune_runs  # noqa: E402
+from probe_profile import copy_revisions, discard_profile_assets, prune_runs, shared_headless_mods  # noqa: E402
 
 
 def run_strategy_processes(command, runs, workers, timeout):
@@ -453,6 +453,9 @@ parser.add_argument('--no-ai-telemetry', action='store_true',
                          'same; formation-duel.py and headless-bench.py use it (docs/headless-performance.md). '
                          'Otherwise DUNECITY_AI_TELEMETRY=1 turns the log on: games default to [General] AI Decision '
                          'Log = false')
+parser.add_argument('--headless-assets', action=argparse.BooleanOptionalAction,
+                    default=os.environ.get('DUNECITY_HEADLESS_ASSETS') == '1',
+                    help='Simulation-only graphics/audio assets; rendered and fixture probes keep full assets')
 parser.add_argument('--factory-recovery-probe', action='store_true')
 parser.add_argument('--strategic-site-probe', action='store_true',
                     help='Continue the stalled-city fixture with its overdue Palace timer restored')
@@ -856,6 +859,13 @@ env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
            BALANCE_HOUSE=str(house_names.index(args.house)),BALANCE_HARVESTER_LIMIT=str(args.harvester_limit))
+# A batch's inherited asset mode must never turn a renderer/UI assertion into
+# a null-texture test. Direct CTests remain full-asset by default.
+headless_assets = args.headless_assets and not (
+    args.real_video or args.ffa_screenshot
+    or any(value is True for name, value in vars(args).items() if name.endswith('_probe')))
+env['DUNECITY_HEADLESS_ASSETS'] = '1' if headless_assets else '0'
+env.pop('DUNECITY_SHARED_MODS', None)
 if args.civ_wars:
     env['BALANCE_CIV_WARS'] = str(args.civ_wars)
     env['BALANCE_CIV_SIZE'] = str(args.civ_size)
@@ -1014,6 +1024,11 @@ if args.scenario:
 if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
 env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
+if (headless_assets and args.mod in ('vanilla', 'dunecity')
+        and not (args.custom_map or args.load_save or args.save_profile or args.game_options or args.genome_phase_dir)):
+    shared_mods = shared_headless_mods(binary, build, env, source_fingerprint_value, lock_exclusive)
+    if shared_mods is not None:
+        env['DUNECITY_SHARED_MODS'] = str(shared_mods)
 if args.strategy_probe:
     extra_seeds = [int(seed) for seed in args.strategy_margin_seeds.split(',') if seed.strip()]
     trike_seeds = [int(seed) for seed in args.strategy_trike_margin_seeds.split(',') if seed.strip()]

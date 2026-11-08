@@ -447,16 +447,30 @@ void ModManager::initialize() {
     // Create mods directory if it doesn't exist
     // Note: createDir() handles "already exists" case gracefully
     createDir(modsBasePath);
+
+    sharedBundledModsPath.clear();
+    if(HeadlessAssets::enabled()) {
+        if(const char* shared = std::getenv("DUNECITY_SHARED_MODS")) {
+            sharedBundledModsPath = shared;
+            if(vanillaNeedsReseed() || dunecityNeedsReseed()) {
+                SDL_Log("ModManager: Shared probe payload is stale; using private profile copies");
+                sharedBundledModsPath.clear();
+            }
+        }
+    }
+    const bool privateBundledMods = sharedBundledModsPath.empty();
+    const bool seedOtherMods = privateBundledMods
+        && !(HeadlessAssets::enabled() && std::getenv("DUNECITY_HEADLESS_SEED_ONLY"));
     
     // Seed vanilla mod if needed
-    if (!modExists(VANILLA_MOD_NAME) || vanillaNeedsReseed()) {
+    if (privateBundledMods && (!modExists(VANILLA_MOD_NAME) || vanillaNeedsReseed())) {
         seedVanillaFromDefaults();
     }
 
     // Seed built-in dunecity mod if needed
-    if (!modExists(DUNECITY_MOD_NAME) || dunecityNeedsReseed()) {
+    if (privateBundledMods && (!modExists(DUNECITY_MOD_NAME) || dunecityNeedsReseed())) {
         seedDunecityFromDefaults();
-    } else {
+    } else if(privateBundledMods) {
         // graphics_skins is a managed presentation payload, but the DuneCity
         // mod directory also holds user-facing configuration. An existing
         // profile therefore receives new Compacts and Icon Sprites - and
@@ -467,27 +481,29 @@ void ModManager::initialize() {
 
     // Rules-only DuneCity derivative: arbitrary scenarios retain their authored starts and tech.
     const auto civWarsBundle = findBundledModPath(CIVWARS_MOD_NAME);
-    if(!modExists(CIVWARS_MOD_NAME)
-       || managedModNeedsRefresh(getModPath(CIVWARS_MOD_NAME), civWarsBundle)) {
+    if(seedOtherMods && (!modExists(CIVWARS_MOD_NAME)
+       || managedModNeedsRefresh(getModPath(CIVWARS_MOD_NAME), civWarsBundle))) {
         refreshManagedMod(CIVWARS_MOD_NAME, getModPath(CIVWARS_MOD_NAME), civWarsBundle);
     }
 
-    for(const char* name : TORNIE_FAMILY_MOD_NAMES) {
-        if(!modExists(name) || tornieFamilyNeedsReseed(name)) {
-            seedTornieFamilyFromDefaults(name);
+    if(seedOtherMods) {
+        for(const char* name : TORNIE_FAMILY_MOD_NAMES) {
+            if(!modExists(name) || tornieFamilyNeedsReseed(name)) {
+                seedTornieFamilyFromDefaults(name);
+            }
         }
     }
 
     // Dune2R is a bundled graphics payload. Refresh stale installed copies so
     // new manifests and atlases are not hidden by an older user-data folder.
-    if (!modExists(DUNE2R_MOD_NAME) || dune2rNeedsReseed()) {
+    if (seedOtherMods && (!modExists(DUNE2R_MOD_NAME) || dune2rNeedsReseed())) {
         seedDune2RFromDefaults();
     }
 
     // Extra installer payloads are selectable, not approved/default mods.
     // Seed only missing folders; never replace a player's existing authored mod.
     const auto bundledMods = findBundledModPath(TORNIE_MOD_NAME).parent_path();
-    if(!bundledMods.empty() && std::filesystem::is_directory(bundledMods)) {
+    if(seedOtherMods && !bundledMods.empty() && std::filesystem::is_directory(bundledMods)) {
         for(const auto& entry : std::filesystem::directory_iterator(bundledMods)) {
             const auto name = entry.path().filename().string();
             if(!entry.is_directory() || !isValidModName(name) || modExists(name)
@@ -2003,6 +2019,8 @@ std::string ModManager::getModPath(const std::string& name) const {
     if(name.empty()) {
         return modsBasePath;  // Safety: avoid trailing slash + empty name
     }
+    if(!sharedBundledModsPath.empty() && (name == VANILLA_MOD_NAME || name == DUNECITY_MOD_NAME))
+        return sharedBundledModsPath + "/" + name;
     return modsBasePath + "/" + name;
 }
 

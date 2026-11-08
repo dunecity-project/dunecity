@@ -32,7 +32,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import discard_profile_assets, require_free_space  # noqa: E402
+from probe_profile import discard_profile_assets, headless_asset_arguments, require_free_space  # noqa: E402
 
 MAP = root / 'data/maps/singleplayer/5P - 128x128 - All against Atreides.ini'
 OPTIONS = root / 'tests/ai/all-against-atreides-options.ini'
@@ -90,7 +90,7 @@ def campaign(output, *extra):
             *(() if args.human_seat else ('--local-spectator',)), '--elimination-match',
             '--enemy-ai', args.enemy_ai, '--enemy-difficulty', 'hard', '--game-options', str(options),
             '--capture-mib', '512', '--path-workers', str(args.path_workers),
-            *(('--no-ai-telemetry',) if args.no_ai_telemetry else ()), *extra]
+            *headless_asset_arguments(), *(('--no-ai-telemetry',) if args.no_ai_telemetry else ()), *extra]
 
 
 def fields(line, marker):

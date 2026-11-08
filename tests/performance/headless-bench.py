@@ -29,7 +29,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import probe_binary, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import headless_asset_arguments, probe_binary, require_free_space, scratch_dir  # noqa: E402
 
 # size, map/match seed, house:shape,house:shape (formation-duel.py's houses for these seeds).
 GAMES = (('128', '7101', 'atreides:none,harkonnen:none'),
@@ -81,7 +81,8 @@ def build_probe(args, scratch):
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
                     '--output-dir', str(probe), '--duel-map-size', '64', '--duel-map-seed', '1',
                     '--duel-sides', 'atreides:none,harkonnen:none', '--local-spectator', '--enemy-difficulty', 'hard',
-                    '--partner-difficulty', 'hard', '--minutes', '1', '--capture-mib', '256'],
+                    '--partner-difficulty', 'hard', '--minutes', '1', '--capture-mib', '256',
+                    *headless_asset_arguments()],
                    cwd=root, check=True, capture_output=True, text=True)
     shutil.rmtree(probe / 'profile', ignore_errors=True)
     return probe_binary(probe)
@@ -103,6 +104,7 @@ def play(args, scratch, probe, game, jobs, index):
                '--duel-map-seed', seed, '--duel-sides', sides, '--local-spectator', '--enemy-difficulty', 'hard',
                '--partner-difficulty', 'hard', '--minutes', str(args.minutes), '--seed', seed,
                '--capture-mib', '256', '--wall-timeout', '3600']
+    command += headless_asset_arguments()
     if args.path_workers:
         command += ['--path-workers', str(args.path_workers)]
     if not args.ai_telemetry:

@@ -718,6 +718,8 @@ public:
     GFXManager& operator=(const GFXManager &) = default;
     GFXManager& operator=(GFXManager &&) = default;
 
+    // Headless asset mode returns null object textures. Simulation frame counts
+    // and geometry are independent; retained interface layout assets stay exact.
     SDL_Texture*     getZoomedObjPic(unsigned int id, int house, unsigned int z);
     SDL_Texture*     getZoomedObjPic(unsigned int id, unsigned int z) { return getZoomedObjPic(id, HOUSE_HARKONNEN, z); };
     zoomable_texture getObjPic(unsigned int id, int house=HOUSE_HARKONNEN, bool greenWindtrap=false);

@@ -366,6 +366,7 @@ private:
     bool installedObjectDataDiffersFromDefaults(const std::string& modName) const;
     
     std::string modsBasePath;        ///< Base path for mods directory
+    std::string sharedBundledModsPath; ///< Verified read-only probe payload; private active_mod.txt stays local
     std::string activeMod;
     std::string activeContentBase; // Capability identity, refreshed on activation; no per-tile filesystem reads.
     bool activeDune2RRemasterPresentation = false;

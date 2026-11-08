@@ -27,6 +27,7 @@
 
 #include <FileClasses/FileManager.h>
 #include <FileClasses/GFXManager.h>
+#include <FileClasses/HeadlessAssets.h>
 #include <FileClasses/SFXManager.h>
 #include <FileClasses/FontManager.h>
 #include <FileClasses/TextManager.h>
@@ -1538,7 +1539,7 @@ int main(int argc, char *argv[]) {
 
             Scaler::setDefaultScaler(Scaler::getScalerByName(settings.video.scaler));
 
-            if(bFirstInit == true) {
+            if(bFirstInit == true && !HeadlessAssets::enabled()) {
                 SDL_Log("Initializing audio...");
                 std::string deviceError, fallbackError;
                 if(!openStartupAudio(deviceError, fallbackError))
@@ -1564,6 +1565,8 @@ int main(int argc, char *argv[]) {
             // Initialize the mod system (seeds vanilla mod from install defaults if needed)
             SDL_Log("Initializing mod system...");
             ModManager::instance().initialize();
+            if(HeadlessAssets::enabled() && std::getenv("DUNECITY_HEADLESS_SEED_ONLY"))
+                return EXIT_SUCCESS;
             // Once per profile: the `ws-<hash>` copies older releases left of Vanilla and Dune City.
             Workshop::pruneShippedModCopiesOnce();
 
@@ -1628,7 +1631,7 @@ int main(int argc, char *argv[]) {
                 
                 // Native renderers benefit from a short initialization pause.
 #ifndef __EMSCRIPTEN__
-                SDL_Delay(100);
+                if(!HeadlessAssets::enabled()) SDL_Delay(100);
 #endif
                 
                 SDL_RendererInfo rendererInfo;
@@ -1694,6 +1697,10 @@ int main(int argc, char *argv[]) {
                 GUIStyle::setGUIStyle(std::make_unique<DuneStyle>(settings.video.menuPalette, settings.video.uiSkin));
 
                 if(bFirstInit == true) {
+                    if(HeadlessAssets::enabled()) {
+                        settings.audio.playSFX = false;
+                        settings.audio.playMusic = false;
+                    }
                     SDL_Log("Starting sound player...");
                     soundPlayer = std::make_unique<SoundPlayer>();
 

@@ -16,6 +16,7 @@
  */
 
 #include <FileClasses/music/ADLPlayer.h>
+#include <FileClasses/HeadlessAssets.h>
 
 #include <globals.h>
 
@@ -34,6 +35,7 @@ ADLPlayer::~ADLPlayer() {
 
 void ADLPlayer::changeMusic(MUSICTYPE musicType)
 {
+    if(HeadlessAssets::enabled()) return;
     int musicNum = -1;
     std::string filename = "";
 
