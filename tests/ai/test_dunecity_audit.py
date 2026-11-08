@@ -537,14 +537,14 @@ class DuneCityAuditTests(unittest.TestCase):
             args = audit['parser'].parse_args([
                 '--results', str(results), '--sizes', '96', '--spice', 'none', '--formats', '1v1',
                 '--mode', 'ladder', '--seeds', '9101', '--style', 'trooper-support-on',
-                '--keep-telemetry', '--capture-mib', '512'])
+                '--keep-telemetry', '--capture-mib', '512', '--minutes', '30'])
             game = audit['schedule'](args)[0]
             cycle = 30 * audit['CYCLES_PER_MINUTE']
 
             def simulate(command, **unused):
                 out = Path(command[command.index('--output-dir') + 1])
                 out.mkdir(parents=True)
-                lines = ['SCENARIO_RESULT: outcome=time_limit winner_team=0 minutes=30',
+                lines = ['SCENARIO_RESULT: outcome=time_limit winner_team=0 minutes=30 end_s=1800',
                          'PROBE_TIMING: loop_ms=1', 'PROBE_DIGEST: final=1 digest=fixture']
                 for name, team, _ in game['sides']:
                     house = audit['HOUSE_IDS'][name]
@@ -565,7 +565,7 @@ class DuneCityAuditTests(unittest.TestCase):
                         f'{key}={value}' for key, value in support.items()))
                     final = {key: sample[key] for key in (
                         'house', 'team', 'alive', 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units')}
-                    final.update(eliminated_s=-1, sortie_minutes=0)
+                    final.update(eliminated_s=-1, sortie_minutes=0, population=120 if team == 1 else 100)
                     lines.append('SCENARIO_HOUSE: ' + ' '.join(f'{key}={value}' for key, value in final.items()))
                 (out / 'run.log').write_text('\n'.join(lines) + '\n')
                 (out / 'summary.json').write_text(json.dumps(dict(
@@ -598,6 +598,9 @@ class DuneCityAuditTests(unittest.TestCase):
                     row = audit['play'](args, top, binary, game)
             self.assertEqual(launched.call_count, 1)  # This was a fixture callback, never a process.
             self.assertEqual(row['error'], '')
+            self.assertEqual((row['outcome'], row['winner_team']), ('time_limit', '0'))
+            self.assertEqual((row['scored_winner_team'], row['win_condition']), (1, 'population'))
+            self.assertEqual(json.loads(row['team_populations']), {'1': 120, '2': 100})
             self.assertEqual(row['air_kill_telemetry'], 'complete')
             self.assertEqual(row['capture_mib'], 512)
             self.assertEqual(row['air_kill_attribution'], 'complete')
@@ -606,6 +609,11 @@ class DuneCityAuditTests(unittest.TestCase):
             self.assertFalse((top / Path(row['diagnostics']).name).exists())
             houses = {house['house']: house for house in audit['read'](results / 'houses.csv')}
             self.assertEqual([houses[house]['difficulty'] for house in ('0', '1')], ['brutal', 'hard'])
+            self.assertEqual((houses['0']['population'], houses['1']['population']), ('120', '100'))
+            self.assertEqual((houses['0']['won'], houses['0']['raw_won']), ('1', '0'))
+            self.assertEqual((houses['0']['drawn'], houses['0']['raw_drawn']), ('0', '1'))
+            self.assertEqual((houses['1']['won'], houses['1']['drawn']), ('0', '0'))
+            self.assertEqual(houses['0']['raw_score'], '-0.25')
             self.assertEqual(houses['0']['trooper_built'], '8')
             self.assertEqual(houses['0']['trooper_queued'], '9')
             self.assertEqual(houses['0']['ornithopter_killed'], '17')
