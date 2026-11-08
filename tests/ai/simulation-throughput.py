@@ -25,7 +25,8 @@ sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir
 from simulation_measure import measure_runner
 
-CASES = ('duel128', 'duel160', 'duel192', 'city160', 'vanilla160', 'campaign', 'aaa1', 'aaa2')
+DEFAULT_CASES = ('duel128', 'duel160', 'duel192', 'city160', 'vanilla160', 'campaign', 'aaa1', 'aaa2')
+CASES = DEFAULT_CASES + ('vanilla160-long',)
 FIELDS = ('id', 'case', 'round', 'host', 'platform', 'cpu_count', 'started_epoch', 'ended_epoch', 'wall_s', 'cpu_s',
           'probe_wall_s', 'probe_cpu_s', 'runner_cpu_s', 'parse_cpu_s', 'peak_rss_mib', 'steady_rss_mib',
           'startup_wall_s', 'setup_ms', 'loop_ms', 'cycles', 'startup', 'headless_assets', 'signature', 'bench', 'error')
@@ -67,13 +68,15 @@ def case_arguments(case):
         return ['--duel-map-size', size, '--duel-map-seed', seed, '--duel-sides', sides,
                 '--local-spectator', '--enemy-difficulty', 'hard', '--partner-difficulty', 'hard',
                 '--minutes', '20', '--seed', seed], dict(size=size, seed=seed, sides=sides, minutes=20)
-    if case in ('city160', 'vanilla160'):
-        city = case == 'city160'
+    if case in ('city160', 'vanilla160', 'vanilla160-long'):
+        city, long_game = case == 'city160', case == 'vanilla160-long'
         houses = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
-        sides = ','.join(f'{house}:{index + 1}:qBotHard' for index, house in enumerate(houses))
-        # Audit matrix settings, with six independent Hard houses and a 160 map.
-        spec = ('size=160,base=medium,army=2,city=0,spice=2,sand=65,rock=30,mountain=5,'
-                'tech=9,credits=3000,seed=9101')
+        controller = 'qBotEasy' if long_game else 'qBotHard'
+        sides = ','.join(f'{house}:{index + 1}:{controller}' for index, house in enumerate(houses))
+        # Keep the fixed audit-style cases; the extra long fixture delays first
+        # contact with a yard-only opening, not by forcing play beyond victory.
+        start = 'base=cy,army=0,city=0,spice=3' if long_game else 'base=medium,army=2,city=0,spice=2'
+        spec = f'size=160,{start},sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101'
         return ['--scenario', '--mod', 'dunecity' if city else 'vanilla', '--house', 'harkonnen',
                 '--scenario-sides', sides, '--local-spectator', '--skirmish', spec,
                 '--seed', '9101', '--minutes', '120' if city else '90'], {}
@@ -123,6 +126,8 @@ def play(args, scratch, binary, game):
         env['BALANCE_HEAP_TOOLS'] = '1'
     if args.malloc_stacks and sys.platform == 'darwin':
         env['DUNECITY_SIM_MALLOC_STACKS'] = 'lite'
+    if args.no_heap_relief:
+        env['DUNECITY_HEADLESS_HEAP_RELIEF'] = '0'
     case, bench = case_arguments(game['case'])
     cmd = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
            '--prebuilt-probe', str(binary), '--output-dir', str(out), '--capture-mib', '256',
@@ -241,13 +246,14 @@ parser.add_argument('--build-dir', default=str(root / 'build-int'))
 parser.add_argument('--scratch')
 parser.add_argument('--jobs', type=int, default=1)
 parser.add_argument('--rounds', type=int, default=1)
-parser.add_argument('--cases', default=','.join(CASES))
+parser.add_argument('--cases', default=','.join(DEFAULT_CASES))
 parser.add_argument('--label', default='simulation')
 parser.add_argument('--wall-timeout', type=int, default=3600)
 parser.add_argument('--sample-seconds', type=float, default=0)
 parser.add_argument('--heap-profile', action='store_true')
 parser.add_argument('--heap-tools', action='store_true')
 parser.add_argument('--malloc-stacks', action='store_true')
+parser.add_argument('--no-heap-relief', action='store_true', help='Keep freed allocator pages for an explicit control')
 parser.add_argument('--headless-assets', action='store_true')
 parser.add_argument('--ai-telemetry', action='store_true')
 parser.add_argument('--runner-profile', action='store_true', help='Retain a cProfile table for the Python launcher')
