@@ -34,6 +34,7 @@ sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
 from probe_profile import finish_game, headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
+from ai_map_features import MAP_FEATURE_FIELDS, rows_from_log  # noqa: E402
 
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
 HOUSE_IDS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
@@ -557,7 +558,63 @@ def game_limit(args, mod):
     return min(args.minutes, 120 if mod == 'dunecity' else 90)
 
 
+def manifest_sample_schedule(args):
+    """Explicit preregistered map cells, shared unchanged by every screen arm."""
+    path = Path(args.case_manifest)
+    if not path.is_absolute():
+        path = root / path
+    manifest = json.loads(path.read_text())
+    if manifest.get('schema_version') != 1 or not manifest.get('cases'):
+        raise ValueError('Case manifest requires schema_version=1 and a nonempty cases list')
+    if args.mod not in ('vanilla', 'dunecity'):
+        raise ValueError('Case manifest requires one explicit content mode')
+    sample_seed = int(manifest['sample_seed'])
+    if not 0 <= sample_seed <= 0xffffffff:
+        raise ValueError('Case manifest sample_seed must be unsigned 32-bit')
+    identity = hashlib.sha256(json.dumps(manifest, sort_keys=True,
+                                        separators=(',', ':')).encode()).hexdigest()[:16]
+    games = []
+    minutes = game_limit(args, args.mod)
+    for index, cell in enumerate(manifest['cases']):
+        fmt, size = cell['format'], int(cell['size'])
+        spice, tech, seed = cell['spice_level'], int(cell['initial_tech']), int(cell['seed'])
+        enemy = cell.get('difficulty', 'brutal')
+        rock, mountain = int(cell.get('rock', 30)), int(cell.get('mountain', 5))
+        if (fmt not in ('1v1', '2v2', 'ffa4', 'ffa6') or not 32 <= size <= 256
+                or spice not in SPICE or spice == 'none' or not 1 <= tech <= 9
+                or not 0 <= seed <= 0xffffffff or enemy not in CLASSES
+                or not 1 <= rock <= 90 or not 0 <= mountain <= 50 or rock + mountain >= 100):
+            raise ValueError(f'Unsupported case-manifest cell {index + 1}')
+        count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
+        houses = list(HOUSES[:count])
+        shift = index % count
+        houses = houses[shift:] + houses[:shift]
+        teams = [1, 1, 2, 2] if fmt == '2v2' else list(range(1, count + 1))
+        spec = (f'size={size},base={args.base},army={args.army},city={args.city},'
+                f'spice={SPICE[spice]},sand={100-rock-mountain},rock={rock},mountain={mountain},'
+                f'tech={tech},credits=3000,seed={seed}')
+        prefix = (f'sample/{args.mod}/design-{identity}/s{sample_seed}-n{len(manifest["cases"])}/'
+                  f'{args.base}-a{args.army}-c{args.city}/{index + 1:03d}/{size}/{spice}/'
+                  f'{fmt}/{enemy}/t{tech}/{minutes}m/{seed}')
+        for swapped, seat in enumerate((0, 2 if fmt == '2v2' else count - 1)):
+            sides = [(house, team, 'brutal' if i == seat else enemy)
+                     for i, (house, team) in enumerate(zip(houses, teams))]
+            games.append(dict(id=f'{prefix}/{"swap" if swapped else "original"}',
+                              format=fmt, size=size, spice_level=spice, initial_tech=tech,
+                              difficulty=enemy, seed=seed, variant=args.variant, sides=sides,
+                              base=args.base, army=args.army, city=args.city, limit=minutes,
+                              style=args.style or 'default', mod=args.mod, minutes=minutes,
+                              skirmish=spec, candidate_house=HOUSE_IDS[houses[seat]],
+                              candidate_seat='swapped' if swapped else 'original',
+                              candidate_style=getattr(args, 'candidate_style', None) or '',
+                              sample_case=index + 1, sample_seed=sample_seed,
+                              require_research=args.mod == 'dunecity'))
+    return games
+
+
 def sample_schedule(args):
+    if getattr(args, 'case_manifest', None):
+        return manifest_sample_schedule(args)
     games = []
     mods = ('vanilla', 'dunecity') if args.mod == 'both' else (args.mod,)
     for mod in mods:
@@ -1064,6 +1121,8 @@ def play(args, scratch, binary, game):
         (results / f'failed-{out.name}.txt').write_text(game['id'] + '\n' + process.stdout[-4000:] + '\n'
                                                        + process.stderr[-4000:] + '\n' + '\n'.join(lines[-80:]))
     else:
+        append(results / 'map-features.csv', MAP_FEATURE_FIELDS,
+               rows_from_log(lines, game, setup))
         groups = defaultdict(list)
         for sample in samples:
             groups[int(sample['house'])].append(sample)
@@ -1145,7 +1204,8 @@ def run(args):
     results.mkdir(parents=True, exist_ok=True)
     for name, fields in (('games.csv', GAME_FIELDS), ('houses.csv', HOUSE_FIELDS),
                          ('samples.csv', SAMPLE_FIELDS), ('waves.csv', ATTACK_FIELDS),
-                         ('air-kills.csv', AIR_KILL_FIELDS)) + TECH_TABLES:
+                         ('air-kills.csv', AIR_KILL_FIELDS),
+                         ('map-features.csv', MAP_FEATURE_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
     observer_mode = 'off' if getattr(args, 'observer_off', False) else 'on'
     if any(row.get('observer_mode') != observer_mode for row in read(results / 'games.csv')):
@@ -1941,6 +2001,9 @@ parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='m
                     help='sample: balanced seeded factor draws, each played from two candidate seats')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--case-manifest', type=Path,
+                    help='sample only: explicit schema-v1 case JSON for common-seed screens; '
+                         'format/size/spice/tech/composition are recorded in the manifest and start receipts')
 parser.add_argument('--sample-enemy', choices=('easy', 'medium', 'hard', 'brutal'),
                     help='sample: fix every non-candidate controller to this tier; factor/map draws stay unchanged')
 parser.add_argument('--sample-formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6'), default=None,
@@ -1976,6 +2039,8 @@ if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and arg
     parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
 if args.candidate_style and args.mode != 'sample':
     parser.error('--candidate-style requires --mode sample')
+if args.case_manifest and (args.mode != 'sample' or args.mod == 'both'):
+    parser.error('--case-manifest requires --mode sample and one explicit --mod')
 if args.compare:
     compare(*args.compare)
 elif args.report_dirs:

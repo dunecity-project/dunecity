@@ -265,3 +265,43 @@ this history, mainly versus 1.0.843 on army value, heavy-factory adoption,
 dispatches, kill value and city zones. Pinned 1v1 bisection places the DuneCity
 loss between `56ab59cd` (1.0.851, good) and `bf3ddf4f` (1.0.863, bad), and a
 separate classic-content army loss between 1.0.843 and `56ab59cd`.
+
+## Factorial and mixed-seat screening
+
+`tests/ai/ai-screen-design.py factorial --spec factors.json --output OUT`
+allocates fixed, hand-chosen existing hashed boolean switches to a resolution-IV
+fraction (eight switches in sixteen runs), writes composite play-style INIs and
+an explicit native arm, and emits ordinary `dunecity-audit.py` commands. Every
+arm uses the same fresh seed/map cells and the existing two candidate seats.
+Source case manifests and styles must be pinned with the harness before queue
+submission; output-only files are not visible in a committed worker archive.
+`pilot` uses six compatible Vanilla switches and a resolution-VI half fraction
+(32 runs), so all fifteen two-factor terms are separately identifiable. The
+smaller IV design discloses its aliased interaction groups instead of naming
+an unsupported individual interaction.
+
+`tournament --variants A B C --formats ffa4 ffa6 --seeds SEED... --output OUT`
+emits the harness's `--seat-styles control,A,B,...` syntax. Complete fixed-size
+variant subsets and complete seat rotations balance every non-control opponent
+pair and physical seat. Spare native controls are intentionally overrepresented;
+seats and pairwise finishes from one game are not independent trials.
+
+`ai_map_features.py --results DIR... --output map-features.csv` is the shared
+start-map interface. It records exact exported-map or observer-start evidence,
+with missing values left unmeasured. Connected rock and free rectangle geometry
+follow the RockBudget observer at `4e1a962d`; free 3x3 origins overlap and are
+not disjoint capacity. Size, initial spice density, rock connectivity,
+mountain/ridge density, base distance and player count accompany outcome rows.
+`ai-screen-analysis.py --design OUT/design.json --features map-features.csv
+--output analysis.json --report report.md` reports clustered confidence intervals,
+rank-based FFA comparisons, switch/feature interactions and coverage holes.
+Army value and harvested spice at minutes 10/15 are secondary outcomes, never
+post-treatment controls in the win model.
+
+Screening effects do not promote a switch. Every promotion retains a fixed
+Controls block: same-seed native pairs and OFF12 parity at the new pin; both
+unobserved All Against Atreides seeds (or exact expected digests when out of
+scope); every current win in the original 66-mission AI-support campaign;
+and the historical gates (including campaign 1.0.807 59W / 1.0.796 56W).
+The coverage table accompanies the controls, and unmeasured composition or
+untested joint strata cannot be inferred from neighboring cells.
