@@ -15,6 +15,12 @@ is the coordinator wrapper. Submit without the queue-side `--wait`, then use
 `dunecity-queue wait JOB` outside the coordinator lock. Never compare an
 uncommitted source tree with a release-labelled archive.
 
+Before a large batch, submit one real game through this **same league harness and argv transport**
+on the intended platforms. A `dunelegacy_tests` build gate does not compile the league's private main.
+Its Linux probe reuses `bin/dunecity`, expands Ninja response files with `compdb -x`, includes the
+existing RobustList iterator-traits compatibility header and stays beside native `bin/data`;
+macOS retains its application-bundle probe. Retain the original prep/probe `build.log` on failure.
+
 1. Run `tests/ai/ai-baseline-league.py` twice at one current immutable bridge pin,
    with the policy's committed `--style NAME-off` and `--style NAME-on`. These
    overlays change only native hashed config values; unhashed `[Play Style]`

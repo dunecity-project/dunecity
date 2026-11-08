@@ -5,6 +5,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -66,6 +67,46 @@ class NativeLeagueInputs(unittest.TestCase):
         source = league.probe_source()
         self.assertNotIn('#if defined( __clang__ ) || defined(__GNUG__) || defined( __GLIBCXX__ ) || defined( __GLIBCPP__ )', source)
         self.assertIn('#define BASELINE_HAS_GENOME_PHASE ', source)
+
+    def test_posix_probe_uses_platform_link_target_and_native_data_directory(self):
+        for platform in ('darwin', 'linux'):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory:
+                build, scratch = Path(directory) / 'build', Path(directory) / 'scratch'
+                build.mkdir()
+                mac = platform == 'darwin'
+                target = 'bin/dunecity.app/Contents/MacOS/dunecity' if mac else 'bin/dunecity'
+                main_object = 'src/CMakeFiles/dunecity.dir/main.cpp.o'
+                compile_line = '/usr/bin/c++ -MD -MT native -MF native.d -o ' + main_object + ' -c /native/src/main.cpp'
+                expanded = ': && /usr/bin/c++ ' + main_object + ' game.o -o ' + target + ' && :'
+                commands = compile_line + '\n' + (expanded if mac else
+                    ': && /usr/bin/c++ @CMakeFiles/dunecity.rsp -o bin/dunecity && :')
+                calls = []
+                def recipe(argv, **kwargs):
+                    calls.append(argv)
+                    if argv[-2:] == ['compdb', '-x']:
+                        return json.dumps([dict(command=expanded)])
+                    self.assertEqual(argv[-1], target)
+                    return commands
+                with mock.patch.object(league.sys, 'platform', platform), \
+                     mock.patch.object(league, 'probe_source', return_value='int main() {}'), \
+                     mock.patch.object(league.subprocess, 'check_output', side_effect=recipe), \
+                     mock.patch.object(league.subprocess, 'run') as run:
+                    binary = league.build_probe(SimpleNamespace(build_dir=build), scratch)
+                self.assertEqual(len(calls), 1 if mac else 2)
+                compile_argv, link_argv = [call.args[0] for call in run.call_args_list]
+                self.assertIn(str(scratch / 'baseline-main.cpp'), compile_argv)
+                self.assertIn(str(scratch / 'baseline-main.o'), link_argv)
+                self.assertNotIn(main_object, link_argv)
+                self.assertFalse(any(arg.endswith('.rsp') for arg in link_argv))
+                self.assertEqual(binary.parent, scratch / 'ai-baseline-probe.app/Contents/MacOS'
+                                 if mac else build / 'bin')
+
+    def test_linux_private_source_includes_iterator_traits_compatibility(self):
+        with mock.patch.object(league.sys, 'platform', 'linux'):
+            source = league.probe_source()
+        self.assertIn('robustlist-iterator-traits.inc', source)
+        self.assertLess(source.index('robustlist-iterator-traits.inc'),
+                        source.index('ai-baseline-observer.inc'))
 
     def test_natives_never_count_as_a_contesting_team(self):
         # isAlive() is always true for the Natives house (worms, crime troopers).
