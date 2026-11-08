@@ -93,8 +93,50 @@ def population_case(populations, teams=None, mod='dunecity', outcome='time_limit
     result = dict(outcome=outcome, winner_team=str(winner), end_s='7200')
     return game, result, final
 
+class LogisticsSnapshotContractTest(unittest.TestCase):
+    def test_exact_checkpoint_logistics_fields_survive_csv_without_reconstruction(self):
+        values = dict(minute='5', cycle='18750', house='0', harvesters_total='6',
+                      harvesters_active='4', harvesters_harvesting='3', harvesters_returning='1',
+                      refinery_bays='2', refinery_bays_busy='1', harvesters_lost='7',
+                      tax_per_min='244', tax_rate='7')
+        line = 'DUNECITY_LOGISTICS: ' + ' '.join(key + '=' + value for key, value in values.items())
+        parsed = audit['parse'](line, 'DUNECITY_LOGISTICS:')
+        self.assertEqual(parsed, values)
+        self.assertTrue(set(audit['LOGISTICS_FIELDS']) <= set(audit['SAMPLE_FIELDS']))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'samples.csv'
+            audit['append'](path, audit['SAMPLE_FIELDS'], [parsed])
+            with path.open(newline='') as handle:
+                restored = next(csv.DictReader(handle))
+            for field in values:
+                self.assertEqual(restored[field], values[field])
+
+    def test_zero_and_absent_measurements_are_distinct(self):
+        present = audit['parse']('DUNECITY_LOGISTICS: minute=5 cycle=18750 house=0 harvesters_lost=0',
+                                 'DUNECITY_LOGISTICS:')
+        self.assertEqual(present['harvesters_lost'], '0')
+        self.assertNotIn('harvesters_harvesting', present)
+
 
 class DuneCityAuditTests(unittest.TestCase):
+    def test_starport_purchase_quotes_survive_compact_decision_capture(self):
+        events = known_callbacks()
+        for name in ('starport_purchase', 'starport_cash_stockpile'):
+            events.insert(-2, dict(schema_version=1, session='fixture', seq=0, cycle=90,
+                                  house=0, event=name, data=dict(item=42, market_price=240,
+                                  normal_price=300, factory_price=270, rule='starport_bargain')))
+        for seq, event in enumerate(events, 1):
+            event['seq'] = seq
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            write_capture(out, events)
+            capture = audit['air_kill_capture'](out, HOUSES, 100, True)
+        self.assertEqual(capture['status'], 'complete')
+        quotes = [event for event in capture['decisions'] if event['event'].startswith('starport_')]
+        self.assertEqual(len(quotes), 2)
+        self.assertEqual(quotes[0]['data']['market_price'], 240)
+        self.assertEqual(quotes[0]['data']['factory_price'], 270)
+
     def test_population_win_boundary_is_inclusive_and_uses_exact_integer_arithmetic(self):
         for population, winner in ((1199, 0), (1200, 1), (1201, 1)):
             with self.subTest(population=population):
@@ -232,6 +274,22 @@ class DuneCityAuditTests(unittest.TestCase):
         exporting = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'vanilla', '--export-maps', 'maps'])
         self.assertEqual(audit['schedule'](ordinary), audit['schedule'](exporting))
 
+    def test_explicit_sample_engine_seeds_preserve_factors_and_candidate_pairing(self):
+        args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both', '--cases', '12'])
+        native = audit['schedule'](args)
+        args.game_seed_base = 1270000
+        explicit = audit['schedule'](args)
+        self.assertEqual([game['seed'] for game in explicit],
+                         [seed for seed in range(1270000, 1270024) for _ in range(2)])
+        for old, new in zip(native, explicit):
+            for field in ('mod','format','size','spice_level','initial_tech','difficulty',
+                          'sides','candidate_house','candidate_seat'):
+                self.assertEqual(old[field], new[field])
+            self.assertIn('seed=' + str(new['seed']), new['skirmish'])
+        args.candidate_style = 'starport-price80'
+        styled = audit['schedule'](args)
+        self.assertEqual([game['seed'] for game in explicit], [game['seed'] for game in styled])
+
     def test_balanced_sampler_respects_both_mods_and_every_factor_level(self):
         args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
         games = audit['schedule'](args)
@@ -267,6 +325,107 @@ class DuneCityAuditTests(unittest.TestCase):
             for factor in audit['SAMPLE_STRATA'][:-1]:
                 counts = Counter(game[factor] for game in rows)
                 self.assertLessEqual(max(counts.values()) - min(counts.values()), 1)
+
+    def test_sample_enemy_override_preserves_map_draws_and_changes_all_other_controllers(self):
+        args = audit['parser'].parse_args([
+            '--mode', 'sample', '--mod', 'vanilla', '--cases', '12', '--sample-seed', '10403'])
+        ordinary = audit['schedule'](args)
+        args.sample_enemy = 'brutal'
+        fixed = audit['schedule'](args)
+        self.assertEqual(len(fixed), 24)
+        self.assertEqual(Counter(game['format'] for game in fixed),
+                         {'1v1': 6, '2v2': 6, 'ffa4': 6, 'ffa6': 6})
+        for old, new in zip(ordinary, fixed):
+            for field in ('skirmish', 'seed', 'size', 'spice_level', 'initial_tech',
+                          'candidate_house', 'candidate_seat', 'sample_case'):
+                self.assertEqual(old[field], new[field])
+            self.assertEqual(new['difficulty'], 'brutal')
+            self.assertTrue(all(level == 'brutal' for _, _, level in new['sides']))
+
+    def test_sample_formats_default_and_original_deck_preserve_legacy_draws_maps_and_ids(self):
+        options = ['--mode', 'sample', '--mod', 'both', '--cases', '13', '--sample-seed', '10403']
+        args = audit['parser'].parse_args(options)
+        self.assertIsNone(args.sample_formats)
+        self.assertEqual(args.formats, ['1v1', '2v2', 'ffa4'])
+        ordinary = audit['schedule'](args)
+        explicit = audit['parser'].parse_args(options + ['--sample-formats', '1v1', '2v2', 'ffa4', 'ffa6'])
+        self.assertEqual(audit['schedule'](explicit), ordinary)
+        # Generic matrix formats still do not select the sample factor deck.
+        generic = audit['parser'].parse_args(options + ['--formats', 'ffa6'])
+        self.assertEqual(audit['schedule'](generic), ordinary)
+        for mod in ('vanilla', 'dunecity'):
+            rng = audit['random'].Random(f'{args.sample_seed}/{mod}')
+            legacy_factors = {
+                'format': ('1v1', '2v2', 'ffa4', 'ffa6'),
+                'difficulty': ('easy', 'medium', 'hard', 'brutal'),
+                'size': (96, 128, 160),
+                'spice_level': tuple(audit['SPICE'])[int(mod == 'vanilla'):],
+                'initial_tech': tuple(range(3 if mod == 'vanilla' else 1, 10)),
+            }
+            draws = {factor: audit['balanced_draw'](levels, args.cases, rng)
+                     for factor, levels in legacy_factors.items()}
+            rows = [game for game in ordinary if game['mod'] == mod]
+            minutes = min(args.minutes, 120 if mod == 'dunecity' else 90)
+            for index in range(args.cases):
+                case = {factor: draw[index] for factor, draw in draws.items()}
+                seed = rng.getrandbits(32)
+                size, spice, tech = case['size'], case['spice_level'], case['initial_tech']
+                spec = (f'size={size},base={args.base},army={args.army},city={args.city},'
+                        f'spice={audit["SPICE"][spice]},sand=65,rock=30,mountain=5,'
+                        f'tech={tech},credits=3000,seed={seed}')
+                cell = (f'sample/{mod}/s{args.sample_seed}-n{args.cases}/{args.base}-a{args.army}-c{args.city}/'
+                        f'{index + 1:03d}/{size}/{spice}/{case["format"]}/{case["difficulty"]}/'
+                        f't{tech}/{minutes}m/{seed}')
+                for seat, suffix in enumerate(('original', 'swap')):
+                    game = rows[index * 2 + seat]
+                    self.assertEqual({factor: game[factor] for factor in legacy_factors}, case)
+                    self.assertEqual(game['seed'], seed)
+                    self.assertEqual(game['skirmish'], spec)
+                    self.assertEqual(game['id'], f'{cell}/{suffix}')
+
+    def test_sample_formats_select_twenty_four_ffa_games_balanced_twelve_per_format(self):
+        args = audit['parser'].parse_args([
+            '--mode', 'sample', '--mod', 'vanilla', '--cases', '12', '--sample-seed', '10403',
+            '--sample-formats', 'ffa4', 'ffa6', '--sample-enemy', 'brutal'])
+        games = audit['schedule'](args)
+        self.assertEqual(len(games), 24)
+        self.assertEqual(Counter(game['format'] for game in games), {'ffa4': 12, 'ffa6': 12})
+        self.assertEqual(len({game['id'] for game in games}), 24)
+        for original, swapped in zip(games[::2], games[1::2]):
+            self.assertEqual(original['candidate_seat'], 'original')
+            self.assertEqual(swapped['candidate_seat'], 'swapped')
+            self.assertNotEqual(original['candidate_house'], swapped['candidate_house'])
+            self.assertEqual(original['skirmish'], swapped['skirmish'])
+            self.assertEqual(original['sides'], swapped['sides'])
+        for game in games:
+            count = 4 if game['format'] == 'ffa4' else 6
+            self.assertEqual(len(game['sides']), count)
+            self.assertEqual(len({team for _, team, _ in game['sides']}), count)
+            self.assertEqual(game['difficulty'], 'brutal')
+            self.assertTrue(all(level == 'brutal' for _, _, level in game['sides']))
+
+    def test_ffa_sample_format_selector_preserves_candidate_only_overlays(self):
+        options = ['--mode', 'sample', '--mod', 'vanilla', '--cases', '12', '--sample-seed', '10403',
+                   '--sample-formats', 'ffa4', 'ffa6', '--sample-enemy', 'brutal']
+        ordinary = audit['parser'].parse_args(options)
+        candidate = audit['parser'].parse_args(options + ['--candidate-style', 'launcher-kite-off'])
+        controls, games = audit['schedule'](ordinary), audit['schedule'](candidate)
+        self.assertEqual(len(games), 24)
+        with tempfile.TemporaryDirectory() as temporary:
+            for index, (control, game) in enumerate(zip(controls, games)):
+                self.assertEqual(dict(game, candidate_style=''), control)
+                self.assertEqual(audit['seat_style_assignments'](control), {})
+                self.assertEqual(audit['seat_style_assignments'](game),
+                                 {str(game['candidate_house']): 'launcher-kite-off'})
+                command = audit['command'](candidate, Path('unused-probe'), game, Path(temporary) / str(index))
+                self.assertNotIn('--scenario-style', command)
+                directory = Path(command[command.index('--genome-phase-dir') + 1])
+                config = audit['configparser'].ConfigParser()
+                config.read(directory / 'schedule.ini')
+                self.assertEqual(dict(config['Genomes']),
+                                 {str(game['candidate_house']): 'candidate-launcher-kite-off'})
+                expected = {f'{game["candidate_house"]}-{phase}.ini' for phase in ('opening', 'mid', 'late')}
+                self.assertEqual({path.name for path in directory.glob('*.ini')} - {'schedule.ini'}, expected)
 
     def test_sampler_swaps_only_the_candidate_seat_and_shards_cover_the_same_cases(self):
         args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both', '--cases', '13'])
@@ -353,6 +512,17 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertFalse(audit['seat_styles_verified'](
             game, setup, configs, [lines[0].replace('house=2', 'house=0')]))
         self.assertTrue(audit['seat_styles_verified']({}, {}, [], []))
+
+    def test_explicit_sample_map_seed_range_preserves_factors(self):
+        ordinary = audit['parser'].parse_args(['--mode', 'sample', '--cases', '12'])
+        explicit = audit['parser'].parse_args([
+            '--mode', 'sample', '--cases', '12', '--game-seed-base', '1210000'])
+        before, after = audit['sample_schedule'](ordinary), audit['sample_schedule'](explicit)
+        self.assertEqual({g['seed'] for g in after}, set(range(1210000, 1210012)))
+        for old, new in zip(before, after):
+            self.assertEqual(new['seed'], 1210000 + new['sample_case'] - 1)
+            for key in ('format', 'size', 'spice_level', 'initial_tech', 'difficulty', 'candidate_house'):
+                self.assertEqual(old[key], new[key])
 
     def test_all_control_seat_styles_preserve_the_native_schedule_and_transport(self):
         ordinary = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
@@ -701,6 +871,11 @@ class DuneCityAuditTests(unittest.TestCase):
                                   ix_built=1, fighters=3, moving=1, targeting=1, enemies=0, enemy_value=0,
                                   covered_enemies=0, spice=0)
                     lines.append('DUNECITY_AUDIT: ' + ' '.join(f'{key}={value}' for key, value in sample.items()))
+                    fleet = dict.fromkeys(audit['FLEET_VALUES'], 0)
+                    fleet.update(fleet_steps=1, refined_spice_raw=100 * 2 ** 32,
+                                 fleet_capital_current_value=1600, fleet_capital_value_cycles=1600 * cycle)
+                    lines.append(f'DUNECITY_FLEET: minute=30 cycle={cycle} house={house} fleet='
+                                 + json.dumps(fleet, separators=(',', ':')))
                     support = dict.fromkeys(audit['TROOPER_FIELDS'], 0)
                     support.update(minute=30, cycle=cycle, house=house, wor=1, wor_built=2, trooper_live=5,
                                    trooper_queued=9, trooper_single_queued=1, trooper_squads_queued=1,
@@ -742,6 +917,8 @@ class DuneCityAuditTests(unittest.TestCase):
                     row = audit['play'](args, top, binary, game)
             self.assertEqual(launched.call_count, 1)  # This was a fixture callback, never a process.
             self.assertEqual(row['error'], '')
+            self.assertEqual(row['fleet_observer_status'], 'complete')
+            self.assertEqual(row['fleet_house_samples'], len(game['sides']))
             self.assertEqual((row['outcome'], row['winner_team']), ('time_limit', '0'))
             self.assertEqual((row['scored_winner_team'], row['win_condition']), (1, 'population'))
             self.assertEqual(json.loads(row['team_populations']), {'1': 120, '2': 100})
@@ -932,8 +1109,9 @@ class DuneCityAuditTests(unittest.TestCase):
 
     def test_refinery_and_power_mode_samples_append_without_reordering_old_fields(self):
         old_fields = audit['META'] + audit['SAMPLE_VALUES'] + ('flags',)
-        self.assertEqual(audit['SAMPLE_FIELDS'][:-2], old_fields)
-        self.assertEqual(audit['SAMPLE_FIELDS'][-2:], ('refineries', 'power_required'))
+        self.assertEqual(audit['SAMPLE_FIELDS'][:len(old_fields)], old_fields)
+        self.assertEqual(audit['SAMPLE_FIELDS'][len(old_fields):len(old_fields) + 2],
+                         ('refineries', 'power_required'))
         prefix = 'DUNECITY_AUDIT: minute=5 cycle=18750 house=0 power=100 need=150 spice=10000'
         for suffix, expected in (('', ('', '')), (' refineries=4 power_required=0', ('4', '0')),
                                  (' refineries=2 power_required=1', ('2', '1'))):
@@ -944,6 +1122,80 @@ class DuneCityAuditTests(unittest.TestCase):
                 row = audit['read'](path)[0]
                 self.assertEqual((row['refineries'], row['power_required']), expected)
                 self.assertEqual((row['power'], row['need']), ('100', '150'))
+
+    def test_boom_receipt_suffix_is_append_only_and_survives_csv_with_large_values(self):
+        fields = ('boom_phase', 'boom_stop_minute', 'boom_own_army', 'boom_enemy_army', 'boom_near_army',
+                  'boom_own_economy', 'boom_leader_economy', 'boom_army_ratio_bps', 'boom_economy_ratio_bps',
+                  'boom_reachable_spice_share', 'boom_refinery_cap', 'boom_harvester_cap', 'boom_current_workers')
+        old_fields = audit['META'] + audit['SAMPLE_VALUES'] + ('flags', 'refineries', 'power_required')
+        # The later logistics observer appends after the boom receipt; neither reorders older columns.
+        self.assertEqual(audit['SAMPLE_FIELDS'], old_fields + fields + audit['LOGISTICS_FIELDS'])
+        values = ('military', '15', '5000000001', '6000000002', '2000000003',
+                  '9000000004', '7000000005', '9000', '15000', '9000000006', '2250000', '4500000', '12')
+        suffix = ' '.join(f'{field}={value}' for field, value in zip(fields, values))
+        line = ('DUNECITY_AUDIT: minute=20 cycle=75000 house=0 power=100 need=150 spice=10000 '
+                'refineries=4 power_required=0 ' + suffix)
+        data = audit['parse'](line, 'DUNECITY_AUDIT:')
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'samples.csv'
+            audit['append'](path, audit['SAMPLE_FIELDS'], [data])
+            row = audit['read'](path)[0]
+        self.assertEqual(tuple(row[field] for field in fields), values)
+        self.assertEqual((row['minute'], row['cycle'], row['refineries'], row['power_required']),
+                         ('20', '75000', '4', '0'))
+
+    def test_boom_phase_receipts_do_not_enter_numeric_detector_inputs(self):
+        baseline = {field: '0' for field in audit['SAMPLE_VALUES'] + ('refineries', 'power_required')}
+        baseline.update(minute='5', cycle='18750', house='0', alive='1', yards='1', credits='600')
+        expected_sample = dict(baseline)
+        expected = audit['detect']([expected_sample])
+        for phase in ('off', 'harvester', 'refinery', 'greedy_economy', 'greedy_army',
+                      'reactive_economy', 'reactive_army'):
+            with self.subTest(phase=phase):
+                sample = dict(baseline)
+                sample.update({field: '0' for field in audit['BOOM_FIELDS']})
+                sample['boom_phase'] = phase
+                sample.update(boom_reachable_spice_share='9000000006', boom_refinery_cap='2250000',
+                              boom_harvester_cap='4500000', boom_current_workers='12')
+                self.assertEqual(audit['detect']([sample]), expected)
+                self.assertEqual(sample['boom_phase'], phase)
+                self.assertEqual(sample['flags'], expected_sample['flags'])
+
+    def test_fleet_refinery_json_survives_without_entering_numeric_detectors(self):
+        baseline = {field: '0' for field in audit['SAMPLE_VALUES'] + ('refineries', 'power_required')}
+        baseline.update(minute='5', cycle='18750', house='0', alive='1', yards='1', credits='600')
+        expected = audit['detect']([dict(baseline)])
+        for geometry in ('[]', '[{"refinery":"42","nearest_spice_distance_steps":"7"}]'):
+            with self.subTest(geometry=geometry):
+                sample = dict(baseline, fleet_refinery_metrics=geometry)
+                self.assertEqual(audit['detect']([sample]), expected)
+                self.assertEqual(sample['fleet_refinery_metrics'], geometry)
+                with tempfile.TemporaryDirectory() as directory:
+                    target = Path(directory) / 'samples.csv'
+                    audit['append'](target, audit['SAMPLE_FIELDS'], [sample])
+                    with target.open(newline='') as handle:
+                        self.assertEqual(next(csv.DictReader(handle))['fleet_refinery_metrics'], geometry)
+
+    def test_legacy_samples_keep_all_minutes_and_missing_boom_fields_blank(self):
+        samples = []
+        for minute in range(1, 21):
+            cycle = minute * audit['CYCLES_PER_MINUTE']
+            sample = audit['parse'](
+                f'ELIMINATION_SAMPLE: minute={minute} cycle={cycle} house=0 army_value={minute * 1000}',
+                'ELIMINATION_SAMPLE:')
+            sample.update(audit['parse'](
+                f'DUNECITY_AUDIT: minute={minute} cycle={cycle} house=0 power=100 need=150 '
+                'refineries=4 power_required=0', 'DUNECITY_AUDIT:'))
+            samples.append(sample)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'samples.csv'
+            audit['append'](path, audit['SAMPLE_FIELDS'], samples)
+            rows = audit['read'](path)
+        self.assertEqual([int(row['minute']) for row in rows], list(range(1, 21)))
+        self.assertEqual([int(row['army_value']) for row in rows], [minute * 1000 for minute in range(1, 21)])
+        self.assertEqual(rows[-1]['minute'], '20')
+        for row in rows:
+            self.assertTrue(all(row[field] == '' for field in audit['BOOM_FIELDS']))
 
     def test_observer_off_plays_core_samples_and_records_mode_without_a_game(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -992,6 +1244,7 @@ class DuneCityAuditTests(unittest.TestCase):
             for sample in audit['read'](results / 'samples.csv'):
                 self.assertEqual(sample['power'], '')
                 self.assertEqual(sample['refineries'], '')
+                self.assertTrue(all(sample[field] == '' for field in audit['BOOM_FIELDS']))
             for house in audit['read'](results / 'houses.csv'):
                 self.assertTrue(all(house['eligible_' + name] == '0' for name in audit['DETECTORS']))
 
@@ -1021,7 +1274,8 @@ class DuneCityAuditTests(unittest.TestCase):
                 {('matrix/fixture', '0'): house_row()})
             self.assertEqual(matched, [])
             self.assertIn('different_observer_mode' if mode else 'missing_observer_mode', rejected)
-        self.assertEqual(audit['GAME_FIELDS'][-1], 'observer_mode')
+        self.assertEqual(audit['GAME_FIELDS'][-4:], (
+            'observer_mode', 'fleet_observer_status', 'fleet_house_samples', 'fleet_refinery_samples'))
         with tempfile.TemporaryDirectory() as temporary:
             out = Path(temporary)
             audit['append'](out / 'games.csv', audit['GAME_FIELDS'], [game_row('default')])

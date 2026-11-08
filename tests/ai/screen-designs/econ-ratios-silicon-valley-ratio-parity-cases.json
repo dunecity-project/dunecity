@@ -1,0 +1,29 @@
+{
+  "cases": [
+    {
+      "cell": "13-silicon-valley",
+      "composition": "authored",
+      "format": "ffa4",
+      "initial_tech": null,
+      "map": "4P - 64x64 - Silicon Valley",
+      "path": "data/maps/multiplayer/4P - 64x64 - Silicon Valley.ini",
+      "seed": 10801,
+      "size": 64,
+      "spice_level": "authored"
+    },
+    {
+      "cell": "13-silicon-valley",
+      "composition": "authored",
+      "format": "ffa4",
+      "initial_tech": null,
+      "map": "4P - 64x64 - Silicon Valley",
+      "path": "data/maps/multiplayer/4P - 64x64 - Silicon Valley.ini",
+      "seed": 11810,
+      "size": 64,
+      "spice_level": "authored"
+    }
+  ],
+  "kind": "authored-control-diagnostic-cases",
+  "note": "Schedule specification, NOT a generated-map --case-manifest. The scenario harness consumes --cells/--cases and diagnostic control flags.",
+  "schema_version": 1
+}

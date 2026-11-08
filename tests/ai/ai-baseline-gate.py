@@ -27,6 +27,8 @@ from ai_baseline_scorecard import COLUMNS, CORE_FAMILIES, METRIC_DEFINITIONS, SC
 SAFETY_MIN_SEEDS = 8
 CONFIDENCE = 0.95
 SUMMARY_MINUTE = -1.0
+FINAL_ARMY_SHARE_METRICS = frozenset((
+    'devastator_live_value_share', 'deviator_live_value_share', 'sonic_tank_live_value_share'))
 STATUSES = ('measured', 'unavailable', 'censored', 'not_applicable')
 GROUP_FIELDS = ('scope', 'mod', 'difficulty', 'research', 'context', 'house', 'metric', 'minute')
 RECEIPT_FIELDS = ('source_commit', 'baseline_release_source', 'map_sha256', 'options_sha256',
@@ -128,7 +130,9 @@ def _valid_not_applicable(row):
     applicability = METRIC_DEFINITIONS[row['metric']]['applicability']
     return ((applicability == 'city' and reason == 'city_simulation_disabled')
             or (applicability == 'research_on' and row['research'] == 'off'
-                and reason == 'research_off_or_unsupported_not_emulated'))
+                and reason == 'research_off_or_unsupported_not_emulated')
+            or (row['metric'] in FINAL_ARMY_SHARE_METRICS and row.get('minute') == SUMMARY_MINUTE
+                and reason == 'no_live_army_denominator'))
 
 
 def validate_rows(rows, role):
@@ -462,6 +466,8 @@ def _coverage(candidate, reference, same_source):
         if any(left[key][field] != right[key][field] for key in set(left) & set(right)):
             errors.append('MISMATCH_' + field.lstrip('_').upper())
     if any(_valid_not_applicable(left[key]) != _valid_not_applicable(right[key])
+           and not (left[key]['metric'] in FINAL_ARMY_SHARE_METRICS
+                    and left[key]['minute'] == SUMMARY_MINUTE)
            for key in set(left) & set(right)):
         errors.append('MISMATCH_APPLICABILITY')
     if any(row['status'] != 'measured' and not _valid_not_applicable(row) for row in candidate + reference):

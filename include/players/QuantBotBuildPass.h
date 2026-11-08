@@ -101,6 +101,9 @@ struct QuantBot::BuildPass {
     bool surplusArmy{};
     int lightBudget{};
     bool citySimEnabled{};
+    CityBoomKind cityBoom = CityBoomKind::Native;
+    int cityBoomWorkers{}, cityBoomBays{};
+    bool cityBoomFunding{}, cityBoomArmy{};
     int spiceCompetitors{};
     int citySpiceWorkerTarget{};
     bool starportMarketAvailable{};
@@ -146,6 +149,10 @@ struct QuantBot::BuildPass {
 
     // planSpiceEconomy()
     int spiceShare{};
+    bool fleetRatios{};
+    int fleetSpiceShare{};
+    int fleetNearestSpiceDistance{-1};
+    int fleetRefineryTarget{};
     int mapSpiceHarvesterTarget{};
     int spiceHarvesterTarget{};
     int fundedHarvesterTarget{};
@@ -251,6 +258,14 @@ struct QuantBot::BuildPass {
     bool vanillaFfaThreatProduction{};
     bool vanillaFfaLightWorkingCash{};
     bool vanillaFfaTechDeferred{};
+    QuantBotVanillaPolicy::Plan vanillaPlan{QuantBotVanillaPolicy::Plan::None};
+    bool vanillaBoldTechDeferred{};
+    bool vanillaBoldMilitaryHeld{};
+    bool vanillaBoomArmy{};
+    QuantBotVanillaPolicy::Targets vanillaBoomTargets{};
+    Uint32 vanillaBoomRequiredItem{NONE_ID};
+    Uint32 vanillaBoomUpgradeBuilder{NONE_ID};
+    int vanillaBoldCapital{-1};
     std::vector<CapitalCandidate> capitalCandidates{};
     AITelemetry::Record capitalProducers{};
     AITelemetry::Record capitalUnitOptions{};
@@ -258,7 +273,13 @@ struct QuantBot::BuildPass {
     int forecastUpkeep{};
     int forecastSpice{};
     int forecastNetIncome{};
+    bool cityResearchAllowed = true;
     int forecastFunding{};
+    int techIncomeLevel{};
+    int techIncomePerMinute{};
+    int64_t techOwnArmy{};
+    int64_t techLargestRival{};
+    bool techRivalsSafe{};
     int existingMilitaryCapacity{};
     int constructionCapacity{};
     int readyYards{};
@@ -306,6 +327,8 @@ struct QuantBot::BuildPass {
     int groundThreatValue{};
     int groundTurretGoal{};
     int groundTurretCover{};
+    CoreDefenceSurvey vanillaCoreDefence{};
+    bool vanillaCoreTurretOrdered{};
     Uint32 missingCoreInfrastructure{};
     bool coreInfrastructureReady{};
     bool cityCoreInfrastructureReady{};
@@ -347,6 +370,19 @@ struct QuantBot::BuildPass {
     // Stable ordering keeps peers deterministic.
     // Keep IDs, not pointers: an earlier yard may demolish a later zone.
     std::vector<std::pair<int, Uint32>> planningOrder{};
+
+    // CityHarvesterReplacement: a pass-local snapshot, never saved runtime state.
+    bool cityReplacementEvaluated{};
+    int cityReplacementFloor{-1};
+    int cityReplacementSpiceCap{};
+    int cityReplacementCapacity{};
+    // CityBoomSpiceGate: enforce the recomputed targets at shared purchase
+    // admission too, including a refinery's promised free worker.
+    bool cityBoomSpiceGate{};
+    int cityBoomWorkerCap{}, cityBoomBayCap{};
+    // cityLandValueServices / cityGrowthStageTax: one finite, fully funded police allocation.
+    bool cityLandValueServices{};
+    int cityLandValuePoliceCandidate{-1};
 };
 
 struct QuantBot::BuilderTurn {

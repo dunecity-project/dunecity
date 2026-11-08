@@ -8,6 +8,29 @@ Additive tech-*.csv/composition.csv sidecars retain replacement-price compositio
 accepted commitments, exact first-owned/completed technology and four-minute
 quote-budget opportunities. Raw engine outcomes and placement scores remain alongside
 the audit-only DuneCity population adjudication.
+
+Fleet metrics are pure per-tick observations, not AI estimates. samples.csv and
+houses.csv retain gross refined-spice credits (also exact Q32 refined_spice_raw),
+asset replacement capital, original-house harvester losses and unload-start to
+unload-start trip totals. Open/left/interrupted/unstarted exposures are separate
+from completed trips; one cycle is 16 ms. Bay occupancy includes empty harvesters
+waiting for pickup; unloading requires positive cargo. Tick integrals use the
+previous observed state and exclude intervals spanning observation gaps.
+For a gap-free window, spice credits per minute per replacement-capital credit
+is delta(refined_spice_raw) / 2**32 * 3750 / delta(fleet_capital_value_cycles).
+Capital built value is the engine's built ledger at current replacement prices,
+not actual expenditure (free deliveries and initial assets need not be purchases).
+refinery-samples.csv retains each refinery's eight-neighbour unweighted ground
+distance from its footprint to reachable spice, contiguous spice-patch amount,
+nearest patch's ground-component amount and union of perimeter-accessible spice.
+The same per-refinery records are embedded as fleet_refinery_metrics JSON in
+samples.csv/houses.csv, so collectors retaining only the main tables lose no fields.
+Geometry ignores fog/transient units, blocks mountains/structures, and runs no
+more than once per 3750 cycles. geometry_cycle identifies stale final snapshots;
+new refineries without a geometry snapshot and unreachable distances are blank.
+Component IDs are row-major root tile indices within that snapshot, not enduring
+field identities. Overlapping refinery supplies must not be summed. Distance is
+not a travel-time model: terrain speed, turns, traffic and carryalls are excluded.
 """
 import base64
 import argparse
@@ -34,6 +57,8 @@ sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
 from probe_profile import finish_game, headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
+from ai_map_features import MAP_FEATURE_FIELDS, rows_from_log  # noqa: E402
+from fleet_observer import FLEET_VALUES, REFINERY_VALUES, fleet_observations  # noqa: E402
 
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
 HOUSE_IDS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
@@ -53,6 +78,7 @@ TROOPER_ITEM = 44
 TROOPER_ENEMY_AIR_FIELDS = {item: 'trooper_' + field for item, field in ENEMY_AIR_FIELDS.items()}
 AIR_COUNT_FIELDS = tuple(ENEMY_AIR_FIELDS.values()) + tuple(TROOPER_ENEMY_AIR_FIELDS.values())
 AIR_ATTRIBUTION_FIELDS = ('air_kill_attribution_complete', 'air_kill_unknown_attribution')
+REFINERY_FIELDS = META + REFINERY_VALUES
 GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes',
                       'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error', 'config_hash', 'options_hash',
                       'map_hash', 'content_hash', 'object_data_hash', 'ai_config_hashes', 'probe_sha256',
@@ -61,15 +87,20 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
                       'air_kill_unknown_attribution', 'capture_mib', 'diagnostics',
                       'mod', 'candidate_house', 'candidate_seat', 'candidate_style', 'sample_case', 'sample_seed', 'research_enabled',
                       'scoring_rule', 'scored_winner_team', 'win_condition', 'team_populations',
-                      'seat_styles', 'style_cohort', 'style_rotation', 'observer_mode')
+                      'seat_styles', 'style_cohort', 'style_rotation', 'observer_mode',
+                      'fleet_observer_status', 'fleet_house_samples', 'fleet_refinery_samples')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                       'power_deficit_cycles', 'required_power_deficit_cycles',
                        'score', 'drawn', 'won', 'flags') + tuple(
     field for detector in DETECTORS for field in (detector, 'eligible_' + detector, 'first_' + detector)
 ) + TROOPER_FIELDS + ('air_kill_telemetry',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS + (
-    'population', 'raw_score', 'raw_drawn', 'raw_won', 'seat_style')
+    'population', 'raw_score', 'raw_drawn', 'raw_won', 'seat_style', 'harvesters', 'refineries') + FLEET_VALUES
 CYCLES_PER_MINUTE = 3750  # The engine's 16 ms fixed simulation tick.
+COMBAT_FIELDS = META + ('house', 'attacker_item', 'target_item', 'target_unit', 'hits',
+                        'hp_removed_milli', 'overkill_milli', 'kills', 'kill_value',
+                        'ttk_cycles', 'capture_status')
 SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_value', 'army_units', 'harvesters',
                  'structures', 'factories', 'kill_value', 'loss_value', 'power', 'need', 'population', 'tax', 'demand',
                  'built', 'structures_lost', 'base_hp', 'yards', 'yard_level', 'queue', 'upgrading', 'waiting', 'fronts',
@@ -78,10 +109,21 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'ledger_enabled', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
                  'yard_storage', 'police_funding', 'army_target', 'unit_limit', 'spice_multiplier', 'sale_credits',
                  'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
-                 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost'
-) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
-SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required')
+                 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                 'power_deficit_cycles', 'required_power_deficit_cycles',
+                 'field_workers', 'field_moving', 'field_harvesting', 'field_travel_sum',
+                 'field_local_spice', 'field_refineries', 'field_moving_cycles', 'field_active_cycles',
+                 'field_return_cycles', 'field_return_trips', 'field_outbound_cycles', 'field_outbound_trips'
+) + FLEET_VALUES + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
+BOOM_FIELDS = ('boom_phase', 'boom_stop_minute', 'boom_own_army', 'boom_enemy_army', 'boom_near_army',
+               'boom_own_economy', 'boom_leader_economy', 'boom_army_ratio_bps', 'boom_economy_ratio_bps',
+               'boom_reachable_spice_share', 'boom_refinery_cap', 'boom_harvester_cap', 'boom_current_workers')
+LOGISTICS_FIELDS = ('harvesters_total', 'harvesters_active', 'harvesters_harvesting', 'harvesters_returning',
+                    'refinery_bays', 'refinery_bays_busy', 'harvesters_lost', 'tax_per_min', 'tax_rate')
+SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required') + BOOM_FIELDS + LOGISTICS_FIELDS
+FIELD_FIELDS = META + ('mod', 'minute', 'cycle', 'field', 'initial', 'remaining')
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
+TEAM_EVENT_FIELDS = META + ('house', 'cycle', 'event', 'data', 'capture_status', 'capture_reasons')
 AIR_KILL_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'attacker', 'victim_house', 'object', 'item',
                           'enemy', 'capture_complete', 'attacker_item', 'attacker_source', 'attacker_firing_house',
                           'attacker_attribution', 'source_enemy', 'attribution_complete')
@@ -137,9 +179,17 @@ TECH_HOUSE_VALUES = ('order_capture', 'spending_complete', 'mean_military_unit_c
 TECH_HOUSE_FIELDS = META + ('mod', 'house') + TECH_HOUSE_VALUES
 CHEAP_PATH_FIELDS = META + ('mod', 'house', 'rule', 'composition_basis', 'item', 'capture_complete',
                             'order_count', 'accepted_credits', 'observed_orders', 'observed_priced_credits', 'missing_prices')
+STARPORT_FIELDS = META + ('mod', 'session', 'seq', 'cycle', 'house', 'event',
+                         'item', 'item_name', 'market_price', 'normal_price', 'factory_price',
+                         'rule', 'spendable_after', 'cash', 'level', 'capture_complete')
+INCOME_TECH_VALUES = ('session', 'seq', 'cycle', 'house', 'event', 'capture_complete',
+                     'level', 'income_per_minute', 'own_army', 'largest_rival',
+                     'local_threat', 'rivals_safe', 'item', 'cost', 'upgrade')
+INCOME_TECH_FIELDS = META + ('mod',) + INCOME_TECH_VALUES
 TECH_TABLES = (('tech-samples.csv', TECH_SAMPLE_FIELDS), ('composition.csv', COMPOSITION_FIELDS),
                ('tech-orders.csv', TECH_ORDER_FIELDS), ('tech-opportunities.csv', TECH_PLAN_FIELDS),
-               ('tech-houses.csv', TECH_HOUSE_FIELDS), ('cheap-paths.csv', CHEAP_PATH_FIELDS))
+               ('tech-houses.csv', TECH_HOUSE_FIELDS), ('cheap-paths.csv', CHEAP_PATH_FIELDS),
+               ('income-tech.csv', INCOME_TECH_FIELDS))
 lock = threading.Lock()
 SAMPLE_FACTORS = {
     'format': ('1v1', '2v2', 'ffa4', 'ffa6'),
@@ -178,6 +228,8 @@ def parse(line, marker):
     return dict(part.split('=', 1) for part in line.split(marker, 1)[1].split() if '=' in part)
 
 
+
+
 def air_kill_capture(out, houses, final_cycle, enabled):
     """Retain actual lethal callbacks and distinguish stream from source completeness.
 
@@ -188,10 +240,11 @@ def air_kill_capture(out, houses, final_cycle, enabled):
     One unknown air callback conservatively censors game-wide exact Trooper totals.
     """
     if not enabled:
-        return dict(status='disabled', reasons='', attribution='disabled', unknown_attribution='', events=[], decisions=[])
+        return dict(status='disabled', reasons='', attribution='disabled', unknown_attribution='', events=[], decisions=[], combat=[])
     paths = sorted((out / 'profile').rglob('events.jsonl'))
     teams = {int(house['house']): int(house['team']) for house in houses}
     reasons, events, decisions = [], [], []
+    combat, first_contact = {}, {}
     limited = False
     if len(paths) != 1:
         reasons.append('missing_capture' if not paths else 'multiple_captures')
@@ -231,12 +284,32 @@ def air_kill_capture(out, houses, final_cycle, enabled):
                         states[seq] = (cycle, data.get('state', {}))
                     elif name in ('production_order', 'capital_upgrade', 'city_yard_upgrade', 'capital_road_batch',
                                    'tech_research_started', 'tech_research_completed', 'tech_savings_plan',
-                                   'construction_completed'):
+                                   'construction_completed', 'ground_hunt', 'team_attack', 'team_help',
+                                   'starport_purchase', 'starport_cash_stockpile',
+                                   'income_tech_state', 'income_tech_hold', 'income_tech_early',
+                                   'base_scramble') or (name == 'attack_deferred'
+                                   and data.get('reason') == 'team_wait_partner'):
                         if 'state' not in data and data.get('state_id') in states:
                             state_cycle, state = states[data['state_id']]
                             data = dict(data, state=state, state_cycle=state_cycle)
                         decisions.append(dict(session=session, seq=seq, cycle=cycle, house=int(event['house']),
                                               event=name, data=data))
+                    elif name == 'combat_target_hit':
+                        target = int(data['target'])
+                        before, after = int(data['hp_before_milli']), int(data['hp_after_milli'])
+                        first_contact.setdefault(target, cycle)
+                        key = (int(event['house']), int(data['attacker_item']),
+                               int(data['target_item']), int(bool(data['target_unit'])))
+                        row = combat.setdefault(key, dict(zip(
+                            ('house', 'attacker_item', 'target_item', 'target_unit'), key),
+                            hits=0, hp_removed_milli=0, overkill_milli=0, kills=0, kill_value=0, ttk_cycles=0))
+                        row['hits'] += 1
+                        row['hp_removed_milli'] += max(0, before - max(0, after))
+                        row['overkill_milli'] += max(0, int(data['damage']) * 1000 - before)
+                        if data['killed']:
+                            row['kills'] += 1
+                            row['kill_value'] += int(data['target_value'])
+                            row['ttk_cycles'] += cycle - first_contact.pop(target)
                     elif name == 'lethal_damage' and int(data['item']) in ENEMY_AIR_FIELDS:
                         victim, attacker_house = int(event['house']), int(data['attacker_house'])
                         object_id, attacker = int(data['object']), int(data['attacker'])
@@ -278,8 +351,10 @@ def air_kill_capture(out, houses, final_cycle, enabled):
         event['capture_complete'] = int(complete)
     status = 'complete' if complete else 'capture_limit' if limited else 'missing' if not paths else 'incomplete'
     unknown = sum(not event['attribution_complete'] for event in events)
+    for row in combat.values():
+        row['capture_status'] = status
     return dict(status=status, reasons=','.join(dict.fromkeys(reasons)), events=events, decisions=decisions,
-                attribution=('unknown' if unknown else 'complete') if complete else status,
+                combat=list(combat.values()), attribution=('unknown' if unknown else 'complete') if complete else status,
                 unknown_attribution=unknown if paths else '')
 
 
@@ -537,9 +612,18 @@ def tech_audit(lines, samples, final, capture):
                 ('quoted_diversion_4m_plans', lambda plan: plan['quoted_diversion_4m'] == 1)):
             row[field] = sum(condition(plan) for plan in own_plans) if own_plans and complete else ''
         house_rows.append(row)
+    income_tech = []
+    for event in decisions:
+        if event['event'] not in ('income_tech_state', 'income_tech_hold', 'income_tech_early'):
+            continue
+        row = {key: event[key] for key in ('session', 'seq', 'cycle', 'house', 'event')}
+        row.update({key: event['data'].get(key, '') for key in INCOME_TECH_VALUES
+                    if key not in row and key != 'capture_complete'})
+        row['capture_complete'] = int(complete)
+        income_tech.append(row)
     return dict(zip((name for name, _ in TECH_TABLES),
                     (list(tech_samples.values()), composition_rows(lines), orders, plans, house_rows,
-                     cheap_path_rows(orders, complete))))
+                     cheap_path_rows(orders, complete), income_tech)))
 
 
 def balanced_draw(levels, count, rng):
@@ -555,18 +639,94 @@ def game_limit(args, mod):
     return min(args.minutes, 120 if mod == 'dunecity' else 90)
 
 
+def manifest_sample_schedule(args):
+    """Explicit preregistered map cells, shared unchanged by every screen arm."""
+    path = Path(args.case_manifest)
+    if not path.is_absolute():
+        path = root / path
+    manifest = json.loads(path.read_text())
+    if manifest.get('schema_version') != 1 or not manifest.get('cases'):
+        raise ValueError('Case manifest requires schema_version=1 and a nonempty cases list')
+    if args.mod not in ('vanilla', 'dunecity'):
+        raise ValueError('Case manifest requires one explicit content mode')
+    sample_seed = int(manifest['sample_seed'])
+    if not 0 <= sample_seed <= 0xffffffff:
+        raise ValueError('Case manifest sample_seed must be unsigned 32-bit')
+    identity = hashlib.sha256(json.dumps(manifest, sort_keys=True,
+                                        separators=(',', ':')).encode()).hexdigest()[:16]
+    games = []
+    minutes = game_limit(args, args.mod)
+    for index, cell in enumerate(manifest['cases']):
+        fmt, size = cell['format'], int(cell['size'])
+        spice, tech, seed = cell['spice_level'], int(cell['initial_tech']), int(cell['seed'])
+        enemy = cell.get('difficulty', 'brutal')
+        rock, mountain = int(cell.get('rock', 30)), int(cell.get('mountain', 5))
+        # Random Skirmish map sizes and 5% terrain steps: scenario-match rejects
+        # any recipe the generator would clamp, so fail before queueing arms.
+        if (fmt not in ('1v1', '2v2', 'ffa4', 'ffa6') or size not in (64, 96, 128, 160, 192, 256)
+                or spice not in SPICE or spice == 'none' or not 1 <= tech <= 9
+                or not 0 <= seed <= 0xffffffff or enemy not in CLASSES
+                or rock % 5 or mountain % 5 or not 5 <= rock <= 90 or not 0 <= mountain <= 50
+                or rock + mountain >= 100):
+            raise ValueError(f'Unsupported case-manifest cell {index + 1}')
+        count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
+        houses = list(HOUSES[:count])
+        shift = index % count
+        houses = houses[shift:] + houses[:shift]
+        teams = [1, 1, 2, 2] if fmt == '2v2' else list(range(1, count + 1))
+        spec = (f'size={size},base={args.base},army={args.army},city={args.city},'
+                f'spice={SPICE[spice]},sand={100-rock-mountain},rock={rock},mountain={mountain},'
+                f'tech={tech},credits=3000,seed={seed}')
+        prefix = (f'sample/{args.mod}/design-{identity}/s{sample_seed}-n{len(manifest["cases"])}/'
+                  f'{args.base}-a{args.army}-c{args.city}/{index + 1:03d}/{size}/{spice}/'
+                  f'{fmt}/{enemy}/t{tech}/{minutes}m/{seed}')
+        for swapped, seat in enumerate((0, 2 if fmt == '2v2' else count - 1)):
+            sides = [(house, team, 'brutal' if i == seat else enemy)
+                     for i, (house, team) in enumerate(zip(houses, teams))]
+            games.append(dict(id=f'{prefix}/{"swap" if swapped else "original"}',
+                              format=fmt, size=size, spice_level=spice, initial_tech=tech,
+                              difficulty=enemy, seed=seed, variant=args.variant, sides=sides,
+                              base=args.base, army=args.army, city=args.city, limit=minutes,
+                              style=args.style or 'default', mod=args.mod, minutes=minutes,
+                              skirmish=spec, candidate_house=HOUSE_IDS[houses[seat]],
+                              candidate_seat='swapped' if swapped else 'original',
+                              candidate_style=getattr(args, 'candidate_style', None) or '',
+                              sample_case=index + 1, sample_seed=sample_seed,
+                              require_research=args.mod == 'dunecity'))
+    return games
+
+
 def sample_schedule(args):
+    if getattr(args, 'case_manifest', None):
+        return manifest_sample_schedule(args)
     games = []
     mods = ('vanilla', 'dunecity') if args.mod == 'both' else (args.mod,)
-    for mod in mods:
+    for mod_index, mod in enumerate(mods):
         minutes = game_limit(args, mod)
         rng = random.Random(f'{args.sample_seed}/{mod}')
         factors = dict(SAMPLE_FACTORS, spice_level=tuple(SPICE)[int(mod == 'vanilla'):],
                        initial_tech=tuple(range(3 if mod == 'vanilla' else 1, 10)))
+        if getattr(args, 'sample_ffa', False):
+            factors.update(format=('ffa4', 'ffa6'), difficulty=('hard', 'brutal'),
+                           spice_level=('low', 'medium', 'high'), initial_tech=(3, 6, 9))
+        if args.sample_techs:
+            factors['initial_tech'] = tuple(args.sample_techs)
+        if getattr(args, 'sample_formats', None) is not None:
+            factors['format'] = tuple(args.sample_formats)
         draws = {factor: balanced_draw(levels, args.cases, rng) for factor, levels in factors.items()}
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
-            seed = rng.getrandbits(32)
+            if getattr(args, 'sample_enemy', None):
+                case['difficulty'] = args.sample_enemy
+            drawn_seed = (args.map_seed_start + index if args.map_seed_start is not None else
+                          args.sample_seed + index + (args.cases if mod == 'dunecity' and args.mod == 'both' else 0)
+                          if getattr(args, 'sample_ffa', False) else rng.getrandbits(32))
+            seed = (args.game_seed_base + mod_index * args.cases + index
+                    if getattr(args, 'game_seed_base', None) is not None else drawn_seed)
+            if args.sample_game_seeds:
+                seed = args.sample_game_seeds[index]
+            if args.sample_game_seed_base is not None:
+                seed = args.sample_game_seed_base + index
             fmt, enemy = case['format'], case['difficulty']
             count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
             houses = list(HOUSES[:count])
@@ -592,6 +752,40 @@ def sample_schedule(args):
                                   candidate_style=getattr(args, 'candidate_style', None) or '',
                                   sample_case=index + 1, sample_seed=args.sample_seed,
                                   require_research=mod == 'dunecity'))
+    return games
+
+
+def team_study_schedule(args):
+    """Fresh explicit seeds; one styled Brutal, native-tier ally/enemies, both team starts."""
+    games = []
+    mods = ('vanilla', 'dunecity') if args.mod == 'both' else (args.mod,)
+    for mod in mods:
+        for index, seed in enumerate(args.seeds):
+            size = args.sizes[index % len(args.sizes)]
+            spice = args.spice[(index // 2) % len(args.spice)]
+            tech = (3, 6, 9)[(index // 3 + index) % 3]
+            enemy = args.difficulties[index % len(args.difficulties)]
+            houses = list(HOUSES[:4])
+            shift = index % 4
+            houses = houses[shift:] + houses[:shift]
+            teams = (1, 1, 2, 2)
+            minutes = game_limit(args, mod)
+            spec = (f'size={size},base={args.base},army={args.army},city={args.city},'
+                    f'spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
+                    f'tech={tech},credits=3000,seed={seed}')
+            for seat in (0, 2):
+                sides = [(house, team, 'brutal' if i == seat else enemy)
+                         for i, (house, team) in enumerate(zip(houses, teams))]
+                games.append(dict(
+                    id=f'team-study/{mod}/{args.base}-a{args.army}-c{args.city}/{size}/{spice}/'
+                       f'{enemy}/t{tech}/{minutes}m/{seed}/seat{seat}',
+                    seed=seed, size=size, spice_level=spice, format='2v2', difficulty=enemy,
+                    variant=args.variant, sides=sides, base=args.base, army=args.army, city=args.city,
+                    limit=minutes, minutes=minutes, style=args.style or 'default', mod=mod,
+                    initial_tech=tech, skirmish=spec, candidate_house=HOUSE_IDS[houses[seat]],
+                    candidate_seat='original' if seat == 0 else 'swapped',
+                    candidate_style=args.candidate_style or '', sample_case=index + 1,
+                    sample_seed='', require_research=mod == 'dunecity'))
     return games
 
 
@@ -649,7 +843,8 @@ def seat_style_schedule(args, games):
 
 
 def schedule(args):
-    games = sample_schedule(args) if args.mode == 'sample' else matrix_schedule(args)
+    games = (team_study_schedule(args) if args.mode == 'team-study'
+             else sample_schedule(args) if args.mode == 'sample' else matrix_schedule(args))
     games = seat_style_schedule(args, games)
     if args.shard:
         k, n = args.shard
@@ -751,7 +946,8 @@ def detect(samples, observer=True):
     seen = {'starport': False, 'radar': False, 'heavy': False, 'ix': False}
     for sample in sorted(samples, key=lambda row: int(row['cycle'])):
         s = {key: int(value) for key, value in sample.items()
-             if key not in META and key not in ('fronts', 'flags') and value != ''}
+             if key not in META and key not in ('fronts', 'flags', 'boom_phase', 'fleet_refinery_metrics')
+             and value != ''}
         minute, cycle = s['minute'], s['cycle']
         alive = bool(s['alive'])
         city = alive and s['yards'] > 0
@@ -807,8 +1003,8 @@ def seat_style_assignments(game):
 
 def seat_style_inputs(args, game, out):
     """Constant per-house config overlays; no genome search or within-game phase changes."""
-    if getattr(args, 'candidate_style', None) and (args.mode != 'sample' or args.style):
-        raise ValueError('--candidate-style requires --mode sample and cannot be combined with --style')
+    if getattr(args, 'candidate_style', None) and (args.mode not in ('sample', 'team-study') or args.style):
+        raise ValueError('--candidate-style requires --mode sample|team-study and cannot be combined with --style')
     assignments = {house: style for house, style in seat_style_assignments(game).items() if style != 'control'}
     if not assignments:
         return None
@@ -993,11 +1189,15 @@ def play(args, scratch, binary, game):
                    if 'PROBE_DIGEST:' in line and 'final=1' in line), '')
     merged = defaultdict(dict)
     for line in lines:
-        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_TROOPERS:'):
+        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_TROOPERS:',
+                       'DUNECITY_LOGISTICS:', 'FIELD_TRAVEL_AUDIT:'):
             if marker in line:
                 data = parse(line, marker)
                 data.update(json.loads(data.pop('economy', '{}')))
                 merged[(int(data['house']), int(data['cycle']))].update(data)
+    fleet_samples, refinery_samples = fleet_observations(lines)
+    for key, data in fleet_samples.items():
+        merged[key].update(data)
     samples = [dict(metadata(game), **data) for _, data in sorted(merged.items())]
     capture = air_kill_capture(out, final, max((int(sample['cycle']) for sample in samples), default=0),
                                telemetry)
@@ -1008,7 +1208,8 @@ def play(args, scratch, binary, game):
     air_final = {int(house['house']): dict(house=house['house'], cycle=air_cycle) for house in final}
     add_air_kill_samples(list(air_final.values()), capture)
     observer_seen = any('DUNECITY_AUDIT:' in line for line in lines)
-    missing = (not observer_off and any('power' not in sample for sample in samples))
+    missing = (not observer_off and (not samples or any(
+        'power' not in sample or 'fleet_steps' not in sample for sample in samples)))
     wrong_observer = observer_off and observer_seen
     error = '' if process.returncode == 0 and result and samples and not missing and not wrong_observer else f'rc={process.returncode};incomplete={int(missing)}'
     if wrong_observer:
@@ -1037,6 +1238,8 @@ def play(args, scratch, binary, game):
     row.update(seat_styles=json.dumps(game.get('seat_styles', {}), sort_keys=True) if game.get('seat_styles') else '',
                style_cohort=game.get('style_cohort', ''), style_rotation=game.get('style_rotation', ''),
                observer_mode='off' if observer_off else 'on')
+    row.update(fleet_observer_status='off' if observer_off else 'complete' if not missing else 'incomplete',
+               fleet_house_samples=len(fleet_samples), fleet_refinery_samples=len(refinery_samples))
     row.update({field: setup.get(field, '') for field in (
         'config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
     row.update(ai_config_hashes=','.join(f'{item["house"]}:{item["config_hash"]}' for item in configs),
@@ -1058,6 +1261,8 @@ def play(args, scratch, binary, game):
         (results / f'failed-{out.name}.txt').write_text(game['id'] + '\n' + process.stdout[-4000:] + '\n'
                                                        + process.stderr[-4000:] + '\n' + '\n'.join(lines[-80:]))
     else:
+        append(results / 'map-features.csv', MAP_FEATURE_FIELDS,
+               rows_from_log(lines, game, setup))
         groups = defaultdict(list)
         for sample in samples:
             groups[int(sample['house'])].append(sample)
@@ -1092,22 +1297,49 @@ def play(args, scratch, binary, game):
                 first_attack_minute=min(attacks[number]) if attacks[number] else '',
                 air_kill_telemetry=capture['status'],
                 **{key: last.get(key, '') for key in TROOPER_FIELDS},
+                **{key: last.get(key, '') for key in ('harvesters', 'refineries') + FLEET_VALUES},
                 **{key: air_final[number][key] for key in AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS},
-                **{key: last.get(key, '') if telemetry or key == 'storage_full_cycles' else ''
-                   for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost')},
+                **{key: last.get(key, '') if telemetry or key not in ('storage_overflow_cycles', 'storage_income_lost') else ''
+                   for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                               'power_deficit_cycles', 'required_power_deficit_cycles')},
                 flags='/'.join(d for d in DETECTORS if detectors[d])))
+        append(results / 'refinery-samples.csv', REFINERY_FIELDS,
+               [dict(metadata(game), **sample) for sample in refinery_samples])
         append(results / 'samples.csv', SAMPLE_FIELDS, samples)
+        append(results / 'spice-fields.csv', FIELD_FIELDS,
+               [dict(metadata(game), mod=game.get('mod', 'dunecity'), **parse(line, 'SPICE_FIELD_AUDIT:'))
+                for line in lines if 'SPICE_FIELD_AUDIT:' in line])
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
         if telemetry:
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
             append(results / 'air-kills.csv', AIR_KILL_FIELDS,
                    [dict(metadata(game), **event) for event in capture['events']])
+            append(results / 'team-events.csv', TEAM_EVENT_FIELDS,
+                   [dict(metadata(game), house=event['house'], cycle=event['cycle'], event=event['event'],
+                         data=json.dumps(event['data'], sort_keys=True, separators=(',', ':')),
+                         capture_status=capture['status'], capture_reasons=capture['reasons'])
+                    for event in capture['decisions']
+                    if event['event'] in ('ground_hunt', 'team_attack', 'team_help', 'base_scramble')
+                    or event['event'] == 'attack_deferred'
+                    and event['data'].get('reason') == 'team_wait_partner'])
+            append(results / 'combat.csv', COMBAT_FIELDS,
+                   [dict(metadata(game), **entry) for entry in capture['combat']])
         supplemental = ({name: [] for name, _ in TECH_TABLES} if observer_off
                         else tech_audit(lines, samples, final, capture))
         for filename, fields in TECH_TABLES:
             append(results / filename, fields, [dict(metadata(game), mod=game.get('mod', 'dunecity'), **entry,
                                                    difficulty=difficulty_of[int(entry['house'])])
                                                for entry in supplemental[filename]])
+        if telemetry:
+            append(results / 'starport-purchases.csv', STARPORT_FIELDS,
+                   [dict(metadata(game), mod=game.get('mod', 'dunecity'),
+                         **{key: event[key] for key in ('session','seq','cycle','house','event')},
+                         **{key: event['data'].get(key, '') for key in (
+                             'item','item_name','market_price','normal_price','factory_price',
+                             'rule','spendable_after','cash','level')},
+                         capture_complete=int(capture['status'] == 'complete'))
+                    for event in capture['decisions']
+                    if event['event'] in ('starport_purchase','starport_cash_stockpile')])
         if getattr(args, 'keep_telemetry', False):
             row['diagnostics'] = retain_telemetry(results, out)
     append(results / 'games.csv', GAME_FIELDS, [row])
@@ -1139,7 +1371,11 @@ def run(args):
     results.mkdir(parents=True, exist_ok=True)
     for name, fields in (('games.csv', GAME_FIELDS), ('houses.csv', HOUSE_FIELDS),
                          ('samples.csv', SAMPLE_FIELDS), ('waves.csv', ATTACK_FIELDS),
-                         ('air-kills.csv', AIR_KILL_FIELDS)) + TECH_TABLES:
+                         ('air-kills.csv', AIR_KILL_FIELDS),
+                         ('map-features.csv', MAP_FEATURE_FIELDS),
+                         ('refinery-samples.csv', REFINERY_FIELDS),
+                         ('team-events.csv', TEAM_EVENT_FIELDS),
+                         ('combat.csv', COMBAT_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
     observer_mode = 'off' if getattr(args, 'observer_off', False) else 'on'
     if any(row.get('observer_mode') != observer_mode for row in read(results / 'games.csv')):
@@ -1162,7 +1398,7 @@ def run(args):
                     row = future.result()
                     print(f'[{n}/{len(todo)}] {row["id"]}: {row["minutes"]} min {row["error"]}', flush=True)
     report([results])
-    if args.mode == 'sample':
+    if args.mode in ('sample', 'team-study'):
         selected = {game['id'] for game in schedule(args)}
         rows = {row['id']: row for row in read(results / 'games.csv')}
         if any(game_id not in rows or rows[game_id]['error'] for game_id in selected):
@@ -1931,17 +2167,36 @@ parser.add_argument('--tech', type=int, choices=range(1, 10), default=9,
 parser.add_argument('--base', choices=('cy', 'small', 'medium', 'large', 'fortress'), default='medium')
 parser.add_argument('--army', type=int, choices=range(7), default=2)
 parser.add_argument('--city', type=int, choices=range(6), default=0)
-parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='matrix',
-                    help='sample: balanced seeded factor draws, each played from two candidate seats')
+parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample', 'team-study'), default='matrix',
+                    help='sample: balanced random draws; team-study: explicit seeds, both team starts, native opponents')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--case-manifest', type=Path,
+                    help='sample only: explicit schema-v1 case JSON for common-seed screens; '
+                         'format/size/spice/tech/composition are recorded in the manifest and start receipts')
+parser.add_argument('--sample-enemy', choices=('easy', 'medium', 'hard', 'brutal'),
+                    help='sample: fix every non-candidate controller to this tier; factor/map draws stay unchanged')
+parser.add_argument('--sample-formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6'), default=None,
+                    help='sample: override only the balanced format deck (default: all four formats)')
+parser.add_argument('--game-seed-base', type=int,
+                    help='sample: consecutive engine seeds; --mod both uses Vanilla then DuneCity blocks')
+parser.add_argument('--sample-game-seeds', nargs='+', type=int,
+                    help='sample: explicit game seeds, exactly one per case; paired seats reuse the seed')
+parser.add_argument('--sample-ffa', action='store_true',
+                    help='sample: FFA4/FFA6, Hard/Brutal rivals, L/M/H spice, tech 3/6/9; '
+                         'sequential map seeds starting at --sample-seed (Vanilla then DuneCity)')
+parser.add_argument('--sample-game-seed-base', type=int,
+                    help='sample: consecutive engine seeds beginning here (same range for both mods)')
+parser.add_argument('--sample-techs', nargs='+', type=int, choices=range(1, 10),
+                    help='sample: restrict the balanced initial-tech deck; default schedule unchanged')
+parser.add_argument('--map-seed-start', type=int, help='sample: consecutive explicit map seeds, independent of factor draws')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
 styles = parser.add_mutually_exclusive_group()
 styles.add_argument('--style', help='All-QuantBot overlay from tests/ai/play-styles/ (not candidate-only)')
 styles.add_argument('--candidate-style',
-                    help='sample only: play-style INI applied only to the candidate seat; opponents keep native config')
+                    help='sample/team-study: play-style INI applied only to the candidate seat; opponents keep native config')
 styles.add_argument('--seat-styles', type=seat_styles_argument, metavar='control,A,B,C',
                     help='Constant per-seat INIs, rotated through every seat; native control fills spare seats')
 parser.add_argument('--observer-off', action='store_true',
@@ -1962,10 +2217,22 @@ if not 256 <= args.capture_mib <= 4096:
     parser.error('Use 256-4096 MiB of capture space')
 if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:
     parser.error('Use positive --cases and an unsigned 32-bit --sample-seed')
-if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and args.mod == 'Dune2R':
-    parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
-if args.candidate_style and args.mode != 'sample':
-    parser.error('--candidate-style requires --mode sample')
+if args.sample_game_seeds and (args.mode != 'sample' or len(args.sample_game_seeds) != args.cases
+                              or len(set(args.sample_game_seeds)) != args.cases
+                              or any(not 0 <= seed <= 0xffffffff for seed in args.sample_game_seeds)):
+    parser.error('--sample-game-seeds needs sample mode and one distinct unsigned 32-bit seed per case')
+if args.case_manifest and (args.mode != 'sample' or args.mod == 'both'):
+    parser.error('--case-manifest requires --mode sample and one explicit --mod')
+if args.mod == 'both' and args.mode not in ('sample', 'team-study') or args.mode in ('sample', 'team-study') and args.mod == 'Dune2R':
+    parser.error('--mode sample|team-study accepts --mod vanilla|dunecity|both')
+if args.candidate_style and args.mode not in ('sample', 'team-study'):
+    parser.error('--candidate-style requires --mode sample|team-study')
+if args.sample_game_seed_base is not None and not 0 <= args.sample_game_seed_base <= 0xffffffff-args.cases+1:
+    parser.error('--sample-game-seed-base range must fit unsigned 32-bit seeds')
+if args.game_seed_base is not None and (
+        args.mode != 'sample' or args.game_seed_base < 0
+        or args.game_seed_base + args.cases * (2 if args.mod == 'both' else 1) - 1 > 0xffffffff):
+    parser.error('--game-seed-base requires sample mode and an unsigned 32-bit engine seed range')
 if args.compare:
     compare(*args.compare)
 elif args.report_dirs:
@@ -1974,11 +2241,11 @@ elif args.list:
     games = schedule(args)
     for game in games:
         candidate = (f'candidate_house={game["candidate_house"]} seat={game["candidate_seat"]} '
-                     f'research_required={int(game["require_research"])}') if args.mode == 'sample' else ''
+                     f'research_required={int(game["require_research"])}') if args.mode in ('sample', 'team-study') else ''
         print(game['id'], game['skirmish'], candidate)
     limits = '/'.join(str(limit) for limit in sorted({game['limit'] for game in games}))
     print(f'{len(games)} games, {sum(len(game["sides"]) for game in games)} houses, {limits} game-minute caps')
-    if args.mode == 'sample':
+    if args.mode in ('sample', 'team-study'):
         sample_coverage(games)
 elif not args.results:
     parser.error('--results is required to play games')

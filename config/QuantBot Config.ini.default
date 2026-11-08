@@ -351,18 +351,68 @@ Strategy=false
 # absent. It only acts when the match's Research Lab game option is enabled.
 # Basic income, power, defence and accepted production commitments keep their funding first.
 [Force Concentration]
+# Palace trials, Custom Hard/Brutal with immutable initial spice; 0 preserves native.
+# Target: 1 economy clusters; 2 economy or army by true purchase value.
+# Timing: 1 hunting wave; 2 engaged wave. Bounded release every 60/120 seconds.
+PalaceValueTarget=0
+PalaceWaveTiming=0
+# Combat target experiments: 0 preserves native targeting and config hash.
+# Focus 1: lowest HP with 75% switch hysteresis; 2: strict lowest HP.
+# Priority 1: artillery/rocket infantry first; 2: harvesters before artillery.
+FocusFireLevel=0
+TargetPriorityLevel=0
 # Independent vanilla multi-enemy tuning; inert in 1v1, two-team matches, cities and campaigns.
 VanillaFfaWeakestTarget=0
 VanillaFfaNearbyTarget=0
 VanillaFfaReserve=0
 VanillaFfaFullWaves=0
 VanillaFfaStarportAfterWave=0
+# Starport experiments: 0=native; Buying 1=80%,2=100% factory-price ceiling.
+# Stockpile 1/2 retains the price of one/two factory units for a cheaper window.
+# EconomyPriority 1=workers before transport,2=also the economy planner's MCV.
+StarportBuying=0
+StarportCashStockpile=0
+StarportEconomyPriority=0
 # Replacement production is scoped to vanilla FFA with at least five original players.
 VanillaFfaThreatProduction=0
 VanillaFfaSingleFront=0
 VanillaFfaLightWorkingCash=0
 # Optional IX/Palace deferral is scoped to vanilla FFA with at least five original players.
 VanillaFfaFundedTech=0
+# Fixed vanilla spice-boom families; all OFF and never used in no-spice or asymmetric survival games.
+# Harvester-heavy: 8/12 workers, two refineries, normal military; refinery-wide: 4/6 bays, two workers/bay.
+# Greedy: 16 workers / 6 refineries until 6/10/12 min, then all optional growth cash goes to army until 20 min.
+# Reactive: true-state reachable-army and economic-size ratios, with immediate near-base army conversion.
+# Existing accepted queues are not cancelled. The test styles scope every family to FFA.
+VanillaHarvesterBoom=0
+VanillaRefineryBoom=0
+VanillaGreedyBoom=0
+VanillaReactiveBoom=0
+VanillaBoomFfaOnly=0
+# Default-OFF reachable-spice gate for the refinery/harvester openings; fixed levels 4000/8000.
+VanillaBoomSpiceGate=0
+VanillaBoomSpicePerRefinery=4000
+VanillaHarvesterBoomWorkers=8
+VanillaRefineryBoomRefineries=4
+VanillaGreedyBoomMinutes=6
+VanillaReactiveArmyRatioBps=6000
+VanillaReactiveEconomyRatioBps=12000
+# Independent Custom Brutal Vanilla FFA experiments: original occupied FFA4/6, no allies, spice > 0.
+# Threat and blend have only two fixed levels: 5000 (50%) or 10000 (100%). Neither enables boom.
+VanillaCoreDefence=0
+VanillaCoreDefenceThreatBps=5000
+VanillaArmyCounters=0
+VanillaArmyCounterBlendBps=5000
+# Vanilla/DuneCity FFA4/FFA6 vulture: 0 native, 1 rival <60%, 2 rival <90% of strike force.
+# Mutual current ground-unit combat replaces rolling history; no save-format change.
+FfaVultureLevel=0
+# Custom Vanilla/DuneCity teams only; the styled seat coordinates its allied QuantBot's waves.
+TeamSynchroniseAttacks=0
+# Ally-base rescue as a percent of ground army HP value: 0 (native), 25, or 50.
+TeamDefenceSharePercent=0
+# Experimental custom spice games: 0=native, 1=income >= tech cost/5min,
+# 2=income >= 1.5*tech cost/5min. Safe full-knowledge rivals allow earlier tech.
+TechIncomeTiming=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0
@@ -422,14 +472,54 @@ CityZoneDefence=0
 CityAdvancedTech=0
 # Experimental: keep city research funded after the opening fleet reaches its target.
 CityContinuousResearch=0
+# Experimental: 0 native; 1 intended-unit technology ceiling; 2 also protect income.
+CityResearchOrder=0
 # Experimental: stop extra spice capacity when the existing fleet can deplete its share.
 CitySpiceTransition=0
+# Experimental: local spice/refinery threshold for a guarded field outpost (0, 4000, 8000).
+SpiceFieldExpansion=0
 # Experimental: preserve working-capital runway for optional spice-city MCVs/upgrades.
 CitySpiceCapacityRunway=0
 # Experimental: give a single yard profitable RCI growth after ordinary infrastructure.
 CitySingleYardGrowth=0
 # Experimental: cash-constrained spice cities reserve bounded latent zone growth power.
 CityPowerGrowthHorizon=0
+# Experimental coherent boom families: spice-backed Custom city FFA with 5+ occupied controllers.
+# All are OFF; never selected by map name, mission, seed, live house count or fog.
+CityBoomWorkers=0
+CityBoomRefineries=0
+CityBoomGreedy=0
+CityBoomShortTax=0
+CityBoomReactive=0
+# Worker-heavy uses 16/24 workers on two bays; refinery-wide uses 6/10 bays and two workers per bay.
+CityBoomWorkerGoal=16
+CityBoomRefineryGoal=6
+# Greedy and low-tax openings stop at 6/10 minutes; low tax is 3%, then normal 7%.
+CityBoomGreedyMinutes=6
+CityBoomTaxMinutes=6
+# Full-knowledge reactive boom: army/strongest reachable army 0.6/0.9; economy/leader 1.2/1.5.
+CityBoomArmyRatioBps=6000
+CityBoomEconomyRatioBps=12000
+# Spice gate for every boom family (all OFF): boom only while the house's reachable, apportioned
+# spice pays each planned worker/bay back within 10/15 minutes and beats city tax payback.
+CityBoomSpiceGate=0
+CityBoomPaybackMinutes=10
+# City FFA (4+ occupied controllers) harvester efficiency, all OFF:
+# nearest uncontested spice avoiding true hostile armies within 6/10 tiles;
+CityHarvestFieldChoice=0
+CityHarvestFieldSafetyTiles=6
+# refineries sited by own spice within 8/12 tiles, with returns spread across bays;
+CityRefineryLogistics=0
+CityRefinerySiteTiles=8
+# lost workers replaced first while apportioned spice pays back within 10/15 minutes.
+CityHarvesterReplacement=0
+CityHarvesterReplacementMinutes=10
+# City FFA services (OFF): police land-value siting/funding at 60/100%; growth-stage tax
+# 3% below 3000/6000 displayed population, normal 7% at/above it.
+CityLandValueServices=0
+CityLandValueFundingPercent=60
+CityGrowthStageTax=0
+CityGrowthTaxPopulation=3000
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
 # Experimental 3-rocket baseline (4 for Hard+ at 16 structures), with a full income budget.
@@ -441,6 +531,12 @@ CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.
 # Bound storage projects to one in flight and the absolute credit ceiling.
 StorageCapacity=1
+# Opt-in power/storage discipline: 0 preserves the native decisions and hash.
+# Lead wind generation by 1 or 2 selected consumer buildings (raw power also prevents decay).
+PowerLeadBuildings=0
+# Earned-credit occupancy backstop: 0 native forecast, or a Silo at 80/90 percent.
+# Both research controls stay inert when no map spice remains.
+SiloFillPercent=0
 # Fund Custom Brutal powered non-city production with the established spice policy.
 # Campaigns, engine power requirements and unit-mix learning are unchanged.
 FundedClassicProduction=1
@@ -458,3 +554,14 @@ LauncherKiteExtraDistance=2
 # reachable spice, affordable units, income and pending cargo are all exhausted.
 # Manual orders, defence and saboteur ownership are unchanged; 0 keeps legacy holds.
 ExhaustedArmyDispatch=1
+# Experimental fixed fleet ratios; no effect unless the master switch is on.
+# Reachable remaining spice is shared across the originally occupied houses.
+# Existing assets and accepted orders are never removed.
+EconomicFleetRatios=0
+FleetHarvestersPerBay=3
+FleetCarryallQuarters=1
+FleetRepairYards=1
+# Experimental pre-ladder (1.0.807) Custom Medium, default 0 = current. 1: no banked-credit
+# surplus army and no heavy-factory walk after the starport opening; 2: also the standing
+# 40% raid share instead of whole-army waves. Easy/Hard/Brutal and campaigns are unchanged.
+MediumClassic=0

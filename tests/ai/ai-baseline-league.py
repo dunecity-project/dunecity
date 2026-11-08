@@ -205,7 +205,10 @@ def probe_source():
     definitions = ''.join('#define BASELINE_HAS_%s %d\n' % (name, enabled) for name, enabled in flags.items())
     position = main.index('int main(')
     observer = (root / 'tests/ai/ai-baseline-observer.inc').as_posix()
-    return main[:position] + definitions + '#include "' + observer + '"\n' + main[position:]
+    compatibility = ''
+    if sys.platform not in ('darwin', 'win32'):
+        compatibility = '#include "' + (root / 'tests/ai/robustlist-iterator-traits.inc').as_posix() + '"\n'
+    return main[:position] + definitions + compatibility + '#include "' + observer + '"\n' + main[position:]
 
 
 def build_probe(args, scratch):
@@ -219,7 +222,7 @@ def build_probe(args, scratch):
         obj = scratch / 'baseline-main.obj'
         binary = game_dir / ('ai-baseline-probe-' + hashlib.sha256(str(scratch).encode()).hexdigest()[:12] + '.exe')
     else:
-        target = 'bin/dunecity.app/Contents/MacOS/dunecity'
+        target = 'bin/dunecity.app/Contents/MacOS/dunecity' if sys.platform == 'darwin' else 'bin/dunecity'
         commands = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
         compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
         for option in ('-include', '-MT', '-MF'):
@@ -232,16 +235,24 @@ def build_probe(args, scratch):
         compile_command[compile_command.index('-o') + 1] = '@OBJECT@'
         compile_command[compile_command.index('-c') + 1] = '@SOURCE@'
         compile_command.append('-fno-access-control')
+        if sys.platform != 'darwin':
+            # Ninja removes Linux's response file after linking; compdb -x expands its object list.
+            commands = [entry['command'] for entry in json.loads(subprocess.check_output(
+                ['ninja', '-C', str(build), '-t', 'compdb', '-x'], text=True))]
         link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
         link = link[link.index('&&') + 1:]
         link = link[:link.index('&&')]
         link[link.index('-o') + 1] = '@BINARY@'
         link = ['@OBJECT@' if arg.endswith('/main.cpp.o') else arg for arg in link]
         obj = scratch / 'baseline-main.o'
-        contents = scratch / 'ai-baseline-probe.app/Contents'
-        (contents / 'MacOS').mkdir(parents=True, exist_ok=True)
-        (contents / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-        binary = contents / 'MacOS/ai-baseline-probe'
+        if sys.platform == 'darwin':
+            contents = scratch / 'ai-baseline-probe.app/Contents'
+            (contents / 'MacOS').mkdir(parents=True, exist_ok=True)
+            (contents / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
+            binary = contents / 'MacOS/ai-baseline-probe'
+        else:
+            # SDL_GetBasePath must resolve the same bin/data as the native Linux executable.
+            binary = build / 'bin' / ('ai-baseline-probe-' + hashlib.sha256(str(scratch).encode()).hexdigest()[:12])
     replacements = {'@OBJECT@': str(obj), '@SOURCE@': str(source), '@BINARY@': str(binary), '@STAGING@': str(scratch)}
     def fill(arg):
         for old, value in replacements.items():

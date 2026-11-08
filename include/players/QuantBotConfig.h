@@ -151,6 +151,11 @@ struct QuantBotConfig {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
         bool focusFire;
+        /// Experimental all-mode ground combat micro: 0 native, 1 lowest HP with
+        /// native switch hysteresis, 2 strict lowest HP. Does not change movement goals.
+        int focusFireLevel;
+        /// 0 native classes, 1 artillery/rockets first, 2 harvesters then artillery.
+        int targetPriorityLevel;
         /// Wave members not yet fighting join a fight of their army within 24 tiles.
         bool converge;
         /// The wave readiness and house attack threshold as a percentage of the difficulty's
@@ -222,6 +227,12 @@ struct QuantBotConfig {
         /// With a funded worker seed and local ground production, defer the first optional
         /// Starport until a ground wave launches; required first-wave/recovery capital stays legal.
         bool vanillaFfaStarportAfterWave;
+        /// Starport experiments: 0 preserves native purchasing; price levels 1/2
+        /// admit <=80/100% factory cost, savings levels retain 1/2 factory orders,
+        /// priority levels buy workers first / workers then a planned MCV.
+        int starportBuying;
+        int starportCashStockpile;
+        int starportEconomyPriority;
         /// In vanilla FFA with at least five original players, below ordinary readiness,
         /// live ground fire funds replacements before optional growth, retaining the worker seed.
         bool vanillaFfaThreatProduction;
@@ -234,10 +245,48 @@ struct QuantBotConfig {
         /// In vanilla FFA with at least five original players, fund up to eight sustainable
         /// workers and ordinary readiness before optional IX/Palace savings or orders.
         bool vanillaFfaFundedTech;
+        /// Fixed, default-OFF vanilla opening families; each kind has only its preregistered levels.
+        bool vanillaHarvesterBoom;
+        bool vanillaRefineryBoom;
+        bool vanillaGreedyBoom;
+        bool vanillaReactiveBoom;
+        /// At least three original occupied hostile controllers and multiple hostile teams.
+        bool vanillaBoomFfaOnly;
+        /// Cap refinery/harvester openings by their nearest-base share of reachable remaining spice.
+        bool vanillaBoomSpiceGate;
+        int vanillaBoomSpicePerRefinery;       ///< 4000 or 8000; other values normalize to 4000.
+        int vanillaHarvesterBoomWorkers;       ///< 8 or 12, with two refineries.
+        int vanillaRefineryBoomRefineries;     ///< 4 or 6, with two workers per refinery.
+        int vanillaGreedyBoomMinutes;          ///< Stop at 6, 10 or 12 minutes; fund army until minute 20.
+        int vanillaReactiveArmyRatioBps;       ///< 6000 or 9000 of the strongest reachable enemy army.
+        int vanillaReactiveEconomyRatioBps;    ///< 12000 or 15000 of the leading hostile economy.
+        /// Independent default-OFF Custom Brutal Vanilla FFA4/6 policies (docs/ai-play-styles.md,
+        /// "Vanilla FFA core defence and army counters"); neither enables boom.
+        bool vanillaCoreDefence;               ///< Guards and turrets for threatened refineries/combat factories.
+        int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
+        bool vanillaArmyCounters;              ///< Unit mix blended toward counters of the strongest reachable team.
+        int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.
+        /// Default-OFF, shared-reachable-spice bounded fleet-ratio experiment.
+        bool economicFleetRatios;
+        int fleetHarvestersPerBay;             ///< Fixed factorial levels: 2, 3, 4.
+        int fleetCarryallQuarters;             ///< Carryalls per worker in quarters: 0, 1, 2.
+        int fleetRepairYards;                  ///< New repair-yard ceiling: 0 or 1.
+        /// Default-off FFA vulture timing: 0 native, 1 strike below 60%, 2 below 90%.
+        /// Uses current mutual rival combat and true army values, never unsaved history.
+        int ffaVultureLevel;
+        /// Default OFF. Custom spice games: 1/2 require sustainable net income
+        /// of 1.0/1.5 times the next technology's price per five minutes.
+        /// Full-knowledge army safety can advance an affordable legal tech order.
+        int techIncomeTiming;
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.
         bool joinAllyWaves;
+        /// Custom team experiment: wait for both autonomous allied armies and use the same
+        /// weakest true-army enemy house. A styled teammate supplies the shared team plan.
+        bool teamSynchroniseAttacks;
+        /// Default-off ally-base rescue, capped at 25% or 50% of our ground army's HP value.
+        int teamDefenceSharePercent;
         /// Custom Hard/Brutal starts without a heavy factory establish a four-worker economy,
         /// then fund their first full combat wave before optional fleet/yard expansion. Initial
         /// heavy-factory starts, Easy/Medium and campaign games are unchanged.
@@ -298,6 +347,10 @@ struct QuantBotConfig {
         /// Free-for-all finishing: the Palace's Death Hand aims at the densest cluster of seen
         /// enemy turrets guarding the house the waves are attacking.
         bool deathHandTurrets;
+        /// Palace experiments: 0 native, 1 richest economy cluster, 2 richest economy/army.
+        int palaceValueTarget;
+        /// 0 native, 1 accompany hunting army, 2 wait for its actual enemy contact.
+        int palaceWaveTiming;
         /// Campaign survival: while an enemy can fire a Death Hand, the yard, refineries and
         /// factories are placed apart so one missile cannot take out several of them.
         bool spreadVsDeathHand;
@@ -354,9 +407,15 @@ struct QuantBotConfig {
         /// Experimental/default off: continue funding city research after the
         /// opening fleet, retaining power, income, bootstrap and live-threat gates.
         bool cityContinuousResearch;
+        /// Experimental: 0 native, 1 research the intended unit plan only,
+        /// 2 also require delivered spice/net tax to cover production plus research.
+        int cityResearchOrder;
         /// Experimental/default off: wind down extra workers and refinery bays
         /// when the working fleet can exhaust its remaining spice share shortly.
         bool citySpiceTransition;
+        /// Experimental/default off. Remaining local spice per refinery below
+        /// 4000/8000 requests one guarded, reachable uncontested spice outpost.
+        int spiceFieldExpansion;
         /// Experimental/default off: optional MCVs and producer upgrades retain
         /// working capital in spice-backed Custom cities as well as tax cities.
         bool citySpiceCapacityRunway;
@@ -366,6 +425,39 @@ struct QuantBotConfig {
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;
+        /// Default-OFF city FFA boom families; only the original occupied roster
+        /// and positive initial spice select their scope. Levels are discrete.
+        bool cityBoomWorkers, cityBoomRefineries, cityBoomGreedy, cityBoomShortTax, cityBoomReactive;
+        int cityBoomWorkerGoal, cityBoomRefineryGoal;
+        int cityBoomGreedyMinutes, cityBoomTaxMinutes;
+        int cityBoomArmyRatioBps, cityBoomEconomyRatioBps;
+        /// Default-OFF spice gate for the boom families (Stefan's spice rule):
+        /// size, start and stop every worker/bay boom by the house's reachable,
+        /// apportioned spice (citySpiceShare) paying back within 10/15 minutes,
+        /// weighed against city tax payback; inert without spice.
+        bool cityBoomSpiceGate;
+        int cityBoomPaybackMinutes;
+        /// Default-OFF city FFA (4+ occupied controllers) harvester field choice:
+        /// nearest uncontested reachable spice to our refineries, avoiding fields
+        /// within 6/10 tiles of true hostile armed units (full knowledge).
+        bool cityHarvestFieldChoice;
+        int cityHarvestFieldSafetyTiles;
+        /// Default-OFF city FFA refinery logistics: site refineries by own
+        /// apportioned spice within 8/12 tiles and spread returns across bays.
+        bool cityRefineryLogistics;
+        int cityRefinerySiteTiles;
+        /// Default-OFF city FFA harvester replacement: replace lost workers first
+        /// while apportioned spice per worker pays back within 10/15 minutes.
+        bool cityHarvesterReplacement;
+        int cityHarvesterReplacementMinutes;
+        /// Default-OFF city FFA police/service land-value siting and funding
+        /// from real spice receipts plus tax, at 60/100% target funding.
+        bool cityLandValueServices;
+        int cityLandValueFundingPercent;
+        /// Default-OFF city FFA growth-stage tax: 3% below 3000/6000 displayed
+        /// own population, normal 7% at/above it, with full service funding.
+        bool cityGrowthStageTax;
+        int cityGrowthTaxPopulation;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;
@@ -379,6 +471,12 @@ struct QuantBotConfig {
         /// production spending. One safe storage project at a time; use a buildable
         /// refinery for its vault when the cheaper Silo is not unlocked yet.
         bool storageCapacity;
+        /// Opt-in: plan wind generation one/two selected consumer buildings ahead.
+        /// Raw supply/demand matters for degradation even without city power rules.
+        int powerLeadBuildings;
+        /// Opt-in occupancy backstop: 0 keeps native forecasting; 80/90 buys a Silo.
+        /// Earned balances only, queue-inclusive capacity, inert without map spice.
+        int siloFillPercent;
         /// Default on: powered non-city Custom Brutal games use the established
         /// funded spice policy for workers, production and capacity, not campaigns.
         /// Engine power requirements and the existing mix learning remain unchanged.
@@ -397,6 +495,11 @@ struct QuantBotConfig {
         /// holds once reachable spice, affordable units and all income/cargo are exhausted.
         /// Manual orders, defence and saboteur ownership remain authoritative.
         bool exhaustedArmyDispatch;
+        /// Experimental/default 0 (Regression807, docs/ai-scenario-matrix.md "Difficulty ladder"):
+        /// restores the pre-ladder (1.0.807) Custom Medium. 1: no banked-credit surplus army and no
+        /// heavy-factory walk after the starport opening; 2: also the standing 40% raid share
+        /// instead of the whole-army scope. Easy/Hard/Brutal and campaigns are unchanged.
+        int mediumClassic;
     };
     ForceSettings force;
 

@@ -18,9 +18,14 @@
 #include <GameInitSettings.h>
 #include <misc/CampaignControls.h>
 #include <FileClasses/INIFile.h>
+#include <FileClasses/FileManager.h>
+#include <MapSeed.h>
 #include <Network/CustomGamePlayerPolicy.h>
 #include <misc/SDL2pp.h>
 #include <algorithm>
+#include <charconv>
+#include <limits>
+#include <string_view>
 
 #include <misc/IFileStream.h>
 #include <misc/IMemoryStream.h>
@@ -137,6 +142,82 @@ constexpr bool markerHasPlannedConstruction(Uint32 marker) {
     return marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER
         || marker == GAMEINIT_MOD12_MARKER || marker == GAMEINIT_MOD13_MARKER
         || marker == GAMEINIT_MOD14_MARKER;
+}
+
+template<typename T>
+bool parseInitialSpiceInteger(std::string_view text, T& value) {
+    const auto first = text.find_first_not_of(" \t\r\n");
+    if(first == std::string_view::npos) return false;
+    text = text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+    if(text.front() == '+') text.remove_prefix(1);
+    if(text.empty()) return false;
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+    return result.ec == std::errc{} && result.ptr == text.data() + text.size();
+}
+
+int seededInitialSpiceTilePermille(const INIFile& map) {
+    Uint32 seed;
+    int scale;
+    if(!parseInitialSpiceInteger(map.getStringValue("MAP", "Seed"), seed)
+       || !parseInitialSpiceInteger(map.getStringValue("BASIC", "MapScale"), scale)
+       || scale < 0 || scale > 2) return -1;
+
+    const int size = scale == 0 ? 62 : (scale == 1 ? 32 : 21);
+    const int offset = scale == 0 ? 1 : (scale == 1 ? 16 : 11);
+    Uint16 terrain[64 * 64];
+    createMapWithSeed(seed, terrain);
+    for(int y = offset; y < offset + size; ++y) {
+        for(int x = offset; x < offset + size; ++x) {
+            auto& tile = terrain[y * 64 + x];
+            tile >>= 4;
+            switch(tile) {
+                case 0x2: case 0x7: case 0x8: case 0x9: case 0xa: case 0xb: case 0xc:
+                    break;
+                default: tile = 0x7; break; // Native unknown terrain fallback is sand.
+            }
+        }
+    }
+
+    // Native overlays replace blooms first, then add fields only on Terrain_Sand.
+    // Keep the original 64-wide coordinates, including fields centred outside the crop.
+    for(const char* key : {"Bloom", "Special", "Field"}) {
+        const auto positions = map.getStringValue("MAP", key);
+        if(positions.empty()) continue;
+        std::string_view remaining(positions);
+        while(true) {
+            const auto separator = remaining.find(',');
+            int position;
+            if(!parseInitialSpiceInteger(remaining.substr(0, separator), position)) return -1;
+            const int x = position % 64 - offset;
+            const int y = position / 64 - offset;
+            if(key[0] == 'F') {
+                for(int dx = -5; dx <= 5; ++dx) {
+                    for(int dy = -5; dy <= 5; ++dy) {
+                        const int tileX = x + dx;
+                        const int tileY = y + dy;
+                        if(tileX < 0 || tileX >= size || tileY < 0 || tileY >= size
+                           || dx * dx + dy * dy > 25) continue;
+                        auto& tile = terrain[(tileY + offset) * 64 + tileX + offset];
+                        if(tile == 0x7) tile = 0xb;
+                    }
+                }
+            } else if(x >= 0 && x < size && y >= 0 && y < size) {
+                terrain[(y + offset) * 64 + x + offset] = 0; // Bloom, not sand or spice.
+            }
+            if(separator == std::string_view::npos) break;
+            remaining.remove_prefix(separator + 1);
+        }
+    }
+
+    int fields = 0;
+    for(int y = offset; y < offset + size; ++y) {
+        for(int x = offset; x < offset + size; ++x) {
+            const auto tile = terrain[y * 64 + x];
+            if(tile == 0xb || tile == 0xc) ++fields;
+        }
+    }
+    // SpiceVariant transforms change colour/thickness, never the spice tile footprint.
+    return fields * 1000 / (size * size);
 }
 }
 
@@ -596,6 +677,57 @@ bool GameInitSettings::isTornieFamilyMatch() const {
         tornieFamilyCached = true;
     }
     return tornieFamilyMatch;
+}
+
+int GameInitSettings::getInitialSpiceTilePermille() const {
+    const bool originalMap = gameType == GameType::Campaign || gameType == GameType::Skirmish;
+    if(!originalMap && gameType != GameType::CustomGame && gameType != GameType::CustomMultiplayer) return -1;
+    if(initialSpiceTilePermille != -2) return initialSpiceTilePermille;
+    initialSpiceTilePermille = -1;
+    try {
+        sdl2::RWops_ptr source;
+        if(!filedata.empty()) {
+            if(filedata.size() > static_cast<size_t>(std::numeric_limits<int>::max())
+               || (originalMap && filedata.find('\0') != std::string::npos)) return initialSpiceTilePermille;
+            source.reset(SDL_RWFromConstMem(filedata.data(), static_cast<int>(filedata.size())));
+        } else if(originalMap && pFileManager && !filename.empty()) {
+            // Use the saved canonical filename and exactly the native campaign/mod resolver.
+            source = pFileManager->openCampaignFile(filename);
+        }
+        if(!source) return initialSpiceTilePermille;
+        INIFile map(source.get());
+        if(originalMap) {
+            int version = 1;
+            if(map.hasKey("BASIC", "Version")
+               && !parseInitialSpiceInteger(map.getStringValue("BASIC", "Version"), version))
+                return initialSpiceTilePermille;
+            if(version < 2) {
+                initialSpiceTilePermille = seededInitialSpiceTilePermille(map);
+                return initialSpiceTilePermille;
+            }
+        }
+        const int width = map.getIntValue("MAP", "SizeX", 0);
+        const int height = map.getIntValue("MAP", "SizeY", 0);
+        if(width <= 0 || height <= 0 || (!originalMap && map.hasKey("MAP", "Seed"))) return initialSpiceTilePermille;
+        int64_t fields = 0;
+        for(int y = 0; y < height; ++y) {
+            auto key = std::to_string(y);
+            if(key.size() < 3) key.insert(0, 3-key.size(), '0');
+            const auto row = map.getStringValue("MAP", key);
+            if(row.size() != static_cast<size_t>(width)) return initialSpiceTilePermille;
+            for(char tile : row) {
+                switch(tile) {
+                    case '~': case '+': case 'g': case 'G': case 'r': case 'R':
+                    case 'l': case 'L': case 'w': case 'W': ++fields; break;
+                    default: break;
+                }
+            }
+        }
+        initialSpiceTilePermille = int(fields*1000/(int64_t(width)*height));
+    } catch(const std::exception&) {
+        // Missing assets, failed streams and malformed scenarios are unknown, not zero spice.
+    }
+    return initialSpiceTilePermille;
 }
 
 bool GameInitSettings::isCivilizationWars() const {

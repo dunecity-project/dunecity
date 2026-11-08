@@ -1,0 +1,96 @@
+{
+  "cases": [
+    {
+      "difficulty": "brutal",
+      "format": "ffa4",
+      "initial_tech": 3,
+      "mountain": 5,
+      "rock": 12,
+      "seed": 2026110811,
+      "size": 64,
+      "spice_level": "low"
+    },
+    {
+      "difficulty": "brutal",
+      "format": "ffa4",
+      "initial_tech": 6,
+      "mountain": 5,
+      "rock": 30,
+      "seed": 2026110812,
+      "size": 128,
+      "spice_level": "low"
+    },
+    {
+      "difficulty": "brutal",
+      "format": "ffa4",
+      "initial_tech": 9,
+      "mountain": 15,
+      "rock": 48,
+      "seed": 2026110813,
+      "size": 160,
+      "spice_level": "low"
+    },
+    {
+      "difficulty": "brutal",
+      "format": "ffa4",
+      "initial_tech": 6,
+      "mountain": 15,
+      "rock": 48,
+      "seed": 2026110814,
+      "size": 64,
+      "spice_level": "medium"
+    },
+    {
+      "difficulty": "brutal",
+      "format": "ffa4",
+      "initial_tech": 9,
+      "mountain": 5,
+      "rock": 12,
+      "seed": 2026110815,
+      "size": 128,
+      "spice_level": "medium"
+    },
+    {
+      "difficulty": "brutal",
+      "format": "ffa4",
+      "initial_tech": 3,
+      "mountain": 5,
+      "rock": 30,
+      "seed": 2026110816,
+      "size": 160,
+      "spice_level": "medium"
+    },
+    {
+      "difficulty": "brutal",
+      "format": "ffa4",
+      "initial_tech": 9,
+      "mountain": 5,
+      "rock": 30,
+      "seed": 2026110817,
+      "size": 64,
+      "spice_level": "high"
+    },
+    {
+      "difficulty": "brutal",
+      "format": "ffa4",
+      "initial_tech": 3,
+      "mountain": 15,
+      "rock": 48,
+      "seed": 2026110818,
+      "size": 128,
+      "spice_level": "high"
+    },
+    {
+      "difficulty": "brutal",
+      "format": "ffa4",
+      "initial_tech": 6,
+      "mountain": 5,
+      "rock": 12,
+      "seed": 2026110819,
+      "size": 160,
+      "spice_level": "high"
+    }
+  ],
+  "sample_seed": 2026110807,
+  "schema_version": 1
+}

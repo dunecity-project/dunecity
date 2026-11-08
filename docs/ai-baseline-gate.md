@@ -15,6 +15,12 @@ is the coordinator wrapper. Submit without the queue-side `--wait`, then use
 `dunecity-queue wait JOB` outside the coordinator lock. Never compare an
 uncommitted source tree with a release-labelled archive.
 
+Before a large batch, submit one real game through this **same league harness and argv transport**
+on the intended platforms. A `dunelegacy_tests` build gate does not compile the league's private main.
+Its Linux probe reuses `bin/dunecity`, expands Ninja response files with `compdb -x`, includes the
+existing RobustList iterator-traits compatibility header and stays beside native `bin/data`;
+macOS retains its application-bundle probe. Retain the original prep/probe `build.log` on failure.
+
 1. Run `tests/ai/ai-baseline-league.py` twice at one current immutable bridge pin,
    with the policy's committed `--style NAME-off` and `--style NAME-on`. These
    overlays change only native hashed config values; unhashed `[Play Style]`
@@ -171,6 +177,19 @@ metadata. The gate compares the exact reason base separately from that metadata;
 unknown reasons, malformed metadata and unavailable active-city observations do
 not gain an applicability exemption.
 
+Final (`minute=-1`) Devastator, Deviator and Sonic Tank live-value shares also
+accept the explicit native `no_live_army_denominator` not-applicable reason.
+Their denominator is the house's live army value: when it is zero, the share
+is undefined, not zero and not a missing observation. Elimination is already
+judged by win/loss, survival and base-loss metrics; failing a share for the same
+defeated house would count that outcome again as missing composition evidence.
+The rule applies identically to historical releases, current OFF and current
+ON. These three conditional shares use only paired seeds on which both armies
+have a defined share; NA counts remain in the report, and the eight-paired-seed
+minimum and all other precision requirements still apply. The house and seed
+remain in every outcome/survival objective. An unavailable denominator, unknown
+reason, checkpoint share or other metric receives no such exemption.
+
 | Family | Measurement and interpretation |
 |---|---|
 | Strength | Native wins and team placement versus other AI houses, kill value, survival/base losses. A timeout is not a material win. |
@@ -265,3 +284,48 @@ this history, mainly versus 1.0.843 on army value, heavy-factory adoption,
 dispatches, kill value and city zones. Pinned 1v1 bisection places the DuneCity
 loss between `56ab59cd` (1.0.851, good) and `bf3ddf4f` (1.0.863, bad), and a
 separate classic-content army loss between 1.0.843 and `56ab59cd`.
+
+## Factorial and mixed-seat screening
+
+`tests/ai/ai-screen-design.py factorial --spec factors.json --output OUT`
+allocates fixed, hand-chosen existing hashed boolean switches to a resolution-IV
+fraction (eight switches in sixteen runs), writes composite play-style INIs and
+an explicit native arm, and emits ordinary `dunecity-audit.py` commands. Every
+arm uses the same fresh seed/map cells and the existing two candidate seats.
+Source case manifests and styles must be pinned with the harness before queue
+submission; output-only files are not visible in a committed worker archive.
+`pilot` uses six compatible Vanilla switches and a resolution-VI half fraction
+(32 runs), so all fifteen two-factor terms are separately identifiable. The
+smaller IV design discloses its aliased interaction groups instead of naming
+an unsupported individual interaction. Map cells use Random Skirmish sizes and
+5% terrain steps (scarce rock 15/5, standard 30/5, rocky ridges 45/15 percent
+rock/mountain); the generator and `--case-manifest` reject anything the probe
+would clamp. `--cases FILE --case-label NAME` replays explicit cells with the
+same styles, for example a supplement replacing rejected cells. Give it its own
+`sample_seed`, so its case numbers never merge with another manifest's CRN clusters.
+
+`tournament --variants A B C --formats ffa4 ffa6 --seeds SEED... --output OUT`
+emits the harness's `--seat-styles control,A,B,...` syntax. Complete fixed-size
+variant subsets and complete seat rotations balance every non-control opponent
+pair and physical seat. Spare native controls are intentionally overrepresented;
+seats and pairwise finishes from one game are not independent trials.
+
+`ai_map_features.py --results DIR... --output map-features.csv` is the shared
+start-map interface. It records exact exported-map or observer-start evidence,
+with missing values left unmeasured. Connected rock and free rectangle geometry
+follow the RockBudget observer at `4e1a962d`; free 3x3 origins overlap and are
+not disjoint capacity. Size, initial spice density, rock connectivity,
+mountain/ridge density, base distance and player count accompany outcome rows.
+`ai-screen-analysis.py --design OUT/design.json --features map-features.csv
+--output analysis.json --report report.md` reports clustered confidence intervals,
+rank-based FFA comparisons, switch/feature interactions and coverage holes.
+Army value and harvested spice at minutes 10/15 are secondary outcomes, never
+post-treatment controls in the win model.
+
+Screening effects do not promote a switch. Every promotion retains a fixed
+Controls block: same-seed native pairs and OFF12 parity at the new pin; both
+unobserved All Against Atreides seeds (or exact expected digests when out of
+scope); every current win in the original 66-mission AI-support campaign;
+and the historical gates (including campaign 1.0.807 59W / 1.0.796 56W).
+The coverage table accompanies the controls, and unmeasured composition or
+untested joint strata cannot be inferred from neighboring cells.

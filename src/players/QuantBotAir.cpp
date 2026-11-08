@@ -754,7 +754,7 @@ Coord QuantBot::findBestDeathHandTarget(int enemyHouseID) {
         // of the wave's ground units are shooting at (ties to the lower team id).
         int waveTeam = -1;
         if (forceVariant(kForceFinishWeakest) || forceVariant(kForceMassAssault)) {
-            waveTeam = finishTargetTeam();
+            waveTeam = finishTargetTeam(nullptr);
         } else {
             std::map<int, int> engaged;
             for (const Uint32 id : customWave.members) {
