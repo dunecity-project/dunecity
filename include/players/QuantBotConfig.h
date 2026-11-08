@@ -379,6 +379,12 @@ struct QuantBotConfig {
         /// production spending. One safe storage project at a time; use a buildable
         /// refinery for its vault when the cheaper Silo is not unlocked yet.
         bool storageCapacity;
+        /// Opt-in: plan wind generation one/two selected consumer buildings ahead.
+        /// Raw supply/demand matters for degradation even without city power rules.
+        int powerLeadBuildings;
+        /// Opt-in occupancy backstop: 0 keeps native forecasting; 80/90 buys a Silo.
+        /// Earned balances only, queue-inclusive capacity, inert without map spice.
+        int siloFillPercent;
         /// Default on: powered non-city Custom Brutal games use the established
         /// funded spice policy for workers, production and capacity, not campaigns.
         /// Engine power requirements and the existing mix learning remain unchanged.

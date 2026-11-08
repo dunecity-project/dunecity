@@ -2265,6 +2265,22 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
             .set("wind_sites",windSites)
             .set("industrial_demand",pass.ownIndValve));
     }
+    // Native measurements show long raw shortages in Vanilla (building decay),
+    // and shorter city blackouts. Size anticipation from the actual next chosen
+    // consumer, plus demand already committed by every yard; never invent growth.
+    if (botConfig().force.powerLeadBuildings>0 && lastCalculatedSpice>0
+        && yardTurn.itemID!=NONE_ID && data[yardTurn.itemID][houseID].power>0
+        && !powerGenerationPending(pass)
+        && getHouse()->getProducedPower()<getHouse()->getPowerRequirement()
+            + pass.committedPowerDemand
+            + botConfig().force.powerLeadBuildings*data[yardTurn.itemID][houseID].power
+        && campaignAvailableToBuild(turn.pBuilder,Structure_WindTrap)
+        && pass.money>=buildingCapitalCost(pass,Structure_WindTrap)
+        && findPlaceLocation(Structure_WindTrap).isValid()) {
+        yardTurn.itemID=Structure_WindTrap;
+        yardTurn.structureRule="power_lead_buildings";
+        yardTurn.crimeServiceSite=Coord::Invalid();
+    }
     if (yardTurn.itemID!=NONE_ID && yardTurn.itemID!=Structure_WindTrap
         && campaignPowerNeeded(pass, std::max(0,data[yardTurn.itemID][houseID].power))
         && campaignAvailableToBuild(turn.pBuilder,Structure_WindTrap)) {

@@ -91,7 +91,9 @@ SAMPLE_FIELDS = ('id', 'category', 'cell', 'seed', 'minute', 'cycle', 'house', '
                  'yard_level', 'queue', 'upgrading', 'waiting', 'fronts', 'gun', 'rocket', 'radar', 'starport',
                  'heavy', 'ix', 'fighters', 'moving', 'targeting', 'enemies', 'enemy_value', 'covered_enemies',
                  'spice', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
-                 'police_funding', 'army_target', 'spent_total', 'power_spent', 'police_charged', 'storage_lost')
+                 'police_funding', 'army_target', 'spent_total', 'power_spent', 'police_charged', 'storage_lost',
+                 'ledger_enabled', 'refineries', 'power_required', 'storage_full_cycles', 'storage_overflow_cycles',
+                 'storage_income_lost', 'power_deficit_cycles', 'required_power_deficit_cycles')
 WAVE_FIELDS = ('id', 'category', 'cell', 'seed', 'house', 'event', 'cycle', 'members', 'value')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20

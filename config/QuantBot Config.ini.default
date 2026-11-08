@@ -441,6 +441,12 @@ CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.
 # Bound storage projects to one in flight and the absolute credit ceiling.
 StorageCapacity=1
+# Opt-in power/storage discipline: 0 preserves the native decisions and hash.
+# Lead wind generation by 1 or 2 selected consumer buildings (raw power also prevents decay).
+PowerLeadBuildings=0
+# Earned-credit occupancy backstop: 0 native forecast, or a Silo at 80/90 percent.
+# Both research controls stay inert when no map spice remains.
+SiloFillPercent=0
 # Fund Custom Brutal powered non-city production with the established spice policy.
 # Campaigns, engine power requirements and unit-mix learning are unchanged.
 FundedClassicProduction=1

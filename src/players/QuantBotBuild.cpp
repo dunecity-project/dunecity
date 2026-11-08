@@ -2959,7 +2959,8 @@ Uint32 QuantBot::storageExpansionItem(BuildPass& pass, const BuilderBase* builde
             && campaignAvailableToBuild(builder,Structure_Silo) ? Uint32(Structure_Silo) : Uint32(NONE_ID);
     }
     if (builder->isUpgrading() || builder->getProductionQueueSize()!=0
-        || !getHouse()->hasPower() || pass.forecastNetIncome<=0) return NONE_ID;
+        || !getHouse()->hasPower()
+        || (pass.forecastNetIncome<=0 && botConfig().force.siloFillPercent==0)) return NONE_ID;
     int64_t projectedCapacity = capacity;
     const Uint32 last = ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID;
     for (Uint32 item=Structure_FirstID; item<=last; ++item) {
@@ -2972,6 +2973,16 @@ Uint32 QuantBot::storageExpansionItem(BuildPass& pass, const BuilderBase* builde
     }
     const int ceiling = House::MAX_GAME_CREDITS-getHouse()->getStartingCredits().lround();
     if (projectedCapacity<=0 || projectedCapacity>=ceiling) return NONE_ID;
+    const int fill = botConfig().force.siloFillPercent;
+    if (fill>0 && lastCalculatedSpice>0
+        && getHouse()->getEarnedCredits()*100 >= FixPoint(int(projectedCapacity))*fill
+        && campaignAvailableToBuild(builder,Structure_Silo)
+        && pass.money>=buildingCapitalCost(pass,Structure_Silo)) {
+        const Coord site=findPlaceLocation(Structure_Silo);
+        if (site.isValid() && dangerAt(site,getStructureSize(Structure_Silo))==0)
+            return Structure_Silo;
+    }
+    if (pass.forecastNetIncome<=0) return NONE_ID;
     Uint32 choice = NONE_ID;
     int choiceCost = 0, choiceCapacity = 0;
     for (Uint32 item=Structure_FirstID; item<=last; ++item) {

@@ -1126,3 +1126,35 @@ are unchanged; protocol 99 is not consumed. No revised-branch build, ctest, all-
 ladder result is claimed. The parent owns combined acceptance on `build-int`, including
 `quantbot_match_score`, `quantbot_strategy`, all-against-Atreides and the ladder; test-only candidate
 styles must not be treated as shipped defaults.
+
+## 9. Power/storage discipline research controls (2026-11-08)
+
+`PowerLeadBuildings=0|1|2` and `SiloFillPercent=0|80|90` in
+`[Force Concentration]` are default-OFF independent research controls.
+OFF preserves the native config hash and construction decisions. Enabled values
+are hashed and round-trip through the normal config save/load path.
+
+Power anticipation uses the actual next selected consumer's demand multiplied
+by the lead, plus demand already committed across yards. It can order one
+affordable Windtrap with a valid site, never a duplicate pending generator.
+It does not change engine power rules: raw deficits still cause building decay
+in Vanilla even though `House::hasPower()` exempts it from city/turret blackouts.
+The storage backstop buys an affordable safe Silo at the selected earned-credit
+occupancy; grants are excluded, queued capacity prevents duplicate purchases,
+and the absolute credit ceiling still applies. Native storage forecasting stays
+in place. Both controls remain inert when no map spice remains.
+
+Styles: `power-discipline-off`, `power-discipline-1`, `power-discipline-2`,
+`silo-discipline-off`, `silo-discipline-80`, `silo-discipline-90`. Screens must
+apply the style only to the candidate, leaving opponents native. No defaults,
+protocol version, or save format change is authorized by these research styles.
+
+The audit now retains exact per-tick `power_deficit_cycles` and
+`required_power_deficit_cycles` alongside storage-full/overflow cycles and lost
+income. Raw deficit measures the condition behind degradation in every mode;
+required deficit distinguishes city blackouts. Divide cycles by 3750 for
+house-minutes. Income loss requires `--attack-events`; missing ledger data is
+unmeasured, never zero. `--sample-game-seeds` specifies one distinct unsigned
+game seed per sampled case; both candidate seat assignments reuse it without
+altering the sampler's factor-deck RNG sequence.
+

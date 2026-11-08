@@ -470,6 +470,47 @@ TEST_CASE("Storage capacity defaults on and is loaded saved and hashed", "[ai][c
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Power and silo discipline is opt-in with independent persisted hashed levels",
+          "[ai][economy][power][storage][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.powerLeadBuildings == 0);
+    REQUIRE(defaults.force.siloFillPercent == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-power-silo-levels-test.ini";
+    for (const int lead : {0, 1, 2}) {
+        for (const int fill : {0, 80, 90}) {
+            QuantBotConfig expected = defaults;
+            expected.force.powerLeadBuildings = lead;
+            expected.force.siloFillPercent = fill;
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\nPowerLeadBuildings=" << lead
+                    << "\nSiloFillPercent=" << fill << '\n';
+            }
+            QuantBotConfig loaded;
+            REQUIRE(loaded.applyOverrides(path.string()));
+            REQUIRE(loaded.force.powerLeadBuildings == lead);
+            REQUIRE(loaded.force.siloFillPercent == fill);
+            REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+            REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (lead == 0 && fill == 0));
+            REQUIRE(loaded.save(path.string()));
+            QuantBotConfig restored;
+            REQUIRE(restored.applyOverrides(path.string()));
+            REQUIRE(restored.force.powerLeadBuildings == lead);
+            REQUIRE(restored.force.siloFillPercent == fill);
+            REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+        }
+    }
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nPowerLeadBuildings=99\nSiloFillPercent=85\n";
+    }
+    QuantBotConfig bounded;
+    REQUIRE(bounded.applyOverrides(path.string()));
+    REQUIRE(bounded.force.powerLeadBuildings == 2);
+    REQUIRE(bounded.force.siloFillPercent == 0);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Funded classic production defaults on and is loaded saved and hashed", "[ai][production][config]") {
     QuantBotConfig config;
     REQUIRE(config.force.fundedClassicProduction);

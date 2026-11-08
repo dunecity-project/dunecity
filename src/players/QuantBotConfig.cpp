@@ -393,6 +393,8 @@ QuantBotConfig::QuantBotConfig() {
     force.moreRocketTurrets = false; // Opt-in: the final paired count-gain gate was not met.
     force.cityStarportSupply = true;
     force.storageCapacity = true;
+    force.powerLeadBuildings = 0;
+    force.siloFillPercent = 0;
     force.fundedClassicProduction = true;
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
     force.simpleTechSavings = false;
@@ -741,6 +743,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
         iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
         iniFile.setBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
+        iniFile.setIntValue("Force Concentration", "PowerLeadBuildings", force.powerLeadBuildings);
+        iniFile.setIntValue("Force Concentration", "SiloFillPercent", force.siloFillPercent);
         iniFile.setBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
         iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
         iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
@@ -915,6 +919,10 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.moreRocketTurrets = iniFile.getBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
     force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
     force.storageCapacity = iniFile.getBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
+    force.powerLeadBuildings = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "PowerLeadBuildings", force.powerLeadBuildings), 0, 2);
+    const int siloFill = iniFile.getIntValue("Force Concentration", "SiloFillPercent", force.siloFillPercent);
+    if (siloFill == 0 || siloFill == 80 || siloFill == 90) force.siloFillPercent = siloFill;
     force.fundedClassicProduction = iniFile.getBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
     force.trooperSupport = iniFile.getBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
     force.simpleTechSavings = iniFile.getBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
@@ -1451,6 +1459,9 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("moreRocketTurrets", force.moreRocketTurrets);
     addNamed("cityStarportSupply", force.cityStarportSupply);
     addNamed("storageCapacity", force.storageCapacity);
+    // Preserve the native config/digest when these research switches are OFF.
+    if (force.powerLeadBuildings) addNamed("powerLeadBuildings", force.powerLeadBuildings);
+    if (force.siloFillPercent) addNamed("siloFillPercent", force.siloFillPercent);
     addNamed("fundedClassicProduction", force.fundedClassicProduction);
     addNamed("trooperSupport", force.trooperSupport);
     addNamed("simpleTechSavings", force.simpleTechSavings);

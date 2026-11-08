@@ -65,6 +65,7 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                       'power_deficit_cycles', 'required_power_deficit_cycles',
                        'score', 'drawn', 'won', 'flags') + tuple(
     field for detector in DETECTORS for field in (detector, 'eligible_' + detector, 'first_' + detector)
 ) + TROOPER_FIELDS + ('air_kill_telemetry',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS + (
@@ -78,7 +79,8 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'ledger_enabled', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
                  'yard_storage', 'police_funding', 'army_target', 'unit_limit', 'spice_multiplier', 'sale_credits',
                  'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
-                 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost'
+                 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                 'power_deficit_cycles', 'required_power_deficit_cycles'
 ) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required')
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
@@ -567,6 +569,8 @@ def sample_schedule(args):
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
             seed = rng.getrandbits(32)
+            if args.sample_game_seeds:
+                seed = args.sample_game_seeds[index]
             fmt, enemy = case['format'], case['difficulty']
             count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
             houses = list(HOUSES[:count])
@@ -1093,8 +1097,9 @@ def play(args, scratch, binary, game):
                 air_kill_telemetry=capture['status'],
                 **{key: last.get(key, '') for key in TROOPER_FIELDS},
                 **{key: air_final[number][key] for key in AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS},
-                **{key: last.get(key, '') if telemetry or key == 'storage_full_cycles' else ''
-                   for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost')},
+                **{key: last.get(key, '') if telemetry or key not in ('storage_overflow_cycles', 'storage_income_lost') else ''
+                   for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                               'power_deficit_cycles', 'required_power_deficit_cycles')},
                 flags='/'.join(d for d in DETECTORS if detectors[d])))
         append(results / 'samples.csv', SAMPLE_FIELDS, samples)
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
@@ -1935,6 +1940,8 @@ parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='m
                     help='sample: balanced seeded factor draws, each played from two candidate seats')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--sample-game-seeds', nargs='+', type=int,
+                    help='sample: explicit game seeds, exactly one per case; paired seats reuse the seed')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
@@ -1962,6 +1969,10 @@ if not 256 <= args.capture_mib <= 4096:
     parser.error('Use 256-4096 MiB of capture space')
 if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:
     parser.error('Use positive --cases and an unsigned 32-bit --sample-seed')
+if args.sample_game_seeds and (args.mode != 'sample' or len(args.sample_game_seeds) != args.cases
+                              or len(set(args.sample_game_seeds)) != args.cases
+                              or any(not 0 <= seed <= 0xffffffff for seed in args.sample_game_seeds)):
+    parser.error('--sample-game-seeds needs sample mode and one distinct unsigned 32-bit seed per case')
 if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and args.mod == 'Dune2R':
     parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
 if args.candidate_style and args.mode != 'sample':
