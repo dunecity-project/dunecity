@@ -351,6 +351,11 @@ Strategy=false
 # absent. It only acts when the match's Research Lab game option is enabled.
 # Basic income, power, defence and accepted production commitments keep their funding first.
 [Force Concentration]
+# Independent vanilla multi-enemy tuning; inert in 1v1, two-team matches, cities and campaigns.
+VanillaFfaWeakestTarget=0
+VanillaFfaNearbyTarget=0
+VanillaFfaReserve=0
+VanillaFfaFullWaves=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0

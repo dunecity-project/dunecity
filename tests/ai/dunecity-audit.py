@@ -32,7 +32,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
-from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import finish_game, headless_asset_arguments, probe_binary, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
 
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
@@ -835,6 +835,7 @@ def command(args, binary, game, out):
            '--capture-mib', str(getattr(args, 'capture_mib', 256)),
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--house', tracked,
            '--scenario-sides', sides, '--local-spectator', '--skirmish', game['skirmish']]
+    cmd += headless_asset_arguments()
     if not (args.attack_events or getattr(args, 'keep_telemetry', False)):
         cmd += ['--no-ai-telemetry']
     if game.get('require_research'):

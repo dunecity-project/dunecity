@@ -670,6 +670,42 @@ TEST_CASE("Exhausted army dispatch defaults on and independently round-trips bot
     std::filesystem::remove(savedPath);
 }
 
+TEST_CASE("Vanilla FFA switches default off and independently persist every hashed combination",
+          "[ai][force][ffa][config]") {
+    const QuantBotConfig defaults;
+    const std::array<bool QuantBotConfig::ForceSettings::*, 4> members{
+        &QuantBotConfig::ForceSettings::vanillaFfaWeakestTarget,
+        &QuantBotConfig::ForceSettings::vanillaFfaNearbyTarget,
+        &QuantBotConfig::ForceSettings::vanillaFfaReserve,
+        &QuantBotConfig::ForceSettings::vanillaFfaFullWaves};
+    const std::array<const char*, 4> names{
+        "VanillaFfaWeakestTarget", "VanillaFfaNearbyTarget", "VanillaFfaReserve", "VanillaFfaFullWaves"};
+    for (const auto member : members) REQUIRE_FALSE(defaults.force.*member);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-ffa-config-test.ini";
+    std::map<std::string, unsigned> hashes;
+    for (unsigned mask = 0; mask < 16; ++mask) {
+        QuantBotConfig expected = defaults;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\n";
+            for (size_t i = 0; i < members.size(); ++i) {
+                expected.force.*members[i] = (mask & (1u << i)) != 0;
+                ini << names[i] << '=' << (expected.force.*members[i]) << '\n';
+            }
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), mask).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        for (const auto member : members) REQUIRE((restored.force.*member) == (expected.force.*member));
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign opening switches default off and independently round-trip their hashes",
           "[ai][campaign][opening][config]") {
     const QuantBotConfig defaults;
