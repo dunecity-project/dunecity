@@ -269,6 +269,21 @@ TEST_CASE("Force: the late game finishes the weakest known team and waits for a 
     REQUIRE(fortifiedReady(90000, 100000, 40) == 90000);   // the normal readiness when it is more
 }
 
+TEST_CASE("Force: an FFA opportunity balances travel against remembered strength", "[ai][force][ffa]") {
+    TeamStrength distant{2, 2000, 0, 10, 80};
+    TeamStrength nearby{3, 6000, 0, 10, 20};
+    REQUIRE(weakerTeam(distant, nearby));
+    REQUIRE(nearerOpportunity(nearby, distant));
+    nearby.army = 20000;
+    REQUIRE(nearerOpportunity(distant, nearby));
+    TeamStrength equal{1, 2000, 0, 10, 80};
+    REQUIRE(nearerOpportunity(equal, distant));
+    REQUIRE_FALSE(nearerOpportunity(distant, equal));
+    nearby = distant;
+    nearby.turrets = 1;
+    REQUIRE(nearerOpportunity(distant, nearby));
+}
+
 TEST_CASE("Force: a sonic wave's path runs past the target and one tile either side of the line", "[ai][force]") {
     REQUIRE(inSonicPath(4, 0, 2, 0));                       // between shooter and target
     REQUIRE(inSonicPath(4, 0, 2, 1));                       // one tile beside the line
