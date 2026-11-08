@@ -17,6 +17,7 @@
  */
 
 #include <FileClasses/GFXManager.h>
+#include <FileClasses/HeadlessAssets.h>
 #include <dunecity/CitySpritePolicy.h>
 #include <FileClasses/EnhancedAtlasCache.h>
 
@@ -319,6 +320,7 @@ static std::unique_ptr<Animation> loadPngStripAnimation(const std::string& filen
 
 
 GFXManager::GFXManager() {
+    const HeadlessAssets::StartupTimer startupTimer("graphics");
 
     // open all shp files
     std::unique_ptr<Shpfile> units = loadShpfile("UNITS.SHP");

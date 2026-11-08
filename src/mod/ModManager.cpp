@@ -24,6 +24,7 @@
 #include <mod/CustomHouseConfig.h>
 #include <mod/ModMentatConfig.h>
 #include <FileClasses/GFXManager.h>
+#include <FileClasses/HeadlessAssets.h>
 #include <FileClasses/SFXManager.h>
 #include <FileClasses/TextManager.h>
 #include <misc/fnkdat.h>
@@ -433,6 +434,7 @@ std::string ModManager::installerContentHash(const std::string& name) const {
 }
 
 void ModManager::initialize() {
+    const HeadlessAssets::StartupTimer startupTimer("bundled_mods");
     activeContentBase.clear();
     activeDune2RRemasterPresentation = false;
     // Get mods base path in user config directory
@@ -672,6 +674,7 @@ bool ModManager::isCityModeActive() const {
 }
 
 bool ModManager::setActiveMod(const std::string& name) {
+    const HeadlessAssets::StartupTimer startupTimer("activate_mod");
     if (!modExists(name)) {
         SDL_Log("ModManager: Cannot activate mod '%s' - does not exist", name.c_str());
         return false;

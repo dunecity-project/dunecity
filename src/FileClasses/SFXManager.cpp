@@ -23,6 +23,7 @@
 #include <House.h>
 
 #include <FileClasses/FileManager.h>
+#include <FileClasses/HeadlessAssets.h>
 #include <FileClasses/Vocfile.h>
 
 #include <FileClasses/adl/sound_adlib.h>
@@ -38,6 +39,7 @@
 // - POPPA.VOC
 
 SFXManager::SFXManager() {
+    const HeadlessAssets::StartupTimer startupTimer("sounds");
     reloadVoices();
 
     loadSoundEffects();
@@ -52,6 +54,7 @@ SFXManager::SFXManager() {
 SFXManager::~SFXManager() = default;
 
 void SFXManager::reloadVoices() {
+    const HeadlessAssets::StartupTimer startupTimer("voices");
     kleshmershNameVoice.reset();
     // Reload language-specific voices after an active-mod switch so optional
     // mod assets cannot leak into another mod.
