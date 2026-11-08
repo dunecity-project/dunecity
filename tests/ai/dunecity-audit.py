@@ -34,6 +34,7 @@ sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
 from probe_profile import finish_game, headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
+from ai_map_features import MAP_FEATURE_FIELDS, rows_from_log  # noqa: E402
 
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
 HOUSE_IDS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
@@ -1098,6 +1099,7 @@ def play(args, scratch, binary, game):
                 flags='/'.join(d for d in DETECTORS if detectors[d])))
         append(results / 'samples.csv', SAMPLE_FIELDS, samples)
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
+        append(results / 'map-features.csv', MAP_FEATURE_FIELDS, rows_from_log(lines, game, setup))
         if telemetry:
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
             append(results / 'air-kills.csv', AIR_KILL_FIELDS,
@@ -1139,7 +1141,7 @@ def run(args):
     results.mkdir(parents=True, exist_ok=True)
     for name, fields in (('games.csv', GAME_FIELDS), ('houses.csv', HOUSE_FIELDS),
                          ('samples.csv', SAMPLE_FIELDS), ('waves.csv', ATTACK_FIELDS),
-                         ('air-kills.csv', AIR_KILL_FIELDS)) + TECH_TABLES:
+                         ('air-kills.csv', AIR_KILL_FIELDS), ('map-features.csv', MAP_FEATURE_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
     observer_mode = 'off' if getattr(args, 'observer_off', False) else 'on'
     if any(row.get('observer_mode') != observer_mode for row in read(results / 'games.csv')):
