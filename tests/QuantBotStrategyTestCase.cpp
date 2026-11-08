@@ -364,6 +364,33 @@ TEST_CASE("City first-factory saving is opt-in and independently loaded saved an
     std::filesystem::remove(path);
 }
 
+TEST_CASE("City research order is opt-in hashed and preserves working income", "[ai][city][research]") {
+    const QuantBotConfig native;
+    REQUIRE(native.force.cityResearchOrder == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-research-order-test.ini";
+    for (int level = 0; level <= 2; ++level) {
+        { std::ofstream ini(path); ini << "[Force Concentration]\nCityResearchOrder=" << level << '\n'; }
+        QuantBotConfig config;
+        REQUIRE(config.applyOverrides(path.string()));
+        REQUIRE(config.force.cityResearchOrder == level);
+        REQUIRE((config.getConfigHash() == native.getConfigHash()) == (level == 0));
+        REQUIRE(config.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.cityResearchOrder == level);
+        REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    }
+    using QuantBotBuildPolicy::cityResearchOrderAdmits;
+    REQUIRE(cityResearchOrderAdmits(0, 9, 4, 0, 2000));
+    REQUIRE(cityResearchOrderAdmits(1, 3, 8, 0, 2000));
+    REQUIRE_FALSE(cityResearchOrderAdmits(1, 8, 8, 9000, 0));
+    REQUIRE_FALSE(cityResearchOrderAdmits(2, 3, 8, 999, 0));
+    REQUIRE(cityResearchOrderAdmits(2, 3, 8, 1000, 0));
+    REQUIRE_FALSE(cityResearchOrderAdmits(2, 3, 8, 2499, 2000));
+    REQUIRE(cityResearchOrderAdmits(2, 3, 8, 2500, 2000));
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("City tuning candidates are opt-in and independently loaded saved and hashed", "[ai][city][config]") {
     const QuantBotConfig defaults;
     REQUIRE_FALSE(defaults.force.cityThreatBudget);

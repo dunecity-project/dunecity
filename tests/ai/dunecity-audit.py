@@ -566,7 +566,8 @@ def sample_schedule(args):
         draws = {factor: balanced_draw(levels, args.cases, rng) for factor, levels in factors.items()}
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
-            seed = rng.getrandbits(32)
+            drawn_seed = rng.getrandbits(32)
+            seed = args.game_seed_base + index if getattr(args, 'game_seed_base', None) is not None else drawn_seed
             fmt, enemy = case['format'], case['difficulty']
             count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
             houses = list(HOUSES[:count])
@@ -1935,6 +1936,8 @@ parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='m
                     help='sample: balanced seeded factor draws, each played from two candidate seats')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--game-seed-base', type=int,
+                    help='sample: use consecutive actual map seeds from this base; factor draws still use --sample-seed')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
@@ -1958,6 +1961,9 @@ parser.add_argument('--compare', nargs=2, type=Path, metavar=('CONTROL', 'CANDID
 args = parser.parse_args()
 if not 1 <= args.minutes <= 120 or any(not 0 <= seed <= 0xffffffff for seed in args.seeds):
     parser.error('Use 1-120 game minutes and unsigned 32-bit seeds')
+if args.game_seed_base is not None and (args.mode != 'sample'
+        or not 0 <= args.game_seed_base <= 0xffffffff - max(0, args.cases - 1)):
+    parser.error('--game-seed-base requires sample mode and an unsigned 32-bit seed range')
 if not 256 <= args.capture_mib <= 4096:
     parser.error('Use 256-4096 MiB of capture space')
 if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:

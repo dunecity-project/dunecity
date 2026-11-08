@@ -138,6 +138,7 @@ void QuantBot::build(int militaryValue) {
     planCityBootstrap(pass);
     planOpeningProduction(pass);
     planDefenceCoverage(pass);
+    planCityResearchOrder(pass);
     planTechSavings(pass);
     planCapitalCandidates(pass);
     chooseCapitalPlan(pass);
@@ -166,13 +167,65 @@ void QuantBot::build(int militaryValue) {
     buildTimer = 5 + (getHouse()->getHouseID() % 10);  // 5-14 cycles
 }
 
+void QuantBot::planCityResearchOrder(BuildPass& pass) {
+    const int level = botConfig().force.cityResearchOrder;
+    if (level == 0 || !pass.citySimEnabled || gameMode != GameMode::Custom
+        || isCampaignGameType(currentGame->gameType) || !researchLabPolicyActive()
+        || !ModManager::instance().isDuneCityContentActive()
+        || currentGame->getGameInitSettings().getInitialSpiceTilePermille() <= 0) return;
+
+    // Use the future strategic mix, not the tech-filtered current mix, which
+    // would deadlock a tech-1 opening before its first combat supplier.
+    const auto& ratios = botConfig().getRatios(getHouse()->getHouseID());
+    UnitMixPolicy::GroupWeights groups{};
+    groups[0] = static_cast<int>(ratios.tank * 10000);
+    groups[1] = static_cast<int>(ratios.siegeTank * 10000);
+    groups[2] = static_cast<int>(ratios.launcher * 10000);
+    groups[3] = static_cast<int>(ratios.special * 10000);
+    groups[4] = static_cast<int>(ratios.ornithopter * 10000);
+    if (pass.strategyMixProfile) groups = pass.strategyMixProfile->prior;
+    const auto intended = UnitMixPolicy::expandGroups(groups, fieldableMixSlots(9));
+    const auto& data = currentGame->objectData.data;
+    const int house = getHouse()->getHouseID();
+    std::array<int, Num_ItemID> memo;
+    memo.fill(-1);
+    auto technology = [&](auto&& self, Uint32 item) -> int {
+        if (item >= Num_ItemID) return 10;
+        int& result = memo[item];
+        if (result >= 0) return result;
+        result = 10; // Cyclic/disabled prerequisites are not a research plan.
+        const auto& spec = data[item][house];
+        if (!spec.enabled) return result;
+        int required = spec.techLevel;
+        if (isUnit(item) && spec.builder != ItemID_Invalid)
+            required = std::max(required, self(self, Uint32(spec.builder)));
+        for (Uint32 dependency = Structure_FirstID; dependency < spec.prerequisiteStructuresSet.size(); ++dependency)
+            if (isStructure(dependency) && spec.prerequisiteStructuresSet[dependency])
+                required = std::max(required, self(self, dependency));
+        return result = required;
+    };
+    int ceiling = getHouse()->getTechLevel();
+    auto need = [&](Uint32 item) {
+        const int required = technology(technology, item);
+        if (required <= 9) ceiling = std::max(ceiling, required);
+    };
+    for (size_t slot = 0; slot < intended.size(); ++slot)
+        if (intended[slot] > 0) need(kMixItems[slot]);
+    if (pass.spiceEconomyViable) { need(Unit_Harvester); need(Unit_Carryall); }
+    if (pass.rockExpansionNeeded || pass.colonisationNeeded) need(Unit_MCV);
+    if (pass.hostileAircraft > 0 || pass.defendingEconomy) need(Structure_RocketTurret);
+    pass.cityResearchAllowed = QuantBotBuildPolicy::cityResearchOrderAdmits(level,
+        getHouse()->getTechLevel(), ceiling,
+        pass.forecastNetIncome / QuantBotSpendingPolicy::horizonMinutes, pass.activeProductionBurn);
+}
+
 bool QuantBot::researchLabPolicyActive() const {
     return currentGame && currentGame->getGameInitSettings().getGameOptions().researchLab
         && botConfig().force.researchLab && !switchedOff() && !fighterOnly();
 }
 
 bool QuantBot::researchRequired(const BuildPass& pass) const {
-    return researchLabPolicyActive() && (currentGame->getGameInitSettings().isCivilizationWars()
+    return pass.cityResearchAllowed && researchLabPolicyActive() && (currentGame->getGameInitSettings().isCivilizationWars()
         || (botConfig().force.researchLabProgression && getHouse()->getTechLevel() < 9
             && (openingFleetIncomplete(pass) || pass.dangerousCrimeProperties > 0))
         || (botConfig().force.cityContinuousResearch && pass.citySimEnabled
@@ -195,7 +248,7 @@ bool QuantBot::economyReadyForCapital(BuildPass& pass) {
 }
 
 bool QuantBot::techInvestmentReady(BuildPass& pass) {
-    return researchLabPolicyActive() && economyReadyForCapital(pass);
+    return pass.cityResearchAllowed && researchLabPolicyActive() && economyReadyForCapital(pass);
 }
 
 bool QuantBot::canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier) {
@@ -221,6 +274,7 @@ bool QuantBot::canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier)
 }
 
 bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
+    if (!pass.cityResearchAllowed) return false;
     if (pass.techSavings)
         return pass.techSavingActive && pass.techResearch
             && getHouse()->getCredits() >= cost
@@ -275,7 +329,7 @@ bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* buil
 
 void QuantBot::planTechResearch(BuildPass& pass) {
     const bool required = researchRequired(pass);
-    if ((!required && !civWarsRules()) || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9
+    if (!pass.cityResearchAllowed || (!required && !civWarsRules()) || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9
         || !techInvestmentReady(pass)) return;
     if (getHouse()->getNumItems(Structure_ResearchLab) == 0) {
         if (required)
@@ -300,7 +354,7 @@ void QuantBot::planTechResearch(BuildPass& pass) {
 }
 
 void QuantBot::startTechResearch(BuildPass& pass) {
-    if (!researchLabPolicyActive() || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9) return;
+    if (!pass.cityResearchAllowed || !researchLabPolicyActive() || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9) return;
     const int cost = getHouse()->getTechResearchCost();
     if (!spendingAdmits(pass, Structure_ResearchLab, cost, true)) return;
     if (!canFundTechInvestment(pass,cost)) return;
@@ -3215,7 +3269,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
     const bool noCombatLane = UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
         pass.compositionPrice, pass.compositionAvailable) == UnitMixPolicy::kSlots;
     bool supplierResearch = false;
-    if (pass.techSavings && !pass.techFundingPriority && noCombatLane && researchLabPolicyActive() && getHouse()->getTechLevel() < 9) {
+    if (pass.cityResearchAllowed && pass.techSavings && !pass.techFundingPriority && noCombatLane && researchLabPolicyActive() && getHouse()->getTechLevel() < 9) {
         // Research may unlock the first ground supplier, not require the army
         // that only that supplier can make. Derive its ceiling from enabled
         // units and the real prerequisite graph, including house/mod overrides.
@@ -3334,9 +3388,9 @@ void QuantBot::planTechSavings(BuildPass& pass) {
         || structure(Structure_HighTechFactory) || structure(Structure_IX)
         || upgrade(Structure_HighTechFactory)
         || (pass.itemCount[Structure_Palace] == 0 && structure(Structure_Palace))
-        || (researchLabPolicyActive() && getHouse()->getTechLevel() < 9
+        || (pass.cityResearchAllowed && researchLabPolicyActive() && getHouse()->getTechLevel() < 9
             && !getHouse()->isTechResearchActive() && structure(Structure_ResearchLab)));
-    if (!candidate && !pass.techFundingPriority && researchLabPolicyActive() && getHouse()->getNumItems(Structure_ResearchLab) > 0
+    if (pass.cityResearchAllowed && !candidate && !pass.techFundingPriority && researchLabPolicyActive() && getHouse()->getNumItems(Structure_ResearchLab) > 0
         && !getHouse()->isTechResearchActive() && getHouse()->getTechLevel() < 9) {
         for (const auto* lab : getStructureList())
             if (lab->getOwner() == getHouse() && lab->getItemID() == Structure_ResearchLab && lab->getHealth() > 0) {

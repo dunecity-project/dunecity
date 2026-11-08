@@ -354,6 +354,9 @@ struct QuantBotConfig {
         /// Experimental/default off: continue funding city research after the
         /// opening fleet, retaining power, income, bootstrap and live-threat gates.
         bool cityContinuousResearch;
+        /// Experimental: 0 native, 1 research the intended unit plan only,
+        /// 2 also require delivered spice/net tax to cover production plus research.
+        int cityResearchOrder;
         /// Experimental/default off: wind down extra workers and refinery bays
         /// when the working fleet can exhaust its remaining spice share shortly.
         bool citySpiceTransition;

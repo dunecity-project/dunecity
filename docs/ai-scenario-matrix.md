@@ -877,3 +877,24 @@ technology, exactly one prerequisite Starport, pending-order deduplication
 and resumed IX/Palace construction. Earlier campaign import and MCV-recovery
 checks keep their original population and assertions.
 
+## Planned research experiment (default OFF)
+
+`[Force Concentration] CityResearchOrder=0|1|2` affects only research-enabled
+Custom DuneCity matches whose original explicit map contains spice. Level 1
+caps linear tech progression at the prerequisites of the future strategic unit
+mix (not the currently tech-filtered mix), economic workers/transports, demanded
+MCV expansion and reactive rocket defence. It does not speculate on Palace-only
+technology. Level 2 also defers new research commitments until delivered-spice
+and net-tax forecast per minute covers `max(1000, active production burn + 500)`.
+Already-funded studies are not cancelled. Native power, capital and cash-reserve
+gates still apply. Vanilla, campaigns, initially no-spice maps, research-off and
+unknown/seed-only map data retain native behavior.
+
+Styles: `research-order-off`, `research-order-plan`, `research-order-income`.
+Research is an optional engine rule, not inherently exclusive to DuneCity.
+
+For a preassigned actual seed range, `dunecity-audit.py --mode sample
+--sample-seed N --game-seed-base B --cases C` retains the ordinary balanced
+factor draws but uses map seeds `B..B+C-1` (each from both candidate seats).
+Omitting `--game-seed-base` preserves the historical schedule exactly.
+

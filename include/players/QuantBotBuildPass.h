@@ -258,6 +258,7 @@ struct QuantBot::BuildPass {
     int forecastUpkeep{};
     int forecastSpice{};
     int forecastNetIncome{};
+    bool cityResearchAllowed = true;
     int forecastFunding{};
     int existingMilitaryCapacity{};
     int constructionCapacity{};

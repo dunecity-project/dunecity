@@ -422,6 +422,8 @@ CityZoneDefence=0
 CityAdvancedTech=0
 # Experimental: keep city research funded after the opening fleet reaches its target.
 CityContinuousResearch=0
+# Experimental: 0 native; 1 intended-unit technology ceiling; 2 also protect income.
+CityResearchOrder=0
 # Experimental: stop extra spice capacity when the existing fleet can deplete its share.
 CitySpiceTransition=0
 # Experimental: preserve working-capital runway for optional spice-city MCVs/upgrades.
