@@ -377,12 +377,12 @@ CampaignFundedLightOpening=1
 CampaignLightWorkingCash=1
 # Protect a second refinery's founded quote from low-tech light units until it is queued.
 CampaignLightIncomeSeed=1
-# Round-2 classic campaign AI-support candidates; all remain OFF pending paired gates.
+# Round-2 classic campaign AI support: accepted idle-cash factory ON; other candidates remain OFF.
 # Build the first vehicle factory before the Starport's optional import infrastructure.
 CampaignFactoryBeforeStarport=0
-# Spend idle uncommitted cash on the first vehicle factory (screened at 1500 and 2000).
-CampaignIdleCashFactory=0
-CampaignIdleCashFactoryCredits=1500
+# Spend 2,000 uncommitted credits on the first vehicle factory; 63W/3L, all62 prior wins kept.
+CampaignIdleCashFactory=1
+CampaignIdleCashFactoryCredits=2000
 # Reuse base-defence assignments at attacked refineries; fund lost processing bays before growth.
 CampaignRefineryDefence=0
 # Save the full first Light Factory/foundation/unit runway before optional extra refineries.

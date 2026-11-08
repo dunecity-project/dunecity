@@ -357,8 +357,8 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignLightWorkingCash = true;
     force.campaignLightIncomeSeed = true;
     force.campaignFactoryBeforeStarport = false;
-    force.campaignIdleCashFactory = false;
-    force.campaignIdleCashFactoryCredits = 1500;
+    force.campaignIdleCashFactory = true;
+    force.campaignIdleCashFactoryCredits = 2000;
     force.campaignRefineryDefence = false;
     force.campaignFactoryRunway = false;
     force.capacityMcvRunway = false;

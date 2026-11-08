@@ -266,7 +266,7 @@ struct QuantBotConfig {
         /// Independent hashed candidate, default off.
         bool campaignFactoryBeforeStarport;
         /// Classic campaign support uses idle uncommitted cash for its first vehicle factory.
-        /// Independent hashed candidate, default off; only the two documented thresholds are screened.
+        /// Hashed; default on at 2,000 credits after paired campaign and official AAA2 acceptance.
         bool campaignIdleCashFactory;
         int campaignIdleCashFactoryCredits;
         /// Reuse whole-army assignments for an attacked campaign refinery and protect replacement funding.

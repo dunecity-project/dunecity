@@ -762,7 +762,7 @@ TEST_CASE("Accepted campaign defaults retain an explicit all-off control",
         ini << "[Force Concentration]\n"
             << "CampaignMilitaryOpening=0\nCampaignAdaptiveReadiness=0\n"
             << "CampaignThreatProduction=0\nCampaignFundedLightOpening=0\n"
-            << "CampaignLightWorkingCash=0\nCampaignLightIncomeSeed=0\n";
+            << "CampaignLightWorkingCash=0\nCampaignLightIncomeSeed=0\nCampaignIdleCashFactory=0\n";
     }
     QuantBotConfig expected = defaults;
     expected.force.campaignMilitaryOpening = false;
@@ -771,6 +771,7 @@ TEST_CASE("Accepted campaign defaults retain an explicit all-off control",
     expected.force.campaignFundedLightOpening = false;
     expected.force.campaignLightWorkingCash = false;
     expected.force.campaignLightIncomeSeed = false;
+    expected.force.campaignIdleCashFactory = false;
     QuantBotConfig control;
     REQUIRE(control.applyOverrides(path.string()));
     REQUIRE_FALSE(control.force.campaignMilitaryOpening);
@@ -779,6 +780,7 @@ TEST_CASE("Accepted campaign defaults retain an explicit all-off control",
     REQUIRE_FALSE(control.force.campaignFundedLightOpening);
     REQUIRE_FALSE(control.force.campaignLightWorkingCash);
     REQUIRE_FALSE(control.force.campaignLightIncomeSeed);
+    REQUIRE_FALSE(control.force.campaignIdleCashFactory);
     REQUIRE(control.getConfigHash() == expected.getConfigHash());
     REQUIRE(control.getConfigHash() != defaults.getConfigHash());
     REQUIRE(control.save(path.string()));
@@ -906,7 +908,7 @@ TEST_CASE("Campaign light income seed independently persists both hashed states"
     std::filesystem::remove(path);
 }
 
-TEST_CASE("Campaign round-two economy switches default off and independently persist every hashed arm",
+TEST_CASE("Campaign round-two economy controls independently persist every hashed arm",
           "[ai][campaign][economy][config]") {
     const QuantBotConfig defaults;
     const std::array<bool QuantBotConfig::ForceSettings::*, 4> members{
@@ -917,8 +919,11 @@ TEST_CASE("Campaign round-two economy switches default off and independently per
     const std::array<const char*, 4> names{
         "CampaignFactoryBeforeStarport", "CampaignIdleCashFactory",
         "CampaignRefineryDefence", "CampaignFactoryRunway"};
-    for (const auto member : members) REQUIRE_FALSE(defaults.force.*member);
-    REQUIRE(defaults.force.campaignIdleCashFactoryCredits == 1500);
+    REQUIRE_FALSE(defaults.force.campaignFactoryBeforeStarport);
+    REQUIRE(defaults.force.campaignIdleCashFactory);
+    REQUIRE_FALSE(defaults.force.campaignRefineryDefence);
+    REQUIRE_FALSE(defaults.force.campaignFactoryRunway);
+    REQUIRE(defaults.force.campaignIdleCashFactoryCredits == 2000);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-round-two-config-test.ini";
     std::map<std::string, unsigned> hashes;
     for (const int threshold : {1500, 2000}) {
