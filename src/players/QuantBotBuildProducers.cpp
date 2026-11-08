@@ -22,6 +22,7 @@
 
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
+#include <players/StarportBuyingPolicy.h>
 
 void QuantBot::buildRepair(BuildPass& pass, const StructureBase* pStructure) {
     const int creditsBeforeUpgrade = getHouse()->getCredits();
@@ -158,6 +159,33 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     if(itemID == Unit_MCV && pass.yardLimit > 0
         && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] >= pass.yardLimit) return false;
     const int quotedPrice=purchasePrice(turn.pBuilder,itemID);
+    const auto& portPolicy = botConfig().force;
+    const bool portScope = gameMode == GameMode::Custom
+        && (getGameInitSettings().getModName() == "vanilla"
+            || ModManager::instance().isDuneCityContentActive());
+    // Only optional factory combat orders wait for the market. Economy,
+    // construction recovery and the port itself keep their native cash access.
+    if (portScope && portPolicy.starportCashStockpile > 0
+        && turn.pBuilder->getItemID() != Structure_StarPort
+        && QuantBotBuildPolicy::militaryItem(itemID)
+        && StarportBuyingPolicy::preserveCash(pass.money, quotedPrice,
+            getHouse()->radarUnitPrice(itemID, data[itemID][houseID].price),
+            portPolicy.starportCashStockpile)) {
+        for (const auto* structure : getStructureList()) {
+            if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_StarPort
+                || structure->getHealth() <= 0 || !structure->isActive()) continue;
+            const auto* port = static_cast<const StarPort*>(structure);
+            if (!port->okToOrder() || !port->isAvailableToBuild(itemID)
+                || getHouse()->getChoam().getNumAvailable(itemID) <= 0) continue;
+            const int factory = getHouse()->radarUnitPrice(itemID, data[itemID][houseID].price);
+            if (!StarportBuyingPolicy::admitted(purchasePrice(port, itemID), factory, portPolicy.starportBuying)) {
+                if (pass.emitStatsLog) traceDecision("starport_cash_stockpile", AITelemetry::Record()
+                    .set("item",itemID).set("cash",pass.money).set("factory_price",factory)
+                    .set("market_price",purchasePrice(port,itemID)).set("level",portPolicy.starportCashStockpile));
+                return false;
+            }
+        }
+    }
     const Uint32 spendingItem = turn.spendingItem == NONE_ID ? itemID : turn.spendingItem;
     const auto spendingBucket = QuantBotBuildPolicy::spendingBucket(spendingItem);
     const bool techInstallment = pass.techSavings
@@ -280,6 +308,12 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
         if (pass.capacityMcvRunway && itemID==Unit_MCV) pass.capacityMcvOrderedCost+=quotedPrice;
         if (AITelemetry::log().enabled()) pass.capitalOrders.set(std::to_string(turn.pBuilder->getObjectID())+":"+std::to_string(before),
             AITelemetry::Record().set("item",itemID).set("price",quotedPrice).set("rule",rule));
+        if (turn.pBuilder->getItemID() == Structure_StarPort && AITelemetry::log().enabled())
+            traceDecision("starport_purchase", AITelemetry::Record()
+                .set("item",itemID).set("item_name",getItemNameByID(itemID))
+                .set("market_price",quotedPrice).set("normal_price",data[itemID][houseID].price)
+                .set("factory_price",getHouse()->radarUnitPrice(itemID,data[itemID][houseID].price))
+                .set("rule",rule).set("spendable_after",pass.money));
     }
     if (accepted && capitalPending(pass) && (requestedItem==pass.capitalCandidates[pass.capitalChoice].item
         || (pass.cityGrowthProtected && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()
@@ -1508,6 +1542,12 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
     const StarPort* pStarPort = static_cast<const StarPort*>(turn.pBuilder);
     if (pStarPort->okToOrder()) {
         const Choam& choam = getHouse()->getChoam();
+        const auto& policy = botConfig().force;
+        const bool scope = gameMode == GameMode::Custom
+            && (getGameInitSettings().getModName() == "vanilla"
+                || ModManager::instance().isDuneCityContentActive());
+        const int priceLevel = scope ? policy.starportBuying : 0;
+        const int economyPriority = scope ? policy.starportEconomyPriority : 0;
 
         // Economic imports may use the cash held for the economy,
         // just as factory-built harvesters do. Market discounts are
@@ -1559,6 +1599,18 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             return true;
         };
 
+        // Do not raise the fleet or yard target: this only changes which of
+        // the already-funded economic orders gets a scarce market window.
+        if (economyPriority > 0) {
+            while (pass.itemCount[Unit_Harvester] < workerTarget)
+                if (!buyEconomicImport(Unit_Harvester, "starport_priority_worker")) break;
+            if (economyPriority > 1 && capitalPending(pass)
+                && pass.capitalCandidates[pass.capitalChoice].item == Unit_MCV
+                && StarportBuyingPolicy::admitted(purchasePrice(turn.pBuilder,Unit_MCV),
+                    getHouse()->radarUnitPrice(Unit_MCV,data[Unit_MCV][houseID].price),priceLevel))
+                buyEconomicImport(Unit_MCV, "starport_priority_planned_mcv");
+        }
+
         // The priority purchase above imports the colonist. If
         // it is still unaffordable, preserve this port's savings.
         if (turn.capitalSupplier && capitalPending(pass)
@@ -1591,9 +1643,11 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
         std::vector<Uint32> bargains;
         for (const auto& offer : pStarPort->getBuildList()) {
             const Uint32 unit = offer.itemID;
+            const int factory = priceLevel == 0 ? data[unit][houseID].price
+                : getHouse()->radarUnitPrice(unit,data[unit][houseID].price);
             if (!isUnit(unit) || unit == Unit_Harvester || unit == Unit_Carryall
-                || unit == Unit_MCV || data[unit][houseID].price <= 0
-                || purchasePrice(turn.pBuilder,unit) <= 0 || purchasePrice(turn.pBuilder,unit) >= data[unit][houseID].price) continue;
+                || unit == Unit_MCV || !StarportBuyingPolicy::admitted(
+                    purchasePrice(turn.pBuilder,unit),factory,priceLevel)) continue;
             bargains.push_back(unit);
         }
         std::sort(bargains.begin(), bargains.end(), [&](Uint32 a, Uint32 b) {
