@@ -80,7 +80,11 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
                  'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost'
 ) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
-SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required')
+ROCK_FIELDS = ('rock_initial_area', 'rock_initial_free', 'rock_area', 'rock_free', 'rock_in_range',
+               'rock_committed', 'rock_key_full_area', 'rock_key_missing_area', 'rock_missing_no_geometry',
+               'rock_wind', 'rock_silo', 'rock_turret', 'rock_wall', 'rock_zone', 'rock_road',
+               'second_refinery_observed_cycle', 'city_zones')
+SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required') + ROCK_FIELDS
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 AIR_KILL_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'attacker', 'victim_house', 'object', 'item',
                           'enemy', 'capture_complete', 'attacker_item', 'attacker_source', 'attacker_firing_house',
@@ -561,8 +565,11 @@ def sample_schedule(args):
     for mod in mods:
         minutes = game_limit(args, mod)
         rng = random.Random(f'{args.sample_seed}/{mod}')
-        factors = dict(SAMPLE_FACTORS, spice_level=tuple(SPICE)[int(mod == 'vanilla'):],
-                       initial_tech=tuple(range(3 if mod == 'vanilla' else 1, 10)))
+        factors = dict(SAMPLE_FACTORS,
+                       size=tuple(args.sizes),
+                       spice_level=tuple(level for level in args.spice if mod != 'vanilla' or level != 'none'),
+                       initial_tech=tuple(getattr(args, 'sample_techs', None)
+                                          or range(3 if mod == 'vanilla' else 1, 10)))
         draws = {factor: balanced_draw(levels, args.cases, rng) for factor, levels in factors.items()}
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
@@ -575,10 +582,12 @@ def sample_schedule(args):
             teams = [1, 1, 2, 2] if fmt == '2v2' else list(range(1, count + 1))
             size, spice, tech = case['size'], case['spice_level'], case['initial_tech']
             spec = (f'size={size},base={args.base},army={args.army},city={args.city},'
-                    f'spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
+                    f'spice={SPICE[spice]},sand={95-getattr(args, "rock", 30)},rock={getattr(args, "rock", 30)},mountain=5,'
                     f'tech={tech},credits=3000,seed={seed}')
             cell = (f'sample/{mod}/s{args.sample_seed}-n{args.cases}/{args.base}-a{args.army}-c{args.city}/'
                     f'{index + 1:03d}/{size}/{spice}/{fmt}/{enemy}/t{tech}/{minutes}m/{seed}')
+            if getattr(args, 'rock', 30) != 30:
+                cell += f'/r{args.rock}'
             # Only the candidate controller moves. Houses, starts, map and enemy tier
             # stay fixed; in 2v2 the other three seats (including its ally) use that tier.
             for swapped, seat in enumerate((0, 2 if fmt == '2v2' else count - 1)):
@@ -686,6 +695,8 @@ def matrix_schedule(args):
                             cell = f'{args.mode}/{args.base}-a{args.army}-c{args.city}/{size}/{spice}/{fmt}/{difficulty}/{minutes}m/{seed}'
                             if args.tech != 9:
                                 cell += f'/t{args.tech}'
+                            if getattr(args, 'rock', 30) != 30:
+                                cell += f'/r{args.rock}'
                             if mod != 'dunecity':
                                 cell = f'{mod}/{cell}'
                             if swapped:
@@ -694,7 +705,8 @@ def matrix_schedule(args):
                                               difficulty=difficulty, variant=args.variant, sides=sides, base=args.base, army=args.army,
                                               city=args.city, limit=minutes, style=args.style or 'default', mod=mod, initial_tech=args.tech,
                                               minutes=minutes, skirmish=f'size={size},base={args.base},army={args.army},'
-                                              f'city={args.city},spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
+                                              f'city={args.city},spice={SPICE[spice]},sand={95-getattr(args, "rock", 30)},'
+                                              f'rock={getattr(args, "rock", 30)},mountain=5,'
                                               f'tech={args.tech},credits=3000,seed={seed}'))
     return games
 
@@ -931,9 +943,14 @@ def research_verified(game, setup, lines):
         return True
     observed = [parse(line, 'DUNECITY_TECH_SAMPLE:') for line in lines if 'DUNECITY_TECH_SAMPLE:' in line]
     initial = {int(item['house']): item for item in observed if item.get('cycle') == '0'}
+    # Startup receipts are independent of the minute observer. Older captures
+    # still require their genuine cycle-zero technology samples.
+    startup = [parse(line, 'SCENARIO_AI_CONFIG:') for line in lines if 'SCENARIO_AI_CONFIG:' in line]
+    if any('research_enabled' in row for row in startup):
+        initial = {int(row['house']): row for row in startup if row.get('cycle') == '0'}
     required = {HOUSE_IDS[house] for house, _, _ in game['sides']}
     return (setup.get('research_enabled') == '1' and set(initial) == required
-            and all(item.get('research_enabled') == '1' for item in observed))
+            and all(item.get('research_enabled') == '1' for item in list(initial.values()) + observed))
 def seat_styles_verified(game, setup, configs, lines):
     assignments = seat_style_assignments(game)
     if not assignments:
@@ -993,7 +1010,8 @@ def play(args, scratch, binary, game):
                    if 'PROBE_DIGEST:' in line and 'final=1' in line), '')
     merged = defaultdict(dict)
     for line in lines:
-        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_TROOPERS:'):
+        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_TROOPERS:',
+                       'DUNECITY_ROCK:'):
             if marker in line:
                 data = parse(line, marker)
                 data.update(json.loads(data.pop('economy', '{}')))
@@ -1918,6 +1936,10 @@ parser.add_argument('--wall-timeout', type=int, default=1800)
 parser.add_argument('--capture-mib', type=int, default=256,
                     help='Ordinary diagnostic telemetry allowance (256-4096 MiB); shipped log cap is unchanged')
 parser.add_argument('--sizes', nargs='+', type=int, choices=(96, 128, 160), default=[96, 128, 160])
+parser.add_argument('--rock', type=int, choices=range(1, 91), default=30,
+                    help='Generated rock percentage; mountains stay 5%% and sand fills the remainder')
+parser.add_argument('--sample-techs', nargs='+', type=int, choices=range(1, 10),
+                    help='Optional initial-technology deck for a targeted sample (default unchanged)')
 parser.add_argument('--spice', nargs='+', choices=tuple(SPICE), default=list(SPICE))
 parser.add_argument('--formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6'), default=['1v1', '2v2', 'ffa4'])
 parser.add_argument('--difficulties', nargs='+', choices=('medium', 'hard', 'brutal'), default=['medium', 'hard', 'brutal'])

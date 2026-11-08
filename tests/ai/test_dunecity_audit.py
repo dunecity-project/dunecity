@@ -232,6 +232,24 @@ class DuneCityAuditTests(unittest.TestCase):
         exporting = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'vanilla', '--export-maps', 'maps'])
         self.assertEqual(audit['schedule'](ordinary), audit['schedule'](exporting))
 
+    def test_targeted_rock_sample_uses_real_terrain_and_preserves_candidate_pairing(self):
+        args = audit['parser'].parse_args([
+            '--mode', 'sample', '--mod', 'both', '--cases', '12', '--sizes', '96',
+            '--spice', 'medium', '--sample-techs', '9', '--rock', '10', '--base', 'cy'])
+        games = audit['schedule'](args)
+        for mod in ('vanilla', 'dunecity'):
+            rows = [game for game in games if game['mod'] == mod]
+            self.assertEqual(len(rows), 24)
+            for game in rows:
+                self.assertEqual(game['size'], 96)
+                self.assertEqual(game['initial_tech'], 9)
+                self.assertEqual(game['spice_level'], 'medium')
+                self.assertIn('sand=85,rock=10,mountain=5', game['skirmish'])
+                self.assertIn('/r10/', game['id'])
+            for original, swapped in zip(rows[::2], rows[1::2]):
+                self.assertEqual(original['skirmish'], swapped['skirmish'])
+                self.assertNotEqual(original['candidate_house'], swapped['candidate_house'])
+
     def test_balanced_sampler_respects_both_mods_and_every_factor_level(self):
         args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
         games = audit['schedule'](args)
@@ -458,6 +476,14 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertFalse(audit['research_verified'](
             game, dict(research_enabled='1'), lines + [lines[0].replace('cycle=0 research_enabled=1',
                                                                        'cycle=3750 research_enabled=0')]))
+        startup = [f'SCENARIO_AI_CONFIG: house={audit["HOUSE_IDS"][house]} config_hash=fixture'
+                   ' cycle=0 research_enabled=1' for house, _, _ in game['sides']]
+        self.assertTrue(audit['research_verified'](game, dict(research_enabled='1'), startup))
+        self.assertFalse(audit['research_verified'](game, dict(research_enabled='1'), startup[:-1]))
+        self.assertFalse(audit['research_verified'](
+            game, dict(research_enabled='1'), [row.replace('cycle=0', 'cycle=1') for row in startup]))
+        self.assertFalse(audit['research_verified'](
+            game, dict(research_enabled='1'), startup + [lines[0].replace('research_enabled=1', 'research_enabled=0')]))
 
     def test_initial_technology_changes_the_real_skirmish_without_colliding_with_default_ids(self):
         options = ['--sizes', '96', '--spice', 'medium', '--formats', '1v1',

@@ -1010,3 +1010,46 @@ AAA seeds and a few city house rotations. Only the economy-observer flag differs
 No engine or AI policy change, network/save bump or diagnostic policy mirror is
 part of this repair.
 
+### Experimental connected-rock budget — 2026-11-08
+
+`[Force Concentration] RockBudget` is hashed and defaults **OFF**. It applies
+only to ordinary custom DuneCity AI houses; Vanilla, other content families,
+campaign game types and human-support builders remain inert. The frozen
+diagnosis found no missing key rectangle in 84 Vanilla histories. In scarce-rock
+City fixtures, 34/44 histories lost a missing key shape (Starport 26/44, Palace
+34/44), despite 233–1312 starting connected cells. These are geometric
+opportunities, not automatically eligible orders or causal delay estimates.
+
+The policy extends the existing production-plot reservation, rather than
+introducing another saved planner. Every build pass surveys edge-connected rock
+from living yards, counts free terrain and reserves missing key rectangles
+largest-first, including prerequisite links and the second refinery. Accepted
+queues consume their real space and inventory. Future plots may lie beyond
+today's build range on the held formation; ordinary engine range, foundations,
+access and safety still decide every actual order. Exact rectangles preserve
+ground egress; `RockBudgetLevel=2` additionally leaves a one-tile reserve margin
+(`1` is the default level). These are the only two experimental levels.
+
+Optional zones, windtraps, silos, defences and roads stay off the plots.
+Low-value structures prefer compact placement and marginal rock. Seed income,
+the first generator and blackout recovery retain priority. If the remaining
+rectangles cannot be reserved, the ordinary safe/reachable MCV colonisation
+path becomes due before the last factory-sized opening disappears; existing
+funding, escort, lost-colonist and yard-limit rules remain authoritative.
+The existing supplemental reservation layout is unchanged.
+
+The pure audit adds connected/free/committed rock, remaining key footprint area,
+per-type occupied rock, city-zone count and overlapping geometric origin counts.
+Origin counts are not disjoint capacity. Missing shapes exclude houses without
+a living yard. Second-refinery time is a minute-observed upper bound; existing
+key-building completion times are per-tick. `key_site_admission` records only
+already-evaluated natural site checks, including pre-selection guards; it never
+asks the observer to invoke placement or policy. All OFF/ON comparisons must use
+the same observer mode. Lightweight per-house cycle-zero research receipts also
+allow honest research verification with the minute observer disabled.
+
+Targeted sampler options `--rock`, `--sample-techs`, `--sizes` and `--spice`
+control the real generated maps; nondefault rock weights have distinct IDs.
+The experiment ledger and raw evidence are in
+`../outputs/ai-tuning-20261108/RockBudget/`. No default adoption is implied.
+

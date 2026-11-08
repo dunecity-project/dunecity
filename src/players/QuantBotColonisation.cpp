@@ -196,7 +196,7 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
 
 bool QuantBot::baseBuiltOut() const {
     QuantBotColonisationPolicy::Demand demand;
-    demand.productionRoomBlocked=baseProductionRoomBlocked;
+    demand.productionRoomBlocked=baseProductionRoomBlocked || rockBudgetShortfall();
     demand.freeFootprints=availableBaseFootprints;
     return QuantBotColonisationPolicy::builtOut(demand);
 }
@@ -217,7 +217,7 @@ QuantBotColonisationPolicy::Demand QuantBot::colonisationDemand(int mcvsIncludin
     demand.campaignGame=isCampaignGameType(currentGame->gameType);
     demand.supportMode=builderOnly();
     demand.siteAvailable=colonySiteOpen();
-    demand.productionRoomBlocked=baseProductionRoomBlocked;
+    demand.productionRoomBlocked=baseProductionRoomBlocked || rockBudgetShortfall();
     demand.freeFootprints=availableBaseFootprints;
     demand.yards=getHouse()->getNumItems(Structure_ConstructionYard);
     demand.mcvsIncludingQueued=mcvsIncludingQueued;

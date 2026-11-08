@@ -1541,7 +1541,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         && pass.itemCount[Structure_LightFactory] > 0
         && pass.itemCount[Structure_HeavyFactory] == 0
         && campaignAvailableToBuild(turn.pBuilder,Structure_HeavyFactory)
-        && findPlaceLocation(Structure_HeavyFactory).isValid()) {
+        && keyBuildingSite(Structure_HeavyFactory,"first_heavy")) {
         yardTurn.skipRemainingStructureLogic = true;
         yardTurn.structureRule = "save_first_heavy";
         if (pass.money >= data[Structure_HeavyFactory][houseID].price) {
@@ -1693,7 +1693,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         && !pass.vanillaFfaStarportDeferred
         && pass.itemCount[Structure_StarPort] == 0
         && campaignAvailableToBuild(turn.pBuilder,Structure_StarPort)
-        && findPlaceLocation(Structure_StarPort).isValid()
+        && keyBuildingSite(Structure_StarPort,"first_starport")
         && (gameMode != GameMode::Campaign || pass.money > 1000)
         && pass.starportMarketAvailable) {
         yardTurn.itemID = Structure_StarPort; yardTurn.structureRule = "starport_supply";
@@ -1937,7 +1937,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
         && pass.itemCount[Structure_RepairYard] > 0
         && campaignAvailableToBuild(turn.pBuilder,Structure_IX)
         && pass.money > 1000
-        && (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_IX).isValid())) {
+        && (!botConfig().strategicSiteGuards || keyBuildingSite(Structure_IX,"first_ix"))) {
         yardTurn.itemID = Structure_IX; yardTurn.structureRule = "advanced_tech";
         logDebug("Build IX... money: %d", pass.money);
     }
@@ -1950,7 +1950,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
         && yardTurn.itemID != Structure_IX
         && yardTurn.itemID != Structure_WindTrap
         && yardTurn.itemID != Structure_NuclearPlant
-        && (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_IX).isValid())) {
+        && (!botConfig().strategicSiteGuards || keyBuildingSite(Structure_IX,"overdue_ix"))) {
         yardTurn.itemID = Structure_IX; yardTurn.structureRule = "advanced_tech";
     }
     // Missing prerequisites never start the IX overdue timer.
@@ -2064,7 +2064,7 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
                             && palaceAllowed
                             && pass.itemCount[Structure_HeavyFactory] > 0
                             && pass.itemCount[Structure_LightFactory] > 0
-                            && (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_Palace).isValid())) {
+                            && (!botConfig().strategicSiteGuards || keyBuildingSite(Structure_Palace,"first_palace"))) {
             yardTurn.itemID = Structure_Palace; yardTurn.structureRule = "palace_strategy";
         }
         if (pass.palaceOverdue && !yardTurn.skipRemainingStructureLogic
@@ -2078,7 +2078,7 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
             && yardTurn.itemID != Structure_IX
             && yardTurn.itemID != Structure_WindTrap
             && yardTurn.itemID != Structure_NuclearPlant
-            && (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_Palace).isValid())) {
+            && (!botConfig().strategicSiteGuards || keyBuildingSite(Structure_Palace,"overdue_palace"))) {
             yardTurn.itemID = Structure_Palace; yardTurn.structureRule = "palace_strategy";
         }
         // Same demand as the palace rules above, for a map whose Palace

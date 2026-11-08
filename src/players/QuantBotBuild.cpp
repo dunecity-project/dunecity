@@ -364,6 +364,124 @@ void QuantBot::resetBuildPass() {
     }
 }
 
+bool QuantBot::rockBudgetActive() const {
+    return botConfig().force.rockBudget && gameMode==GameMode::Custom
+        && !isCampaignGameType(currentGame->gameType) && !builderOnly()
+        && currentGame->isCitySimEnabled() && ModManager::instance().isDuneCityContentActive();
+}
+
+std::array<int,Num_ItemID> QuantBot::rockBudgetNeeds() const {
+    std::array<int,Num_ItemID> present{}, target{};
+    const int house=getHouse()->getHouseID();
+    const auto& data=currentGame->objectData.data;
+    const int tech=getGameInitSettings().getGameOptions().researchLab ? 9 : getHouse()->getTechLevel();
+    for (int item=Structure_FirstID;item<=Structure_LastID;++item)
+        present[item]=getHouse()->getNumItems(item);
+    for (const auto* structure:getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0)
+            if (const auto* builder=dynamic_cast<const BuilderBase*>(structure))
+                for (const auto& order:builder->getProductionQueue())
+                    if (isStructure(order.itemID)) ++present[order.itemID];
+    for (Uint32 item:{Structure_HeavyFactory,Structure_StarPort,Structure_RepairYard,
+            Structure_IX,Structure_HighTechFactory,Structure_Palace,Structure_Refinery,Structure_WindTrap})
+        if (data[item][house].enabled && data[item][house].techLevel<=tech)
+            target[item]=item==Structure_Refinery ? 2 : 1;
+    if (getGameInitSettings().getGameOptions().researchLab && getHouse()->getTechLevel()<9)
+        target[Structure_ResearchLab]=1;
+    // Missing goals bring their missing prerequisite footprints with them.
+    // Completed/accepted suppliers do not claim another speculative copy.
+    for (int depth=0;depth<Num_ItemID;++depth) {
+        bool changed=false;
+        for (int item=Structure_FirstID;item<=Structure_LastID;++item) {
+            if (target[item]<=present[item]) continue;
+            for (Uint32 prerequisite=Structure_FirstID;
+                    prerequisite<data[item][house].prerequisiteStructuresSet.size();++prerequisite)
+                if (isStructure(prerequisite) && data[item][house].prerequisiteStructuresSet[prerequisite]
+                    && data[prerequisite][house].enabled && data[prerequisite][house].techLevel<=tech
+                    && target[prerequisite]==0 && present[prerequisite]==0) {
+                    target[prerequisite]=1; changed=true;
+                }
+        }
+        if (!changed) break;
+    }
+    for (int item=Structure_FirstID;item<=Structure_LastID;++item)
+        target[item]=std::max(0,target[item]-present[item]);
+    return target;
+}
+
+void QuantBot::reserveRockBudgetPlots() {
+    const auto needs=rockBudgetNeeds();
+    std::vector<Uint32> goals;
+    int requiredArea=0;
+    for (int item=Structure_FirstID;item<=Structure_LastID;++item)
+        for (int count=0;count<needs[item];++count) {
+            goals.push_back(item);
+            const Coord size=getStructureSize(item);
+            requiredArea+=size.x*size.y;
+        }
+    if (goals.empty()) return;
+    // Allocate fragile 3x3 rectangles before fitting the smaller links.
+    std::stable_sort(goals.begin(),goals.end(),[](Uint32 a,Uint32 b) {
+        const Coord sa=getStructureSize(a), sb=getStructureSize(b);
+        return sa.x*sa.y>sb.x*sb.y;
+    });
+    const int w=getMap().getSizeX(), h=getMap().getSizeY();
+    std::vector<char> connected(static_cast<size_t>(w)*h,0);
+    std::vector<int> queue;
+    queue.reserve(connected.size());
+    auto visit=[&](int cell) {
+        const auto* tile=getMap().getTile(cell%w,cell/w);
+        if (!connected[cell] && tile->isRock() && !tile->isMountain()) {
+            connected[cell]=1; queue.push_back(cell);
+        }
+    };
+    for (const auto* structure:getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0
+            && structure->getItemID()==Structure_ConstructionYard) {
+            const Coord at=structure->getLocation(), size=structure->getStructureSize();
+            for (int y=at.y;y<at.y+size.y;++y) for (int x=at.x;x<at.x+size.x;++x) visit(y*w+x);
+        }
+    for (size_t index=0;index<queue.size();++index) {
+        const int cell=queue[index], x=cell%w;
+        if (x>0) visit(cell-1);
+        if (x+1<w) visit(cell+1);
+        if (cell>=w) visit(cell-w);
+        if (cell+w<w*h) visit(cell+w);
+    }
+    int freeRock=0, reservedArea=0;
+    for (const int cell:queue) {
+        const auto* tile=getMap().getTile(cell%w,cell/w);
+        freeRock+=!tile->hasAStructure() && !tile->hasCityZone()
+            && !overlapsReservedStructure(cell%w,cell/w,1,1);
+    }
+    planningCityProductionPlots=true;
+    for (const Uint32 item:goals) {
+        clearPlacementCache(false);
+        const Coord site=findPlaceLocation(item,&connected);
+        if (!site.isValid()) continue;
+        cityProductionPlots.push_back({item,site});
+        const Coord size=getStructureSize(item);
+        reservedArea+=size.x*size.y;
+    }
+    planningCityProductionPlots=false;
+    clearPlacementCache(false);
+    traceDecision("rock_budget_plan",AITelemetry::Record().set("connected_rock",int(queue.size()))
+        .set("free_rock",freeRock).set("required_area",requiredArea).set("reserved_area",reservedArea)
+        .set("required_plots",int(goals.size())).set("reserved_plots",int(cityProductionPlots.size()))
+        .set("shortfall",cityProductionPlots.size()<goals.size()));
+}
+
+bool QuantBot::rockBudgetShortfall() const {
+    if (!rockBudgetActive()) return false;
+    const auto* sim=currentGame->getCitySimulation();
+    if (lastCalculatedSpice<=0 && (!sim || sim->getHouseState(getHouse()->getHouseID()).taxBaseEighths<=0))
+        return false; // Seed income takes priority over unfundable future plots.
+    auto needs=rockBudgetNeeds();
+    for (const auto& plot:cityProductionPlots)
+        if (needs[plot.item]>0) --needs[plot.item];
+    return std::any_of(needs.begin(),needs.end(),[](int missing) { return missing>0; });
+}
+
 void QuantBot::planBuildInventory(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
@@ -554,7 +672,9 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     const bool cityFundsProduction = !pass.citySimEnabled || pass.citySpiceWorkerTarget > 0
         || (getHouse()->getCapacity()>0 && currentGame->getCitySimulation()
             && currentGame->getCitySimulation()->getHouseState(houseID).taxBaseEighths > 0);
-    if (pass.citySimEnabled && cityFundsProduction && pass.itemCount[Structure_ConstructionYard]>0) {
+    if (rockBudgetActive() && cityFundsProduction && pass.itemCount[Structure_ConstructionYard]>0) {
+        reserveRockBudgetPlots();
+    } else if (pass.citySimEnabled && cityFundsProduction && pass.itemCount[Structure_ConstructionYard]>0) {
         planningCityProductionPlots=true;
         for (Uint32 item:{Structure_HeavyFactory,Structure_RepairYard}) {
             if (!data[item][houseID].enabled || data[item][houseID].techLevel>getHouse()->getTechLevel()) continue;
@@ -933,7 +1053,8 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
         rockExpansionSite=findRockExpansionSite();
     }
     pass.rockExpansionNeeded = pass.citySimEnabled&&colonySiteOpen()
-        && (availableBaseRock<48 || (pass.unloadingBacklog&&!findPlaceLocation(Structure_Refinery).isValid()));
+        && (availableBaseRock<48 || rockBudgetShortfall()
+            || (pass.unloadingBacklog&&!findPlaceLocation(Structure_Refinery).isValid()));
     pass.cityWorkingReserve = data[Unit_Tank][houseID].price
         + (pass.itemCount[Unit_Harvester] < pass.fundedHarvesterTarget ? data[Unit_Harvester][houseID].price : 0)
         + (!pass.citySimEnabled && pass.itemCount[Structure_Refinery] < QuantBotBuildPolicy::desiredSpiceRefineries(
@@ -3283,6 +3404,11 @@ void QuantBot::planTechSavings(BuildPass& pass) {
                 continue;
             planningBuilder = builder->getObjectID(); clearPlacementCache(false, true);
             candidate.site = findPlaceLocation(item);
+            if (AITelemetry::log().enabled())
+                traceDecision("key_site_admission",AITelemetry::Record().set("item",item).set("goal",goal)
+                    .set("rule","tech_progression").set("builder",planningBuilder)
+                    .set("valid",candidate.site.isValid()).set("owned",getHouse()->getNumItems(item))
+                    .set("credits",getHouse()->getCredits()).set("placement",placementScoreDetails[item]));
             if (!candidate.site.isValid()) continue;
             const auto foundation = foundationPlan(builder, item, candidate.site);
             if (!foundation.complete) continue;
@@ -4405,6 +4531,7 @@ std::vector<std::pair<int,int>> QuantBot::cityRoadRepairSites() {
         return !tile->isRoadConnection() && !tile->hasCityZone() && !tile->hasAGroundObject()
             && tile->isRock() && !tile->isMountain()
             && !overlapsReservedStructure(x,y,1,1)
+            && !overlapsRockBudget(Structure_Road,x,y,1,1)
             && getMap().okayToPlaceStructure(x,y,1,1,false,getHouse(),false,Structure_Road);
     },[&](int x,int y) {
         return getMap().tileExists(x,y) && getMap().getTile(x,y)->isRoadConnection();
@@ -4542,6 +4669,7 @@ void QuantBot::manageCityBuilding() {
             Tile* tile = currentGameMap->getTile(road.x, road.y);
             if (tile->isRoadConnection()) continue;
             if (tile->hasCityZone() || tile->hasAStructure() || !tile->isRock() || tile->isMountain()) break;
+            if (overlapsRockBudget(Structure_Road,road.x,road.y,1,1)) break;
             if (tile->hasAGroundObject() && tile->getDestroyedStructureTile() == DestroyedStructure_None) break;
             if (!scheduledRoads.emplace(road.x, road.y).second) continue;
             currentGame->getCommandManager().addCommand(Command(getPlayerID(), CMD_CITY_TOOL,
@@ -4582,6 +4710,7 @@ void QuantBot::manageCityBuilding() {
             if (tile->isRoad() || tile->hasCityZone() || tile->hasAStructure()) continue;
             if (scheduledRoads.count({tx, ty}) != 0) continue;
             if (!tile->isRock() || tile->isMountain()) continue;
+            if (overlapsRockBudget(Structure_Road,tx,ty,1,1)) continue;
             // Allow rubble tiles (destroyed structures) — road clears the rubble
             if (tile->hasAGroundObject() && tile->getDestroyedStructureTile() == DestroyedStructure_None) continue;
 

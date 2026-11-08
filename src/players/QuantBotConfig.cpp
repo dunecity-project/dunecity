@@ -389,6 +389,8 @@ QuantBotConfig::QuantBotConfig() {
     force.citySpiceCapacityRunway = false;
     force.citySingleYardGrowth = false;
     force.cityPowerGrowthHorizon = false;
+    force.rockBudget = false;
+    force.rockBudgetLevel = 1;
     force.threatTurrets = true;
     force.moreRocketTurrets = false; // Opt-in: the final paired count-gain gate was not met.
     force.cityStarportSupply = true;
@@ -737,6 +739,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
         iniFile.setBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
         iniFile.setBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
+        iniFile.setBoolValue("Force Concentration", "RockBudget", force.rockBudget);
+        iniFile.setIntValue("Force Concentration", "RockBudgetLevel", force.rockBudgetLevel);
         iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
         iniFile.setBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
         iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
@@ -911,6 +915,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.citySpiceCapacityRunway = iniFile.getBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
     force.citySingleYardGrowth = iniFile.getBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
     force.cityPowerGrowthHorizon = iniFile.getBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
+    force.rockBudget = iniFile.getBoolValue("Force Concentration", "RockBudget", force.rockBudget);
+    force.rockBudgetLevel = std::clamp(iniFile.getIntValue("Force Concentration", "RockBudgetLevel", force.rockBudgetLevel), 1, 2);
     force.threatTurrets = iniFile.getBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
     force.moreRocketTurrets = iniFile.getBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
     force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
@@ -1447,6 +1453,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("citySpiceCapacityRunway", force.citySpiceCapacityRunway);
     addNamed("citySingleYardGrowth", force.citySingleYardGrowth);
     addNamed("cityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
+    addNamed("rockBudget", force.rockBudget);
+    addNamed("rockBudgetLevel", force.rockBudgetLevel);
     addNamed("threatTurrets", force.threatTurrets);
     addNamed("moreRocketTurrets", force.moreRocketTurrets);
     addNamed("cityStarportSupply", force.cityStarportSupply);

@@ -520,7 +520,13 @@ private:
     static constexpr int kMcvDeployRoom = 12;
     /// How far past the footprint clearMcvFootprint() looks for free ground.
     static constexpr int kMcvClearanceReach = 6;
-    Coord findPlaceLocation(Uint32 itemID);
+    Coord findPlaceLocation(Uint32 itemID, const std::vector<char>* futureRock = nullptr);
+    bool rockBudgetActive() const;
+    std::array<int,Num_ItemID> rockBudgetNeeds() const;
+    void reserveRockBudgetPlots();
+    bool rockBudgetShortfall() const;
+    bool overlapsRockBudget(Uint32 item, int x, int y, int width, int height) const;
+    bool keyBuildingSite(Uint32 item, const char* rule);
     /// `clearedZones` are object ids this placement is about to demolish; their
     /// tiles count as passable, because by the time the building stands they
     /// are. Pass nothing for an ordinary placement.
@@ -679,7 +685,7 @@ private:
     std::map<Uint32, std::list<Coord>> builderPlaceLocations;
     struct PlannedStructure { Uint32 item; Coord location; };
     std::map<Uint32, PlannedStructure> reservedStructures;
-    // Recomputed every planning pass; zoning leaves two usable production plots.
+    // Recomputed every pass; RockBudget extends the ordinary two city production plots.
     std::vector<PlannedStructure> cityProductionPlots;
     bool planningCityProductionPlots = false;
     struct RecentStructureLoss { Coord location; Coord size; Uint32 cycle; Uint32 item; };
@@ -813,7 +819,7 @@ private:
     bool tileBlocksOwnPlacement(const Tile* tile) const;
     /// Map::okayToPlaceStructure with own leaving-capable units ignored (other units, structures
     /// and mountains still block). tilesRequired/item as the engine check.
-    bool placeableAmongOwnUnits(int x, int y, int width, int height, Uint32 item) const;
+    bool placeableAmongOwnUnits(int x, int y, int width, int height, Uint32 item, bool future = false) const;
     /// Does any unit of this house stand on the footprint?
     bool ownUnitsOnFootprint(int x, int y, int width, int height) const;
     /// Is p inside any planned site of this house (every yard's reservation)? Holding, bundle,

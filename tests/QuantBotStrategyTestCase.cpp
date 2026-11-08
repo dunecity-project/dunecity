@@ -317,6 +317,44 @@ TEST_CASE("City construction capital defaults on and is loaded saved and hashed"
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Rock budget defaults off and both discrete levels are loaded saved and hashed", "[ai][city][config][rock]") {
+    QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.rockBudget);
+    REQUIRE(defaults.force.rockBudgetLevel==1);
+    const auto path=std::filesystem::temp_directory_path()/"quantbot-rock-budget-test.ini";
+    for (int enabled:{0,1}) for (int level:{1,2}) {
+        QuantBotConfig expected=defaults;
+        expected.force.rockBudget=enabled;
+        expected.force.rockBudgetLevel=level;
+        {
+            std::ofstream ini(path);
+            ini<<"[Force Concentration]\nRockBudget="<<enabled<<"\nRockBudgetLevel="<<level<<'\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.rockBudget==bool(enabled));
+        REQUIRE(loaded.force.rockBudgetLevel==level);
+        REQUIRE(loaded.getConfigHash()==expected.getConfigHash());
+        REQUIRE((loaded.getConfigHash()==defaults.getConfigHash())==(enabled==0 && level==1));
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.rockBudget==loaded.force.rockBudget);
+        REQUIRE(restored.force.rockBudgetLevel==level);
+        REQUIRE(restored.getConfigHash()==loaded.getConfigHash());
+    }
+    for (int raw:{-1,99}) {
+        {
+            std::ofstream ini(path);
+            ini<<"[Force Concentration]\nRockBudgetLevel="<<raw<<'\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.rockBudgetLevel==(raw<1 ? 1 : 2));
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("City production prerequisites default on and are loaded saved and hashed", "[ai][city][config]") {
     QuantBotConfig config;
     REQUIRE(config.force.cityProductionPrerequisites);

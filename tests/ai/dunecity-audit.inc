@@ -4,6 +4,7 @@
 #include <dunecity/PowerRules.h>
 #include <structures/BuilderBase.h>
 #include <array>
+#include <vector>
 
 namespace DuneCityAudit {
 
@@ -23,6 +24,128 @@ struct TechObservation {
     std::array<int64_t,6> firstCompleted{-1,-1,-1,-1,-1,-1};
 };
 inline std::array<TechObservation,NUM_HOUSES> technology;
+
+struct RockObservation {
+    const House* house{};
+    Uint32 cycle{};
+    int initialArea=-1, initialFree=-1;
+    int64_t secondRefinery=-1;
+};
+inline std::array<RockObservation,NUM_HOUSES> rock;
+
+// Pure geometry, not another AI placement query: units are traffic, while
+// structures, city lots and accepted yard reservations consume building land.
+// The connected formation includes occupied rock so a building cannot split
+// the survey into artificial islands. Origin counts are not disjoint capacity.
+inline void sampleRock(Game& game, const House* house, const QuantBot* bot, int minute) {
+    const auto& map=*currentGameMap;
+    const int w=map.getSizeX(), h=map.getSizeY(), n=w*h, owner=house->getHouseID();
+    const StructureBase* yard=nullptr;
+    for (const auto* structure:structureList)
+        if (structure->getOwner()==house && structure->getHealth()>0
+            && structure->getItemID()==Structure_ConstructionYard
+            && (!yard || structure->getObjectID()<yard->getObjectID())) yard=structure;
+    auto& state=rock[owner];
+    const Uint32 cycle=game.getGameCycleCount();
+    if (state.house!=house || cycle<state.cycle) state={};
+    state.house=house; state.cycle=cycle;
+    if (state.secondRefinery<0 && house->getNumItems(Structure_Refinery)>=2) state.secondRefinery=cycle;
+    std::vector<char> region(n,0), free(n,0);
+    std::vector<int> queue;
+    queue.reserve(n);
+    auto visit=[&](int at) {
+        const auto* tile=map.getTile(at%w,at/w);
+        if (!region[at] && tile->isRock() && !tile->isMountain()) {
+            region[at]=1; queue.push_back(at);
+        }
+    };
+    if (yard) {
+        const Coord at=yard->getLocation(), size=yard->getStructureSize();
+        for (int y=at.y;y<at.y+size.y;++y) for (int x=at.x;x<at.x+size.x;++x) visit(y*w+x);
+    }
+    for (size_t i=0;i<queue.size();++i) {
+        const int at=queue[i], x=at%w;
+        if (x>0) visit(at-1);
+        if (x+1<w) visit(at+1);
+        if (at>=w) visit(at-w);
+        if (at+w<n) visit(at+w);
+    }
+    int freeTiles=0, inRange=0, roads=0, committed=0;
+    DuneCity::BoxAnyField anchors;
+    anchors.build(w,h,[&](int x,int y) { return map.getTile(x,y)->getOwner()==owner; });
+    for (int at:queue) {
+        const auto* tile=map.getTile(at%w,at/w);
+        roads+=int(tile->isRoad());
+        if (!tile->hasAStructure() && !tile->hasCityZone()) free[at]=1;
+    }
+    for (const auto& entry:bot->reservedStructures) {
+        const Coord at=entry.second.location, size=getStructureSize(entry.second.item);
+        for (int y=at.y;y<at.y+size.y;++y) for (int x=at.x;x<at.x+size.x;++x)
+            if (map.tileExists(x,y) && free[y*w+x]) { free[y*w+x]=0; ++committed; }
+    }
+    for (int at:queue) if (free[at]) {
+        ++freeTiles;
+        inRange+=int(anchors.anyWithin(at%w,at/w,BUILDRANGE));
+    }
+    if (state.initialArea<0 && yard) {
+        state.initialArea=int(queue.size()); state.initialFree=freeTiles;
+    }
+    constexpr std::array<Uint32,7> items{Structure_HeavyFactory,Structure_StarPort,Structure_RepairYard,
+        Structure_IX,Structure_HighTechFactory,Structure_Palace,Structure_Refinery};
+    constexpr std::array<const char*,7> names{"heavy","starport","repair","ix","hitech","palace","refinery"};
+    int fullArea=0, missingArea=0, absentNoGeometry=0;
+    for (size_t i=0;i<items.size();++i) {
+        const Uint32 item=items[i];
+        const auto& data=game.objectData.data[item][owner];
+        const Coord size=getStructureSize(item);
+        const int target=item==Structure_Refinery ? 2 : 1;
+        int queued=0, origins=0, reachable=0;
+        for (const auto* structure:structureList)
+            if (structure->getOwner()==house && structure->getHealth()>0)
+                if (const auto* builder=dynamic_cast<const BuilderBase*>(structure))
+                    for (const auto& order:builder->getProductionQueue()) queued+=int(order.itemID==item);
+        if (data.enabled) fullArea+=target*size.x*size.y;
+        const bool available=data.enabled && data.techLevel<=house->getTechLevel();
+        const int missing=available ? std::max(0,target-house->getNumItems(item)-queued) : 0;
+        missingArea+=missing*size.x*size.y;
+        for (int at:queue) {
+            const int x=at%w, y=at/w;
+            if (x+size.x>w || y+size.y>h) continue;
+            bool fits=true;
+            for (int dy=0;dy<size.y && fits;++dy) for (int dx=0;dx<size.x;++dx)
+                if (!free[(y+dy)*w+x+dx]) { fits=false; break; }
+            if (!fits) continue;
+            ++origins;
+            reachable+=int(anchors.anyNearFootprint(x,y,size.x,size.y,BUILDRANGE));
+        }
+        absentNoGeometry+=int(missing>0 && origins==0);
+        const auto cache=bot->placementCache.find(item);
+        SDL_Log("DUNECITY_ROCK_KEY: minute=%d cycle=%u house=%d name=%s item=%u"
+                " owned=%d queued=%d missing=%d origins=%d range_origins=%d cached_probe=%d cached_valid=%d",
+            minute,cycle,owner,names[i],item,house->getNumItems(item),queued,missing,origins,reachable,
+            int(cache!=bot->placementCache.end()),int(cache!=bot->placementCache.end() && cache->second.isValid()));
+    }
+    std::array<int,5> consumed{};
+    for (const auto* structure:structureList) {
+        if (structure->getOwner()!=house || structure->getHealth()<=0) continue;
+        const Uint32 item=structure->getItemID();
+        const int category=item==Structure_WindTrap ? 0 : item==Structure_Silo ? 1
+            : item==Structure_GunTurret || item==Structure_RocketTurret ? 2
+            : item==Structure_Wall ? 3 : DuneCity::isCityZoneStructure(item) ? 4 : -1;
+        if (category<0) continue;
+        const Coord at=structure->getLocation(), size=structure->getStructureSize();
+        for (int y=at.y;y<at.y+size.y;++y) for (int x=at.x;x<at.x+size.x;++x)
+            if (map.tileExists(x,y) && region[y*w+x]) ++consumed[category];
+    }
+    SDL_Log("DUNECITY_ROCK: minute=%d cycle=%u house=%d rock_initial_area=%d rock_initial_free=%d"
+            " rock_area=%zu rock_free=%d rock_in_range=%d rock_committed=%d rock_key_full_area=%d"
+            " rock_key_missing_area=%d rock_missing_no_geometry=%d rock_wind=%d rock_silo=%d"
+            " rock_turret=%d rock_wall=%d rock_zone=%d rock_road=%d second_refinery_observed_cycle=%lld city_zones=%d",
+        minute,cycle,owner,state.initialArea,state.initialFree,queue.size(),freeTiles,inRange,committed,fullArea,
+        missingArea,absentNoGeometry,consumed[0],consumed[1],consumed[2],consumed[3],consumed[4],roads,
+        static_cast<long long>(state.secondRefinery),house->getNumItems(Structure_ZoneResidential)
+            +house->getNumItems(Structure_ZoneCommercial)+house->getNumItems(Structure_ZoneIndustrial));
+}
 
 inline size_t compositionSlot(Uint32 item) {
     for (size_t i=0; i<QuantBot::kMixItems.size(); ++i)
@@ -165,6 +288,7 @@ inline void sample(Game& game) {
         const QuantBot* bot = FfaArmy::quantBotOf(house);
         if (!bot) continue;
         sampleComposition(game,house,bot,minute);
+        sampleRock(game,house,bot,minute);
         const auto grid = FfaArmy::baseGrid(house);
         int fighters = 0, moving = 0, targeting = 0, enemies = 0, enemyValue = 0, coveredEnemies = 0;
         int trooperLive = 0, ornithopterLive = 0, eliteOrnithopterLive = 0;

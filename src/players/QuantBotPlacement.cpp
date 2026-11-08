@@ -306,6 +306,36 @@ bool QuantBot::overlapsReservedStructure(int x, int y, int width, int height) co
     return false;
 }
 
+bool QuantBot::overlapsRockBudget(Uint32 item, int x, int y, int width, int height) const {
+    if (!rockBudgetActive()) return false;
+    if (!planningCityProductionPlots && (item==Structure_WindTrap || item==Structure_NuclearPlant)
+        && (!getHouse()->hasPower() || getHouse()->getNumItems(Structure_WindTrap)==0)) return false;
+    const bool seed=!planningCityProductionPlots && DuneCity::isCityZoneStructure(item)
+        && getHouse()->getNumItems(Structure_ZoneResidential)+getHouse()->getNumItems(Structure_ZoneCommercial)
+            +getHouse()->getNumItems(Structure_ZoneIndustrial)<3;
+    const int margin=item==Structure_Road ? 0 : botConfig().force.rockBudgetLevel-1;
+    for (const auto& plot:cityProductionPlots) {
+        if (!planningCityProductionPlots && plot.item==item) continue;
+        // Seed income may displace optional future tech, never its first supplier.
+        if (seed && plot.item!=Structure_HeavyFactory && plot.item!=Structure_LightFactory
+            && plot.item!=Structure_Refinery && plot.item!=Structure_Radar) continue;
+        const Coord size=getStructureSize(plot.item);
+        if (CityPlacementPolicy::overlaps(x,y,width,height,plot.location.x-margin,plot.location.y-margin,
+                size.x+2*margin,size.y+2*margin)) return true;
+    }
+    return false;
+}
+
+bool QuantBot::keyBuildingSite(Uint32 item, const char* rule) {
+    const Coord site=findPlaceLocation(item);
+    if (AITelemetry::log().enabled())
+        traceDecision("key_site_admission",AITelemetry::Record().set("item",item).set("rule",rule)
+            .set("builder",planningBuilder).set("valid",site.isValid())
+            .set("owned",getHouse()->getNumItems(item)).set("credits",getHouse()->getCredits())
+            .set("placement",placementScoreDetails[item]));
+    return site.isValid();
+}
+
 bool QuantBot::ownUnitCannotLeave(const UnitBase* unit) const {
     // Ordered away (a forced move) yet standing with no path coming: the walk off the site
     // failed, so the site waits for nothing and is planned elsewhere instead.
@@ -327,11 +357,11 @@ bool QuantBot::tileBlocksOwnPlacement(const Tile* tile) const {
     return false;
 }
 
-bool QuantBot::placeableAmongOwnUnits(int x, int y, int width, int height, Uint32 item) const {
+bool QuantBot::placeableAmongOwnUnits(int x, int y, int width, int height, Uint32 item, bool future) const {
     // The engine check with units ignored (which also skips its structure test), then the
     // footprint itself: no mountain or structure, and nobody but our own leaving traffic.
     if (!getMap().okayToPlaceStructure(x, y, width, height, false,
-            item == Structure_ConstructionYard ? nullptr : getHouse(), true, item)) return false;
+            future || item == Structure_ConstructionYard ? nullptr : getHouse(), true, item)) return false;
     for (int ty = y; ty < y + height; ++ty)
         for (int tx = x; tx < x + width; ++tx)
             if (tileBlocksOwnPlacement(getMap().getTile(tx, ty))) return false;
@@ -465,6 +495,11 @@ bool QuantBot::preservesGroundAccess(Uint32 item, Coord pos, const std::vector<U
             const auto p=entry.second.location, extent=getStructureSize(entry.second.item);
             if (x>=p.x && x<p.x+extent.x && y>=p.y && y<p.y+extent.y) return false;
         }
+        if (rockBudgetActive()) for (const auto& plot:cityProductionPlots) {
+            if (!planningCityProductionPlots && plot.item==item) continue;
+            const Coord p=plot.location, extent=getStructureSize(plot.item);
+            if (x>=p.x && x<p.x+extent.x && y>=p.y && y<p.y+extent.y) return false;
+        }
         return true;
     };
     if (!GroundAccessPolicy::allows({pos.x,pos.y,size.x,size.y},needsGroundExit(item),passable,
@@ -491,6 +526,12 @@ bool QuantBot::preservesGroundAccess(Uint32 item, Coord pos, const std::vector<U
     for (const auto& entry:reservedStructures) {
         if (entry.first==planningBuilder || !needsGroundExit(entry.second.item)) continue;
         const auto p=entry.second.location, extent=getStructureSize(entry.second.item);
+        if (CityPlacementPolicy::overlaps(pos.x-1,pos.y-1,size.x+2,size.y+2,p.x,p.y,extent.x,extent.y)
+            && !keepsExit(p,extent)) return false;
+    }
+    if (rockBudgetActive()) for (const auto& plot:cityProductionPlots) {
+        if ((!planningCityProductionPlots && plot.item==item) || !needsGroundExit(plot.item)) continue;
+        const Coord p=plot.location, extent=getStructureSize(plot.item);
         if (CityPlacementPolicy::overlaps(pos.x-1,pos.y-1,size.x+2,size.y+2,p.x,p.y,extent.x,extent.y)
             && !keepsExit(p,extent)) return false;
     }
@@ -537,6 +578,7 @@ Coord QuantBot::findRedevelopmentSite(Uint32 item) {
             const Coord pos(x,y);
             std::vector<Uint32> zones;
             if (!redevelopmentZones(item,pos,zones) || overlapsReservedStructure(x,y,size.x,size.y)
+                || overlapsRockBudget(item,x,y,size.x,size.y)
                 || nearRecentStructureLoss(x,y,size.x,size.y) || dangerAt(pos,size)>0
                 || (blastChecked && !clearsBlastSites(blastSites,pos,size)) || !preservesGroundAccess(item,pos) || !cityRoadImpact(getMap(),x,y,size.x,size.y,item).preservesConnections) continue;
             int score=static_cast<int>(zones.size())*100;
@@ -565,7 +607,7 @@ Coord QuantBot::findRedevelopmentSite(Uint32 item) {
     return best;
 }
 
-Coord QuantBot::findPlaceLocation(Uint32 itemID) {
+Coord QuantBot::findPlaceLocation(Uint32 itemID, const std::vector<char>* futureRock) {
     AITelemetry::PerformanceScope perfScope("ai.findPlaceLocation", getGameCycleCount(), getHouse()->getHouseID(), itemID);
     refreshTacticalDanger();
     int accessRejected = 0, pollutionRejected = 0, reservedRejected = 0, roadRejected = 0, neighbourRejected = 0;
@@ -737,7 +779,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     // Owned-tile field for the build-range gate (anchorField(): rebuilt only when
     // this house's tile ownership changed). Reservations and planningBuilder do
     // not move an owned tile.
-    const bool gateByBuildRange = itemID != Structure_ConstructionYard;
+    const bool gateByBuildRange = itemID != Structure_ConstructionYard && !futureRock;
     const DuneCity::BoxAnyField* buildRangeField = nullptr;
     size_t buildRangeSkipped = 0;
     if (gateByBuildRange) buildRangeField = &anchorField();
@@ -840,9 +882,10 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                 ++buildRangeSkipped;
                 continue;
             }
+            if (futureRock && !(*futureRock)[placeLocationY*mapW+placeLocationX]) continue;
             // First check if this location is valid for building. Our own units standing
             // there are traffic (the footprint rule): they are asked off once it is planned.
-			if (placeableAmongOwnUnits(placeLocationX, placeLocationY, newSizeX, newSizeY, itemID)) {
+			if (placeableAmongOwnUnits(placeLocationX, placeLocationY, newSizeX, newSizeY, itemID, futureRock!=nullptr)) {
 
                 // A zone may spill onto sand, but slabs cannot. When foundations
                 // are enabled, choose a footprint that can actually be prepared.
@@ -853,16 +896,16 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                 // In DuneCity every structure keeps off the reserved factory/repair plots (a
                 // factory may use its own; an emergency power plant may use any): five
                 // refineries on the heavy factory's plot left Ordos m17 without one for 80 min.
-                if ((cityZonePlacement || planningCityProductionPlots
+                if (rockBudgetActive() ? overlapsRockBudget(itemID,placeLocationX,placeLocationY,newSizeX,newSizeY)
+                    : ((cityZonePlacement || planningCityProductionPlots
                         || (citySim && !(!getHouse()->hasPower()
                             && (itemID==Structure_WindTrap || itemID==Structure_NuclearPlant))))
                     && std::any_of(cityProductionPlots.begin(),cityProductionPlots.end(),[&](const auto& plot) {
                         if (plot.item==itemID) return false;
                         const auto size=getStructureSize(plot.item);
-                        // Leave access around the future factory/repair footprint.
                         return CityPlacementPolicy::overlaps(placeLocationX,placeLocationY,newSizeX,newSizeY,
                             plot.location.x-1,plot.location.y-1,size.x+2,size.y+2);
-                    })) { ++productionPlotRejected; continue; }
+                    }))) { ++productionPlotRejected; continue; }
                 // Use the same origin sample and role-specific gate as zone growth.
                 // Industry tolerates pollution; R/C must not become vacant dead lots.
                 if (citySim && cityZonePlacement && DuneCity::isPollutionBlockingGrowth(
@@ -1069,6 +1112,19 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 			// For other buildings, apply base center distance penalty
 			locationScore -= lround(blockDistance(baseCenter, Coord(placeLocationX, placeLocationY)));
 		}
+        if (futureRock) {
+            locationScore-=10*lround(blockDistance(baseCenter,Coord(placeLocationX,placeLocationY)));
+        } else if (rockBudgetActive() && (cityZonePlacement || itemID==Structure_WindTrap
+                || itemID==Structure_Silo || itemID==Structure_Wall || itemID==Structure_PoliceStation)) {
+            int edge=0;
+            for (int y=placeLocationY-1;y<=placeLocationEndY;++y)
+                for (int x=placeLocationX-1;x<=placeLocationEndX;++x) {
+                    if (x>=placeLocationX && x<placeLocationEndX && y>=placeLocationY && y<placeLocationEndY) continue;
+                    const auto* tile=getMap().tileExists(x,y) ? getMap().getTile(x,y) : nullptr;
+                    edge+=!tile || !tile->isRock() || tile->isMountain();
+                }
+            locationScore+=40*edge+12*adjacentFriendlyStructureTiles;
+        }
 
 		// === CITY MODE: grid alignment + road spacing + zone-type scoring ===
 		if (currentGame && currentGame->isCitySimEnabled()) {
@@ -1334,7 +1390,8 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 				// Pick this location if it has the best score. force.spreadVsDeathHand: a site
 				// spaced from the other critical buildings outranks every unspaced one.
                 const bool spread = spreadVsDeathHand && spreadFromDeathHandSites(placeLocationX, placeLocationY);
-				if (spreadVsDeathHand && spread != bestSpread ? spread
+				if (futureRock ? locationScore>bestLocationScore
+                    : spreadVsDeathHand && spread != bestSpread ? spread
                     : itemID == Structure_NuclearPlant ? reactorRank > bestReactorRank
                     : factoryPlacement ? factoryRank > bestFactoryRank
                     : CityPlacementPolicy::preferCitySite(lossRisk==0,infill,siteTier,locationScore,
@@ -1359,7 +1416,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     if (spreadVsDeathHand)
         bestQuality.set("death_hand_spread",bestSpread ? 1 : 0)
             .set("death_hand_sites",static_cast<int>(deathHandSites.size()));
-    if (bestLocation.isInvalid()) {
+    if (bestLocation.isInvalid() && !futureRock) {
         bestLocation = findRedevelopmentSite(itemID);
         if (bestLocation.isValid()) { bestQuality.set("redevelopment",1); roadingRelaxed=false; }
     }
@@ -1567,6 +1624,7 @@ Coord QuantBot::findThreatTurretPlaceLocation(Coord asset, Coord approach) {
             if (blockDistance(at,asset)>range
                 || !placeableAmongOwnUnits(x,y,1,1,item)
                 || overlapsReservedStructure(x,y,1,1)
+                || overlapsRockBudget(item,x,y,1,1)
                 || !preservesGroundAccess(item,at)
                 || !cityRoadImpact(getMap(),x,y,1,1,item).preservesConnections
                 || (currentGame->isCitySimEnabled()
@@ -1632,6 +1690,7 @@ Coord QuantBot::findCoveredDefencePlaceLocation(Uint32 item, Coord home) {
                 const Coord at(x,y);
                 if (!placeableAmongOwnUnits(x,y,size.x,size.y,item)
                     || overlapsReservedStructure(x,y,size.x,size.y)
+                    || overlapsRockBudget(item,x,y,size.x,size.y)
                     || !preservesGroundAccess(item,at)
                     || !cityRoadImpact(getMap(),x,y,size.x,size.y,item).preservesConnections
                     || (currentGame->isCitySimEnabled()
@@ -1718,6 +1777,7 @@ Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {
 			if (placeableAmongOwnUnits(x, y, newSizeX, newSizeY, itemID)) {
 
                 if (overlapsReservedStructure(x, y, newSizeX, newSizeY)
+                    || overlapsRockBudget(itemID,x,y,newSizeX,newSizeY)
                     || !preservesGroundAccess(itemID,Coord(x,y))) continue;
                 const auto roads = cityRoadImpact(getMap(), x, y, newSizeX, newSizeY, itemID);
                 if (!roads.preservesConnections) continue;
@@ -1884,7 +1944,8 @@ Coord QuantBot::findPerimeterTurretLocation() {
             const int across = int((int64_t(dy) * p.forward.x - int64_t(dx) * p.forward.y) / p.length);
             if (!Force::onPerimeterBand(along, across, p.depth)) continue;
             if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) continue;
-            if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) continue;
+            if (overlapsReservedStructure(x, y, 1, 1) || overlapsRockBudget(Structure_RocketTurret,x,y,1,1)
+                || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) continue;
             if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
             if (currentGame->isCitySimEnabled()
                 && wouldLandlockNeighbouringZone(getMap(), getHouse()->getHouseID(), x, y, 1, 1)) continue;
@@ -2150,6 +2211,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
             const int cell=y*w+x;
             if (cell<scan.begin || cell>=scan.end) continue;
             if (candidates[y*(w+1)+x]<=0 || overlapsReservedStructure(x,y,size.x,size.y)
+                || overlapsRockBudget(item,x,y,size.x,size.y)
                 || !placeableAmongOwnUnits(x,y,size.x,size.y,item)
                 || !preservesGroundAccess(item,Coord(x,y))) continue;
             const auto road = cityRoadImpact(getMap(),x,y,size.x,size.y,item);
@@ -2387,6 +2449,7 @@ Coord QuantBot::findCityTurretPlaceLocation(Uint32 itemID, int* defenseScore, in
     for (int cell=scan.begin;cell<scan.end;++cell) {
         const int x=cell%w, y=cell/w;
         if (!candidates[y*w+x] || overlapsReservedStructure(x, y, 1, 1)) continue;
+        if (overlapsRockBudget(itemID,x,y,1,1)) continue;
         if (!placeableAmongOwnUnits(x, y, 1, 1, itemID)) continue;
         if (!preservesGroundAccess(itemID,Coord(x,y))) continue;
         const auto roads = cityRoadImpact(getMap(), x, y, 1, 1, itemID);
@@ -2630,6 +2693,7 @@ Coord QuantBot::findBatteryClearanceSite(Coord requiredSite) {
             // range, on rock, not landlocking a neighbouring lot, keeping the
             // roads, local ground access and factory exits.
             if (overlapsReservedStructure(x, y, 1, 1)) continue;
+            if (overlapsRockBudget(Structure_RocketTurret,x,y,1,1)) continue;
             if (wouldLandlockNeighbouringZone(getMap(), houseID, x, y, 1, 1, &lots)) continue;
             if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
             if (!preservesGroundAccess(Structure_RocketTurret, site, &lots)) continue;

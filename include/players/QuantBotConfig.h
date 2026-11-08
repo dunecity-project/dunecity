@@ -366,6 +366,10 @@ struct QuantBotConfig {
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;
+        /// Experimental/default OFF: reserve missing core building rectangles on connected
+        /// rock in custom DuneCity; bootstrap income/power and campaign authority stay intact.
+        bool rockBudget;
+        int rockBudgetLevel;          // 1: exact rectangles/egress; 2: one-tile reserve margin.
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;

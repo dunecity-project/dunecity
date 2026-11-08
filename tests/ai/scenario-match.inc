@@ -246,8 +246,9 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     for (const House* house : houses)
         for (const auto& player : house->getPlayerList())
             if (const auto* bot = dynamic_cast<const QuantBot*>(player.get()))
-                SDL_Log("SCENARIO_AI_CONFIG: house=%d config_hash=%s", house->getHouseID(),
-                        bot->botConfig().getConfigHash().c_str());
+                SDL_Log("SCENARIO_AI_CONFIG: house=%d config_hash=%s cycle=%u research_enabled=%d",
+                    house->getHouseID(),bot->botConfig().getConfigHash().c_str(),game.getGameCycleCount(),
+                    int(game.getGameInitSettings().getGameOptions().researchLab));
     const Uint32 minute = MILLI2CYCLES(60000);
     const size_t initialTriggers = game.getTriggerManager().getTriggers().size();
     int fired = 0, winner = 0;
