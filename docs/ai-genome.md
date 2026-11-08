@@ -123,6 +123,36 @@ Measured on `abb7ef58` (four 30-game-minute Hard/DuneCity 1v1 games, no errors):
 458,704 bytes in total, **0.115 MB/game** including node archives, versus about
 13 MB/game with full capture.
 
+### Candidate-only sampled sweeps
+
+`sweep-match.py --mode sample --mod both --cases 6 --sample-seed SEED`
+reuses the audit's balanced factor decks and two candidate-seat assignments:
+24 games covering Vanilla/DuneCity and 1v1/2v2/FFA4/FFA6. Omit
+`--candidate-manifest-b64` for the shared native arm; otherwise pass base64 JSON
+`{"schema_version":1,"genomes":[...]}`. Every registry-validated sparse genome
+replays the whole deck as one queue job (fair sharing with other jobs), with game
+IDs suffixed by `/sweep-<genotype prefix>` and `candidate_style` holding the full
+genotype digest. Only the candidate seat receives the overlay; opponents and
+allies retain their native configurations. The existing audit startup/phase
+receipts verify the application and native opponents.
+
+This adapter accepts only constant within-game QuantBot assignments: contextual
+mod/format/house/size predicates are supported, but phase predicates, whole-game
+rules and additional play-style overlays are rejected. It uses the existing
+leased scratch, cleanup, scoring and collection paths. Pin the source and keep
+the exact genome, sampler seed and fixture list in a preregistered external
+plan. Run one native arm per fixture deck, reused by every candidate; do not
+substitute mixed-candidate games for native-paired evidence. Screens are
+exploratory, not promotion gates, and never change shipped defaults.
+
+`sweep-controls.py --tier controls --sweep-genome-b64 B64 --results DIR` plays the
+unchanged 26-game fixed controls schedule with one expression-free genome on the
+candidate Brutal QuantBot seat only, through the tier's candidate-only `--style`
+transport (label `sweep-<genotype prefix>`); every other seat stays native and the
+tier's `style_seats` receipts must match. Without the genome it is exactly the
+native controls run. Compare with `compare-control-maps.py --baseline ... --results
+DIR`; map 13 must stay digest-identical.
+
 ## Screening and epistasis
 
 `genome_search.py screen` writes one-gene default knockouts/activations and
