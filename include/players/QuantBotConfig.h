@@ -366,6 +366,13 @@ struct QuantBotConfig {
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;
+        /// Bold city-FFA experiments: coherent plans, independently hashed/default off.
+        bool cityBoldSpiceBoom;
+        bool cityBoldTwinYard;
+        bool cityBoldTaxTakeoff;
+        bool cityBoldNeighbourRush;
+        bool cityBoldTechLance;
+        bool cityBoldAdaptive;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;

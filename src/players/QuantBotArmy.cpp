@@ -629,6 +629,10 @@ int QuantBot::reachableAttackThreshold(int required) const {
                                   customMapLimit(config.getSettings(static_cast<int>(Difficulty::Medium))));
         required = std::min(required, (base * (FixPoint(static_cast<int>(own * 100)) / 100)).lround());
     }
+    const auto bold = boldCityPlan();
+    if (bold == CityBoldPlan::NeighbourRush) required = std::min(required, 3500);
+    else if (bold == CityBoldPlan::SpiceBoom || bold == CityBoldPlan::TechLance)
+        required = std::max(required, 12000);
     return required;
 }
 
