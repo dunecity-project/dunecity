@@ -220,8 +220,56 @@ const QuantBotStrategy::TempoProfile* QuantBot::strategyTempo() const {
     return &tempo;
 }
 
+int QuantBot::duelOpeningPlan() const {
+    const int plan = botConfig().force.duelOpeningPlan;
+    if (!plan || !autonomousCustomArmy()
+        || getGameCycleCount() >= Uint32(MILLI2CYCLES(8 * 60000))) return 0;
+    const auto& settings = currentGame->getGameInitSettings();
+    if (settings.getModName() != "vanilla" && settings.getModName() != "dunecity") return 0;
+    // The fresh duel screen rejected this opening in Vanilla; only the city
+    // production gap justified confirmation. Other plans remain experiment arms.
+    if (plan == 2 && settings.getModName() != "dunecity") return 0;
+    if (settings.getInitialSpiceTilePermille() <= 0) return 0;
+    size_t controllers = 0;
+    bool enemy = false;
+    for (const auto& house : settings.getHouseInfoList()) {
+        controllers += house.playerInfoList.size();
+        if (!house.playerInfoList.empty() && house.team != getHouse()->getTeamID()) enemy = true;
+    }
+    return controllers == 2 && enemy ? plan : 0;
+}
+
+int QuantBot::duelReachableSpiceShare(const StructureBase* yard) const {
+    // Geographic ground reachability, ignoring temporary units/buildings.
+    // Both occupied controllers share the reachable pool conservatively.
+    const int width = currentGameMap->getSizeX(), height = currentGameMap->getSizeY();
+    const Coord start = yard->getLocation();
+    std::vector<unsigned char> seen(width * height, 0);
+    std::vector<int> queue;
+    queue.reserve(width * height);
+    const int first = start.y * width + start.x;
+    seen[first] = 1;
+    queue.push_back(first);
+    int64_t spice = 0;
+    for (size_t head = 0; head < queue.size(); ++head) {
+        const int x = queue[head] % width, y = queue[head] / width;
+        const auto* tile = currentGameMap->getTile(x, y);
+        if (tile->hasSpice()) spice += tile->getSpice().lround();
+        for (const Coord d : {Coord(-1, 0), Coord(1, 0), Coord(0, -1), Coord(0, 1)}) {
+            const int nx = x + d.x, ny = y + d.y;
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+            const int next = ny * width + nx;
+            if (seen[next] || currentGameMap->getTile(nx, ny)->isMountain()) continue;
+            seen[next] = 1;
+            queue.push_back(next);
+        }
+    }
+    return int(std::min<int64_t>(spice / 2, std::numeric_limits<int>::max()));
+}
+
 bool QuantBot::lightFirstOpening() const {
     if (style().active()) return style().lightFirst;
+    if (duelOpeningPlan() == 2) return true;
     const auto* tempo = strategyTempo();
     return tempo && tempo->lightFirst;
 }
@@ -277,6 +325,24 @@ UnitMixPolicy::Mix QuantBot::styledUnitMix(const UnitMixPolicy::Mix& mix, const 
     return result;
 }
 
+bool QuantBot::duelOpeningRaider(const UnitBase* unit) const {
+    if (duelOpeningPlan() != 2 || getGameCycleCount() < Uint32(MILLI2CYCLES(4 * 60000))) return false;
+    const auto eligible = [&](const UnitBase* candidate) {
+        return candidate && candidate->getOwner() == getHouse() && candidate->getHealth() > 0
+            && candidate->isActive() && candidate->isRespondable() && candidate->isAGroundUnit()
+            && QuantBotBuildPolicy::isLightRaider(candidate->getItemID())
+            && unitRole(candidate, {UnitRole::Human, UnitRole::Repair, UnitRole::BaseDefence,
+                                   UnitRole::LiveDefence, UnitRole::Escort}) == UnitRole::Free;
+    };
+    if (!eligible(unit)) return false;
+    // Derive membership from current deterministic state at every caller.
+    // The test-style set is runtime-only and must not decide a saved AI policy.
+    int earlier = 0;
+    for (const auto* candidate : getUnitList())
+        if (candidate->getObjectID() < unit->getObjectID() && eligible(candidate) && ++earlier >= 4) return false;
+    return true;
+}
+
 void QuantBot::updateStyleRaiders() {
     const int wanted = style().raidUnits;
     if (wanted <= 0) { styleRaiders.clear(); return; }
@@ -302,10 +368,11 @@ void QuantBot::updateStyleRaiders() {
 
 bool QuantBot::raidWithStyle(const UnitBase* raider) {
     const int myTeam = getHouse()->getTeamID();
+    const bool duelRaid = duelOpeningPlan() == 2;
     const ObjectBase* current = raider->getTarget();
     auto hostile = [&](const ObjectBase* object) {
         return object && object->getOwner() && object->getOwner()->getTeamID() != myTeam
-            && object->getHealth() > 0 && object->isActive() && object->isVisible(myTeam);
+            && object->getHealth() > 0 && object->isActive() && (duelRaid || object->isVisible(myTeam));
     };
     if (hostile(current) && (enemyHarvester(current) || current->getItemID() == Structure_Refinery)) return true;
     // Nearest visible enemy harvester; with none, the nearest enemy refinery.
@@ -324,6 +391,9 @@ bool QuantBot::raidWithStyle(const UnitBase* raider) {
             }
     if (!best) return false;
     doAttackObject(raider, best, true);
+    if (duelRaid) traceDecision("duel_opening_raid", AITelemetry::Record()
+        .set("unit", raider->getObjectID()).set("target", best->getObjectID())
+        .set("target_item", int(best->getItemID())).set("distance", bestTiles));
     ++forceStats.raidOrders;
     return true;
 }

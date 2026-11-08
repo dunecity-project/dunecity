@@ -4,8 +4,14 @@
 // Everything here drives the production QuantBot entry points against real
 // units, real structures and the real map. No behaviour is simulated.
 #include "battery-clearance-probe.inc"
+#include "retreat-preserve-probe.inc"
 
 void runArmyRecoveryProbe(Game& game) {
+    if (std::getenv("BALANCE_RETREAT_PRESERVE_ONLY")) {
+        runRetreatPreserveProbe(game);
+        SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=retreat_preserve outcome=passed");
+        return;
+    }
     // QuantBot's AI pass interval (AIUPDATEINTERVAL in QuantBot.cpp, which is a
     // translation-unit macro). One interval of real frames is serviced between
     // recall passes in the stress section below.

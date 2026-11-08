@@ -704,7 +704,10 @@ def sample_schedule(args):
     for mod_index, mod in enumerate(mods):
         minutes = game_limit(args, mod)
         rng = random.Random(f'{args.sample_seed}/{mod}')
-        factors = dict(SAMPLE_FACTORS, spice_level=tuple(SPICE)[int(mod == 'vanilla'):],
+        # --sizes/--spice restrict the balanced decks (Vanilla never draws no-spice);
+        # their defaults reproduce the historical decks and draw order exactly.
+        factors = dict(SAMPLE_FACTORS, size=tuple(args.sizes),
+                       spice_level=tuple(level for level in args.spice if mod != 'vanilla' or level != 'none'),
                        initial_tech=tuple(range(3 if mod == 'vanilla' else 1, 10)))
         if getattr(args, 'sample_ffa', False):
             factors.update(format=('ffa4', 'ffa6'), difficulty=('hard', 'brutal'),
@@ -735,10 +738,12 @@ def sample_schedule(args):
             teams = [1, 1, 2, 2] if fmt == '2v2' else list(range(1, count + 1))
             size, spice, tech = case['size'], case['spice_level'], case['initial_tech']
             spec = (f'size={size},base={args.base},army={args.army},city={args.city},'
-                    f'spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
+                    f'spice={SPICE[spice]},sand={95 - args.rock},rock={args.rock},mountain=5,'
                     f'tech={tech},credits=3000,seed={seed}')
             cell = (f'sample/{mod}/s{args.sample_seed}-n{args.cases}/{args.base}-a{args.army}-c{args.city}/'
                     f'{index + 1:03d}/{size}/{spice}/{fmt}/{enemy}/t{tech}/{minutes}m/{seed}')
+            if args.rock != 30:
+                cell += f'/r{args.rock}'
             # Only the candidate controller moves. Houses, starts, map and enemy tier
             # stay fixed; in 2v2 the other three seats (including its ally) use that tier.
             for swapped, seat in enumerate((0, 2 if fmt == '2v2' else count - 1)):
@@ -2155,6 +2160,9 @@ parser.add_argument('--capture-mib', type=int, default=256,
                     help='Ordinary diagnostic telemetry allowance (256-4096 MiB); shipped log cap is unchanged')
 parser.add_argument('--sizes', nargs='+', type=int, choices=(96, 128, 160), default=[96, 128, 160])
 parser.add_argument('--spice', nargs='+', choices=tuple(SPICE), default=list(SPICE))
+parser.add_argument('--rock', type=int, choices=range(1, 91), default=30,
+                    help='sample: generated rock percentage; mountains stay 5%% and sand fills the remainder '
+                         '(default 30 keeps the historical schedule and ids)')
 parser.add_argument('--formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6'), default=['1v1', '2v2', 'ffa4'])
 parser.add_argument('--difficulties', nargs='+', choices=('medium', 'hard', 'brutal'), default=['medium', 'hard', 'brutal'])
 parser.add_argument('--seeds', nargs='+', type=int, default=[9101, 148680876])

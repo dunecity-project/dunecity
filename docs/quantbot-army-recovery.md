@@ -4,6 +4,43 @@ Custom-game Hard and Brutal bots use a house-level army posture, rather than
 asking every unit to decide independently whether the whole army is losing.
 Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 
+## Harvester raiding experiment
+
+`[Force Concentration] HarvesterRaid` is hashed and **defaults OFF**;
+`HarvesterRaidLevel` is a hashed integer clamped to 1 or 2. The experiment is
+for ordinary Custom Medium/Hard/Brutal skirmish, including Vanilla and DuneCity.
+Campaigns, switched-off bots, builder-only roles and human-allied support are
+inert. OFF returns before surveying objects or changing any order.
+
+- Level 1 reserves two existing fast light vehicles. They share the nearest
+  reachable active harvester of the richest-income hostile house, falling
+  back to that house's nearest reachable refinery. Income means cumulative
+  harvested spice plus gross city-tax receipts divided by common elapsed
+  game time, so ranking uses only the two saved engine totals; it is not an
+  instantaneous or telemetry-derived income forecast.
+- Level 2 reserves four existing fast light vehicles against the nearest
+  reachable unprotected active harvester, with no refinery fallback. A worker
+  is protected by any active armed ally within the greater of eight tiles or
+  its weapon range plus two, or an armed allied structure whose weapon range
+  plus two reaches the worker. True simulation positions are used.
+
+Both levels choose fast vehicles by object ID and distance ties by target ID.
+An incomplete group remains in the ordinary home reserve; no new production
+quota, formation, random draw, saved membership or historical cache is added.
+Every member must be terrain-connected to the shared objective. Inactive
+workers in bays/carryalls are not targets. Human orders, repair journeys and
+reservations, RETREAT, emergency/base defence, escorts, colony guards and
+existing main-wave membership take precedence. The ordinary whole-army launch
+excludes the derived raid reserve; raid orders run ahead of ordinary rally and
+targeting. Preserve/retreat overrides raiding, never vice versa.
+
+An unseen target determines a forced approach to its true position. Once
+visible, the ordinary engine attack order and weapon legality apply. No
+observer or client-local state selects the target. The paired experiments use
+`harvester-raid-income2`, `harvester-raid-exposed4` and explicit-OFF
+`harvester-raid-off`; this documents an unpromoted experiment, not a measured
+win-rate improvement.
+
 ## Stateless technology experiment and save compatibility
 
 `[Force Concentration] SimpleTechSavings` is hashed and **OFF after rejection**.
@@ -326,6 +363,64 @@ Hunt and its wave membership and can resume firing afterward. Damage from a
 distant enemy does not trigger retreat. The scan uses nearby tile occupants;
 workers, aircraft, human orders, repair and ordinary posted defence contacts
 retain their existing handling.
+
+### Retreat and preserve experiment (default OFF)
+
+`[Force Concentration] RetreatPreserve=0` and `RetreatPreserveLevel=1` are
+hashed, loaded and saved config keys. Level 1 withdraws at a true local enemy
+advantage of **at least 1.5x**; level 2 uses **2x**. Both share early vehicle
+repair and threatened-field protection. `retreat-preserve-{off,150,200}` are
+candidate-only test overlays; plain engine-Hunt/formation None remains control.
+
+The experiment applies to Custom skirmishes, including Vanilla, DuneCity and
+Easy/Defend, independently of power requirements. Campaign game types, saved
+campaign authority, Builder/Off roles and human-allied helpers remain inert.
+OFF retains native visibility, repair and disabled-withdrawal policy. It adds no
+RNG draw or saved field.
+
+Local strength uses the existing integer health-weighted purchase-price model.
+Within the existing 14-tile fight radius it counts all active hostile combat
+units, including unseen units and aircraft, and enemy turret fire that reaches
+the fight. Inactive cargo and native ambient threats are not enemy armies.
+Friendly troops/allies and covering allied turrets count only locally. A
+currently engaged offensive fighter (lowest object id, including non-wave
+raiders) anchors the fight instead of the mean of separated waves; without such
+contact the existing wave centre is used. A raider's membership is never moved
+into the main wave. There is no 1,500-credit/one-fifth-wave floor for this trigger.
+This is a strength proxy, not a matchup simulator.
+
+The existing saved Offensive/Withdrawing/Recovering machine, protected-rally
+selection, forced Area Guard moves, recall budget/backpressure and recovery
+dwell/readiness own the retreat. The general attrition/core triggers do not
+become enabled merely by selecting this experiment. Existing wave and
+damage-control passes preserve these orders; healthy emergency defenders retain
+authority. All offensive raiders must defer while `reserveHeldHome()` is true.
+
+Eligible combat vehicles below 80% health reserve the existing repair service.
+The ordinary engine command chooses and books a free owned yard. If every bay
+is busy, a bounded withdrawal shelters the waiting vehicle while subsequent
+passes retry. An actual yard target keeps ownership until full health; repaired
+units return to ordinary availability. Human orders win, then repair, then live
+defence, then attacks. Aircraft, infantry, deviated units and no-yard situations
+retain their existing repair eligibility; no unaffordable-repair bypass is
+removed. No independent repair queue, saved membership or target cache is added.
+
+The existing harvester danger field and clearing list include true active
+attackers with a three-tile approach margin (minimum four tiles). Existing
+two-second safety checks, safe-field relocation, escape corridors, cooling
+memory and bounded spice clearing provide withdrawal/support before impact.
+Unseen enemies need not be attackable by escorts: the worker can still leave.
+Routine cargo return, refinery choice, siting and fleet targets are unchanged.
+Full-knowledge field danger also excludes threatened retreat/rally slots;
+ordinary production placement/front intelligence stays visibility-based.
+
+`quantbot_retreat_preserve_{vanilla,dunecity}` exercise the real policy at exact
+1.5x/2x and just below 2x, hidden/inactive enemies, local versus distant allies,
+non-wave raiders, saved orders, human/campaign/role boundaries, a paid repair bay and
+field evacuation/clearing. The top-level config fixture covers defaults, both
+levels, clamping, save/load and hashing. These are fixture definitions, not
+claimed passing results or win-rate evidence. Outcome gates and controls live
+in `outputs/ai-tuning-20261108/RetreatPreserve/ledger.md`.
 
 ## Exhausted Custom economies
 

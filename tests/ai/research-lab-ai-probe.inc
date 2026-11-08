@@ -37,7 +37,8 @@ inline void require(bool value, const char* why) {
     }
 }
 
-enum class Control { Solvent, RuleOff, MissingYard, NoCash, ExistingLab, Crime };
+// City is Crime's physical tax-only city without the injected crime.
+enum class Control { Solvent, RuleOff, MissingYard, NoCash, ExistingLab, Crime, City };
 
 inline std::string mapText(Control control) {
     std::ostringstream map;
@@ -132,7 +133,7 @@ struct World {
                     require(currentGameMap->getTile(x, y)->isRoad(), "Initial city road placement failed");
                 }
         }
-        if (control != Control::Crime)
+        if (control != Control::Crime && control != Control::City)
         for (int y = 6; y < 35; ++y) for (int x = 39; x < 62; ++x) {
             auto* tile = currentGameMap->getTile(x, y);
             tile->setType(Terrain_Spice);
@@ -148,7 +149,7 @@ struct World {
         if (control == Control::ExistingLab) place(Structure_ResearchLab, legalLabSite());
         game->gameCycleCount = MILLI2CYCLES(300000);
         if (game->isCitySimEnabled()) {
-            if (control == Control::Crime)
+            if (control == Control::Crime || control == Control::City)
                 for (auto* structure : structureList)
                     if (structure->getOwner() == owner)
                         if (auto* lot = dynamic_cast<ZoneStructure*>(structure)) lot->setStartingLevel(3);
@@ -479,6 +480,48 @@ inline void crimePolicy(bool enabled) {
             enabled, pass.dangerousCrimeProperties, enabled);
 }
 
+// CityResearchOrder clears pass.cityResearchAllowed once technology reaches the
+// plan ceiling (always at tech 9, QuantBotBuildPolicy::cityResearchOrderAdmits).
+// That deferral limits new studies only: the Research Lab building keeps its
+// ordinary optional-capital admission, and an existing lab starts no study.
+inline void researchOrderLabCapital() {
+    {
+        World world("dunecity", "qBotHard", false, Control::City);
+        auto pass = world.observePlan();
+        require(pass.citySimEnabled && pass.cityResearchAllowed && pass.forecastNetIncome > 0
+                && !world.bot->cityBootstrapNeeded(pass) && !world.bot->openingFleetIncomplete(pass)
+                && pass.dangerousCrimeProperties <= 0 && !world.bot->researchRequired(pass)
+                && world.owner->getCredits() >= 30000 && world.yard->isAvailableToBuild(Structure_ResearchLab),
+                "Crime-free city fixture lost its income, legality, fleet or optional-lab isolation");
+        world.legalLabSite();
+        const int labCapital = world.bot->buildingCapitalCost(pass, Structure_ResearchLab);
+        const bool ready = world.bot->techInvestmentReady(pass);
+        const bool funded = world.bot->canFundTechInvestment(pass, labCapital);
+        require(ready, "Solvent crime-free city is not ready for optional lab capital");
+        pass.cityResearchAllowed = false;
+        require(!world.bot->researchRequired(pass) && world.bot->techInvestmentReady(pass) == ready
+                && world.bot->canFundTechInvestment(pass, labCapital) == funded
+                && funded == world.bot->canFundWorkingCapital(pass, labCapital, NONE_ID),
+                "A deferred research order vetoed the Research Lab building's optional capital");
+        SDL_Log("RESEARCH_ORDER_LAB_CAPITAL_PASS: deferred=1 ready=%d funded=%d lab_capital=%d",
+                int(ready), int(funded), labCapital);
+    }
+    {
+        World world("dunecity", "qBotHard", false, Control::ExistingLab);
+        auto pass = world.observePlan();
+        require(world.lab() && !world.owner->isTechResearchActive(), "Deferred-study fixture lacks its idle lab");
+        const int reserve = pass.civWarsResearchReserve;
+        const int credits = world.owner->getCredits();
+        pass.cityResearchAllowed = false;
+        world.bot->planTechResearch(pass);
+        world.bot->startTechResearch(pass);
+        require(!world.owner->isTechResearchActive() && pass.civWarsResearchReserve == reserve
+                && world.owner->getCredits() == credits,
+                "A deferred research order still reserved, paid or started a study");
+        SDL_Log("RESEARCH_ORDER_STUDY_DEFERRED_PASS: existing_lab=1 started=0 reserve=%d", reserve);
+    }
+}
+
 } // namespace ResearchLabAIProbe
 
 void runResearchLabAIProbe(const char* mod, const char* playerClass) {
@@ -490,6 +533,11 @@ void runResearchLabAIProbe(const char* mod, const char* playerClass) {
     if (std::getenv("BALANCE_RESEARCH_LAB_CRIME_ONLY")) {
         crimePolicy(false); crimePolicy(true);
         SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=research_lab_crime_policy outcome=passed synthetic=1");
+        return;
+    }
+    if (std::getenv("BALANCE_RESEARCH_ORDER_LAB_ONLY")) {
+        researchOrderLabCapital();
+        SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=research_order_lab_capital outcome=passed synthetic=1");
         return;
     }
     auto pair = [&](const std::string& controller) {

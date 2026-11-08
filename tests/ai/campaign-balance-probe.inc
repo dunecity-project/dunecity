@@ -415,7 +415,8 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_RECOVERY_PROBE")) {
         runArmyRecoveryProbe(*game);
-        if (!std::getenv("BALANCE_BATTERY_CLEARANCE_ONLY")) runArmyRecoveryContinuationProbe(game);
+        if (!std::getenv("BALANCE_BATTERY_CLEARANCE_ONLY") && !std::getenv("BALANCE_RETREAT_PRESERVE_ONLY"))
+            runArmyRecoveryContinuationProbe(game);
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }

@@ -63,7 +63,9 @@ bool QuantBot::economicFleetRatioActive() const {
     return botConfig().force.economicFleetRatios && currentGame && currentGameMap
         && lastCalculatedSpice > 0 && (difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal)
         && !builderOnly()
-        && !ModManager::instance().isTornieFamilyContentActive() && !civWarsRules()
+        && !ModManager::instance().isTornieFamilyContentActive()
+        && !currentGame->getGameInitSettings().isCivilizationWars()
+        && currentGame->getGameInitSettings().getModName() != "CivWars"
         && (!isCampaignGameType(currentGame->gameType) || isAlliedWithHuman());
 }
 
@@ -391,8 +393,11 @@ bool QuantBot::economyReadyForCapital(BuildPass& pass) {
         && (civWarsRules() || researchRequired(pass) || pass.dangerousCrimeProperties <= 0);
 }
 
+// CityResearchOrder (pass.cityResearchAllowed) defers new studies only: it is
+// checked where research is required, planned or started, never here, so a
+// deferred study leaves the Research Lab building ordinary optional capital.
 bool QuantBot::techInvestmentReady(BuildPass& pass) {
-    return pass.cityResearchAllowed && researchLabPolicyActive() && economyReadyForCapital(pass);
+    return researchLabPolicyActive() && economyReadyForCapital(pass);
 }
 
 bool QuantBot::canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier) {
@@ -418,7 +423,6 @@ bool QuantBot::canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier)
 }
 
 bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
-    if (!pass.cityResearchAllowed) return false;
     if (pass.techSavings)
         return pass.techSavingActive && pass.techResearch
             && getHouse()->getCredits() >= cost
@@ -1446,7 +1450,7 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
             harvesterLimit, getAIRefineryBays(), pass.itemCount[Unit_Harvester],
             force.fleetHarvestersPerBay, force.fleetCarryallQuarters, force.fleetRepairYards,
             data[Unit_Harvester][houseID].price, data[Structure_Refinery][houseID].price,
-            data[Unit_Carryall][houseID].price);
+            data[Unit_Carryall][houseID].price, !pass.harvesterFactories.empty());
         pass.mapSpiceHarvesterTarget = targets.sustainable;
         pass.spiceHarvesterTarget = pass.fundedHarvesterTarget = targets.workers;
         pass.fleetRefineryTarget = targets.refineries;
@@ -2274,8 +2278,10 @@ Uint32 QuantBot::chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, 
             industry ? 0 : pollution,crime,unfinished);
     }
     Coord refinerySite = Coord::Invalid();
+    // A fixed fleet ratio refuses the order at its target; never select it then.
     if ((!pass.citySpiceTransition || pass.unloadingBacklog)
-        && (pass.spiceShare>0 || pass.unloadingBacklog) && campaignAvailableToBuild(builder,Structure_Refinery))
+        && (pass.spiceShare>0 || pass.unloadingBacklog) && campaignAvailableToBuild(builder,Structure_Refinery)
+        && (!pass.fleetRatios || refs < pass.fleetRefineryTarget))
         refinerySite = findPlaceLocation(Structure_Refinery);
     Coord forecastSite=refinerySite;
     if(forecastSite.isInvalid()) for(const auto* structure:getStructureList())
@@ -2673,8 +2679,10 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     pass.unitMix = styledUnitMix(pass.unitMix, available);
     // VanillaArmyCounters (default off): re-weight the buildable part of the mix toward the
     // live army of the strongest reachable hostile team. The anti-air floor below still
-    // protects its minimum share afterwards.
-    if (botConfig().force.vanillaArmyCounters && vanillaFfaTuningGame())
+    // protects its minimum share afterwards. Initial map spice (not current spice) keeps
+    // an initially spiceless map inert.
+    if (botConfig().force.vanillaArmyCounters && QuantBotArmyCounterPolicy::active(vanillaFfaTuningGame(),
+            currentGame->getGameInitSettings().getInitialSpiceTilePermille()))
         pass.unitMix = vanillaArmyCounterMix(pass, pass.unitMix);
     // Damage-based learning does not value air deterrence, so protect a minimum
     // mobile anti-air share while a visible hostile wing is active.
@@ -3152,7 +3160,8 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     // current tax base, never starting cash or workers still in production.
     if (force.techIncomeTiming > 0 && gameMode == GameMode::Custom
         && !isCampaignGameType(currentGame->gameType) && !builderOnly()
-        && (pass.citySimEnabled || pass.vanillaEconomy) && lastCalculatedSpice > 0
+        && (getGameInitSettings().getModName() == "vanilla"
+            || ModManager::instance().isDuneCityContentActive()) && lastCalculatedSpice > 0
         && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard
             || difficulty == Difficulty::Brutal)) {
         pass.techIncomeLevel = force.techIncomeTiming;

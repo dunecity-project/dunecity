@@ -884,6 +884,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --output-dir ${CMAKE_BINARY_DIR}/research-lab-crime-policy)
         set_tests_properties(quantbot_research_lab_crime_policy PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
             ENVIRONMENT "BALANCE_RESEARCH_LAB_CRIME_ONLY=1")
+        # A deferred CityResearchOrder study must not veto the Research Lab building.
+        add_test(NAME quantbot_research_order_lab_capital COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --research-lab-ai-probe --repeatable
+            --mod dunecity --partner-difficulty hard --seed 1841712204
+            --no-ai-telemetry --path-workers 1 --wall-timeout 240
+            --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/research-order-lab-capital)
+        set_tests_properties(quantbot_research_order_lab_capital PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+            ENVIRONMENT "BALANCE_RESEARCH_ORDER_LAB_ONLY=1")
         add_test(NAME quantbot_dunecity_audit_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_dunecity_audit.py)
         set_tests_properties(quantbot_dunecity_audit_parser PROPERTIES TIMEOUT 60)
@@ -1084,6 +1093,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/army-recovery-probe)
         set_tests_properties(quantbot_army_recovery PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # One default-OFF experiment, actual hidden-force boundaries and paid repair
+        # in both supported skirmish modes. The ordinary recovery fixture is unchanged.
+        foreach(preserve_mod IN ITEMS vanilla dunecity)
+            add_test(NAME quantbot_retreat_preserve_${preserve_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --recovery-probe --repeatable
+                --level 9 --mod ${preserve_mod} --local-spectator --partner-difficulty brutal
+                --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+                --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retreat-preserve-${preserve_mod}-probe)
+            set_tests_properties(quantbot_retreat_preserve_${preserve_mod} PROPERTIES
+                TIMEOUT 300 RUN_SERIAL TRUE ENVIRONMENT "BALANCE_RETREAT_PRESERVE_ONLY=1")
+        endforeach()
         # Custom Hard/Brutal whole-army dispatch: one attack sends every
         # available combat troop to engine Hunt - idle, targeting, moving,
         # tracked from an older wave, posted as a colony guard or produced at a

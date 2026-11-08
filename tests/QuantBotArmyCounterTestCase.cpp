@@ -3,6 +3,7 @@
 // The live survey (QuantBot::vanillaArmyCounterMix) only gathers these inputs from the game.
 #include <catch2/catch_test_macros.hpp>
 
+#include <GameInitSettings.h>
 #include <players/QuantBotArmyCounterPolicy.h>
 
 #include <cstdint>
@@ -300,4 +301,20 @@ TEST_CASE("Army counters stay bounded", "[quantbot][production][army-counters]")
     REQUIRE(withinBounds(blend(kNative, candidates, target, 5000)));
     const Mix extreme{largestInt, 0, largestInt, 0, 0, 0, 0, 0, 0, largestInt};
     REQUIRE(withinBounds(blend(extreme, candidates, target, 5000)));
+}
+
+TEST_CASE("Army counters stay inert on an initially spiceless map",
+          "[quantbot][production][army-counters][initial-spice]") {
+    // The live scope reads initial map spice from the saved scenario, not current spice:
+    // spice spilled later by destroyed harvesters cannot activate a no-spice start.
+    const GameInitSettings noSpice("counters.ini", "[MAP]\nSizeX=4\nSizeY=1\n000=-^%@\n",
+                                   false, SettingsClass::GameOptionsClass{});
+    REQUIRE(noSpice.getInitialSpiceTilePermille() == 0);
+    REQUIRE_FALSE(active(true, noSpice.getInitialSpiceTilePermille()));
+    const GameInitSettings spice("counters.ini", "[MAP]\nSizeX=4\nSizeY=1\n000=~---\n",
+                                 false, SettingsClass::GameOptionsClass{});
+    REQUIRE(spice.getInitialSpiceTilePermille() == 250);
+    REQUIRE(active(true, spice.getInitialSpiceTilePermille()));
+    REQUIRE_FALSE(active(false, spice.getInitialSpiceTilePermille())); // outside the FFA tuning scope
+    REQUIRE_FALSE(active(true, -1)); // unknown or seed-only map data stays native
 }

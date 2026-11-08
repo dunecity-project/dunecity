@@ -11,11 +11,13 @@
 
 namespace QuantBotBuildPolicy {
 
-// Compare rates without division: level 1 is cost / 5 minutes, level 2
-// is 1.5 * cost / 5 minutes. No cash balance masquerades as continuing income.
+// Compare rates without division: level 1 needs income per minute of at least
+// the cost, level 2 at least twice the cost. The earlier cost-per-5-minutes
+// rule never bound in Vanilla (median realised income 885/min, screen24).
+// No cash balance masquerades as continuing income.
 inline bool incomeTechnologyAdmitted(int level, int incomePerMinute, int cost) {
     return level == 0 || (cost > 0 && incomePerMinute > 0
-        && int64_t(incomePerMinute) * 10 >= int64_t(cost) * (level == 2 ? 3 : 2));
+        && int64_t(incomePerMinute) >= int64_t(cost) * (level == 2 ? 2 : 1));
 }
 inline bool incomeTechnologySafe(int64_t ownArmy, int64_t largestRival, bool localThreat) {
     return !localThreat && ownArmy >= largestRival;
@@ -594,6 +596,14 @@ inline int desiredSpiceRefineries(int harvesterTarget, int harvestersIncludingQu
 inline int openingSpiceRefineries(int sustainableHarvesters) {
     return std::clamp(sustainableHarvesters, 1, 3);
 }
+// The opening ladders build this many refineries before they unlock the
+// worker supplier (starport or heavy factory).
+inline constexpr int kOpeningSupplierRefineries = 4;
+// A fixed fleet ratio refuses refineries beyond its target, so a ladder that
+// holds the yard for one must stop at that target instead of waiting forever.
+inline int supplierRefineryGoal(int goal, bool fleetRatios, int fleetRefineryTarget) {
+    return fleetRatios ? std::min(goal, std::max(0, fleetRefineryTarget)) : goal;
+}
 inline int fundedSpiceHarvesters(int sustainable, int refineries) {
     return std::max(0, std::min(sustainable, std::max(0, refineries) * 3));
 }
@@ -607,9 +617,12 @@ struct FleetTargets {
 // Fixed factorial levels, not an optimiser. Capacity advances one bay at a time,
 // only after the fleet fills its current ratio. Remaining shared spice must cover
 // the normal-price worker, its bay share and its requested transport share.
+// Without a harvester-capable heavy factory a refinery is the only source of a
+// worker, and the opening ladders hold every other structure until they own
+// kOpeningSupplierRefineries; the ratio cap must not refuse those refineries.
 inline FleetTargets economicFleetTargets(int spiceShare, int limit, int bays, int workers,
         int perBay, int carryallQuarters, int repairYards,
-        int workerPrice, int bayPrice, int carryallPrice) {
+        int workerPrice, int bayPrice, int carryallPrice, bool workerFactory) {
     FleetTargets result;
     perBay = std::clamp(perBay, 2, 4);
     carryallQuarters = std::clamp(carryallQuarters, 0, 2);
@@ -620,6 +633,8 @@ inline FleetTargets economicFleetTargets(int spiceShare, int limit, int bays, in
     result.workers = std::min(result.sustainable, std::max(1, bays) * perBay);
     result.refineries = std::min((result.sustainable + perBay - 1) / perBay,
         1 + std::max(0, workers) / perBay);
+    if (!workerFactory && result.sustainable > 0)
+        result.refineries = std::max(result.refineries, kOpeningSupplierRefineries);
     result.carryalls = (std::min(result.sustainable, std::max(0, workers)) * carryallQuarters + 3) / 4;
     result.repairYards = result.sustainable > 0 ? std::clamp(repairYards, 0, 1) : 0;
     return result;

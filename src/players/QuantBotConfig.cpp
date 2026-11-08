@@ -360,6 +360,7 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaBoomFfaOnly = false;
     force.vanillaBoomSpiceGate = false;
     force.vanillaBoomSpicePerRefinery = 4000;
+    force.duelOpeningPlan = 0;
     force.vanillaHarvesterBoomWorkers = 8;
     force.vanillaRefineryBoomRefineries = 4;
     force.vanillaGreedyBoomMinutes = 6;
@@ -394,6 +395,8 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignIdleCashFactoryCredits = 2000;
     force.campaignRefineryDefence = false;
     force.campaignFactoryRunway = false;
+    force.campaignHomeFields = 0;
+    force.campaignSizedWorkerRescue = 0;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
     force.clearMcvFootprint = true;
@@ -447,6 +450,10 @@ QuantBotConfig::QuantBotConfig() {
     force.cityLandValueFundingPercent = 60;
     force.cityGrowthStageTax = false;
     force.cityGrowthTaxPopulation = 3000;
+    force.retreatPreserve = false;
+    force.retreatPreserveLevel = 1;
+    force.harvesterRaid = false;
+    force.harvesterRaidLevel = 1;
     force.threatTurrets = true;
     force.moreRocketTurrets = false; // Opt-in: the final paired count-gain gate was not met.
     force.cityStarportSupply = true;
@@ -771,6 +778,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "VanillaBoomFfaOnly", force.vanillaBoomFfaOnly);
         iniFile.setBoolValue("Force Concentration", "VanillaBoomSpiceGate", force.vanillaBoomSpiceGate);
         iniFile.setIntValue("Force Concentration", "VanillaBoomSpicePerRefinery", force.vanillaBoomSpicePerRefinery);
+        iniFile.setIntValue("Force Concentration", "DuelOpeningPlan", force.duelOpeningPlan);
         iniFile.setIntValue("Force Concentration", "VanillaHarvesterBoomWorkers", force.vanillaHarvesterBoomWorkers);
         iniFile.setIntValue("Force Concentration", "VanillaRefineryBoomRefineries", force.vanillaRefineryBoomRefineries);
         iniFile.setIntValue("Force Concentration", "VanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);
@@ -803,6 +811,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CampaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits);
         iniFile.setBoolValue("Force Concentration", "CampaignRefineryDefence", force.campaignRefineryDefence);
         iniFile.setBoolValue("Force Concentration", "CampaignFactoryRunway", force.campaignFactoryRunway);
+        iniFile.setIntValue("Force Concentration", "CampaignHomeFields", force.campaignHomeFields);
+        iniFile.setIntValue("Force Concentration", "CampaignSizedWorkerRescue", force.campaignSizedWorkerRescue);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
         iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -854,6 +864,10 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CityLandValueFundingPercent", force.cityLandValueFundingPercent);
         iniFile.setBoolValue("Force Concentration", "CityGrowthStageTax", force.cityGrowthStageTax);
         iniFile.setIntValue("Force Concentration", "CityGrowthTaxPopulation", force.cityGrowthTaxPopulation);
+        iniFile.setBoolValue("Force Concentration", "RetreatPreserve", force.retreatPreserve);
+        iniFile.setIntValue("Force Concentration", "RetreatPreserveLevel", force.retreatPreserveLevel);
+        iniFile.setBoolValue("Force Concentration", "HarvesterRaid", force.harvesterRaid);
+        iniFile.setIntValue("Force Concentration", "HarvesterRaidLevel", force.harvesterRaidLevel);
         iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
         iniFile.setBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
         iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
@@ -1003,6 +1017,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.vanillaBoomSpiceGate = iniFile.getBoolValue("Force Concentration", "VanillaBoomSpiceGate", force.vanillaBoomSpiceGate);
     force.vanillaBoomSpicePerRefinery = QuantBotVanillaPolicy::spicePerRefineryLevel(iniFile.getIntValue(
         "Force Concentration", "VanillaBoomSpicePerRefinery", force.vanillaBoomSpicePerRefinery));
+    force.duelOpeningPlan = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "DuelOpeningPlan", force.duelOpeningPlan), 0, 3);
     force.vanillaHarvesterBoomWorkers = std::clamp(iniFile.getIntValue(
         "Force Concentration", "VanillaHarvesterBoomWorkers", force.vanillaHarvesterBoomWorkers), 8, 12);
     force.vanillaRefineryBoomRefineries = std::clamp(iniFile.getIntValue(
@@ -1050,6 +1066,10 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         iniFile.getIntValue("Force Concentration", "CampaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits), 1500, 2000);
     force.campaignRefineryDefence = iniFile.getBoolValue("Force Concentration", "CampaignRefineryDefence", force.campaignRefineryDefence);
     force.campaignFactoryRunway = iniFile.getBoolValue("Force Concentration", "CampaignFactoryRunway", force.campaignFactoryRunway);
+    force.campaignHomeFields = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignHomeFields", force.campaignHomeFields), 0, 2);
+    force.campaignSizedWorkerRescue = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignSizedWorkerRescue", force.campaignSizedWorkerRescue), 0, 2);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
     force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1102,6 +1122,10 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityLandValueFundingPercent = iniFile.getIntValue("Force Concentration", "CityLandValueFundingPercent", force.cityLandValueFundingPercent) == 100 ? 100 : 60;
     force.cityGrowthStageTax = iniFile.getBoolValue("Force Concentration", "CityGrowthStageTax", force.cityGrowthStageTax);
     force.cityGrowthTaxPopulation = iniFile.getIntValue("Force Concentration", "CityGrowthTaxPopulation", force.cityGrowthTaxPopulation) == 6000 ? 6000 : 3000;
+    force.retreatPreserve = iniFile.getBoolValue("Force Concentration", "RetreatPreserve", force.retreatPreserve);
+    force.retreatPreserveLevel = std::clamp(iniFile.getIntValue("Force Concentration", "RetreatPreserveLevel", force.retreatPreserveLevel), 1, 2);
+    force.harvesterRaid = iniFile.getBoolValue("Force Concentration", "HarvesterRaid", force.harvesterRaid);
+    force.harvesterRaidLevel = std::clamp(iniFile.getIntValue("Force Concentration", "HarvesterRaidLevel", force.harvesterRaidLevel), 1, 2);
     force.threatTurrets = iniFile.getBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
     force.moreRocketTurrets = iniFile.getBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
     force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
@@ -1618,6 +1642,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("vanillaBoomFfaOnly", force.vanillaBoomFfaOnly);
     addNamed("vanillaBoomSpiceGate", force.vanillaBoomSpiceGate);
     addNamed("vanillaBoomSpicePerRefinery", force.vanillaBoomSpicePerRefinery);
+    if (force.duelOpeningPlan != 0) addNamed("duelOpeningPlan", force.duelOpeningPlan);
     addNamed("vanillaHarvesterBoomWorkers", force.vanillaHarvesterBoomWorkers);
     addNamed("vanillaRefineryBoomRefineries", force.vanillaRefineryBoomRefineries);
     addNamed("vanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);
@@ -1650,6 +1675,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits);
     addNamed("campaignRefineryDefence", force.campaignRefineryDefence);
     addNamed("campaignFactoryRunway", force.campaignFactoryRunway);
+    addNamed("campaignHomeFields", force.campaignHomeFields);
+    addNamed("campaignSizedWorkerRescue", force.campaignSizedWorkerRescue);
     addNamed("capacityMcvRunway", force.capacityMcvRunway);
     addNamed("respectServiceOwnership", force.respectServiceOwnership);
     addNamed("clearMcvFootprint", force.clearMcvFootprint);
@@ -1701,6 +1728,10 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("cityLandValueFundingPercent", force.cityLandValueFundingPercent);
     addNamed("cityGrowthStageTax", force.cityGrowthStageTax);
     addNamed("cityGrowthTaxPopulation", force.cityGrowthTaxPopulation);
+    addNamed("retreatPreserve", force.retreatPreserve);
+    addNamed("retreatPreserveLevel", force.retreatPreserveLevel);
+    addNamed("harvesterRaid", force.harvesterRaid);
+    addNamed("harvesterRaidLevel", force.harvesterRaidLevel);
     addNamed("threatTurrets", force.threatTurrets);
     addNamed("moreRocketTurrets", force.moreRocketTurrets);
     addNamed("cityStarportSupply", force.cityStarportSupply);

@@ -302,6 +302,14 @@ inline Mix blend(const Mix& native, const Candidates& candidates, const Target& 
     return normalize(combined);
 }
 
+/// The enabled switch's live scope: the Vanilla FFA tuning roster/difficulty scope and
+/// positive initial map spice measured from the saved scenario at game start
+/// (GameInitSettings::getInitialSpiceTilePermille). An initially spiceless map stays
+/// inert even after destroyed harvesters spill spice; unknown map data (-1) stays native.
+inline bool active(bool tuningScope, int initialSpiceTilePermille) {
+    return tuningScope && initialSpiceTilePermille > 0;
+}
+
 } // namespace QuantBotArmyCounterPolicy
 
 #endif // QUANTBOT_ARMY_COUNTER_POLICY_H

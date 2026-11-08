@@ -230,6 +230,9 @@ approach, then nearest the core. The rule `vanilla_core_defence` passes the rout
 
 **Army counters.** `QuantBot::vanillaArmyCounterMix` runs in `planUnitMix` after the style mix and
 before the mobile anti-air floor, which still applies afterwards; off, it costs one switch read.
+Besides the shared scope it needs positive initial map spice from the saved scenario
+(`GameInitSettings::getInitialSpiceTilePermille()`, `QuantBotArmyCounterPolicy::active`): spice that
+destroyed harvesters spill on an initially spiceless map (Silicon Valley) never activates it (Batch2).
 - *Hostile army* (live simulation state, no visibility or telemetry): units of another team, not
   natives, alive, active and armed, of a vanilla combat type (no workers, carryalls, MCVs, saboteurs,
   worms or frigates). A unit counts when `Map::terrainAttackReachable` connects it to any of our core
@@ -281,7 +284,13 @@ structure footprints, and divided among the initially occupied controllers.
 It conservatively excludes fields reachable only by an airlift. Each worker's
 normal-price capital includes its refinery and transport shares, with at least
 2,000 remaining spice per worker. Expansion advances one bay when the current
-fleet fills its selected ratio. No unloading backlog is fabricated.
+fleet fills its selected ratio. Until a heavy factory can build harvesters, a
+refinery is the only source of a worker, so the four refineries the native
+opening ladders build before the worker supplier stay allowed. With a factory
+the ratio cap governs again, and those ladders stop at the cap instead of holding
+the yard for a refinery the ratio refuses; city economy choices skip it too.
+Without this, one delivered worker capped the fleet at one refinery and stalled
+the opening (5ba screen). No unloading backlog is fabricated.
 
 The throughput model is workers/bay ≈ (field fill + ground/air round-trip travel
 + unload time) / unload time. Distance raises the saturation ratio; carryalls can
@@ -1353,8 +1362,11 @@ paired arms; `--keep-telemetry --attack-events` retains mechanism/economy eviden
 
 `[Force Concentration] TeamSynchroniseAttacks` shares a team attack plan between autonomous
 Custom QuantBots in Vanilla/DuneCity. Only occupied original controller slots define the team
-scope; duels, FFA and campaigns are inert. Once both live allied bot armies meet their ordinary
-readiness and repair prerequisites, the first real dispatch wakes its partner. Both hunt towards
+scope; duels, FFA and campaigns are inert. Once both live allied bots have a fresh deployable
+wave meeting ordinary readiness, viable-wave and repair prerequisites, the first real dispatch
+wakes its partner. Older hunters, repair/defence assignments and other booked roles are not a
+fresh force. Each bot retains its native available-wave and bundle gates; unlike JoinAllyWaves,
+the shared objective does not bypass them. Both hunt towards
 the same enemy building, belonging to the enemy with the weakest true HP-weighted mobile army
 (air included). The partner keeps the first dispatch's target for the existing 30-second join
 window. Existing recovery/defence rules retain priority. A candidate-only style advertises the
@@ -1432,3 +1444,45 @@ Use fresh result directories for the combined CSV schema. Unit compilation is
 not proof that an actual probe starts: combined native-OFF/control parity and
 per-style real headless startup receipts are required before shared follow-ons.
 
+## Shared experiment batch 2
+
+Batch2 is Batch1 plus the late corrections and lanes Batch1 excluded, built the
+same way (one immutable source, every new master hashed and default OFF):
+TechTiming's per-minute income gate with exact Vanilla/DuneCity identity,
+EconRatios' opening supplier refineries and CivWars guard, TeamPlay's Sync
+correction (native available-value and bundle gates kept), SpecialWeapons'
+summon route toward the true-value cluster, DuelOpening's stateless raid,
+CampaignLeftovers' scoped low-legal-tech HomeFields and sized worker rescue,
+HarvesterRaid, RetreatPreserve (its preservation hook precedes the raid hook),
+the CityResearchOrder lab fix and VanillaArmyCounters' initial-spice scope.
+`experiment-batch-2-off` disables the Batch1 and Batch2 masters. Owners, pins,
+exclusions and acceptance receipts are in
+`outputs/ai-tuning-20261108/BatchIntegration/ledger.md`.
+
+## Experimental duel openings (default OFF)
+
+`[Force Concentration] DuelOpeningPlan` is a hashed integer: `0` native,
+`1` fast second refinery, `2` early light harvester pressure, `3` first heavy
+factory. Candidate-only test overlays are `duel-opening-off`, `-refinery`,
+`-raid`, and `-heavy`. The scope is autonomous Custom Medium/Hard/Brutal QuantBot,
+Vanilla or DuneCity, exactly two occupied controllers on opposing teams, with
+spice in the immutable original explicit-grid scenario. Unavailable initial maps
+stay native; spice dropped later cannot activate the policy. The initial-spice
+getter is reconstructed from saved scenario bytes, not new serialized state.
+The plan expires at eight game minutes. Other formats and
+campaign support do not enter the policy; zero preserves the native config hash.
+Plan2 is DuneCity-only after its discovery screen rejected Vanilla pressure;
+Vanilla is an explicit out-of-scope digest control for confirmation.
+
+The second-refinery plan surveys the yard's mountain-connected ground component,
+ignoring temporary traffic/buildings, divides remaining spice between both
+controllers conservatively, and requires four refinery purchase prices in that
+share before advancing to two refineries. Power recovery and live air defence
+retain priority. Raid builds up to four light vehicles and derives raider
+membership at every caller from the lowest four eligible unit IDs at minutes
+4–8, not the unsaved test-style raider set. It permits full-knowledge harvester
+targets. Heavy walks the actual mod prerequisites after the first income bay;
+neither factory plan invents unavailable technology or bypasses purchase admission.
+
+These are experiment arms, not accepted improvements. Evidence, coverage and
+funnel decisions live in `outputs/ai-tuning-20261108/DuelOpening/ledger.md`.

@@ -392,6 +392,8 @@ VanillaBoomFfaOnly=0
 # Default-OFF reachable-spice gate for the refinery/harvester openings; fixed levels 4000/8000.
 VanillaBoomSpiceGate=0
 VanillaBoomSpicePerRefinery=4000
+; Autonomous Custom duels only: 0 native, 1 second refinery, 2 light harvester raid, 3 first heavy factory.
+DuelOpeningPlan=0
 VanillaHarvesterBoomWorkers=8
 VanillaRefineryBoomRefineries=4
 VanillaGreedyBoomMinutes=6
@@ -410,8 +412,8 @@ FfaVultureLevel=0
 TeamSynchroniseAttacks=0
 # Ally-base rescue as a percent of ground army HP value: 0 (native), 25, or 50.
 TeamDefenceSharePercent=0
-# Experimental custom spice games: 0=native, 1=income >= tech cost/5min,
-# 2=income >= 1.5*tech cost/5min. Safe full-knowledge rivals allow earlier tech.
+# Experimental custom spice Vanilla/DuneCity games: 0=native, 1=income/min >= tech cost,
+# 2=income/min >= 2*tech cost. Safe full-knowledge rivals allow earlier tech.
 TechIncomeTiming=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
@@ -441,6 +443,12 @@ CampaignIdleCashFactoryCredits=2000
 CampaignRefineryDefence=0
 # Save the full first Light Factory/foundation/unit runway before optional extra refineries.
 CampaignFactoryRunway=0
+# Initially spice-bearing campaign AI support below Heavy Factory tech only.
+# Harvest jobs: 0=OFF, 1=home side of enemy-base frontier, 2=four tiles inward.
+CampaignHomeFields=0
+# Campaign support, positive initial spice, actual ground attack on a live worker only.
+# Reuse sized rescue: 0=OFF, 1=require 100% threat coverage, 2=require 150%; buildings unchanged.
+CampaignSizedWorkerRescue=0
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.
@@ -520,6 +528,15 @@ CityLandValueServices=0
 CityLandValueFundingPercent=60
 CityGrowthStageTax=0
 CityGrowthTaxPopulation=3000
+# Experimental: true-force retreat, early vehicle repair and threatened-field evacuation.
+# Vanilla/DuneCity skirmish only; campaigns and human-allied helpers stay unchanged.
+RetreatPreserve=0
+# 1: retreat at enemy >= 1.5x friendly local strength; 2: at >= 2x.
+RetreatPreserveLevel=1
+# Experimental: shared fast-unit harvester raids in Custom skirmish; campaigns stay inert.
+HarvesterRaid=0
+# 1: two units vs the richest-income rival's workers/refineries; 2: four vs an unprotected worker.
+HarvesterRaidLevel=1
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
 # Experimental 3-rocket baseline (4 for Hard+ at 16 structures), with a full income budget.

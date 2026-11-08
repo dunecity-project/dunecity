@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "sample_seed": 1220950,
+  "cases": [
+    {
+      "format": "2v2",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220950
+    },
+    {
+      "format": "ffa4",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220951
+    },
+    {
+      "format": "ffa6",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220952
+    },
+    {
+      "format": "2v2",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220953
+    },
+    {
+      "format": "ffa4",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220954
+    },
+    {
+      "format": "ffa6",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220955
+    }
+  ]
+}

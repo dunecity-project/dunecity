@@ -850,16 +850,49 @@ bool QuantBot::teamAttackReady() const {
             const auto* bot = dynamic_cast<const QuantBot*>(player.get());
             if (!bot || !bot->autonomousCustomArmy()) continue;
             // A partner already departing this joint wave does not make us wait for its
-            // reinforcements. No order or readiness cache in another controller is changed.
+            // reinforcements. No orders are issued to the other controller here.
             if (bot->customWave.launched != 0
                 && ArmyPosturePolicy::elapsed(getGameCycleCount(), bot->customWave.launched)
                     <= Uint32(MILLI2CYCLES(kAllyWaveJoinMs))) break;
             if (!bot->botConfig().getSettings(static_cast<int>(bot->difficulty)).attackEnabled
                 || ArmyPosturePolicy::suppressesOffensiveDispatch(bot->armyPosture)) return false;
-            const int64_t required = Force::scaledReadiness(bot->houseAttackThreshold(),
-                                                            bot->openingReadinessPercent());
-            if (bot->ownGroundArmyValue() < std::max<int64_t>(1, required)) return false;
-            if (!bot->fighterOnly() && !bot->lightFirstOpening() && house->getTechLevel() > 4
+            // Match native dispatch readiness without incrementing another bot's telemetry
+            // counter or treating its older hunters as a fresh force waiting to depart.
+            int percent = bot->waveReadinessPercent();
+            if (percent < 100 && (bot->openingReadinessPercent() >= 100
+                || (bot->forceVariant(kForceStrengthReadiness)
+                    && (bot->forceVariant(kForceEstimate)
+                        ? Force::outnumbered(bot->teamGroundArmyValue(), bot->enemyThreatEstimate())
+                        : bot->outnumberedByObservedArmy())))) percent = 100;
+            const bool exhausted = bot->exhaustedArmyEconomy();
+            const int64_t required = Force::scaledReadiness(bot->houseAttackThreshold(), percent);
+            if (!exhausted && bot->militaryUnitValue() < required) return false;
+            int availableUnits = 0;
+            int64_t availableValue = 0;
+            for (const auto* unit : getUnitList()) {
+                if (unit->getOwner() != house || !groundFighter(unit) || !unit->isRespondable()
+                    || unit->getAttackMode() == HUNT
+                    || bot->unitRole(unit, {UnitRole::Human, UnitRole::Repair,
+                        UnitRole::LiveDefence, UnitRole::Escort}) != UnitRole::Free) continue;
+                const Uint32 id = unit->getObjectID();
+                if (bot->styleRaiders.count(id) || bot->huntPartyOf(id)
+                    || (!bot->splits.empty() && bot->splitOf(id))
+                    || (!bot->musters.empty() && bot->musterOf(id))) continue;
+                ++availableUnits;
+                availableValue += std::max(100, currentGame->objectData.data[unit->getItemID()]
+                    [unit->getProductionHouseID()].price);
+            }
+            if (exhausted) {
+                if (availableUnits == 0) return false;
+            } else {
+                const auto& settings = bot->botConfig().getSettings(static_cast<int>(bot->difficulty));
+                const FixPoint threshold = FixPoint(static_cast<int>(settings.attackThresholdPercent * 100)) / 100;
+                const int64_t freshRequired = Force::scaledReadiness(
+                    bot->reachableAttackThreshold((bot->militaryValueLimit * threshold).lround()), percent);
+                if (availableUnits < bot->minWaveUnits()
+                    || availableValue < std::max<int64_t>(bot->minWaveValue(), freshRequired)) return false;
+            }
+            if (!exhausted && !bot->fighterOnly() && !bot->lightFirstOpening() && house->getTechLevel() > 4
                 && (bot->difficulty != Difficulty::Medium || bot->initialItemCount[Structure_RepairYard] > 0)
                 && house->getNumItems(Structure_RepairYard) == 0) return false;
             break;

@@ -10,10 +10,12 @@ kinds of game with one driver, `tests/ai/scenario-matrix.py`, and prints one sum
 
 ## Income-based technology timing experiment
 
-`TechIncomeTiming` is a hashed, default-OFF QuantBot setting (`0/1/2`).
-Levels 1/2 admit optional first Repair Yard, High Tech Factory, IX, Palace,
-Research Lab and military producer/research upgrades only when net income per
-minute reaches 1.0/1.5 times the full project cost per five minutes. Income is
+`TechIncomeTiming` is a hashed, default-OFF QuantBot setting (`0/1/2`) for
+Custom Vanilla and DuneCity spice games. Levels 1/2 admit optional first Repair
+Yard, High Tech Factory, IX, Palace, Research Lab and military producer/research
+upgrades only when net income per minute reaches 1x/2x the full project cost
+(the first cut used cost per five minutes and never held in the Vanilla screen,
+where median realised income was 885/min). Income is
 the lifetime realised spice/tax receipt rate, less current upkeep, capped by
 the existing four-minute delivered-worker/shared-spice forecast. Starting cash
 is never income. The lifetime rate avoids unsaved rolling history; it responds
@@ -84,6 +86,48 @@ replaces the fixed seeds for each selected campaign mission (duplicate seeds are
 played once). `--cases` can restrict the missions. The default fixed 66-game gate,
 the idle-human AI-support seating, and every non-campaign seed remain unchanged.
 Use separate result directories for each arm and keep observer flags identical.
+
+Campaign support field experiment: `[Force Concentration] CampaignHomeFields`
+is hashed and defaults to 0 (OFF). Level 1 rejects spice jobs closer to any
+hostile base centre than the support AI's own base; level 2 leaves a four-tile
+inward margin. Base centres use live deterministic structures, ignoring fog.
+Existing immediate-danger, route, unloading and ownership rules remain.
+It does not increase refinery or worker targets. It requires a positive exact
+initial-map spice measurement, remaining spice, and a Heavy Factory that is
+disabled or above the match's legal technology. It never checks the current
+factory count: destruction cannot reactivate the opening restriction. It is
+inert on initially spiceless or unsupported inputs, at Heavy Factory technology,
+outside classic campaign human support, or at level 0. Campaign activation
+requires the shared campaign initial-spice helper, not its Custom-only
+predecessor. The broad high-tech policy was rejected after A20 fell from23/24
+wins to15/24 or10/24. Restricting high-tech income fields is not a qualified fix;
+the low-tech hypothesis requires its own fresh paired and full-campaign gates.
+Styles:
+`campaign-home-fields-off`, `campaign-home-fields-home`, `campaign-home-fields-margin`.
+The hypothesis is worker survival without drawing the whole opening army into
+an enemy base to rescue a worker; measure worker deaths and defence-response
+locations as well as delivered spice, army, idle cash and wins.
+
+Campaign sized worker rescue experiment: `[Force Concentration]
+CampaignSizedWorkerRescue` is hashed, default 0 (OFF), with levels 1/2 requiring
+100%/150% health-weighted threat coverage. It applies only to classic campaign
+human support on an exactly measured initially spice-bearing map, when a live
+own harvester is hit or actually targeted within weapon range by a ground
+attacker. Buildings, air defence, spice-clearing requests, human orders and
+repair ownership retain their existing paths.
+
+The candidate reuses the existing sized-worker threat survey and responder
+pool: committed forces count toward coverage; an insufficient reachable pool
+is declined before issuing any new unit orders. An admitted pool retains its
+existing bundle/nearest/id selection order. It changes no harvesting jobs,
+refinery/worker targets or production budgets. `campaign_worker_rescue` events
+record worker, threat, required/committed/reachable value, coverage and admission;
+existing defence responses/declines also expose the campaign coverage.
+Styles `campaign-sized-worker-rescue-off`, `campaign-sized-worker-rescue-equal`
+and `campaign-sized-worker-rescue-superior` keep HomeFields OFF to isolate this
+hypothesis. Shared startup, OFF/outside-scope digests, fresh outcomes, worker
+losses and full66 campaign acceptance remain mandatory; source alone is not a
+qualified improvement.
 
 
 ### Genuine exhaustion regression
@@ -1029,7 +1073,10 @@ mix (not the currently tech-filtered mix), economic workers/transports, demanded
 MCV expansion and reactive rocket defence. It does not speculate on Palace-only
 technology. Level 2 also defers new research commitments until delivered-spice
 and net-tax forecast per minute covers `max(1000, active production burn + 500)`.
-Already-funded studies are not cancelled. Native power, capital and cash-reserve
+Already-funded studies are not cancelled. Both levels limit new studies only:
+the Research Lab building keeps its ordinary optional-capital admission, so a
+deferred study (always at tech 9) never stops the lab being built (Batch2 fix;
+`quantbot_research_order_lab_capital`). Native power, capital and cash-reserve
 gates still apply. Vanilla, campaigns, initially no-spice maps, research-off and
 unknown/seed-only map data retain native behavior.
 

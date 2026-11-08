@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "sample_seed": 1170001,
+  "cases": [
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "rock": 30,
+      "mountain": 5,
+      "seed": 1170001,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "2v2",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "rock": 15,
+      "mountain": 5,
+      "seed": 1170002,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa4",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "rock": 45,
+      "mountain": 15,
+      "seed": 1170003,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa6",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "rock": 15,
+      "mountain": 5,
+      "seed": 1170004,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa4",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 3,
+      "rock": 30,
+      "mountain": 5,
+      "seed": 1170005,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa6",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "rock": 45,
+      "mountain": 15,
+      "seed": 1170006,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa4",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "rock": 45,
+      "mountain": 15,
+      "seed": 1170007,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa6",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "rock": 30,
+      "mountain": 5,
+      "seed": 1170008,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa4",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 3,
+      "rock": 15,
+      "mountain": 5,
+      "seed": 1170009,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa6",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "rock": 45,
+      "mountain": 15,
+      "seed": 1170010,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa4",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "rock": 15,
+      "mountain": 5,
+      "seed": 1170011,
+      "difficulty": "brutal"
+    },
+    {
+      "format": "ffa6",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "rock": 30,
+      "mountain": 5,
+      "seed": 1170012,
+      "difficulty": "brutal"
+    }
+  ]
+}

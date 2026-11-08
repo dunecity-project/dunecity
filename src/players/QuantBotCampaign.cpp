@@ -252,6 +252,16 @@ bool QuantBot::reserveDamagedUnitForRepair(const UnitBase* unit) const {
     // A deviated unit is refused by our repair yards for as long as we hold it, so reserving it
     // has the same effect as reserving an aircraft: withdrawn from every order, never healed.
     if (!unit->isEligibleForRepair()) return false;
+    if (retreatPreserveActive() && !fighterOnly() && unit->isAGroundUnit() && !unit->isInfantry()
+        && QuantBotInternal::mobileCombatItem(unit->getItemID()) && getHouse()->hasRepairYard()
+        && !declinesUnfundedRepair(unit)) {
+        const auto* target = unit->getTarget();
+        // A repair trip owns the unit until full health, not just until it
+        // crosses the entry threshold. Both target and health are saved state.
+        if (unit->getHealth() * 5 < unit->getMaxHealth() * 4
+            || (target && target->getOwner() == getHouse() && target->getItemID() == Structure_RepairYard
+                && unit->getHealth() < unit->getMaxHealth())) return true;
+    }
     // Easy/Medium campaign troops cannot recover at home without a repair yard.
     // Keep them available for combat instead of withdrawing and excluding them
     // from every later wave. Explicit retreat/manual orders remain protected.

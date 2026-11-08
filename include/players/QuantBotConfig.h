@@ -255,6 +255,7 @@ struct QuantBotConfig {
         /// Cap refinery/harvester openings by their nearest-base share of reachable remaining spice.
         bool vanillaBoomSpiceGate;
         int vanillaBoomSpicePerRefinery;       ///< 4000 or 8000; other values normalize to 4000.
+        int duelOpeningPlan;                  ///< 0 native, 1 spice-funded second refinery, 2 light raid, 3 first heavy.
         int vanillaHarvesterBoomWorkers;       ///< 8 or 12, with two refineries.
         int vanillaRefineryBoomRefineries;     ///< 4 or 6, with two workers per refinery.
         int vanillaGreedyBoomMinutes;          ///< Stop at 6, 10 or 12 minutes; fund army until minute 20.
@@ -274,8 +275,8 @@ struct QuantBotConfig {
         /// Default-off FFA vulture timing: 0 native, 1 strike below 60%, 2 below 90%.
         /// Uses current mutual rival combat and true army values, never unsaved history.
         int ffaVultureLevel;
-        /// Default OFF. Custom spice games: 1/2 require sustainable net income
-        /// of 1.0/1.5 times the next technology's price per five minutes.
+        /// Default OFF. Custom spice Vanilla/DuneCity games: 1/2 require sustainable
+        /// net income per minute of 1x/2x the next technology's price.
         /// Full-knowledge army safety can advance an affordable legal tech order.
         int techIncomeTiming;
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
@@ -330,6 +331,14 @@ struct QuantBotConfig {
         /// Save the first campaign light factory's founded quote and first unit before extra refineries.
         /// Independent hashed candidate, default off.
         bool campaignFactoryRunway;
+        /// Initially spice-bearing campaign AI support below legal Heavy Factory tech
+        /// keeps worker jobs on its side of the base-distance frontier.
+        /// Hashed, default 0 (OFF); 1 = home side, 2 = four-tile inward margin.
+        int campaignHomeFields;
+        /// Initially spice-bearing classic campaign support rescues a worker only
+        /// with enough health-weighted ground strength: 0=OFF, 1=100%, 2=150%.
+        /// True worker attacks only; building defence and human/repair ownership stay unchanged.
+        int campaignSizedWorkerRescue;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.
@@ -458,6 +467,14 @@ struct QuantBotConfig {
         /// own population, normal 7% at/above it, with full service funding.
         bool cityGrowthStageTax;
         int cityGrowthTaxPopulation;
+        /// Experimental/default OFF: true local-force withdrawal, early vehicle
+        /// repair and full-knowledge field safety in Vanilla/DuneCity skirmishes.
+        bool retreatPreserve;
+        int retreatPreserveLevel;     // 1: enemy >= 1.5x friendly; 2: enemy >= 2x.
+        /// Experimental/default OFF: a small shared light-vehicle raid in ordinary
+        /// Custom skirmish; campaigns and human support retain their authority.
+        bool harvesterRaid;
+        int harvesterRaidLevel;       // 1: two vs income leader; 2: four vs exposed worker.
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;

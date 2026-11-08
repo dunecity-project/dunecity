@@ -11,6 +11,7 @@
 #include <players/QuantBotCoreDefencePolicy.h>
 #include <players/QuantBotFieldExpansionPolicy.h>
 #include <players/StarportBuyingPolicy.h>
+#include <players/TacticalSafetyPolicy.h>
 
 #include <array>
 #include <cstdio>
@@ -46,12 +47,19 @@ TEST_CASE("Income technology timing defaults off and round-trips both rate level
     }
     std::filesystem::remove(path);
     REQUIRE(incomeTechnologyAdmitted(0, 0, 1000));
-    REQUIRE_FALSE(incomeTechnologyAdmitted(1, 199, 1000));
-    REQUIRE(incomeTechnologyAdmitted(1, 200, 1000));
-    REQUIRE_FALSE(incomeTechnologyAdmitted(2, 299, 1000));
-    REQUIRE(incomeTechnologyAdmitted(2, 300, 1000));
+    // Per-minute thresholds: level 1 needs income/min >= cost, level 2 >= 2 * cost.
+    REQUIRE_FALSE(incomeTechnologyAdmitted(1, 999, 1000));
+    REQUIRE(incomeTechnologyAdmitted(1, 1000, 1000));
+    REQUIRE_FALSE(incomeTechnologyAdmitted(2, 1999, 1000));
+    REQUIRE(incomeTechnologyAdmitted(2, 2000, 1000));
+    // The Vanilla screen's median income (885/min) now holds a 1000-credit tech
+    // at both levels; the old cost-per-5-minutes rule admitted it.
+    REQUIRE_FALSE(incomeTechnologyAdmitted(1, 885, 1000));
+    REQUIRE_FALSE(incomeTechnologyAdmitted(2, 885, 500));
+    REQUIRE(incomeTechnologyAdmitted(1, 885, 500));
     REQUIRE_FALSE(incomeTechnologyAdmitted(1, 0, 0));
-    REQUIRE(incomeTechnologyAdmitted(2, 1000000000, 2000000000));
+    REQUIRE(incomeTechnologyAdmitted(2, 2000000000, 1000000000));
+    REQUIRE_FALSE(incomeTechnologyAdmitted(2, 2000000000, 2000000000));
     REQUIRE(incomeTechnologySafe(1000, 1000, false));
     REQUIRE_FALSE(incomeTechnologySafe(999, 1000, false));
     REQUIRE_FALSE(incomeTechnologySafe(10000, 0, true));
@@ -391,6 +399,84 @@ TEST_CASE("City construction capital defaults on and is loaded saved and hashed"
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Retreat preserve defaults off and both levels are loaded saved and hashed", "[ai][config][retreat]") {
+    QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.retreatPreserve);
+    REQUIRE(defaults.force.retreatPreserveLevel == 1);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-retreat-preserve-test.ini";
+    for (int enabled : {0, 1}) for (int level : {1, 2}) {
+        QuantBotConfig expected = defaults;
+        expected.force.retreatPreserve = enabled;
+        expected.force.retreatPreserveLevel = level;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nRetreatPreserve=" << enabled
+                << "\nRetreatPreserveLevel=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.retreatPreserve == bool(enabled));
+        REQUIRE(loaded.force.retreatPreserveLevel == level);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (enabled == 0 && level == 1));
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.retreatPreserve == bool(enabled));
+        REQUIRE(restored.force.retreatPreserveLevel == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    for (int raw : {-1, 99}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nRetreatPreserveLevel=" << raw << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.retreatPreserveLevel == (raw < 1 ? 1 : 2));
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Harvester raid defaults off and both levels are loaded saved and hashed", "[ai][config][harvester-raid]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.harvesterRaid);
+    REQUIRE(defaults.force.harvesterRaidLevel == 1);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-harvester-raid-test.ini";
+    for (const int enabled : {0, 1}) for (const int level : {1, 2}) {
+        QuantBotConfig expected = defaults;
+        expected.force.harvesterRaid = enabled != 0;
+        expected.force.harvesterRaidLevel = level;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nHarvesterRaid=" << enabled
+                << "\nHarvesterRaidLevel=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.harvesterRaid == (enabled != 0));
+        REQUIRE(loaded.force.harvesterRaidLevel == level);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (enabled == 0 && level == 1));
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.harvesterRaid == loaded.force.harvesterRaid);
+        REQUIRE(restored.force.harvesterRaidLevel == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    for (const int raw : {-1, 99}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nHarvesterRaidLevel=" << raw << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.harvesterRaidLevel == (raw < 1 ? 1 : 2));
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("City production prerequisites default on and are loaded saved and hashed", "[ai][city][config]") {
     QuantBotConfig config;
     REQUIRE(config.force.cityProductionPrerequisites);
@@ -462,6 +548,10 @@ TEST_CASE("City research order is opt-in hashed and preserves working income", "
     REQUIRE(cityResearchOrderAdmits(2, 3, 8, 1000, 0));
     REQUIRE_FALSE(cityResearchOrderAdmits(2, 3, 8, 2499, 2000));
     REQUIRE(cityResearchOrderAdmits(2, 3, 8, 2500, 2000));
+    // At tech 9 every new study is deferred at both levels. The deferral gates
+    // research only; quantbot_research_order_lab_capital checks that the Research
+    // Lab building keeps its ordinary optional-capital admission.
+    for (const int level : {1, 2}) REQUIRE_FALSE(cityResearchOrderAdmits(level, 9, 9, 9000, 0));
     std::filesystem::remove(path);
 }
 
@@ -1133,6 +1223,32 @@ TEST_CASE("Vanilla boom families default off and persist independent hashed comb
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Duel opening plans default off and round trip independent hashed levels", "[ai][duel][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.duelOpeningPlan == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-duel-opening-config-test.ini";
+    std::map<std::string, int> hashes;
+    for (int level = 0; level <= 3; ++level) {
+        QuantBotConfig expected = defaults;
+        expected.force.duelOpeningPlan = level;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nDuelOpeningPlan=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.duelOpeningPlan == level);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), level).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.duelOpeningPlan == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai][vanilla][strategy][config]") {
     const std::array<int QuantBotConfig::ForceSettings::*, 6> members{
         &QuantBotConfig::ForceSettings::vanillaHarvesterBoomWorkers,
@@ -1437,30 +1553,70 @@ TEST_CASE("Economic fleet fixed ratios advance one bay and stop at shared availa
           "[ai][economy][fleet-ratios]") {
     using QuantBotBuildPolicy::economicFleetTargets;
     for (const int ratio : {2, 3, 4}) {
-        const auto initial = economicFleetTargets(100000, 20, 1, 1, ratio, 1, 1, 1200, 2000, 800);
+        const auto initial = economicFleetTargets(100000, 20, 1, 1, ratio, 1, 1, 1200, 2000, 800, true);
         REQUIRE(initial.workers == ratio);
         REQUIRE(initial.refineries == 1);
-        const auto filled = economicFleetTargets(100000, 20, 1, ratio, ratio, 1, 1, 1200, 2000, 800);
+        const auto filled = economicFleetTargets(100000, 20, 1, ratio, ratio, 1, 1, 1200, 2000, 800, true);
         REQUIRE(filled.refineries == 2);
         REQUIRE(filled.workers == ratio);
-        const auto expanded = economicFleetTargets(100000, 20, 2, ratio + 1, ratio, 1, 1, 1200, 2000, 800);
+        const auto expanded = economicFleetTargets(100000, 20, 2, ratio + 1, ratio, 1, 1, 1200, 2000, 800, true);
         REQUIRE(expanded.workers == ratio * 2);
         REQUIRE(expanded.carryalls == (ratio + 4) / 4);
     }
-    const auto empty = economicFleetTargets(0, 40, 3, 12, 4, 2, 1, 1200, 2000, 800);
+    const auto empty = economicFleetTargets(0, 40, 3, 12, 4, 2, 1, 1200, 2000, 800, true);
     REQUIRE(empty.sustainable == 0);
     REQUIRE(empty.workers == 0);
     REQUIRE(empty.refineries == 0);
     REQUIRE(empty.carryalls == 0);
     REQUIRE(empty.repairYards == 0);
-    const auto scarce = economicFleetTargets(5000, 40, 6, 20, 2, 2, 1, 1200, 2000, 800);
+    const auto scarce = economicFleetTargets(5000, 40, 6, 20, 2, 2, 1, 1200, 2000, 800, true);
     REQUIRE(scarce.sustainable == 1);
     REQUIRE(scarce.workers == 1);
     REQUIRE(scarce.refineries == 1);
-    const auto unsupported = economicFleetTargets(100000, 3, 10, 10, 4, 0, 0, 1200, 2000, 800);
+    const auto unsupported = economicFleetTargets(100000, 3, 10, 10, 4, 0, 0, 1200, 2000, 800, true);
     REQUIRE(unsupported.workers == 3);
     REQUIRE(unsupported.carryalls == 0);
     REQUIRE(unsupported.repairYards == 0);
+}
+
+TEST_CASE("Economic fleet ratios keep the opening refineries until a heavy factory can build workers",
+          "[ai][economy][fleet-ratios]") {
+    using QuantBotBuildPolicy::economicFleetTargets;
+    using QuantBotBuildPolicy::kOpeningSupplierRefineries;
+    using QuantBotBuildPolicy::supplierRefineryGoal;
+    for (const int ratio : {2, 3, 4}) {
+        // The 5ba screen deadlock: the first refinery delivered one worker, the cap
+        // 1 + workers/perBay refused every further refinery, and the opening ladders
+        // (four refineries before the worker supplier) kept selecting the refused one.
+        const auto capped = economicFleetTargets(100000, 20, 1, 1, ratio, 1, 1, 1200, 2000, 800, true);
+        REQUIRE(capped.refineries == 1);
+        const int ladder = std::min(kOpeningSupplierRefineries, capped.sustainable);
+        REQUIRE(ladder == 4);
+        // Without a factory the cap admits the whole native opening ladder.
+        const auto opening = economicFleetTargets(100000, 20, 1, 1, ratio, 1, 1, 1200, 2000, 800, false);
+        REQUIRE(opening.refineries == kOpeningSupplierRefineries);
+        REQUIRE(opening.workers == capped.workers);
+        REQUIRE(supplierRefineryGoal(ladder, true, opening.refineries) == ladder);
+        // Lost workers do not lower the floor while no factory can replace them.
+        const auto lost = economicFleetTargets(100000, 20, 2, 0, ratio, 1, 1, 1200, 2000, 800, false);
+        REQUIRE(lost.refineries == kOpeningSupplierRefineries);
+        // With a factory the ladder stops at the ratio's cap instead of holding the yard.
+        REQUIRE(supplierRefineryGoal(ladder, true, capped.refineries) == 1);
+    }
+    // Refineries deliver their own worker, so the floor applies on a scarce share
+    // exactly as the native ladder does; an empty share stays at zero.
+    const auto scarce = economicFleetTargets(5000, 40, 1, 1, 2, 2, 1, 1200, 2000, 800, false);
+    REQUIRE(scarce.sustainable == 1);
+    REQUIRE(scarce.refineries == kOpeningSupplierRefineries);
+    const auto empty = economicFleetTargets(0, 40, 0, 0, 3, 1, 1, 1200, 2000, 800, false);
+    REQUIRE(empty.refineries == 0);
+    REQUIRE(supplierRefineryGoal(4, true, empty.refineries) == 0);
+    // Once a factory exists the selected ratio governs expansion again.
+    const auto factory = economicFleetTargets(100000, 20, 3, 3, 3, 1, 1, 1200, 2000, 800, true);
+    REQUIRE(factory.refineries == 2);
+    // Switch OFF: the native ladder goal is untouched.
+    REQUIRE(supplierRefineryGoal(4, false, 0) == 4);
+    REQUIRE(supplierRefineryGoal(2, false, 7) == 2);
 }
 
 TEST_CASE("Vanilla boom phases preserve scope and convert greedy spending at the declared stop",
@@ -1843,6 +1999,92 @@ TEST_CASE("Campaign round-two economy controls independently persist every hashe
         }
     }
     std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign home fields have two independently hashed persistent levels",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHomeFields == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-home-fields-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int level : {0, 1, 2}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHomeFields=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHomeFields == level);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHomeFields = level;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), level).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHomeFields == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+    REQUIRE(TacticalSafetyPolicy::homeFieldAllowed(100, 1, 0));
+    REQUIRE(TacticalSafetyPolicy::homeFieldAllowed(7, 7, 1));
+    REQUIRE_FALSE(TacticalSafetyPolicy::homeFieldAllowed(8, 7, 1));
+    REQUIRE_FALSE(TacticalSafetyPolicy::homeFieldAllowed(7, 10, 2));
+    REQUIRE(TacticalSafetyPolicy::homeFieldAllowed(7, 11, 2));
+}
+
+TEST_CASE("Campaign home fields require initial spice and a legally low-tech opening",
+          "[ai][campaign][economy][scope]") {
+    using TacticalSafetyPolicy::homeFieldOpeningScope;
+    REQUIRE_FALSE(homeFieldOpeningScope(-1, true, 3, 2));
+    REQUIRE_FALSE(homeFieldOpeningScope(0, true, 3, 2));
+    REQUIRE(homeFieldOpeningScope(1, true, 3, 2));
+    REQUIRE_FALSE(homeFieldOpeningScope(100, true, 3, 3));
+    REQUIRE_FALSE(homeFieldOpeningScope(100, true, 3, 8));
+    REQUIRE(homeFieldOpeningScope(100, false, 3, 8));
+    REQUIRE_FALSE(homeFieldOpeningScope(0, false, 3, 8));
+}
+
+TEST_CASE("Campaign sized worker rescue persists OFF and both force coverage levels",
+          "[ai][campaign][defence][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignSizedWorkerRescue == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-worker-rescue-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int level : {0, 1, 2}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignSizedWorkerRescue=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignSizedWorkerRescue == level);
+        REQUIRE(loaded.force.campaignHomeFields == defaults.force.campaignHomeFields);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignSizedWorkerRescue = level;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), level).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignSizedWorkerRescue == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+    using TacticalSafetyPolicy::campaignWorkerRescueCoverage;
+    REQUIRE(campaignWorkerRescueCoverage(0) == 0);
+    REQUIRE(campaignWorkerRescueCoverage(1) == 100);
+    REQUIRE(campaignWorkerRescueCoverage(2) == 150);
+    const auto equal = ForceConcentrationPolicy::scaledReadiness(1000, campaignWorkerRescueCoverage(1));
+    const auto superior = ForceConcentrationPolicy::scaledReadiness(1000, campaignWorkerRescueCoverage(2));
+    REQUIRE(ForceConcentrationPolicy::answerable(equal, 100, 1100));
+    REQUIRE_FALSE(ForceConcentrationPolicy::answerable(superior, 100, 1100));
+    REQUIRE(ForceConcentrationPolicy::answerable(superior, 100, 1400));
+    const std::vector<ForceConcentrationPolicy::SizedResponder> responders{
+        {2, 500, 8, false}, {1, 700, 3, false}, {3, 200, 12, false}};
+    const std::vector<uint32_t> expectedOrder{1, 2};
+    REQUIRE(ForceConcentrationPolicy::sizedPool(equal, 100, responders,
+        ForceConcentrationPolicy::kSizedBandTiles) == expectedOrder);
 }
 
 TEST_CASE("Campaign funded light opening independently persists both hashed states",

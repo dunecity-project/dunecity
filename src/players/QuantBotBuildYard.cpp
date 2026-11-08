@@ -344,6 +344,54 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardVanillaCoreDefence(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    // Duel plans spend the opening grant differently, after real power/air
+    // emergencies but before optional city growth, imports and repair support.
+    const int duelPlan = duelOpeningPlan();
+    if (duelPlan && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && getAIRefineryBays() > 0) {
+        const int house = getHouse()->getHouseID();
+        const auto& data = currentGame->objectData.data;
+        Uint32 goal = NONE_ID;
+        if (duelPlan == 1 && pass.itemCount[Structure_Refinery] < 2) {
+            const int cost = buildingCapitalCost(pass, Structure_Refinery);
+            const int share = duelReachableSpiceShare(turn.pBuilder);
+            // Two processing bays must each have at least two purchase prices
+            // of reachable spice left; no expansion on an empty/stranded field.
+            if (cost > 0 && int64_t(share) >= int64_t(cost) * 4) goal = Structure_Refinery;
+            traceDecision("duel_opening_spice", AITelemetry::Record()
+                .set("share", share).set("price", cost).set("goal", goal == Structure_Refinery ? 2 : 1));
+        } else if (duelPlan == 2 && pass.itemCount[Structure_LightFactory] == 0) {
+            goal = Structure_LightFactory;
+        } else if (duelPlan == 3 && pass.itemCount[Structure_HeavyFactory] == 0) {
+            goal = Structure_HeavyFactory;
+        }
+        if (goal != NONE_ID && data[goal][house].enabled
+            && data[goal][house].techLevel <= getHouse()->getTechLevel()) {
+            Uint32 step = goal;
+            for (int depth = 0; step != NONE_ID && depth < Structure_LastID; ++depth) {
+                if (pass.itemCount[step] > 0) break;
+                if (campaignAvailableToBuild(turn.pBuilder, step)) {
+                    if (findPlaceLocation(step).isValid()) {
+                        yardTurn.skipRemainingStructureLogic = true;
+                        yardTurn.serviceSavingHold = pass.money < buildingCapitalCost(pass, step);
+                        yardTurn.itemID = yardTurn.serviceSavingHold ? NONE_ID : step;
+                        yardTurn.structureRule = yardTurn.serviceSavingHold ? "save_duel_opening" : "duel_opening";
+                        traceDecision("duel_opening", AITelemetry::Record()
+                            .set("plan", duelPlan).set("goal", int(goal)).set("step", int(step))
+                            .set("funded", !yardTurn.serviceSavingHold));
+                    }
+                    break;
+                }
+                Uint32 prerequisite = NONE_ID;
+                for (int i = Structure_FirstID; i <= Structure_LastID; ++i)
+                    if (data[step][house].prerequisiteStructuresSet[i] && getHouse()->getNumItems(i) == 0) {
+                        prerequisite = i;
+                        break;
+                    }
+                step = prerequisite;
+            }
+        }
+    }
     if (pass.vanillaBoomArmy) {
         // Conversion keeps actual power/defence recovery and the planner's
         // one required prerequisite. Do not re-enter the native growth ladder.
@@ -1104,8 +1152,11 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         // fill the opening fleet. Starport upgrades otherwise wait
         // behind cheap lots even on a rich spice field.
         const bool supplyingWorkers = openingWorkerSupplier && defenceReady;
+        const int supplierRefineries = QuantBotBuildPolicy::supplierRefineryGoal(
+            familySupplier ? 2 : QuantBotBuildPolicy::kOpeningSupplierRefineries,
+            pass.fleetRatios, pass.fleetRefineryTarget);
         Uint32 step = completingCore ? pass.missingCoreInfrastructure : supplyingWorkers
-            ? (pass.itemCount[Structure_Refinery] < (familySupplier ? 2 : 4) ? Structure_Refinery
+            ? (pass.itemCount[Structure_Refinery] < supplierRefineries ? Structure_Refinery
                 : pass.starportMarketAvailable ? Structure_StarPort : Structure_HeavyFactory)
             : Structure_RocketTurret;
         if (!supplyingWorkers && !hasPowerBufferForTurret(pass)) step = Structure_WindTrap;
@@ -1299,7 +1350,9 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         && getHouse()->getTechLevel() >= data[Structure_StarPort][houseID].techLevel) {
         Uint32 step = NONE_ID;
         if (getHouse()->getNumItems(Structure_StarPort) == 0) {
-            const int refineryGoal = std::min(4, pass.mapSpiceHarvesterTarget);
+            const int refineryGoal = QuantBotBuildPolicy::supplierRefineryGoal(
+                std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
+                pass.fleetRatios, pass.fleetRefineryTarget);
             const bool campaignFactory = botConfig().force.campaignFactoryBeforeStarport
                 && campaignEconomySupport() && lastCalculatedSpice > 0
                 && pass.itemCount[Structure_LightFactory] == 0

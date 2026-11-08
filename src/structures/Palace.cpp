@@ -56,6 +56,14 @@ const ObjectBase* palaceControllerTarget(const House* house) {
             if (const auto* target = bot->palaceValueTarget()) return target;
     return nullptr;
 }
+void directPalaceSummon(UnitBase* unit, const ObjectBase* target) {
+    if (!target) return;
+    // A held invisible target is immediately dropped by engageTarget(). The
+    // existing saved hunt route walks toward this cluster through fog, taking
+    // local contacts normally (including Saboteur occupied-tile acquisition).
+    const Coord goal = target->getClosestPoint(unit->getLocation());
+    unit->doHuntToward(goal.x, goal.y);
+}
 void recordPalaceSpawn(const Palace* palace, UnitBase* unit, const ObjectBase* target) {
     if (!AITelemetry::log().enabled()) return;
     AITelemetry::log().write(currentGame->getGameCycleCount(), palace->getOwner()->getHouseID(), -1,
@@ -463,7 +471,7 @@ bool Palace::callFremen() {
                     pFremen->setDestination(closestUnit->getLocation());
                 }
             }
-            if (valuedTarget) pFremen->doAttackObject(valuedTarget, false);
+            directPalaceSummon(pFremen, valuedTarget);
             recordPalaceSpawn(this, pFremen, valuedTarget ? valuedTarget : pFremen->getTarget());
         }
 
@@ -509,7 +517,7 @@ bool Palace::spawnSaboteur() {
         soundPlayer->playVoice(SaboteurApproaching, currentGame->getInterfaceHouseID());
     }
     const auto* valuedTarget = palaceControllerTarget(getOwner());
-    if (valuedTarget) saboteur->doAttackObject(valuedTarget, false);
+    directPalaceSummon(saboteur, valuedTarget);
     recordPalaceSpawn(this, saboteur, valuedTarget ? valuedTarget : saboteur->getTarget());
 
     return true;
@@ -572,7 +580,7 @@ bool Palace::callLightVehicles() {
             newUnit->deploy(deployPos);
             newUnit->setGuardPoint(deployPos);
             newUnit->doSetAttackMode(HUNT);
-            if (valuedTarget) newUnit->doAttackObject(valuedTarget, false);
+            directPalaceSummon(newUnit, valuedTarget);
             recordPalaceSpawn(this, newUnit, valuedTarget ? valuedTarget : newUnit->getTarget());
             spawned++;
             return;
@@ -620,7 +628,7 @@ bool Palace::callOrnithopterStrike() {
         ornithopter->deploy(deployPos);
         ornithopter->setGuardPoint(deployPos);
         ornithopter->doSetAttackMode(HUNT);
-        if (valuedTarget) ornithopter->doAttackObject(valuedTarget, false);
+        directPalaceSummon(ornithopter, valuedTarget);
         recordPalaceSpawn(this, ornithopter, valuedTarget ? valuedTarget : ornithopter->getTarget());
         ++spawned;
     }

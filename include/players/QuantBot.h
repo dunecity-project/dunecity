@@ -45,6 +45,7 @@ class Harvester;
 #include <dunecity/SpatialFields.h>
 
 #include <DataTypes.h>
+#include <algorithm>
 #include <limits>
 #include <set>
 #include <map>
@@ -666,6 +667,18 @@ private:
     Coord findBestDeathHandTarget(int enemyHouseID);
     const UnitBase* findLightRaiderTarget(const UnitBase* raider) const;
     const UnitBase* findThreateningTank(const UnitBase* raider) const;
+    /// Re-derived from simulation objects for each controller pass; never saved.
+    /// An incomplete group stays in the ordinary home reserve until it fills.
+    struct HarvesterRaidPlan {
+        std::array<const UnitBase*, 4> members{};
+        const ObjectBase* target = nullptr;
+        int count = 0, required = 0;
+        bool contains(const UnitBase* unit) const {
+            return target && std::find(members.begin(), members.end(), unit) != members.end();
+        }
+        bool ready() const { return target && count == required; }
+    };
+    HarvesterRaidPlan planHarvesterRaid() const;
     double getProductionBuildingMultiplier(int itemID) const;
     // Runtime-only observations. Never consulted by tactical/production decisions.
     struct HarvesterStrikeMemberTrace { Uint32 id, item; int price; CombatReward::Totals reward; };
@@ -1036,6 +1049,9 @@ private:
     UnitMixPolicy::Weights startingPrior(const UnitMixPolicy::Slots& available) const;
     /// The opening and wave rules of the style (if a test style is active) or else the tempo.
     bool lightFirstOpening() const;
+    int duelOpeningPlan() const;
+    bool duelOpeningRaider(const UnitBase* unit) const;
+    int duelReachableSpiceShare(const StructureBase* yard) const;
     int minWaveUnits() const;
     int minWaveValue() const;
     /// An Infantry mix strategy: Custom vanilla then founds a barracks and a WOR too.
@@ -1584,6 +1600,9 @@ private:
         bool frontObserved = false;
         Coord frontAnchor = Coord::Invalid();
         int waveMembers = 0;
+        /// Derived this survey only: an owned offensive fighter (including a
+        /// raider outside customWave) has a live hostile contact at this fight.
+        bool preservationContact = false;
         /// Local holding strength around the attacked core asset, and the
         /// hostile power actually attacking it. A minor raid that the local
         /// defenders and turret cover outweigh is not a house emergency.
@@ -1596,6 +1615,11 @@ private:
         Coord coreAt = Coord::Invalid();
     };
     ArmySurvey surveyArmy(const ObjectBase* plannedFront = nullptr);
+    /// One default-OFF experiment; never campaign, Builder/Off or a human ally.
+    bool retreatPreserveActive() const;
+    /// Repair first, then the saved house withdrawal. True means this controller
+    /// retains the unit; raids, Hunt spacing and ordinary rally must stand aside.
+    bool preserveCombatUnit(const UnitBase* unit, int& orderBudget, int radius = 3);
     /// Posture evaluation, once per AI pass this house actually takes.
     void updateArmyPosture();
     /// Apply the current posture to units: hold reinforcements, recall the wave.

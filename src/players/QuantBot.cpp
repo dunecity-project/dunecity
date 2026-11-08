@@ -915,6 +915,12 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 		if (pGroundUnit->isAwaitingPickup()) {
 			return;
 		}
+        // Damage must not cancel a saved withdrawal/repair trip before the next
+        // AI pass. Use the same controller and ordinary engine repair command.
+        if (retreatPreserveActive()) {
+            int preservationBudget = 1;
+            if (preserveCombatUnit(pGroundUnit, preservationBudget, assemblyRadius(getHouse()->getNumUnits()))) return;
+        }
         // A hit on a hunt party's member is contact (Blob waves): a gathering, marching or
         // reforming party unblobs into the fight before the per-unit reactions below.
         if (damage>0 && pDamager->getOwner()->getTeamID()!=getHouse()->getTeamID())
@@ -1068,6 +1074,7 @@ void QuantBot::refreshTacticalDanger() {
     visibleEnemyBases.clear();
     visibleHarvestLaunchers.clear();
     const bool civWars = civWarsRules();
+    const bool preserve = retreatPreserveActive();
     const bool emitSafety = AITelemetry::log().enabled()
         && (lastSafetyTrace == std::numeric_limits<Uint32>::max() || now-lastSafetyTrace >= MILLI2CYCLES(30000));
     AITelemetry::Record threats;
@@ -1079,8 +1086,11 @@ void QuantBot::refreshTacticalDanger() {
                     grid[y*w+x] = std::min(10000, grid[y*w+x] + strength);
     };
     auto observe = [&](const ObjectBase* object, bool active = true) {
-        if (!TacticalSafetyPolicy::observedThreat(object,getHouse()->getTeamID(),active)) return;
-        if (object->isAStructure()) visibleEnemyBases.push_back(object->getLocation());
+        const bool observed = TacticalSafetyPolicy::observedThreat(object,getHouse()->getTeamID(),active);
+        if (!observed && !(preserve && active && object && object->getOwner() && object->getHealth() > 0
+            && object->getOwner()->getTeamID() != getHouse()->getTeamID()
+            && object->getLocation().isValid())) return;
+        if (observed && object->isAStructure()) visibleEnemyBases.push_back(object->getLocation());
         // Palace missiles are addressed by spacing, not a permanent map-wide veto.
         if (!object->canAttack() || object->getItemID() == Structure_Palace) return;
         Coord p = object->getLocation();
@@ -1088,17 +1098,22 @@ void QuantBot::refreshTacticalDanger() {
             p += Coord(structure->getStructureSizeX()/2, structure->getStructureSizeY()/2);
         const bool reachesRock = TacticalSafetyPolicy::threatReachesRock(object->getItemID(),civWars);
         const int radius = TacticalSafetyPolicy::tacticalThreatRadius(object->getItemID(),object->getWeaponRange(),civWars);
-        stamp(tacticalDanger, p, radius, 100, reachesRock);
+        if (observed) stamp(tacticalDanger, p, radius, 100, reachesRock);
         // Launchers get an early-warning margin: a harvester must turn before missiles arrive.
         // Tracked harvesters can crush foot troops; do not treat them like tanks.
-        const int harvestRadius = TacticalSafetyPolicy::harvesterThreatRadius(object->getItemID(),object->getWeaponRange(),civWars);
-        if (object->getItemID()==Unit_Launcher) visibleHarvestLaunchers.push_back(object->getObjectID());
+        const int harvestRadius = preserve
+            ? std::max(4, object->getWeaponRange() + 3)
+            : TacticalSafetyPolicy::harvesterThreatRadius(object->getItemID(),object->getWeaponRange(),civWars);
+        // Retain the existing checkpointed threat list; ON includes every mobile
+        // field attacker, even unseen, instead of only visible launchers.
+        if (object->getItemID()==Unit_Launcher || (preserve && object->isAUnit()))
+            visibleHarvestLaunchers.push_back(object->getObjectID());
         for (int y = std::max(0,p.y-harvestRadius); y <= std::min(h-1,p.y+harvestRadius); ++y)
             for (int x = std::max(0,p.x-harvestRadius); x <= std::min(w-1,p.x+harvestRadius); ++x)
                 if ((x-p.x)*(x-p.x)+(y-p.y)*(y-p.y) <= harvestRadius*harvestRadius
                     && (reachesRock || !getMap().getTile(x,y)->isRock()))
                     harvesterDanger[y*w+x] += 100;
-        if (emitSafety) threats.set(std::to_string(object->getObjectID()), AITelemetry::Record()
+        if (emitSafety && observed) threats.set(std::to_string(object->getObjectID()), AITelemetry::Record()
             .set("item",object->getItemID()).set("x",p.x).set("y",p.y).set("radius_tiles",radius)
             .set("harvester_radius_tiles",harvestRadius));
     };
