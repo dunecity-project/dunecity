@@ -363,6 +363,19 @@ VanillaFfaSingleFront=0
 VanillaFfaLightWorkingCash=0
 # Optional IX/Palace deferral is scoped to vanilla FFA with at least five original players.
 VanillaFfaFundedTech=0
+# Strategy packages for spice-backed vanilla skirmishes; outnumbered two-team survival is inert.
+# Boom: 16 workers / 6 refineries, then mass; Expansion: early second yard.
+# Foundry: 8 workers / 3 factories; Neighbour: 4 workers / early nearest-core strike.
+# Tech: 6 workers / IX chain; Adaptive: minute-3 rich-safe boom versus war economy.
+# Openings release by minute 12 (Neighbour 8); existing accepted queues are never cancelled.
+VanillaBoldBoom=0
+# Hashed attribution scope for Boom: only FFA with three or more original hostile controllers.
+VanillaBoldBoomFfaOnly=0
+VanillaBoldExpansion=0
+VanillaBoldFoundry=0
+VanillaBoldNeighbour=0
+VanillaBoldTech=0
+VanillaBoldAdaptive=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0

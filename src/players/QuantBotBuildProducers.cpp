@@ -150,6 +150,18 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.vanillaPlan != QuantBotVanillaPolicy::Plan::None) {
+        if (itemID == Unit_Harvester && pass.itemCount[itemID] >= pass.spiceHarvesterTarget) return false;
+        if (itemID == Structure_Refinery && pass.itemCount[itemID]
+            >= QuantBotVanillaPolicy::refineries(pass.vanillaPlan, pass.spiceHarvesterTarget)) return false;
+        if (itemID == Structure_HeavyFactory
+            && pass.itemCount[itemID] >= QuantBotVanillaPolicy::factories(pass.vanillaPlan)) return false;
+        if (itemID == Unit_MCV && pass.itemCount[Structure_ConstructionYard] > 0
+            && (pass.vanillaPlan != QuantBotVanillaPolicy::Plan::Expansion
+                || pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] >= 2)) return false;
+        if (pass.vanillaBoldTechDeferred && (itemID == Structure_IX || itemID == Structure_Palace)) return false;
+        if (pass.vanillaBoldMilitaryHeld && !pass.defendingEconomy && QuantBotBuildPolicy::militaryItem(itemID)) return false;
+    }
     if(!cityAdmitsStructure(pass, itemID)) return false;
     if (itemID==Structure_RepairYard && !canAddRepairYard(pass.itemCount[Structure_RepairYard])) return false;
     // Also cover campaign rebuild orders, which bypass the strategic planner.
@@ -834,6 +846,13 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (turn.capitalSupplier && pass.vanillaBoldCapital == pass.capitalChoice
+        && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "vanilla_bold_upgrade") {
+        if (pass.money >= pass.capitalCandidates[pass.capitalChoice].price
+            && turn.pBuilder->getProductionQueueSize() == 0 && !turn.pBuilder->isUpgrading()
+            && upgradeWithLogging(pass, turn, __LINE__)) pass.capitalConsumed = true;
+        return true;
+    }
     // The capital allocator also offers workers ahead of the type-specific
     // military handler. Do not let it bypass the live-threat replacement rule.
     if ((pass.campaignThreatProduction || pass.vanillaFfaThreatProduction)

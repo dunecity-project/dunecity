@@ -6,6 +6,7 @@
 #include <players/QuantBotStrategy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotSpendingPolicy.h>
+#include <players/QuantBotVanillaPolicy.h>
 
 #include <array>
 #include <cstdio>
@@ -754,6 +755,77 @@ TEST_CASE("Vanilla FFA switches default off and independently persist every hash
         REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
     }
     std::filesystem::remove(path);
+}
+
+TEST_CASE("Vanilla bold packages default off and persist independent hashed combinations",
+          "[ai][vanilla][strategy][config]") {
+    const QuantBotConfig defaults;
+    const std::array<bool QuantBotConfig::ForceSettings::*, 7> members{
+        &QuantBotConfig::ForceSettings::vanillaBoldBoom, &QuantBotConfig::ForceSettings::vanillaBoldBoomFfaOnly,
+        &QuantBotConfig::ForceSettings::vanillaBoldExpansion, &QuantBotConfig::ForceSettings::vanillaBoldFoundry,
+        &QuantBotConfig::ForceSettings::vanillaBoldNeighbour, &QuantBotConfig::ForceSettings::vanillaBoldTech,
+        &QuantBotConfig::ForceSettings::vanillaBoldAdaptive};
+    const std::array<const char*, 7> names{"VanillaBoldBoom", "VanillaBoldBoomFfaOnly", "VanillaBoldExpansion",
+        "VanillaBoldFoundry", "VanillaBoldNeighbour", "VanillaBoldTech", "VanillaBoldAdaptive"};
+    for (const auto member : members) REQUIRE_FALSE(defaults.force.*member);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-bold-config-test.ini";
+    std::map<std::string, unsigned> hashes;
+    for (unsigned mask = 0; mask < (1u << members.size()); ++mask) {
+        QuantBotConfig expected = defaults;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\n";
+            for (size_t i = 0; i < members.size(); ++i) {
+                expected.force.*members[i] = (mask & (1u << i)) != 0;
+                ini << names[i] << '=' << (expected.force.*members[i]) << '\n';
+            }
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), mask).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        for (const auto member : members) REQUIRE((restored.force.*member) == (expected.force.*member));
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Vanilla bold opening commitments are large bounded and responsive",
+          "[ai][vanilla][strategy]") {
+    using namespace QuantBotVanillaPolicy;
+    REQUIRE(rosterScope(1, 1, false));
+    REQUIRE(rosterScope(2, 2, false));
+    REQUIRE(rosterScope(1, 3, true));
+    REQUIRE(rosterScope(1, 5, true));
+    REQUIRE_FALSE(rosterScope(1, 4, false));
+    REQUIRE_FALSE(rosterScope(0, 4, true));
+    REQUIRE_FALSE(rosterScope(1, 0, false));
+    REQUIRE(boomScope(false, 1, false));
+    REQUIRE_FALSE(boomScope(true, 1, false));
+    REQUIRE_FALSE(boomScope(true, 2, false));
+    REQUIRE_FALSE(boomScope(true, 4, false));
+    REQUIRE(boomScope(true, 3, true));
+    REQUIRE(boomScope(true, 5, true));
+    REQUIRE(workers(Plan::Boom, 50) == 16);
+    REQUIRE(workers(Plan::Boom, 3) == 3);
+    REQUIRE(refineries(Plan::Boom, 16) == 6);
+    REQUIRE(factories(Plan::Foundry) == 3);
+    REQUIRE(workers(Plan::Neighbour, 50) == 4);
+    REQUIRE(readiness(Plan::Neighbour) == 40);
+    REQUIRE(readiness(Plan::Foundry) == 150);
+    REQUIRE(opening(Plan::Boom, 11, false));
+    REQUIRE_FALSE(opening(Plan::Boom, 12, false));
+    REQUIRE_FALSE(opening(Plan::Neighbour, 8, false));
+    REQUIRE_FALSE(opening(Plan::Tech, 4, true));
+    REQUIRE(deferTech(Plan::Expansion, 12, 12, 1, 2));
+    REQUIRE_FALSE(deferTech(Plan::Expansion, 12, 12, 2, 2));
+    REQUIRE(adaptive(60000, 48, 3000, 3000) == Plan::AdaptiveBoom);
+    REQUIRE(adaptive(59999, 48, 3000, 3000) == Plan::AdaptiveWar);
+    REQUIRE(adaptive(60000, 47, 3000, 3000) == Plan::AdaptiveWar);
+    REQUIRE(adaptive(60000, 48, 3001, 3000) == Plan::AdaptiveWar);
 }
 
 TEST_CASE("Accepted campaign defaults retain an explicit all-off control",
