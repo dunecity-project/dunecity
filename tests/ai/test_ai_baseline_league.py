@@ -56,9 +56,9 @@ class NativeLeagueInputs(unittest.TestCase):
 
     def test_style_receipt_is_an_exact_committed_file(self):
         self.assertEqual(league.style_receipt(SimpleNamespace()), ('', ''))
-        path, digest = league.style_receipt(SimpleNamespace(style='existing-composition-unit-choice-off'))
+        path, digest = league.style_receipt(SimpleNamespace(style='research-lab-progression-off'))
         self.assertEqual(hashlib.sha256(Path(path).read_bytes()).hexdigest(), digest)
-        for name in ('../outside', 'existing-composition-unit-choice-off.ini'):
+        for name in ('../outside', 'research-lab-progression-off.ini'):
             with self.assertRaises(ValueError):
                 league.style_receipt(SimpleNamespace(style=name))
 
@@ -138,7 +138,7 @@ class NativeLeagueInputs(unittest.TestCase):
 
     def test_inline_genome_requires_frozen_manifest_and_exclusive_treatment(self):
         args = self.genome_args(dict(id='default', values={}))
-        args.style = 'existing-composition-unit-choice-on'
+        args.style = 'research-lab-progression-on'
         with self.assertRaisesRegex(ValueError, 'cannot be mixed'):
             league.inline_genome(args)
         args.style = None

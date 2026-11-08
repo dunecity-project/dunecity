@@ -97,8 +97,7 @@ def play(args, scratch, binary, key):
                '--mod', 'dunecity', '--minutes', str(args.minutes), '--wall-timeout', str(args.wall_timeout),
                '--path-workers', '1', '--capture-mib', str(args.capture_mib)]
     if arm != 'audit':
-        prefix = 'continuous-research-' if args.research_policy == 'continuous' else 'research-lab-progression-'
-        command += ['--scenario-style', prefix + arm.removeprefix('audit-')]
+        command += ['--scenario-style', 'research-lab-progression-' + arm.removeprefix('audit-')]
     started = time.time()
     process = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
     results = Path(args.results)
@@ -118,7 +117,7 @@ def play(args, scratch, binary, key):
             measurements.append({'marker': marker, 'data': json.loads(body) if body.strip().startswith('{') else body.strip()})
     (results / (arm + '-measurements.json')).write_text(json.dumps(measurements, indent=2) + '\n')
     passed = process.returncode == 0 and any('RESEARCH_LAB_SAVE_RESULT:' in line for line in lines)
-    row = {'arm': arm, 'sha256': digest, 'research_policy': args.research_policy,
+    row = {'arm': arm, 'sha256': digest, 'research_policy': 'lab-progression',
            'technology_installments': args.technology_installments,
            'wall_s': round(time.time() - started, 2), 'error': '' if passed else 'rc=' + str(process.returncode)}
     append(results / 'games.csv', FIELDS, [row])
@@ -156,34 +155,13 @@ def verify_saved_crime(args):
         print('RESEARCH_LAB_SAVED_CRIME_PASS: house=%d old_refusal=1 new_lab=1 normal_research=1' % house)
     return True
 
-def verify_continuous_research(args):
-    """Private reported-save checks; the user's bytes are never repository fixtures."""
-    results = Path(args.results)
-    captures = {arm: json.loads((results / (arm + '-measurements.json')).read_text())
-                for arm in ('audit-off', 'audit-on', 'off', 'on')}
+def verify_prepaid_research(args):
+    """An already-paid legacy countdown retains its exact remaining duration."""
+    captures = json.loads((Path(args.results) / 'on-measurements.json').read_text())
     events = [dict(field.split('=', 1) for field in row['data'].split() if '=' in field)
-              for row in captures['on'] if row['marker'] == 'RESEARCH_LAB_SAVE_EVENT']
-    loaded = {row['data']['house']: row['data'] for row in captures['on']
+              for row in captures if row['marker'] == 'RESEARCH_LAB_SAVE_EVENT']
+    loaded = {row['data']['house']: row['data'] for row in captures
               if row['marker'] == 'RESEARCH_LAB_SAVE_HOUSE' and row['data']['phase'] == 'loaded'}
-    for house in args.verify_continuous_houses:
-        initial = loaded[house]
-        audits = [next(row['data'] for row in captures[arm]
-                       if row['marker'] == 'RESEARCH_LAB_SAVE_AUDIT' and row['data']['house'] == house)
-                  for arm in ('audit-off', 'audit-on')]
-        if not (initial['research_target'] == 0 and initial['research_start_legal']
-                and initial['structures'].get('Research Lab', 0) > 0
-                and not audits[0]['continuous_research'] and audits[1]['continuous_research']
-                and not audits[0]['research_funded']):
-            raise RuntimeError('House %d does not isolate an idle legal lab with the legacy funding veto' % house)
-        target = initial['tech'] + 1
-        started = [row for row in events if int(row['house']) == house
-                   and int(row['target']) == target and int(row['elapsed']) <= 3750]
-        completed = [row for row in events if int(row['house']) == house
-                     and int(row['tech']) >= target and int(row['elapsed']) <= 22500]
-        if not started or not completed or int(started[0]['installment']) != 1:
-            raise RuntimeError('House %d did not start within one minute and progress within six' % house)
-        print('CONTINUOUS_RESEARCH_SAVE_PASS: house=%d start=%s completion=%s initial_tech=%d target=%d'
-              % (house, started[0]['elapsed'], completed[0]['elapsed'], initial['tech'], target))
     if args.verify_prepaid_house is not None:
         house = args.verify_prepaid_house
         initial = loaded[house]
@@ -205,8 +183,7 @@ def report(args):
     for row in rows:
         print('%s: sha256=%s wall=%ss error=%s' % (row['arm'], row['sha256'], row['wall_s'], row['error'] or 'none'))
     return (bool(failed) or bool(args.verify_houses and not verify_saved_crime(args))
-            or bool((args.verify_continuous_houses or args.verify_prepaid_house is not None)
-                    and not verify_continuous_research(args)))
+            or bool(args.verify_prepaid_house is not None and not verify_prepaid_research(args)))
 
 
 def run(args):
@@ -231,7 +208,6 @@ parser.add_argument('--results', required=True)
 parser.add_argument('--game-options', help='Frozen save input; required for play, not shared probe compilation')
 parser.add_argument('--arms', nargs='+', choices=('audit', 'audit-off', 'audit-on', 'off', 'on'),
                     default=['audit-off', 'audit-on', 'off', 'on'])
-parser.add_argument('--research-policy', choices=('lab-progression', 'continuous'), default='lab-progression')
 parser.add_argument('--technology-installments', choices=('saved', 'off', 'on'), default='saved',
                     help='Explicit test-only global rule override; saved preserves old upfront games')
 parser.add_argument('--minutes', type=int, default=12)
@@ -242,8 +218,6 @@ parser.add_argument('--rebuild', action='store_true')
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--verify-houses', nargs='+', type=int, default=[],
                     help='Require exact crime-only refusal off and paid lab/normal research on for these houses')
-parser.add_argument('--verify-continuous-houses', nargs='+', type=int, default=[],
-                    help='Private input: require legal idle labs to start within one minute and progress within six')
 parser.add_argument('--verify-prepaid-house', type=int,
                     help='Private input: require the loaded prepaid countdown to finish on its exact remaining cycle')
 parser.add_argument('--repeatable', action='store_true', help='Use a fresh retained CTest result directory')

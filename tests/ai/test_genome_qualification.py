@@ -20,8 +20,8 @@ class CandidateQualificationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.registry = genome_model.load_registry()
         cls.contracts = gate.contracts(source_fingerprint='3' * 64)
-        cls.item = dict(id='conservative-nuclear-first-factory',
-                        values=dict(city_compact_power=1, first_factory_own_prerequisites=1), expression=[])
+        cls.item = dict(id='growth-and-defence',
+                        values=dict(city_growth_power=0, threat_turrets=1), expression=[])
         cls.source = '1' * 40
         cls.identity = genome_model.genome_id(cls.item)
 
@@ -108,7 +108,7 @@ class CandidateQualificationTests(unittest.TestCase):
     def test_stale_source_wrong_genome_and_missing_provenance_are_unverified(self):
         mutations = (
             lambda p: p.update(source_commit='5' * 40),
-            lambda p: p['genome']['values'].update(first_factory_own_prerequisites=0),
+            lambda p: p['genome']['values'].update(threat_turrets=0),
             lambda p: p.update(genome_digest='6' * 64),
             lambda p: p.update(effective_options_sha256='7' * 64),
             lambda p: p.update(requested_options_ini='[Game Options]\nInstant Build=true\n'),

@@ -20,36 +20,6 @@ UVX default would no longer have passed it.
 bounded (each producible unit type 2%-50%); new `Tuned` and `Bounded` (random within the bounds) mixes;
 randomised, control and tuned arms.
 
-**Independent unit-choice experiment (2026-11-06).** The optional, persisted and
-multiplayer-hashed `[Force Concentration] ExistingCompositionUnitChoice` defaults
-to **false after its first standalone paired trial was rejected**. Its retuning
-lets each producer fill its own greatest positive existing **VALUE-share**
-deficit, not a military-limit quota or another producer's globally chosen slot.
-One whole unit may overshoot; the shared accepted queue prevents another copy.
-Empty/balanced armies take the least-error growth step. A light producer stays
-idle when its own families are full, not merely because heavy production is busy.
-It does not enable technology saving, change economy/tech priorities or payments,
-or alter human-order leases, saboteurs or other unit-role authority.
-`SimpleTechSavings` remains independently **false** after its rejected trial.
-
-Use `default@existing-composition-unit-choice-off` and
-`default@existing-composition-unit-choice-on` for the standalone comparison.
-Both styles explicitly set `SimpleTechSavings=false`; their only difference is
-`ExistingCompositionUnitChoice=false/true`. The effective config hash and flag
-are available in the probe's optional build-site audit manifest. In the completed
-cohort, the pinned styles, archived base INIs/applied-style records and observed
-per-player runtime hashes establish the contrast; no direct flag column is claimed.
-
-The `a1bf0d0b` 288-game/four-seed trial (both Simple settings OFF) raised the
-Hard/Brutal observed-alive-time live-object value from 259.07 to 275.67 credits,
-but reduced kill value from 43,309 to 36,922 and native decided matches from
-45.83% to 27.08%. Ground dispatches were 3.58 to 3.47, not the combined trial's
-0.99. Cheap/military accepted quotes fell from 28.80% to 20.14%; this is a real
-composition change but not enough to pass the performance gate. Keep the switch
-OFF. CIs, milestone/censoring details and the separate source qualification are
-in `docs/quantbot-army-recovery.md` and
-`/Users/stefan/Documents/projects/outputs/unit-choice-20261106/analysis-a1bf0d0b/`.
-
 **Result in one paragraph.** Eleven styles were built as test-only per-player overrides and played
 2,406 recorded games (Fortress duels and Construction Yard starts on six bundled maps, Hard) on the mini,
 MacBook Pro and Windows PC. The 1.0.846 default (BASE) is hard to beat: no fixed army composition and

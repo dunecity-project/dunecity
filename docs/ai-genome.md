@@ -16,41 +16,11 @@ The initial committed-config inventory has 336 genes, including all 61 booleans,
 formation/strategy choices, wave thresholds, launcher distance, timers, recovery
 ratios, force budgets, unit ratios, priority weights and tuned tech-band mixes.
 That first source pin is `b10df0c63cf6ade5eb5057f9086a1cfac719f25d`.
-The follow-up registry has 339 genes / 64 booleans: `CityCompactPower`
-(source `dc2aee77`), `ContinuousResearch` (`f82f13d9`) and
-`StartWhatMakesSense` (`d3098d9a`) are independent `0/1`, default-OFF genes.
-UnitChoice's `BufferedHeavyProduction` and `IncomeHeavyFactories` (source
-`e9f72ce3`, default OFF) brought the QuantBot part to 341 genes / 66 booleans;
-`FirstFactoryOwnPrerequisites` (default OFF, `docs/quantbot-money-planning.md`)
-brings it to 342 genes / 67 booleans.
-The game-rule gene `technology_installments` brought the inventory to 343 rows;
-`OpeningMediumCap` added row 344. The independent
-`city_compact_power_installments` gene brings it to **345 genes / 70 booleans**:
-344 native QuantBot config keys and one whole-game rule. Every evaluation pin
-must include its complete parser/registry pair.
-
-### Compact-power selection versus financing
-
-`city_compact_power` / `CityCompactPower` selects compact nuclear power.
-`city_compact_power_installments` / `CityCompactPowerInstallments` independently
-enables its **underfunded native construction-installment path** while SWMS is
-OFF. Both are AI booleans, default OFF. With only CompactPower enabled, its
-fully funded path remains available; setting the financing flag does not change
-Technology Installments, research, saved payment state or the ordinary unit budget.
-The real parser, constructor and config hash inventory include both fields.
-
-Before this split, source `b3f39034` coupled that financing path to CompactPower.
-The negative 48-game health comparison measured **isolated C1**, with
-FirstFactoryOwnPrerequisites OFF and Technology Installments ON, not whole C2.
-Whole-C2 health remains **unmeasured**. Exact b3 C2 passed all 13 native
-AllAgainst games but is **INFEASIBLE: 9/10 saved cases pass, NoRocket fails**.
-C5's actual 0/13 native wins and harmful 192-game held-out result are unchanged.
-Neither is a trial recommendation. Their b3 records and 343-key static overlays
-remain immutable and source-bound. New-source
-financing-enabled chromosome must set the new gene explicitly, receive a new
-DNA and repeat its gates; never reinterpret the old sparse C2 label/DNA as that
-new chromosome. Post-split full static overlays inventory all 344 native keys,
-including the explicit financing value, and need fresh same-context native hashes.
+The feature-only cut removes nine experimental booleans and their test styles.
+The registry now contains **336 genes**: 335 native QuantBot config keys and one
+whole-game rule. It contains only settings still accepted by the live parser;
+old chromosomes and full overlays remain tied to their original source pin and
+must not be reinterpreted against this registry.
 
 ### Game-rule genes
 
@@ -69,11 +39,10 @@ QuantBot key. The loader audits its key against the requested-options reader
   Roster genomes, `--technology-installments` and a frozen `--game-options`
   INI that set different levels are an error, not a silent override;
 - is not a search locus. A one-gene contrast of the rule alone would compare
-  identical AIs under one shared rule. Instead a QuantBot gene declares
-  `"requires": {"<rule>": <level>}`: `continuous_research` requires
-  `technology_installments: 1`, because ContinuousResearch only acts when the
-  Installments rule is on. Validation rejects an active dependent gene (top
-  level or any expression rule) without its rule; search operators close the
+  identical AIs under one shared rule. The schema supports a QuantBot gene's
+  `"requires": {"<rule>": <level>}` declaration for future dependent features.
+  No current gene declares a dependency. Validation rejects an active dependent
+  gene (top level or any expression rule) without its rule; search operators close the
   rule over active dependents and drop it otherwise. A dependent gene is
   screened one gene at a time (never a fraction column) and its 2x2
   interactions put all four cells under the rule. Analysis strata include
@@ -401,8 +370,7 @@ constructor fallbacks before applying the candidate; prove that the target
 phases are constant. Retain the canonical full INI and its SHA-256, and compare
 the installed native config FNV with the same-source, same-save/context phase
 proof. A file SHA, a game-options hash or another map's config hash is not that
-comparison. Financed compact power must explicitly include
-`CityCompactPowerInstallments=1`; funded-only compact power uses `0`.
+comparison.
 
 New games and existing saves first resolve their actual mod/pinned Workshop
 revision, then read fresh QuantBot defaults, the **normal config source selected
@@ -455,8 +423,8 @@ python3 tests/ai/genome_search.py interactions --genes focus_fire converge \
   --output INTERACTIONS.json.gz
 python3 tests/ai/genome_search.py evolve --plan SCREEN.json.gz \
   --report REPORT/report.json.gz --payoffs REPORT/payoffs.json --generation 1 \
-  --seed-genes city_compact_power continuous_research --race-seeds 110601 110602 \
-  --seed-combinations existing_composition_unit_choice,buffered_heavy_production,income_heavy_factories \
+  --seed-genes simple_tech_savings threat_turrets --race-seeds 110601 110602 \
+  --seed-combinations simple_tech_savings,threat_turrets,more_rocket_turrets \
   --behaviour BEHAVIOUR/games.csv --evaluation-rev FULL_COMMIT_SHA --output ROUND1.json.gz
 python3 tests/ai/genome_search.py race --plan SCREEN.json.gz ROUND1.json.gz \
   --elites ELITE... --seeds EIGHT_HELD_OUT_SEEDS... \

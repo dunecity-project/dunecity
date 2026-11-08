@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 HARNESS = Path(__file__).with_name('genome-behaviors.py')
 body = []
@@ -30,7 +31,7 @@ def sample(phase='loaded', house=2, **changes):
     row = dict(phase=phase, cycle=100 if phase == 'loaded' else 200, house=house, elapsed=0,
         bots=2, other_controllers=0, colour_slot=1, yard=1, light_factory=0, light_factory_sites=365,
         tech=2, research_target=0, research_remaining=0, research_start_legal=0,
-        start_what_makes_sense=0, research_lab=0, rocket_turret_built=0)
+        research_lab=0, rocket_turret_built=0)
     row.update(ready_yards=1, heavy_factory=0, heavy_factory_queued=0, heavy_factory_built=0,
         heavy_factory_available=1, heavy_factory_sites=4, heavy_factory_power=50, starport=1,
         light_factory_queued=0, light_factory_built=0, yard_built=0, residential_built=0,
@@ -50,17 +51,21 @@ class BehaviorContracts(unittest.TestCase):
         self.assertEqual((args.capture_mib, args.wall_timeout), (1024, 3600))
 
     def test_default_is_sparse_and_manifest_does_not_add_extra_games(self):
-        genome = {'id': 'compact', 'values': {'city_compact_power': 1}}
+        genome = {'id': 'growth', 'values': {'city_growth_power': 0}}
         encoded = base64.b64encode(json.dumps({'schema_version': 1, 'genomes': [genome]}).encode()).decode()
         args = runner.parser.parse_args(['--case', 'ainonuclear', '--manifest-b64', encoded])
-        self.assertEqual(runner.schedule(args), [('ainonuclear', 'compact')])
+        self.assertEqual(runner.schedule(args), [('ainonuclear', 'growth')])
         self.assertEqual(runner.manifest(None)['default']['values'], {})
 
     def test_game_rule_dependency_is_validated(self):
-        genome = {'id': 'bad', 'values': {'continuous_research': 1}}
+        registry = [dict(gene, requires={'technology_installments': 1})
+                    if gene['id'] == 'simple_tech_savings' else gene
+                    for gene in runner.genome_model.load_registry()]
+        genome = {'id': 'bad', 'values': {'simple_tech_savings': 1}}
         encoded = base64.b64encode(json.dumps({'schema_version': 1, 'genomes': [genome]}).encode()).decode()
-        with self.assertRaises(ValueError):
-            runner.manifest(encoded)
+        with patch.object(runner.genome_model, 'load_registry', return_value=registry):
+            with self.assertRaisesRegex(ValueError, 'requires game rule'):
+                runner.manifest(encoded)
 
     def test_all_ten_required_issues_have_native_adapters(self):
         cases = runner.definitions()
@@ -261,22 +266,23 @@ class BehaviorContracts(unittest.TestCase):
         self.assertEqual(runner.evaluate_case(case, samples, orders, {}, True, {1, 6})[1], 'unverified')
 
     def test_event_projection_preserves_zoning_rule_inputs(self):
-        rows = []
-        for cycle in range(100, 112):
-            rows.append(event('zone_evaluation', {'selected': 20, 'result': 'selected',
-                'candidates': {'20': {'demand': 50, 'rank': 1}}}, cycle))
-            rows.append(event('capital_plan', {'selected': 0, 'candidates': {
-                '0': {'kind': 'construction', 'reason': 'optional', 'item': 34, 'affordable': 0},
-                '1': {'item': 20, 'affordable': 0}}}, cycle))
-        for mode in (False, True):
+        for affordable in (0, 1):
+            rows = []
+            for cycle in range(100, 112):
+                rows.append(event('zone_evaluation', {'selected': 20, 'result': 'selected',
+                    'candidates': {'20': {'demand': 50, 'rank': 1}}}, cycle))
+                rows.append(event('capital_plan', {'selected': 0, 'candidates': {
+                    '0': {'kind': 'construction', 'reason': 'optional', 'item': 34, 'affordable': 0},
+                    '1': {'item': 20, 'affordable': affordable}}}, cycle))
             projected = [runner.project_event(row) for row in rows]
-            self.assertEqual(runner.check_r_admission(rows, mode), runner.check_r_admission(projected, mode))
-        bad = runner.check_r_admission(rows, True)['s/2']
-        self.assertEqual(bad['failures'], ['r_never_admitted', 'optional_capital_owns_lane'])
-        rows.append(event('drain_budget_hold', {'item': 20, 'priority': 'higher_real_drain'}, 113))
-        rows.append(event('production_order', {'item': 34, 'accepted': 1}, 110))
-        self.assertEqual(runner.check_r_admission(rows, True)['s/2']['verdict'], 'pass')
-        self.assertEqual(runner.check_r_admission(rows, False)['s/2']['verdict'], 'not_applicable')
+            self.assertEqual(runner.check_r_admission(rows), runner.check_r_admission(projected))
+            result = runner.check_r_admission(rows)['s/2']
+            self.assertEqual(result['failures'],
+                             ['r_never_admitted', 'optional_capital_owns_lane'] if affordable else [])
+            rows.append(event('production_order', {'item': 20, 'accepted': 0}, 113))
+            rows.append(event('production_order', {'item': 34, 'accepted': 1}, 110))
+            self.assertEqual(runner.check_r_admission(rows)['s/2']['verdict'],
+                             'pass' if affordable else 'not_applicable')
 
     def test_projected_capture_keeps_cap_and_requires_closed_session(self):
         with tempfile.TemporaryDirectory() as directory:

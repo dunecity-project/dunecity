@@ -342,19 +342,25 @@ bool QuantBotConfig::readFrom(
         self.assertNotEqual(forward, model.genome_id(candidate))
         self.assertNotEqual(model.genome_id(candidate), model.genome_id(genome({'focus_fire': 1})))
 
+    def dependent_registry(self):
+        # Exercise dependency machinery without inventing a shipped dependency.
+        return model._validate_registry([
+            dict(gene, requires={'technology_installments': 1})
+            if gene['id'] == 'simple_tech_savings' else gene for gene in self.registry])
+
     def test_game_rule_genes_audit_the_real_game_options_reader_and_default(self):
         rule = self.genes['technology_installments']
         self.assertEqual((rule['scope'], rule['section'], rule['key'], rule['default']),
                          ('game', 'Game Options', 'Technology Installments', 0))
         self.assertIs(model._game_option_catalog()['Technology Installments'], 0)
-        self.assertEqual(self.genes['continuous_research']['requires'], {'technology_installments': 1})
+        self.assertTrue(all('requires' not in gene for gene in self.registry))
         for update in ({'key': 'Invented Rule'}, {'section': 'Force Concentration'}, {'default': 1},
                        {'kind': 'int'}, {'levels': [0, 2]}, {'scope': 'house'}, {'difficulty': ['hard']},
                        {'requires': {'technology_installments': 1}}):
             with self.subTest(update=update):
                 with self.assertRaises(ValueError):
                     model._validate_registry([dict(rule, **update)])
-        dependent = self.genes['continuous_research']
+        dependent = next(gene for gene in self.dependent_registry() if gene['id'] == 'simple_tech_savings')
         for requires in ({'focus_fire': 1}, {'technology_installments': 0}, {'technology_installments': 2},
                          {'missing_rule': 1}, {}):
             with self.subTest(requires=requires):
@@ -362,32 +368,34 @@ bool QuantBotConfig::readFrom(
                     model._validate_registry([dict(dependent, requires=requires), rule, self.genes['focus_fire']])
 
     def test_dependent_gene_needs_its_whole_game_rule_and_rules_are_never_per_house(self):
+        registry = self.dependent_registry()
         with self.assertRaisesRegex(ValueError, 'requires game rule technology_installments=1'):
-            model.validate_genome(genome({'continuous_research': 1}), self.registry)
+            model.validate_genome(genome({'simple_tech_savings': 1}), registry)
         with self.assertRaisesRegex(ValueError, 'requires game rule'):
             model.validate_genome(genome(expression=[{'when': {'mod': ['dunecity']},
-                                                      'values': {'continuous_research': 1}}]), self.registry)
+                                                      'values': {'simple_tech_savings': 1}}]), registry)
         with self.assertRaisesRegex(ValueError, 'whole-game top-level'):
-            model.validate_genome(genome({'continuous_research': 1}, [
-                {'when': {'phase': ['late']}, 'values': {'technology_installments': 1}}]), self.registry)
-        candidate = genome({'continuous_research': 1, 'technology_installments': 1})
-        model.validate_genome(candidate, self.registry)
-        model.validate_genome(genome({'continuous_research': 0}), self.registry)
-        rendered = ini_values(model.render_ini(candidate, CONTEXT, self.registry))
-        self.assertEqual(rendered, {('Force Concentration', 'ContinuousResearch'): '1'})
-        self.assertEqual(model.resolve(candidate, CONTEXT, self.registry)['technology_installments'], 1)
+            model.validate_genome(genome({'simple_tech_savings': 1}, [
+                {'when': {'phase': ['late']}, 'values': {'technology_installments': 1}}]), registry)
+        candidate = genome({'simple_tech_savings': 1, 'technology_installments': 1})
+        model.validate_genome(candidate, registry)
+        model.validate_genome(genome({'simple_tech_savings': 0}), registry)
+        rendered = ini_values(model.render_ini(candidate, CONTEXT, registry))
+        self.assertEqual(rendered, {('Force Concentration', 'SimpleTechSavings'): '1'})
+        self.assertEqual(model.resolve(candidate, CONTEXT, registry)['technology_installments'], 1)
 
     def test_roster_game_rules_are_explicit_shared_and_conflicts_fail(self):
-        candidate = genome({'continuous_research': 1, 'technology_installments': 1})
+        registry = self.dependent_registry()
+        candidate = genome({'simple_tech_savings': 1, 'technology_installments': 1})
         default = {'id': 'default', 'values': {}, 'expression': []}
-        self.assertEqual(model.game_rules([candidate, default], self.registry), {'technology_installments': 1})
-        self.assertEqual(model.game_rules([default, default], self.registry), {'technology_installments': 0})
+        self.assertEqual(model.game_rules([candidate, default], registry), {'technology_installments': 1})
+        self.assertEqual(model.game_rules([default, default], registry), {'technology_installments': 0})
         explicit_off = {'id': 'off', 'values': {'technology_installments': 0}, 'expression': []}
         with self.assertRaisesRegex(ValueError, 'conflicting whole-game rule'):
-            model.game_rules([candidate, explicit_off], self.registry)
-        closed = model.close_game_rules(genome({'continuous_research': 1}), self.registry)
-        self.assertEqual(closed['values'], {'continuous_research': 1, 'technology_installments': 1})
-        self.assertEqual(model.close_game_rules(explicit_off, self.registry)['values'], {})
+            model.game_rules([candidate, explicit_off], registry)
+        closed = model.close_game_rules(genome({'simple_tech_savings': 1}), registry)
+        self.assertEqual(closed['values'], {'simple_tech_savings': 1, 'technology_installments': 1})
+        self.assertEqual(model.close_game_rules(explicit_off, registry)['values'], {})
 
 
 if __name__ == '__main__':

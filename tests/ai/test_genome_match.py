@@ -157,7 +157,7 @@ class GenomeMatchTests(unittest.TestCase):
             self.assertFalse(options.getboolean('Game Options', 'Technology Installments'))
 
     def test_game_rule_genes_set_one_explicit_rule_for_the_whole_game(self):
-        candidate = dict(id='candidate', values={'continuous_research': 1, 'technology_installments': 1}, expression=[])
+        candidate = dict(id='candidate', values={'simple_tech_savings': 1, 'technology_installments': 1}, expression=[])
         args = arguments()
         args.manifest_b64 = inline([candidate])
         games = league['schedule'](args)
@@ -185,9 +185,13 @@ class GenomeMatchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'conflicting whole-game rule'):
                 league['schedule'](from_file)
         dependent_only = arguments()
-        dependent_only.manifest_b64 = inline([dict(id='candidate', values={'continuous_research': 1}, expression=[])])
-        with self.assertRaisesRegex(ValueError, 'requires game rule'):
-            league['schedule'](dependent_only)
+        dependent_only.manifest_b64 = inline([dict(id='candidate', values={'simple_tech_savings': 1}, expression=[])])
+        model = league['genome_model']
+        registry = [dict(gene, requires={'technology_installments': 1})
+                    if gene['id'] == 'simple_tech_savings' else gene for gene in model.load_registry()]
+        with patch.object(model, 'load_registry', return_value=registry):
+            with self.assertRaisesRegex(ValueError, 'requires game rule'):
+                league['schedule'](dependent_only)
 
     def test_saved_phase_helper_supports_all_houses_and_actual_difficulty_variants(self):
         _, genomes, registry, _ = league['manifest'](inline())

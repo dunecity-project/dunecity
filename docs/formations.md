@@ -117,19 +117,6 @@ unchanged, E became the default: `QuantBotConfig::force.openingReadiness` (optio
 `[Force Concentration] OpeningReadiness`, code default on, hashed), in the configured force bits like F, C,
 B and W; protocol 81, save unchanged (`customWave.launched` and the initial military value were saved already).
 
-**Independent opening-cap control:** `[Force Concentration] OpeningMediumCap`
-(`opening_medium_cap`, boolean, default `1`) preserves the current held-first-wave
-threshold cap at the house's threshold share of at most Medium's military limit.
-Level `0` removes only that cap and uses the own-difficulty threshold. It does not
-change team readiness, Medium's whole-army path, reachability, production budgets,
-placement, later waves, or the removed strength-relative readiness policy. The
-committed styles `opening-medium-cap-off` and `opening-medium-cap-on` differ only
-in this hashed key. The historical `748f9288` to `fbbeecff` comparison measures the
-whole merge, which changed several behaviours; it does not establish that this
-cap caused its army-value or producer-acquisition differences. Default behaviour
-is unchanged; a one-feature current-engine comparison is required before any
-causal or strength claim.
-
 **4-player FFA** (Habbanya-Archer, Ergsun-Odenkirk, Sihaya-Bowie; Hard; seeds 8101-8404; two BWFCQ and two
 old-rules houses, all six seatings; 72 games, 144 houses per label; place 1 = last standing, survivors at
 80 minutes share the top places):

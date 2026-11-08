@@ -53,7 +53,7 @@ FIELDS = KEY + ('genome_digest', 'save_sha256', 'input_sha256', 'source_commit',
                 'completed', 'telemetry', 'feasibility', 'wall_s', 'error', 'checks_file', 'evidence_file')
 CHECK_FIELDS = KEY + ('genome_digest', 'source_commit', 'house', 'check', 'status', 'reason', 'details')
 RESIDENTIAL, MCV, LIGHT_FACTORY, HEAVY_FACTORY, ROCKET = 20, 34, 7, 4, 12
-R_EVENTS = ('zone_evaluation', 'capital_plan', 'production_order', 'drain_budget_hold')
+R_EVENTS = ('zone_evaluation', 'capital_plan', 'production_order')
 CITY_EVENTS = ('city_growth_sample', 'city_level_changed')
 EVENTS = R_EVENTS + CITY_EVENTS + ('city_generator_choice', 'mcv_deployment', 'capture_limit', 'session_start', 'session_end')
 CYCLES_PER_MINUTE = 3750
@@ -276,13 +276,10 @@ def optional_winner(winner):
         or (winner.get('kind') == 'trooper_support' and winner.get('reason') == 'first_wor'))
 
 
-def check_r_admission(events, start_what_makes_sense, houses=None, min_opportunities=10):
-    """CityZoning's 2026-11-06 rule, ported verbatim except input is an iterable.
+def check_r_admission(events, houses=None, min_opportunities=10):
+    """Count selected/legal, affordable residential candidates once per cycle.
 
-    start_what_makes_sense may also be a (house, cycle) function for genome phases.
-    Count positive, selected/legal R plots once per cycle, not per controller.
-    Legacy counts only an affordable R capital candidate. Reaching the real
-    production/funding gate is enough; a hold may lawfully lose to a higher drain.
+    Reaching the real production gate is enough, including a refused order.
     """
     state = {}
     for row in events:
@@ -310,16 +307,12 @@ def check_r_admission(events, start_what_makes_sense, houses=None, min_opportuni
                 hs['reached'].append([cycle, name, data.get('accepted')])
             if data.get('accepted') == 1:
                 hs['accepted'].setdefault(data.get('item'), []).append(cycle)
-        elif data.get('item') == RESIDENTIAL:
-            hs['reached'].append([cycle, name, data.get('priority')])
     result = {}
     for (session, house), hs in sorted(state.items(), key=lambda item: (item[0][0], str(item[0][1]))):
         for cycle, demand in hs['pending'].items():
             hs['opportunities'][cycle] = {'demand': demand, 'r_affordable': False, 'winner': None}
         opportunities = hs['opportunities']
-        counted = sorted(c for c, o in opportunities.items() if
-            (start_what_makes_sense(house, c) if callable(start_what_makes_sense) else start_what_makes_sense)
-            or o['r_affordable'])
+        counted = sorted(c for c, o in opportunities.items() if o['r_affordable'])
         reached, optional, optional_executed = [], [], False
         if counted:
             first, last = counted[0], counted[-1]
@@ -578,9 +571,7 @@ def evaluate_case(case, samples, events, setup, complete, applied, telemetry='co
         observations = sorted(by_house.get(house, []), key=lambda s: s['cycle'])
         own_events = [e for e in events if e.get('house') == house and observations
                       and observations[0]['cycle'] <= e['cycle'] <= observations[-1]['cycle']]
-        def swms(h, cycle):
-            return next(s['start_what_makes_sense'] for s in reversed(observations) if s['cycle'] <= cycle)
-        residential = check_r_admission(own_events, swms, [house])
+        residential = check_r_admission(own_events, [house])
         for check in case['checks']:
             if check.get('houses') and house not in check['houses']:
                 continue
@@ -607,7 +598,7 @@ def project_event(row):
     name, data = row['event'], row.get('data') or {}
     if name not in EVENTS:
         return None
-    fields = {'production_order': ('item', 'accepted', 'quoted_price', 'capital_plan'), 'drain_budget_hold': ('item', 'priority'),
+    fields = {'production_order': ('item', 'accepted', 'quoted_price', 'capital_plan'),
               'city_generator_choice': ('nuclear', 'nuclear_available', 'nuclear_site', 'cash', 'nuclear_price',
                                        'compact_nuclear', 'installments'),
               'mcv_deployment': ('mcv', 'x', 'y', 'deployed')}

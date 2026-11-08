@@ -19,11 +19,11 @@ inline constexpr std::array<const char*, 12> names = {{
 struct State {
     std::array<int, items.size()> owned{}, built{}, queued{}, available{};
     int tech = 0, target = 0, readyYards = 0;
-    bool researchLegal = false, paused = false, alive = false, startWhatMakesSense = false, unpoweredZonesVacate = false;
+    bool researchLegal = false, paused = false, alive = false, unpoweredZonesVacate = false;
     bool operator==(const State& other) const {
         return owned == other.owned && built == other.built && queued == other.queued && available == other.available
             && tech == other.tech && target == other.target && researchLegal == other.researchLegal
-            && paused == other.paused && alive == other.alive && startWhatMakesSense == other.startWhatMakesSense
+            && paused == other.paused && alive == other.alive
             && readyYards == other.readyYards && unpoweredZonesVacate == other.unpoweredZonesVacate;
     }
 };
@@ -37,10 +37,6 @@ std::array<State, NUM_HOUSES> observe(Game& game) {
         state.tech = house->getTechLevel(); state.target = house->getTechResearchTarget();
         state.paused = house->isTechResearchPaused(); state.alive = house->isAlive();
         state.unpoweredZonesVacate = game.getGameInitSettings().getGameOptions().unpoweredZonesVacate;
-        for (const auto& player : house->getPlayerList()) if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
-            state.startWhatMakesSense = bot->botConfig().force.startWhatMakesSense;
-            break;
-        }
         for (size_t i = 0; i < items.size(); ++i) {
             state.owned[i] = house->getNumItems(items[i]); state.built[i] = house->getNumBuiltItems(items[i]);
         }
@@ -95,7 +91,6 @@ void emit(Game& game, int h, const State& state, const char* phase, Uint32 first
         .set("research_remaining", house->getTechResearchRemaining()).set("research_start_legal", state.researchLegal)
         .set("research_installment", house->isTechResearchInstallment()).set("research_paused", state.paused)
         .set("research_total_cycles", house->getTechResearchTotalCycles()).set("research_cost", house->getTechResearchCost())
-        .set("start_what_makes_sense", state.startWhatMakesSense)
         .set("power", house->getProducedPower()).set("power_required", house->getPowerRequirement());
     row.set("ready_yards", state.readyYards).set("unpowered_zones_vacate", state.unpoweredZonesVacate);
     for (size_t i = 0; i < items.size(); ++i) {

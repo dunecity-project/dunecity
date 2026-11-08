@@ -259,50 +259,59 @@ class GenomeSearchTests(unittest.TestCase):
             self.assertEqual(entry['id'], search.digest(dict(revision=args.rev, command=entry['command'])))
             self.assertEqual(entry['plan_sha256'], plan['plan_sha256'])
 
+    def dependent_registry(self):
+        # Synthetic metadata on a live gene keeps dependency operators covered.
+        return genome_model._validate_registry([
+            dict(gene, requires={'technology_installments': 1})
+            if gene['id'] == 'simple_tech_savings' else gene for gene in self.registry])
+
     def test_game_rules_follow_dependent_genes_and_are_never_searched_alone(self):
-        names = [gene['id'] for gene in search.selected_genes(self.registry)]
+        registry = self.dependent_registry()
+        names = [gene['id'] for gene in search.selected_genes(registry)]
         self.assertNotIn('technology_installments', names)
-        self.assertIn('continuous_research', names)
+        self.assertIn('simple_tech_savings', names)
         with self.assertRaisesRegex(ValueError, 'Game rules'):
-            search.selected_genes(self.registry, ['technology_installments'])
-        genes = search.selected_genes(self.registry, ['focus_fire', 'converge', 'continuous_research'])
-        plan = search.screen_plan(self.registry, genes, parameter_sweeps=False)
+            search.selected_genes(registry, ['technology_installments'])
+        genes = search.selected_genes(registry, ['focus_fire', 'converge', 'simple_tech_savings'])
+        plan = search.screen_plan(registry, genes, parameter_sweeps=False)
         one = {d['gene']: d for d in plan['designs'] if d['stage'] == 'one_gene'}
-        self.assertEqual(one['continuous_research']['game_rules'], {'technology_installments': 1})
+        self.assertEqual(one['simple_tech_savings']['game_rules'], {'technology_installments': 1})
         self.assertEqual(one['focus_fire']['game_rules'], {})
         genomes = {g['id']: g for g in plan['genomes']}
-        self.assertEqual(genomes[one['continuous_research']['genome']]['values'],
-                         {'continuous_research': 1, 'technology_installments': 1})
-        self.assertEqual(plan['one_gene_only'], ['continuous_research'])
-        self.assertNotIn('continuous_research', plan['fractional_columns'])
+        self.assertEqual(genomes[one['simple_tech_savings']['genome']]['values'],
+                         {'simple_tech_savings': 1, 'technology_installments': 1})
+        self.assertEqual(plan['one_gene_only'], ['simple_tech_savings'])
+        self.assertNotIn('simple_tech_savings', plan['fractional_columns'])
         for design in plan['designs']:
             if design['stage'] == 'fractional':
                 self.assertNotIn('technology_installments', genomes[design['genome']]['values'])
-        pairs = search.interaction_plan(self.registry, ['focus_fire', 'continuous_research'])
+        pairs = search.interaction_plan(registry, ['focus_fire', 'simple_tech_savings'])
         for item in pairs['genomes'][1:]:
             self.assertEqual(item['values']['technology_installments'], 1)
 
     def test_operators_close_game_rules_over_active_dependents(self):
-        genes = search.selected_genes(self.registry, ['focus_fire', 'continuous_research'])
-        active = search.finish(search.genome('x', {'continuous_research': 1}), self.registry)
+        registry = self.dependent_registry()
+        genes = search.selected_genes(registry, ['focus_fire', 'simple_tech_savings'])
+        active = search.finish(search.genome('x', {'simple_tech_savings': 1}), registry)
         self.assertEqual(active['values']['technology_installments'], 1)
-        dropped = search.finish(search.genome('y', {'technology_installments': 1, 'focus_fire': 0}), self.registry)
+        dropped = search.finish(search.genome('y', {'technology_installments': 1, 'focus_fire': 0}), registry)
         self.assertNotIn('technology_installments', dropped['values'])
         for seed in range(40):
             rng = random.Random(seed)
-            child = search.crossover(active, dropped, genes, rng, self.registry)
-            child, _ = search.mutate(child, genes, rng, registry=self.registry)
-            genome_model.validate_genome(child, self.registry)
-            needed = child['values'].get('continuous_research') == 1 or any(
-                rule['values'].get('continuous_research') == 1 for rule in child['expression'])
+            child = search.crossover(active, dropped, genes, rng, registry)
+            child, _ = search.mutate(child, genes, rng, registry=registry)
+            genome_model.validate_genome(child, registry)
+            needed = child['values'].get('simple_tech_savings') == 1 or any(
+                rule['values'].get('simple_tech_savings') == 1 for rule in child['expression'])
             self.assertEqual(child['values'].get('technology_installments') == 1, needed)
 
     def test_evolution_seeds_new_genes_and_pairs_every_child_with_default(self):
-        plan = search.screen_plan(self.registry, self.genes[:2], parameter_sweeps=False, fraction=False)
+        registry = self.dependent_registry()
+        plan = search.screen_plan(registry, self.genes[:2], parameter_sweeps=False, fraction=False)
         names = [g['id'] for g in plan['genomes']]
         report = dict(pareto_fronts=[names[1:], [names[0]]], genomes={}, niches={})
-        result = search.evolve(plan, report, self.registry, 1, population=4, offspring=6,
-                               seed_genes=['continuous_research'], seeds=[7, 8])
+        result = search.evolve(plan, report, registry, 1, population=4, offspring=6,
+                               seed_genes=['simple_tech_savings'], seeds=[7, 8])
         seeded = [r for r in result['lineage'] if r['role'] == 'seeded_gene']
         self.assertEqual(len(seeded), 1)
         child = next(g for g in result['genomes'] if g['id'] == seeded[0]['genome'])
@@ -407,7 +416,7 @@ class GenomeSearchTests(unittest.TestCase):
     def test_joint_seed_is_measured_without_fake_fitness_or_extra_offspring(self):
         plan = search.screen_plan(self.registry, self.genes[:1], parameter_sweeps=False, fraction=False)
         report = dict(pareto_fronts=[[g['id'] for g in plan['genomes']]], genomes={}, niches={})
-        genes = ['existing_composition_unit_choice', 'buffered_heavy_production', 'income_heavy_factories']
+        genes = ['simple_tech_savings', 'threat_turrets', 'more_rocket_turrets']
         result = search.evolve(plan, report, self.registry, 1, population=4, offspring=6,
                                seed_genes=genes, seed_combinations=[genes])
         self.assertEqual(len(result['lineage']), 6)
