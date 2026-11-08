@@ -252,6 +252,27 @@ Evidence: `~/Documents/projects/outputs/ai-recovery-20261108/fixes/CampaignOpeni
 `bounded-seed13/`, `bounded-seed-aaa2/`). These results do not pass the
 all-missions-win recovery gate.
 
+The next campaign tuning round isolates `campaign-threat-production-on`,
+`campaign-adaptive-readiness-on`, and `campaign-readiness-threat-on` across the
+same 66 human-partner missions. The last style deliberately omits the military
+opening; the previous 61 wins therefore do not establish that a factory-first
+opening is necessary.
+
+Two independent default-off hashed light-production candidates investigate the
+observed idle factory. `CampaignFundedLightOpening` leaves normal yard economy
+active until the opening Light Factory, a legal first vehicle, and the
+producer's protected cash can all be funded together; it does not wait for a
+particular delivered-worker count. `CampaignAffordableLight` lets a light
+producer under the existing live-base-attack funding rule order a legal unit
+at its actual price instead of imposing the unrelated 700-credit entry floor.
+Prices, commitments, army budgets, unit limits, noncampaign games, and both
+OFF paths retain their existing rules. Styles `campaign-light-funded-on`,
+`campaign-light-affordable-on`, and `campaign-light-combined-on` isolate and
+combine them with the existing three campaign switches. The paired variant
+ledger lives in `~/Documents/projects/outputs/ai-tuning-20261108/CampaignLane/ledger.md`;
+no default adoption follows from a diagnostic subset.
+
+
 
 For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
 seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;

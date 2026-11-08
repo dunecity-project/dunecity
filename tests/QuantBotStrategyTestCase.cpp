@@ -691,6 +691,39 @@ TEST_CASE("Campaign threat production defaults off and independently round-trips
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Campaign light funding candidates independently persist their hashed states",
+          "[ai][campaign][production][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignFundedLightOpening);
+    REQUIRE_FALSE(defaults.force.campaignAffordableLight);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-light-test.ini";
+    for (const bool funded : {false, true}) {
+        for (const bool affordable : {false, true}) {
+            QuantBotConfig expected = defaults;
+            expected.force.campaignFundedLightOpening = funded;
+            expected.force.campaignAffordableLight = affordable;
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\nCampaignFundedLightOpening=" << funded
+                    << "\nCampaignAffordableLight=" << affordable << '\n';
+            }
+            QuantBotConfig loaded;
+            REQUIRE(loaded.applyOverrides(path.string()));
+            REQUIRE(loaded.force.campaignFundedLightOpening == funded);
+            REQUIRE(loaded.force.campaignAffordableLight == affordable);
+            REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+            REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (!funded && !affordable));
+            REQUIRE(loaded.save(path.string()));
+            QuantBotConfig restored;
+            REQUIRE(restored.applyOverrides(path.string()));
+            REQUIRE(restored.force.campaignFundedLightOpening == funded);
+            REQUIRE(restored.force.campaignAffordableLight == affordable);
+            REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+        }
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign player house defaults off and independently round-trips both hashed states",
           "[ai][campaign][config]") {
     const QuantBotConfig defaults;

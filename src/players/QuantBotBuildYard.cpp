@@ -348,6 +348,37 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             const auto& spec = data[producer][house];
             if (!spec.enabled || spec.builder != int(turn.pBuilder->getItemID())
                 || spec.techLevel > getHouse()->getTechLevel()) continue;
+            if (producer == Structure_LightFactory && botConfig().force.campaignFundedLightOpening) {
+                // A paid-for empty factory is not a replacement army. Leave the
+                // yard to its normal economy until a legal first vehicle fits
+                // beside the cash that its producer would have to protect.
+                int protectedCash = pass.campaignThreatProduction ? 0
+                    : std::max({pass.strategicReserveCost, pass.economyReserve,
+                        pass.civicReserveCost, harvesterInvestmentReserve(pass),
+                        capitalReserve(pass, NONE_ID)});
+                if (!pass.campaignThreatProduction && openingWorkersNeeded(pass))
+                    protectedCash = std::max(protectedCash, data[Unit_Harvester][house].price);
+                if (!pass.campaignThreatProduction && needsFirstTransport(pass))
+                    protectedCash = std::max(protectedCash, data[Unit_Carryall][house].price);
+                const int factoryCost = buildingCapitalCost(pass, producer);
+                const int entryCash = botConfig().force.campaignAffordableLight
+                    && pass.campaignThreatProduction ? 1 : 701;
+                bool fundedUnit = false;
+                for (size_t slot = UnitMixPolicy::kFirstLightSlot; slot < UnitMixPolicy::kSlots; ++slot) {
+                    const auto& unit = data[kMixItems[slot]][house];
+                    if (!unit.enabled || unit.builder != int(producer) || unit.upgradeLevel > 0
+                        || unit.techLevel > getHouse()->getTechLevel()
+                        || getHouse()->isUnitLimitReached(kMixItems[slot])
+                        || int64_t(pass.militaryValue) + unit.price > pass.lightBudget) continue;
+                    bool prerequisites = true;
+                    for (int item = Structure_FirstID; item <= Structure_LastID; ++item)
+                        if (item != int(producer) && unit.prerequisiteStructuresSet[item]
+                            && getHouse()->getNumItems(item) == 0) { prerequisites = false; break; }
+                    if (prerequisites && int64_t(pass.money) >= int64_t(factoryCost) + protectedCash
+                            + std::max(entryCash, unit.price)) { fundedUnit = true; break; }
+                }
+                if (!fundedUnit) break;
+            }
             Uint32 step = producer;
             for (int depth = 0; step != NONE_ID && depth < Structure_LastID; ++depth) {
                 if (pass.itemCount[step] > 0) break;

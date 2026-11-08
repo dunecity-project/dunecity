@@ -905,7 +905,9 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
     constexpr auto& mixItems = kMixItems;
     constexpr size_t kSlots = UnitMixPolicy::kSlots;
     if (!turn.pBuilder->isUpgrading()
-        && pass.money > (pass.techSavings && pass.militaryEmergency ? 0 : pass.citySimEnabled ? 500 : 700)
+        && pass.money > (pass.techSavings && pass.militaryEmergency ? 0
+            : botConfig().force.campaignAffordableLight && pass.campaignThreatProduction ? 0
+            : pass.citySimEnabled ? 500 : 700)
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
         && pass.militaryValue < pass.lightBudget
