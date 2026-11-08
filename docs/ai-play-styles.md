@@ -1126,3 +1126,29 @@ are unchanged; protocol 99 is not consumed. No revised-branch build, ctest, all-
 ladder result is claimed. The parent owns combined acceptance on `build-int`, including
 `quantbot_match_score`, `quantbot_strategy`, all-against-Atreides and the ladder; test-only candidate
 styles must not be treated as shipped defaults.
+
+## TeamPlay coordination experiment (2026-11-08, default OFF)
+
+`[Force Concentration] TeamSynchroniseAttacks` shares a team attack plan between autonomous
+Custom QuantBots in Vanilla/DuneCity. Only occupied original controller slots define the team
+scope; duels, FFA and campaigns are inert. Once both live allied bot armies meet their ordinary
+readiness and repair prerequisites, the first real dispatch wakes its partner. Both hunt towards
+the same enemy building, belonging to the enemy with the weakest true HP-weighted mobile army
+(air included). The partner keeps the first dispatch's target for the existing 30-second join
+window. Existing recovery/defence rules retain priority. A candidate-only style advertises the
+plan to its native allied bot, never to hostile controllers.
+
+`TeamDefenceSharePercent=0|25|50` independently sends nearby available ground fighters to a
+live enemy weapon attacking an ally's building. Human orders, repairs, own defence, pickups and
+live fights retain ownership. All concurrent ally rescues count against the one share cap;
+the existing saved defence assignments retain and release these hunters. No new saved state,
+random draws, formations, production changes or defaults are introduced.
+
+Styles: `teamplay-off`, `teamplay-sync`, `teamplay-help25`, `teamplay-help50`, and the two
+`teamplay-sync-help25/50` combinations. `dunecity-audit.py --mode team-study --mod both
+--seeds ... --candidate-style teamplay-sync` uses explicit fresh seeds, sizes 96/128/160,
+low/medium/high spice, tech 3/6/9 and both sets of team starts. Only the Brutal candidate is
+styled; its ally and both enemies use the requested native difficulty. Ordinary audit
+economy samples and raw `team_attack`, `team_help`, `team_wait_partner` telemetry accompany
+outcomes. A population adjudication is reported separately from conquest. Acceptance evidence
+belongs in `outputs/ai-tuning-20261108/TeamPlay/ledger.md`; no promotion is claimed here.

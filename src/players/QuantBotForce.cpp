@@ -265,6 +265,125 @@ const ObjectBase* QuantBot::allyWaveObjective() const {
     return nullptr;
 }
 
+bool QuantBot::teamCoordinationGame() const {
+    if (!autonomousCustomArmy()) return false;
+    const auto& init = currentGame->getGameInitSettings();
+    if (init.getModName() != "vanilla" && init.getModName() != "dunecity") return false;
+    int friends = 0, enemies = 0;
+    for (const auto& house : init.getHouseInfoList()) {
+        if (house.playerInfoList.empty()) continue;
+        if (house.team == getHouse()->getTeamID()) ++friends;
+        else ++enemies;
+    }
+    return friends >= 2 && enemies >= 1;
+}
+
+const QuantBot* QuantBot::teamAttackCoordinator() const {
+    if (!teamCoordinationGame()) return nullptr;
+    const QuantBot* coordinator = nullptr;
+    int partners = 0;
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const auto* house = getHouse(h);
+        if (!house || house->isNatives() || !house->isAlive()
+            || house->getTeamID() != getHouse()->getTeamID()) continue;
+        for (const auto& player : house->getPlayerList()) {
+            const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+            if (!bot || !bot->autonomousCustomArmy()) continue;
+            ++partners;
+            if (!coordinator && bot->botConfig().force.teamSynchroniseAttacks) coordinator = bot;
+            break; // One army per occupied house, not per co-controller.
+        }
+    }
+    return partners >= 2 ? coordinator : nullptr;
+}
+
+bool QuantBot::teamAttackReady() const {
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const auto* house = getHouse(h);
+        if (!house || house == getHouse() || house->isNatives() || !house->isAlive()
+            || house->getTeamID() != getHouse()->getTeamID()) continue;
+        for (const auto& player : house->getPlayerList()) {
+            const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+            if (!bot || !bot->autonomousCustomArmy()) continue;
+            // A partner already departing this joint wave does not make us wait for its
+            // reinforcements. No order or readiness cache in another controller is changed.
+            if (bot->customWave.launched != 0
+                && ArmyPosturePolicy::elapsed(getGameCycleCount(), bot->customWave.launched)
+                    <= Uint32(MILLI2CYCLES(kAllyWaveJoinMs))) break;
+            if (!bot->botConfig().getSettings(static_cast<int>(bot->difficulty)).attackEnabled
+                || ArmyPosturePolicy::suppressesOffensiveDispatch(bot->armyPosture)) return false;
+            const int64_t required = Force::scaledReadiness(bot->houseAttackThreshold(),
+                                                            bot->openingReadinessPercent());
+            if (bot->ownGroundArmyValue() < std::max<int64_t>(1, required)) return false;
+            if (!bot->fighterOnly() && !bot->lightFirstOpening() && house->getTechLevel() > 4
+                && (bot->difficulty != Difficulty::Medium || bot->initialItemCount[Structure_RepairYard] > 0)
+                && house->getNumItems(Structure_RepairYard) == 0) return false;
+            break;
+        }
+    }
+    return true;
+}
+
+const ObjectBase* QuantBot::teamAttackObjective() const {
+    // Continue the first partner's just-launched objective so same-cycle losses cannot make
+    // the second partner pick a different enemy. The anchor is already saved in customWave.
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const auto* house = getHouse(h);
+        if (!house || house == getHouse() || house->isNatives()
+            || house->getTeamID() != getHouse()->getTeamID()) continue;
+        for (const auto& player : house->getPlayerList()) {
+            const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+            if (!bot || !bot->customWave.launched
+                || ArmyPosturePolicy::elapsed(getGameCycleCount(), bot->customWave.launched)
+                    > Uint32(MILLI2CYCLES(kAllyWaveJoinMs))) continue;
+            const auto* front = getObject(bot->customWave.front);
+            if (front && front->getHealth() > 0 && front->getOwner()
+                && front->getOwner()->getTeamID() != getHouse()->getTeamID()) return front;
+        }
+    }
+    std::array<int64_t, NUM_HOUSES> armies{};
+    for (const auto* unit : getUnitList())
+        if (unit->getOwner() && !unit->getOwner()->isNatives() && unit->isActive()
+            && unit->getHealth() > 0 && unit->canAttack() && mobileCombatItem(unit->getItemID()))
+            armies[unit->getOwner()->getHouseID()] += healthValue(unit);
+    const ObjectBase* objective = nullptr;
+    int64_t weakest = std::numeric_limits<int64_t>::max();
+    // Deterministic full-knowledge target: weakest living enemy with a building, then house
+    // id, then structure id. Both partners derive the same answer regardless of their starts.
+    int chosenHouse = NUM_HOUSES;
+    for (const auto* building : getStructureList()) {
+        const auto* owner = building->getOwner();
+        if (!owner || owner->isNatives() || !owner->isAlive() || building->getHealth() <= 0
+            || owner->getTeamID() == getHouse()->getTeamID()) continue;
+        const int h = owner->getHouseID();
+        if (!objective || armies[h] < weakest || (armies[h] == weakest && h < chosenHouse)
+            || (h == chosenHouse && building->getObjectID() < objective->getObjectID())) {
+            objective = building;
+            weakest = armies[h];
+            chosenHouse = h;
+        }
+    }
+    return objective;
+}
+
+void QuantBot::wakeTeamAttackPartners() {
+    // Wake just the allied controllers when the first real wave leaves, not while waiting.
+    // attackTimer is existing saved simulation state; no unsaved coordination clock is added.
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        auto* house = getHouse(h);
+        if (!house || house == getHouse() || house->isNatives() || !house->isAlive()
+            || house->getTeamID() != getHouse()->getTeamID()) continue;
+        for (const auto& player : house->getPlayerList()) {
+            auto* bot = dynamic_cast<QuantBot*>(player.get());
+            if (bot && bot->autonomousCustomArmy()
+                && (!bot->customWave.launched
+                    || ArmyPosturePolicy::elapsed(getGameCycleCount(), bot->customWave.launched)
+                        > Uint32(MILLI2CYCLES(kAllyWaveJoinMs))))
+                bot->attackTimer = 0;
+        }
+    }
+}
+
 bool QuantBot::outnumberedByEstimate() const {
     const Uint32 now = getGameCycleCount();
     if (estimateCycle != now) {

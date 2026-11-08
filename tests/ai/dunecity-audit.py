@@ -82,6 +82,7 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
 ) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required')
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
+TEAM_EVENT_FIELDS = META + ('house', 'cycle', 'event', 'data', 'capture_status', 'capture_reasons')
 AIR_KILL_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'attacker', 'victim_house', 'object', 'item',
                           'enemy', 'capture_complete', 'attacker_item', 'attacker_source', 'attacker_firing_house',
                           'attacker_attribution', 'source_enemy', 'attribution_complete')
@@ -231,7 +232,9 @@ def air_kill_capture(out, houses, final_cycle, enabled):
                         states[seq] = (cycle, data.get('state', {}))
                     elif name in ('production_order', 'capital_upgrade', 'city_yard_upgrade', 'capital_road_batch',
                                    'tech_research_started', 'tech_research_completed', 'tech_savings_plan',
-                                   'construction_completed'):
+                                   'construction_completed', 'ground_hunt', 'team_attack', 'team_help',
+                                   'base_scramble') or (name == 'attack_deferred'
+                                   and data.get('reason') == 'team_wait_partner'):
                         if 'state' not in data and data.get('state_id') in states:
                             state_cycle, state = states[data['state_id']]
                             data = dict(data, state=state, state_cycle=state_cycle)
@@ -595,6 +598,40 @@ def sample_schedule(args):
     return games
 
 
+def team_study_schedule(args):
+    """Fresh explicit seeds; one styled Brutal, native-tier ally/enemies, both team starts."""
+    games = []
+    mods = ('vanilla', 'dunecity') if args.mod == 'both' else (args.mod,)
+    for mod in mods:
+        for index, seed in enumerate(args.seeds):
+            size = args.sizes[index % len(args.sizes)]
+            spice = args.spice[(index // 2) % len(args.spice)]
+            tech = (3, 6, 9)[(index // 3 + index) % 3]
+            enemy = args.difficulties[index % len(args.difficulties)]
+            houses = list(HOUSES[:4])
+            shift = index % 4
+            houses = houses[shift:] + houses[:shift]
+            teams = (1, 1, 2, 2)
+            minutes = game_limit(args, mod)
+            spec = (f'size={size},base={args.base},army={args.army},city={args.city},'
+                    f'spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
+                    f'tech={tech},credits=3000,seed={seed}')
+            for seat in (0, 2):
+                sides = [(house, team, 'brutal' if i == seat else enemy)
+                         for i, (house, team) in enumerate(zip(houses, teams))]
+                games.append(dict(
+                    id=f'team-study/{mod}/{args.base}-a{args.army}-c{args.city}/{size}/{spice}/'
+                       f'{enemy}/t{tech}/{minutes}m/{seed}/seat{seat}',
+                    seed=seed, size=size, spice_level=spice, format='2v2', difficulty=enemy,
+                    variant=args.variant, sides=sides, base=args.base, army=args.army, city=args.city,
+                    limit=minutes, minutes=minutes, style=args.style or 'default', mod=mod,
+                    initial_tech=tech, skirmish=spec, candidate_house=HOUSE_IDS[houses[seat]],
+                    candidate_seat='original' if seat == 0 else 'swapped',
+                    candidate_style=args.candidate_style or '', sample_case=index + 1,
+                    sample_seed='', require_research=mod == 'dunecity'))
+    return games
+
+
 def shard(text):
     try:
         k, n = (int(part) for part in text.split('/'))
@@ -649,7 +686,8 @@ def seat_style_schedule(args, games):
 
 
 def schedule(args):
-    games = sample_schedule(args) if args.mode == 'sample' else matrix_schedule(args)
+    games = (team_study_schedule(args) if args.mode == 'team-study'
+             else sample_schedule(args) if args.mode == 'sample' else matrix_schedule(args))
     games = seat_style_schedule(args, games)
     if args.shard:
         k, n = args.shard
@@ -807,8 +845,8 @@ def seat_style_assignments(game):
 
 def seat_style_inputs(args, game, out):
     """Constant per-house config overlays; no genome search or within-game phase changes."""
-    if getattr(args, 'candidate_style', None) and (args.mode != 'sample' or args.style):
-        raise ValueError('--candidate-style requires --mode sample and cannot be combined with --style')
+    if getattr(args, 'candidate_style', None) and (args.mode not in ('sample', 'team-study') or args.style):
+        raise ValueError('--candidate-style requires --mode sample|team-study and cannot be combined with --style')
     assignments = {house: style for house, style in seat_style_assignments(game).items() if style != 'control'}
     if not assignments:
         return None
@@ -1102,6 +1140,14 @@ def play(args, scratch, binary, game):
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
             append(results / 'air-kills.csv', AIR_KILL_FIELDS,
                    [dict(metadata(game), **event) for event in capture['events']])
+            append(results / 'team-events.csv', TEAM_EVENT_FIELDS,
+                   [dict(metadata(game), house=event['house'], cycle=event['cycle'], event=event['event'],
+                         data=json.dumps(event['data'], sort_keys=True, separators=(',', ':')),
+                         capture_status=capture['status'], capture_reasons=capture['reasons'])
+                    for event in capture['decisions']
+                    if event['event'] in ('ground_hunt', 'team_attack', 'team_help', 'base_scramble')
+                    or event['event'] == 'attack_deferred'
+                    and event['data'].get('reason') == 'team_wait_partner'])
         supplemental = ({name: [] for name, _ in TECH_TABLES} if observer_off
                         else tech_audit(lines, samples, final, capture))
         for filename, fields in TECH_TABLES:
@@ -1139,7 +1185,7 @@ def run(args):
     results.mkdir(parents=True, exist_ok=True)
     for name, fields in (('games.csv', GAME_FIELDS), ('houses.csv', HOUSE_FIELDS),
                          ('samples.csv', SAMPLE_FIELDS), ('waves.csv', ATTACK_FIELDS),
-                         ('air-kills.csv', AIR_KILL_FIELDS)) + TECH_TABLES:
+                         ('air-kills.csv', AIR_KILL_FIELDS), ('team-events.csv', TEAM_EVENT_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
     observer_mode = 'off' if getattr(args, 'observer_off', False) else 'on'
     if any(row.get('observer_mode') != observer_mode for row in read(results / 'games.csv')):
@@ -1162,7 +1208,7 @@ def run(args):
                     row = future.result()
                     print(f'[{n}/{len(todo)}] {row["id"]}: {row["minutes"]} min {row["error"]}', flush=True)
     report([results])
-    if args.mode == 'sample':
+    if args.mode in ('sample', 'team-study'):
         selected = {game['id'] for game in schedule(args)}
         rows = {row['id']: row for row in read(results / 'games.csv')}
         if any(game_id not in rows or rows[game_id]['error'] for game_id in selected):
@@ -1931,8 +1977,8 @@ parser.add_argument('--tech', type=int, choices=range(1, 10), default=9,
 parser.add_argument('--base', choices=('cy', 'small', 'medium', 'large', 'fortress'), default='medium')
 parser.add_argument('--army', type=int, choices=range(7), default=2)
 parser.add_argument('--city', type=int, choices=range(6), default=0)
-parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='matrix',
-                    help='sample: balanced seeded factor draws, each played from two candidate seats')
+parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample', 'team-study'), default='matrix',
+                    help='sample: balanced random draws; team-study: explicit seeds, both team starts, native opponents')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
@@ -1941,7 +1987,7 @@ parser.add_argument('--game-options', type=Path)
 styles = parser.add_mutually_exclusive_group()
 styles.add_argument('--style', help='All-QuantBot overlay from tests/ai/play-styles/ (not candidate-only)')
 styles.add_argument('--candidate-style',
-                    help='sample only: play-style INI applied only to the candidate seat; opponents keep native config')
+                    help='sample/team-study: play-style INI applied only to the candidate seat; opponents keep native config')
 styles.add_argument('--seat-styles', type=seat_styles_argument, metavar='control,A,B,C',
                     help='Constant per-seat INIs, rotated through every seat; native control fills spare seats')
 parser.add_argument('--observer-off', action='store_true',
@@ -1962,10 +2008,10 @@ if not 256 <= args.capture_mib <= 4096:
     parser.error('Use 256-4096 MiB of capture space')
 if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:
     parser.error('Use positive --cases and an unsigned 32-bit --sample-seed')
-if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and args.mod == 'Dune2R':
-    parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
-if args.candidate_style and args.mode != 'sample':
-    parser.error('--candidate-style requires --mode sample')
+if args.mod == 'both' and args.mode not in ('sample', 'team-study') or args.mode in ('sample', 'team-study') and args.mod == 'Dune2R':
+    parser.error('--mode sample|team-study accepts --mod vanilla|dunecity|both')
+if args.candidate_style and args.mode not in ('sample', 'team-study'):
+    parser.error('--candidate-style requires --mode sample|team-study')
 if args.compare:
     compare(*args.compare)
 elif args.report_dirs:
@@ -1974,11 +2020,11 @@ elif args.list:
     games = schedule(args)
     for game in games:
         candidate = (f'candidate_house={game["candidate_house"]} seat={game["candidate_seat"]} '
-                     f'research_required={int(game["require_research"])}') if args.mode == 'sample' else ''
+                     f'research_required={int(game["require_research"])}') if args.mode in ('sample', 'team-study') else ''
         print(game['id'], game['skirmish'], candidate)
     limits = '/'.join(str(limit) for limit in sorted({game['limit'] for game in games}))
     print(f'{len(games)} games, {sum(len(game["sides"]) for game in games)} houses, {limits} game-minute caps')
-    if args.mode == 'sample':
+    if args.mode in ('sample', 'team-study'):
         sample_coverage(games)
 elif not args.results:
     parser.error('--results is required to play games')

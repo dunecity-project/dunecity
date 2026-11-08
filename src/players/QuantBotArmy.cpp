@@ -272,9 +272,94 @@ bool QuantBot::baseDefenceAssignment(const UnitBase* unit) const {
     const auto assignment=defenceAssignments.find(unit->getObjectID());
     if (assignment==defenceAssignments.end()) return false;
     const auto* assigned=getObject(assignment->second);
-    return assigned && assigned->isAStructure() && assigned->getOwner()==getHouse()
+    return assigned && assigned->isAStructure()
+        && (assigned->getOwner()==getHouse() || alliedDefenceBuilding(assigned))
         && (wholeArmyBaseDefence() || (assigned->getItemID() == Structure_Refinery
             && botConfig().force.campaignRefineryDefence && campaignEconomySupport()));
+}
+
+bool QuantBot::alliedDefenceBuilding(const ObjectBase* building) const {
+    return botConfig().force.teamDefenceSharePercent > 0 && teamCoordinationGame()
+        && building && building->isAStructure() && building->getOwner()
+        && building->getOwner() != getHouse() && !building->getOwner()->isNatives()
+        && building->getOwner()->getTeamID() == getHouse()->getTeamID();
+}
+
+void QuantBot::helpAttackedAlly() {
+    const int share = botConfig().force.teamDefenceSharePercent;
+    if (!share || !teamCoordinationGame()) return;
+    const auto hpValue = [](const UnitBase* unit) {
+        return CombatPowerPolicy::unitValue(
+            currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price,
+            unit->getHealth().lround(), unit->getMaxHealth());
+    };
+    // An actual ground weapon in range of its allied building target, not mere proximity.
+    std::map<Uint32, int64_t> threats;
+    const UnitBase* contact = nullptr;
+    const ObjectBase* building = nullptr;
+    for (const auto* enemy : getUnitList()) {
+        if (!enemy->getOwner() || enemy->getOwner()->getTeamID() == getHouse()->getTeamID()
+            || enemy->getOwner()->isNatives() || !enemy->isActive() || enemy->getHealth() <= 0
+            || !enemy->isAGroundUnit() || !mobileCombatItem(enemy->getItemID())
+            || !enemy->canAttack()) continue;
+        const auto* target = enemy->getTarget();
+        if (!alliedDefenceBuilding(target) || target->getHealth() <= 0
+            || !enemy->isInWeaponRange(target)) continue;
+        threats[target->getObjectID()] += hpValue(enemy);
+    }
+    int64_t largest = 0;
+    for (const auto& [id, threat] : threats)
+        if (threat > largest) { largest = threat; building = getObject(id); }
+    if (!building) return;
+    for (const auto* enemy : getUnitList())
+        if (enemy->getOwner() && enemy->getOwner()->getTeamID() != getHouse()->getTeamID()
+            && enemy->getHealth() > 0 && enemy->isActive() && enemy->canAttack()
+            && enemy->getTarget() == building && enemy->isInWeaponRange(building)) {
+            contact = enemy;
+            break;
+        }
+    if (!contact) return;
+    const int64_t cap = ownGroundArmyValue() * share / 100;
+    int64_t committed = 0;
+    struct Helper { Uint32 id; int64_t value; int distance; };
+    std::vector<Helper> candidates;
+    for (const auto* unit : getUnitList()) {
+        if (unit->getOwner() != getHouse() || !unit->isActive() || unit->getHealth() <= 0
+            || !unit->isAGroundUnit() || !mobileCombatItem(unit->getItemID()) || !unit->canAttack()) continue;
+        const auto assigned = defenceAssignments.find(unit->getObjectID());
+        // The cap covers ALL ongoing ally rescues, not a new 25/50% on every pass.
+        if (assigned != defenceAssignments.end() && alliedDefenceBuilding(getObject(assigned->second))) {
+            committed += hpValue(unit);
+            continue;
+        }
+        if (!unit->isRespondable() || !unit->canAttack(contact) || unit->wasForced()
+            || unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::Defence}) != UnitRole::Free
+            || static_cast<const GroundUnit*>(unit)->isAwaitingPickup()) continue;
+        const auto* target = unit->getTarget();
+        if (target && unit->isInWeaponRange(target)) continue; // Never abandon a live fight.
+        candidates.push_back({unit->getObjectID(), hpValue(unit),
+            blockDistance(unit->getLocation(), building->getClosestPoint(unit->getLocation())).lround()});
+    }
+    std::stable_sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) {
+        return a.distance != b.distance ? a.distance < b.distance : a.id < b.id;
+    });
+    int sent = 0;
+    int64_t value = 0;
+    for (const auto& candidate : candidates) {
+        if (committed + candidate.value > cap) continue;
+        const auto* unit = static_cast<const UnitBase*>(getObject(candidate.id));
+        const Coord goal = building->getClosestPoint(unit->getLocation());
+        doHuntToward(unit, goal.x, goal.y);
+        defenceAssignments[candidate.id] = building->getObjectID();
+        groundSquad.erase(candidate.id);
+        committed += candidate.value;
+        value += candidate.value;
+        ++sent;
+    }
+    if (sent) traceDecision("team_help", AITelemetry::Record().set("building", building->getObjectID())
+        .set("ally", building->getOwner()->getHouseID()).set("share_percent", share)
+        .set("members", sent).set("value", value).set("cap", cap)
+        .set("committed", committed).set("threat", largest));
 }
 
 void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const ObjectBase* building) {
@@ -782,6 +867,12 @@ void QuantBot::attack(int militaryValue) {
         return;
     }
 
+    if (teamAttackCoordinator() && !teamAttackReady()) {
+        attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(5000)));
+        traceDecision("attack_deferred", AITelemetry::Record().set("reason", "team_wait_partner"));
+        return;
+    }
+
     launchGroundHunt();
     if (isCampaignEnemy()) tryLaunchOrnithopterStrike(diffSettings, config);
 }
@@ -950,7 +1041,9 @@ void QuantBot::launchGroundHunt() {
         && vanillaMultiEnemyGame() && lastCalculatedSpice > 0;
     const bool ffaDirected = ffaTargeting || ffaSingleFront;
     // JoinAllyWaves: the objective of an allied wave that has just left; ours joins it.
-    const ObjectBase* allyFront=wholeArmy ? allyWaveObjective() : nullptr;
+    const bool synchronisedTeam = wholeArmy && teamAttackCoordinator();
+    const ObjectBase* allyFront = synchronisedTeam ? teamAttackObjective()
+        : wholeArmy ? allyWaveObjective() : nullptr;
     std::vector<Uint32> existingHunters;
     std::vector<SimpleArmyPolicy::Responder> candidates;
     // Launcher accounting for the dispatch audit. launchGroundHunt() has never
@@ -1353,7 +1446,7 @@ void QuantBot::launchGroundHunt() {
     std::vector<const UnitBase*> finishers;                    // H / Z: hunt towards the weakest house
     const bool massAssault=trackedCustomWave && wholeArmy && forceVariant(kForceMassAssault);
     const bool finishWave=trackedCustomWave && wholeArmy && (forceVariant(kForceFinishWeakest) || massAssault
-        || ffaDirected || (forceVariant(kForceFinishLeading) && finishLeading()));
+        || synchronisedTeam || ffaDirected || (forceVariant(kForceFinishLeading) && finishLeading()));
     std::map<Uint32,std::vector<const UnitBase*>> assaults;    // campaign objective -> its attackers
     std::map<Uint32,std::vector<const UnitBase*>> flankers;    // campaign objective -> its flankers
     const ObjectBase* front=nullptr;
@@ -1477,6 +1570,12 @@ void QuantBot::launchGroundHunt() {
     if (!splitUnits.empty() && !startSplit(splitUnits,observedFront))
         for (const auto* unit : splitUnits) doSetAttackMode(unit,HUNT);
     if (count==0) return; // An empty house checking readiness is not an attack.
+    if (synchronisedTeam) {
+        wakeTeamAttackPartners();
+        traceDecision("team_attack", AITelemetry::Record().set("members", count).set("value", value)
+            .set("target", observedFront ? observedFront->getObjectID() : NONE_ID)
+            .set("target_house", observedFront ? observedFront->getOwner()->getHouseID() : -1));
+    }
     if (limited && profile.limitedWave) {
         attackTimer=MILLI2CYCLES(CampaignDifficultyPolicy::repeatDelayMs(
             static_cast<int>(difficulty),
@@ -1493,6 +1592,8 @@ void QuantBot::launchGroundHunt() {
         .set("hunt_party",int(partyUnits.size()))
         .set("formation_members",formationMembers)
         .set("finish_team",finishTeam)
+        .set("front_house", observedFront ? observedFront->getOwner()->getHouseID() : -1)
+        .set("front_object", observedFront ? observedFront->getObjectID() : NONE_ID)
         .set("campaign_limited",limited).set("army_value",armyValue)
         .set("committed_value",custom ? groundCommittedValue : committedValue)
         .set("committed_units",limited ? campaignPressure().units : groundCommittedUnits)
@@ -3621,6 +3722,7 @@ void QuantBot::retreatAllUnits() {
         // Aircraft on any building we own, main base or outlying colony, on the
         // same cadence and before regrouping can claim the launchers again.
         defendStructuresFromAircraft();
+        helpAttackedAlly();
         // Defence is sized on contact. No fixed reserve owns troops or prevents
         // the main body helping when a city/harvester is under attack.
         // Per building, once per pass: is any visible enemy fighter still at it?
@@ -3658,7 +3760,8 @@ void QuantBot::retreatAllUnits() {
             // there, during a launcher's spacing step, while it fights an enemy
             // it has met, and while enemies remain at that building. After that
             // it is an ordinary hunter, free to answer the next attack.
-            if (target && target->isAStructure() && target->getOwner()==getHouse()) {
+            if (target && target->isAStructure()
+                && (target->getOwner()==getHouse() || alliedDefenceBuilding(target))) {
                 const auto* fighting=unit ? unit->getTarget() : nullptr;
                 const bool onJob=unit && unit->getOwner()==getHouse() && unit->getHealth()>0
                     && baseDefenceAssignment(unit) && unit->getAttackMode()==HUNT

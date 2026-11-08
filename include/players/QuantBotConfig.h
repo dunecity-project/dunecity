@@ -238,6 +238,11 @@ struct QuantBotConfig {
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.
         bool joinAllyWaves;
+        /// Custom team experiment: wait for both autonomous allied armies and use the same
+        /// weakest true-army enemy house. A styled teammate supplies the shared team plan.
+        bool teamSynchroniseAttacks;
+        /// Default-off ally-base rescue, capped at 25% or 50% of our ground army's HP value.
+        int teamDefenceSharePercent;
         /// Custom Hard/Brutal starts without a heavy factory establish a four-worker economy,
         /// then fund their first full combat wave before optional fleet/yard expansion. Initial
         /// heavy-factory starts, Easy/Medium and campaign games are unchanged.
