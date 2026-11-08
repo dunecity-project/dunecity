@@ -137,7 +137,10 @@ QuantBot::CityBoldPlan QuantBot::boldCityPlan() const {
         teams[occupied++] = house.team;
     }
     if (occupied < 5 || getGameInitSettings().getInitialSpiceTilePermille() <= 0) return CityBoldPlan::Native;
-    if (f.cityBoldSpiceBoom) return CityBoldPlan::SpiceBoom;
+    // R3's original-grid low-spice band ends at 90 per-mille.
+    if (f.cityBoldSpiceBoom)
+        return getGameInitSettings().getInitialSpiceTilePermille() > 90
+            ? CityBoldPlan::SpiceBoom : CityBoldPlan::Native;
     if (f.cityBoldTwinYard) return CityBoldPlan::TwinYard;
     if (f.cityBoldTaxTakeoff) return CityBoldPlan::TaxTakeoff;
     if (f.cityBoldNeighbourRush) return CityBoldPlan::NeighbourRush;
