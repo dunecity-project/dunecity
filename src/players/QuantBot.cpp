@@ -252,7 +252,8 @@ int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int
                                                           productionCash, largestUnitValue);
     // Custom Medium turns banked credits into army past its cap, so a won economy ends the game
     // (docs/ai-scenario-matrix.md, "Difficulty ladder"); at most half the cap, below Hard's.
-    if (difficulty == Difficulty::Medium && autonomousCustomArmy())
+    // MediumClassic 1-2 (default off) keeps the 1.0.807 Medium at its cap.
+    if (difficulty == Difficulty::Medium && autonomousCustomArmy() && botConfig().force.mediumClassic == 0)
         return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash);
     // M (SpendAtCap, test-only, Custom Hard/Brutal): banked credits above the reserve buy heavy
     // units beyond the limit, up to the limit again (QuantBotBuild.cpp keeps the other producers

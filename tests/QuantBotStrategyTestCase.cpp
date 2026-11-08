@@ -193,6 +193,38 @@ TEST_CASE("Civ Wars strategy defaults off, round-trips both states and is multip
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Medium classic defaults off and every discrete level is loaded saved and hashed",
+          "[ai][config][medium-classic]") {
+    QuantBotConfig defaults;
+    REQUIRE(defaults.force.mediumClassic == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-medium-classic-test.ini";
+    for (int level : {0, 1, 2}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nMediumClassic=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.mediumClassic == level);
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (level == 0));
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.mediumClassic == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    for (int raw : {-1, 99}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nMediumClassic=" << raw << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.mediumClassic == (raw < 0 ? 0 : 2));
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Research Lab policy defaults on and is loaded saved and hashed",
           "[ai][research][config]") {
     QuantBotConfig config;

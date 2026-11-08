@@ -1184,13 +1184,16 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             && getHouse()->getTechLevel() >= data[Structure_RepairYard][houseID].techLevel) {
             step = Structure_RepairYard;
         } else if (!canAddRepairYard(pass.itemCount[Structure_RepairYard])
+            && !(botConfig().force.mediumClassic >= 1 && difficulty == Difficulty::Medium
+                 && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType))
             && pass.itemCount[Structure_HeavyFactory] == 0
             && data[Structure_HeavyFactory][houseID].enabled
             && getHouse()->getTechLevel() >= data[Structure_HeavyFactory][houseID].techLevel) {
             // Medium builds no repair yard of its own, but the yard was also this
             // ladder's only way to the light factory and so to vehicle production:
             // walk to the heavy factory instead (7P FFA: Medium idle with 17
-            // harvesters and no factory, docs/ai-scenario-matrix.md).
+            // harvesters and no factory, docs/ai-scenario-matrix.md). MediumClassic
+            // 1-2 (default off) keeps the 1.0.807 Custom Medium opening without it.
             step = Structure_HeavyFactory;
         }
         // Walk missing prerequisites, stopping at a pending build.

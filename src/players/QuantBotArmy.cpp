@@ -231,9 +231,17 @@ bool QuantBot::autonomousCustomArmy() const {
     // Medium joined Hard and Brutal (docs/ai-scenario-matrix.md, "Difficulty ladder"): its
     // 40% standing raid share traded evenly with Easy's home army for 60 minutes. Medium now
     // differs from Hard in its economy, limits and air raids, not in how its army attacks.
+    // MediumClassic 2 (Regression807, default off) keeps Custom Medium on its 1.0.807 standing
+    // raid share outside this scope, as Easy.
     return !builderOnly() && !switchedOff() && currentGame!=nullptr && gameMode==GameMode::Custom
         && !isCampaignGameType(currentGame->gameType)
-        && (difficulty==Difficulty::Medium || difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+        && ((difficulty==Difficulty::Medium && botConfig().force.mediumClassic < 2)
+            || difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+}
+
+bool QuantBot::raidShareDifficulty() const {
+    return difficulty==Difficulty::Easy
+        || (difficulty==Difficulty::Medium && botConfig().force.mediumClassic >= 2);
 }
 
 bool QuantBot::playsStrategy() const {
@@ -3379,7 +3387,7 @@ void QuantBot::kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThre
 	// unit that was not sent on the wave backs onto the body it belongs to.
 	Coord squadCenter = findSquadCenter(getHouse()->getHouseID(),
         isCampaignGameType(currentGame->gameType) || gameMode!=GameMode::Custom
-        || difficulty!=Difficulty::Easy || pUnit->getAttackMode()==HUNT);
+        || !raidShareDifficulty() || pUnit->getAttackMode()==HUNT);
 
 	// If no squad center, just move directly away from threat
 	if (!squadCenter.isValid()) {
@@ -3497,7 +3505,7 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
     // colony while offensive, the protected shelter while coming home.
     const bool recoveryHold = recoveryActive();
     const bool homeAnchored = recoveryHold || (!isCampaignGameType(currentGame->gameType)
-        && gameMode==GameMode::Custom && difficulty==Difficulty::Easy);
+        && gameMode==GameMode::Custom && raidShareDifficulty());
     const Coord home = assemblyPoint();
     Coord regroup = (unit->getAttackMode()==RETREAT || homeAnchored)
         ? home : findSquadCenter(getHouse()->getHouseID());
@@ -4046,7 +4054,7 @@ void QuantBot::retreatAllUnits() {
                             // attack centroid is not a place to end a retreat.
                             Coord actualSquadCenter = findSquadCenter(getHouse()->getHouseID(),
                                 isCampaignGameType(currentGame->gameType) || gameMode!=GameMode::Custom
-                                || difficulty!=Difficulty::Easy);
+                                || !raidShareDifficulty());
                             FixPoint distToSquadCenter = actualSquadCenter.isValid() ? 
                                 blockDistance(pUnit->getLocation(), actualSquadCenter) : FixPt_MAX;
                             FixPoint distToRallyPoint = squadRallyLocation.isValid() ? 

@@ -578,6 +578,25 @@ min, DuneCity 6/6 (before 5/6). 7P FFA: no idle house (before QM idle 1/4). Regr
 0/4 decided (before 3/4), the skirmish controller order is QH +0.26 > QB +0.18 > QM +0.12 > QE (Brutal
 plays 20 houses, interval -0.13..+0.48).
 
+### Pre-ladder Medium (`MediumClassic`, diagnostic, default 0)
+
+The 1.0.807 baseline gate (docs/ai-baseline-gate.md) flags vanilla Custom Medium 1v1 on its frozen maps:
+attack dispatches per house 14.6 / 15.8 (807) -> 4.6 / 3.1, Palace adoption 1.0 / 1.0 -> 0.63 / 0.13, first
+heavy factory at ~14 -> ~7.6-8 game minutes. Exact-map release bisection puts the whole step at the
+`fix/ai-late-game-2` merge `fbbeecff` (848 trial `748f9288` unchanged), i.e. at this branch's Medium changes:
+the gate counts dispatches, and one whole-army wave replaces several 40% raid shares by design.
+`[Force Concentration] MediumClassic` restores the pre-ladder Custom Medium for measurement (Easy, Hard,
+Brutal and campaigns unchanged; style overlays `medium-classic-off`, `-economy`, `-army`):
+
+- **1** (economy): no banked-credit surplus army (`planningMilitaryBudget` stops at the cap) and no
+  heavy-factory walk after the starport opening.
+- **2** (army): 1, and Medium leaves `autonomousCustomArmy()` - the standing 40% raid share
+  (`SimpleArmyPolicy::customAttack`) with its uncommitted reserve anchored at home, as Easy
+  (`QuantBot::raidShareDifficulty`).
+
+Level 2 reverts the change behind the QM v QE result above, so it stays default 0 unless a paired screen,
+including the QM v QE ladder pair, shows a net gain.
+
 ## Difficulty separation (branch `fix/difficulty-separation`, protocol 88)
 
 Stefan: a clear ladder, Brutal > Hard > Medium > Easy; "brutal should have a higher harvester limit and military

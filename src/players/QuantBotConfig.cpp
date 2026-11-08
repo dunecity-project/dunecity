@@ -398,6 +398,7 @@ QuantBotConfig::QuantBotConfig() {
     force.simpleTechSavings = false;
     force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
     force.exhaustedArmyDispatch = true;
+    force.mediumClassic = 0; // Regression807 diagnostic: 1.0.807 Custom Medium economy (1) / army (2).
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -746,6 +747,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
         iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
         iniFile.setBoolValue("Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
+        iniFile.setIntValue("Force Concentration", "MediumClassic", force.mediumClassic);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -922,6 +924,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
     force.exhaustedArmyDispatch = iniFile.getBoolValue(
         "Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
+    force.mediumClassic = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "MediumClassic", force.mediumClassic), 0, 2);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1456,6 +1460,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("simpleTechSavings", force.simpleTechSavings);
     addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
     addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);
+    addNamed("mediumClassic", force.mediumClassic);
     configStr += "|/FORCE|";
     addNamed("civWarsStrategy", civWarsStrategy);
     configStr += "|STRATEGY";

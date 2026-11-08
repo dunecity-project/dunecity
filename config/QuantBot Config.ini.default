@@ -458,3 +458,7 @@ LauncherKiteExtraDistance=2
 # reachable spice, affordable units, income and pending cargo are all exhausted.
 # Manual orders, defence and saboteur ownership are unchanged; 0 keeps legacy holds.
 ExhaustedArmyDispatch=1
+# Experimental pre-ladder (1.0.807) Custom Medium, default 0 = current. 1: no banked-credit
+# surplus army and no heavy-factory walk after the starport opening; 2: also the standing
+# 40% raid share instead of whole-army waves. Easy/Hard/Brutal and campaigns are unchanged.
+MediumClassic=0

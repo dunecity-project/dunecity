@@ -397,6 +397,11 @@ struct QuantBotConfig {
         /// holds once reachable spice, affordable units and all income/cargo are exhausted.
         /// Manual orders, defence and saboteur ownership remain authoritative.
         bool exhaustedArmyDispatch;
+        /// Experimental/default 0 (Regression807, docs/ai-scenario-matrix.md "Difficulty ladder"):
+        /// restores the pre-ladder (1.0.807) Custom Medium. 1: no banked-credit surplus army and no
+        /// heavy-factory walk after the starport opening; 2: also the standing 40% raid share
+        /// instead of the whole-army scope. Easy/Hard/Brutal and campaigns are unchanged.
+        int mediumClassic;
     };
     ForceSettings force;
 

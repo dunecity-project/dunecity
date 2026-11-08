@@ -420,6 +420,9 @@ private:
     /// concentrated wave instead of Easy's standing raid share) and of the mobile
     /// anti-air floor (docs/ai-scenario-matrix.md, "Difficulty ladder").
     bool autonomousCustomArmy() const;
+    /// Easy, and Custom Medium under MediumClassic 2 (Regression807, default off): the 1.0.807
+    /// standing raid share whose uncommitted reserve stays at home.
+    bool raidShareDifficulty() const;
     /// Does this house play a production strategy (QuantBotStrategy: the default Fixed:Tuned,Swarm
     /// mix and tempo)? Custom Hard and Brutal only: the strategies were tuned there, and Custom
     /// Medium keeps its learned mix and the configured wave readiness, so the strategy is one of
