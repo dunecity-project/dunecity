@@ -383,7 +383,7 @@ void ConstructionYard::moveUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOn
                     moveOff(static_cast<UnitBase*>(pObject));
                 }
             } else if(pTile->hasInfantry()) {
-                const std::list<Uint32> infantryList = pTile->getInfantryList();
+                const auto infantryList = pTile->getInfantryList();
                 for(Uint32 objectID : infantryList) {
                     moveOff(dynamic_cast<InfantryBase*>(currentGame->getObjectManager().getObject(objectID)));
                 }

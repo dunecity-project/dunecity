@@ -8,14 +8,48 @@
 #include <dunecity/CitySimulation.h>
 #include <players/QuantBot.h>
 #include <units/UnitBase.h>
+#include <chrono>
+#include <cstring>
 #ifdef __APPLE__
 #include <mach/mach.h>
 #include <malloc/malloc.h>
 #include <sys/resource.h>
 #include <unistd.h>
+#elif defined(_WIN32) || defined(__GLIBC__)
+#include <malloc.h>
 #endif
 
 namespace SimHeap {
+
+// The ordinary probe's initial load and requested-mod reload have both finished
+// here. Returning free allocator pages does not release any live game allocation.
+inline void releaseUnusedPages() {
+    const char* mode = std::getenv("DUNECITY_HEADLESS_HEAP_RELIEF");
+    const char* driver = SDL_GetCurrentVideoDriver();
+    if ((mode && std::strcmp(mode, "0") == 0)
+        || (!mode && (!driver || std::strcmp(driver, "dummy") != 0))) return;
+    const auto started = std::chrono::steady_clock::now();
+    size_t released = 0;
+    int status = 0, bytesKnown = 0;
+    const char* allocator = "unsupported";
+#if defined(__APPLE__)
+    allocator = "macos";
+    released = malloc_zone_pressure_relief(nullptr, 0);
+    bytesKnown = 1;
+#elif defined(_WIN32)
+    allocator = "ucrt";
+    status = _heapmin();
+#elif defined(__GLIBC__)
+    allocator = "glibc";
+    status = malloc_trim(0);
+#else
+    status = -1;
+#endif
+    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - started).count();
+    SDL_Log("HEADLESS_HEAP_RELIEF: allocator=%s status=%d released_bytes=%zu bytes_known=%d us=%lld",
+        allocator, status, released, bytesKnown, static_cast<long long>(elapsed));
+}
 
 template<class T> size_t bytes(const std::vector<T>& v) { return v.capacity() * sizeof(T); }
 
@@ -54,8 +88,10 @@ inline void snapshot(Game& game, bool final = false) {
         for (const auto& tile : map->tiles) {
             tileDamage += bytes(tile.damage);
             tileCorpses += bytes(tile.deadUnits);
-            tileOccupants += tile.assignedAirUnitList.size() + tile.assignedInfantryList.size()
-                + tile.assignedUndergroundUnitList.size() + tile.assignedNonInfantryGroundObjectList.size();
+            tileOccupants += std::distance(tile.assignedAirUnitList.begin(), tile.assignedAirUnitList.end())
+                + std::distance(tile.assignedInfantryList.begin(), tile.assignedInfantryList.end())
+                + std::distance(tile.assignedUndergroundUnitList.begin(), tile.assignedUndergroundUnitList.end())
+                + std::distance(tile.assignedNonInfantryGroundObjectList.begin(), tile.assignedNonInfantryGroundObjectList.end());
         }
     }
     size_t history = bytes(game.cmdManager.timeslot), commands = 0, occupiedCycles = 0;

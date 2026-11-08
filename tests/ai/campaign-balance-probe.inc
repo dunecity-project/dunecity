@@ -529,6 +529,7 @@ int runCampaignBalanceProbe() {
     const TornieCampaignAudit tornieAudit(*game);
     const Uint32 end = MILLI2CYCLES(minutes * 60000);
     std::string outcome;
+    SimHeap::releaseUnusedPages();
     const long long setupMs = ProbeDigest::millisecondsSince(probeStart);
     if(std::getenv("DUNECITY_SIM_MEASURE"))
         SDL_Log("ASSET_STARTUP: phase=probe_setup ms=%lld", setupMs);

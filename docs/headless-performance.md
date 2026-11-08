@@ -183,6 +183,50 @@ skirmish_generator_tests, active_tile_probe and all 29 `quantbot_*`: 36/36 passe
 ~10 s). No pathfinding/performance probes are registered in ctest; their runners in
 `tests/pathfinding` and `tests/performance` were not run.
 
+## Long-game heap attribution
+
+`tests/ai/simulation-throughput.py` is a cluster-distributable harness for the fixed
+duels, 160x160 six-house city/classic games, a human-partner campaign mission and
+both All Against Atreides seeds. Native CPU/peak RSS and a sampled RSS series are
+kept separately from the Python runner's costs. Comparison signatures stay in
+`games.csv`; raw logs and native counters are retained in each collected attempt's
+`probe-evidence.tar.gz` archive under `--results/cluster-evidence`.
+
+For a macOS retained-heap investigation, submit that harness through the ordinary
+commit-pinned cluster wrapper with `--machines pro --cases city160,vanilla160,campaign`
+and `--heap-profile --heap-tools` (optionally `--malloc-stacks`, applied only to the
+native probe). The city/classic caps are 120/90 game minutes; natural victories
+still end the game. `vanilla160-long` supplies a slower six-house Easy yard-only
+opening without extending play after victory. `SIM_HEAP` records the initialized
+world, every ten game minutes and
+the final cycle. Its vector totals are **requested capacity bytes**, not allocator
+overhead; sightings, tile occupants and unit path nodes are explicitly counts.
+macOS rows also contain RSS, physical footprint and allocator live/reserved bytes.
+`heap-<cycle>.txt`, `vmmap-<cycle>.txt` and `malloc-<cycle>.txt` retain allocator and
+stack attribution beside each game's log. These hooks are off by default and are
+compiled only into the private balance probe.
+
+Do not use stack-logging/heap-tool runs for throughput or OOM sizing: profiling
+changes both runtime and memory use. Use an unprofiled paired run on the same
+named host for those measurements, and compare every digest/result/formation line.
+
+Tile occupancy registries use `std::forward_list` rather than `std::list`.
+They need stable successor iterators when destruction removes the current object,
+but never traverse backwards. Empty tiles no longer retain four reverse links and
+size counters; live nodes also need only one link. Insertion order, duplicate IDs,
+remove-all semantics and the existing count-plus-IDs save encoding are preserved.
+Appending walks the tile's short occupant list instead of retaining a tail pointer;
+the infantry fullness check stops after the existing five-unit occupancy limit.
+No simulation or AI history is discarded or capped.
+
+Private dummy-video balance probes return unused allocator pages to the OS once
+all setup and requested-mod reloading have finished, before recording the setup/
+loop boundary. This is independent of asset skipping and never frees a live
+simulation allocation: macOS uses `malloc_zone_pressure_relief`, Windows `_heapmin`,
+and glibc `malloc_trim`. The one-off cost is included in setup time, not hidden in
+the loop. `DUNECITY_HEADLESS_HEAP_RELIEF=0` (the harness's `--no-heap-relief`) keeps
+the allocator state for an explicit control. Shipped interactive games are unchanged.
+
 ## Not done (ideas, measured costs above)
 
 - Skip graphics in headless batches: start-up `GFXManager` + mod re-activation is ~1 s and
