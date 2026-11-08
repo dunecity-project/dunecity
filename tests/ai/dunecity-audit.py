@@ -6,7 +6,8 @@ measurement. Detectors identify suspicious house histories, not automatic proof 
 Use dunecity-queue submit for games; --report and --compare only read captured CSVs.
 Additive tech-*.csv/composition.csv sidecars retain replacement-price composition,
 accepted commitments, exact first-owned/completed technology and four-minute
-quote-budget opportunities without changing historical games/houses/samples CSVs.
+quote-budget opportunities. Raw engine outcomes and placement scores remain alongside
+the audit-only DuneCity population adjudication.
 """
 import base64
 import argparse
@@ -58,13 +59,15 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
                       'source_commit', 'source_fingerprint', 'source_fingerprint_error',
                       'air_kill_telemetry', 'air_kill_telemetry_reasons', 'air_kill_attribution',
                       'air_kill_unknown_attribution', 'capture_mib', 'diagnostics',
-                      'mod', 'candidate_house', 'candidate_seat', 'sample_case', 'sample_seed', 'research_enabled')
+                      'mod', 'candidate_house', 'candidate_seat', 'sample_case', 'sample_seed', 'research_enabled',
+                      'scoring_rule', 'scored_winner_team', 'win_condition', 'team_populations')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
                        'score', 'drawn', 'won', 'flags') + tuple(
     field for detector in DETECTORS for field in (detector, 'eligible_' + detector, 'first_' + detector)
-) + TROOPER_FIELDS + ('air_kill_telemetry',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
+) + TROOPER_FIELDS + ('air_kill_telemetry',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS + (
+    'population', 'raw_score', 'raw_drawn', 'raw_won')
 CYCLES_PER_MINUTE = 3750  # The engine's 16 ms fixed simulation tick.
 SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_value', 'army_units', 'harvesters',
                  'structures', 'factories', 'kill_value', 'loss_value', 'power', 'need', 'population', 'tax', 'demand',
@@ -546,10 +549,16 @@ def balanced_draw(levels, count, rng):
     return draw
 
 
+def game_limit(args, mod):
+    """Short diagnostic runs remain available; classic games never exceed 90 minutes."""
+    return min(args.minutes, 120 if mod == 'dunecity' else 90)
+
+
 def sample_schedule(args):
     games = []
     mods = ('vanilla', 'dunecity') if args.mod == 'both' else (args.mod,)
     for mod in mods:
+        minutes = game_limit(args, mod)
         rng = random.Random(f'{args.sample_seed}/{mod}')
         factors = dict(SAMPLE_FACTORS, spice_level=tuple(SPICE)[int(mod == 'vanilla'):],
                        initial_tech=tuple(range(3 if mod == 'vanilla' else 1, 10)))
@@ -568,7 +577,7 @@ def sample_schedule(args):
                     f'spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
                     f'tech={tech},credits=3000,seed={seed}')
             cell = (f'sample/{mod}/s{args.sample_seed}-n{args.cases}/{args.base}-a{args.army}-c{args.city}/'
-                    f'{index + 1:03d}/{size}/{spice}/{fmt}/{enemy}/t{tech}/{args.minutes}m/{seed}')
+                    f'{index + 1:03d}/{size}/{spice}/{fmt}/{enemy}/t{tech}/{minutes}m/{seed}')
             # Only the candidate controller moves. Houses, starts, map and enemy tier
             # stay fixed; in 2v2 the other three seats (including its ally) use that tier.
             for swapped, seat in enumerate((0, 2 if fmt == '2v2' else count - 1)):
@@ -576,8 +585,8 @@ def sample_schedule(args):
                          for i, (house, team) in enumerate(zip(houses, teams))]
                 games.append(dict(id=f'{cell}/{"swap" if swapped else "original"}', **case,
                                   seed=seed, variant=args.variant, sides=sides, base=args.base, army=args.army,
-                                  city=args.city, limit=args.minutes, style=args.style or 'default', mod=mod,
-                                  minutes=args.minutes, skirmish=spec, candidate_house=HOUSE_IDS[houses[seat]],
+                                  city=args.city, limit=minutes, style=args.style or 'default', mod=mod,
+                                  minutes=minutes, skirmish=spec, candidate_house=HOUSE_IDS[houses[seat]],
                                   candidate_seat='swapped' if swapped else 'original',
                                   sample_case=index + 1, sample_seed=args.sample_seed,
                                   require_research=mod == 'dunecity'))
@@ -606,6 +615,8 @@ def schedule(args):
 
 def matrix_schedule(args):
     games = []
+    mod = getattr(args, 'mod', 'dunecity')
+    minutes = game_limit(args, mod)
     for size in args.sizes:
         for spice in args.spice:
             for fmt in args.formats:
@@ -626,21 +637,61 @@ def matrix_schedule(args):
                             sides = [(house, team, levels[i] if len(levels) > 1 else levels[0])
                                      for i, (house, team) in enumerate(zip(houses, teams))]
                             difficulty = '-v-'.join(levels)
-                            cell = f'{args.mode}/{args.base}-a{args.army}-c{args.city}/{size}/{spice}/{fmt}/{difficulty}/{args.minutes}m/{seed}'
+                            cell = f'{args.mode}/{args.base}-a{args.army}-c{args.city}/{size}/{spice}/{fmt}/{difficulty}/{minutes}m/{seed}'
                             if args.tech != 9:
                                 cell += f'/t{args.tech}'
-                            mod = getattr(args, 'mod', 'dunecity')
                             if mod != 'dunecity':
                                 cell = f'{mod}/{cell}'
                             if swapped:
                                 cell += '/swap'
                             games.append(dict(id=cell, seed=seed, size=size, spice_level=spice, format=fmt,
                                               difficulty=difficulty, variant=args.variant, sides=sides, base=args.base, army=args.army,
-                                              city=args.city, limit=args.minutes, style=args.style or 'default', mod=mod, initial_tech=args.tech,
-                                              minutes=args.minutes, skirmish=f'size={size},base={args.base},army={args.army},'
+                                              city=args.city, limit=minutes, style=args.style or 'default', mod=mod, initial_tech=args.tech,
+                                              minutes=minutes, skirmish=f'size={size},base={args.base},army={args.army},'
                                               f'city={args.city},spice={SPICE[spice]},sand=65,rock=30,mountain=5,'
                                               f'tech={args.tech},credits=3000,seed={seed}'))
     return games
+
+
+def score_match(game, result, final):
+    """Audit-only population adjudication; the engine result and eliminations stay untouched."""
+    ids = [int(house['house']) for house in final]
+    eliminated = {int(house['house']): float(house['eliminated_s']) for house in final if house['alive'] == '0'}
+    teams = {int(house['house']): int(house['team']) for house in final}
+    raw_scores = match_score.score_game(ids, eliminated, teams=teams)
+    winner = int(result.get('winner_team') or 0)
+    condition = 'conquest' if winner > 0 else 'draw'
+    rule = 'conquest-placement'
+    populations = defaultdict(int)
+    if game.get('mod', 'dunecity') == 'dunecity':
+        rule = 'city-population-20pct'
+        required = {HOUSE_IDS[house] for house, _, _ in game['sides']}
+        if set(ids) != required or len(ids) != len(required):
+            raise ValueError('population_house_roster_incomplete')
+        for house in final:
+            population = int(house['population'])
+            if population < 0:
+                raise ValueError('population_not_measured')
+            populations[int(house['team'])] += population
+        if result.get('outcome') == 'time_limit' and len(populations) >= 2:
+            ranked = sorted(populations, key=populations.get, reverse=True)
+            leader, runner_up = ranked[:2]
+            # Integer arithmetic makes exactly 20% a win, without rounding a
+            # smaller lead up to the boundary. Zero versus zero remains a draw.
+            if populations[leader] > 0 and 5 * populations[leader] >= 6 * populations[runner_up]:
+                winner, condition = leader, 'population'
+    scores = raw_scores
+    if condition == 'population':
+        # Rank the population winner first. Other surviving teams share the
+        # next places; teams already eliminated retain their relative order.
+        scored_eliminated = {house: time for house, time in eliminated.items() if teams[house] != winner}
+        for house in ids:
+            if teams[house] != winner:
+                scored_eliminated.setdefault(house, float(result['end_s']))
+        scores = match_score.score_game(ids, scored_eliminated, teams=teams)
+    return (dict(scoring_rule=rule, scored_winner_team=winner, win_condition=condition,
+                 team_populations=json.dumps(dict(sorted(populations.items())), separators=(',', ':'))),
+            raw_scores, scores)
 
 
 def detect(samples):
@@ -846,6 +897,12 @@ def play(args, scratch, binary, game):
         error = ';'.join(filter(None, (error, 'research_enabled_not_verified')))
     if 'candidate_house' in game and str(game['candidate_house']) not in {house['house'] for house in final}:
         error = ';'.join(filter(None, (error, 'candidate_result_missing')))
+    scored = {}
+    if not error:
+        try:
+            scored, raw_scores, scores = score_match(game, result, final)
+        except (KeyError, ValueError) as exc:
+            error = f'outcome_not_verified:{exc}'
     row = dict(metadata(game), sides=','.join(f'{h}:{t}:{d}' for h, t, d in game['sides']),
                map_seed=generated.get('map_seed', ''), terrain_attempts=generated.get('attempts', ''),
                skipped=generated.get('skipped', ''), outcome=result.get('outcome', ''), winner_team=result.get('winner_team', ''),
@@ -863,6 +920,7 @@ def play(args, scratch, binary, game):
     row.update(air_kill_telemetry=capture['status'], air_kill_telemetry_reasons=capture['reasons'],
                air_kill_attribution=capture['attribution'], air_kill_unknown_attribution=capture['unknown_attribution'],
                capture_mib=getattr(args, 'capture_mib', 256), diagnostics='')
+    row.update(scored)
     results = Path(args.results)
     if getattr(args, 'export_maps', None):
         try:
@@ -877,10 +935,6 @@ def play(args, scratch, binary, game):
         groups = defaultdict(list)
         for sample in samples:
             groups[int(sample['house'])].append(sample)
-        ids = [int(h['house']) for h in final]
-        eliminated = {int(h['house']): float(h['eliminated_s']) for h in final if h['alive'] == '0'}
-        teams = {int(h['house']): int(h['team']) for h in final}
-        scores = match_score.score_game(ids, eliminated, teams=teams)
         house_rows = []
         difficulty_of = {HOUSE_IDS[h]: d for h, _, d in game['sides']}
         attacks = defaultdict(list)
@@ -902,7 +956,10 @@ def play(args, scratch, binary, game):
                 'house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                 'army_value', 'army_units', 'sortie_minutes')}, **detectors,
                 score=round(scores[number].score, 4), drawn=int(scores[number].drawn),
-                won=int(house['team'] == result.get('winner_team')), difficulty=difficulty_of[number],
+                won=int(int(house['team']) == scored['scored_winner_team']), difficulty=difficulty_of[number],
+                population=house.get('population', ''),
+                raw_score=round(raw_scores[number].score, 4), raw_drawn=int(raw_scores[number].drawn),
+                raw_won=int(house['team'] == result.get('winner_team')),
                 attack_telemetry=int(telemetry),
                 attack_count=len(attacks[number]) if telemetry else '',
                 first_attack_minute=min(attacks[number]) if attacks[number] else '',
@@ -1022,17 +1079,24 @@ def sample_report(games, houses):
     by_house = {(row['id'], row['house']): row for row in houses}
     print('Sampler: one Brutal candidate seat; difficulty strata describe the other controllers. '
           'Errors/missing candidate evidence are unmeasured, never counted as losses or zero scores.')
-    print('| Mod | Factor | Stratum | Games | Measured | Candidate wins | Draws | Mean score | Mean min | Research verified |')
-    print('|---|---|---|---|---|---|---|---|---|---|')
+    print('DuneCity time limits: a team wins with population >= 1.2 times every rival; '
+          'raw conquest outcomes/draws remain available separately. Classic scoring is unchanged.')
+    print('| Mod | Factor | Stratum | Games | Measured | Candidate wins | Conquest wins | Population wins | Draws | Raw draws | Mean score | Mean min | Research verified |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     for (mod, factor, level), rows in sorted(sample_groups(games).items()):
         measured = [(game, by_house[(game['id'], str(game['candidate_house']))]) for game in rows
                     if not game['error'] and (game['id'], str(game['candidate_house'])) in by_house]
         wins = sum(house['won'] == '1' for _, house in measured)
+        conquest = sum((house.get('raw_won') or house['won']) == '1' for _, house in measured)
+        population = sum(house['won'] == '1' and game.get('win_condition') == 'population'
+                         for game, house in measured)
+        raw_draws = sum((house.get('raw_drawn') or house['drawn']) == '1' for _, house in measured)
         draws = sum(house['drawn'] == '1' for _, house in measured)
         score = f'{statistics.mean(float(house["score"]) for _, house in measured):+.3f}' if measured else 'unmeasured'
         minutes = f'{statistics.mean(float(game["minutes"]) for game, _ in measured):.2f}' if measured else 'unmeasured'
         research = f'{sum(game.get("research_enabled") == "1" for game, _ in measured)}/{len(rows)}' if mod == 'dunecity' else 'n/a'
-        print(f'| {mod} | {factor} | {level} | {len(rows)} | {len(measured)} | {wins} | {draws} | {score} | {minutes} | {research} |')
+        print(f'| {mod} | {factor} | {level} | {len(rows)} | {len(measured)} | {wins} | {conquest} | '
+              f'{population} | {draws} | {raw_draws} | {score} | {minutes} | {research} |')
 
 
 def sample_comparison(control, candidate):
@@ -1046,21 +1110,23 @@ def sample_comparison(control, candidate):
     valid = [key for key in sorted(common) if all(not arm[key]['error'] for arm in games)
              and all(games[0][key].get(field, '') != '' and
                      games[0][key].get(field) == games[1][key].get(field) for field in same)
+             and (games[0][key].get('scoring_rule') or 'conquest-placement')
+                 == (games[1][key].get('scoring_rule') or 'conquest-placement')
              and all((key, arm[key]['candidate_house']) in source for arm, source in zip(games, houses))]
     print(f'Sampler matched candidate seats {len(valid)}/{len(common)} common; '
           f'control-only {len(games[0].keys() - games[1].keys())}, '
           f'candidate-only {len(games[1].keys() - games[0].keys())}. '
-          'Pairing requires identical factors, map, options and content, not identical policy/source hashes.')
+          'Pairing requires identical factors, map, options, content and scoring rule, not identical policy/source hashes.')
     print('Intervals resample sampled cases, keeping the two swapped seats together; '
           'no supported regression is not proof of equivalence.')
-    print('| Mod | Factor | Stratum | Matched/available seats | Cases | Score control -> candidate | Paired delta [95% CI] | Candidate wins control -> candidate | Verdict |')
-    print('|---|---|---|---|---|---|---|---|---|')
+    print('| Mod | Factor | Stratum | Matched/available seats | Cases | Score control -> candidate | Paired delta [95% CI] | Candidate wins control -> candidate | Conquest wins | Population wins | Verdict |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|')
     matched = set(valid)
     available = {**games[0], **games[1]}
     for (mod, factor, level), group in sorted(sample_groups(available.values()).items()):
         rows = [game for game in group if game['id'] in matched]
         if not rows:
-            print(f'| {mod} | {factor} | {level} | 0/{len(group)} | 0 | unmeasured | unmeasured | unmeasured | unmeasured |')
+            print(f'| {mod} | {factor} | {level} | 0/{len(group)} | 0 | unmeasured | unmeasured | unmeasured | unmeasured | unmeasured | unmeasured |')
             continue
         by_case = defaultdict(list)
         for game in rows:
@@ -1073,10 +1139,17 @@ def sample_comparison(control, candidate):
         result = match_score.compare(pairs, 9101)
         wins = [sum(source[(game['id'], game['candidate_house'])]['won'] == '1' for game in rows)
                 for source in houses]
+        conquest = [sum((source[(game['id'], game['candidate_house'])].get('raw_won')
+                         or source[(game['id'], game['candidate_house'])]['won']) == '1' for game in rows)
+                    for source in houses]
+        population = [sum(source[(game['id'], game['candidate_house'])]['won'] == '1'
+                          and arm[game['id']].get('win_condition') == 'population' for game in rows)
+                      for arm, source in zip(games, houses)]
         print(f'| {mod} | {factor} | {level} | {len(rows)}/{len(group)} | {len(pairs)} | '
               f'{result.control:+.3f} -> {result.candidate:+.3f} | '
               f'{result.difference:+.3f} [{result.low:+.3f}, {result.high:+.3f}] | '
-              f'{wins[0]} -> {wins[1]} | {result.verdict} |')
+              f'{wins[0]} -> {wins[1]} | {conquest[0]} -> {conquest[1]} | '
+              f'{population[0]} -> {population[1]} | {result.verdict} |')
 
 
 def report(directories):
@@ -1087,7 +1160,10 @@ def report(directories):
         return
     completed = [game for game in games if not game['error']]
     print(f'Games {len(completed)}/{len(games)}, houses {len(houses)}, '
-          f'time limits {sum(game["winner_team"] == "0" for game in completed)}; '
+          f'raw time limits {sum(game["winner_team"] == "0" for game in completed)}; '
+          f'conquest wins {sum(int(game["winner_team"]) > 0 for game in completed)}; '
+          f'population wins {sum(game.get("win_condition") == "population" for game in completed)}; '
+          f'undecided {sum((game.get("scored_winner_team") or game["winner_team"]) == "0" for game in completed)}; '
           f'mean length {statistics.mean(float(g["minutes"]) for g in completed):.2f} min' if completed else 'No completed games')
     print('| Difficulty | Spice | Houses | ' + ' | '.join(DETECTORS) + ' |')
     print('|---|---|---|' + '---|' * len(DETECTORS))
@@ -1111,9 +1187,10 @@ def report(directories):
         if game['id'].startswith('ladder/'):
             ladder[game['difficulty']].append(game)
     for pair, rows in sorted(ladder.items()):
-        print(f'Ladder {pair}: stronger wins {sum(row["winner_team"] == "1" for row in rows)}/{len(rows)}, '
-              f'weaker {sum(row["winner_team"] == "2" for row in rows)}, '
-              f'time limit {sum(row["winner_team"] == "0" for row in rows)}')
+        print(f'Ladder {pair}: stronger wins {sum((row.get("scored_winner_team") or row["winner_team"]) == "1" for row in rows)}/{len(rows)}, '
+              f'weaker {sum((row.get("scored_winner_team") or row["winner_team"]) == "2" for row in rows)}, '
+              f'draws {sum((row.get("scored_winner_team") or row["winner_team"]) == "0" for row in rows)}, '
+              f'population wins {sum(row.get("win_condition") == "population" for row in rows)}')
     combat_report(directories)
     storage_report(directories)
     trooper_report(directories)
@@ -1610,7 +1687,9 @@ def compare(control, candidate):
         for label, source in (('Control', previous), ('Candidate', current)):
             print(f'{label}: mean game {statistics.mean(float(source[k]["minutes"]) for k in keys):.2f} min; '
                   f'mean loop {statistics.mean(float(source[k]["loop_ms"]) for k in keys):.1f} ms '
-                  '(diagnostic only: mixed host/load, not a performance gate)')
+                  '(diagnostic only: mixed host/load, not a performance gate); '
+                  f'conquest wins {sum(int(source[k]["winner_team"]) > 0 for k in keys)}, '
+                  f'population wins {sum(source[k].get("win_condition") == "population" for k in keys)}')
     combat_report([control], set(common), 'Control combat')
     combat_report([candidate], set(common), 'Candidate combat')
     storage_report([control], set(common), 'Control storage')
@@ -1638,7 +1717,8 @@ parser.add_argument('--spice', nargs='+', choices=tuple(SPICE), default=list(SPI
 parser.add_argument('--formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6'), default=['1v1', '2v2', 'ffa4'])
 parser.add_argument('--difficulties', nargs='+', choices=('medium', 'hard', 'brutal'), default=['medium', 'hard', 'brutal'])
 parser.add_argument('--seeds', nargs='+', type=int, default=[9101, 148680876])
-parser.add_argument('--minutes', type=int, default=30)
+parser.add_argument('--minutes', type=int, default=120,
+                    help='Game-minute cap (default: DuneCity 120, vanilla/Dune2R 90); shorter caps apply to every mod')
 parser.add_argument('--mod', choices=('dunecity', 'Dune2R', 'vanilla', 'both'), default='dunecity',
                     help='Content family; --mode sample accepts vanilla, dunecity or both')
 parser.add_argument('--tech', type=int, choices=range(1, 10), default=9,
@@ -1682,7 +1762,8 @@ elif args.list:
         candidate = (f'candidate_house={game["candidate_house"]} seat={game["candidate_seat"]} '
                      f'research_required={int(game["require_research"])}') if args.mode == 'sample' else ''
         print(game['id'], game['skirmish'], candidate)
-    print(f'{len(games)} games, {sum(len(game["sides"]) for game in games)} houses, {args.minutes} game minutes')
+    limits = '/'.join(str(limit) for limit in sorted({game['limit'] for game in games}))
+    print(f'{len(games)} games, {sum(len(game["sides"]) for game in games)} houses, {limits} game-minute caps')
     if args.mode == 'sample':
         sample_coverage(games)
 elif not args.results:

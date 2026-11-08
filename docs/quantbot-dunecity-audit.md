@@ -10,7 +10,7 @@ by `BALANCE_DUNECITY_AUDIT`. Ordinary game/probe runs do not pay for these extra
 The exhaustive `--mode matrix` is 3 map sizes (96/128/160), 4 spice levels
 (None/Low/Medium/**High**), 3 formats (1v1/2v2/4-house FFA), 3 mirror difficulties
 (Medium/Hard/Brutal), and 2 fixed seeds (9101, 148680876):
-**216 games / 720 AI-house histories**, capped at 30 game minutes. Use
+**216 games / 720 AI-house histories**, now capped at **120 DuneCity game minutes** by default. Use
 `--spice none low medium` to reproduce the former 162-game matrix.
 Each start has a Medium base, the Small 2,500-credit army, no prebuilt city, 3,000 credits,
 High rock and tech 9. These are specified starting conditions, not a claim to cover every
@@ -84,10 +84,12 @@ other controller uses the sampled enemy tier, including the candidate's ally
 in 2v2. FFA4/6 use the last seat for the swap; 2v2 swaps slots 1 and 3.
 This avoids mistaking the other houses' results for the candidate's results.
 
-Starts and the default 30-minute limit reuse the audit's `--base`, `--army`,
-`--city` and `--minutes` options. The legacy `--sizes`, `--spice`, `--formats`,
-`--difficulties`, `--seeds` and `--tech` selections configure matrix/ladder runs;
-sample mode uses the complete factor domains above.
+Starts reuse the audit's `--base`, `--army` and `--city` options. The default cap
+is **120 game minutes for DuneCity and 90 for vanilla/Dune2R**. `--minutes N`
+can request a shorter diagnostic run; even `--mod both --minutes 120` keeps
+vanilla at 90. The legacy `--sizes`, `--spice`, `--formats`, `--difficulties`,
+`--seeds` and `--tech` selections configure matrix/ladder runs; sample mode uses
+the complete factor domains above. Changing the cap changes game IDs.
 
 ```sh
 python3 tests/ai/dunecity-audit.py --mode sample --mod both --list
@@ -116,13 +118,43 @@ does not verify research.
 
 New game columns retain mod, sampled case/seed, candidate house/seat and observed
 research enablement; use a **fresh results directory** after this schema change.
-Reports split candidate wins, draws, placement score, game length, errors/missing
-evidence and research verification by **each factor stratum and mod**, plus the
-overall mod result. Paired reports require identical case IDs, factors, maps,
-options and content (policy/source hashes may differ). Intervals resample whole
+Reports split candidate wins (**conquest and population wins separately**), draws,
+raw conquest draws, placement score, game length, errors/missing evidence and research
+verification by **each factor stratum and mod**, plus the overall mod result.
+Paired sample reports require identical case IDs, factors, maps, options, content
+and scoring rule (policy/source hashes may differ). Intervals resample whole
 sampled cases, keeping swapped seats together, rather than treating every house
 or both seats as independent evidence. Inspect every stratum against the control;
 “no supported regression” is not equivalence or permission to enable a candidate.
+
+### DuneCity population result at the time limit (2026-11-08)
+
+This is **test scoring only**, not a new in-game win condition or an AI policy change.
+Conquest still ends a game immediately. If a DuneCity game reaches its cap, sum
+the actual final population of every house on each team. In FFA each house has
+its own team. The largest team wins when its population is **at least 1.2 times
+the runner-up's** (therefore every other team's): exactly 20% qualifies, using
+integer `5 * leader >= 6 * runner_up` arithmetic. Ties and all-zero populations
+remain draws. A positive population against zero qualifies. Vanilla/Dune2R
+retain conquest-only scoring.
+
+`SCENARIO_HOUSE population` records the initialized engine city state's final
+per-house display population, including houses eliminated earlier; it is not
+the observer's local-house population or an earlier minute's sample. Missing
+population/house evidence fails the DuneCity measurement rather than being
+invented as zero. `houses.csv` retains this `population`.
+
+`games.csv outcome` and `winner_team` remain the **raw engine result**. Additive
+`scoring_rule`, `scored_winner_team`, `win_condition` (`conquest`, `population`,
+or `draw`) and `team_populations` describe adjudication separately. House
+`raw_score`, `raw_drawn` and `raw_won` retain the old conquest-only placement
+result; ordinary `score`, `drawn` and `won` use the scored result. A population
+winner receives first place; other surviving teams share the next places,
+without a draw penalty, while earlier eliminations keep their relative order.
+Real `alive` and `eliminated_s` values are never changed. Historical CSVs still
+report their original conquest-only results; use a fresh directory for the new
+schema and do not treat a 90-minute/old-rule comparison as a paired AI gain.
+
 
 ## Automatic detectors
 

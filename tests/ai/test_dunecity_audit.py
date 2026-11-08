@@ -84,7 +84,109 @@ def house_row(house='0', difficulty='hard', **extra):
     return row
 
 
+def population_case(populations, teams=None, mod='dunecity', outcome='time_limit', winner=0):
+    teams = teams or range(1, len(populations) + 1)
+    names = {number: name for name, number in audit['HOUSE_IDS'].items()}
+    final = [dict(house=str(number), team=str(team), population=str(population), alive='1', eliminated_s='-1')
+             for number, (team, population) in enumerate(zip(teams, populations))]
+    game = dict(mod=mod, sides=[(names[int(house['house'])], int(house['team']), 'brutal') for house in final])
+    result = dict(outcome=outcome, winner_team=str(winner), end_s='7200')
+    return game, result, final
+
+
 class DuneCityAuditTests(unittest.TestCase):
+    def test_population_win_boundary_is_inclusive_and_uses_exact_integer_arithmetic(self):
+        for population, winner in ((1199, 0), (1200, 1), (1201, 1)):
+            with self.subTest(population=population):
+                game, result, final = population_case([population, 1000])
+                before = json.dumps((game, result, final), sort_keys=True)
+                scored, raw, adjusted = audit['score_match'](game, result, final)
+                self.assertEqual(scored['scored_winner_team'], winner)
+                self.assertEqual(scored['win_condition'], 'population' if winner else 'draw')
+                self.assertTrue(all(placing.drawn for placing in raw.values()))
+                if winner:
+                    self.assertEqual([adjusted[house].score for house in (0, 1)], [1, -1])
+                    self.assertTrue(all(not placing.drawn for placing in adjusted.values()))
+                else:
+                    self.assertEqual(adjusted, raw)
+                self.assertEqual(json.dumps((game, result, final), sort_keys=True), before)
+
+    def test_population_win_sums_allied_houses_before_comparing_teams(self):
+        scored, raw, adjusted = audit['score_match'](*population_case([600, 600, 1000, 0], teams=[1, 1, 2, 2]))
+        self.assertEqual(json.loads(scored['team_populations']), {'1': 1200, '2': 1000})
+        self.assertEqual(scored['scored_winner_team'], 1)
+        self.assertEqual([adjusted[house].score for house in range(4)], [1, 1, -1, -1])
+        self.assertTrue(all(placing.drawn for placing in raw.values()))
+        self.assertTrue(all(not placing.drawn for placing in adjusted.values()))
+
+    def test_population_ffa_uses_the_strongest_rival_not_the_rival_average(self):
+        for populations, winner in (([1200, 1000, 200, 0, 0, 0], 1),
+                                    ([1200, 1001, 200, 0, 0, 0], 0),
+                                    ([1200, 1200, 0, 0, 0, 0], 0),
+                                    ([0, 0, 0, 0, 0, 0], 0),
+                                    ([1, 0, 0, 0, 0, 0], 1)):
+            with self.subTest(populations=populations):
+                scored, _, _ = audit['score_match'](*population_case(populations))
+                self.assertEqual(scored['scored_winner_team'], winner)
+
+    def test_population_adjudication_does_not_change_vanilla_or_conquest_results(self):
+        for mod in ('vanilla', 'Dune2R'):
+            scored, raw, adjusted = audit['score_match'](*population_case([12000, 1], mod=mod))
+            self.assertEqual(scored['scored_winner_team'], 0)
+            self.assertEqual(scored['win_condition'], 'draw')
+            self.assertEqual(scored['scoring_rule'], 'conquest-placement')
+            self.assertEqual(adjusted, raw)
+        game, result, final = population_case([1000, 12000], outcome='decided', winner=1)
+        final[1].update(alive='0', eliminated_s='6000')
+        scored, raw, adjusted = audit['score_match'](game, result, final)
+        self.assertEqual((scored['scored_winner_team'], scored['win_condition']), (1, 'conquest'))
+        self.assertEqual(adjusted, raw)
+
+    def test_population_scoring_preserves_elimination_order_and_raw_house_state(self):
+        game, result, final = population_case([1200, 1000, 0, 0])
+        final[2].update(alive='0', eliminated_s='2000')
+        final[3].update(alive='0', eliminated_s='1000')
+        _, raw, adjusted = audit['score_match'](game, result, final)
+        self.assertEqual([adjusted[house].place for house in range(4)], [1, 2, 3, 4])
+        self.assertEqual(raw[0].place, raw[1].place)
+        self.assertEqual(final[1]['alive'], '1')
+        self.assertEqual(final[1]['eliminated_s'], '-1')
+
+    def test_population_scoring_rejects_missing_final_population_or_houses(self):
+        game, result, final = population_case([1200, 1000])
+        for value in ('', '-1', 'not-a-number'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                audit['score_match'](game, result, [dict(final[0], population=value), final[1]])
+        with self.assertRaises(KeyError):
+            audit['score_match'](game, result, [{key: value for key, value in final[0].items()
+                                              if key != 'population'}, final[1]])
+        with self.assertRaisesRegex(ValueError, 'roster_incomplete'):
+            audit['score_match'](game, result, final[:1])
+
+    def test_audit_caps_dunecity_at_120_and_vanilla_at_90_minutes(self):
+        for extra in ([], ['--minutes', '120']):
+            games = audit['schedule'](audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'] + extra))
+            for game in games:
+                expected = 120 if game['mod'] == 'dunecity' else 90
+                self.assertEqual((game['limit'], game['minutes']), (expected, expected))
+                self.assertIn(f'/{expected}m/', game['id'])
+        games = audit['schedule'](audit['parser'].parse_args(
+            ['--mode', 'sample', '--mod', 'both', '--minutes', '30']))
+        self.assertTrue(all(game['limit'] == game['minutes'] == 30 for game in games))
+
+    def test_sample_report_separates_population_conquest_and_raw_draws(self):
+        game = audit['schedule'](audit['parser'].parse_args(['--mode', 'sample', '--cases', '1']))[0]
+        game.update(error='', research_enabled='1', minutes='120', win_condition='population',
+                    outcome='time_limit', winner_team='0', scoring_rule='city-population-20pct')
+        house = dict(id=game['id'], house=str(game['candidate_house']), won='1', raw_won='0',
+                     drawn='0', raw_drawn='1', score='1')
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            audit['sample_report']([game], [house])
+        self.assertIn('Conquest wins | Population wins | Draws | Raw draws', output.getvalue())
+        self.assertIn('| dunecity | all | all | 1 | 1 | 1 | 0 | 1 | 0 | 1 | +1.000 | 120.00 | 1/1 |',
+                      output.getvalue())
+
     def test_map_export_preserves_bytes_and_seat_identity_in_queue_receipts(self):
         import base64
         import hashlib
@@ -220,7 +322,7 @@ class DuneCityAuditTests(unittest.TestCase):
         explicit = audit['schedule'](audit['parser'].parse_args(options + ['--tech', '9']))[0]
         low = audit['schedule'](audit['parser'].parse_args(options + ['--tech', '1']))[0]
         self.assertEqual(default, explicit)
-        self.assertEqual(default['id'], 'matrix/medium-a2-c0/96/medium/1v1/hard/30m/9101')
+        self.assertEqual(default['id'], 'matrix/medium-a2-c0/96/medium/1v1/hard/120m/9101')
         self.assertEqual(low['id'], default['id'] + '/t1')
         self.assertIn('tech=1,', low['skirmish'])
         self.assertIn('tech=9,', default['skirmish'])

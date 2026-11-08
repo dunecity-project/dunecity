@@ -279,6 +279,7 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     }
     EliminationMatch::sample(game);
     const Uint32 cycle = game.getGameCycleCount();
+    const auto* city = game.getCitySimulation();
     for (const House* house : houses) {
         int armyValue = 0, armyUnits = 0, structures = 0;
         for (const auto* unit : unitList)
@@ -289,14 +290,16 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         for (const auto* structure : structureList)
             if (structure->getOwner() == house && structure->getHealth() > 0) ++structures;
         const HouseTrack& track = tracks[house->getHouseID()];
+        const int population = city && game.isCitySimEnabled() && city->isInitialized()
+            ? city->getHouseState(house->getHouseID()).getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier : -1;
         SDL_Log("SCENARIO_HOUSE: house=%d team=%d players=%s alive=%d eliminated_s=%.1f credits=%d kill_value=%d "
                 "loss_value=%d structures_destroyed=%d units_destroyed=%d structures=%d army_value=%d army_units=%d "
-                "away_peak=%d sortie_minutes=%d start=%d:%d crush_kills=%d",
+                "away_peak=%d sortie_minutes=%d start=%d:%d crush_kills=%d population=%d",
                 house->getHouseID(), house->getTeamID(), classesOf(house).c_str(), int(house->isAlive()),
                 track.eliminated ? FormationWaveMeasure::seconds(track.eliminated) : -1.0, house->getCredits(),
                 house->getKillValue(), house->getLossValue(), house->getNumDestroyedStructures(),
                 house->getNumDestroyedUnits(), structures, armyValue, armyUnits, track.awayPeak, track.sortieMinutes,
-                track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()));
+                track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()), population);
     }
     std::string outcome;
     int winnerTeam = winner;
@@ -310,7 +313,6 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     } else {
         outcome = winner == 0 ? "time_limit" : (tracked && winner == tracked->getTeamID() ? "won" : "lost");
     }
-    const auto* city = game.getCitySimulation();
     SDL_Log("SCENARIO_RESULT: mode=%s outcome=%s winner_team=%d cycle=%u end_s=%.1f minutes=%.2f triggers=%zu fired=%d "
             "win_flags=%d lose_flags=%d quota=%d city_pop=%d",
             campaign ? "campaign" : "match", outcome.c_str(), winnerTeam, cycle, FormationWaveMeasure::seconds(cycle),
