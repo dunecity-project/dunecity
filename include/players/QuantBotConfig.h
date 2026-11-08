@@ -234,6 +234,10 @@ struct QuantBotConfig {
         /// In vanilla FFA with at least five original players, fund up to eight sustainable
         /// workers and ordinary readiness before optional IX/Palace savings or orders.
         bool vanillaFfaFundedTech;
+        /// Default OFF. Custom spice games: 1/2 require sustainable net income
+        /// of 1.0/1.5 times the next technology's price per five minutes.
+        /// Full-knowledge army safety can advance an affordable legal tech order.
+        int techIncomeTiming;
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.

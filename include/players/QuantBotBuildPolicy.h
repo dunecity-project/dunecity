@@ -11,6 +11,22 @@
 
 namespace QuantBotBuildPolicy {
 
+// Compare rates without division: level 1 is cost / 5 minutes, level 2
+// is 1.5 * cost / 5 minutes. No cash balance masquerades as continuing income.
+inline bool incomeTechnologyAdmitted(int level, int incomePerMinute, int cost) {
+    return level == 0 || (cost > 0 && incomePerMinute > 0
+        && int64_t(incomePerMinute) * 10 >= int64_t(cost) * (level == 2 ? 3 : 2));
+}
+inline bool incomeTechnologySafe(int64_t ownArmy, int64_t largestRival, bool localThreat) {
+    return !localThreat && ownArmy >= largestRival;
+}
+inline bool incomeTechnologyProject(Uint32 item, bool upgrade, int owned) {
+    if (upgrade) return item == Structure_HeavyFactory || item == Structure_HighTechFactory
+        || item == Structure_ResearchLab;
+    return owned == 0 && (item == Structure_RepairYard || item == Structure_HighTechFactory
+        || item == Structure_IX || item == Structure_Palace || item == Structure_ResearchLab);
+}
+
 // Zero disables the reservation; otherwise one service order per N orders.
 // An outbreak only needs one dangerous district and a six-minute buildup, so
 // waiting for a quarter of the developed city to reach the dangerous band
