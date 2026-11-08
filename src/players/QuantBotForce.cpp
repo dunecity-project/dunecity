@@ -115,11 +115,57 @@ bool QuantBot::vanillaMultiEnemyGame() const {
     return false;
 }
 
+bool QuantBot::vanillaBoomGame() const {
+    if (!autonomousCustomArmy() || currentGame->isCitySimEnabled()
+        || currentGame->getGameInitSettings().getModName() != "vanilla" || lastCalculatedSpice <= 0)
+        return false;
+    int allies = 0, enemies = 0, firstEnemyTeam = -1;
+    bool severalEnemyTeams = false;
+    for (const auto& house : currentGame->getGameInitSettings().getHouseInfoList()) {
+        if (house.playerInfoList.empty()) continue;
+        if (house.team == getHouse()->getTeamID()) ++allies;
+        else {
+            ++enemies;
+            if (firstEnemyTeam < 0) firstEnemyTeam = house.team;
+            else if (house.team != firstEnemyTeam) severalEnemyTeams = true;
+        }
+    }
+    return QuantBotVanillaPolicy::rosterScope(allies, enemies, severalEnemyTeams)
+        && QuantBotVanillaPolicy::boomScope(botConfig().force.vanillaBoomFfaOnly, enemies, severalEnemyTeams);
+}
+
+bool QuantBot::vanillaReactiveKnowledge() const {
+    return botConfig().force.vanillaReactiveBoom && vanillaBoomGame();
+}
+
+QuantBotVanillaPolicy::Plan QuantBot::vanillaBoldPlan(QuantBotVanillaPolicy::Observation& receipt) const {
+    using Plan = QuantBotVanillaPolicy::Plan;
+    const auto& force = botConfig().force;
+    receipt = {};
+    if (!(force.vanillaHarvesterBoom || force.vanillaRefineryBoom || force.vanillaGreedyBoom || force.vanillaReactiveBoom)
+        || !vanillaBoomGame()) return Plan::None;
+    const unsigned minute = getGameCycleCount() / MILLI2CYCLES(60000);
+    const Plan kind = force.vanillaHarvesterBoom ? Plan::Harvester : force.vanillaRefineryBoom ? Plan::Refinery
+        : force.vanillaGreedyBoom ? Plan::GreedyEconomy : Plan::ReactiveEconomy;
+    receipt.stopMinute = kind == Plan::GreedyEconomy ? force.vanillaGreedyBoomMinutes
+        : kind == Plan::Harvester || kind == Plan::Refinery ? 10 : 0;
+    receipt.plan = QuantBotVanillaPolicy::timedPlan(kind, minute, force.vanillaGreedyBoomMinutes);
+    if (kind == Plan::ReactiveEconomy) {
+        vanillaReactiveSurvey(receipt);
+        receipt.plan = QuantBotVanillaPolicy::reactiveArmy(receipt.ownArmy, receipt.enemyArmy, receipt.nearArmy,
+            receipt.ownEconomy, receipt.leaderEconomy, receipt.armyRatioBps, receipt.economyRatioBps)
+            ? Plan::ReactiveArmy : Plan::ReactiveEconomy;
+    }
+    return receipt.plan;
+}
+
 
 int QuantBot::waveReadinessPercent() const {
     if (!autonomousCustomArmy()) return 100;
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
+    if (botConfig().force.vanillaGreedyBoom && vanillaBoomGame()
+        && getGameCycleCount() / MILLI2CYCLES(60000) < 20) return 150;
     if (botConfig().force.vanillaFfaFullWaves && vanillaMultiEnemyGame()) return 100;
     // A small start buys one full wave before its tempo starts splitting production into raids.
     // This ends only when that wave actually launches, not when its first heavy factory stands.
@@ -132,6 +178,8 @@ int QuantBot::waveReadinessPercent() const {
 
 int QuantBot::openingReadinessPercent() const {
     const int percent = waveReadinessPercent();
+    if (botConfig().force.vanillaGreedyBoom && vanillaBoomGame()
+        && getGameCycleCount() / MILLI2CYCLES(60000) < 20) return 150;
     // I: a house that started without an army able to launch a wave (a Construction Yard start,
     // not a Fortress with a starting army) holds its first wave until full readiness: small
     // early waves into a base that is building its defence died there (docs/formations.md,
@@ -174,6 +222,136 @@ int64_t healthValue(const UnitBase* unit) {
 }
 
 } // namespace
+
+void QuantBot::vanillaReactiveSurvey(QuantBotVanillaPolicy::Observation& receipt, int* firstTeam,
+                                   const UnitBase* lead) const {
+    // Full simulation truth, not sightings, visibility, telemetry or client-local state. No decision cache.
+    struct Team {
+        int id{-1}, distance{INT32_MAX};
+        int64_t army{}, reachable{}, nearby{}, economy{};
+    };
+    std::array<Team, NUM_HOUSES> teams{};
+    std::array<int, NUM_HOUSES> houseTeam{};
+    houseTeam.fill(-1);
+    int teamCount = 0;
+    const int myTeam = getHouse()->getTeamID();
+    const auto& data = currentGame->objectData.data;
+    const auto economicSize = [&](const House* house) -> int64_t {
+        const int id = house->getHouseID();
+        const int worker = std::max(0, data[Unit_Harvester][id].price);
+        // A refinery includes a gifted worker; count its bay capital net of that worker, not twice.
+        const int bay = std::max(0, data[Structure_Refinery][id].price - worker);
+        return int64_t(std::max(0, house->getCredits())) + int64_t(house->getNumHarvesters()) * worker
+            + int64_t(house->getNumItems(Structure_Refinery)) * bay;
+    };
+    receipt.ownEconomy = economicSize(getHouse());
+    receipt.armyRatioBps = botConfig().force.vanillaReactiveArmyRatioBps;
+    receipt.economyRatioBps = botConfig().force.vanillaReactiveEconomyRatioBps;
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const auto* house = getHouse(h);
+        if (!house || house->isNatives() || !house->isAlive() || house->getTeamID() == myTeam) continue;
+        int t = 0;
+        while (t < teamCount && teams[t].id != house->getTeamID()) ++t;
+        if (t == teamCount) teams[teamCount++].id = house->getTeamID();
+        houseTeam[h] = t;
+        const int64_t economy = economicSize(house);
+        teams[t].economy += economy;
+        receipt.leaderEconomy = std::max(receipt.leaderEconomy, economy);
+    }
+    const auto core = [](const StructureBase* structure) {
+        if (!structure->getOwner() || structure->getHealth() <= 0) return false;
+        switch (structure->getItemID()) {
+            case Structure_Wall: case Structure_Slab1: case Structure_Slab4:
+            case Structure_Road: case Structure_PowerLine: return false;
+            default: return true;
+        }
+    };
+    const ObjectBase* home = nullptr;
+    Coord low(INT32_MAX, INT32_MAX), high(-1, -1);
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || !core(structure)) continue;
+        if (!home || (structure->getItemID() == Structure_ConstructionYard && home->getItemID() != Structure_ConstructionYard))
+            home = structure;
+        const Coord at = structure->getLocation(), size = structure->getStructureSize();
+        low.x = std::min(low.x, at.x); low.y = std::min(low.y, at.y);
+        high.x = std::max(high.x, at.x + size.x - 1); high.y = std::max(high.y, at.y + size.y - 1);
+    }
+    const bool hasBase = home != nullptr;
+    if (!home) for (const auto* unit : getUnitList()) {
+        if (unit->getOwner() != getHouse() || unit->getHealth() <= 0 || !unit->isActive()) continue;
+        if (!home || unit->getItemID() == Unit_MCV) home = unit;
+        if (unit->getItemID() == Unit_MCV) break;
+    }
+    constexpr int nearTiles = 18;
+    for (const auto* unit : getUnitList()) {
+        if (!unit->getOwner() || unit->getOwner()->isNatives() || unit->getHealth() <= 0 || !unit->isActive()
+            || !unit->canAttack() || !mobileCombatItem(unit->getItemID())) continue;
+        const int64_t value = healthValue(unit); // Ground and armed air are counted consistently on both sides.
+        if (unit->getOwner() == getHouse()) {
+            receipt.ownArmy += value;
+            if (firstTeam && !lead && unit->isAGroundUnit()) lead = unit;
+            continue;
+        }
+        const int house = unit->getOwner()->getHouseID();
+        if (house < 0 || house >= NUM_HOUSES || houseTeam[house] < 0) continue;
+        auto& team = teams[houseTeam[house]];
+        team.army += value;
+        bool reachable = false, near = false;
+        if (home && !hasBase) {
+            reachable = getMap().terrainAttackReachable(*unit, *home);
+            near = tiles(unit->getLocation(), home->getLocation()) <= nearTiles;
+        } else if (home) {
+            const Coord at = unit->getLocation();
+            const bool nearBounds = at.x >= low.x - nearTiles && at.y >= low.y - nearTiles
+                && at.x <= high.x + nearTiles && at.y <= high.y + nearTiles;
+            for (const auto* structure : getStructureList()) {
+                if (structure->getOwner() != getHouse() || !core(structure)) continue;
+                if (!reachable) reachable = getMap().terrainAttackReachable(*unit, *structure);
+                if (nearBounds && !near) near = tiles(at, structure->getClosestPoint(at)) <= nearTiles;
+                if (reachable && (!nearBounds || near)) break;
+            }
+        }
+        if (reachable) team.reachable += value;
+        if (reachable && near) team.nearby += value;
+    }
+    for (int t = 0; t < teamCount; ++t) {
+        receipt.enemyArmy = std::max(receipt.enemyArmy, teams[t].reachable);
+        receipt.nearArmy = std::max(receipt.nearArmy, teams[t].nearby);
+    }
+    if (!firstTeam) return;
+    *firstTeam = -1;
+    if (!home || !lead) return;
+    for (const auto* structure : getStructureList()) {
+        if (!core(structure)) continue;
+        const int house = structure->getOwner()->getHouseID();
+        if (house < 0 || house >= NUM_HOUSES || houseTeam[house] < 0
+            || !groundAttackReachable(lead, structure)) continue;
+        auto& team = teams[houseTeam[house]];
+        team.distance = std::min(team.distance, tiles(home->getLocation(), structure->getClosestPoint(home->getLocation())));
+    }
+    // Neighbours are the two nearest terrain-reachable hostile teams; only then compare true economic/army size.
+    std::array<int, 2> neighbours{-1, -1};
+    for (int t = 0; t < teamCount; ++t) {
+        if (teams[t].distance == INT32_MAX) continue;
+        for (int n = 0; n < 2; ++n) {
+            const int previous = neighbours[n];
+            if (previous < 0 || teams[t].distance < teams[previous].distance
+                || (teams[t].distance == teams[previous].distance && teams[t].id < teams[previous].id)) {
+                if (n == 0) neighbours[1] = neighbours[0];
+                neighbours[n] = t;
+                break;
+            }
+        }
+    }
+    int weakest = -1;
+    for (const int t : neighbours) {
+        if (t < 0) continue;
+        const int64_t size = teams[t].economy + teams[t].army;
+        const int64_t previous = weakest < 0 ? INT64_MAX : teams[weakest].economy + teams[weakest].army;
+        if (weakest < 0 || size < previous || (size == previous && teams[t].id < teams[weakest].id)) weakest = t;
+    }
+    if (weakest >= 0) *firstTeam = teams[weakest].id;
+}
 
 bool QuantBot::outnumberedByObservedArmy() const {
     // Against the strongest enemy team in view, not every enemy summed (see enemyThreatEstimate).
@@ -727,10 +905,17 @@ bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
         default: break;
     }
     const Coord at = structure->getLocation();
-    return getMap().tileExists(at) && getMap().getTile(at)->isExploredByTeam(getHouse()->getTeamID());
+    return getMap().tileExists(at) && (vanillaReactiveKnowledge()
+        || getMap().getTile(at)->isExploredByTeam(getHouse()->getTeamID()));
 }
 
-int QuantBot::finishTargetTeam() const {
+int QuantBot::finishTargetTeam(const UnitBase* lead) const {
+    if (customWave.launched == 0 && vanillaReactiveKnowledge()) {
+        QuantBotVanillaPolicy::Observation receipt{};
+        int firstTeam = -1;
+        vanillaReactiveSurvey(receipt, &firstTeam, lead);
+        return firstTeam;
+    }
     // Ordered by team id (std::map), scanned in list order: the same choice on every peer.
     std::map<int, Force::TeamStrength> teams;
     const bool nearby = botConfig().force.vanillaFfaNearbyTarget && vanillaMultiEnemyGame();
@@ -752,9 +937,11 @@ int QuantBot::finishTargetTeam() const {
             if (found != teams.end()) found->second.army += sighting.value;
         }
     const Force::TeamStrength* weakest = nullptr;
-    for (const auto& [id, team] : teams)
-        if (!weakest || (home.isValid() ? Force::nearerOpportunity(team, *weakest)
-                                        : Force::weakerTeam(team, *weakest))) weakest = &team;
+    for (const auto& [id, team] : teams) {
+        const bool prefer = weakest
+            && (home.isValid() ? Force::nearerOpportunity(team, *weakest) : Force::weakerTeam(team, *weakest));
+        if (!weakest || prefer) weakest = &team;
+    }
     return weakest ? weakest->team : -1;
 }
 

@@ -944,8 +944,9 @@ void QuantBot::launchGroundHunt() {
     // target or a move order may hold a troop back. Hunters already in the
     // field are not reset; they are tracked with the army that joins them.
     const bool wholeArmy=!limited && (autonomousCustomArmy() || exhausted);
-    const bool ffaTargeting=(botConfig().force.vanillaFfaWeakestTarget || botConfig().force.vanillaFfaNearbyTarget)
-        && vanillaMultiEnemyGame();
+    const bool reactiveFirstStrike = customWave.launched == 0 && vanillaReactiveKnowledge();
+    const bool ffaTargeting=reactiveFirstStrike || ((botConfig().force.vanillaFfaWeakestTarget
+        || botConfig().force.vanillaFfaNearbyTarget) && vanillaMultiEnemyGame());
     const bool ffaSingleFront = botConfig().force.vanillaFfaSingleFront && recoveryActive()
         && vanillaMultiEnemyGame() && lastCalculatedSpice > 0;
     const bool ffaDirected = ffaTargeting || ffaSingleFront;
@@ -1133,8 +1134,8 @@ void QuantBot::launchGroundHunt() {
                     const auto* unit=dynamic_cast<const UnitBase*>(getObject(candidate.id));
                     if (unit && unit->isAGroundUnit() && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
                 }
-                const ObjectBase* objective=forceVariant(kForceFinishWeakest) ? finishObjective(lead,finishTargetTeam())
-                                                                             : customWaveObjective(lead);
+                const ObjectBase* objective=forceVariant(kForceFinishWeakest) ? finishObjective(lead,finishTargetTeam(lead))
+                                                                            : customWaveObjective(lead);
                 const int turrets=knownTurretsNear(objective);
                 const int64_t needed=ForceConcentrationPolicy::fortifiedReady(requiredReady,militaryValueLimit,turrets);
                 const bool overdue=ArmyPosturePolicy::elapsed(getGameCycleCount(),customWave.launched)
@@ -1157,7 +1158,7 @@ void QuantBot::launchGroundHunt() {
                     const auto* unit=dynamic_cast<const UnitBase*>(getObject(candidate.id));
                     if (unit && unit->isAGroundUnit() && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
                 }
-                const ObjectBase* objective=finishObjective(lead,finishTargetTeam());
+                const ObjectBase* objective=finishObjective(lead,finishTargetTeam(lead));
                 if (!objective) objective=customWaveObjective(lead);
                 const int turrets=knownTurretsNear(objective);
                 const int64_t needed=ForceConcentrationPolicy::assaultReady(requiredReady,militaryValueLimit,turrets);
@@ -1294,10 +1295,10 @@ void QuantBot::launchGroundHunt() {
             if (!observedFront && !ffaTargeting
                 && (forceVariant(kForceFinishWeakest) || forceVariant(kForceMassAssault)
                     || (forceVariant(kForceFinishLeading) && finishLeading())))
-                observedFront = finishObjective(lead, finishTargetTeam());
+                observedFront = finishObjective(lead, finishTargetTeam(lead));
         }
         if (!observedFront)
-            observedFront=allyFront ? allyFront : ffaTargeting ? finishObjective(lead,finishTargetTeam())
+            observedFront=allyFront ? allyFront : ffaTargeting ? finishObjective(lead,finishTargetTeam(lead))
                                                             : customWaveObjective(lead);
         if (ffaTargeting && !observedFront) observedFront=customWaveObjective(lead);
         const ArmySurvey planned=surveyArmy(observedFront);
@@ -1461,7 +1462,7 @@ void QuantBot::launchGroundHunt() {
     if (!finishers.empty()) {
         const UnitBase* lead=nullptr;
         for (const auto* unit : finishers) if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
-        finishTeam=ffaDirected ? (observedFront ? observedFront->getOwner()->getTeamID() : -1) : finishTargetTeam();
+        finishTeam=ffaDirected ? (observedFront ? observedFront->getOwner()->getTeamID() : -1) : finishTargetTeam(lead);
         const ObjectBase* objective=allyFront ? allyFront : ffaDirected ? observedFront
                                                                       : finishObjective(lead,finishTeam);
         if (!objective && massAssault) objective=observedFront;
@@ -2130,7 +2131,7 @@ void QuantBot::updateCustomWave() {
                 knownReady = true;
                 for (const auto* structure : getStructureList())
                     if (knownEnemyStructure(structure)) known.push_back(structure);
-                pressTeam = forceVariant(kForceFinishWeakest) ? finishTargetTeam() : -1;
+                pressTeam = forceVariant(kForceFinishWeakest) ? finishTargetTeam(unit) : -1;
             }
             const StructureBase* target = pressOnTarget(unit, known, pressTeam);
             if (!target && pressTeam >= 0) target = pressOnTarget(unit, known, -1);
@@ -2173,12 +2174,13 @@ void QuantBot::updateCustomWave() {
         ++it;
     }
     if (hadWave || !customWave.members.empty()) customWave.lastActive = now;
-    // Native anchors require visibility. The single-front candidate may retain
-    // a known structure for its live army, using existing checkpointed state.
+    // Native anchors require visibility; full-truth reactive or checkpointed single-front
+    // waves may retain a live structure without turning the observer into a controller.
     if (customWave.front != NONE_ID) {
         const auto* objective = getObject(customWave.front);
-        const bool remembered = botConfig().force.vanillaFfaSingleFront && vanillaMultiEnemyGame()
-            && lastCalculatedSpice > 0 && !customWave.members.empty() && objective
+        const bool remembered = (vanillaReactiveKnowledge()
+                || (botConfig().force.vanillaFfaSingleFront && vanillaMultiEnemyGame() && lastCalculatedSpice > 0))
+            && !customWave.members.empty() && objective
             && objective->isAStructure() && knownEnemyStructure(static_cast<const StructureBase*>(objective));
         if (!objective || objective->getHealth() <= 0 || !objective->getOwner()
             || objective->getOwner()->getTeamID() == getHouse()->getTeamID()

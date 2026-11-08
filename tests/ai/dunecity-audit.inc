@@ -235,11 +235,14 @@ inline void sample(Game& game) {
             demand = std::max({int(city.resValve), int(city.comValve), int(city.indValve)});
             policeFunding = city.policeFundingPercent;
         }
+        const auto& observation = bot->vanillaBoomObservation();
         SDL_Log("DUNECITY_AUDIT: minute=%d cycle=%u house=%d credits=%d power=%d need=%d population=%d tax=%d "
                 "demand=%d built=%d structures_lost=%d base_hp=%d yards=%d yard_level=%d queue=%d upgrading=%d "
                 "waiting=%d fronts=%s gun=%d rocket=%d radar=%d radar_built=%d starport=%d starport_built=%d "
                 "heavy=%d heavy_built=%d ix=%d ix_built=%d fighters=%d moving=%d targeting=%d enemies=%d "
-                "enemy_value=%d covered_enemies=%d spice=%d refineries=%d power_required=%d",
+                "enemy_value=%d covered_enemies=%d spice=%d refineries=%d power_required=%d "
+                "boom_phase=%s boom_stop_minute=%d boom_own_army=%lld boom_enemy_army=%lld boom_near_army=%lld "
+                "boom_own_economy=%lld boom_leader_economy=%lld boom_army_ratio_bps=%d boom_economy_ratio_bps=%d",
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getCredits(),
                 house->getProducedPower(), house->getPowerRequirement(), population, tax, demand,
                 house->getNumBuiltStructures(), structuresLost, structureHP,
@@ -251,7 +254,10 @@ inline void sample(Game& game) {
                 house->getNumBuiltItems(Structure_HeavyFactory), house->getNumItems(Structure_IX),
                 house->getNumBuiltItems(Structure_IX), fighters, moving, targeting, enemies, enemyValue,
                 coveredEnemies, bot->lastCalculatedSpice, house->getNumItems(Structure_Refinery),
-                int(house->isPowerRequired()));
+                int(house->isPowerRequired()), QuantBotVanillaPolicy::phaseName(observation.plan), observation.stopMinute,
+                static_cast<long long>(observation.ownArmy), static_cast<long long>(observation.enemyArmy),
+                static_cast<long long>(observation.nearArmy), static_cast<long long>(observation.ownEconomy),
+                static_cast<long long>(observation.leaderEconomy), observation.armyRatioBps, observation.economyRatioBps);
         // BuilderBase expands a squad into 3 (or 5) Unit_Trooper objects before
         // informWasBuilt is called for each single. Never multiply that ledger
         // again. Queue entries still describe products, so expand only those.

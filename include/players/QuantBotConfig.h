@@ -234,6 +234,18 @@ struct QuantBotConfig {
         /// In vanilla FFA with at least five original players, fund up to eight sustainable
         /// workers and ordinary readiness before optional IX/Palace savings or orders.
         bool vanillaFfaFundedTech;
+        /// Fixed, default-OFF vanilla opening families; each kind has only its preregistered levels.
+        bool vanillaHarvesterBoom;
+        bool vanillaRefineryBoom;
+        bool vanillaGreedyBoom;
+        bool vanillaReactiveBoom;
+        /// At least three original occupied hostile controllers and multiple hostile teams.
+        bool vanillaBoomFfaOnly;
+        int vanillaHarvesterBoomWorkers;       ///< 8 or 12, with two refineries.
+        int vanillaRefineryBoomRefineries;     ///< 4 or 6, with two workers per refinery.
+        int vanillaGreedyBoomMinutes;          ///< Stop at 6, 10 or 12 minutes; fund army until minute 20.
+        int vanillaReactiveArmyRatioBps;       ///< 6000 or 9000 of the strongest reachable enemy army.
+        int vanillaReactiveEconomyRatioBps;    ///< 12000 or 15000 of the leading hostile economy.
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.

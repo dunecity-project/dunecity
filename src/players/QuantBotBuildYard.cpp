@@ -299,9 +299,14 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     Uint32 admittedItem = NONE_ID;
     auto releaseUnfundedChoice = [&]() {
         const Uint32 item = yardTurn.itemID;
-        if (!pass.techSavings || item == NONE_ID || item == admittedItem
-            || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0
-            || spendingEmergency(pass, item)) return;
+        if ((!pass.techSavings && pass.vanillaPlan == QuantBotVanillaPolicy::Plan::None)
+            || item == NONE_ID || item == admittedItem
+            || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0) return;
+        const bool boomAdmitted = vanillaBoomAdmits(pass, item);
+        if (boomAdmitted && (!pass.techSavings || spendingEmergency(pass, item))) {
+            admittedItem = item;
+            return;
+        }
         const Coord site = yardTurn.crimeServiceSite.isValid() ? yardTurn.crimeServiceSite
             : item == Structure_RocketTurret || item == Structure_GunTurret
                 ? findEffectiveTurretPlaceLocation(item) : findPlaceLocation(item);
@@ -309,7 +314,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         if (site.isValid())
             for (const auto& slab : foundationPlan(turn.pBuilder, item, site).orders)
                 cost += purchasePrice(turn.pBuilder, slab.item);
-        if (spendingAdmits(pass, item, cost)) {
+        if (boomAdmitted && spendingAdmits(pass, item, cost)) {
             admittedItem = item;
             return;
         }
@@ -323,7 +328,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             yardTurn.higherPriorityCapital = false;
         }
         yardTurn.itemID = NONE_ID;
-        yardTurn.structureRule = "technology_plan_hold";
+        yardTurn.structureRule = boomAdmitted ? "technology_plan_hold" : "vanilla_boom_hold";
         yardTurn.crimeServiceSite = Coord::Invalid();
         yardTurn.skipRemainingStructureLogic = yardTurn.serviceSavingHold = false;
         turn.installmentProject = NONE_ID;
@@ -333,6 +338,28 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     releaseUnfundedChoice();
     chooseYardEssentials(pass, turn, yardTurn);
     releaseUnfundedChoice();
+    if (pass.vanillaBoomArmy) {
+        // Conversion keeps actual power/defence recovery and the planner's
+        // one required prerequisite. Do not re-enter the native growth ladder.
+        if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+            && pass.protectionCapital && capitalPending(pass)
+            && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()
+            && (vanillaBoomAdmits(pass, pass.capitalCandidates[pass.capitalChoice].item)
+                || (pass.capitalCandidates[pass.capitalChoice].urgent
+                    && (pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid())
+                    && vanillaBoomUpgradeAdmitted(pass, turn.pBuilder))))
+            chooseYardCityFoundations(pass, turn, yardTurn);
+        const Uint32 required = pass.vanillaBoomRequiredItem;
+        if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+            && !turn.pBuilder->isUpgrading() && required != NONE_ID
+            && vanillaBoomAdmits(pass, required) && campaignAvailableToBuild(turn.pBuilder, required)) {
+            yardTurn.itemID = required;
+            yardTurn.structureRule = "vanilla_boom_required";
+        }
+        yardTurn.skipRemainingStructureLogic = true;
+        vetYardChoice(pass, turn, yardTurn);
+        return placeYardChoice(pass, turn, yardTurn);
+    }
     // Existing processing capacity lost in a raid is recovery, not another
     // optional refinery expansion behind factory/Starport prerequisites.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
@@ -625,6 +652,7 @@ void QuantBot::chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn
     // present loss: it buys the baseline emplacements and its own
     // prerequisites, then waits behind the production core.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && (!pass.vanillaBoomArmy || pass.airEngaged)
         && yardTurn.counterAirTurrets > 0
         && pass.routineRocketsAllowed
         && pass.itemCount[Structure_RocketTurret] < yardTurn.activeRocketTurretGoal) {
@@ -632,6 +660,7 @@ void QuantBot::chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn
         bool hasRadar = pass.itemCount[Structure_Radar] > 0;
 
         if (turn.pBuilder->getCurrentUpgradeLevel() < 2) {
+            if (!vanillaBoomUpgradeAdmitted(pass, turn.pBuilder)) return;
             if (turn.pBuilder->getHealth() < turn.pBuilder->getMaxHealth() && !turn.pBuilder->isRepairing()) {
                 doRepair(turn.pBuilder);
                 logDebug("COUNTER-ORNITHOPTER: Repairing CY before upgrade (level %d)", turn.pBuilder->getCurrentUpgradeLevel());
@@ -881,12 +910,13 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
         && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()) {
         const auto& service = pass.capitalCandidates[pass.capitalChoice];
         const bool defenceUpgrade=service.kind==std::string("defence_upgrade");
+        const bool boldUpgrade=service.kind==std::string("vanilla_bold_upgrade");
         const int working=std::max(0,pass.cityPlotPrice);
         if (std::string_view(service.reason)=="early_rocket"
             && int64_t(pass.money)<int64_t(service.price)+service.foundationCost+working) {
             yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
             yardTurn.structureRule="save_early_rocket";
-        } else if (service.kind==std::string("expansion_upgrade") || defenceUpgrade) {
+        } else if (service.kind==std::string("expansion_upgrade") || defenceUpgrade || boldUpgrade) {
             yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
             yardTurn.structureRule=defenceUpgrade ? "save_defence_upgrade" : "save_expansion_upgrade";
             if (pass.money>=service.price && turn.pBuilder->getHealth()>=turn.pBuilder->getMaxHealth()
@@ -1885,7 +1915,7 @@ void QuantBot::chooseYardMilitaryInfrastructure(BuildPass& pass, BuilderTurn& tu
 }
 
 bool QuantBot::buildResearchLab(BuildPass& pass, BuilderTurn& turn) {
-    if (!researchLabPolicyActive() || getHouse()->isTechResearchActive()
+    if (pass.vanillaBoomArmy || !researchLabPolicyActive() || getHouse()->isTechResearchActive()
         || pass.itemCount[Structure_ResearchLab] > 0
         || turn.pBuilder->getProductionQueueSize() > 0 || turn.pBuilder->isUpgrading()
         || turn.pBuilder->isOnHold()
@@ -1930,7 +1960,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     //     choice of every rule above it, and an unplaceable IX was then rejected each pass
     //     (no_site) and nothing at all was built. The Palace below likewise.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && !pass.vanillaFfaTechDeferred
+        && !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.itemCount[Structure_HeavyFactory] > 0
         && pass.itemCount[Structure_HighTechFactory] > 0
@@ -1942,7 +1972,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
         logDebug("Build IX... money: %d", pass.money);
     }
     if (pass.ixOverdue && !yardTurn.skipRemainingStructureLogic
-        && !pass.vanillaFfaTechDeferred
+        && !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.stablePower
         && pass.money > 1000
@@ -1955,7 +1985,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     }
     // Missing prerequisites never start the IX overdue timer.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && !pass.vanillaFfaTechDeferred
+        && !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.itemCount[Structure_HeavyFactory] > 0
         && pass.itemCount[Structure_HighTechFactory] > 0
@@ -2055,7 +2085,7 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
     // 17b. Palace (after military infrastructure)
     //       City sim: 1 palace per 30000 population
     {
-        const bool palaceAllowed = !pass.vanillaFfaTechDeferred
+        const bool palaceAllowed = !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
             && pass.itemCount[Structure_Palace] < pass.palaceTarget
             && !pass.orderedThisTick.count(Structure_Palace);
         if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
@@ -2397,6 +2427,7 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         yardTurn.itemID = variant;
         yardTurn.crimeServiceSite = Coord::Invalid();
     }
+    if (yardTurn.itemID != NONE_ID && !vanillaBoomAdmits(pass, yardTurn.itemID)) return false;
     Coord selectedPlaceLocation = Coord::Invalid();
     if (yardTurn.itemID != NONE_ID && campaignAvailableToBuild(turn.pBuilder,yardTurn.itemID)) {
         if (yardTurn.crimeServiceSite.isValid()) selectedPlaceLocation = yardTurn.crimeServiceSite;
@@ -2650,6 +2681,7 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
 void QuantBot::useSpareYardCapacity(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.vanillaBoomArmy) return;
     // Only use spare yard capacity, after all strategic/city choices.
     if (yardTurn.isCitySim && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && !pass.roadMaintenanceAttempted && !turn.pBuilder->isUpgrading()

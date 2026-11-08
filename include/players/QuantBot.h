@@ -38,6 +38,7 @@ class Harvester;
 #include <players/ForceConcentrationPolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
+#include <players/QuantBotVanillaPolicy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/AIDecisionLog.h>
 #include <dunecity/SpatialFields.h>
@@ -79,6 +80,8 @@ public:
     void save(OutputStream& stream) const override;
     void saveObserverRuntime(OutputStream& stream) const;
     void loadObserverRuntime(InputStream& stream);
+    /// Read-only receipt from the last normal build pass; inspecting it never runs AI planning.
+    const QuantBotVanillaPolicy::Observation& vanillaBoomObservation() const { return vanillaBoomReceipt; }
 
     void update() override;
     void onHumanUnitOrder(Uint32 id);
@@ -1134,6 +1137,12 @@ private:
     /// Vanilla Custom games whose original roster has at least two hostile teams.
     /// The tuning switches never activate in campaigns, duels or two-team matches.
     bool vanillaMultiEnemyGame() const;
+    bool vanillaBoomGame() const;
+    bool vanillaReactiveKnowledge() const;
+    QuantBotVanillaPolicy::Plan vanillaBoldPlan(QuantBotVanillaPolicy::Observation& receipt) const;
+    void vanillaReactiveSurvey(QuantBotVanillaPolicy::Observation& receipt, int* firstTeam = nullptr,
+                              const UnitBase* lead = nullptr) const;
+    QuantBotVanillaPolicy::Observation vanillaBoomReceipt{};
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
     /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
     /// Medium/Hard/Brutal.
@@ -1237,7 +1246,7 @@ private:
     /// kForceFinishWeakest (H): the enemy team to finish - of the teams with a known structure,
     /// the weakest by remembered army plus kKnownTurretValue per known turret (ties: fewer known
     /// structures, then the lower team id); -1 when none is known.
-    int finishTargetTeam() const;
+    int finishTargetTeam(const UnitBase* lead) const;
     /// H's objective for a wave led by \a lead: the nearest known structure of \a team the lead can
     /// reach by ground, production and economy (yard, factories, refinery) counted 20 tiles nearer.
     const ObjectBase* finishObjective(const UnitBase* lead, int team) const;
@@ -1726,6 +1735,9 @@ private:
     bool compositionAdmits(BuildPass& pass, Uint32 item);
     /// Scores every producer's candidate purchases.
     void planCapitalCandidates(BuildPass& pass);
+    void planVanillaBoldCapital(BuildPass& pass);
+    bool vanillaBoomAdmits(BuildPass& pass, Uint32 item);
+    bool vanillaBoomUpgradeAdmitted(BuildPass& pass, const BuilderBase* builder);
     /// Chooses the protected capital purchase for this pass.
     void chooseCapitalPlan(BuildPass& pass);
     /// Orders this pass's producers.

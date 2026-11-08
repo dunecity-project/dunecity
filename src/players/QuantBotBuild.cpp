@@ -140,8 +140,9 @@ void QuantBot::build(int militaryValue) {
     planDefenceCoverage(pass);
     planTechSavings(pass);
     planCapitalCandidates(pass);
+    planVanillaBoldCapital(pass);
     chooseCapitalPlan(pass);
-    planTechResearch(pass);
+    if (!pass.vanillaBoomArmy) planTechResearch(pass);
     if (pass.techSavingActive && pass.techResearch) startTechResearch(pass);
 
     phaseScope.next("ai.build.orders");
@@ -864,6 +865,35 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
     pass.fundedHarvesterTarget = pass.citySimEnabled
         ? CityEconomyInvestmentPolicy::factoryHarvesterTarget(pass.spiceHarvesterTarget,harvesterLimit)
         : QuantBotBuildPolicy::fundedSpiceHarvesters(pass.mapSpiceHarvesterTarget,getAIRefineryBays());
+    pass.vanillaPlan = vanillaBoldPlan(vanillaBoomReceipt);
+    if (pass.vanillaPlan != QuantBotVanillaPolicy::Plan::None) {
+        const auto& force = botConfig().force;
+        const int sustainable = std::min(harvesterLimit, pass.spiceShare / 2000);
+        const int workerPrice = std::max(1, data[Unit_Harvester][houseID].price);
+        const int64_t economicGap = std::max<int64_t>(0,
+            vanillaBoomReceipt.leaderEconomy * force.vanillaReactiveEconomyRatioBps / 10000
+                - vanillaBoomReceipt.ownEconomy);
+        const int reactiveWorkers = std::max(8, getAIHarvesterCount()
+            + int(std::min<int64_t>(harvesterLimit, (economicGap + workerPrice - 1) / workerPrice)));
+        pass.vanillaBoomTargets = QuantBotVanillaPolicy::targets(pass.vanillaPlan,
+            force.vanillaHarvesterBoomWorkers, force.vanillaRefineryBoomRefineries, reactiveWorkers, sustainable);
+        pass.spiceHarvesterTarget = pass.mapSpiceHarvesterTarget = pass.fundedHarvesterTarget
+            = pass.vanillaBoomTargets.workers;
+        pass.vanillaBoomArmy = QuantBotVanillaPolicy::armyPhase(pass.vanillaPlan);
+        pass.vanillaBoldTechDeferred = QuantBotVanillaPolicy::deferTech(pass.vanillaPlan,
+            getAIHarvesterCount(), getHouse()->getNumItems(Structure_Refinery),
+            getHouse()->getNumItems(Structure_HeavyFactory), pass.vanillaBoomTargets);
+        pass.vanillaBoldMilitaryHeld = pass.vanillaPlan == QuantBotVanillaPolicy::Plan::GreedyEconomy
+            && pass.itemCount[Unit_Harvester] < pass.spiceHarvesterTarget;
+        // At the stop, income no longer replenishes a generic future-refinery cash pool.
+        // Missing bootstrap workers and the selected real prerequisite retain their own quotes.
+        if (pass.vanillaBoomArmy) pass.economyReserve = 0;
+        if (pass.vanillaBoldTechDeferred
+            && (pass.strategicReserveItem == Structure_IX || pass.strategicReserveItem == Structure_Palace)) {
+            pass.strategicReserveItem = NONE_ID;
+            pass.strategicReserveCost = 0;
+        }
+    }
     pass.citySpiceCapacityRunway = botConfig().force.citySpiceCapacityRunway && pass.citySimEnabled
         && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
         && lastCalculatedSpice > 0
@@ -987,6 +1017,11 @@ bool QuantBot::openingWorkersNeeded(BuildPass& pass) {
 int QuantBot::harvesterInvestmentReserve(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.vanillaPlan != QuantBotVanillaPolicy::Plan::None
+        && pass.itemCount[Unit_Harvester] < pass.spiceHarvesterTarget && getAIRefineryBays() > 0
+        && (!pass.harvesterFactories.empty() || getHouse()->getNumItems(Structure_StarPort) > 0)
+        && !getHouse()->isGroundUnitLimitReached())
+        return data[Unit_Harvester][houseID].price;
     if (!isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
         || gameMode != GameMode::Custom || builderOnly() || !(pass.vanillaEconomy || pass.citySimEnabled)
         || lastCalculatedSpice <= 0 || getHouse()->isGroundUnitLimitReached()
@@ -1128,6 +1163,8 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
     // is funding its first combat wave. A lost yard or exhausted home rock can still buy an MCV.
     pass.postponeCapacityMcv = (openingCombatBudgetActive() || campaignCombatBudgetActive())
         && pass.itemCount[Structure_ConstructionYard] > 0 && !pass.rockExpansionNeeded && !pass.colonisationNeeded;
+    if (pass.vanillaBoomArmy && pass.itemCount[Structure_ConstructionYard] > 0)
+        pass.postponeCapacityMcv = true;
     if (pass.postponeCapacityMcv) pass.cityYardTarget = std::min(pass.cityYardTarget, pass.cityConstructionCapacity);
 }
 
@@ -2521,6 +2558,7 @@ bool QuantBot::repairPolicyMaintains(BuildPass& pass, const StructureBase* struc
 }
 
 bool QuantBot::canFundCapacityMcv(BuildPass& pass, int price, Uint32 supplier) {
+    if (pass.vanillaBoomArmy && pass.itemCount[Structure_ConstructionYard] > 0) return false;
     if (pass.itemCount[Structure_ConstructionYard]>0 && !pass.rockExpansionNeeded && !pass.colonisationNeeded
         && !cityOpeningCapitalFunded(pass,price,supplier)) return false;
     return !pass.capacityMcvRunway || int64_t(pass.cashFlow.projectedCash)-pass.capacityMcvOrderedCost
@@ -3078,6 +3116,14 @@ bool QuantBot::spendingEmergency(BuildPass& pass, Uint32 item) {
 
 bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade) {
     if (!pass.techSavings || cost <= 0) return true;
+    if (pass.vanillaPlan != QuantBotVanillaPolicy::Plan::None) {
+        if (!upgrade && item == pass.vanillaBoomRequiredItem) return true;
+        if (upgrade && pass.vanillaBoomUpgradeBuilder != NONE_ID
+            && planningBuilder == pass.vanillaBoomUpgradeBuilder) return true;
+        const auto* builder = upgrade && pass.vanillaBoomArmy
+            ? dynamic_cast<const BuilderBase*>(getObject(planningBuilder)) : nullptr;
+        if (builder && vanillaBoomUpgradeAdmitted(pass, builder)) return true;
+    }
     const auto bucket = upgrade ? QuantBotSpendingPolicy::Bucket::Production
         : QuantBotBuildPolicy::spendingBucket(item);
     const auto* producer = upgrade && (item == Structure_HeavyFactory || item == Structure_HighTechFactory)
@@ -4029,6 +4075,123 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
     }
 }
 
+void QuantBot::planVanillaBoldCapital(BuildPass& pass) {
+    using Plan = QuantBotVanillaPolicy::Plan;
+    if (pass.vanillaPlan == Plan::None) return;
+    if (pass.vanillaBoomArmy) {
+        pass.techWorkingReserve = 0;
+        pass.techSavingActive = pass.techResearch = pass.techUpgrade = false;
+        pass.techFundingPriority = false;
+    }
+    for (auto& candidate : pass.capitalCandidates) {
+        bool admitted = !(pass.vanillaBoldTechDeferred
+                && (candidate.item == Structure_IX || candidate.item == Structure_Palace))
+            && !(pass.vanillaBoldMilitaryHeld && !pass.defendingEconomy
+                && QuantBotBuildPolicy::militaryItem(candidate.item))
+            && !(candidate.item == Unit_Harvester && pass.itemCount[Unit_Harvester] >= pass.spiceHarvesterTarget)
+            && !(candidate.item == Structure_Refinery && pass.itemCount[Structure_Refinery] >= pass.vanillaBoomTargets.refineries)
+            && !(candidate.item == Structure_HeavyFactory && pass.itemCount[Structure_HeavyFactory] >= pass.vanillaBoomTargets.factories);
+        if (pass.vanillaBoomArmy) {
+            const std::string_view kind(candidate.kind);
+            const bool emergency = pass.defendingEconomy || pass.airEngaged;
+            const bool recovery = (candidate.item == Unit_Harvester && pass.itemCount[Unit_Harvester] < pass.spiceHarvesterTarget)
+                || (candidate.item == Unit_Carryall && pass.itemCount[Unit_Carryall] == 0)
+                || (candidate.item == Unit_MCV && pass.itemCount[Structure_ConstructionYard] == 0);
+            const bool power = candidate.item == Structure_WindTrap && pass.powerRules
+                && getHouse()->getProducedPower() < getHouse()->getPowerRequirement() + pass.committedPowerDemand;
+            const bool defence = emergency && (candidate.item == Structure_GunTurret
+                || candidate.item == Structure_RocketTurret || kind == "defence_upgrade" || kind == "expansion_upgrade");
+            admitted &= QuantBotBuildPolicy::militaryItem(candidate.item) || recovery || power || defence;
+        }
+        if (!admitted) candidate.score = 0;
+    }
+    if ((!pass.vanillaBoomArmy && pass.defendingEconomy)
+        || (!pass.vanillaBoomArmy && getHouse()->isGroundUnitLimitReached())) return;
+    const int house = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    const int refineryGoal = pass.vanillaBoomTargets.refineries;
+    const int factoryGoal = pass.vanillaBoomTargets.factories;
+    const auto available = [&](Uint32 item) {
+        return data[item][house].enabled && data[item][house].techLevel <= getHouse()->getTechLevel();
+    };
+    const Uint32 producer = available(Structure_HeavyFactory) ? Structure_HeavyFactory
+        : available(Structure_LightFactory) ? Structure_LightFactory
+        : available(Structure_WOR) ? Structure_WOR : Structure_Barracks;
+    const bool portBoom = pass.vanillaPlan == Plan::GreedyEconomy || pass.vanillaPlan == Plan::ReactiveEconomy;
+    Uint32 goal = NONE_ID;
+    if (pass.vanillaBoomArmy) {
+        goal = pass.itemCount[Structure_Refinery] == 0 ? Structure_Refinery
+            : pass.itemCount[producer] == 0 ? producer
+            : getHouse()->getTechLevel() > 4 && canAddRepairYard(0) && pass.itemCount[Structure_RepairYard] == 0
+                ? Structure_RepairYard
+            : needsFirstTransport(pass) && pass.itemCount[Structure_HighTechFactory] == 0
+                && pass.itemCount[Structure_StarPort] == 0 && available(Structure_HighTechFactory)
+                ? Structure_HighTechFactory
+            : pass.itemCount[Structure_Refinery] < refineryGoal ? Structure_Refinery : NONE_ID;
+    } else {
+        goal = pass.itemCount[Structure_Refinery] < std::min(2, refineryGoal) ? Structure_Refinery
+            : pass.itemCount[producer] == 0 ? producer
+            : portBoom && pass.itemCount[Structure_Refinery] >= std::min(3, refineryGoal)
+                && pass.itemCount[Structure_StarPort] == 0 && available(Structure_StarPort) ? Structure_StarPort
+            : pass.itemCount[Structure_Refinery] < refineryGoal ? Structure_Refinery
+            : pass.itemCount[Structure_HeavyFactory] < factoryGoal && available(Structure_HeavyFactory)
+                ? Structure_HeavyFactory : NONE_ID;
+    }
+    for (int depth = 0; goal != NONE_ID && depth < Structure_LastID; ++depth) {
+        const auto& spec = data[goal][house];
+        if (!spec.enabled || spec.techLevel > getHouse()->getTechLevel()
+            || pass.itemCount[goal] > getHouse()->getNumItems(goal)) return;
+        for (const auto* builder : pass.capitalBuilders) {
+            if (builder->isUpgrading() || builder->isOnHold() || builder->getProductionQueueSize() > 0) continue;
+            CapitalCandidate candidate;
+            candidate.builder = builder->getObjectID(); candidate.item = goal;
+            candidate.kind = "vanilla_bold"; candidate.reason = "strategy_commitment"; candidate.score = 8000;
+            if (campaignAvailableToBuild(builder, goal)) {
+                if (builder->getItemID() == Structure_StarPort
+                    && (getHouse()->getChoam().getNumAvailable(goal) <= 0
+                        || !static_cast<const StarPort*>(builder)->okToOrder())) continue;
+                candidate.price = candidate.cost = purchasePrice(builder, goal);
+                if (isStructure(goal)) {
+                    planningBuilder = builder->getObjectID(); clearPlacementCache(false, true);
+                    candidate.site = findPlaceLocation(goal);
+                    if (candidate.site.isInvalid()) continue;
+                    const auto foundation = foundationPlan(builder, goal, candidate.site);
+                    if (!foundation.complete) continue;
+                    for (const auto& slab : foundation.orders) candidate.foundationCost += purchasePrice(builder, slab.item);
+                    candidate.cost += candidate.foundationCost;
+                }
+            } else if (int(builder->getItemID()) == spec.builder
+                && builder->getCurrentUpgradeLevel() < spec.upgradeLevel
+                && builder->getMaxUpgradeLevel() >= spec.upgradeLevel && builder->isAllowedToUpgrade()
+                && builder->getHealth() >= builder->getMaxHealth()) {
+                bool prerequisites = true;
+                for (Uint32 item = Structure_FirstID; item < spec.prerequisiteStructuresSet.size(); ++item)
+                    if (isStructure(item) && spec.prerequisiteStructuresSet[item]
+                        && getHouse()->getNumItems(item) == 0) prerequisites = false;
+                if (!prerequisites) continue;
+                candidate.item = builder->getItemID(); candidate.kind = "vanilla_bold_upgrade";
+                candidate.price = candidate.cost = builder->getUpgradeCost();
+                pass.vanillaBoomUpgradeBuilder = builder->getObjectID();
+            } else continue;
+            if (candidate.price <= 0) continue;
+            pass.vanillaBoomRequiredItem = candidate.item;
+            pass.vanillaBoldCapital = int(pass.capitalCandidates.size());
+            pass.capitalCandidates.push_back(candidate);
+            planningBuilder = NONE_ID; clearPlacementCache(false, true);
+            return;
+        }
+        Uint32 missing = NONE_ID;
+        for (Uint32 item = Structure_FirstID; item < spec.prerequisiteStructuresSet.size(); ++item)
+            if (isStructure(item) && spec.prerequisiteStructuresSet[item]
+                && getHouse()->getNumItems(item) == 0) {
+                if (pass.itemCount[item] > 0) return;
+                missing = item; break;
+            }
+        goal = missing;
+    }
+    planningBuilder = NONE_ID; clearPlacementCache(false, true);
+}
+
 void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     planningBuilder=NONE_ID; clearPlacementCache(false,true);
     pass.capitalChoice = -1;
@@ -4212,6 +4375,12 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
                 && pass.capitalCandidates[i].score>0
                 && (growth<0 || pass.capitalCandidates[i].score>pass.capitalCandidates[growth].score)) growth=int(i);
         if (growth>=0) {pass.capitalChoice=growth;pass.cityGrowthProtected=true;}
+    }
+    if (pass.vanillaBoldCapital >= 0 && !pass.defendingEconomy
+        && !(pass.protectionCapital && pass.airEngaged)) {
+        pass.capitalChoice = pass.vanillaBoldCapital;
+        pass.protectionCapital = true;
+        pass.cityGrowthProtected = false;
     }
     pass.capitalConsumed = false;
     pass.capitalOrderedCost = 0;

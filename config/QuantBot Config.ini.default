@@ -363,6 +363,21 @@ VanillaFfaSingleFront=0
 VanillaFfaLightWorkingCash=0
 # Optional IX/Palace deferral is scoped to vanilla FFA with at least five original players.
 VanillaFfaFundedTech=0
+# Fixed vanilla spice-boom families; all OFF and never used in no-spice or asymmetric survival games.
+# Harvester-heavy: 8/12 workers, two refineries, normal military; refinery-wide: 4/6 bays, two workers/bay.
+# Greedy: 16 workers / 6 refineries until 6/10/12 min, then all optional growth cash goes to army until 20 min.
+# Reactive: true-state reachable-army and economic-size ratios, with immediate near-base army conversion.
+# Existing accepted queues are not cancelled. The test styles scope every family to FFA.
+VanillaHarvesterBoom=0
+VanillaRefineryBoom=0
+VanillaGreedyBoom=0
+VanillaReactiveBoom=0
+VanillaBoomFfaOnly=0
+VanillaHarvesterBoomWorkers=8
+VanillaRefineryBoomRefineries=4
+VanillaGreedyBoomMinutes=6
+VanillaReactiveArmyRatioBps=6000
+VanillaReactiveEconomyRatioBps=12000
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0

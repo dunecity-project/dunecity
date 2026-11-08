@@ -80,7 +80,9 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
                  'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost'
 ) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
-SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required')
+BOOM_FIELDS = ('boom_phase', 'boom_stop_minute', 'boom_own_army', 'boom_enemy_army', 'boom_near_army',
+               'boom_own_economy', 'boom_leader_economy', 'boom_army_ratio_bps', 'boom_economy_ratio_bps')
+SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required') + BOOM_FIELDS
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 AIR_KILL_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'attacker', 'victim_house', 'object', 'item',
                           'enemy', 'capture_complete', 'attacker_item', 'attacker_source', 'attacker_firing_house',
@@ -563,9 +565,13 @@ def sample_schedule(args):
         rng = random.Random(f'{args.sample_seed}/{mod}')
         factors = dict(SAMPLE_FACTORS, spice_level=tuple(SPICE)[int(mod == 'vanilla'):],
                        initial_tech=tuple(range(3 if mod == 'vanilla' else 1, 10)))
+        if getattr(args, 'sample_formats', None) is not None:
+            factors['format'] = tuple(args.sample_formats)
         draws = {factor: balanced_draw(levels, args.cases, rng) for factor, levels in factors.items()}
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
+            if getattr(args, 'sample_enemy', None):
+                case['difficulty'] = args.sample_enemy
             seed = rng.getrandbits(32)
             fmt, enemy = case['format'], case['difficulty']
             count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
@@ -1935,6 +1941,10 @@ parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='m
                     help='sample: balanced seeded factor draws, each played from two candidate seats')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--sample-enemy', choices=('easy', 'medium', 'hard', 'brutal'),
+                    help='sample: fix every non-candidate controller to this tier; factor/map draws stay unchanged')
+parser.add_argument('--sample-formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6'), default=None,
+                    help='sample: override only the balanced format deck (default: all four formats)')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
