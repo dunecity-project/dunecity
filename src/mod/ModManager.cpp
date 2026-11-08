@@ -49,6 +49,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 // File names
 static const char* ACTIVE_MOD_FILE = "active_mod.txt";
@@ -146,9 +147,9 @@ std::string bundledModFingerprint(const std::filesystem::path& source) {
             const auto relative = entry.substr(0, entry.find('\n'));
             std::ifstream file(source / relative, std::ios::binary);
             if(!file) return {};
-            char buffer[65536];
-            while(file.read(buffer, sizeof(buffer)) || file.gcount() > 0) {
-                appendFingerprintBytes(hash, std::string(buffer, static_cast<size_t>(file.gcount())));
+            std::vector<char> buffer(65536); // heap: reached from mod activation under Game::initGame
+            while(file.read(buffer.data(), static_cast<std::streamsize>(buffer.size())) || file.gcount() > 0) {
+                appendFingerprintBytes(hash, std::string(buffer.data(), static_cast<size_t>(file.gcount())));
             }
             if(file.bad()) return {};
         }
@@ -1738,9 +1739,9 @@ void ModManager::refreshBundledDunecityGraphicsSkins() const {
             std::ifstream sourceFile(entry.path(), std::ios::binary);
             std::ofstream destinationFile(destination, std::ios::binary | std::ios::trunc);
             if(sourceFile && destinationFile) {
-                char buffer[65536];
-                while(sourceFile.read(buffer, sizeof(buffer)) || sourceFile.gcount() > 0) {
-                    destinationFile.write(buffer, sourceFile.gcount());
+                std::vector<char> buffer(65536); // heap: reached from mod activation under Game::initGame
+                while(sourceFile.read(buffer.data(), static_cast<std::streamsize>(buffer.size())) || sourceFile.gcount() > 0) {
+                    destinationFile.write(buffer.data(), sourceFile.gcount());
                     if(!destinationFile) break;
                 }
                 destinationFile.flush();

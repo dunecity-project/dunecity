@@ -6112,30 +6112,32 @@ void GFXManager::reloadAllObjectGraphicsForActiveMod() {
     // Build the complete object set through the newly active mod, but keep
     // this manager alive: menus retain pointers to its UI and background
     // textures while a saved game is running.
-    GFXManager refreshedGraphics;
+    // Heap-owned: a whole manager is ~250 KB, and this runs under Game::initGame
+    // when a match activates another mod, below every live menu frame.
+    const auto refreshedGraphics = std::make_unique<GFXManager>();
 
-    objPic = std::move(refreshedGraphics.objPic);
-    objPicTex = std::move(refreshedGraphics.objPicTex);
-    greenWindtrapTex = std::move(refreshedGraphics.greenWindtrapTex);
-    factionTrooperProductionPortraits = std::move(refreshedGraphics.factionTrooperProductionPortraits);
-    factionTrooperSelectionPortraits = std::move(refreshedGraphics.factionTrooperSelectionPortraits);
-    scoutpostBaseGraphics = std::move(refreshedGraphics.scoutpostBaseGraphics);
-    chaosFactoryBaseGraphics = std::move(refreshedGraphics.chaosFactoryBaseGraphics);
+    objPic = std::move(refreshedGraphics->objPic);
+    objPicTex = std::move(refreshedGraphics->objPicTex);
+    greenWindtrapTex = std::move(refreshedGraphics->greenWindtrapTex);
+    factionTrooperProductionPortraits = std::move(refreshedGraphics->factionTrooperProductionPortraits);
+    factionTrooperSelectionPortraits = std::move(refreshedGraphics->factionTrooperSelectionPortraits);
+    scoutpostBaseGraphics = std::move(refreshedGraphics->scoutpostBaseGraphics);
+    chaosFactoryBaseGraphics = std::move(refreshedGraphics->chaosFactoryBaseGraphics);
     // Family spice icons are generated with the active palette. Unlike the
     // persistent menu backgrounds, these editor masters must follow the mod.
     for(unsigned int id = UI_MapEditor_GreenSpice; id <= UI_MapEditor_WhiteSpiceBloom; ++id) {
-        uiGraphic[id][HOUSE_HARKONNEN] = std::move(refreshedGraphics.uiGraphic[id][HOUSE_HARKONNEN]);
+        uiGraphic[id][HOUSE_HARKONNEN] = std::move(refreshedGraphics->uiGraphic[id][HOUSE_HARKONNEN]);
     }
-    hdObjPicOverrides = std::move(refreshedGraphics.hdObjPicOverrides);
+    hdObjPicOverrides = std::move(refreshedGraphics->hdObjPicOverrides);
     // The replacement manager also owns the active mod's house skins. Retaining
     // the old caches here made a vanilla -> DuneCity switch keep native sidebar
     // portraits, even though the new map sprites had loaded successfully.
-    duneCitySimCityZonePic = std::move(refreshedGraphics.duneCitySimCityZonePic);
-    duneCityDune2ZonePic = std::move(refreshedGraphics.duneCityDune2ZonePic);
-    duneCitySimCityBuildingPic = std::move(refreshedGraphics.duneCitySimCityBuildingPic);
-    duneCityDune2BuildingPic = std::move(refreshedGraphics.duneCityDune2BuildingPic);
-    duneCityDune2DetailPicTex = std::move(refreshedGraphics.duneCityDune2DetailPicTex);
-    duneCityHouseUsesDune2 = refreshedGraphics.duneCityHouseUsesDune2;
+    duneCitySimCityZonePic = std::move(refreshedGraphics->duneCitySimCityZonePic);
+    duneCityDune2ZonePic = std::move(refreshedGraphics->duneCityDune2ZonePic);
+    duneCitySimCityBuildingPic = std::move(refreshedGraphics->duneCitySimCityBuildingPic);
+    duneCityDune2BuildingPic = std::move(refreshedGraphics->duneCityDune2BuildingPic);
+    duneCityDune2DetailPicTex = std::move(refreshedGraphics->duneCityDune2DetailPicTex);
+    duneCityHouseUsesDune2 = refreshedGraphics->duneCityHouseUsesDune2;
 
     // Editor previews and runtime portraits depend on the freshly installed
     // object surfaces, so rebuild only those mod-sensitive UI caches.

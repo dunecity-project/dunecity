@@ -325,7 +325,8 @@ void CustomGameMenu::onChildWindowClose(Window* pChildWindow) {
             GameInitSettings gameInitSettings(getBasename(filename, true), savegamedata, servername);
 
             int ret;
-            try { ret = CustomGamePlayers(gameInitSettings, true, bLANServer).showMenu(); }
+            // Heap-owned: the lobby (~437 KB on MSVC) stays live for the whole match it starts.
+            try { ret = std::make_unique<CustomGamePlayers>(gameInitSettings, true, bLANServer)->showMenu(); }
             catch(const std::exception& error) { openWindow(MsgBox::create(error.what())); return; }
             if(ret != MENU_QUIT_DEFAULT) {
                 quit(ret);
@@ -431,7 +432,8 @@ void CustomGameMenu::onNext()
     yieldFrameToBrowser();
 #endif
 
-    int ret = CustomGamePlayers(gameInitSettings, true, bLANServer).showMenu();
+    // Heap-owned: the lobby (~437 KB on MSVC) stays live for the whole match it starts.
+    int ret = std::make_unique<CustomGamePlayers>(gameInitSettings, true, bLANServer)->showMenu();
     if(ret != MENU_QUIT_DEFAULT) {
         quit(ret);
     }

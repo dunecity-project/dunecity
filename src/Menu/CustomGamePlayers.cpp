@@ -1057,6 +1057,7 @@ CustomGamePlayers::~CustomGamePlayers()
         pNetworkManager->setOnPeerDisconnected(std::function<void (const std::string&, bool, int)>());
         pNetworkManager->setGetChangeEventListForNewPlayerCallback(std::function<ChangeEventList (const std::string&)>());
         pNetworkManager->setOnReceiveChangeEventList(std::function<void (const std::string&, const ChangeEventList&)>());
+        pNetworkManager->setOnConfigMismatch(std::function<void (const std::string&)>());
         pNetworkManager->setOnReceiveChatMessage(std::function<void (const std::string&, const std::string&)>());
         pNetworkManager->setOnStartGame(std::function<void (unsigned int)>());
         pNetworkManager->setOnReceiveModInfo(std::function<void (const std::string&, const std::string&)>());
