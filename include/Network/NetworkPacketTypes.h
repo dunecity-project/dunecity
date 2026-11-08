@@ -352,7 +352,10 @@
 //      Research state captures payment mode, terms and exact cumulative payments.
 // 114: Feature-only interim restores QuantBot's installed 3710464d decision policy;
 //      installment research books its actual zero-upfront payment (save format unchanged).
-#define NETWORK_PROTOCOL_VERSION            114
+// 115: Campaign AI-support QuantBot defaults ON: MilitaryOpening, AdaptiveReadiness,
+//      ThreatProduction, FundedLightOpening, LightWorkingCash, LightIncomeSeed and
+//      IdleCashFactory (2000 credits). Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            115
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
