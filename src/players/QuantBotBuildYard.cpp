@@ -336,10 +336,14 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     // A campaign's small starting army needs replacements before the
     // economy can compound. The normal refinery/starport ladders otherwise
     // consume every opening order, including on missions with no factory.
+    // Preserve the capital planner's small delivered-worker seed first;
+    // a lone worker cannot fund a factory while the second one's capital
+    // sits idle in that factory. A smaller sustainable fleet keeps its ceiling.
     if (botConfig().force.campaignMilitaryOpening && !pass.citySimEnabled
         && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman()
         && !builderOnly() && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && pass.itemCount[Structure_Refinery] > 0
+        && pass.actualHarvesters >= std::max(1, std::min(2, pass.mapSpiceHarvesterTarget))
         && pass.itemCount[Structure_LightFactory] == 0 && pass.itemCount[Structure_HeavyFactory] == 0
         && pass.itemCount[Structure_Barracks] == 0 && pass.itemCount[Structure_WOR] == 0) {
         const int house = getHouse()->getHouseID();
