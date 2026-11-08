@@ -237,6 +237,10 @@ struct QuantBotConfig {
         /// During campaign base attacks, affordable light replacements need only
         /// their actual price, not the legacy 700-credit entry floor. Hashed; default off.
         bool campaignAffordableLight;
+        /// Before heavy-factory technology, campaign light production funds growth
+        /// from real uncommitted cash instead of a 2,000-credit economic buffer.
+        /// Independent, hashed candidate; default off.
+        bool campaignLightWorkingCash;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

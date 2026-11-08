@@ -368,6 +368,7 @@ struct QuantBot::BuilderTurn {
     bool workerProducer{};
     bool transportProducer{};
     bool capitalSupplier{};
+    bool campaignLightWorkingCash{};
 
     // Set by reserveBuilderCash(); restored when the turn ends.
     RestoreReservedCredits reserve;

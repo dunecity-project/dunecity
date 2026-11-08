@@ -367,6 +367,8 @@ CampaignThreatProduction=0
 CampaignFundedLightOpening=0
 # Live campaign base attacks admit light replacements at their real price instead of 700 credits.
 CampaignAffordableLight=0
+# Before heavy-factory technology, fund campaign light growth from real uncommitted cash.
+CampaignLightWorkingCash=0
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.

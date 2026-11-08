@@ -356,13 +356,15 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
                     : std::max({pass.strategicReserveCost, pass.economyReserve,
                         pass.civicReserveCost, harvesterInvestmentReserve(pass),
                         capitalReserve(pass, NONE_ID)});
+                if (turn.campaignLightWorkingCash)
+                    protectedCash = std::max(pass.strategicReserveCost, pass.civicReserveCost);
                 if (!pass.campaignThreatProduction && openingWorkersNeeded(pass))
                     protectedCash = std::max(protectedCash, data[Unit_Harvester][house].price);
                 if (!pass.campaignThreatProduction && needsFirstTransport(pass))
                     protectedCash = std::max(protectedCash, data[Unit_Carryall][house].price);
                 const int factoryCost = buildingCapitalCost(pass, producer);
-                const int entryCash = botConfig().force.campaignAffordableLight
-                    && pass.campaignThreatProduction ? 1 : 701;
+                const int entryCash = turn.campaignLightWorkingCash
+                    || (botConfig().force.campaignAffordableLight && pass.campaignThreatProduction) ? 1 : 701;
                 bool fundedUnit = false;
                 for (size_t slot = UnitMixPolicy::kFirstLightSlot; slot < UnitMixPolicy::kSlots; ++slot) {
                     const auto& unit = data[kMixItems[slot]][house];
