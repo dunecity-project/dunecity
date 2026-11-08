@@ -407,6 +407,49 @@ TEST_CASE("City tuning candidates are opt-in and independently loaded saved and 
     std::filesystem::remove(path);
 }
 
+TEST_CASE("City building economy candidates are opt-in and independently loaded saved and hashed", "[ai][city][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.citySpiceTransition);
+    REQUIRE_FALSE(defaults.force.citySpiceCapacityRunway);
+    REQUIRE_FALSE(defaults.force.citySingleYardGrowth);
+    REQUIRE_FALSE(defaults.force.cityPowerGrowthHorizon);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-building-economy-test.ini";
+    for (int mask = 0; mask < 16; ++mask) {
+        const bool transition = (mask & 1) != 0;
+        const bool runway = (mask & 2) != 0;
+        const bool growth = (mask & 4) != 0;
+        const bool power = (mask & 8) != 0;
+        QuantBotConfig expected = defaults;
+        expected.force.citySpiceTransition = transition;
+        expected.force.citySpiceCapacityRunway = runway;
+        expected.force.citySingleYardGrowth = growth;
+        expected.force.cityPowerGrowthHorizon = power;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCitySpiceTransition=" << transition
+                << "\nCitySpiceCapacityRunway=" << runway << "\nCitySingleYardGrowth=" << growth
+                << "\nCityPowerGrowthHorizon=" << power << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.citySpiceTransition == transition);
+        REQUIRE(loaded.force.citySpiceCapacityRunway == runway);
+        REQUIRE(loaded.force.citySingleYardGrowth == growth);
+        REQUIRE(loaded.force.cityPowerGrowthHorizon == power);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (mask == 0));
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.citySpiceTransition == transition);
+        REQUIRE(restored.force.citySpiceCapacityRunway == runway);
+        REQUIRE(restored.force.citySingleYardGrowth == growth);
+        REQUIRE(restored.force.cityPowerGrowthHorizon == power);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Storage capacity defaults on and is loaded saved and hashed", "[ai][city][config][storage]") {
     QuantBotConfig config;
     REQUIRE(config.force.storageCapacity);

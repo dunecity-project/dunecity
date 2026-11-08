@@ -888,3 +888,89 @@ Evidence: `../outputs/dunecity-audit-20261103/`, especially `d56-final-matrix-co
 Verification-owner receipts are in `../outputs/ctest-triage-20261103/`.
 Frozen bundles remain outside the checkout at `../dunecity-results/audit-d56d1710/`.
 
+## DuneCity tuning lane — 2026-11-08
+
+The seed9101 recovery control uses48 cases from both candidate seats,120-minute
+limits, and a population win when one team's population is at least1.2× every
+rival's. Its96 results are **53W/42L/1D:44 conquest wins and9 population wins**;
+1v1 and2v2 each win16/24. FFA6 wins7/24, versus Brutal9/24, initial-tech9
+5/12, and low-spice10/24. Evidence is
+`../outputs/ai-recovery-20261108/fixes/CityNoSpice/control-population-120/`.
+
+The telemetry does not justify optimising for the cap itself: no spice-backed
+control loss reaches120minutes. All capped losses/draws are no-spice cases,
+which this lane continues to measure but does not target with AI changes.
+Nor does initial-tech9 imply research is late: only4/12 tech9 games have
+spice, and all four build IX by minute13–18. Lower-tech FFA losses instead
+stall at tech6/7, while city growth and static cover can outpace the mobile
+army that has to defend them. For example, case25 has20,380 population and
+28 rockets at minute20 but only3,010 mobile army value against19,350 observed
+enemy value, then loses its entire124-structure base before minute30.
+
+Four independent hashed, default-OFF city-mode candidates isolate those causes:
+`CityThreatBudget` removes the ordinary growth-over-military interleave during
+direct base attacks; `CityZoneDefence` extends existing capped reactive ground
+cover to R/C/I zones; `CityAdvancedTech` funds one first IX/prerequisite at
+tech9 ahead of repeatable capacity; and `CityContinuousResearch` keeps the
+existing required-research funding route after the opening fleet completes.
+They exclude campaigns and require remaining spice; none changes no-spice
+bootstrap policy or adds saved AI state. The five `city-*-on`/`city-tuning-off`
+play styles isolate the candidates for balanced same-game multi-variant trials.
+No default adoption follows from their presence.
+
+The variant ledger, pins, paired outcomes, conquest/population split and lessons
+live at `../outputs/ai-tuning-20261108/DuneCityLane/ledger.md`. A kept candidate
+requires the full96-game city comparison without1v1/2v2 regression; any proposed
+ON default additionally requires AAA2 and the programme's cross-mode gates.
+
+### Round2 building/economy candidates
+
+Round1 closed with all four switches still OFF: the six-seat FFA screen measured
+29 valid games (one timeout is unmeasured), with native controls10/58 wins versus
+4/29 ThreatBudget,4/29 ZoneDefence,5/29 AdvancedTech and5/29 ContinuousResearch.
+Native won10 by conquest and0 by population; the candidates respectively won
+4+0,3+1,4+1 and4+1. Longer survival alone did not justify adopting any candidate.
+The low-spice minute20 ledger showed native25716 spice receipts versus1999 tax,
+with power+police only4.3% of measured spending: test productive reinvestment,
+not blanket service cuts.
+
+Four further independent, hashed/default-OFF switches require Custom city mode,
+noncampaign play and remaining spice:
+
+- `CitySpiceTransition`: a working fleet of at least two harvesters and one bay
+  starts transitioning when its remaining share fits within two four-minute
+  throughput horizons. Keep accepted workers and unloading recovery; stop new
+  workers and optional refinery expansion, release the missing-worker reserve,
+  and leave existing profitable tax investments to compete normally. Eight minutes
+  deliberately tests an earlier transition than the existing four-minute ROI gate;
+  it may forgo a short-term profitable worker rather than duplicate that gate.
+- `CitySpiceCapacityRunway`: apply the existing real-cash/projected-cash
+  working-capital admission to optional MCV capacity and producer upgrades even
+  when spice remains viable. Lost-yard/terrain recovery, yard upgrades, active
+  defence and first worker/transport/military unlocks retain their existing rules.
+- `CitySingleYardGrowth`: after four seed plots and a completed Heavy Factory,
+  a single yard may protect an already profitable, affordable R/C/I candidate
+  ahead of ordinary capital. Two standing ordinary infrastructure buildings
+  support each extra plot; queued plots consume that allowance immediately.
+  Existing order cadence, urgent services, full queued power and the first import
+  supplier remain protected. Use live inventory, not unsaved lifetime build stats.
+- `CityPowerGrowthHorizon`: when buying a windtrap would cross the existing
+  working reserve, cap latent standing-plot maturity at one mature plot per yard.
+  Current demand, fully queued loads, observed growth, blackout recovery and the
+  24-power growth floor remain unchanged.
+
+`city-building-economy-off` and the four matching `city-*-on` styles isolate the
+round2 switches and explicitly disable round1. These are experiments, not adopted
+defaults. No kept-variant96-game result, AAA2 result or OFF parity is claimed for
+this new round until the shared cluster run supplies it.
+
+Report conquest/population wins and1v1/2v2 strata alongside cumulative spice,
+minute-sampled mean/peak idle credits, worker/refinery histories, first observed
+key-building times and minute-sampled power-deficit duration. Existing economy
+and audit rows provide `spice_gross` from `House::getHarvestedSpice()`, cash,
+harvesters, owned `refineries`, power and building milestones; no new logger is
+needed for these measurements. Idle/deficit intervals and peaks remain sampled
+estimates, never exact cycle-duration or true peak claims. If exact values become
+necessary, the cheapest addition is probe-only accumulators alongside the existing
+per-cycle storage counters, not saved AI state.
+

@@ -405,6 +405,14 @@ CityZoneDefence=0
 CityAdvancedTech=0
 # Experimental: keep city research funded after the opening fleet reaches its target.
 CityContinuousResearch=0
+# Experimental: stop extra spice capacity when the existing fleet can deplete its share.
+CitySpiceTransition=0
+# Experimental: preserve working-capital runway for optional spice-city MCVs/upgrades.
+CitySpiceCapacityRunway=0
+# Experimental: give a single yard profitable RCI growth after ordinary infrastructure.
+CitySingleYardGrowth=0
+# Experimental: cash-constrained spice cities reserve bounded latent zone growth power.
+CityPowerGrowthHorizon=0
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
 # Experimental 3-rocket baseline (4 for Hard+ at 16 structures), with a full income budget.
