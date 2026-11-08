@@ -881,12 +881,13 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
         && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()) {
         const auto& service = pass.capitalCandidates[pass.capitalChoice];
         const bool defenceUpgrade=service.kind==std::string("defence_upgrade");
+        const bool boldUpgrade=service.kind==std::string("vanilla_bold_upgrade");
         const int working=std::max(0,pass.cityPlotPrice);
         if (std::string_view(service.reason)=="early_rocket"
             && int64_t(pass.money)<int64_t(service.price)+service.foundationCost+working) {
             yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
             yardTurn.structureRule="save_early_rocket";
-        } else if (service.kind==std::string("expansion_upgrade") || defenceUpgrade) {
+        } else if (service.kind==std::string("expansion_upgrade") || defenceUpgrade || boldUpgrade) {
             yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
             yardTurn.structureRule=defenceUpgrade ? "save_defence_upgrade" : "save_expansion_upgrade";
             if (pass.money>=service.price && turn.pBuilder->getHealth()>=turn.pBuilder->getMaxHealth()
@@ -1930,7 +1931,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     //     choice of every rule above it, and an unplaceable IX was then rejected each pass
     //     (no_site) and nothing at all was built. The Palace below likewise.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && !pass.vanillaFfaTechDeferred
+        && !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.itemCount[Structure_HeavyFactory] > 0
         && pass.itemCount[Structure_HighTechFactory] > 0
@@ -1942,7 +1943,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
         logDebug("Build IX... money: %d", pass.money);
     }
     if (pass.ixOverdue && !yardTurn.skipRemainingStructureLogic
-        && !pass.vanillaFfaTechDeferred
+        && !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.stablePower
         && pass.money > 1000
@@ -1955,7 +1956,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     }
     // Missing prerequisites never start the IX overdue timer.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && !pass.vanillaFfaTechDeferred
+        && !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.itemCount[Structure_HeavyFactory] > 0
         && pass.itemCount[Structure_HighTechFactory] > 0
@@ -2055,7 +2056,7 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
     // 17b. Palace (after military infrastructure)
     //       City sim: 1 palace per 30000 population
     {
-        const bool palaceAllowed = !pass.vanillaFfaTechDeferred
+        const bool palaceAllowed = !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
             && pass.itemCount[Structure_Palace] < pass.palaceTarget
             && !pass.orderedThisTick.count(Structure_Palace);
         if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic

@@ -115,11 +115,43 @@ bool QuantBot::vanillaMultiEnemyGame() const {
     return false;
 }
 
+QuantBotVanillaPolicy::Plan QuantBot::vanillaBoldPlan() const {
+    using Plan = QuantBotVanillaPolicy::Plan;
+    const auto& force = botConfig().force;
+    if (!(force.vanillaBoldBoom || force.vanillaBoldExpansion || force.vanillaBoldFoundry
+        || force.vanillaBoldNeighbour || force.vanillaBoldTech || force.vanillaBoldAdaptive)
+        || !autonomousCustomArmy() || currentGame->isCitySimEnabled()
+        || currentGame->getGameInitSettings().getModName() != "vanilla" || lastCalculatedSpice <= 0)
+        return Plan::None;
+    Plan plan = force.vanillaBoldBoom ? Plan::Boom : force.vanillaBoldExpansion ? Plan::Expansion
+        : force.vanillaBoldFoundry ? Plan::Foundry : force.vanillaBoldNeighbour ? Plan::Neighbour
+        : force.vanillaBoldTech ? Plan::Tech : Plan::AdaptiveWar;
+    const unsigned minute = getGameCycleCount() / MILLI2CYCLES(60000);
+    if (!QuantBotVanillaPolicy::opening(plan, minute, getHouse()->getNumItems(Structure_IX) > 0))
+        return Plan::None;
+    if (force.vanillaBoldAdaptive && plan == Plan::AdaptiveWar) {
+        if (minute < 3) return Plan::None;
+        const Coord home = findBaseCentre(getHouse()->getHouseID());
+        int nearest = INT32_MAX, occupied = 0;
+        for (const auto& house : currentGame->getGameInitSettings().getHouseInfoList())
+            if (!house.playerInfoList.empty()) ++occupied;
+        for (const auto* structure : getStructureList())
+            if (home.isValid() && knownEnemyStructure(structure))
+                nearest = std::min(nearest, tiles(home, structure->getLocation()));
+        plan = QuantBotVanillaPolicy::adaptive(lastCalculatedSpice / std::max(1, occupied), nearest,
+            int(std::min<int64_t>(INT32_MAX, enemyThreatEstimate())),
+            int(std::min<int64_t>(INT32_MAX, ownGroundArmyValue())));
+    }
+    return plan;
+}
+
 
 int QuantBot::waveReadinessPercent() const {
     if (!autonomousCustomArmy()) return 100;
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
+    if (const auto plan = vanillaBoldPlan(); plan != QuantBotVanillaPolicy::Plan::None)
+        return QuantBotVanillaPolicy::readiness(plan);
     if (botConfig().force.vanillaFfaFullWaves && vanillaMultiEnemyGame()) return 100;
     // A small start buys one full wave before its tempo starts splitting production into raids.
     // This ends only when that wave actually launches, not when its first heavy factory stands.
@@ -132,6 +164,8 @@ int QuantBot::waveReadinessPercent() const {
 
 int QuantBot::openingReadinessPercent() const {
     const int percent = waveReadinessPercent();
+    if (const auto plan = vanillaBoldPlan(); plan != QuantBotVanillaPolicy::Plan::None)
+        return QuantBotVanillaPolicy::readiness(plan);
     // I: a house that started without an army able to launch a wave (a Construction Yard start,
     // not a Fortress with a starting army) holds its first wave until full readiness: small
     // early waves into a base that is building its defence died there (docs/formations.md,
@@ -733,7 +767,9 @@ bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
 int QuantBot::finishTargetTeam() const {
     // Ordered by team id (std::map), scanned in list order: the same choice on every peer.
     std::map<int, Force::TeamStrength> teams;
-    const bool nearby = botConfig().force.vanillaFfaNearbyTarget && vanillaMultiEnemyGame();
+    const auto plan = vanillaBoldPlan();
+    const bool neighbour = plan == QuantBotVanillaPolicy::Plan::Neighbour;
+    const bool nearby = neighbour || (botConfig().force.vanillaFfaNearbyTarget && vanillaMultiEnemyGame());
     const Coord home = nearby ? findBaseCentre(getHouse()->getHouseID()) : Coord::Invalid();
     for (const auto* structure : getStructureList()) {
         if (!knownEnemyStructure(structure)) continue;
@@ -752,9 +788,12 @@ int QuantBot::finishTargetTeam() const {
             if (found != teams.end()) found->second.army += sighting.value;
         }
     const Force::TeamStrength* weakest = nullptr;
-    for (const auto& [id, team] : teams)
-        if (!weakest || (home.isValid() ? Force::nearerOpportunity(team, *weakest)
-                                        : Force::weakerTeam(team, *weakest))) weakest = &team;
+    for (const auto& [id, team] : teams) {
+        const bool prefer = weakest && (neighbour
+            ? team.distance < weakest->distance
+            : home.isValid() ? Force::nearerOpportunity(team, *weakest) : Force::weakerTeam(team, *weakest));
+        if (!weakest || prefer) weakest = &team;
+    }
     return weakest ? weakest->team : -1;
 }
 
@@ -762,6 +801,7 @@ const ObjectBase* QuantBot::finishObjective(const UnitBase* lead, int team) cons
     if (!lead || team < 0) return nullptr;
     const ObjectBase* chosen = nullptr;
     int best = std::numeric_limits<int>::max();
+    const bool neighbour = vanillaBoldPlan() == QuantBotVanillaPolicy::Plan::Neighbour;
     for (const auto* structure : getStructureList()) {
         if (!knownEnemyStructure(structure) || structure->getOwner()->getTeamID() != team) continue;
         int score = tiles(lead->getLocation(), structure->getLocation());
@@ -771,6 +811,7 @@ const ObjectBase* QuantBot::finishObjective(const UnitBase* lead, int team) cons
                 score -= Force::kFinishPriorityTiles; break;
             default: break;
         }
+        if (neighbour && structure->getItemID() == Structure_Refinery) score -= Force::kFinishPriorityTiles;
         if (score >= best || !groundAttackReachable(lead, structure)) continue;
         best = score; chosen = structure;
     }

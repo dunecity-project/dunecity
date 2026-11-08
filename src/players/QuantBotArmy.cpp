@@ -944,8 +944,11 @@ void QuantBot::launchGroundHunt() {
     // target or a move order may hold a troop back. Hunters already in the
     // field are not reset; they are tracked with the army that joins them.
     const bool wholeArmy=!limited && (autonomousCustomArmy() || exhausted);
-    const bool ffaTargeting=(botConfig().force.vanillaFfaWeakestTarget || botConfig().force.vanillaFfaNearbyTarget)
-        && vanillaMultiEnemyGame();
+    const auto vanillaPlan = vanillaBoldPlan();
+    const bool boldTargeting = vanillaPlan == QuantBotVanillaPolicy::Plan::Neighbour
+        || vanillaPlan == QuantBotVanillaPolicy::Plan::AdaptiveWar;
+    const bool ffaTargeting=boldTargeting || ((botConfig().force.vanillaFfaWeakestTarget
+        || botConfig().force.vanillaFfaNearbyTarget) && vanillaMultiEnemyGame());
     const bool ffaSingleFront = botConfig().force.vanillaFfaSingleFront && recoveryActive()
         && vanillaMultiEnemyGame() && lastCalculatedSpice > 0;
     const bool ffaDirected = ffaTargeting || ffaSingleFront;

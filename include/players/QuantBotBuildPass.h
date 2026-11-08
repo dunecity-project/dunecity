@@ -251,6 +251,11 @@ struct QuantBot::BuildPass {
     bool vanillaFfaThreatProduction{};
     bool vanillaFfaLightWorkingCash{};
     bool vanillaFfaTechDeferred{};
+    QuantBotVanillaPolicy::Plan vanillaPlan{QuantBotVanillaPolicy::Plan::None};
+    bool vanillaBoldTechDeferred{};
+    bool vanillaBoldMilitaryHeld{};
+    bool vanillaBoldExpansion{};
+    int vanillaBoldCapital{-1};
     std::vector<CapitalCandidate> capitalCandidates{};
     AITelemetry::Record capitalProducers{};
     AITelemetry::Record capitalUnitOptions{};
