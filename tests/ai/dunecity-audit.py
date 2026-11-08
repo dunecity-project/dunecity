@@ -80,7 +80,8 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
                  'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
                  'field_workers', 'field_moving', 'field_harvesting', 'field_travel_sum',
-                 'field_local_spice', 'field_refineries'
+                 'field_local_spice', 'field_refineries', 'field_moving_cycles', 'field_active_cycles',
+                 'field_return_cycles', 'field_return_trips', 'field_outbound_cycles', 'field_outbound_trips'
 ) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required')
 FIELD_FIELDS = META + ('mod', 'minute', 'cycle', 'field', 'initial', 'remaining')

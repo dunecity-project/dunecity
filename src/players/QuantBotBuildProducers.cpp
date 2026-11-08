@@ -1289,7 +1289,9 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
     const int styleYardShortfall = pass.vanillaEconomy && gameMode == GameMode::Custom
         && pass.itemCount[Structure_HeavyFactory] > 0
         ? style().minYards - pass.itemCount[Structure_ConstructionYard] - pass.itemCount[Unit_MCV] : 0;
-    const bool prioritizeMcv = prioritizeCityMcv || (!pass.postponeCapacityMcv && pass.vanillaEconomy && gameMode == GameMode::Custom
+    const bool prioritizeMcv = (fieldExpansion.yard.isValid() && pass.colonisationNeeded
+        && pass.money >= data[Unit_MCV][houseID].price + 1000) || prioritizeCityMcv
+        || (!pass.postponeCapacityMcv && pass.vanillaEconomy && gameMode == GameMode::Custom
         && !getHouse()->isGroundUnitLimitReached()
         && (DuneCity::prioritizeVanillaMcv(pass.money, getAIHarvesterCount(),
             pass.itemCount[Structure_ConstructionYard], pass.itemCount[Unit_MCV], data[Unit_MCV][houseID].price)
@@ -1300,8 +1302,9 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
     const int mcvShortfall = pass.citySimEnabled
         ? std::max(pass.colonisationNeeded ? 1 : 0,
             pass.cityYardTarget - pass.itemCount[Structure_ConstructionYard] - pass.itemCount[Unit_MCV])
-        : std::max(styleYardShortfall, DuneCity::vanillaMcvShortfall(pass.money, getAIHarvesterCount(),
-            pass.itemCount[Structure_ConstructionYard], pass.itemCount[Unit_MCV]));
+        : std::max(pass.colonisationNeeded ? 1 : 0,
+            std::max(styleYardShortfall, DuneCity::vanillaMcvShortfall(pass.money, getAIHarvesterCount(),
+                pass.itemCount[Structure_ConstructionYard], pass.itemCount[Unit_MCV])));
     if (pass.emitStatsLog && AITelemetry::log().enabled())
         traceDecision("factory_economy_priority",AITelemetry::Record()
             .set("builder",turn.pBuilder->getObjectID()).set("harvesters_committed",pass.itemCount[Unit_Harvester])

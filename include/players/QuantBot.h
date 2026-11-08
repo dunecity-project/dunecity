@@ -462,6 +462,15 @@ private:
     Coord findRockExpansionSite(const MCV* mcv = nullptr, bool needsLocalSpace = false);
     /// Orders one undeployed MCV: keep its remembered site, drive there, deploy.
     void manageMcv(const MCV* pMCV);
+    bool fieldExpansionActive() const;
+    struct FieldExpansionPlan {
+        Coord refinery = Coord::Invalid(), yard = Coord::Invalid(), guard = Coord::Invalid();
+        int localSpice = 0, sharedSpice = 0, fieldSpice = 0;
+    };
+    FieldExpansionPlan surveyFieldExpansion(const MCV* mcv = nullptr);
+    bool manageFieldExpansionMcv(const MCV* mcv);
+    FieldExpansionPlan fieldExpansion;
+    mutable std::optional<bool> fieldExpansionInitialSpice;
     /// A reachable 2x2 yard footprint on the rock formation the base already
     /// occupies, or invalid when this formation has no room left. \a current
     /// is the site this MCV is already driving at; it is kept while it stays

@@ -386,6 +386,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityAdvancedTech = false;
     force.cityContinuousResearch = false;
     force.citySpiceTransition = false;
+    force.spiceFieldExpansion = 0;
     force.citySpiceCapacityRunway = false;
     force.citySingleYardGrowth = false;
     force.cityPowerGrowthHorizon = false;
@@ -734,6 +735,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CityAdvancedTech", force.cityAdvancedTech);
         iniFile.setBoolValue("Force Concentration", "CityContinuousResearch", force.cityContinuousResearch);
         iniFile.setBoolValue("Force Concentration", "CitySpiceTransition", force.citySpiceTransition);
+        iniFile.setIntValue("Force Concentration", "SpiceFieldExpansion", force.spiceFieldExpansion);
         iniFile.setBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
         iniFile.setBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
         iniFile.setBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
@@ -908,6 +910,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityAdvancedTech = iniFile.getBoolValue("Force Concentration", "CityAdvancedTech", force.cityAdvancedTech);
     force.cityContinuousResearch = iniFile.getBoolValue("Force Concentration", "CityContinuousResearch", force.cityContinuousResearch);
     force.citySpiceTransition = iniFile.getBoolValue("Force Concentration", "CitySpiceTransition", force.citySpiceTransition);
+    force.spiceFieldExpansion = iniFile.getIntValue("Force Concentration", "SpiceFieldExpansion", force.spiceFieldExpansion);
     force.citySpiceCapacityRunway = iniFile.getBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
     force.citySingleYardGrowth = iniFile.getBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
     force.cityPowerGrowthHorizon = iniFile.getBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
@@ -1444,6 +1447,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("cityAdvancedTech", force.cityAdvancedTech);
     addNamed("cityContinuousResearch", force.cityContinuousResearch);
     addNamed("citySpiceTransition", force.citySpiceTransition);
+    if (force.spiceFieldExpansion != 0) addNamed("spiceFieldExpansion", force.spiceFieldExpansion);
     addNamed("citySpiceCapacityRunway", force.citySpiceCapacityRunway);
     addNamed("citySingleYardGrowth", force.citySingleYardGrowth);
     addNamed("cityPowerGrowthHorizon", force.cityPowerGrowthHorizon);

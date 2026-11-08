@@ -357,6 +357,9 @@ struct QuantBotConfig {
         /// Experimental/default off: wind down extra workers and refinery bays
         /// when the working fleet can exhaust its remaining spice share shortly.
         bool citySpiceTransition;
+        /// Experimental/default off. Remaining local spice per refinery below
+        /// 4000/8000 requests one guarded, reachable uncontested spice outpost.
+        int spiceFieldExpansion;
         /// Experimental/default off: optional MCVs and producer upgrades retain
         /// working capital in spice-backed Custom cities as well as tax cities.
         bool citySpiceCapacityRunway;

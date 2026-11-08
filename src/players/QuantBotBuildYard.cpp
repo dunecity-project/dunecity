@@ -333,6 +333,22 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     releaseUnfundedChoice();
     chooseYardEssentials(pass, turn, yardTurn);
     releaseUnfundedChoice();
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && getHouse()->hasPower()) {
+        const Uint32 item = fieldExpansion.guard.isValid() ? Uint32(Structure_GunTurret)
+            : fieldExpansion.refinery.isValid() ? Uint32(Structure_Refinery) : Uint32(NONE_ID);
+        const Coord site = item == Structure_GunTurret ? fieldExpansion.guard : fieldExpansion.refinery;
+        if (item != NONE_ID && campaignAvailableToBuild(turn.pBuilder,item)
+            && pass.money >= purchasePrice(turn.pBuilder,item) + 1000
+            && spendingAdmits(pass,item,purchasePrice(turn.pBuilder,item))) {
+            yardTurn.itemID = item;
+            yardTurn.crimeServiceSite = site;
+            yardTurn.structureRule = "spice_field_outpost";
+            yardTurn.skipRemainingStructureLogic = true;
+            // Subsequent yards must not reserve a second order for this site.
+            if (item == Structure_GunTurret) fieldExpansion.guard = Coord::Invalid();
+            else fieldExpansion.refinery = Coord::Invalid();
+        }
+    }
     // Existing processing capacity lost in a raid is recovery, not another
     // optional refinery expansion behind factory/Starport prerequisites.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
@@ -2384,7 +2400,9 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         && protectedProject->item==yardTurn.itemID
         && (std::string_view(protectedProject->reason)=="ground_threat"
             || std::string_view(protectedProject->kind)=="city_supply");
-    if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite)
+    const bool fieldSite = std::string_view(yardTurn.structureRule) == "spice_field_outpost"
+        && (yardTurn.itemID == Structure_Refinery || yardTurn.itemID == Structure_GunTurret);
+    if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite && !fieldSite)
         yardTurn.crimeServiceSite = Coord::Invalid();
 }
 

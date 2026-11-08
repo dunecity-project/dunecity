@@ -1,10 +1,58 @@
 // Read-only probe measurements. Initial connected spice components retain their
 // identity after depletion; later spice spills are deliberately not new fields.
+#include <map>
 namespace FieldExpansionAudit {
 inline const Game* owner = nullptr;
 inline Uint32 sampledCycle = std::numeric_limits<Uint32>::max();
 inline std::vector<int> membership, initial;
 inline int width = 0, height = 0;
+struct Travel {
+    int house = -1, cargo = 0;
+    Uint32 cycle = 0, returnStart = 0, outboundStart = 0;
+    bool moving = false, active = false, returning = false;
+};
+inline std::map<Uint32,Travel> travel;
+inline const Game* travelOwner = nullptr;
+inline Uint32 observed = std::numeric_limits<Uint32>::max();
+struct Totals {
+    uint64_t movingCycles = 0, activeCycles = 0;
+    uint64_t returnCycles = 0, returnTrips = 0, outboundCycles = 0, outboundTrips = 0;
+};
+inline std::array<Totals,NUM_HOUSES> totals;
+inline void observe(Game& game) {
+    const Uint32 now = game.getGameCycleCount();
+    if (travelOwner != &game || now < observed) {
+        travelOwner = &game; travel.clear(); totals = {};
+    }
+    if (now == observed) return;
+    observed = now;
+    for (const auto* unit : unitList) {
+        if (unit->getItemID() != Unit_Harvester || !unit->getOwner()) continue;
+        const auto* harvester = static_cast<const Harvester*>(unit);
+        const int house = unit->getOwner()->getHouseID();
+        auto& state = travel[unit->getObjectID()];
+        if (state.house != house) { state = {}; state.house = house; state.cycle = now; }
+        auto& sum = totals[house];
+        const Uint32 elapsed = now - state.cycle;
+        sum.movingCycles += state.moving ? elapsed : 0;
+        sum.activeCycles += state.active ? elapsed : 0;
+        const int cargo = harvester->getAmountOfSpice().lround();
+        if (harvester->isReturning() && !state.returning) state.returnStart = now;
+        // First actual unloading, not becoming inactive inside a carryall.
+        if (state.returnStart && cargo < state.cargo) {
+            sum.returnCycles += now - state.returnStart; ++sum.returnTrips; state.returnStart = 0;
+        }
+        // Includes refinery release/transport waits; reported separately from
+        // pure movement and from the return-to-first-unload interval.
+        if (cargo == 0 && state.cargo > 0) state.outboundStart = now;
+        if (state.outboundStart && harvester->isHarvesting()) {
+            sum.outboundCycles += now - state.outboundStart; ++sum.outboundTrips; state.outboundStart = 0;
+        }
+        state.cycle = now; state.cargo = cargo;
+        state.returning = harvester->isReturning();
+        state.moving = harvester->isMoving(); state.active = harvester->isActive();
+    }
+}
 inline void sample(Game& game, int minute) {
     const auto cycle = game.getGameCycleCount();
     if (owner != &game || cycle < sampledCycle || membership.empty()) {
@@ -62,6 +110,13 @@ inline void sample(Game& game, int minute) {
         SDL_Log("FIELD_TRAVEL_AUDIT: minute=%d cycle=%u house=%d field_workers=%d field_moving=%d field_harvesting=%d"
                 " field_travel_sum=%d field_local_spice=%d field_refineries=%zu",
             minute,cycle,house->getHouseID(),workers,moving,harvesting,travel,local,refs.size());
+        const auto& sum = totals[house->getHouseID()];
+        SDL_Log("FIELD_TRAVEL_AUDIT: minute=%d cycle=%u house=%d field_moving_cycles=%llu field_active_cycles=%llu"
+                " field_return_cycles=%llu field_return_trips=%llu field_outbound_cycles=%llu field_outbound_trips=%llu",
+            minute,cycle,house->getHouseID(),static_cast<unsigned long long>(sum.movingCycles),
+            static_cast<unsigned long long>(sum.activeCycles),static_cast<unsigned long long>(sum.returnCycles),
+            static_cast<unsigned long long>(sum.returnTrips),static_cast<unsigned long long>(sum.outboundCycles),
+            static_cast<unsigned long long>(sum.outboundTrips));
     }
 }
 }

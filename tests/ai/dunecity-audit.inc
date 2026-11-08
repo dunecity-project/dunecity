@@ -125,6 +125,7 @@ inline void observe(Game& game) {
     static const bool enabled = std::getenv("BALANCE_DUNECITY_AUDIT")!=nullptr;
     if (!enabled) return;
     const Uint32 cycle = game.getGameCycleCount();
+    FieldExpansionAudit::observe(game);
     for (int h=0; h<NUM_HOUSES; ++h) {
         const House* house = game.getHouse(h);
         if (!house || !FfaArmy::quantBotOf(house)) continue;

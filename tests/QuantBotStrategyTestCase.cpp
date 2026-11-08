@@ -6,6 +6,7 @@
 #include <players/QuantBotStrategy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotSpendingPolicy.h>
+#include <players/QuantBotFieldExpansionPolicy.h>
 
 #include <array>
 #include <cstdio>
@@ -448,6 +449,38 @@ TEST_CASE("City building economy candidates are opt-in and independently loaded 
         REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
     }
     std::filesystem::remove(path);
+}
+
+TEST_CASE("Spice field expansion is opt-in, funded by reachable shared spice and round-trips", "[ai][config][spice]") {
+    using namespace QuantBotFieldExpansionPolicy;
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.spiceFieldExpansion == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-field-expansion-test.ini";
+    for (int threshold : {0, 4000, 8000}) {
+        QuantBotConfig expected = defaults;
+        expected.force.spiceFieldExpansion = threshold;
+        { std::ofstream ini(path); ini << "[Force Concentration]\nSpiceFieldExpansion=" << threshold << '\n'; }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.spiceFieldExpansion == threshold);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (threshold == 0));
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.spiceFieldExpansion == threshold);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+    REQUIRE_FALSE(due(0, 0, 2, 100000));
+    REQUIRE_FALSE(due(4000, 0, 2, 0));
+    REQUIRE_FALSE(due(4000, 0, 0, 100000));
+    REQUIRE_FALSE(due(4000, 8000, 2, 100000));
+    REQUIRE_FALSE(due(4000, 1000, 2, 11999));
+    REQUIRE(due(4000, 7999, 2, 12000));
+    REQUIRE(due(8000, 15000, 2, 24000));
+    const auto reach = reachable(3, 3, {1,0,1, 1,0,1, 1,0,1}, {0});
+    REQUIRE(reach == std::vector<uint8_t>{1,0,0, 1,0,0, 1,0,0});
 }
 
 TEST_CASE("Storage capacity defaults on and is loaded saved and hashed", "[ai][city][config][storage]") {

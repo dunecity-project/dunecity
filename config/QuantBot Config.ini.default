@@ -424,6 +424,8 @@ CityAdvancedTech=0
 CityContinuousResearch=0
 # Experimental: stop extra spice capacity when the existing fleet can deplete its share.
 CitySpiceTransition=0
+# Experimental: local spice/refinery threshold for a guarded field outpost (0, 4000, 8000).
+SpiceFieldExpansion=0
 # Experimental: preserve working-capital runway for optional spice-city MCVs/upgrades.
 CitySpiceCapacityRunway=0
 # Experimental: give a single yard profitable RCI growth after ordinary infrastructure.

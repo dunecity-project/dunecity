@@ -112,6 +112,31 @@ test-only behaviour.
   identical, Windows identical apart from the known ±0.1 s `FORMATION_WAVE`/`end_s` timing fields; 12
   style games replayed on Windows matched the mini's rows and per-minute samples.
 
+#### Experimental spice-field outposts (default OFF)
+
+`SpiceFieldExpansion=0/4000/8000` in `[Force Concentration]` compares remaining
+ground-reachable spice within 16 tiles of our refineries with refinery count.
+Below the selected per-refinery threshold, a Custom-game bot may claim the
+nearest new field with no enemy refinery/yard within 20 tiles or live enemy
+combat unit within 12. Ground-connected total spice divided among occupied
+controllers must still fund the enlarged refinery count. A new MCV site requires
+twice the threshold in its 12-tile field window; legal in-range refinery sites
+need one threshold. Yard caps, real build lists, cash, power and spending gates
+still apply. MCVs gather the existing colonist escort, and remote refineries get
+a gun-turret guard. Campaigns, helpers, Tornie content and initially no-spice
+maps retain native behavior; no-spice eligibility reads immutable map terrain,
+not cargo dropped during play. OFF does not alter the native config hash.
+
+Candidate-only styles: `field-expansion-off`, `field-expansion-4000`,
+`field-expansion-8000`. Probe-only `spice-fields.csv` follows initial connected
+spice components through depletion (minute-sampled, so crossing times have
+one-minute resolution). `field_*` sample columns measure active harvesters,
+moving/harvesting counts, nearest-refinery tile-distance sum, local spice and
+refinery count. Tile distance is a travel-distance proxy, not timed trips.
+Per-tick cumulative worker movement/active cycles, returning-to-first-unload
+cycles/trips and empty-to-harvest cycles/trips provide real simulation durations.
+The empty-to-harvest interval includes refinery-release/carryall waits.
+
 ### The styles (all on top of BASE)
 
 | Style | Archetype | Definition (`tests/ai/play-styles/*.ini`) |

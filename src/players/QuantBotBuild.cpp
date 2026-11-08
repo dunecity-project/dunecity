@@ -850,6 +850,11 @@ void QuantBot::planStrategicReserve(BuildPass& pass) {
 void QuantBot::planSpiceEconomy(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    fieldExpansion = surveyFieldExpansion();
+    if (pass.itemCount[Structure_Refinery] > getHouse()->getNumItems(Structure_Refinery)) {
+        fieldExpansion.refinery = Coord::Invalid();
+        fieldExpansion.yard = Coord::Invalid();
+    }
     pass.spiceShare = lastCalculatedSpice / std::max(1, pass.spiceCompetitors);
     // Same competitor count and, under city sim, the same target the space
     // reservation above already used.
@@ -1123,7 +1128,9 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
     // is the only thing that keeps a built-out city growing. It runs beside
     // the yard target rather than through it, so production capacity is still
     // governed by that target alone.
-    pass.colonisationNeeded = colonisationMcvDue(pass.itemCount[Unit_MCV],pass.yardLimit);
+    pass.colonisationNeeded = colonisationMcvDue(pass.itemCount[Unit_MCV],pass.yardLimit)
+        || (fieldExpansion.yard.isValid() && pass.itemCount[Unit_MCV] == 0
+            && (pass.yardLimit <= 0 || pass.itemCount[Structure_ConstructionYard] < pass.yardLimit));
     // Optional construction capacity must not occupy the first heavy factory while a small start
     // is funding its first combat wave. A lost yard or exhausted home rock can still buy an MCV.
     pass.postponeCapacityMcv = (openingCombatBudgetActive() || campaignCombatBudgetActive())
