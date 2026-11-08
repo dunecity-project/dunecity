@@ -228,6 +228,12 @@ struct QuantBotConfig {
         /// Fresh waves reinforce the existing live army's reachable known structure objective.
         /// Uses checkpointed wave state; immediate combat and defence keep their authority.
         bool vanillaFfaSingleFront;
+        /// Below ordinary readiness, let a funded light-unit order use its real price rather
+        /// than the blanket 700-credit entry floor. Existing reserves and mix stay authoritative.
+        bool vanillaFfaLightWorkingCash;
+        /// Fund up to eight sustainable workers and ordinary army readiness before optional
+        /// IX/Palace savings or orders; keep the port, transport and first combat supplier legal.
+        bool vanillaFfaFundedTech;
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.

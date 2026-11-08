@@ -1930,6 +1930,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     //     choice of every rule above it, and an unplaceable IX was then rejected each pass
     //     (no_site) and nothing at all was built. The Palace below likewise.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && !pass.vanillaFfaTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.itemCount[Structure_HeavyFactory] > 0
         && pass.itemCount[Structure_HighTechFactory] > 0
@@ -1941,6 +1942,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
         logDebug("Build IX... money: %d", pass.money);
     }
     if (pass.ixOverdue && !yardTurn.skipRemainingStructureLogic
+        && !pass.vanillaFfaTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.stablePower
         && pass.money > 1000
@@ -1953,6 +1955,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     }
     // Missing prerequisites never start the IX overdue timer.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && !pass.vanillaFfaTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.itemCount[Structure_HeavyFactory] > 0
         && pass.itemCount[Structure_HighTechFactory] > 0
@@ -2052,7 +2055,8 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
     // 17b. Palace (after military infrastructure)
     //       City sim: 1 palace per 30000 population
     {
-        const bool palaceAllowed = pass.itemCount[Structure_Palace] < pass.palaceTarget
+        const bool palaceAllowed = !pass.vanillaFfaTechDeferred
+            && pass.itemCount[Structure_Palace] < pass.palaceTarget
             && !pass.orderedThisTick.count(Structure_Palace);
         if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
                             && pass.money > 5000

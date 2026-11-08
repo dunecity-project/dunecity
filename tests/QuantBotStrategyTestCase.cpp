@@ -716,17 +716,20 @@ TEST_CASE("Exhausted army dispatch defaults on and independently round-trips bot
 TEST_CASE("Vanilla FFA switches default off and independently persist every hashed combination",
           "[ai][force][ffa][config]") {
     const QuantBotConfig defaults;
-    const std::array<bool QuantBotConfig::ForceSettings::*, 7> members{
+    const std::array<bool QuantBotConfig::ForceSettings::*, 9> members{
         &QuantBotConfig::ForceSettings::vanillaFfaWeakestTarget,
         &QuantBotConfig::ForceSettings::vanillaFfaNearbyTarget,
         &QuantBotConfig::ForceSettings::vanillaFfaReserve,
         &QuantBotConfig::ForceSettings::vanillaFfaFullWaves,
         &QuantBotConfig::ForceSettings::vanillaFfaStarportAfterWave,
         &QuantBotConfig::ForceSettings::vanillaFfaThreatProduction,
-        &QuantBotConfig::ForceSettings::vanillaFfaSingleFront};
-    const std::array<const char*, 7> names{
+        &QuantBotConfig::ForceSettings::vanillaFfaSingleFront,
+        &QuantBotConfig::ForceSettings::vanillaFfaLightWorkingCash,
+        &QuantBotConfig::ForceSettings::vanillaFfaFundedTech};
+    const std::array<const char*, 9> names{
         "VanillaFfaWeakestTarget", "VanillaFfaNearbyTarget", "VanillaFfaReserve", "VanillaFfaFullWaves",
-        "VanillaFfaStarportAfterWave", "VanillaFfaThreatProduction", "VanillaFfaSingleFront"};
+        "VanillaFfaStarportAfterWave", "VanillaFfaThreatProduction", "VanillaFfaSingleFront",
+        "VanillaFfaLightWorkingCash", "VanillaFfaFundedTech"};
     for (const auto member : members) REQUIRE_FALSE(defaults.force.*member);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-ffa-config-test.ini";
     std::map<std::string, unsigned> hashes;

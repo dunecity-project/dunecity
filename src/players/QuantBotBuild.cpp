@@ -2283,11 +2283,23 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     auto& data = currentGame->objectData.data;
     pass.roadMaintenanceAttempted = false;
     const auto& force = botConfig().force;
-    const bool vanillaFfaGrowth = (force.vanillaFfaStarportAfterWave || force.vanillaFfaThreatProduction)
+    const bool vanillaFfaEconomyScope = (force.vanillaFfaStarportAfterWave || force.vanillaFfaThreatProduction
+            || force.vanillaFfaLightWorkingCash || force.vanillaFfaFundedTech)
         && vanillaMultiEnemyGame() && lastCalculatedSpice > 0
         && pass.actualHarvesters >= 4 && getAIRefineryBays() > 0
         && getHouse()->getNumItems(Structure_ConstructionYard) > 0
         && !pass.rockExpansionNeeded && !pass.colonisationNeeded;
+    const bool vanillaFfaGrowth = vanillaFfaEconomyScope
+        && (force.vanillaFfaStarportAfterWave || force.vanillaFfaThreatProduction);
+    const bool seedNeeded = force.vanillaFfaFundedTech && vanillaFfaEconomyScope
+        && pass.actualHarvesters < std::min(8, pass.spiceHarvesterTarget);
+    const bool checkReadiness = vanillaFfaEconomyScope
+        && (force.vanillaFfaLightWorkingCash || (force.vanillaFfaFundedTech && !seedNeeded));
+    const bool armyReady = !checkReadiness || bundleArmyReady();
+    pass.vanillaFfaLightWorkingCash = force.vanillaFfaLightWorkingCash
+        && vanillaFfaEconomyScope && !armyReady;
+    pass.vanillaFfaTechDeferred = force.vanillaFfaFundedTech
+        && vanillaFfaEconomyScope && (seedNeeded || !armyReady);
     bool groundEconomyThreat = false;
 
     pass.defendingEconomy = false;
@@ -2349,8 +2361,9 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
                 && !builder->isUpgrading() && !builder->isWaitingToPlace()
                 && !getHouse()->isUnitLimitReached(item)) currentBurn=cost/QuantBotSpendingPolicy::horizonMinutes;
             if (!campaignAvailableToBuild(builder,item)) continue;
-            if (pass.vanillaFfaStarportDeferred && builder->getItemID() == Structure_HeavyFactory
-                && builder->getHealth() > 0 && !builder->isUpgrading() && !builder->isOnHold()
+            if ((pass.vanillaFfaStarportDeferred || pass.vanillaFfaTechDeferred)
+                && builder->getItemID() == Structure_HeavyFactory && builder->getHealth() > 0
+                && !builder->isUpgrading() && !builder->isOnHold()
                 && QuantBotBuildPolicy::militaryItem(item)) localGroundSupplier = true;
             // MCVs are occasional capital purchases, not a permanent production
             // mix. Their real queue cost is already reserved. Assuming every
@@ -2383,6 +2396,12 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
                 .set("construction_capacity_cost",cityCapacity));
     }
     pass.vanillaFfaStarportDeferred &= localGroundSupplier;
+    pass.vanillaFfaTechDeferred &= localGroundSupplier;
+    if (pass.vanillaFfaTechDeferred
+        && (pass.strategicReserveItem == Structure_IX || pass.strategicReserveItem == Structure_Palace)) {
+        pass.strategicReserveItem = NONE_ID;
+        pass.strategicReserveCost = 0;
+    }
     // A first wave above tech4 requires a Repair Yard. Delaying the optional
     // port must not strand that prerequisite behind perpetual unit spending.
     if (pass.vanillaFfaStarportDeferred && getHouse()->getTechLevel() > 4
@@ -3218,6 +3237,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
     }
     bool firstSupplier = false;
     auto structure = [&](Uint32 goal) {
+        if (pass.vanillaFfaTechDeferred && (goal == Structure_IX || goal == Structure_Palace)) return false;
         if (pass.itemCount[goal] > 0 || !data[goal][house].enabled
             || data[goal][house].techLevel > getHouse()->getTechLevel()) return false;
         Uint32 item = goal;
@@ -4200,7 +4220,23 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
                 .set("reason",c.reason).set("urgent",c.urgent)
                 .set("affordable",pass.money>=c.price+c.foundationCost));
         }
-        pass.capitalDecision=traceDecision("capital_plan",AITelemetry::Record().set("policy_version",2)
+        auto observeVanillaFfa = [&](AITelemetry::Record& details) -> AITelemetry::Record& {
+            const auto& force = botConfig().force;
+            if (!(force.vanillaFfaStarportAfterWave || force.vanillaFfaThreatProduction
+                    || force.vanillaFfaLightWorkingCash || force.vanillaFfaFundedTech)
+                || !vanillaMultiEnemyGame()) return details;
+            if (force.vanillaFfaStarportAfterWave)
+                details.set("vanilla_ffa_port_deferred",pass.vanillaFfaStarportDeferred)
+                    .set("vanilla_ffa_wave_capital",pass.vanillaFfaWaveCapitalReserve);
+            if (force.vanillaFfaThreatProduction)
+                details.set("vanilla_ffa_threat_production",pass.vanillaFfaThreatProduction);
+            if (force.vanillaFfaLightWorkingCash)
+                details.set("vanilla_ffa_light_working_cash",pass.vanillaFfaLightWorkingCash);
+            if (force.vanillaFfaFundedTech)
+                details.set("vanilla_ffa_tech_deferred",pass.vanillaFfaTechDeferred);
+            return details;
+        };
+        pass.capitalDecision=traceDecision("capital_plan",observeVanillaFfa(AITelemetry::Record().set("policy_version",2)
             .set("mode",pass.citySimEnabled ? "dunecity" : "vanilla").set("campaign",isCampaignGameType(currentGame->gameType))
             .set("campaign_helper_reserve",harvesterInvestmentReserve(pass)).set("defending",pass.defendingEconomy)
             .set("cash",getHouse()->getCredits()).set("committed_cost",pass.queuedProductionCost).set("spendable",pass.money)
@@ -4215,9 +4251,6 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("funds_parallel_production",pass.cashFlow.fundsParallelProduction).set("shared_priority",pass.sharedSpending)
             .set("prefer_funded_battery",preferFundedBattery)
             .set("starport_market_available",pass.starportMarketAvailable).set("funded_factory_opening",pass.fundedFactoryOpening)
-            .set("vanilla_ffa_port_deferred",pass.vanillaFfaStarportDeferred)
-            .set("vanilla_ffa_wave_capital",pass.vanillaFfaWaveCapitalReserve)
-            .set("vanilla_ffa_threat_production",pass.vanillaFfaThreatProduction)
             .set("funded_city_production",pass.fundedCityProduction).set("next_heavy_runway",pass.nextHeavyRunway)
             .set("city_growth_protected",pass.cityGrowthProtected)
             .set("city_growth_yards_busy",pass.cityGrowthYardsBusy)
@@ -4252,7 +4285,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("ground_threat_x",pass.groundThreatAsset.x).set("ground_threat_y",pass.groundThreatAsset.y)
             .set("unit_options",pass.capitalUnitOptions).set("candidates",options).set("selected",pass.capitalChoice)
             .set("reason",pass.cityGrowthProtected ? "protect_demanded_city_growth" : !pass.sharedSpending ? "funded_parallel_production" : pass.capitalChoice<0
-                ? "no_useful_available_purchase" : "highest_marginal_priority"));
+                ? "no_useful_available_purchase" : "highest_marginal_priority")));
     }
 }
 

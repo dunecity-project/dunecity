@@ -359,6 +359,8 @@ VanillaFfaFullWaves=0
 VanillaFfaStarportAfterWave=0
 VanillaFfaThreatProduction=0
 VanillaFfaSingleFront=0
+VanillaFfaLightWorkingCash=0
+VanillaFfaFundedTech=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0

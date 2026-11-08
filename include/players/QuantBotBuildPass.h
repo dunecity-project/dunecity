@@ -248,6 +248,8 @@ struct QuantBot::BuildPass {
     bool vanillaFfaStarportDeferred{};
     int vanillaFfaWaveCapitalReserve{};
     bool vanillaFfaThreatProduction{};
+    bool vanillaFfaLightWorkingCash{};
+    bool vanillaFfaTechDeferred{};
     std::vector<CapitalCandidate> capitalCandidates{};
     AITelemetry::Record capitalProducers{};
     AITelemetry::Record capitalUnitOptions{};
