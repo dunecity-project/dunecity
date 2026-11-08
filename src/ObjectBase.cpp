@@ -300,10 +300,8 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
     // Immortality guard: Human-controlled houses are invulnerable in single-player modes when option is enabled
     // This applies when ANY human player controls the house (not just AI players)
     if(damage > 0) {
-        // Game::localHumanImmortalityApplies() carries the option, the game-type restriction
-        // and - new - the requirement that pLocalHouse really is played by a registered human.
-        // While observing, pLocalHouse is a view anchor onto an AI faction, and making that
-        // faction invulnerable would change the match being watched.
+        // The option protects only a real, registered local human's house, never a faction
+        // being watched by the detached, houseless observer.
         if(currentGame->localHumanImmortalityApplies() && getOwner() == pLocalHouse) {
             // Zero damage so human-controlled units/structures are invulnerable
             // Continue function execution so visibility/music/stats hooks still run

@@ -63,7 +63,8 @@ CampaignStatsMenu::CampaignStatsMenu(int level) : MenuBase()
 
     showTaxStatistics = isDuneCityTaxStatisticEnabled();
 
-    const int localHouseID = pLocalHouse->getHouseID();
+    const int localHouseID = currentGame->getOutcomeHouse()
+        ? currentGame->getOutcomeHouse()->getHouseID() : currentGame->getInterfaceHouseID();
     Uint32 colorYou = getHouseColorRGB(getHouseVisualHouse(localHouseID), 1);
     Uint32 colorEnemy = localHouseID == HOUSE_SARDAUKAR
         ? COLOR_RGB(255, 32, 192)
@@ -491,7 +492,8 @@ void CampaignStatsMenu::calculateScore(int level)
     float totalHumanCredits = 0.0f;
     // A campaign house can have both a human and an AI partner. Controller
     // type does not identify the enemy; use the same teams as campaign victory.
-    const int localTeam = pLocalHouse->getTeamID();
+    const House* outcomeHouse = currentGame->getOutcomeHouse();
+    const int localTeam = outcomeHouse ? outcomeHouse->getTeamID() : 0;
     for(int i=0; i < NUM_HOUSES; i++) {
         House* pHouse = currentGame->getHouse(i);
         // The Natives (worms, crime troopers) are neither side: their kills and losses are no

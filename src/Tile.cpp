@@ -1567,7 +1567,8 @@ void Tile::selectFilter(int houseID, ObjectBase** lastCheckedObject, ObjectBase*
                                 obj = currentGame->getObjectManager().getObject(objectID);
 
                                 if (obj->isSelected()
-                                    || !currentGame->canPlayerControlHouse(currentGame->getHouse(houseID), obj->getOwner()))
+                                    || (!currentGame->isObserving()
+                                        && !currentGame->canPlayerControlHouse(currentGame->getHouse(houseID), obj->getOwner())))
                                     return;
 
                                 if (!predicate(obj))

@@ -887,7 +887,7 @@ void StructureBase::destroy() {
         }
     }
 
-    if(isVisible(pLocalHouse->getTeamID()))
+    if(currentGame->isObserving() || (pLocalHouse && isVisible(pLocalHouse->getTeamID())))
         soundPlayer->playSoundAt(Sound_ExplosionStructure, location);
 
 

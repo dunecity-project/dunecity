@@ -315,7 +315,7 @@ public:
     */
     bool isSpectating() const;
 
-    /// True for the Offline Custom Game "Spectate" choice: all-AI match watched locally.
+    /// True for offline observation, including all-AI replays and campaign probes.
     bool isLocalObserver() const { return localObserver; }
 
     /**
@@ -325,14 +325,18 @@ public:
     */
     bool isObserving() const { return localObserver || isSpectating(); }
 
+    /// Presentation palette only. An observer has no house and uses the neutral UI.
+    int getInterfaceHouseID() const;
+    /// Mission objective perspective, not ownership: an observed campaign still has authored goals.
+    House* getOutcomeHouse() const;
+
     /**
         Whether the single-player "immortal human player" option may protect pLocalHouse.
 
-        The option exists to protect the house the local *human* plays. While observing,
-        pLocalHouse is only a view anchor onto a real AI faction, so answering yes there would
-        quietly make one AI invulnerable and change the outcome of the match being watched.
-        Watching a game must not alter it. Ordinary single-player and shared-house games are
-        unaffected, and the network cases never reach these guards at all.
+        The option exists to protect the house the local *human* plays. An observer has no
+        local house or registered controller and must never protect a faction it watches.
+        Ordinary single-player and shared-house games are unaffected; network games never
+        reach these guards.
     */
     bool localHumanImmortalityApplies() const;
 

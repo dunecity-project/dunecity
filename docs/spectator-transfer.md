@@ -6,6 +6,21 @@ are unchanged. Fast compression (`Z_BEST_SPEED`) runs once per checkpoint per vi
 stream plus its header is not smaller, the original bytes are sent. Progress reports count
 actual wire bytes. Both compressed input and decoded output are capped at 8 MiB.
 
+## Houseless observer view
+
+Local observers and network spectators have `pLocalHouse == nullptr`. Their detached
+`HumanPlayer` stores selection groups and chat identity only: it has no house, controller
+slot, registry entry, or saved simulation state. The reserved observer controller ID still
+rejects commands, including city orders without an acting object.
+
+The interface uses the neutral palette and empty local economy gauges; inspecting an object
+or browsing budget/statistics windows reads that object's or window's selected owner instead.
+Fog, radar, selection, and positional audio use the observer view without changing simulation
+visibility. Save/replay restoration recreates the houseless identity; promotion restores a real
+local human and house. An AI-only campaign probe uses the same observer identity while native
+victory rules retain the mission's authored objective house, not a local owner.
+
+
 ## Protocol compatibility
 
 The existing authorized, reliable JOIN_SYNC/JOIN_ACK channel and spectator operations are used:

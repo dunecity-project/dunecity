@@ -65,7 +65,7 @@ void Player::save(OutputStream& stream) const {
 
 void Player::logDebug(const char* fmt, ...) const {
 //#ifdef DEBUG_AI
-    std::string house = getHouseNameByNumber((HOUSETYPE) pHouse->getHouseID());
+    const std::string house = pHouse ? getHouseNameByNumber((HOUSETYPE) pHouse->getHouseID()) : "Observer";
     fprintf(stderr, "%s (%s):   ", playername.c_str(), house.c_str());
     va_list arg;
     va_start(arg, fmt);
@@ -76,7 +76,7 @@ void Player::logDebug(const char* fmt, ...) const {
 }
 
 void Player::logWarn(const char* fmt, ...) const {
-    std::string house = getHouseNameByNumber((HOUSETYPE) pHouse->getHouseID());
+    const std::string house = pHouse ? getHouseNameByNumber((HOUSETYPE) pHouse->getHouseID()) : "Observer";
     fprintf(stderr, "%s (%s):   ", playername.c_str(), house.c_str());
     va_list arg;
     va_start(arg, fmt);

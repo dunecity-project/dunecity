@@ -848,13 +848,13 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
         if (!tile_center)
             return;
 
-        if(tile_center->isExploredByTeam(pHouse->getTeamID()) || debug || observing) {
+        if(debug || observing || (pHouse && tile_center->isExploredByTeam(pHouse->getTeamID()))) {
             lastCheckedObject = tile_center->getObjectAt(realX, realY);
         } else {
             lastCheckedObject = nullptr;
         }
 
-        if(lastCheckedObject && currentGame->canPlayerControlHouse(pHouse, lastCheckedObject->getOwner())) {
+        if(lastCheckedObject && (observing || currentGame->canPlayerControlHouse(pHouse, lastCheckedObject->getOwner()))) {
             // Buildings have a single-object sidebar. Shift must not combine a
             // building with troops (or another building) into a troop command panel.
             if (lastCheckedObject->isAStructure()) {
@@ -878,7 +878,7 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
                         const auto tile = getTile_internal(i, j);
 
                         if (tile && tile->hasAnObject()) {
-                            tile->selectAllPlayersUnitsOfType(pHouse->getHouseID(), lastSinglySelectedObject->getItemID(), &lastCheckedObject, &lastSelectedObject);
+                            tile->selectAllPlayersUnitsOfType(observing ? lastSinglySelectedObject->getOwner()->getHouseID() : pHouse->getHouseID(), lastSinglySelectedObject->getItemID(), &lastCheckedObject, &lastSelectedObject);
                         }
                     }
                 }
@@ -910,10 +910,10 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
                 const auto tile = getTile_internal(i, j);
 
                 const bool visibleHere = observing
-                    || (tile && tile->isExploredByTeam(pHouse->getTeamID())
+                    || (pHouse && tile && tile->isExploredByTeam(pHouse->getTeamID())
                         && !tile->isFoggedByTeam(pHouse->getTeamID()));
                 if (tile && tile->hasAnObject() && visibleHere) {
-                    tile->selectAllPlayersUnits(pHouse->getHouseID(), &lastCheckedObject, &lastSelectedObject);
+                    tile->selectAllPlayersUnits(pHouse ? pHouse->getHouseID() : -1, &lastCheckedObject, &lastSelectedObject);
                 }
             }
         }
@@ -925,7 +925,7 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
         lastSelectedObject = lastCheckedObject;
         currentGame->getSelectedList().insert(lastCheckedObject->getObjectID());
         currentGame->selectionChanged();
-    } else if (lastSelectedObject != nullptr) {
+    } else if (lastSelectedObject != nullptr && !observing) {
         lastSelectedObject->playSelectSound();  //we only want one unit responding
     }
 }
