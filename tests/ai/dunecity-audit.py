@@ -65,6 +65,7 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                       'power_deficit_cycles', 'required_power_deficit_cycles',
                        'score', 'drawn', 'won', 'flags') + tuple(
     field for detector in DETECTORS for field in (detector, 'eligible_' + detector, 'first_' + detector)
 ) + TROOPER_FIELDS + ('air_kill_telemetry',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS + (
@@ -78,7 +79,8 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'ledger_enabled', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
                  'yard_storage', 'police_funding', 'army_target', 'unit_limit', 'spice_multiplier', 'sale_credits',
                  'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
-                 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost'
+                 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                 'power_deficit_cycles', 'required_power_deficit_cycles'
 ) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required')
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
@@ -1093,8 +1095,9 @@ def play(args, scratch, binary, game):
                 air_kill_telemetry=capture['status'],
                 **{key: last.get(key, '') for key in TROOPER_FIELDS},
                 **{key: air_final[number][key] for key in AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS},
-                **{key: last.get(key, '') if telemetry or key == 'storage_full_cycles' else ''
-                   for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost')},
+                **{key: last.get(key, '') if telemetry or key not in ('storage_overflow_cycles', 'storage_income_lost') else ''
+                   for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                               'power_deficit_cycles', 'required_power_deficit_cycles')},
                 flags='/'.join(d for d in DETECTORS if detectors[d])))
         append(results / 'samples.csv', SAMPLE_FIELDS, samples)
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)

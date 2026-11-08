@@ -111,9 +111,11 @@ struct StorageObservation {
     const House* house{};
     Uint32 cycle{};
     Uint32 fullCycles{}, overflowCycles{};
+    Uint32 powerDeficitCycles{}, requiredPowerDeficitCycles{};
     int capacity{};
     int64_t lostRaw{}, incomeLostRaw{};
     bool full{};
+    bool powerDeficit{}, requiredPowerDeficit{};
 };
 inline std::array<StorageObservation,NUM_HOUSES> storage;
 
@@ -147,6 +149,8 @@ inline void observe(Game& game) {
         if (state.house==house && cycle>state.cycle) {
             const Uint32 elapsed = cycle-state.cycle;
             if (state.full) state.fullCycles+=elapsed;
+            if (state.powerDeficit) state.powerDeficitCycles+=elapsed;
+            if (state.requiredPowerDeficit) state.requiredPowerDeficitCycles+=elapsed;
             if (lost>state.lostRaw && house->getCapacity()>=state.capacity) {
                 state.overflowCycles+=elapsed;
                 state.incomeLostRaw+=lost-state.lostRaw;
@@ -154,6 +158,8 @@ inline void observe(Game& game) {
         }
         state.house=house;state.cycle=cycle;state.capacity=house->getCapacity();state.lostRaw=lost;
         state.full=house->isAlive() && state.capacity>0 && house->getEarnedCredits()>=FixPoint(state.capacity);
+        state.powerDeficit=house->isAlive() && house->getProducedPower()<house->getPowerRequirement();
+        state.requiredPowerDeficit=state.powerDeficit && house->isPowerRequired();
     }
 }
 
@@ -279,7 +285,7 @@ inline void sample(Game& game) {
                 " spice_gross=%d tax_gross=%d starting_cash=%d spice_cash=%d city_cash=%d"
                 " capacity=%d yard_storage=%d police_funding=%d army_target=%d unit_limit=%d"
                 " spice_multiplier=%u sale_credits=%u storage_full_cycles=%u storage_overflow_cycles=%u"
-                " storage_income_lost=%lld economy=%s",
+                " storage_income_lost=%lld power_deficit_cycles=%u required_power_deficit_cycles=%u economy=%s",
                 minute,game.getGameCycleCount(),house->getHouseID(),int(AITelemetry::log().enabled()),
                 house->getHarvestedSpice().lround(),house->getCityTaxReceipts().lround(),
                 house->getStartingCredits().lround(),house->getStoredCredits().lround(),house->getCityCredits().lround(),
@@ -289,6 +295,8 @@ inline void sample(Game& game) {
                 house->getSpiceIncomeMultiplier(),house->getSaleCredits(),
                 storage[house->getHouseID()].fullCycles,storage[house->getHouseID()].overflowCycles,
                 static_cast<long long>(storage[house->getHouseID()].incomeLostRaw/(int64_t{1}<<32)),
+                storage[house->getHouseID()].powerDeficitCycles,
+                storage[house->getHouseID()].requiredPowerDeficitCycles,
                 AITelemetry::log().economyTotals(house->getHouseID()).json().c_str());
     }
 }
