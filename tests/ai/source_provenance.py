@@ -30,7 +30,10 @@ def _entry_header(digest, name, logical_link, size):
 
 def source_fingerprint(root: Path, build: Path, output: Path) -> str:
     root = root.resolve()
-    excluded = (build.resolve(), output.resolve())
+    excluded_names = tuple(os.path.normcase(os.fspath(path.resolve())) for path in (build, output))
+    # Include the separator: "build/" is excluded, but "build-sibling/" is not.
+    # PurePath containment can allocate every ancestor on supported Python versions.
+    excluded_prefixes = tuple(os.path.join(name, '') for name in excluded_names)
     names = subprocess.check_output(
         ['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
         cwd=root).decode('utf-8', errors='surrogateescape').split('\0')
@@ -59,7 +62,8 @@ def source_fingerprint(root: Path, build: Path, output: Path) -> str:
             if parent not in resolved_parents:
                 resolved_parents[parent] = parent.resolve()
             resolved = resolved_parents[parent] / path.name
-        if any(resolved.is_relative_to(target) for target in excluded):
+        resolved_name = os.path.normcase(os.fspath(resolved))
+        if resolved_name in excluded_names or resolved_name.startswith(excluded_prefixes):
             continue
         if not actual_link and (info is None or not stat.S_ISREG(info.st_mode)):
             raise RuntimeError(f'Cannot fingerprint source input: {name}')

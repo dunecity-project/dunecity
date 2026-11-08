@@ -478,7 +478,7 @@ if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
     if(Python3_Interpreter_FOUND)
         add_test(NAME source_identity_regression COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_genome_qualification.py
-            CandidateQualificationTests.test_source_identity_matches_committed_blobs_not_modified_worktree)
+            SourceIdentityTests.test_source_identity_matches_committed_blobs_not_modified_worktree)
         set_tests_properties(source_identity_regression PROPERTIES TIMEOUT 60)
         add_test(NAME cross_platform_city_medium COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable
