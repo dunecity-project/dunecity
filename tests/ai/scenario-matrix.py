@@ -62,6 +62,7 @@ sys.path.insert(0, str(root / 'tests/ai'))
 from probe_profile import finish_game, headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
 import genome_qualification  # noqa: E402
+from fleet_observer import FLEET_VALUES, REFINERY_VALUES, fleet_observations  # noqa: E402
 
 MP = root / 'data/maps/multiplayer'
 AAA_MAP = root / 'data/maps/singleplayer/5P - 128x128 - All against Atreides.ini'
@@ -77,11 +78,11 @@ CLASSES = {'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBr
            'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard'}
 QUANTBOT_ORDER = ('QB', 'QH', 'QM', 'QE')
 DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
-CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team')
+CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team', 'controls')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
-               'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint') \
-              + genome_qualification.FIELDS
+               'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint',
+               'style_seats', 'control_diagnostics') + genome_qualification.FIELDS
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
@@ -91,7 +92,10 @@ SAMPLE_FIELDS = ('id', 'category', 'cell', 'seed', 'minute', 'cycle', 'house', '
                  'yard_level', 'queue', 'upgrading', 'waiting', 'fronts', 'gun', 'rocket', 'radar', 'starport',
                  'heavy', 'ix', 'fighters', 'moving', 'targeting', 'enemies', 'enemy_value', 'covered_enemies',
                  'spice', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
-                 'police_funding', 'army_target', 'spent_total', 'power_spent', 'police_charged', 'storage_lost')
+                 'police_funding', 'army_target', 'spent_total', 'power_spent', 'police_charged', 'storage_lost',
+                 'ledger_enabled', 'refineries', 'power_required', 'storage_full_cycles', 'storage_overflow_cycles',
+                 'storage_income_lost', 'power_deficit_cycles', 'required_power_deficit_cycles') + FLEET_VALUES
+REFINERY_FIELDS = ('id', 'category', 'cell', 'seed') + REFINERY_VALUES
 WAVE_FIELDS = ('id', 'category', 'cell', 'seed', 'house', 'event', 'cycle', 'members', 'value')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20
@@ -138,6 +142,38 @@ def ffa(*codes):
 
 def skirmish_spec(size, base, army, **extra):
     return ','.join([f'size={size}', f'base={base}', f'army={army}'] + [f'{k}={v}' for k, v in extra.items()])
+
+
+def control_cells():
+    """Mandatory fixed controls; two seeds rotate houses/starts as in other match cells."""
+    maps = (
+        '2P - 64x64 - Bottle Neck',
+        '2P - 128x31 - 1v1 - Sihaya-Pip',
+        '2P - 192x192 - Kleiner Lvl',
+        '4P - 64x128 - 2v2 - Tuono-Blake',
+        '4P - 128x128 - Mountain Pass',
+        '4P - 128x128 - Wormhole',
+        '4P - 128x128 - Habbanya-Froiud',
+        '5P - 128x128 - Fortress',
+        '6P - 64x64 - Fertile Basin',
+        '6P - 128x128 - Enclaves',
+        '6P - 256x256 - Alkozeltser 4',
+        '4P - 192x192 - DuneCity',
+        '4P - 64x64 - Silicon Valley',
+    )
+    cells = []
+    for number, name in enumerate(maps, 1):
+        players = int(name[0])
+        slots = ffa(*('QB', 'QH', 'QM', 'QE', 'AH', 'AM')[:players])
+        if number == 4:
+            # Standard stronger-v-weaker team cell, with one Brutal candidate.
+            slots = team_slots(['QB', 'QH'], ['QM', 'QM'])
+        named = ['harkonnen', 'atreides', 'ordos', 'fremen', 'sardaukar', 'mercenary'] if players == 6 else None
+        short = name.rsplit(' - ', 1)[-1].lower().replace(' ', '-')
+        cells.append(match('controls', f'{number:02d}-{short}', 'dunecity' if number == 12 else 'vanilla',
+                           slots, path=mp_map(name), houses=named, full=2,
+                           minutes=80 if '192x192' in name or '256x256' in name else 60))
+    return cells
 
 
 def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
@@ -272,8 +308,30 @@ def aaa_seeds(count):
 
 
 def schedule(args):
+    if args.tier == 'controls' and (getattr(args, 'economy_samples', False) or getattr(args, 'genome', None)
+                                    or getattr(args, 'game_options', None)):
+        raise SystemExit('Control games are unobserved native matches: no --economy-samples, --genome '
+                         'or --game-options (a candidate is a --style on the Brutal seat only)')
+    diagnostic = getattr(args, 'control_diagnostics', False)
+    if diagnostic and (args.tier != 'controls' or getattr(args, 'check', False)):
+        raise SystemExit('--control-diagnostics requires --tier controls and cannot be a --check gate')
+    control_seeds = getattr(args, 'control_seeds', None)
+    control_mod = getattr(args, 'control_mod', None)
+    if (control_seeds or control_mod) and not diagnostic:
+        raise SystemExit('--control-seeds/--control-mod require --control-diagnostics')
+    if control_seeds and (len(set(control_seeds)) != len(control_seeds)
+                          or any(not 0 <= seed <= 0xffffffff for seed in control_seeds)):
+        raise SystemExit('--control-seeds must be distinct unsigned 32-bit seeds')
+    if args.tier == 'controls' and (getattr(args, 'genome', None) or getattr(args, 'game_options', None)
+                                   or (getattr(args, 'economy_samples', False) and not diagnostic)):
+        raise SystemExit('Control gates are unobserved native matches: no --economy-samples, --genome '
+                         'or --game-options; use --control-diagnostics for a separate observed study')
     games = []
-    for cell in matrix(getattr(args, 'ladder_seeds', LADDER_SEEDS), getattr(args, 'team_seeds', TEAM_SEEDS)):
+    cells = control_cells() if args.tier == 'controls' else matrix(
+        getattr(args, 'ladder_seeds', LADDER_SEEDS), getattr(args, 'team_seeds', TEAM_SEEDS))
+    for cell in cells:
+        if diagnostic and control_mod:
+            cell = dict(cell, mod=control_mod)
         if args.categories and cell['category'] not in args.categories:
             continue
         if getattr(args, 'cells', None) and not re.search(args.cells, f'{cell["category"]}/{cell["name"]}/{cell["mod"]}'):
@@ -288,10 +346,14 @@ def schedule(args):
         if cell['kind'] == 'campaign':
             for house in ('atreides', 'harkonnen', 'ordos'):
                 for level, mission in campaign_missions():
-                    for seed in seeds_for('campaign', f'{house}{mission}', count):
+                    seeds = getattr(args, 'campaign_seeds', None)
+                    if seeds is None:
+                        seeds = seeds_for('campaign', f'{house}{mission}', count)
+                    for seed in dict.fromkeys(seeds):
                         games.append(campaign_game(cell, house, level, mission, seed))
             continue
-        seeds = aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
+        seeds = ((control_seeds or (10801, 11810)) if cell['category'] == 'controls' else
+                 aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count))
         for index, seed in enumerate(seeds):
             game = match_game(cell, index, seed)
             if game['id'] == 'skirmish/4p-ffa-medium-smallarmy/vanilla/90866':
@@ -409,7 +471,7 @@ def command(args, binary, game, out):
     cmd += headless_asset_arguments()
     if not (getattr(args, 'attack_events', False) or getattr(args, 'keep_telemetry', False)):
         cmd += ['--no-ai-telemetry']
-    if getattr(args, 'style', None):
+    if getattr(args, 'style', None) and args.tier != 'controls':
         cmd += ['--scenario-style', args.style]
     options_path = game.get('options')
     if getattr(args, 'genome', None):
@@ -437,8 +499,61 @@ def command(args, binary, game, out):
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
     if getattr(args, 'genome', None):
         cmd += ['--genome-phase-dir', str(out.with_suffix('.candidate'))]
+    elif directory := control_style_inputs(args, game, out):
+        cmd += ['--genome-phase-dir', str(directory)]
     cmd += ['--skirmish', game['skirmish']] if game['skirmish'] else ['--custom-map', str(game['path'])]
     return cmd
+
+
+def control_style_inputs(args, game, out):
+    """Controls: --style overlays only the candidate seat (slot 0, the Brutal QuantBot) through the
+    per-house genome-phase transport of dunecity-audit.py --candidate-style. Every other seat,
+    including a QuantBot ally, keeps the native config."""
+    if args.tier != 'controls' or not getattr(args, 'style', None):
+        return None
+    style = args.style
+    source = root / 'tests/ai/play-styles' / f'{style}.ini'
+    if Path(style).name != style or not source.is_file():
+        raise SystemExit(f'Unknown play style: {style}')
+    payload = source.read_bytes()
+    if re.search(rb'^\s*\[\s*Play Style\s*\]', payload, re.IGNORECASE | re.MULTILINE):
+        raise SystemExit('Candidate-only control styles must be config overlays (no [Play Style] section)')
+    house, _, code = game['sides'][0]
+    if code != 'QB':
+        raise SystemExit(f'Control candidate seat is {code}, not QB: {game["id"]}')
+    directory = out.with_suffix('.candidate')
+    remove_tree(directory)
+    directory.mkdir(parents=True)
+    number = HOUSE_NUMBERS[house]
+    for phase in ('opening', 'mid', 'late'):
+        (directory / f'{number}-{phase}.ini').write_bytes(payload)
+    (directory / 'schedule.ini').write_text('[Schedule]\nopening=0\nmid=9999\nlate=10000\n\n[Genomes]\n'
+                                            f'{number}=candidate-{style}\n', encoding='utf-8')
+    return directory
+
+
+def style_seats(lines):
+    """Seats whose QuantBot config differs from the native config, with the genome that changed it
+    ('config' without one); 'none' when every QuantBot played native. A global style is 'style=NAME'."""
+    setup = next((parse(l, 'SCENARIO_SETUP:') for l in lines if 'SCENARIO_SETUP:' in l), {})
+    native = setup.get('config_hash', '')
+    configs = {row['house']: row.get('config_hash', '') for l in lines if 'SCENARIO_AI_CONFIG:' in l
+               for row in [parse(l, 'SCENARIO_AI_CONFIG:')]}
+    genomes = {row['house']: row.get('genome', '') for l in lines if 'GENOME_PHASE:' in l
+               for row in [parse(l, 'GENOME_PHASE:')]}
+    if not native or not configs:
+        return ''
+    seats = sorted({h for h, c in configs.items() if c != native} | set(genomes), key=int)
+    parts = [f'{h}={genomes.get(h, "config")}' for h in seats]
+    if setup.get('style', 'default') != 'default':
+        parts.insert(0, f'style={setup["style"]}')
+    return ' '.join(parts) or 'none'
+
+
+def expected_style_seats(args, game):
+    if not getattr(args, 'style', None):
+        return 'none'
+    return f'{HOUSE_NUMBERS[game["sides"][0][0]]}=candidate-{args.style}'
 
 
 def win_type(result, houses, campaign):
@@ -457,6 +572,11 @@ def play(args, scratch, binary, game):
     env = dict(os.environ)
     env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
     env.pop('BALANCE_DUNECITY_AUDIT', None)
+    env.pop('DUNECITY_TECH_SAVINGS_AUDIT', None)
+    if args.tier == 'controls':
+        # Native means no inherited experiment; a --style reaches the candidate seat only.
+        for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
+            env.pop(key, None)
     candidate_dir = out.with_suffix('.candidate')
     if getattr(args, 'genome', None):
         # Explicit, candidate-only transport; never inherit a style or another run's overlays.
@@ -466,7 +586,7 @@ def play(args, scratch, binary, game):
         remove_tree(candidate_dir)
         genome_qualification.prepare(args, game, candidate_dir)
         env['BALANCE_SCENARIO_DUMP_MAP'] = str(candidate_dir / 'map.ini')
-    if getattr(args, 'economy_samples', False):
+    if getattr(args, 'economy_samples', False) or getattr(args, 'control_diagnostics', False):
         env['BALANCE_DUNECITY_AUDIT'] = '1'
     cmd = command(args, binary, game, out)
     assert '--army-deploys-regression-observer' not in cmd
@@ -498,7 +618,13 @@ def play(args, scratch, binary, game):
            'error': '' if outcome.returncode == 0 and result else f'rc={outcome.returncode}',
            'endgame_audit': json.dumps(endgame_audit, sort_keys=True, separators=(',', ':')),
            'source_commit': summary.get('sourceCommit', ''),
-           'source_fingerprint': summary.get('sourceFingerprint', '')}
+           'source_fingerprint': summary.get('sourceFingerprint', ''),
+           'style_seats': style_seats(lines),
+           'control_diagnostics': int(getattr(args, 'control_diagnostics', False))}
+    if args.tier == 'controls':
+        remove_tree(candidate_dir)
+        if not row['error'] and row['style_seats'] != expected_style_seats(args, game):
+            row['error'] = f'style seats {row["style_seats"] or "unrecorded"} != {expected_style_seats(args, game)}'
     winner = result.get('winner_team', '')
     row['winner'] = '+'.join(sorted({code_of.get(int(h['house']), '?') for h in houses if h['team'] == winner})) \
         if winner not in ('', '0', '-1') and not campaign else ''
@@ -548,6 +674,11 @@ def play(args, scratch, binary, game):
                 sample.update(json.loads(sample.pop('economy', '{}')))
                 samples.setdefault((sample['house'], sample['cycle']), {}).update(sample)
     metadata = {key: game[key] for key in ('id', 'category', 'cell', 'seed')}
+    fleet_samples, refinery_samples = fleet_observations(lines)
+    for key, sample in fleet_samples.items():
+        samples.setdefault((str(key[0]), str(key[1])), {}).update(sample)
+    append(results / 'refinery-samples.csv', REFINERY_FIELDS,
+           [dict(metadata, **sample) for sample in refinery_samples])
     append(results / 'samples.csv', SAMPLE_FIELDS, [dict(metadata, **sample) for sample in samples.values()])
     if getattr(args, 'attack_events', False) or getattr(args, 'keep_telemetry', False):
         events = next(out.rglob('events.jsonl'), None)
@@ -604,6 +735,13 @@ def run(args):
                           f'{" " + row["error"] if row["error"] else ""}', flush=True)
     if getattr(args, 'genome', None) and not genome_qualification.check_run(args):
         sys.exit(1)
+    if args.tier == 'controls':
+        rows = {row['id']: row for row in read(results / 'games.csv')}
+        problems = [game['id'] for game in schedule(args)
+                    if game['id'] not in rows or rows[game['id']]['error'] or not rows[game['id']]['digest']]
+        if problems:
+            raise SystemExit('Incomplete control games: ' + ', '.join(problems))
+        return  # Time limits, especially no-spice #13, are compared with native, not smoke failures.
     if args.tier == 'smoke' or getattr(args, 'check', False):
         sys.exit(0 if smoke_checks(args, results) else 1)
 
@@ -1031,17 +1169,26 @@ def shard(text):
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('--tier', choices=('smoke', 'full'), default='full')
+parser.add_argument('--tier', choices=('smoke', 'full', 'controls'), default='full')
 parser.add_argument('--build-dir', default=str(root / 'build-int'))
 parser.add_argument('--results', help='Directory for games.csv and houses.csv (games already there are skipped)')
 parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories '
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--campaign-seeds', nargs='+', type=int,
+                    help='Explicit fresh campaign seeds, shared across selected missions; default retains '
+                         'the fixed campaign gate seeds. Does not alter non-campaign games.')
 parser.add_argument('--minutes', type=int, choices=range(1, 121),
                     help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
 parser.add_argument('--cases', help='Only scheduled game IDs matching this regular expression (diagnostic subset)')
+parser.add_argument('--control-diagnostics', action='store_true',
+                    help='Observed handmade-map study, never a controls gate; every comparison arm must use it')
+parser.add_argument('--control-seeds', type=int, nargs='+',
+                    help='Diagnostic controls only: explicit fresh seeds instead of fixed gate seeds')
+parser.add_argument('--control-mod', choices=('vanilla', 'dunecity'),
+                    help='Diagnostic controls only: play the selected handmade maps in this mod')
 parser.add_argument('--campaign-ai-only', action='store_true',
                     help='Diagnostic: play the vanilla campaign cell without the idle human seat, so its '
                          'Brutal QuantBot is the only player-side house; never gate evidence. The default '
@@ -1072,8 +1219,9 @@ parser.add_argument('--list', action='store_true', help='Print the scheduled gam
 parser.add_argument('--report', dest='report_dirs', nargs='+', metavar='RESULTS',
                     help='Print the summary table of these results directories')
 parser.add_argument('--draw-score', type=match_score.check_draw_score, default=match_score.DRAW_SCORE)
-parser.add_argument('--style', help='A play style (tests/ai/play-styles/<style>.ini) every QuantBot plays by: the on '
-                                    'arm of a candidate config switch; compare with a run without it (same seeds)')
+parser.add_argument('--style', help='A play style (tests/ai/play-styles/<style>.ini): the on arm of a candidate config '
+                                    'switch; compare with a run without it (same seeds). Every QuantBot plays by it, '
+                                    'except in --tier controls, where only the Brutal candidate seat does')
 parser.add_argument('--compare', dest='compare_dirs', nargs=2, metavar=('CONTROL', 'CANDIDATE'),
                     help='Paired A/B of two results directories over their common game ids (ladder: the stronger '
                          'side; team: the Hard team; campaign: the required player/partner won)')

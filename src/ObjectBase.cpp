@@ -366,6 +366,18 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                 hostile, isAUnit(),
                 lethalUnit ? House::killBonusPermilleForVictim(itemID, originalHouseID, price)
                            : CombatReward::kBaselineBonusPermille);
+            // Measurement only: no state, save or digest fields. Capture exact hit
+            // destinations, wasted lethal HP and first-contact-to-death in the harness.
+            if (hostile && healthBefore > 0 && AITelemetry::log().enabled())
+                AITelemetry::log().write(currentGame->getGameCycleCount(), beneficiary->getHouseID(), -1,
+                    "combat_target_hit", AITelemetry::Record()
+                        .set("attacker", damagerID).set("attacker_item", credit.sourceItemID)
+                        .set("target", objectID).set("target_item", itemID)
+                        .set("target_house", getOwner()->getHouseID()).set("target_unit", isAUnit())
+                        .set("target_value", price).set("damage", damage)
+                        .set("hp_before_milli", (healthBefore*1000).lround())
+                        .set("hp_after_milli", (getHealth()*1000).lround())
+                        .set("killed", getHealth() <= 0));
             // A borrowed unit's damage pays its controller's Deviator and nothing else: the
             // natural type must not be credited a second time for the same hit.
             beneficiary->addCombatReward(credit.rewardItemID, reward);

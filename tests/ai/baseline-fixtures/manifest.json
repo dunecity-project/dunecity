@@ -9961,6 +9961,1638 @@
       "reference_research_cells": [
         "off"
       ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1150101",
+      "mod": "vanilla",
+      "seed": 1150101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "a6b8dec2b35345fb6972185cbf3a9e595818100d6887118efb7d28fb20d4f6fc.ini",
+      "map_sha256": "a6b8dec2b35345fb6972185cbf3a9e595818100d6887118efb7d28fb20d4f6fc",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1150101",
+      "mod": "vanilla",
+      "seed": 1150101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "a6b8dec2b35345fb6972185cbf3a9e595818100d6887118efb7d28fb20d4f6fc.ini",
+      "map_sha256": "a6b8dec2b35345fb6972185cbf3a9e595818100d6887118efb7d28fb20d4f6fc",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1150101",
+      "mod": "vanilla",
+      "seed": 1150101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "a6b8dec2b35345fb6972185cbf3a9e595818100d6887118efb7d28fb20d4f6fc.ini",
+      "map_sha256": "a6b8dec2b35345fb6972185cbf3a9e595818100d6887118efb7d28fb20d4f6fc",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150101",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1150101",
+      "mod": "vanilla",
+      "seed": 1150101,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "12a7d6ede7ddc4bfcacf34ae898cd9b378be47d25289f5e66987244ae549dfc1.ini",
+      "map_sha256": "12a7d6ede7ddc4bfcacf34ae898cd9b378be47d25289f5e66987244ae549dfc1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150101",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotBrutal,sardaukar:2:qBotBrutal,fremen:3:qBotBrutal,mercenary:4:qBotBrutal,harkonnen:5:qBotBrutal,atreides:6:qBotBrutal",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1150101",
+      "mod": "vanilla",
+      "seed": 1150101,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "12a7d6ede7ddc4bfcacf34ae898cd9b378be47d25289f5e66987244ae549dfc1.ini",
+      "map_sha256": "12a7d6ede7ddc4bfcacf34ae898cd9b378be47d25289f5e66987244ae549dfc1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150101",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotHard,sardaukar:2:qBotHard,fremen:3:qBotHard,mercenary:4:qBotHard,harkonnen:5:qBotHard,atreides:6:qBotHard",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1150101",
+      "mod": "vanilla",
+      "seed": 1150101,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "12a7d6ede7ddc4bfcacf34ae898cd9b378be47d25289f5e66987244ae549dfc1.ini",
+      "map_sha256": "12a7d6ede7ddc4bfcacf34ae898cd9b378be47d25289f5e66987244ae549dfc1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150101",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotMedium,sardaukar:2:qBotMedium,fremen:3:qBotMedium,mercenary:4:qBotMedium,harkonnen:5:qBotMedium,atreides:6:qBotMedium",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150101",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1150202",
+      "mod": "vanilla",
+      "seed": 1150202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "154ccac55d1911ef8d83989a998306faabeef1314f4adb3296ec9c6b7a8ff7c4.ini",
+      "map_sha256": "154ccac55d1911ef8d83989a998306faabeef1314f4adb3296ec9c6b7a8ff7c4",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150202",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1150202",
+      "mod": "vanilla",
+      "seed": 1150202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "154ccac55d1911ef8d83989a998306faabeef1314f4adb3296ec9c6b7a8ff7c4.ini",
+      "map_sha256": "154ccac55d1911ef8d83989a998306faabeef1314f4adb3296ec9c6b7a8ff7c4",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150202",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1150202",
+      "mod": "vanilla",
+      "seed": 1150202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "154ccac55d1911ef8d83989a998306faabeef1314f4adb3296ec9c6b7a8ff7c4.ini",
+      "map_sha256": "154ccac55d1911ef8d83989a998306faabeef1314f4adb3296ec9c6b7a8ff7c4",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150202",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1150202",
+      "mod": "vanilla",
+      "seed": 1150202,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "90493e402b345db09ac9ca66002491798c0823c07709e91046d79964944f87e4.ini",
+      "map_sha256": "90493e402b345db09ac9ca66002491798c0823c07709e91046d79964944f87e4",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150202",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotBrutal,fremen:2:qBotBrutal,mercenary:3:qBotBrutal,harkonnen:4:qBotBrutal,atreides:5:qBotBrutal,ordos:6:qBotBrutal",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1150202",
+      "mod": "vanilla",
+      "seed": 1150202,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "90493e402b345db09ac9ca66002491798c0823c07709e91046d79964944f87e4.ini",
+      "map_sha256": "90493e402b345db09ac9ca66002491798c0823c07709e91046d79964944f87e4",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150202",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotHard,fremen:2:qBotHard,mercenary:3:qBotHard,harkonnen:4:qBotHard,atreides:5:qBotHard,ordos:6:qBotHard",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1150202",
+      "mod": "vanilla",
+      "seed": 1150202,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "90493e402b345db09ac9ca66002491798c0823c07709e91046d79964944f87e4.ini",
+      "map_sha256": "90493e402b345db09ac9ca66002491798c0823c07709e91046d79964944f87e4",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150202",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotMedium,fremen:2:qBotMedium,mercenary:3:qBotMedium,harkonnen:4:qBotMedium,atreides:5:qBotMedium,ordos:6:qBotMedium",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150202",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1150303",
+      "mod": "vanilla",
+      "seed": 1150303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "ed937061614b57c734f036e61d9d6ab0ebb551b9faa33f9bdfa7c2c5a340cd3c.ini",
+      "map_sha256": "ed937061614b57c734f036e61d9d6ab0ebb551b9faa33f9bdfa7c2c5a340cd3c",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150303",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1150303",
+      "mod": "vanilla",
+      "seed": 1150303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "ed937061614b57c734f036e61d9d6ab0ebb551b9faa33f9bdfa7c2c5a340cd3c.ini",
+      "map_sha256": "ed937061614b57c734f036e61d9d6ab0ebb551b9faa33f9bdfa7c2c5a340cd3c",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150303",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1150303",
+      "mod": "vanilla",
+      "seed": 1150303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "ed937061614b57c734f036e61d9d6ab0ebb551b9faa33f9bdfa7c2c5a340cd3c.ini",
+      "map_sha256": "ed937061614b57c734f036e61d9d6ab0ebb551b9faa33f9bdfa7c2c5a340cd3c",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150303",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1150303",
+      "mod": "vanilla",
+      "seed": 1150303,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "7d81045749fc37974c43cc0309e1a87108ee66063bc8c182ab3919bc4b8e3d21.ini",
+      "map_sha256": "7d81045749fc37974c43cc0309e1a87108ee66063bc8c182ab3919bc4b8e3d21",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150303",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotBrutal,mercenary:2:qBotBrutal,harkonnen:3:qBotBrutal,atreides:4:qBotBrutal,ordos:5:qBotBrutal,sardaukar:6:qBotBrutal",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1150303",
+      "mod": "vanilla",
+      "seed": 1150303,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "7d81045749fc37974c43cc0309e1a87108ee66063bc8c182ab3919bc4b8e3d21.ini",
+      "map_sha256": "7d81045749fc37974c43cc0309e1a87108ee66063bc8c182ab3919bc4b8e3d21",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150303",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotHard,mercenary:2:qBotHard,harkonnen:3:qBotHard,atreides:4:qBotHard,ordos:5:qBotHard,sardaukar:6:qBotHard",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1150303",
+      "mod": "vanilla",
+      "seed": 1150303,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "7d81045749fc37974c43cc0309e1a87108ee66063bc8c182ab3919bc4b8e3d21.ini",
+      "map_sha256": "7d81045749fc37974c43cc0309e1a87108ee66063bc8c182ab3919bc4b8e3d21",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150303",
+      "initial_tech": 9,
+      "sides": "fremen:1:qBotMedium,mercenary:2:qBotMedium,harkonnen:3:qBotMedium,atreides:4:qBotMedium,ordos:5:qBotMedium,sardaukar:6:qBotMedium",
+      "roster": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150303",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1150404",
+      "mod": "vanilla",
+      "seed": 1150404,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "bcf297f5216ae82715047e277370451eb779a71ca36118e455927f557f8636ff.ini",
+      "map_sha256": "bcf297f5216ae82715047e277370451eb779a71ca36118e455927f557f8636ff",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150404",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150404",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1150404",
+      "mod": "vanilla",
+      "seed": 1150404,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "bcf297f5216ae82715047e277370451eb779a71ca36118e455927f557f8636ff.ini",
+      "map_sha256": "bcf297f5216ae82715047e277370451eb779a71ca36118e455927f557f8636ff",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150404",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150404",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1150404",
+      "mod": "vanilla",
+      "seed": 1150404,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "bcf297f5216ae82715047e277370451eb779a71ca36118e455927f557f8636ff.ini",
+      "map_sha256": "bcf297f5216ae82715047e277370451eb779a71ca36118e455927f557f8636ff",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150404",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150404",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1150404",
+      "mod": "vanilla",
+      "seed": 1150404,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "152fad565e389ce13e2d3e06c68be7523397231cd70284538e96f932ae5ec8f3.ini",
+      "map_sha256": "152fad565e389ce13e2d3e06c68be7523397231cd70284538e96f932ae5ec8f3",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150404",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotBrutal,harkonnen:2:qBotBrutal,atreides:3:qBotBrutal,ordos:4:qBotBrutal,sardaukar:5:qBotBrutal,fremen:6:qBotBrutal",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150404",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1150404",
+      "mod": "vanilla",
+      "seed": 1150404,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "152fad565e389ce13e2d3e06c68be7523397231cd70284538e96f932ae5ec8f3.ini",
+      "map_sha256": "152fad565e389ce13e2d3e06c68be7523397231cd70284538e96f932ae5ec8f3",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150404",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotHard,harkonnen:2:qBotHard,atreides:3:qBotHard,ordos:4:qBotHard,sardaukar:5:qBotHard,fremen:6:qBotHard",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150404",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1150404",
+      "mod": "vanilla",
+      "seed": 1150404,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "152fad565e389ce13e2d3e06c68be7523397231cd70284538e96f932ae5ec8f3.ini",
+      "map_sha256": "152fad565e389ce13e2d3e06c68be7523397231cd70284538e96f932ae5ec8f3",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150404",
+      "initial_tech": 9,
+      "sides": "mercenary:1:qBotMedium,harkonnen:2:qBotMedium,atreides:3:qBotMedium,ordos:4:qBotMedium,sardaukar:5:qBotMedium,fremen:6:qBotMedium",
+      "roster": [
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150404",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1150505",
+      "mod": "vanilla",
+      "seed": 1150505,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "1f08b2f5484d7ed96929e9d5c27a9b8ae0938d380b8605e603e8c307cd1365bf.ini",
+      "map_sha256": "1f08b2f5484d7ed96929e9d5c27a9b8ae0938d380b8605e603e8c307cd1365bf",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150505",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150505",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1150505",
+      "mod": "vanilla",
+      "seed": 1150505,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "1f08b2f5484d7ed96929e9d5c27a9b8ae0938d380b8605e603e8c307cd1365bf.ini",
+      "map_sha256": "1f08b2f5484d7ed96929e9d5c27a9b8ae0938d380b8605e603e8c307cd1365bf",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150505",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150505",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1150505",
+      "mod": "vanilla",
+      "seed": 1150505,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "1f08b2f5484d7ed96929e9d5c27a9b8ae0938d380b8605e603e8c307cd1365bf.ini",
+      "map_sha256": "1f08b2f5484d7ed96929e9d5c27a9b8ae0938d380b8605e603e8c307cd1365bf",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150505",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150505",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1150505",
+      "mod": "vanilla",
+      "seed": 1150505,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "99813d85ac1bef3bb7ff35d30ca20d05f19f13abf529b973e97b16670c09c5d1.ini",
+      "map_sha256": "99813d85ac1bef3bb7ff35d30ca20d05f19f13abf529b973e97b16670c09c5d1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150505",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal,ordos:3:qBotBrutal,sardaukar:4:qBotBrutal,fremen:5:qBotBrutal,mercenary:6:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150505",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1150505",
+      "mod": "vanilla",
+      "seed": 1150505,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "99813d85ac1bef3bb7ff35d30ca20d05f19f13abf529b973e97b16670c09c5d1.ini",
+      "map_sha256": "99813d85ac1bef3bb7ff35d30ca20d05f19f13abf529b973e97b16670c09c5d1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150505",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard,ordos:3:qBotHard,sardaukar:4:qBotHard,fremen:5:qBotHard,mercenary:6:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150505",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1150505",
+      "mod": "vanilla",
+      "seed": 1150505,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "99813d85ac1bef3bb7ff35d30ca20d05f19f13abf529b973e97b16670c09c5d1.ini",
+      "map_sha256": "99813d85ac1bef3bb7ff35d30ca20d05f19f13abf529b973e97b16670c09c5d1",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150505",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium,ordos:3:qBotMedium,sardaukar:4:qBotMedium,fremen:5:qBotMedium,mercenary:6:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150505",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1150606",
+      "mod": "vanilla",
+      "seed": 1150606,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "41f0f93a683571a55323767f7adfeaf923fa780515bbc516765c363de4aa9011.ini",
+      "map_sha256": "41f0f93a683571a55323767f7adfeaf923fa780515bbc516765c363de4aa9011",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150606",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150606",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1150606",
+      "mod": "vanilla",
+      "seed": 1150606,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "41f0f93a683571a55323767f7adfeaf923fa780515bbc516765c363de4aa9011.ini",
+      "map_sha256": "41f0f93a683571a55323767f7adfeaf923fa780515bbc516765c363de4aa9011",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150606",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150606",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1150606",
+      "mod": "vanilla",
+      "seed": 1150606,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "41f0f93a683571a55323767f7adfeaf923fa780515bbc516765c363de4aa9011.ini",
+      "map_sha256": "41f0f93a683571a55323767f7adfeaf923fa780515bbc516765c363de4aa9011",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150606",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150606",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1150606",
+      "mod": "vanilla",
+      "seed": 1150606,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "aa02c2f027b128581aee9ee082d98a19ad4325355e1c3cb263631d7cf3865ec2.ini",
+      "map_sha256": "aa02c2f027b128581aee9ee082d98a19ad4325355e1c3cb263631d7cf3865ec2",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150606",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,ordos:2:qBotBrutal,sardaukar:3:qBotBrutal,fremen:4:qBotBrutal,mercenary:5:qBotBrutal,harkonnen:6:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150606",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1150606",
+      "mod": "vanilla",
+      "seed": 1150606,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "aa02c2f027b128581aee9ee082d98a19ad4325355e1c3cb263631d7cf3865ec2.ini",
+      "map_sha256": "aa02c2f027b128581aee9ee082d98a19ad4325355e1c3cb263631d7cf3865ec2",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150606",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,ordos:2:qBotHard,sardaukar:3:qBotHard,fremen:4:qBotHard,mercenary:5:qBotHard,harkonnen:6:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150606",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1150606",
+      "mod": "vanilla",
+      "seed": 1150606,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "aa02c2f027b128581aee9ee082d98a19ad4325355e1c3cb263631d7cf3865ec2.ini",
+      "map_sha256": "aa02c2f027b128581aee9ee082d98a19ad4325355e1c3cb263631d7cf3865ec2",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150606",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,ordos:2:qBotMedium,sardaukar:3:qBotMedium,fremen:4:qBotMedium,mercenary:5:qBotMedium,harkonnen:6:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150606",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1150707",
+      "mod": "vanilla",
+      "seed": 1150707,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "df3c19771fc80557e4b7a7f9db36753b5cd148c362a057af7be5edf5e7eb2a90.ini",
+      "map_sha256": "df3c19771fc80557e4b7a7f9db36753b5cd148c362a057af7be5edf5e7eb2a90",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150707",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotBrutal,atreides:2:qBotBrutal",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150707",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1150707",
+      "mod": "vanilla",
+      "seed": 1150707,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "df3c19771fc80557e4b7a7f9db36753b5cd148c362a057af7be5edf5e7eb2a90.ini",
+      "map_sha256": "df3c19771fc80557e4b7a7f9db36753b5cd148c362a057af7be5edf5e7eb2a90",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150707",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotHard,atreides:2:qBotHard",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150707",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1150707",
+      "mod": "vanilla",
+      "seed": 1150707,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "df3c19771fc80557e4b7a7f9db36753b5cd148c362a057af7be5edf5e7eb2a90.ini",
+      "map_sha256": "df3c19771fc80557e4b7a7f9db36753b5cd148c362a057af7be5edf5e7eb2a90",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150707",
+      "initial_tech": 9,
+      "sides": "harkonnen:1:qBotMedium,atreides:2:qBotMedium",
+      "roster": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150707",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1150707",
+      "mod": "vanilla",
+      "seed": 1150707,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "0ae94e733e2233bd7c4f81628520cbfc09db88333cc765c92dc0ba634c806826.ini",
+      "map_sha256": "0ae94e733e2233bd7c4f81628520cbfc09db88333cc765c92dc0ba634c806826",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150707",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotBrutal,sardaukar:2:qBotBrutal,fremen:3:qBotBrutal,mercenary:4:qBotBrutal,harkonnen:5:qBotBrutal,atreides:6:qBotBrutal",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150707",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1150707",
+      "mod": "vanilla",
+      "seed": 1150707,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "0ae94e733e2233bd7c4f81628520cbfc09db88333cc765c92dc0ba634c806826.ini",
+      "map_sha256": "0ae94e733e2233bd7c4f81628520cbfc09db88333cc765c92dc0ba634c806826",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150707",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotHard,sardaukar:2:qBotHard,fremen:3:qBotHard,mercenary:4:qBotHard,harkonnen:5:qBotHard,atreides:6:qBotHard",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150707",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1150707",
+      "mod": "vanilla",
+      "seed": 1150707,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "0ae94e733e2233bd7c4f81628520cbfc09db88333cc765c92dc0ba634c806826.ini",
+      "map_sha256": "0ae94e733e2233bd7c4f81628520cbfc09db88333cc765c92dc0ba634c806826",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150707",
+      "initial_tech": 9,
+      "sides": "ordos:1:qBotMedium,sardaukar:2:qBotMedium,fremen:3:qBotMedium,mercenary:4:qBotMedium,harkonnen:5:qBotMedium,atreides:6:qBotMedium",
+      "roster": [
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150707",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/brutal/40m/1150808",
+      "mod": "vanilla",
+      "seed": 1150808,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "029c59a6a1835d980992a8e605d19ec93fb753e6d5d9804cf77f7d90b1b6f859.ini",
+      "map_sha256": "029c59a6a1835d980992a8e605d19ec93fb753e6d5d9804cf77f7d90b1b6f859",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150808",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotBrutal,harkonnen:2:qBotBrutal",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150808",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/hard/40m/1150808",
+      "mod": "vanilla",
+      "seed": 1150808,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "029c59a6a1835d980992a8e605d19ec93fb753e6d5d9804cf77f7d90b1b6f859.ini",
+      "map_sha256": "029c59a6a1835d980992a8e605d19ec93fb753e6d5d9804cf77f7d90b1b6f859",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150808",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotHard,harkonnen:2:qBotHard",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150808",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/40m/1150808",
+      "mod": "vanilla",
+      "seed": 1150808,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "029c59a6a1835d980992a8e605d19ec93fb753e6d5d9804cf77f7d90b1b6f859.ini",
+      "map_sha256": "029c59a6a1835d980992a8e605d19ec93fb753e6d5d9804cf77f7d90b1b6f859",
+      "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150808",
+      "initial_tech": 9,
+      "sides": "atreides:1:qBotMedium,harkonnen:2:qBotMedium",
+      "roster": [
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150808",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/brutal/40m/1150808",
+      "mod": "vanilla",
+      "seed": 1150808,
+      "difficulty": "brutal",
+      "minutes": 40,
+      "map": "19360d68b65ca5021194c465722ff38974a8339d958a95084d62b9c29e9f83f8.ini",
+      "map_sha256": "19360d68b65ca5021194c465722ff38974a8339d958a95084d62b9c29e9f83f8",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150808",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotBrutal,fremen:2:qBotBrutal,mercenary:3:qBotBrutal,harkonnen:4:qBotBrutal,atreides:5:qBotBrutal,ordos:6:qBotBrutal",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150808",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/hard/40m/1150808",
+      "mod": "vanilla",
+      "seed": 1150808,
+      "difficulty": "hard",
+      "minutes": 40,
+      "map": "19360d68b65ca5021194c465722ff38974a8339d958a95084d62b9c29e9f83f8.ini",
+      "map_sha256": "19360d68b65ca5021194c465722ff38974a8339d958a95084d62b9c29e9f83f8",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150808",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotHard,fremen:2:qBotHard,mercenary:3:qBotHard,harkonnen:4:qBotHard,atreides:5:qBotHard,ordos:6:qBotHard",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150808",
+      "reference_research_cells": [
+        "off"
+      ]
+    },
+    {
+      "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/40m/1150808",
+      "mod": "vanilla",
+      "seed": 1150808,
+      "difficulty": "medium",
+      "minutes": 40,
+      "map": "19360d68b65ca5021194c465722ff38974a8339d958a95084d62b9c29e9f83f8.ini",
+      "map_sha256": "19360d68b65ca5021194c465722ff38974a8339d958a95084d62b9c29e9f83f8",
+      "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150808",
+      "initial_tech": 9,
+      "sides": "sardaukar:1:qBotMedium,fremen:2:qBotMedium,mercenary:3:qBotMedium,harkonnen:4:qBotMedium,atreides:5:qBotMedium,ordos:6:qBotMedium",
+      "roster": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "skirmish": "size=128,base=cy,army=0,city=0,spice=2,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=1150808",
+      "reference_research_cells": [
+        "off"
+      ]
     }
   ],
   "references": [
@@ -12590,5 +14222,170 @@
       }
     ],
     "comparison_scope": "Supported native researchON/T1 only; no researchOFF/T9 or pre-lab release equivalence. Native observer repetitions replace lifecycle-ambiguous audit measures, not extra independent trials."
+  },
+  "seed_expansion_regression807": {
+    "native_source": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+    "mod": "vanilla",
+    "seeds": [
+      1150101,
+      1150202,
+      1150303,
+      1150404,
+      1150505,
+      1150606,
+      1150707,
+      1150808
+    ],
+    "map_input_jobs": [
+      "20261108T225908-r807-map-inputs-291134"
+    ],
+    "provenance": "Exact map.ini bytes exported (dunecity-audit.py --export-maps) by one-minute input-generation matches at the pinned current engine; generation behaviour rows unused.",
+    "roster_policy": "dunecity-audit.py matrix rotation at global seed index 8..15 (vanilla only)",
+    "receipts": [
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/1150101",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "a6b8dec2b35345fb6972185cbf3a9e595818100d6887118efb7d28fb20d4f6fc",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150101",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1150101",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "12a7d6ede7ddc4bfcacf34ae898cd9b378be47d25289f5e66987244ae549dfc1",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150101",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/1150202",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "154ccac55d1911ef8d83989a998306faabeef1314f4adb3296ec9c6b7a8ff7c4",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150202",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1150202",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "90493e402b345db09ac9ca66002491798c0823c07709e91046d79964944f87e4",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150202",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/1150303",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "ed937061614b57c734f036e61d9d6ab0ebb551b9faa33f9bdfa7c2c5a340cd3c",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150303",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1150303",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "7d81045749fc37974c43cc0309e1a87108ee66063bc8c182ab3919bc4b8e3d21",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150303",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/1150404",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "bcf297f5216ae82715047e277370451eb779a71ca36118e455927f557f8636ff",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150404",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1150404",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "152fad565e389ce13e2d3e06c68be7523397231cd70284538e96f932ae5ec8f3",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150404",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/1150505",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "1f08b2f5484d7ed96929e9d5c27a9b8ae0938d380b8605e603e8c307cd1365bf",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150505",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1150505",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "99813d85ac1bef3bb7ff35d30ca20d05f19f13abf529b973e97b16670c09c5d1",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150505",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/1150606",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "41f0f93a683571a55323767f7adfeaf923fa780515bbc516765c363de4aa9011",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150606",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1150606",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "aa02c2f027b128581aee9ee082d98a19ad4325355e1c3cb263631d7cf3865ec2",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150606",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/1150707",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "df3c19771fc80557e4b7a7f9db36753b5cd148c362a057af7be5edf5e7eb2a90",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150707",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1150707",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "0ae94e733e2233bd7c4f81628520cbfc09db88333cc765c92dc0ba634c806826",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150707",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/1v1/medium/1m/1150808",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "029c59a6a1835d980992a8e605d19ec93fb753e6d5d9804cf77f7d90b1b6f859",
+        "map_name": "2P - 128x128 - Random 2 starts Vanilla T9 1150808",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      },
+      {
+        "id": "vanilla/matrix/cy-a0-c0/128/medium/ffa6/medium/1m/1150808",
+        "source_commit": "98ca530ab89e47dccbc75f1703ed9e70587a97b8",
+        "job": "20261108T225908-r807-map-inputs-291134",
+        "map_sha256": "19360d68b65ca5021194c465722ff38974a8339d958a95084d62b9c29e9f83f8",
+        "map_name": "6P - 128x128 - Random 6 starts Vanilla T9 1150808",
+        "generation_game_minutes": 1,
+        "behaviour_observation": false
+      }
+    ]
   }
 }

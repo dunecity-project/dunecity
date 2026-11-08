@@ -112,6 +112,31 @@ test-only behaviour.
   identical, Windows identical apart from the known ±0.1 s `FORMATION_WAVE`/`end_s` timing fields; 12
   style games replayed on Windows matched the mini's rows and per-minute samples.
 
+#### Experimental spice-field outposts (default OFF)
+
+`SpiceFieldExpansion=0/4000/8000` in `[Force Concentration]` compares remaining
+ground-reachable spice within 16 tiles of our refineries with refinery count.
+Below the selected per-refinery threshold, a Custom-game bot may claim the
+nearest new field with no enemy refinery/yard within 20 tiles or live enemy
+combat unit within 12. Ground-connected total spice divided among occupied
+controllers must still fund the enlarged refinery count. A new MCV site requires
+twice the threshold in its 12-tile field window; legal in-range refinery sites
+need one threshold. Yard caps, real build lists, cash, power and spending gates
+still apply. MCVs gather the existing colonist escort, and remote refineries get
+a gun-turret guard. Campaigns, helpers, Tornie content and initially no-spice
+maps retain native behavior; no-spice eligibility reads immutable map terrain,
+not cargo dropped during play. OFF does not alter the native config hash.
+
+Candidate-only styles: `field-expansion-off`, `field-expansion-4000`,
+`field-expansion-8000`. Probe-only `spice-fields.csv` follows initial connected
+spice components through depletion (minute-sampled, so crossing times have
+one-minute resolution). `field_*` sample columns measure active harvesters,
+moving/harvesting counts, nearest-refinery tile-distance sum, local spice and
+refinery count. Tile distance is a travel-distance proxy, not timed trips.
+Per-tick cumulative worker movement/active cycles, returning-to-first-unload
+cycles/trips and empty-to-harvest cycles/trips provide real simulation durations.
+The empty-to-harvest interval includes refinery-release/carryall waits.
+
 ### The styles (all on top of BASE)
 
 | Style | Archetype | Definition (`tests/ai/play-styles/*.ini`) |
@@ -127,6 +152,144 @@ test-only behaviour.
 | `heavy` | super-unit push | 70% of the mix from special 50 / tank 25 / siege 15 / launcher 10 |
 | `armor` | mass armour | 70% of the mix from tank 65 / siege 20 / launcher 15 |
 | `counter` | counter-composition | 60% of the mix towards counters of the remembered enemy army (light → tanks/siege, armour → launchers/siege, launchers → quads/tanks, air → launchers) |
+
+### Vanilla spice-gated refinery cells (test-only)
+
+`vanilla-boom-refinery-6-spice-{4000,8000}` copies the six-refinery FFA opening, adding
+`VanillaBoomSpiceGate=1` and the named `VanillaBoomSpicePerRefinery` level. Both keys are hashed;
+the gate defaults off, the level defaults to 4000, and any value other than 8000 normalizes to 4000.
+`vanilla-boom-refinery-6` explicitly keeps the gate off; `vanilla-boom-off` disables every family.
+Each ordinary build pass measures the remaining spice in vehicle-terrain regions occupied by our
+yard/refinery footprints. Each tile belongs to the nearest live yard/refinery of any house in that
+region (squared distance to the footprint); tied structures each receive integer `spice / ties`.
+No fog knowledge, saved state or decision cache is added. The refinery cap is `share / level`,
+the worker cap is `2 * share / level`; the existing sustainable limit still applies. A refinery
+opening runs only when its cap exceeds current refineries, a harvester opening only when its worker
+cap exceeds current harvesters. Otherwise the plan is off and native planning runs unchanged.
+Active targets are capped, without cancelling accepted orders. The audit's append-only
+`boom_reachable_spice_share`, `boom_refinery_cap`, `boom_harvester_cap` and `boom_current_workers`
+fields record the last build pass (zero when the gate is off/out of scope); reading them never runs planning.
+This is only a remaining-resource gate, not a refinery-efficiency or rich-map army-timing fix.
+
+### Vanilla refinery/greedy compound cells (test-only)
+
+`vanilla-boom-refinery-6-greedy-{6,10,12}` enables the existing `VanillaRefineryBoom` and
+`VanillaGreedyBoom` switches with six refineries, the named greedy stop, and `VanillaBoomFfaOnly=1`.
+Before that stop it uses the refinery plan: two workers per refinery and one heavy factory, subject
+to the existing sustainable-spice cap. At the stop it enters the existing greedy army phase until
+minute 20: four-worker/two-refinery/one-factory recovery targets, optional economy/technology savings
+released, and the existing military, power, defence and prerequisite admission rules. These are
+new-order constraints, not teardown of existing assets or cancellation of accepted orders.
+At minute 20 normal planning resumes. The greedy switch deliberately retains **150% readiness**
+throughout both phases before minute 20; these cells add no formations. All switches remain default
+off, and single-family plans and out-of-scope games retain their existing behavior.
+
+### Vanilla FFA core defence and army counters (test-only cells)
+
+Two independent switches, `VanillaCoreDefence` and `VanillaArmyCounters`, each with exactly two
+preregistered levels (`VanillaCoreDefenceThreatBps`, `VanillaArmyCounterBlendBps`: 5000 or 10000; any
+other value loads as 5000). All four keys are saved and hashed; both switches are default off, are never
+promoted here, and neither enables or combines with a boom family. The pure arithmetic is
+`include/players/QuantBotCoreDefencePolicy.h`.
+
+**Scope (both).** `QuantBot::vanillaFfaTuningGame()`: an autonomous Custom army at Brutal, city
+simulation off, mod `vanilla`, sustainable map spice above zero, and - from the original occupied
+controller rows, never runtime houses, survivors or another policy switch - ours alone on its team with
+at least three hostile controllers on more than one hostile team (FFA4/FFA6). Duels, team games,
+campaigns, no-spice and city games never run either policy. Off or out of scope, every existing path is
+unchanged by construction.
+
+**Core defence threat.** Each pass reads the live simulation state only (no visibility filter, fog
+memory, telemetry or saved estimate). Cores are our refineries, light/heavy/high-tech factories,
+barracks and WORs. A hostile armed mobile unit threatens a core when it is within its own weapon range
+plus 24 tiles, can attack it, and the engine's cached terrain components connect the two (no per-unit
+path search). Its value is purchase price x remaining health share. Per core the strongest single
+hostile team is the threat (ties: lower team ID), split into ground and air; the level scales it to the
+response value (50% or 100%). Zero threat means no guard and no turret: the policy protects threatened
+cores, it does not hold army back or raise spending.
+
+**Standing guards.** Idle home ground fighters worth up to the response value per arm hold Area Guard
+posts on free tiles within four tiles of the core, chosen nearest the threat's approach. Caps: a third of
+our live ground army's value and units, eight guards, four new posts or walk orders per unit pass. A post
+is the existing saved `defenceAssignments` entry naming the core, so it survives save/load without new
+state. A new post never takes a unit in a live emergency, rescue or wave, a hunt party, a force hold, a
+forced transit, a fight, a retreat, a pickup, or a human, repair, escort or colony-guard role.
+Scrambles, anti-air rescues and district responses still override posts, and posts end when the
+threat goes.
+
+**Turrets.** One emplacement per 1,000 response credits and arm: at most three ground and two
+anti-air covers per core and sixteen Gun/Rocket Turrets per house. Live turrets (Rocket Turrets only
+while powered) and reserved ones whose reach includes the core's centre count as cover. At most one
+emplacement per build pass, after power recovery and the essentials and before optional growth, and
+only when legal, already funded and admitted by the existing spending plan: a Rocket Turret for air
+cover (with the power buffer), otherwise a Gun Turret, else a Rocket Turret. The site is one bounded
+window within the turret's range minus one of the core's centre, under the existing placement legality
+and front-battery spacing, cluster and corridor rules: least live return fire first, then nearest the
+approach, then nearest the core. The rule `vanilla_core_defence` passes the routine-rocket gate as
+`ground_threat` does.
+
+**Army counters.** `QuantBot::vanillaArmyCounterMix` runs in `planUnitMix` after the style mix and
+before the mobile anti-air floor, which still applies afterwards; off, it costs one switch read.
+- *Hostile army* (live simulation state, no visibility or telemetry): units of another team, not
+  natives, alive, active and armed, of a vanilla combat type (no workers, carryalls, MCVs, saboteurs,
+  worms or frigates). A unit counts when `Map::terrainAttackReachable` connects it to any of our core
+  structures (not walls, slabs, roads or power lines); aircraft and infantry always count, and vehicle
+  answers are cached per terrain region and weapon range. A team's value is the sum of
+  `CombatPowerPolicy::unitValue` (price x health share). The strongest team has the most value (ties:
+  lower team ID). With no reachable hostile army the native mix stands.
+- *Exchange model* (`include/players/QuantBotArmyCounterPolicy.h`): ObjectData price, hit points,
+  damage and reload per production house, the native weapons and shot counts, `OrdinaryDamagePolicy`
+  centre damage under the match's damage rules, the full payload against aircraft. Only
+  `CombatPowerPolicy::airCapableItem` types hit aircraft, a Sonic Tank never hits a Sonic Tank, and a
+  ranged Trooper fires at 3/4. A candidate's worth against one hostile type is the value it destroys
+  per credit and reload cycle times its survival against the whole team's value-weighted kill rate, so
+  ornithopters only pay off against teams without anti-air. Per hostile type the worths become shares
+  through `UnitMixPolicy::sharpenScores`, weighted by that type's live value. Range, speed, splash,
+  accuracy and terrain are not modelled; Deviator gas (no hit-point damage) counts neither way.
+- *Candidates and authority*: the mix slots a live owned Light, Heavy or High-Tech Factory can build
+  now (`campaignAvailableToBuild` and the unit limit); the Starport is not a supplier. Only those slots,
+  Deviator excepted, are re-weighted, and only among themselves: their combined native share is kept,
+  every other slot keeps its exact native share, hostile value nothing buildable can damage keeps the
+  native proportions, and with nothing answerable the native mix stands. No technology purchase,
+  queue override or budget change.
+- *Blend*: 5000 is halfway between the native and the counter mix, 10000 the full counter mix
+  (integer basis points summing to 10000).
+
+**Cells, traces and fixtures.** `vanilla-core-defence-{off,50,100}` and
+`vanilla-army-counters-{off,50,100}` each set only their own switch (0 in the off cells) and level, the
+other new switch off at 5000, `VanillaBoomFfaOnly=1` and every boom family off. Decision traces:
+`vanilla_core_guard` (unit pass: threatened cores, top threats, guards kept, posted, moved and
+released), `vanilla_core_defence` (yard: turret, site, threat, cover and goals) and, with stats
+logging, `vanilla_army_counter` (team, team value, unanswered value, blend and per-slot candidate,
+answer value, native and counter shares). Pure fixtures: `tests/QuantBotStrategyTestCase.cpp`
+(`[ai][vanilla]`: config, levels and core-defence policy) and `tests/QuantBotArmyCounterTestCase.cpp`
+(`[army-counters]`).
+
+### Fixed economic fleet-ratio experiment
+
+`econ-ratio-h{2,3,4}-cq{0,1,2}-r{0,1}` is the preregistered 3×3×2 factorial;
+`cq` is carryalls per harvester in quarters. `econ-ratio-off` disables the hashed
+`EconomicFleetRatios` master switch. Opponents remain native. The discrete keys
+are `FleetHarvestersPerBay`, `FleetCarryallQuarters` and `FleetRepairYards`.
+They affect new orders only, not existing assets or accepted queues.
+
+The experiment applies to Hard/Brutal vanilla/DuneCity spice economies and human
+campaign supporters; enemy campaign controllers, Tornie/CivWars and no-spice maps
+are unchanged. Ground-connected remaining spice is surveyed from owned yards and
+refinery perimeters, ignoring transient mobile traffic but not mountains or
+structure footprints, and divided among the initially occupied controllers.
+It conservatively excludes fields reachable only by an airlift. Each worker's
+normal-price capital includes its refinery and transport shares, with at least
+2,000 remaining spice per worker. Expansion advances one bay when the current
+fleet fills its selected ratio. No unloading backlog is fabricated.
+
+The throughput model is workers/bay ≈ (field fill + ground/air round-trip travel
++ unload time) / unload time. Distance raises the saturation ratio; carryalls can
+lower it, while damage and repair transit lower effective working time. The
+15-minute factorial measures these mechanisms before fresh-seed full-game
+screening. Current asset value is not cumulative capital spending. A factorial
+winner is not a promoted default; paired outcomes and the fixed controls remain
+required.
 
 ## 3. Tournament
 
@@ -1126,3 +1289,146 @@ are unchanged; protocol 99 is not consumed. No revised-branch build, ctest, all-
 ladder result is claimed. The parent owns combined acceptance on `build-int`, including
 `quantbot_match_score`, `quantbot_strategy`, all-against-Atreides and the ladder; test-only candidate
 styles must not be treated as shipped defaults.
+
+## 9. Power/storage discipline research controls (2026-11-08)
+
+`PowerLeadBuildings=0|1|2` and `SiloFillPercent=0|80|90` in
+`[Force Concentration]` are default-OFF independent research controls.
+OFF preserves the native config hash and construction decisions. Enabled values
+are hashed and round-trip through the normal config save/load path.
+
+Power anticipation uses the actual next selected consumer's demand multiplied
+by the lead, plus demand already committed across yards. It can order one
+affordable Windtrap with a valid site, never a duplicate pending generator.
+It does not change engine power rules: raw deficits still cause building decay
+in Vanilla even though `House::hasPower()` exempts it from city/turret blackouts.
+The storage backstop buys an affordable safe Silo at the selected earned-credit
+occupancy; grants are excluded, queued capacity prevents duplicate purchases,
+and the absolute credit ceiling still applies. Native storage forecasting stays
+in place. Both controls remain inert when no map spice remains.
+
+Styles: `power-discipline-off`, `power-discipline-1`, `power-discipline-2`,
+`silo-discipline-off`, `silo-discipline-80`, `silo-discipline-90`. Screens must
+apply the style only to the candidate, leaving opponents native. No defaults,
+protocol version, or save format change is authorized by these research styles.
+
+The audit now retains exact per-tick `power_deficit_cycles` and
+`required_power_deficit_cycles` alongside storage-full/overflow cycles and lost
+income. Raw deficit measures the condition behind degradation in every mode;
+required deficit distinguishes city blackouts. Divide cycles by 3750 for
+house-minutes. Income loss requires `--attack-events`; missing ledger data is
+unmeasured, never zero. `--sample-game-seeds` specifies one distinct unsigned
+game seed per sampled case; both candidate seat assignments reuse it without
+altering the sampler's factor-deck RNG sequence.
+
+
+## Experimental FFA vulture timing (2026-11-08)
+
+`ffa-vulture-off`, `ffa-vulture-60`, and `ffa-vulture-90` select the hashed,
+default-OFF `FfaVultureLevel` (0/1/2). On Vanilla/DuneCity original FFA4/FFA6
+occupied-controller rosters, with initial spice in the saved scenario grid, mutual live ground-unit
+targets inside weapon range identify rivals currently fighting. Fresh ground
+dispatch waits while the weaker fighting rival's true health-weighted army is
+at least 60%/90% of our deployable strike force. Below that share it directs the
+wave to that rival's reachable production/core structures, using full knowledge.
+Existing defence, production, readiness and recovery gates retain authority;
+already deployed hunters are not recalled. Outside scope and OFF retain native
+dispatch. OFF adds nothing to the config hash. No protocol or save changes.
+
+This first screen deliberately uses current mutual combat, **not recent-loss
+history**: the integrator rejected unversioned conditional save state. Telemetry
+`ffa_vulture` records hold/strike, both true armies, deployable force and both
+rivals' cumulative combat-unit losses. It does not claim those losses happened
+inside a rolling window.
+
+`dunecity-audit.py --mode sample --sample-ffa --mod both --cases 6
+--sample-seed 1190000 --candidate-style ffa-vulture-60` schedules 24 games:
+two seats per case, six cases per mod, balanced FFA4/FFA6, 96/128/160,
+L/M/H spice, tech 3/6/9, Hard/Brutal rivals. Unlike the general sampler this
+option uses sequential map seeds (Vanilla first, then DuneCity), so the lane's
+reserved seed range is respected. Use the same command with OFF and 90 for
+paired arms; `--keep-telemetry --attack-events` retains mechanism/economy evidence.
+
+## TeamPlay coordination experiment (2026-11-08, default OFF)
+
+`[Force Concentration] TeamSynchroniseAttacks` shares a team attack plan between autonomous
+Custom QuantBots in Vanilla/DuneCity. Only occupied original controller slots define the team
+scope; duels, FFA and campaigns are inert. Once both live allied bot armies meet their ordinary
+readiness and repair prerequisites, the first real dispatch wakes its partner. Both hunt towards
+the same enemy building, belonging to the enemy with the weakest true HP-weighted mobile army
+(air included). The partner keeps the first dispatch's target for the existing 30-second join
+window. Existing recovery/defence rules retain priority. A candidate-only style advertises the
+plan to its native allied bot, never to hostile controllers.
+
+`TeamDefenceSharePercent=0|25|50` independently sends nearby available ground fighters to a
+live enemy weapon attacking an ally's building. Human orders, repairs, own defence, pickups and
+live fights retain ownership. All concurrent ally rescues count against the one share cap;
+the existing saved defence assignments retain and release these hunters. No new saved state,
+random draws, formations, production changes or defaults are introduced.
+
+Styles: `teamplay-off`, `teamplay-sync`, `teamplay-help25`, `teamplay-help50`, and the two
+`teamplay-sync-help25/50` combinations. `dunecity-audit.py --mode team-study --mod both
+--seeds ... --candidate-style teamplay-sync` uses explicit fresh seeds, sizes 96/128/160,
+low/medium/high spice, tech 3/6/9 and both sets of team starts. Only the Brutal candidate is
+styled; its ally and both enemies use the requested native difficulty. Ordinary audit
+economy samples and raw `team_attack`, `team_help`, `team_wait_partner` telemetry accompany
+outcomes. A population adjudication is reported separately from conquest. Acceptance evidence
+belongs in `outputs/ai-tuning-20261108/TeamPlay/ledger.md`; no promotion is claimed here.
+
+## Combat target experiments (2026-11-08)
+
+`focus-fire-off/1/2` changes only `FocusFireLevel`; `target-priority-off/1/2`
+changes only `TargetPriorityLevel`, in `[Force Concentration]`. Both default to
+zero and omit their hash contributions at zero, retaining native strategy seeds.
+Native Custom hunters prefer armed units, then fewer remaining HP, switching
+only for a better class or at most 75% of the current target's HP. Focus level 1
+removes that class bias; level 2 also removes the HP-switch hysteresis. Priority
+level 1 elevates launchers, siege tanks and rocket infantry; level 2 puts enemy
+harvesters above those units. Both use stable object-ID ties.
+
+These experiments reuse the focus controller and permit unforced guarding ground
+fighters. They require a positive immutable original-map spice density from
+`GameInitSettings::getInitialSpiceTilePermille()`; zero and unavailable initial
+map data retain native targeting, including the native comparator and switch
+hysteresis. Human-owned orders, repair, STOP/retreat, Deviators, aircraft,
+close-threat escape, sonic lane safety and siege holds retain their authority.
+Only attackable targets already in weapon range qualify.
+
+With `dunecity-audit.py --attack-events`, `combat.csv` aggregates actual hostile
+damage callbacks by attacker house and target item: hit counts, HP removed,
+overkill HP, killing blows, victim-price kill value and first-hostile-hit-to-death
+cycles. Time-to-kill is global first contact, including other houses' damage;
+it is not a duel estimate. These diagnostic records do not enter simulation
+state, saves or digests. A complete telemetry stream is required for exact totals.
+Use `houses.csv` kill_value/loss_value for the match exchange ratio; also report
+spice, harvesters/refineries, army value and credits from `samples.csv`.
+
+## Shared experiment batch 1
+
+The November 2026 experimental policies share one immutable source/build. Their
+individual styles and hashed switches remain independently selectable; none is
+promoted by being compiled into the batch. Existing campaign defaults, protocol
+and save formats are unchanged. `experiment-batch-1-off` explicitly disables
+only the new experimental masters, retaining the native campaign defaults.
+
+The exact source owners, pins, compatible style names and pending exclusions are
+recorded in `outputs/ai-tuning-20261108/BatchIntegration/`. DuelOpening's stateless
+raid correction and CampaignHomeFields' low-legal-tech correction missed the
+batch cutoff; their policies/styles are not part of this build. HarvesterRaid,
+RetreatPreserve and the separate Nix tooling trial are also excluded.
+
+The shared initial-spice getter also reconstructs native campaign/skirmish
+scenarios. Custom-only policy callers explicitly retain the original
+`CustomGame`/`CustomMultiplayer` type boundary; extending the getter does not
+silently extend those experiments. Combat target micro intentionally uses the
+expanded immutable-map evidence.
+
+Shared harness integration retains all map, fleet, logistics, power, combat,
+team, starport and income-tech evidence. `--game-seed-base` uses consecutive
+engine seeds; `--mod both` consumes a Vanilla block then a DuneCity block.
+Single-mod preregistrations are unchanged. The separately named
+`--sample-game-seed-base` retains its same-range-for-both-mods contract.
+Use fresh result directories for the combined CSV schema. Unit compilation is
+not proof that an actual probe starts: combined native-OFF/control parity and
+per-style real headless startup receipts are required before shared follow-ons.
+

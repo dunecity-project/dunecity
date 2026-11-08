@@ -34,6 +34,9 @@ from probe_profile import finish_game, probe_binary, require_free_space, scratch
 import genome_model  # noqa: E402
 import match_score  # noqa: E402
 
+# report() uses retained tables/observations; the raw probe archive may live in S3.
+REMOTE_PROBE_EVIDENCE = True
+
 
 def helpers(filename):
     """Reuse existing non-importable harnesses through the queue's AST boundary."""
