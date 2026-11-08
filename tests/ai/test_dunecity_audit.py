@@ -68,7 +68,7 @@ def game_row(style, **extra):
                source_commit='same-source', source_fingerprint='same-fingerprint', source_fingerprint_error='',
                map_hash='same-map', options_hash='same-options', content_hash='same-content',
                object_data_hash='same-object-data', air_kill_telemetry='complete',
-               air_kill_attribution='complete', air_kill_unknown_attribution='0')
+               air_kill_attribution='complete', air_kill_unknown_attribution='0', observer_mode='on')
     row.update(extra)
     return row
 
@@ -944,6 +944,89 @@ class DuneCityAuditTests(unittest.TestCase):
                 row = audit['read'](path)[0]
                 self.assertEqual((row['refineries'], row['power_required']), expected)
                 self.assertEqual((row['power'], row['need']), ('100', '150'))
+
+    def test_observer_off_plays_core_samples_and_records_mode_without_a_game(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            top = Path(temporary)
+            results = top / 'results'
+            results.mkdir()
+            binary = top / 'not-an-executable'
+            binary.write_bytes(b'parser fixture, not a game binary')
+            args = audit['parser'].parse_args([
+                '--results', str(results), '--mod', 'vanilla', '--sizes', '96',
+                '--spice', 'medium', '--formats', '1v1', '--difficulties', 'brutal',
+                '--seeds', '9101', '--minutes', '30', '--observer-off'])
+            game = audit['schedule'](args)[0]
+
+            def simulate(command, **options):
+                self.assertNotIn('BALANCE_DUNECITY_AUDIT', options['env'])
+                out = Path(command[command.index('--output-dir') + 1])
+                out.mkdir(parents=True)
+                lines = ['SCENARIO_RESULT: outcome=time_limit winner_team=0 minutes=30 end_s=1800',
+                         'PROBE_TIMING: loop_ms=1', 'PROBE_DIGEST: final=1 digest=fixture']
+                for name, team, _ in game['sides']:
+                    house = audit['HOUSE_IDS'][name]
+                    sample = dict(minute=30, cycle=112500, house=house, team=team, alive=1,
+                                  credits=600, army_value=1000, army_units=3, harvesters=4,
+                                  structures=2, factories=1, kill_value=1000, loss_value=1000)
+                    lines.append('ELIMINATION_SAMPLE: ' + ' '.join(
+                        f'{key}={value}' for key, value in sample.items()))
+                    final = {key: sample[key] for key in (
+                        'house', 'team', 'alive', 'kill_value', 'loss_value', 'structures',
+                        'army_value', 'army_units')}
+                    final.update(eliminated_s=-1, sortie_minutes=0, population=0)
+                    lines.append('SCENARIO_HOUSE: ' + ' '.join(
+                        f'{key}={value}' for key, value in final.items()))
+                (out / 'run.log').write_text('\n'.join(lines) + '\n')
+                (out / 'summary.json').write_text(json.dumps(dict(
+                    sourceCommit='fixture', sourceFingerprint='fixture', sourceFingerprintError='', attacks=[])))
+                return types.SimpleNamespace(returncode=0, stdout='', stderr='')
+
+            with patch.dict(audit['os'].environ, BALANCE_DUNECITY_AUDIT='1'):
+                with patch.object(audit['subprocess'], 'run', side_effect=simulate):
+                    row = audit['play'](args, top, binary, game)
+            self.assertEqual(row['error'], '')
+            self.assertEqual(row['observer_mode'], 'off')
+            self.assertEqual(row['digest'], 'fixture')
+            self.assertEqual(len(audit['read'](results / 'houses.csv')), 2)
+            for sample in audit['read'](results / 'samples.csv'):
+                self.assertEqual(sample['power'], '')
+                self.assertEqual(sample['refineries'], '')
+            for house in audit['read'](results / 'houses.csv'):
+                self.assertTrue(all(house['eligible_' + name] == '0' for name in audit['DETECTORS']))
+
+    def test_observer_off_keeps_audit_detectors_unmeasured_without_fake_power(self):
+        args = audit['parser'].parse_args(['--observer-off'])
+        self.assertTrue(args.observer_off)
+        self.assertFalse(audit['parser'].parse_args([]).observer_off)
+        sample = dict(minute='5', cycle='18750', house='0', alive='1', credits='600')
+        fields = audit['detect']([sample], observer=False)
+        self.assertNotIn('power', sample)
+        for detector in audit['DETECTORS']:
+            self.assertEqual(fields['eligible_' + detector], 0)
+            self.assertEqual(fields['first_' + detector], '')
+
+    def test_observer_receipts_reject_mixed_missing_and_changed_resume_modes(self):
+        before = {'matrix/fixture': game_row('trooper-support-off')}
+        for mode in ('on', 'off'):
+            same = {'matrix/fixture': game_row('trooper-support-on', observer_mode=mode)}
+            control = {'matrix/fixture': game_row('trooper-support-off', observer_mode=mode)}
+            audit['require_matching_observers'](control, same)
+        for mode in ('off', ''):
+            changed = {'matrix/fixture': game_row('trooper-support-on', observer_mode=mode)}
+            with self.assertRaisesRegex(ValueError, 'Observer-mode pairing rejected'):
+                audit['require_matching_observers'](before, changed)
+            matched, rejected = audit['trooper_pair_keys'](
+                before, changed, {('matrix/fixture', '0'): house_row()},
+                {('matrix/fixture', '0'): house_row()})
+            self.assertEqual(matched, [])
+            self.assertIn('different_observer_mode' if mode else 'missing_observer_mode', rejected)
+        self.assertEqual(audit['GAME_FIELDS'][-1], 'observer_mode')
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            audit['append'](out / 'games.csv', audit['GAME_FIELDS'], [game_row('default')])
+            with self.assertRaisesRegex(ValueError, 'Observer mode changed'):
+                audit['run'](types.SimpleNamespace(results=out, observer_off=True))
 
     def test_resume_rejects_old_csv_schema_before_scheduling_or_games(self):
         with tempfile.TemporaryDirectory() as temporary:

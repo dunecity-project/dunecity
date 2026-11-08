@@ -61,7 +61,7 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
                       'air_kill_unknown_attribution', 'capture_mib', 'diagnostics',
                       'mod', 'candidate_house', 'candidate_seat', 'candidate_style', 'sample_case', 'sample_seed', 'research_enabled',
                       'scoring_rule', 'scored_winner_team', 'win_condition', 'team_populations',
-                      'seat_styles', 'style_cohort', 'style_rotation')
+                      'seat_styles', 'style_cohort', 'style_rotation', 'observer_mode')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
@@ -740,8 +740,13 @@ def score_match(game, result, final):
             raw_scores, scores)
 
 
-def detect(samples):
-    """Per-house flags, eligibility and first minute; durations use cycles, not sample counts."""
+def detect(samples, observer=True):
+    """Per-house flags and eligibility; observer-off audit metrics are unmeasured."""
+    if not observer:
+        for sample in samples:
+            sample['flags'] = ''
+        return {field: value for detector in DETECTORS for field, value in (
+            (detector, 0), ('eligible_' + detector, 0), ('first_' + detector, ''))}
     first, eligible, since, previous = {}, set(), {}, None
     seen = {'starport': False, 'radar': False, 'heavy': False, 'ix': False}
     for sample in sorted(samples, key=lambda row: int(row['cycle'])):
@@ -958,9 +963,14 @@ def play(args, scratch, binary, game):
     started = time.monotonic()
     cmd = command(args, binary, game, out)
     assert '--army-deploys-regression-observer' not in cmd
-    env = dict(os.environ, BALANCE_DUNECITY_AUDIT='1')
+    observer_off = getattr(args, 'observer_off', False)
+    env = dict(os.environ)
     env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
     env.pop('DUNECITY_TECH_SAVINGS_AUDIT', None)
+    if observer_off:
+        env.pop('BALANCE_DUNECITY_AUDIT', None)
+    else:
+        env['BALANCE_DUNECITY_AUDIT'] = '1'
     assert 'BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER' not in env
     if getattr(args, 'candidate_style', None) or getattr(args, 'seat_styles', None):
         for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
@@ -997,8 +1007,12 @@ def play(args, scratch, binary, game):
     air_cycle = max((int(event['cycle']) for event in capture['events']), default=0)
     air_final = {int(house['house']): dict(house=house['house'], cycle=air_cycle) for house in final}
     add_air_kill_samples(list(air_final.values()), capture)
-    missing = any('power' not in sample for sample in samples)
-    error = '' if process.returncode == 0 and result and samples and not missing else f'rc={process.returncode};incomplete={int(missing)}'
+    observer_seen = any('DUNECITY_AUDIT:' in line for line in lines)
+    missing = (not observer_off and any('power' not in sample for sample in samples))
+    wrong_observer = observer_off and observer_seen
+    error = '' if process.returncode == 0 and result and samples and not missing and not wrong_observer else f'rc={process.returncode};incomplete={int(missing)}'
+    if wrong_observer:
+        error = ';'.join(filter(None, (error, 'observer_mode_not_verified')))
     research = setup.get('research_enabled', '')
     if not research_verified(game, setup, lines):
         error = ';'.join(filter(None, (error, 'research_enabled_not_verified')))
@@ -1021,7 +1035,8 @@ def play(args, scratch, binary, game):
                **{field: game.get(field, '') for field in
                   ('candidate_house', 'candidate_seat', 'candidate_style', 'sample_case', 'sample_seed')})
     row.update(seat_styles=json.dumps(game.get('seat_styles', {}), sort_keys=True) if game.get('seat_styles') else '',
-               style_cohort=game.get('style_cohort', ''), style_rotation=game.get('style_rotation', ''))
+               style_cohort=game.get('style_cohort', ''), style_rotation=game.get('style_rotation', ''),
+               observer_mode='off' if observer_off else 'on')
     row.update({field: setup.get(field, '') for field in (
         'config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
     row.update(ai_config_hashes=','.join(f'{item["house"]}:{item["config_hash"]}' for item in configs),
@@ -1061,7 +1076,7 @@ def play(args, scratch, binary, game):
                                         members=event['data']['members'], value=event['data']['value']))
         for house in final:
             number = int(house['house'])
-            detectors = detect(groups[number])
+            detectors = detect(groups[number], observer=not observer_off)
             last = max(groups[number], key=lambda row: int(row['cycle']))
             house_rows.append(dict(metadata(game), **{key: house[key] for key in (
                 'house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
@@ -1087,7 +1102,8 @@ def play(args, scratch, binary, game):
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
             append(results / 'air-kills.csv', AIR_KILL_FIELDS,
                    [dict(metadata(game), **event) for event in capture['events']])
-        supplemental = tech_audit(lines, samples, final, capture)
+        supplemental = ({name: [] for name, _ in TECH_TABLES} if observer_off
+                        else tech_audit(lines, samples, final, capture))
         for filename, fields in TECH_TABLES:
             append(results / filename, fields, [dict(metadata(game), mod=game.get('mod', 'dunecity'), **entry,
                                                    difficulty=difficulty_of[int(entry['house'])])
@@ -1125,6 +1141,9 @@ def run(args):
                          ('samples.csv', SAMPLE_FIELDS), ('waves.csv', ATTACK_FIELDS),
                          ('air-kills.csv', AIR_KILL_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
+    observer_mode = 'off' if getattr(args, 'observer_off', False) else 'on'
+    if any(row.get('observer_mode') != observer_mode for row in read(results / 'games.csv')):
+        raise ValueError('Observer mode changed; use a new results directory')
     exported = {row['id'] for row in read(results / 'export-maps.csv')
                 if row['artifact'] == 'map.ini'} if getattr(args, 'export_maps', None) else None
     done = {r['id'] for r in read(results / 'games.csv') if not r['error']
@@ -1214,9 +1233,23 @@ def sample_report(games, houses):
               f'{population} | {draws} | {raw_draws} | {score} | {minutes} | {research} |')
 
 
+def observer_pair_error(before, after):
+    if any(game.get('observer_mode') not in ('on', 'off') for game in (before, after)):
+        return 'missing_observer_mode'
+    return 'different_observer_mode' if before['observer_mode'] != after['observer_mode'] else ''
+
+
+def require_matching_observers(previous, current):
+    for game_id in sorted(previous.keys() & current.keys()):
+        reason = observer_pair_error(previous[game_id], current[game_id])
+        if reason:
+            raise ValueError(f'Observer-mode pairing rejected for {game_id}: {reason}')
+
+
 def sample_comparison(control, candidate):
     games = [{row['id']: row for row in load([directory], 'games.csv', ('id',))
               if row.get('candidate_house', '') != ''} for directory in (control, candidate)]
+    require_matching_observers(*games)
     houses = [{(row['id'], row['house']): row for row in load([directory], 'houses.csv', ('id', 'house'))}
               for directory in (control, candidate)]
     common = games[0].keys() & games[1].keys()
@@ -1500,6 +1533,8 @@ def trooper_pair_keys(previous, current, old, new, styles=('trooper-support-off'
         reason = ''
         if not before or not after or before.get('error') or after.get('error'):
             reason = 'incomplete_game'
+        elif observer_pair_error(before, after):
+            reason = observer_pair_error(before, after)
         elif styles is not None and (before.get('style'), after.get('style')) != styles:
             reason = 'not_trooper_support_OFF_ON'
         elif any(before.get(field, '') == '' or after.get(field, '') == ''
@@ -1815,8 +1850,10 @@ def tech_comparison(control, candidate):
 
 
 def compare(control, candidate):
-    if any(game.get('candidate_house', '') != ''
-           for game in load([control, candidate], 'games.csv', ('id',))):
+    games = [{row['id']: row for row in load([directory], 'games.csv', ('id',))}
+             for directory in (control, candidate)]
+    require_matching_observers(*games)
+    if any(game.get('candidate_house', '') != '' for arm in games for game in arm.values()):
         sample_comparison(control, candidate)
         return
     old = {(row['id'], row['house']): row for row in load([control], 'houses.csv', ('id', 'house'))}
@@ -1907,6 +1944,8 @@ styles.add_argument('--candidate-style',
                     help='sample only: play-style INI applied only to the candidate seat; opponents keep native config')
 styles.add_argument('--seat-styles', type=seat_styles_argument, metavar='control,A,B,C',
                     help='Constant per-seat INIs, rotated through every seat; native control fills spare seats')
+parser.add_argument('--observer-off', action='store_true',
+                    help='Disable BALANCE_DUNECITY_AUDIT for outcome/digest gates; audit metrics are unmeasured')
 parser.add_argument('--attack-events', action='store_true',
                     help='Enable existing AI telemetry, retain exact ground dispatches in waves.csv, and report passivity metrics')
 parser.add_argument('--keep-telemetry', action='store_true',

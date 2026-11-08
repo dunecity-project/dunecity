@@ -1484,12 +1484,15 @@ void QuantBot::launchGroundHunt() {
         traceDecision("attack_schedule",AITelemetry::Record().set("delay_cycles",attackTimer)
             .set("reason","next_wave_after_dispatch"));
     }
-    traceDecision("ground_hunt",AITelemetry::Record().set("members",count).set("value",value)
+    auto observeSingleFront = [&](AITelemetry::Record& details) -> AITelemetry::Record& {
+        if (ffaSingleFront) details.set("front_continued",continuedFront);
+        return details;
+    };
+    traceDecision("ground_hunt",observeSingleFront(AITelemetry::Record().set("members",count).set("value",value)
         .set("wave_formation",QuantBotConfig::waveFormationName(waveFormationShape()))
         .set("hunt_party",int(partyUnits.size()))
         .set("formation_members",formationMembers)
         .set("finish_team",finishTeam)
-        .set("front_continued",continuedFront)
         .set("campaign_limited",limited).set("army_value",armyValue)
         .set("committed_value",custom ? groundCommittedValue : committedValue)
         .set("committed_units",limited ? campaignPressure().units : groundCommittedUnits)
@@ -1522,7 +1525,7 @@ void QuantBot::launchGroundHunt() {
         .set("alliance_units",pressure.units).set("alliance_value",pressure.value)
         .set("alliance_unit_cap",profile.limitedWave ? profile.units : -1)
         .set("alliance_value_cap",profile.limitedWave ? profile.value : -1)
-        .set("alliance_house_cap",profile.houses));
+        .set("alliance_house_cap",profile.houses)));
 }
 
 // ===========================================================================

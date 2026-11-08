@@ -391,6 +391,40 @@ new columns blank. Raw `power < need` is not a powered-mode economy penalty when
 `power_required=0`. Use `--attack-events` only for diagnostic captures that need
 spending, first dispatch and the candidate activation/front-continuation records.
 
+Round3 isolates the observed winning-economy gap with two more default-off,
+hashed, registry-listed switches (both spice-backed vanilla multi-enemy only).
+`VanillaFfaLightWorkingCash` removes the flat700-credit light-factory entry hurdle
+below ordinary readiness after four real workers. Actual quotes, protected cash,
+unit limits and the existing mix remain authoritative; it does not give cheap
+entry to optional factory upgrades. `VanillaFfaFundedTech` defers optional
+IX/Palace orders and their savings until up to eight sustainable real workers
+and ordinary army readiness, while a legal local Heavy Factory can supply the
+army without them. The first port, transport, repair, accepted commitments and
+space/yard recovery keep their existing rules. Styles:
+`vanilla-ffa-light-working-cash-on`, `vanilla-ffa-funded-tech-on`,
+`vanilla-ffa-round3-off`. New capital-plan fields and `front_continued` are built
+only in their enabled vanilla switch scope, not for OFF/campaign telemetry.
+
+The scoped follow-up retains the hashed, default-OFF keys
+`VanillaFfaThreatProduction` and `VanillaFfaFundedTech`, but activates them only
+in vanilla multi-enemy skirmishes with **at least five original occupied player
+houses**. Original setup, not current survivors, determines match size; no
+mission, map-name or seed condition participates. Four-player FFA, 1v1, teams,
+other mods and campaigns remain inert. The existing nine-switch round-trip/hash
+fixture still covers both keys. Acceptance uses fresh sample seed9202, both arms
+observer-off, requiring a gain inside the five-plus-player stratum and identical
+native digests in every smaller match. The earlier observed9101 screen is
+discovery evidence, not the fresh-seed acceptance gate.
+
+For outcome/digest promotion gates use **`--observer-off`** in both arms.
+It removes `BALANCE_DUNECITY_AUDIT`, keeps real elimination samples/final results,
+and leaves power/refinery/audit-dependent metrics unmeasured rather than inventing
+zeros. `games.csv` appends the verified `observer_mode` receipt; comparison rejects
+mixed or missing modes and resume requires a new directory when the mode changes.
+Do not compare an observed screen with an observer-off gate. Any screen winner
+still needs the full candidate-only vanilla96 against observer-off native on the
+same pin, plus AAA2 and the cross-mode/default gates, before proposing ON.
+
 ```sh
 # Real games run only through the committed cluster queue, never a local mini batch.
 dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag sm-smoke -- \

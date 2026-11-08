@@ -946,7 +946,7 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
         : pass.vehiclePlanValue;
     if (!turn.pBuilder->isUpgrading()
         && pass.money > (pass.techSavings && pass.militaryEmergency ? 0
-            : turn.campaignLightWorkingCash ? 0
+            : (turn.campaignLightWorkingCash || pass.vanillaFfaLightWorkingCash) ? 0
             : pass.citySimEnabled ? 500 : 700)
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
@@ -960,6 +960,7 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
 
         if (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel()
             && !(pass.techSavings && pass.militaryEmergency)
+            && (!pass.vanillaFfaLightWorkingCash || pass.money > 700)
             && getHouse()->getCredits() > 1500 && canFundProductionUpgrade(pass,turn.pBuilder)
             && spendingAdmits(pass, turn.pBuilder->getItemID(), turn.pBuilder->getUpgradeCost(), true)) {
             upgradeWithLogging(pass, turn, __LINE__);
