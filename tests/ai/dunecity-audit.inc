@@ -4,6 +4,7 @@
 #include <dunecity/PowerRules.h>
 #include <structures/BuilderBase.h>
 #include <array>
+#include "field-expansion-audit.inc"
 
 namespace DuneCityAudit {
 
@@ -161,6 +162,7 @@ inline void sample(Game& game) {
     if (!std::getenv("BALANCE_DUNECITY_AUDIT")) return;
     observe(game);
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
+    FieldExpansionAudit::sample(game,minute);
     for (const House* house : EliminationMatch::playingHouses(game)) {
         const QuantBot* bot = FfaArmy::quantBotOf(house);
         if (!bot) continue;

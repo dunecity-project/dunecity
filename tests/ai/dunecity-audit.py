@@ -78,9 +78,12 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'ledger_enabled', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
                  'yard_storage', 'police_funding', 'army_target', 'unit_limit', 'spice_multiplier', 'sale_credits',
                  'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
-                 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost'
+                 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
+                 'field_workers', 'field_moving', 'field_harvesting', 'field_travel_sum',
+                 'field_local_spice', 'field_refineries'
 ) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required')
+FIELD_FIELDS = META + ('mod', 'minute', 'cycle', 'field', 'initial', 'remaining')
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 AIR_KILL_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'attacker', 'victim_house', 'object', 'item',
                           'enemy', 'capture_complete', 'attacker_item', 'attacker_source', 'attacker_firing_house',
@@ -566,7 +569,7 @@ def sample_schedule(args):
         draws = {factor: balanced_draw(levels, args.cases, rng) for factor, levels in factors.items()}
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
-            seed = rng.getrandbits(32)
+            seed = (args.map_seed_start + index if args.map_seed_start is not None else rng.getrandbits(32))
             fmt, enemy = case['format'], case['difficulty']
             count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
             houses = list(HOUSES[:count])
@@ -993,7 +996,7 @@ def play(args, scratch, binary, game):
                    if 'PROBE_DIGEST:' in line and 'final=1' in line), '')
     merged = defaultdict(dict)
     for line in lines:
-        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_TROOPERS:'):
+        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_TROOPERS:', 'FIELD_TRAVEL_AUDIT:'):
             if marker in line:
                 data = parse(line, marker)
                 data.update(json.loads(data.pop('economy', '{}')))
@@ -1097,6 +1100,9 @@ def play(args, scratch, binary, game):
                    for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost')},
                 flags='/'.join(d for d in DETECTORS if detectors[d])))
         append(results / 'samples.csv', SAMPLE_FIELDS, samples)
+        append(results / 'spice-fields.csv', FIELD_FIELDS,
+               [dict(metadata(game), mod=game.get('mod', 'dunecity'), **parse(line, 'SPICE_FIELD_AUDIT:'))
+                for line in lines if 'SPICE_FIELD_AUDIT:' in line])
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
         if telemetry:
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
@@ -1935,6 +1941,7 @@ parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='m
                     help='sample: balanced seeded factor draws, each played from two candidate seats')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--map-seed-start', type=int, help='sample: consecutive explicit map seeds, independent of factor draws')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
