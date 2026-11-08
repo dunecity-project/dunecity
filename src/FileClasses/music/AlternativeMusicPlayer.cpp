@@ -1,4 +1,5 @@
 #include <FileClasses/music/AlternativeMusicPlayer.h>
+#include <FileClasses/HeadlessAssets.h>
 
 #include <FileClasses/music/ADLPlayer.h>
 #include <FileClasses/music/DirectoryPlayer.h>
@@ -81,6 +82,7 @@ void AlternativeMusicPlayer::setMusicVolume(int newVolume) {
 }
 
 std::unique_ptr<MusicPlayer> createMusicPlayer() {
+    if(HeadlessAssets::enabled()) return std::make_unique<ADLPlayer>();
     std::unique_ptr<MusicPlayer> player;
     if(settings.audio.musicType == "directory") player = std::make_unique<DirectoryPlayer>();
     else if(settings.audio.musicType == "adl") player = std::make_unique<ADLPlayer>();

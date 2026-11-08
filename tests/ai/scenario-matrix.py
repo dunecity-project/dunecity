@@ -59,7 +59,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
-from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import finish_game, headless_asset_arguments, probe_binary, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
 import genome_qualification  # noqa: E402
 
@@ -406,6 +406,7 @@ def command(args, binary, game, out):
            '--prebuilt-probe', str(binary), '--output-dir', str(out), '--scenario', '--mod', game['mod'],
            '--seed', str(game['seed']), '--minutes', str(game['minutes']), '--capture-mib', '256',
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1']
+    cmd += headless_asset_arguments()
     if not (getattr(args, 'attack_events', False) or getattr(args, 'keep_telemetry', False)):
         cmd += ['--no-ai-telemetry']
     if getattr(args, 'style', None):

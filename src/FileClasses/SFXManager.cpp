@@ -40,6 +40,7 @@
 
 SFXManager::SFXManager() {
     const HeadlessAssets::StartupTimer startupTimer("sounds");
+    if(HeadlessAssets::enabled()) return;
     reloadVoices();
 
     loadSoundEffects();
@@ -55,6 +56,7 @@ SFXManager::~SFXManager() = default;
 
 void SFXManager::reloadVoices() {
     const HeadlessAssets::StartupTimer startupTimer("voices");
+    if(HeadlessAssets::enabled()) return;
     kleshmershNameVoice.reset();
     // Reload language-specific voices after an active-mod switch so optional
     // mod assets cannot leak into another mod.

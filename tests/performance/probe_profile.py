@@ -18,6 +18,7 @@ import hashlib
 from contextlib import contextmanager
 import importlib.util
 import os
+import json
 from pathlib import Path
 import re
 import shutil
@@ -35,6 +36,86 @@ DISPOSABLE_PROFILE_ASSETS = ('mods', 'workshop/revisions')
 FAILED_GAMES_KEEP = 5
 _failed_lock = threading.Lock()
 HASH = re.compile(rb'[0-9a-f]{64}')
+
+def headless_asset_arguments():
+    """Batch-only opt-in; direct CTest/UI probes retain the normal asset loader."""
+    return ['--no-headless-assets'] if os.environ.get('DUNECITY_HEADLESS_ASSETS') == '0' else ['--headless-assets']
+
+
+def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
+    """Reuse exact, sealed Vanilla/DuneCity install payloads, never a user's mods.
+
+    A real seed-only engine run produces the files. The immutable binary and
+    source identity key the cache; every reader verifies all bytes under the
+    publication lock. Invalid caches are left untouched and the caller uses
+    ordinary private profile copies instead.
+    """
+    if not fingerprint:
+        return None
+    binary, build = Path(binary), Path(build)
+    identity = {'binary': hashlib.sha256(binary.read_bytes()).hexdigest(), 'source': fingerprint}
+    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    cache = build / 'headless-mod-cache'
+    destination = cache / key
+    staged = None
+
+    def payload_hashes(directory):
+        if directory.is_symlink() or not directory.is_dir():
+            raise RuntimeError('Missing or linked shared headless mods')
+        result = {}
+        for path in sorted(directory.rglob('*')):
+            if path.is_symlink():
+                raise RuntimeError('Linked file in shared headless mods')
+            if path.is_file():
+                result[path.relative_to(directory).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+        return result
+
+    try:
+        cache.mkdir(parents=True, exist_ok=True)
+        with (cache / (key + '.lock')).open('a+b') as handle:
+            if handle.tell() == 0:
+                handle.write(b'\0')
+                handle.flush()
+            handle.seek(0)
+            lock_exclusive(handle)
+            if destination.exists():
+                manifest = json.loads((destination / 'manifest.json').read_text())
+                if manifest['identity'] != identity or manifest['files'] != payload_hashes(destination / 'mods'):
+                    raise RuntimeError('Shared headless mod fingerprint differs')
+                return destination / 'mods'
+            with scratch_dir('headless-mod-seed') as scratch:
+                seed_env = dict(env, DUNECITY_USERDIR=str(scratch / 'profile'),
+                                DUNECITY_HEADLESS_SEED_ONLY='1')
+                for name in ('DUNECITY_SHARED_MODS', 'DUNECITY_SIM_MEASURE', 'DUNECITY_SIM_SAMPLE_SECONDS',
+                             'BALANCE_HEAP_PROFILE', 'BALANCE_HEAP_TOOLS', 'MallocStackLogging'):
+                    seed_env.pop(name, None)
+                with (scratch / 'seed.log').open('w') as log:
+                    subprocess.run([str(binary), '--window', '--showlog', '--non-interactive'],
+                                   cwd=scratch, env=seed_env, stdout=log, stderr=subprocess.STDOUT,
+                                   check=True, timeout=120)
+                staged = Path(tempfile.mkdtemp(prefix=key + '.incoming-', dir=cache))
+                for name in ('vanilla', 'dunecity'):
+                    shutil.copytree(scratch / 'profile/mods' / name, staged / 'mods' / name)
+                (staged / 'manifest.json').write_text(
+                    json.dumps({'identity': identity, 'files': payload_hashes(staged / 'mods')}, sort_keys=True) + '\n')
+            # Read-only files on both platforms; read-only directories on POSIX.
+            for path in staged.rglob('*'):
+                if path.is_file():
+                    path.chmod(0o444)
+                elif sys.platform != 'win32':
+                    path.chmod(0o555)
+            staged.rename(destination)
+            staged = None
+            return destination / 'mods'
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
+        print(f'Shared headless mods unavailable; using private copies: {error}', file=sys.stderr)
+        return None
+    finally:
+        if staged is not None:
+            for path in staged.rglob('*'):
+                path.chmod(0o755 if path.is_dir() else 0o644)
+            shutil.rmtree(staged)
+
 
 
 def default_build_dir(root):
