@@ -255,7 +255,7 @@ struct QuantBotConfig {
         /// Cap refinery/harvester openings by their nearest-base share of reachable remaining spice.
         bool vanillaBoomSpiceGate;
         int vanillaBoomSpicePerRefinery;       ///< 4000 or 8000; other values normalize to 4000.
-        int duelOpeningPlan;                  ///< 0 native, 1 spice-funded second refinery, 2 light raid, 3 first heavy.
+        int duelOpeningPlan;                  ///< 0 native, 1 spice-funded second refinery, 2 light raid (default since protocol 117), 3 first heavy.
         int vanillaHarvesterBoomWorkers;       ///< 8 or 12, with two refineries.
         int vanillaRefineryBoomRefineries;     ///< 4 or 6, with two workers per refinery.
         int vanillaGreedyBoomMinutes;          ///< Stop at 6, 10 or 12 minutes; fund army until minute 20.
@@ -333,7 +333,7 @@ struct QuantBotConfig {
         bool campaignFactoryRunway;
         /// Initially spice-bearing campaign AI support below legal Heavy Factory tech
         /// keeps worker jobs on its side of the base-distance frontier.
-        /// Hashed, default 0 (OFF); 1 = home side, 2 = four-tile inward margin.
+        /// Hashed, default 2 since protocol 117; 0 = OFF, 1 = home side, 2 = four-tile inward margin.
         int campaignHomeFields;
         /// Initially spice-bearing classic campaign support rescues a worker only
         /// with enough health-weighted ground strength: 0=OFF, 1=100%, 2=150%.

@@ -358,7 +358,10 @@
 // 116: QuantBot CityResearchOrder defaults to 2: research-enabled Custom DuneCity matches on
 //      spice maps defer new research until income covers it (Civilization Wars excluded),
 //      so a 115 peer researches differently and would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            116
+// 117: QuantBot DuelOpeningPlan and CampaignHomeFields default to 2: Custom DuneCity 1v1 spice
+//      duels open with the light harvester raid and low-tech campaign AI support keeps its
+//      workers four tiles inside its own frontier, so a 116 peer would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            117
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

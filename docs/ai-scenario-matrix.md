@@ -87,8 +87,8 @@ played once). `--cases` can restrict the missions. The default fixed 66-game gat
 the idle-human AI-support seating, and every non-campaign seed remain unchanged.
 Use separate result directories for each arm and keep observer flags identical.
 
-Campaign support field experiment: `[Force Concentration] CampaignHomeFields`
-is hashed and defaults to 0 (OFF). Level 1 rejects spice jobs closer to any
+Campaign support home fields: `[Force Concentration] CampaignHomeFields`
+is hashed and defaults to 2 since protocol 117 (0 is OFF). Level 1 rejects spice jobs closer to any
 hostile base centre than the support AI's own base; level 2 leaves a four-tile
 inward margin. Base centres use live deterministic structures, ignoring fog.
 Existing immediate-danger, route, unloading and ownership rules remain.
@@ -102,6 +102,11 @@ requires the shared campaign initial-spice helper, not its Custom-only
 predecessor. The broad high-tech policy was rejected after A20 fell from23/24
 wins to15/24 or10/24. Restricting high-tech income fields is not a qualified fix;
 the low-tech hypothesis requires its own fresh paired and full-campaign gates.
+Level 2 passed them on B2 `f9fd39b0` (2026-11-09): paired96 campaign wins 59 -> 82
+(23 gained, none lost; A20 digest-identical 48/48), fresh48 32 -> 42, fixed66
+63 -> 63 with all 45 legal-Heavy-Factory missions identical, controls26 and AAA2
+digest-identical, and the 1.0.807 promotion check PASS (candidate 53 / OFF 53 /
+807 22; the Custom deck is outside its scope).
 Styles:
 `campaign-home-fields-off`, `campaign-home-fields-home`, `campaign-home-fields-margin`.
 The hypothesis is worker survival without drawing the whole opening army into

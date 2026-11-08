@@ -1459,7 +1459,7 @@ the CityResearchOrder lab fix and VanillaArmyCounters' initial-spice scope.
 exclusions and acceptance receipts are in
 `outputs/ai-tuning-20261108/BatchIntegration/ledger.md`.
 
-## Experimental duel openings (default OFF)
+## Duel openings (default 2: DuneCity light raid)
 
 `[Force Concentration] DuelOpeningPlan` is a hashed integer: `0` native,
 `1` fast second refinery, `2` early light harvester pressure, `3` first heavy
@@ -1484,5 +1484,11 @@ membership at every caller from the lowest four eligible unit IDs at minutes
 targets. Heavy walks the actual mod prerequisites after the first income bay;
 neither factory plan invents unavailable technology or bypasses purchase admission.
 
-These are experiment arms, not accepted improvements. Evidence, coverage and
-funnel decisions live in `outputs/ai-tuning-20261108/DuelOpening/ledger.md`.
+Default 2 since protocol 117 (2026-11-09): on B2 `f9fd39b0` the City raid won
+paired96 City duels 48 -> 84 against native (40 gained, 4 lost) and fresh48
+24 -> 40, against Hard and Medium opponents 13 -> 20 of 24 each; controls26 kept
+all 15 native wins with every digest identical (Silicon Valley included), and
+Vanilla/non-duel OOS72 and campaign68/AAA2 were digest-identical. The 1.0.807
+promotion check passed: candidate 56 / OFF 53 / 807 22. Plans 1 and 3 remain
+experiment arms; `duel-opening-off` is the explicit OFF control. Evidence,
+coverage and funnel decisions live in `outputs/ai-tuning-20261108/DuelOpening/ledger.md`.

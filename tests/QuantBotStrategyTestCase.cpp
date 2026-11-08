@@ -1223,9 +1223,9 @@ TEST_CASE("Vanilla boom families default off and persist independent hashed comb
     std::filesystem::remove(path);
 }
 
-TEST_CASE("Duel opening plans default off and round trip independent hashed levels", "[ai][duel][config]") {
+TEST_CASE("Duel opening plan defaults to the City raid and round trips independent hashed levels", "[ai][duel][config]") {
     const QuantBotConfig defaults;
-    REQUIRE(defaults.force.duelOpeningPlan == 0);
+    REQUIRE(defaults.force.duelOpeningPlan == 2);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-duel-opening-config-test.ini";
     std::map<std::string, int> hashes;
     for (int level = 0; level <= 3; ++level) {
@@ -2004,7 +2004,7 @@ TEST_CASE("Campaign round-two economy controls independently persist every hashe
 TEST_CASE("Campaign home fields have two independently hashed persistent levels",
           "[ai][campaign][economy][config]") {
     const QuantBotConfig defaults;
-    REQUIRE(defaults.force.campaignHomeFields == 0);
+    REQUIRE(defaults.force.campaignHomeFields == 2);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-home-fields-test.ini";
     std::map<std::string, int> hashes;
     for (const int level : {0, 1, 2}) {

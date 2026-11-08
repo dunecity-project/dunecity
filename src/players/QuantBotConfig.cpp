@@ -360,7 +360,7 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaBoomFfaOnly = false;
     force.vanillaBoomSpiceGate = false;
     force.vanillaBoomSpicePerRefinery = 4000;
-    force.duelOpeningPlan = 0;
+    force.duelOpeningPlan = 2;
     force.vanillaHarvesterBoomWorkers = 8;
     force.vanillaRefineryBoomRefineries = 4;
     force.vanillaGreedyBoomMinutes = 6;
@@ -395,7 +395,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignIdleCashFactoryCredits = 2000;
     force.campaignRefineryDefence = false;
     force.campaignFactoryRunway = false;
-    force.campaignHomeFields = 0;
+    force.campaignHomeFields = 2;
     force.campaignSizedWorkerRescue = 0;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
