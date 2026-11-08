@@ -1131,6 +1131,9 @@ private:
     /// T, P, H, K and S.
     int forceBits() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }
+    /// Vanilla Custom games whose original roster has at least two hostile teams.
+    /// The tuning switches never activate in campaigns, duels or two-team matches.
+    bool vanillaMultiEnemyGame() const;
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
     /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
     /// Medium/Hard/Brutal.

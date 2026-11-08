@@ -297,6 +297,7 @@ struct TeamStrength {
     int64_t army = 0;
     int turrets = 0;
     int structures = 0;
+    int distance = 0;      ///< nearest known structure from home; used only by the nearby FFA candidate
 };
 
 /// Is \a a the weaker team to finish (army + kKnownTurretValue per turret; ties: fewer known
@@ -307,6 +308,14 @@ inline bool weakerTeam(const TeamStrength& a, const TeamStrength& b) {
     if (sa != sb) return sa < sb;
     if (a.structures != b.structures) return a.structures < b.structures;
     return a.team < b.team;
+}
+
+/// A local opportunity prices a tile of travel as one light vehicle (200 credits), avoiding
+/// a cross-map march to a slightly weaker rival. Existing weakness/id ordering breaks ties.
+inline bool nearerOpportunity(const TeamStrength& a, const TeamStrength& b) {
+    const int64_t sa = a.army + int64_t(kKnownTurretValue) * a.turrets + int64_t(200) * a.distance;
+    const int64_t sb = b.army + int64_t(kKnownTurretValue) * b.turrets + int64_t(200) * b.distance;
+    return sa != sb ? sa < sb : weakerTeam(a, b);
 }
 
 /// K: an objective with at least kFortifiedTurrets known turrets within kFortifiedRadiusTiles is
