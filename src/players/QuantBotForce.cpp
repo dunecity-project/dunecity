@@ -97,7 +97,7 @@ int QuantBot::forceBits() const {
         | (force.perimeterTurrets ? kForceThreatTurrets : 0)
         | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0)
         | (force.turretPriority ? kForceTurretPriority : 0) | (force.pressOn ? kForcePressOn : 0)
-        | ((force.finishWeakest || cityBoomKind() == CityBoomKind::Reactive) ? kForceFinishWeakest : 0)
+        | ((force.finishWeakest || cityBoomSpiceKind() == CityBoomKind::Reactive) ? kForceFinishWeakest : 0)
         | (force.fortifiedWaves ? kForceFortifiedWaves : 0)
         | (force.sonicClearLane ? kForceSonicClearLane : 0) | (force.spendAtCap ? kForceSpendAtCap : 0)
         | (force.siegeStandoff ? kForceSiegeStandoff : 0) | (force.massAssault ? kForceMassAssault : 0)
@@ -116,6 +116,115 @@ bool QuantBot::vanillaMultiEnemyGame() const {
     return false;
 }
 
+bool QuantBot::citySpiceFfaScope(unsigned minimumControllers) const {
+    if (!autonomousCustomArmy() || fighterOnly() || !currentGame->isCitySimEnabled()
+        || getGameInitSettings().getModName() != "dunecity") return false;
+    unsigned occupied = 0;
+    std::array<int, NUM_HOUSES> teams{};
+    for (const auto& row : getGameInitSettings().getHouseInfoList()) {
+        if (row.playerInfoList.empty()) continue;
+        for (unsigned i = 0; i < occupied; ++i)
+            if (teams[i] == row.team) return false;
+        if (occupied == teams.size()) return false;
+        teams[occupied++] = row.team;
+    }
+    return occupied >= minimumControllers && getGameInitSettings().getInitialSpiceTilePermille() > 0;
+}
+
+const QuantBot::CitySpiceShare& QuantBot::citySpiceShare() const {
+    const Uint32 now = getGameCycleCount();
+    if (citySpiceShareCycle == now) return citySpiceShareCache;
+    citySpiceShareCycle = now;
+    auto& share = citySpiceShareCache;
+    const int w = getMap().getSizeX(), h = getMap().getSizeY();
+    share.ownSpice = share.reachableSpice = 0;
+    share.ownTiles = share.reachableTiles = share.ownAnchors = share.rivals = 0;
+    share.owner.assign(static_cast<size_t>(w) * h, 0);
+    share.ownDistance.assign(static_cast<size_t>(w) * h, -1);
+    const int ownTeam = getHouse()->getTeamID();
+    auto live = [](const StructureBase* structure) {
+        return structure->getOwner() && !structure->getOwner()->isNatives()
+            && structure->getHealth() > 0 && structure->isActive();
+    };
+    // A house harvests into its drop-offs; only a house without one is
+    // anchored at its construction yards (it will site its refinery there).
+    std::array<bool, NUM_HOUSES> dropoff{};
+    for (const auto* structure : getStructureList())
+        if (live(structure) && structure->acceptsHarvesterDropoff())
+            dropoff[structure->getOwner()->getHouseID()] = true;
+    struct Anchor { int x0, y0, x1, y1, house; bool ours; std::array<int, 4> regions; int regionCount; };
+    std::vector<Anchor> anchors;
+    for (const auto* structure : getStructureList()) {
+        if (!live(structure)) continue;
+        const int house = structure->getOwner()->getHouseID();
+        if (dropoff[house] ? !structure->acceptsHarvesterDropoff()
+                : structure->getItemID() != Structure_ConstructionYard) continue;
+        Anchor anchor{structure->getX(), structure->getY(),
+            structure->getX() + structure->getStructureSizeX() - 1,
+            structure->getY() + structure->getStructureSizeY() - 1,
+            house, structure->getOwner()->getTeamID() == ownTeam, {}, 0};
+        // Vehicles leave a building onto its perimeter; collect those regions.
+        for (int y = anchor.y0 - 1; y <= anchor.y1 + 1; ++y)
+            for (int x = anchor.x0 - 1; x <= anchor.x1 + 1; ++x) {
+                if ((x >= anchor.x0 && x <= anchor.x1 && y >= anchor.y0 && y <= anchor.y1)
+                    || !getMap().tileExists(x, y)) continue;
+                const int region = getMap().vehicleTerrainRegion(Coord(x, y));
+                if (region == 0 || anchor.regionCount == static_cast<int>(anchor.regions.size())
+                    || std::find(anchor.regions.begin(), anchor.regions.begin() + anchor.regionCount, region)
+                        != anchor.regions.begin() + anchor.regionCount) continue;
+                anchor.regions[anchor.regionCount++] = region;
+            }
+        if (anchor.regionCount > 0) anchors.push_back(anchor);
+    }
+    std::array<bool, NUM_HOUSES> rival{};
+    for (const auto& anchor : anchors) {
+        if (anchor.ours) { ++share.ownAnchors; continue; }
+        for (const auto& own : anchors) {
+            if (!own.ours) continue;
+            for (int i = 0; i < anchor.regionCount && !rival[anchor.house]; ++i)
+                for (int j = 0; j < own.regionCount; ++j)
+                    if (anchor.regions[i] == own.regions[j]) { rival[anchor.house] = true; break; }
+        }
+    }
+    share.rivals = static_cast<int>(std::count(rival.begin(), rival.end(), true));
+    if (share.ownAnchors == 0) return share;
+    for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
+        const Tile* tile = getMap().getTile(x, y);
+        if (!tile->hasSpice()) continue;
+        const int region = getMap().vehicleTerrainRegion(Coord(x, y));
+        if (region == 0) continue;
+        int own = std::numeric_limits<int>::max(), other = std::numeric_limits<int>::max();
+        std::array<int, NUM_HOUSES> rivalDistance;
+        rivalDistance.fill(std::numeric_limits<int>::max());
+        for (const auto& anchor : anchors) {
+            if (std::find(anchor.regions.begin(), anchor.regions.begin() + anchor.regionCount, region)
+                == anchor.regions.begin() + anchor.regionCount) continue;
+            const int dx = std::max({0, anchor.x0 - x, x - anchor.x1});
+            const int dy = std::max({0, anchor.y0 - y, y - anchor.y1});
+            const int d = std::max(dx, dy);
+            int& best = anchor.ours ? own : rivalDistance[anchor.house];
+            best = std::min(best, d);
+        }
+        other = *std::min_element(rivalDistance.begin(), rivalDistance.end());
+        if (own == std::numeric_limits<int>::max()) continue;
+        const int64_t amount = tile->getSpice().lround();
+        const size_t cell = static_cast<size_t>(y) * w + x;
+        share.reachableSpice += amount;
+        ++share.reachableTiles;
+        share.ownDistance[cell] = static_cast<int16_t>(std::min(own, 32767));
+        if (own < other) {
+            share.owner[cell] = 1;
+            share.ownSpice += amount;
+            ++share.ownTiles;
+        } else if (own == other) {
+            share.owner[cell] = 2;
+            const int ties = static_cast<int>(std::count(rivalDistance.begin(), rivalDistance.end(), own));
+            share.ownSpice += amount / (1 + ties);
+        } else share.owner[cell] = 3;
+    }
+    return share;
+}
+
 QuantBot::CityBoomKind QuantBot::cityBoomKind() const {
     const auto& f = botConfig().force;
     if (!currentGame || !(f.cityBoomWorkers || f.cityBoomRefineries || f.cityBoomGreedy
@@ -124,18 +233,7 @@ QuantBot::CityBoomKind QuantBot::cityBoomKind() const {
     if (cityBoomKindCycle == now) return cityBoomKindCache;
     cityBoomKindCycle = now;
     cityBoomKindCache = CityBoomKind::Native;
-    if (!autonomousCustomArmy() || fighterOnly() || !currentGame->isCitySimEnabled()
-        || getGameInitSettings().getModName() != "dunecity") return cityBoomKindCache;
-    unsigned occupied = 0;
-    std::array<int, NUM_HOUSES> teams{};
-    for (const auto& row : getGameInitSettings().getHouseInfoList()) {
-        if (row.playerInfoList.empty()) continue;
-        for (unsigned i = 0; i < occupied; ++i)
-            if (teams[i] == row.team) return cityBoomKindCache;
-        if (occupied == teams.size()) return cityBoomKindCache;
-        teams[occupied++] = row.team;
-    }
-    if (occupied < 5 || getGameInitSettings().getInitialSpiceTilePermille() <= 0) return cityBoomKindCache;
+    if (!citySpiceFfaScope(5)) return cityBoomKindCache;
     cityBoomKindCache = f.cityBoomWorkers ? CityBoomKind::Workers
         : f.cityBoomRefineries ? CityBoomKind::Refineries
         : f.cityBoomGreedy ? CityBoomKind::Greedy
@@ -149,7 +247,7 @@ const QuantBot::CityBoomSurvey& QuantBot::cityBoomSurvey() const {
     auto& survey = cityBoomSurveyCache;
     survey = {};
     cityBoomBaseSites.clear(); // Retain capacity; no per-survey heap churn.
-    if (cityBoomKind() != CityBoomKind::Reactive) return survey;
+    if (cityBoomSpiceKind() != CityBoomKind::Reactive) return survey;
     std::array<bool, NUM_HOUSES> enemy{};
     std::array<int64_t, NUM_HOUSES> armies{}, economies{}, reachable{}, local{};
     std::array<int, NUM_HOUSES> distance;
@@ -878,12 +976,12 @@ bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
         default: break;
     }
     const Coord at = structure->getLocation();
-    return getMap().tileExists(at) && (cityBoomKind() == CityBoomKind::Reactive
+    return getMap().tileExists(at) && (cityBoomSpiceKind() == CityBoomKind::Reactive
         || getMap().getTile(at)->isExploredByTeam(getHouse()->getTeamID()));
 }
 
 int QuantBot::finishTargetTeam() const {
-    if (cityBoomKind() == CityBoomKind::Reactive) return cityBoomSurvey().targetTeam;
+    if (cityBoomSpiceKind() == CityBoomKind::Reactive) return cityBoomSurvey().targetTeam;
     // Ordered by team id (std::map), scanned in list order: the same choice on every peer.
     std::map<int, Force::TeamStrength> teams;
     const bool nearby = botConfig().force.vanillaFfaNearbyTarget && vanillaMultiEnemyGame();

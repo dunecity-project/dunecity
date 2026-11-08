@@ -908,6 +908,9 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
                 yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_city_construction" : "city_construction";
             else if (std::string_view(service.reason)=="early_rocket")
                 yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_early_rocket" : "early_rocket_cover";
+            else if (std::string_view(service.kind)=="city_land_value_service")
+                yardTurn.structureRule=yardTurn.itemID==NONE_ID
+                    ? "save_city_land_value_police" : "city_land_value_police";
             yardTurn.skipRemainingStructureLogic = true;
         }
     }
@@ -2438,6 +2441,20 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     if (selectedPlaceLocation.isValid())
         for (const auto& foundation:foundationOrders(turn.pBuilder,yardTurn.itemID,selectedPlaceLocation))
             selectedCost+=purchasePrice(turn.pBuilder,foundation.item);
+    // Elective service orders cannot spend the working till or money owed to
+    // paid queues. Actual dangerous-crime responses retain their native route.
+    if (pass.cityLandValueServices && yardTurn.itemID==Structure_PoliceStation
+        && pass.dangerousCrimeProperties==0
+        && int64_t(pass.money)<int64_t(selectedCost)+std::max(2000,pass.cityWorkingReserve)) {
+        if (capitalPending(pass)
+            && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()
+            && pass.capitalCandidates[pass.capitalChoice].item==Structure_PoliceStation) {
+            pass.capitalChoice=-1;pass.protectionCapital=false;
+        }
+        yardTurn.itemID=NONE_ID;selectedPlaceLocation=Coord::Invalid();
+        yardTurn.crimeServiceSite=Coord::Invalid();yardTurn.skipRemainingStructureLogic=false;
+        yardTurn.structureRule="city_land_value_working_cash";
+    }
     if (yardTurn.isCitySim && !turn.pBuilder->isUpgrading() && !turn.pBuilder->isOnHold()
         && turn.pBuilder->getProductionQueueSize()==0
         && !(pass.protectionCapital && capitalPending(pass))
@@ -2568,6 +2585,15 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         if (!foundations.empty()) yardTurn.placeLocations->push_back(selectedPlaceLocation);
 
         if (produceItemWithLogging(pass, turn, yardTurn.itemID, __LINE__, yardTurn.structureRule)) {
+            if (pass.cityLandValueServices && yardTurn.itemID==Structure_PoliceStation)
+                traceDecision("city_land_value_police_order",AITelemetry::Record()
+                    .set("builder",turn.pBuilder->getObjectID()).set("x",selectedPlaceLocation.x)
+                    .set("y",selectedPlaceLocation.y).set("rule",yardTurn.structureRule)
+                    .set("protected_allocation",std::string_view(yardTurn.structureRule)=="city_land_value_police")
+                    .set("target_funding",botConfig().force.cityGrowthStageTax
+                        ? 100 : botConfig().force.cityLandValueFundingPercent)
+                    .set("price",purchasePrice(turn.pBuilder,yardTurn.itemID)).set("foundation_cost",foundationCost)
+                    .set("remaining_planning_cash",pass.money).set("working_cash_floor",2000));
             if (yardTurn.isCitySim && yardTurn.itemID != Structure_Road && yardTurn.itemID != Structure_Slab1
                 && yardTurn.itemID != Structure_Slab4) {
                 if (yardTurn.crimeServiceSite.isValid()) nonServiceConstructionOrders = 0;

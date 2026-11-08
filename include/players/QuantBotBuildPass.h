@@ -350,6 +350,19 @@ struct QuantBot::BuildPass {
     // Stable ordering keeps peers deterministic.
     // Keep IDs, not pointers: an earlier yard may demolish a later zone.
     std::vector<std::pair<int, Uint32>> planningOrder{};
+
+    // CityHarvesterReplacement: a pass-local snapshot, never saved runtime state.
+    bool cityReplacementEvaluated{};
+    int cityReplacementFloor{-1};
+    int cityReplacementSpiceCap{};
+    int cityReplacementCapacity{};
+    // CityBoomSpiceGate: enforce the recomputed targets at shared purchase
+    // admission too, including a refinery's promised free worker.
+    bool cityBoomSpiceGate{};
+    int cityBoomWorkerCap{}, cityBoomBayCap{};
+    // cityLandValueServices / cityGrowthStageTax: one finite, fully funded police allocation.
+    bool cityLandValueServices{};
+    int cityLandValuePoliceCandidate{-1};
 };
 
 struct QuantBot::BuilderTurn {

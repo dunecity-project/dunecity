@@ -2,8 +2,12 @@
 // BALANCE_DUNECITY_AUDIT; no changes to the shipped game or to AI decisions.
 #include <dunecity/CitySimulation.h>
 #include <dunecity/PowerRules.h>
+#include <dunecity/SpatialFields.h>
 #include <structures/BuilderBase.h>
+#include <structures/ConstructionYard.h>
 #include <array>
+#include <cmath>
+#include <vector>
 
 namespace DuneCityAudit {
 
@@ -23,6 +27,210 @@ struct TechObservation {
     std::array<int64_t,6> firstCompleted{-1,-1,-1,-1,-1,-1};
 };
 inline std::array<TechObservation,NUM_HOUSES> technology;
+
+// Start-only port of RockBudget's sampleRock geometry:
+// 4e1a962d7c581c7e03ba16b0a761f427e3d09cfc, tests/ai/dunecity-audit.inc.
+// Four-neighbour rock includes occupied land (including the starting yard),
+// excludes mountains, and does not let buildings split a formation. Free land
+// excludes structures, zones and accepted reservations, never transient units.
+// Footprint counts enumerate overlapping top-left origins, NOT disjoint capacity.
+struct MapFeatureCounts {
+    int area{}, free{}, origins22{}, origins32{}, origins33{};
+};
+
+struct MapFeatureObservation {
+    const Game* game{};
+    const Map* map{};
+    Uint32 cycle{};
+    bool emitted{};
+};
+inline MapFeatureObservation mapFeatureObservation;
+
+inline void sampleMapFeatures(Game& game) {
+    const Uint32 cycle=game.getGameCycleCount();
+    auto& observation=mapFeatureObservation;
+    if (observation.game!=&game || observation.map!=currentGameMap || cycle<observation.cycle)
+        observation={&game,currentGameMap,cycle,false};
+    observation.cycle=cycle;
+    // The sole later-sample cost is this observer guard: no geometry allocation,
+    // placement query, RNG use, AI cache update, or persistent world write.
+    if (cycle!=0 || observation.emitted || !currentGameMap) return;
+    observation.emitted=true;
+    const auto& map=*currentGameMap;
+    const int w=map.getSizeX(), h=map.getSizeY(), n=w*h;
+    const auto houses=EliminationMatch::playingHouses(game);
+    std::vector<int> component(n,-1), queue;
+    std::vector<char> free(n,0), committed(n,0);
+    std::vector<MapFeatureCounts> counts;
+    queue.reserve(n);
+    int spiceTiles=0, mountains=0;
+    double spiceAmount=0;
+    for (int at=0;at<n;++at) {
+        const auto* tile=map.getTile(at%w,at/w);
+        spiceTiles+=int(tile->hasSpice());
+        spiceAmount+=tile->getSpice().toDouble();
+        mountains+=int(tile->isMountain());
+        free[at]=tile->isRock() && !tile->isMountain()
+            && !tile->hasAStructure() && !tile->hasCityZone();
+    }
+    auto reserve=[&](Coord at,Coord size) {
+        for (int y=at.y;y<at.y+size.y;++y) for (int x=at.x;x<at.x+size.x;++x)
+            if (map.tileExists(x,y) && free[y*w+x]) {
+                free[y*w+x]=0; committed[y*w+x]=1;
+            }
+    };
+    for (int owner=0;owner<NUM_HOUSES;++owner) {
+        const House* house=game.getHouse(owner);
+        if (!house) continue;
+        if (const auto* bot=FfaArmy::quantBotOf(house))
+            for (const auto& entry:bot->reservedStructures)
+                reserve(entry.second.location,getStructureSize(entry.second.item));
+    }
+    for (const auto* structure:structureList) {
+        if (structure->getHealth()<=0 || structure->getItemID()!=Structure_ConstructionYard) continue;
+        for (const auto& entry:static_cast<const ConstructionYard*>(structure)->getProductionQueue())
+            if (entry.reservationID!=0)
+                reserve(Coord(entry.plotX,entry.plotY),getStructureSize(entry.itemID));
+    }
+    for (int seed=0;seed<n;++seed) {
+        const auto* tile=map.getTile(seed%w,seed/w);
+        if (component[seed]>=0 || !tile->isRock() || tile->isMountain()) continue;
+        const int id=int(counts.size());
+        queue.clear();
+        auto visit=[&](int at) {
+            const auto* candidate=map.getTile(at%w,at/w);
+            if (component[at]<0 && candidate->isRock() && !candidate->isMountain()) {
+                component[at]=id; queue.push_back(at);
+            }
+        };
+        visit(seed);
+        for (size_t i=0;i<queue.size();++i) {
+            const int at=queue[i], x=at%w;
+            if (x>0) visit(at-1);
+            if (x+1<w) visit(at+1);
+            if (at>=w) visit(at-w);
+            if (at+w<n) visit(at+w);
+        }
+        MapFeatureCounts measured;
+        measured.area=int(queue.size());
+        for (int at:queue) measured.free+=int(free[at]);
+        counts.push_back(measured);
+    }
+    auto fits=[&](int at,int width,int height) {
+        const int x=at%w,y=at/w;
+        if (x+width>w || y+height>h || !free[at]) return false;
+        for (int dy=0;dy<height;++dy) for (int dx=0;dx<width;++dx)
+            if (!free[(y+dy)*w+x+dx]) return false;
+        return true;
+    };
+    for (int at=0;at<n;++at) if (component[at]>=0) {
+        auto& measured=counts[component[at]];
+        measured.origins22+=int(fits(at,2,2));
+        measured.origins32+=int(fits(at,3,2));
+        measured.origins33+=int(fits(at,3,3));
+    }
+    std::array<const StructureBase*,NUM_HOUSES> yards{};
+    std::array<const UnitBase*,NUM_HOUSES> mcvs{};
+    std::array<Coord,NUM_HOUSES> bases;
+    bases.fill(Coord::Invalid());
+    for (const auto* structure:structureList)
+        if (structure->getHealth()>0 && structure->getItemID()==Structure_ConstructionYard) {
+            const int owner=structure->getOwner()->getHouseID();
+            if (!yards[owner] || structure->getObjectID()<yards[owner]->getObjectID()) yards[owner]=structure;
+        }
+    for (const auto* unit:unitList)
+        if (unit->getHealth()>0 && unit->getItemID()==Unit_MCV) {
+            const int owner=unit->getOwner()->getHouseID();
+            if (!mcvs[owner] || unit->getObjectID()<mcvs[owner]->getObjectID()) mcvs[owner]=unit;
+        }
+    bool allBases=true;
+    for (const House* house:houses) {
+        const int owner=house->getHouseID();
+        if (yards[owner]) bases[owner]=yards[owner]->getLocation();
+        else if (mcvs[owner]) bases[owner]=mcvs[owner]->getLocation();
+        allBases=allBases && bases[owner].isValid();
+    }
+    auto distances=[&](int owner) {
+        std::array<double,2> result{-1,-1};
+        if (!allBases || houses.size()<2) return result;
+        double total=0,minimum=0;
+        int pairs=0;
+        for (size_t a=0;a<houses.size();++a) for (size_t b=a+1;b<houses.size();++b) {
+            const int first=houses[a]->getHouseID(),second=houses[b]->getHouseID();
+            if (owner>=0 && first!=owner && second!=owner) continue;
+            const double distance=std::hypot(double(bases[first].x-bases[second].x),
+                double(bases[first].y-bases[second].y));
+            if (!pairs || distance<minimum) minimum=distance;
+            total+=distance; ++pairs;
+        }
+        if (pairs) result={minimum,total/pairs};
+        return result;
+    };
+    auto emit=[&](int owner,const MapFeatureCounts& measured,int formations,int largest,int largestOrigins,
+                  int rangeTiles,int range22,int range32,int range33,int reserved) {
+        const auto distance=distances(owner);
+        const Coord base=owner<0 ? Coord::Invalid() : bases[owner];
+        SDL_Log("DUNECITY_MAP_FEATURE: cycle=0 house=%d width=%d height=%d player_count=%zu"
+                " initial_spice_density=%.9f initial_spice_amount=%.9f mountain_density=%.9f"
+                " rock_area=%d rock_components=%d largest_rock_area=%d free3x3_count=%d"
+                " largest_component_free3x3=%d rock_initial_area=%d rock_initial_free=%d rock_free=%d"
+                " rock_in_range=%d rock_committed=%d free2x2_count=%d free3x2_count=%d"
+                " in_range2x2_count=%d in_range3x2_count=%d in_range3x3_count=%d"
+                " base_x=%d base_y=%d base_distance_min=%.9f base_distance_mean=%.9f",
+            owner,w,h,houses.size(),double(spiceTiles)/n,spiceAmount,double(mountains)/n,
+            measured.area,formations,largest,measured.origins33,largestOrigins,measured.area,measured.free,
+            measured.free,rangeTiles,reserved,measured.origins22,measured.origins32,range22,range32,range33,
+            base.x,base.y,distance[0],distance[1]);
+    };
+    MapFeatureCounts total;
+    int largest=-1,reserved=0;
+    for (size_t id=0;id<counts.size();++id) {
+        const auto& measured=counts[id];
+        total.area+=measured.area; total.free+=measured.free;
+        total.origins22+=measured.origins22; total.origins32+=measured.origins32; total.origins33+=measured.origins33;
+        if (largest<0 || measured.area>counts[largest].area) largest=int(id);
+    }
+    for (char value:committed) reserved+=int(value);
+    emit(-1,total,int(counts.size()),largest<0 ? 0 : counts[largest].area,
+        largest<0 ? 0 : counts[largest].origins33,-1,-1,-1,-1,reserved);
+    std::vector<char> selected(counts.size(),0);
+    for (const House* house:houses) {
+        const int owner=house->getHouseID();
+        const auto* yard=yards[owner];
+        if (!yard) {
+            emit(owner,{-1,-1,-1,-1,-1},-1,-1,-1,-1,-1,-1,-1,-1);
+            continue;
+        }
+        std::fill(selected.begin(),selected.end(),0);
+        const Coord at=yard->getLocation(),size=yard->getStructureSize();
+        for (int y=at.y;y<at.y+size.y;++y) for (int x=at.x;x<at.x+size.x;++x)
+            if (map.tileExists(x,y) && component[y*w+x]>=0) selected[component[y*w+x]]=1;
+        MapFeatureCounts local;
+        int formations=0;
+        largest=-1;
+        for (size_t id=0;id<counts.size();++id) if (selected[id]) {
+            const auto& measured=counts[id];
+            local.area+=measured.area; local.free+=measured.free;
+            local.origins22+=measured.origins22; local.origins32+=measured.origins32; local.origins33+=measured.origins33;
+            ++formations;
+            if (largest<0 || measured.area>counts[largest].area) largest=int(id);
+        }
+        DuneCity::BoxAnyField anchors;
+        anchors.build(w,h,[&](int x,int y) { return map.getTile(x,y)->getOwner()==owner; });
+        int rangeTiles=0,range22=0,range32=0,range33=0;
+        reserved=0;
+        for (int tile=0;tile<n;++tile) if (component[tile]>=0 && selected[component[tile]]) {
+            const int x=tile%w,y=tile/w;
+            reserved+=int(committed[tile]);
+            rangeTiles+=int(free[tile] && anchors.anyWithin(x,y,BUILDRANGE));
+            range22+=int(fits(tile,2,2) && anchors.anyNearFootprint(x,y,2,2,BUILDRANGE));
+            range32+=int(fits(tile,3,2) && anchors.anyNearFootprint(x,y,3,2,BUILDRANGE));
+            range33+=int(fits(tile,3,3) && anchors.anyNearFootprint(x,y,3,3,BUILDRANGE));
+        }
+        emit(owner,local,formations,largest<0 ? 0 : counts[largest].area,
+            largest<0 ? 0 : counts[largest].origins33,rangeTiles,range22,range32,range33,reserved);
+    }
+}
 
 inline size_t compositionSlot(Uint32 item) {
     for (size_t i=0; i<QuantBot::kMixItems.size(); ++i)
@@ -160,6 +368,7 @@ inline void observe(Game& game) {
 inline void sample(Game& game) {
     if (!std::getenv("BALANCE_DUNECITY_AUDIT")) return;
     observe(game);
+    sampleMapFeatures(game);
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
     for (const House* house : EliminationMatch::playingHouses(game)) {
         const QuantBot* bot = FfaArmy::quantBotOf(house);
@@ -235,11 +444,14 @@ inline void sample(Game& game) {
             demand = std::max({int(city.resValve), int(city.comValve), int(city.indValve)});
             policeFunding = city.policeFundingPercent;
         }
+        const auto& observation = bot->vanillaBoomObservation();
         SDL_Log("DUNECITY_AUDIT: minute=%d cycle=%u house=%d credits=%d power=%d need=%d population=%d tax=%d "
                 "demand=%d built=%d structures_lost=%d base_hp=%d yards=%d yard_level=%d queue=%d upgrading=%d "
                 "waiting=%d fronts=%s gun=%d rocket=%d radar=%d radar_built=%d starport=%d starport_built=%d "
                 "heavy=%d heavy_built=%d ix=%d ix_built=%d fighters=%d moving=%d targeting=%d enemies=%d "
-                "enemy_value=%d covered_enemies=%d spice=%d refineries=%d power_required=%d",
+                "enemy_value=%d covered_enemies=%d spice=%d refineries=%d power_required=%d "
+                "boom_phase=%s boom_stop_minute=%d boom_own_army=%lld boom_enemy_army=%lld boom_near_army=%lld "
+                "boom_own_economy=%lld boom_leader_economy=%lld boom_army_ratio_bps=%d boom_economy_ratio_bps=%d",
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getCredits(),
                 house->getProducedPower(), house->getPowerRequirement(), population, tax, demand,
                 house->getNumBuiltStructures(), structuresLost, structureHP,
@@ -251,7 +463,10 @@ inline void sample(Game& game) {
                 house->getNumBuiltItems(Structure_HeavyFactory), house->getNumItems(Structure_IX),
                 house->getNumBuiltItems(Structure_IX), fighters, moving, targeting, enemies, enemyValue,
                 coveredEnemies, bot->lastCalculatedSpice, house->getNumItems(Structure_Refinery),
-                int(house->isPowerRequired()));
+                int(house->isPowerRequired()), QuantBotVanillaPolicy::phaseName(observation.plan), observation.stopMinute,
+                static_cast<long long>(observation.ownArmy), static_cast<long long>(observation.enemyArmy),
+                static_cast<long long>(observation.nearArmy), static_cast<long long>(observation.ownEconomy),
+                static_cast<long long>(observation.leaderEconomy), observation.armyRatioBps, observation.economyRatioBps);
         // BuilderBase expands a squad into 3 (or 5) Unit_Trooper objects before
         // informWasBuilt is called for each single. Never multiply that ledger
         // again. Queue entries still describe products, so expand only those.

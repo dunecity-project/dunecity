@@ -594,7 +594,7 @@ int QuantBot::houseAttackThreshold() const {
     const int required = reachableAttackThreshold(vanillaCustom
         ? DuneCity::vanillaAttackThreshold((militaryValueLimit * threshold).lround(), static_cast<int>(difficulty))
         : (militaryValueLimit * threshold).lround());
-    const auto boom = cityBoomKind();
+    const auto boom = cityBoomSpiceKind();
     return lastCalculatedSpice > 0 && customWave.launched == 0 && boom != CityBoomKind::Native && boom != CityBoomKind::ShortTax
         ? std::max(12000, required) : required;
 }

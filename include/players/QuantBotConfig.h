@@ -372,6 +372,33 @@ struct QuantBotConfig {
         int cityBoomWorkerGoal, cityBoomRefineryGoal;
         int cityBoomGreedyMinutes, cityBoomTaxMinutes;
         int cityBoomArmyRatioBps, cityBoomEconomyRatioBps;
+        /// Default-OFF spice gate for the boom families (Stefan's spice rule):
+        /// size, start and stop every worker/bay boom by the house's reachable,
+        /// apportioned spice (citySpiceShare) paying back within 10/15 minutes,
+        /// weighed against city tax payback; inert without spice.
+        bool cityBoomSpiceGate;
+        int cityBoomPaybackMinutes;
+        /// Default-OFF city FFA (4+ occupied controllers) harvester field choice:
+        /// nearest uncontested reachable spice to our refineries, avoiding fields
+        /// within 6/10 tiles of true hostile armed units (full knowledge).
+        bool cityHarvestFieldChoice;
+        int cityHarvestFieldSafetyTiles;
+        /// Default-OFF city FFA refinery logistics: site refineries by own
+        /// apportioned spice within 8/12 tiles and spread returns across bays.
+        bool cityRefineryLogistics;
+        int cityRefinerySiteTiles;
+        /// Default-OFF city FFA harvester replacement: replace lost workers first
+        /// while apportioned spice per worker pays back within 10/15 minutes.
+        bool cityHarvesterReplacement;
+        int cityHarvesterReplacementMinutes;
+        /// Default-OFF city FFA police/service land-value siting and funding
+        /// from real spice receipts plus tax, at 60/100% target funding.
+        bool cityLandValueServices;
+        int cityLandValueFundingPercent;
+        /// Default-OFF city FFA growth-stage tax: 3% below 3000/6000 displayed
+        /// own population, normal 7% at/above it, with full service funding.
+        bool cityGrowthStageTax;
+        int cityGrowthTaxPopulation;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;

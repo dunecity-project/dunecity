@@ -446,6 +446,26 @@ CityBoomTaxMinutes=6
 # Full-knowledge reactive boom: army/strongest reachable army 0.6/0.9; economy/leader 1.2/1.5.
 CityBoomArmyRatioBps=6000
 CityBoomEconomyRatioBps=12000
+# Spice gate for every boom family (all OFF): boom only while the house's reachable, apportioned
+# spice pays each planned worker/bay back within 10/15 minutes and beats city tax payback.
+CityBoomSpiceGate=0
+CityBoomPaybackMinutes=10
+# City FFA (4+ occupied controllers) harvester efficiency, all OFF:
+# nearest uncontested spice avoiding true hostile armies within 6/10 tiles;
+CityHarvestFieldChoice=0
+CityHarvestFieldSafetyTiles=6
+# refineries sited by own spice within 8/12 tiles, with returns spread across bays;
+CityRefineryLogistics=0
+CityRefinerySiteTiles=8
+# lost workers replaced first while apportioned spice pays back within 10/15 minutes.
+CityHarvesterReplacement=0
+CityHarvesterReplacementMinutes=10
+# City FFA services (OFF): police land-value siting/funding at 60/100%; growth-stage tax
+# 3% below 3000/6000 displayed population, normal 7% at/above it.
+CityLandValueServices=0
+CityLandValueFundingPercent=60
+CityGrowthStageTax=0
+CityGrowthTaxPopulation=3000
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
 # Experimental 3-rocket baseline (4 for Hard+ at 16 structures), with a full income budget.

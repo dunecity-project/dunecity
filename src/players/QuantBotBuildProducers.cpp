@@ -73,11 +73,13 @@ void QuantBot::buildProducer(BuildPass& pass, const StructureBase* pStructure) {
     beginBuilderTurn(pass, turn);
     if (recoverBuilderConstruction(pass, turn)) return;
     // A selected ordinary-installment project needs no legacy yard-entry cash.
-    if (pass.techSavings && buildTechSavings(pass, turn)) return;
+    if (pass.techSavings && cityHarvesterReplacementFloor(pass) <= pass.itemCount[Unit_Harvester]
+        && buildTechSavings(pass, turn)) return;
     if (upgradeYardForConcrete(pass, turn)) return;
     if (queueCampaignWindtrap(pass, turn, 0)) return;
     if (buildCampaignRepairYard(pass, turn)) return;
     reserveBuilderCash(pass, turn);
+    if (buildCityHarvesterReplacement(pass, turn)) return;
     if (turn.pBuilder->getItemID() != Structure_ConstructionYard && buildTechSavings(pass, turn)) return;
     if (buildCapitalUnits(pass, turn)) return;
 
@@ -146,6 +148,12 @@ void QuantBot::beginBuilderTurn(BuildPass& pass, BuilderTurn& turn) {
 // Record actual queue acceptance for unit and structure production.
 bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32 itemID, int sourceLine, const char* rule) {
     const Uint32 requestedItem = itemID;
+    const bool replacementWorker = botConfig().force.cityHarvesterReplacement
+        && (requestedItem == Unit_Harvester
+            || (ModManager::instance().isTornieFamilyContentActive()
+                && (requestedItem == Unit_CapacityHarvester || requestedItem == Unit_FastHarvester)));
+    const int replacement = replacementWorker ? cityHarvesterReplacementFloor(pass) : 0;
+    if (replacementWorker && replacement >= 0 && pass.itemCount[Unit_Harvester] >= replacement) return false;
     if (itemID == Unit_Harvester) itemID = chooseTornieHarvester(turn.pBuilder, pass.money);
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
@@ -245,6 +253,14 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     doProduceItem(turn.pBuilder, itemID);
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
+        if (replacement > pass.itemCount[Unit_Harvester]) {
+            const int live = getAIHarvesterCount();
+            traceDecision("harvester_replacement", AITelemetry::Record()
+                .set("live", live).set("queued", std::max(0, pass.itemCount[Unit_Harvester] - live))
+                .set("floor", replacement).set("spice_cap", pass.cityReplacementSpiceCap)
+                .set("capacity", pass.cityReplacementCapacity)
+                .set("source", turn.pBuilder->getItemID() == Structure_StarPort ? "starport" : "factory"));
+        }
         if (pass.techSavings || AITelemetry::log().enabled()) {
             const size_t slot = compositionSlot(itemID);
             if (slot < UnitMixPolicy::kSlots) {
@@ -826,8 +842,48 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
             && producer != Structure_HeavyFactory && producer != Structure_Barracks
             && producer != Structure_WOR)))
         protectedCash = std::max(protectedCash, campaignRefineryReplacementCost(pass));
+    // Optional capital ownership must not let another army producer consume
+    // the replacement wallet; live emergencies make this floor inactive.
+    if (producer != Structure_ConstructionYard
+        && cityHarvesterReplacementFloor(pass) > pass.itemCount[Unit_Harvester])
+        protectedCash = std::max(protectedCash, harvesterInvestmentReserve(pass));
     turn.reserve.reserved = pass.money - QuantBotBuildPolicy::spendableCredits(pass.money,protectedCash);
     pass.money -= turn.reserve.reserved;
+}
+
+bool QuantBot::buildCityHarvesterReplacement(BuildPass& pass, BuilderTurn& turn) {
+    const int floor = cityHarvesterReplacementFloor(pass);
+    if (pass.itemCount[Unit_Harvester] >= floor || getHouse()->isGroundUnitLimitReached()) return false;
+    const bool port = turn.pBuilder->getItemID() == Structure_StarPort;
+    if (!port && turn.pBuilder->getItemID() != Structure_HeavyFactory) return false;
+    if (!campaignAvailableToBuild(turn.pBuilder, Unit_Harvester)) return false;
+    // An idle factory supplies the worker without tying it up in a shipment.
+    // Busy, upgrading or held factories leave the market lane available.
+    if (port && cityHarvesterReplacementFactoryReady(pass)) return true;
+    if (turn.pBuilder->isUpgrading() || turn.pBuilder->isOnHold()) return true;
+    if (!port && turn.pBuilder->getProductionQueueSize() > 0) return true;
+    const auto* starport = port ? static_cast<const StarPort*>(turn.pBuilder) : nullptr;
+    if (starport && !starport->okToOrder()) return true;
+    const int protectedCapital = std::max(capitalReserve(pass, turn.pBuilder->getObjectID()),
+        cityBootstrapReserve(pass));
+    const int availableReserve = std::max(0, turn.reserve.reserved - protectedCapital);
+    pass.money += availableReserve;
+    bool ordered = false;
+    while (pass.itemCount[Unit_Harvester] < floor) {
+        const Uint32 item = chooseTornieHarvester(turn.pBuilder, pass.money);
+        const int price = purchasePrice(turn.pBuilder, item);
+        if (price <= 0 || pass.money < price || turn.pBuilder->isUnitLimitReached(item)
+            || (starport && getHouse()->getChoam().getNumAvailable(item) <= 0)) break;
+        if (!produceItemWithLogging(pass, turn, Unit_Harvester, __LINE__, "harvester_replacement")) break;
+        ++pass.itemCount[Unit_Harvester];
+        pass.orderedSpiceHarvester = true;
+        ordered = true;
+        if (!port) break;
+    }
+    pass.money -= availableReserve;
+    if (starport && ordered) doPlaceOrder(starport);
+    // The idle factory waits for its protected price instead of buying army.
+    return true;
 }
 
 bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {

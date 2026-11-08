@@ -716,6 +716,10 @@ private:
     int recentFactoryLossCount() const;
     struct SpiceFieldCache;
     bool manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache* spice = nullptr);
+    // CityHarvestFieldChoice: true armed-threat stamps, derived only for this cycle.
+    const std::vector<int>& cityHarvestTrueDanger();
+    Uint32 cityHarvestDangerCycle = std::numeric_limits<Uint32>::max();
+    std::vector<int> cityHarvestDanger;
 
     std::vector<RecentStructureLoss> recentStructureLosses;
     bool nearRecentStructureLoss(int x, int y, int width, int height) const;
@@ -1134,6 +1138,30 @@ private:
     /// Vanilla Custom games whose original roster has at least two hostile teams.
     /// The tuning switches never activate in campaigns, duels or two-team matches.
     bool vanillaMultiEnemyGame() const;
+    /// Economic experiments use original occupied controllers and saved grid
+    /// metadata, never surviving Houses or map/mission identifiers.
+    bool citySpiceFfaScope(unsigned minimumControllers) const;
+    /// Stefan's spice rule (full knowledge, true simulation state, never fog):
+    /// spice on tiles whose vehicle terrain region one of our anchors opens onto
+    /// is credited to the house whose nearest anchor (Chebyshev to the footprint)
+    /// is closest; exact ties split equally among competing houses. Anchors are
+    /// a house's drop-offs, or its yards while it has none. Allies count as
+    /// ours. Rebuilt in each new game cycle it is read in and never carried across
+    /// cycles, so checkpoint continuation does not depend on it.
+    struct CitySpiceShare {
+        int64_t ownSpice = 0;       ///< spice credited to this house
+        int64_t reachableSpice = 0; ///< all spice in regions our anchors open onto
+        int ownTiles = 0, reachableTiles = 0;
+        int ownAnchors = 0;         ///< our drop-offs (or yards while none) counted
+        int rivals = 0;             ///< hostile houses with an anchor in our regions
+        /// Per map tile (y*width+x): 0 no spice or unreachable, 1 ours, 2 tied, 3 a rival's.
+        std::vector<uint8_t> owner;
+        /// Chebyshev tiles from each labelled spice tile to our nearest anchor (-1 elsewhere).
+        std::vector<int16_t> ownDistance;
+    };
+    const CitySpiceShare& citySpiceShare() const;
+    mutable Uint32 citySpiceShareCycle = std::numeric_limits<Uint32>::max();
+    mutable CitySpiceShare citySpiceShareCache;
     enum class CityBoomKind { Native, Workers, Refineries, Greedy, ShortTax, Reactive };
     CityBoomKind cityBoomKind() const;
     mutable Uint32 cityBoomKindCycle = std::numeric_limits<Uint32>::max();
@@ -1712,8 +1740,35 @@ private:
     /// Spendable cash, military budget, spice competition, support queues and reserves.
     void planBuildBudget(BuildPass& pass);
     void planCityBoom(BuildPass& pass);
+    /// Measured native FFA winners' realised 5-15 minute yield, not the
+    /// optimistic trip forecast: credits of spice per worker-minute.
+    static constexpr int kCityBoomWorkerSpicePerMinute = 200;
+    struct CityBoomSpiceGate {
+        CityBoomKind kind = CityBoomKind::Native;
+        int kindWorkers = 0, kindBays = 0, workerCap = 0, bayCap = 0;
+        /// Capital for kindWorkers workers and kindBays bays, crediting each
+        /// bay's free harvester once. Keep the ratio exact until telemetry.
+        int64_t workerCapitalNumerator = 0;
+        bool inert = false;
+    };
+    /// Every boom consumer uses this effective kind. Native is returned when
+    /// the enabled gate cannot fund even its first worker; ShortTax is untouched.
+    CityBoomKind cityBoomSpiceKind(const CitySpiceShare* share = nullptr) const;
+    mutable Uint32 cityBoomSpiceGateCycle = std::numeric_limits<Uint32>::max();
+    mutable CityBoomSpiceGate cityBoomSpiceGateCache;
+    // Telemetry-only change detection; never an input to a game decision.
+    bool cityBoomSpiceGateTraceValid = false;
+    std::array<int64_t, 6> lastCityBoomSpiceGateTrace{};
     /// Per-house city statistics, custom-city valve tuning and power demand sampling.
     void planCityState(BuildPass& pass);
+    /// Default-OFF spice-FFA service packages; all inputs come from saved simulation state.
+    bool cityLandValueServiceScope() const;
+    struct CityLandValueBudget {
+        int spiceIncome = 0, taxIncome = 0, powerCost = 0;
+        int allowance = 0, targetFunding = 0, funding = 0;
+    };
+    CityLandValueBudget cityLandValueBudget(int spendable, int fullPoliceCost) const;
+    bool cityFirstPoliceAllocationReady() const;
     /// IX/Palace eligibility timers and the strategic reserve they protect.
     void planStrategicReserve(BuildPass& pass);
     /// Harvester targets, refinery queues, rock expansion and the opening fleet.
@@ -1782,8 +1837,18 @@ private:
     bool canBuildMilitaryVehicle(BuildPass& pass, const BuilderBase* factory);
     CivicPlan planCivicForYard(BuildPass& pass, const BuilderBase* yard);
     void forecastSpiceTrip(BuildPass& pass, Coord site);
+    /// CityRefineryLogistics: called only after safety accepts an established return.
+    bool balanceRefineryReturn(const Harvester* harvester);
+    /// Derived drop-off membership only; bookings stay live after every immediate order.
+    Uint32 refineryReturnDropoffsCycle = std::numeric_limits<Uint32>::max();
+    std::vector<Uint32> refineryReturnDropoffs;
+    /// Telemetry debounce only, never read by placement or return decisions.
+    std::array<Coord, 2> refinerySpiceSiteTrace{{Coord::Invalid(), Coord::Invalid()}};
     int workerAnnualIncome(BuildPass& pass);
     bool factoryPrefersHarvester(BuildPass& pass, const BuilderBase* factory);
+    int cityHarvesterReplacementFloor(BuildPass& pass);
+    bool cityHarvesterReplacementFactoryReady(BuildPass& pass);
+    bool buildCityHarvesterReplacement(BuildPass& pass, BuilderTurn& turn);
     Uint32 chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, bool opening);
     bool infantryQuotaAdmits(BuildPass& pass, int value);
     bool cityInfantryItem(BuildPass& pass, Uint32 item);

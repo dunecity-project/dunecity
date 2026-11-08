@@ -494,6 +494,55 @@ TEST_CASE("City boom families and discrete levels are opt-in loaded saved and in
     std::filesystem::remove(path);
 }
 
+TEST_CASE("City spice gate, harvester efficiency and service switches are opt-in loaded saved and independently hashed", "[ai][city][config]") {
+    using ForceSettings = QuantBotConfig::ForceSettings;
+    const std::array<bool ForceSettings::*, 6> switches{{
+        &ForceSettings::cityBoomSpiceGate, &ForceSettings::cityHarvestFieldChoice,
+        &ForceSettings::cityRefineryLogistics, &ForceSettings::cityHarvesterReplacement,
+        &ForceSettings::cityLandValueServices, &ForceSettings::cityGrowthStageTax}};
+    struct Level { int ForceSettings::*member; int initial, alternate; };
+    const std::array<Level, 6> levels{{
+        {&ForceSettings::cityBoomPaybackMinutes, 10, 15}, {&ForceSettings::cityHarvestFieldSafetyTiles, 6, 10},
+        {&ForceSettings::cityRefinerySiteTiles, 8, 12}, {&ForceSettings::cityHarvesterReplacementMinutes, 10, 15},
+        {&ForceSettings::cityLandValueFundingPercent, 60, 100}, {&ForceSettings::cityGrowthTaxPopulation, 3000, 6000}}};
+    const QuantBotConfig defaults;
+    for (auto member : switches) REQUIRE_FALSE(defaults.force.*member);
+    for (const auto& level : levels) REQUIRE(defaults.force.*level.member == level.initial);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-economy-efficiency-test.ini";
+    std::set<std::string> hashes;
+    auto roundTrip = [&](const QuantBotConfig& expected) {
+        REQUIRE(expected.save(path.string()));
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        for (auto member : switches) REQUIRE(loaded.force.*member == expected.force.*member);
+        for (const auto& level : levels) REQUIRE(loaded.force.*level.member == expected.force.*level.member);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.insert(loaded.getConfigHash()).second);
+    };
+    roundTrip(defaults);
+    for (std::size_t i = 0; i < switches.size(); ++i) {
+        auto expected = defaults;
+        expected.force.*switches[i] = true;
+        roundTrip(expected);
+        // Each knob has exactly two accepted choices; anything else loads as the first.
+        expected.force.*levels[i].member = levels[i].alternate;
+        roundTrip(expected);
+    }
+    for (const auto& level : levels) {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\n";
+        ini.close();
+        QuantBotConfig odd;
+        odd.force.*level.member = level.alternate + 1;
+        REQUIRE(odd.save(path.string()));
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.*level.member == level.initial);
+    }
+    REQUIRE(hashes.size() == 1 + 2 * switches.size());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Storage capacity defaults on and is loaded saved and hashed", "[ai][city][config][storage]") {
     QuantBotConfig config;
     REQUIRE(config.force.storageCapacity);

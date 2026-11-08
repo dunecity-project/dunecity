@@ -679,11 +679,52 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
         data[Structure_Refinery][houseID].price + 2 * data[Unit_Harvester][houseID].price) : 0;
 }
 
+QuantBot::CityBoomKind QuantBot::cityBoomSpiceKind(const CitySpiceShare* share) const {
+    const auto kind = cityBoomKind();
+    const auto& f = botConfig().force;
+    if (!f.cityBoomSpiceGate || kind == CityBoomKind::Native || kind == CityBoomKind::ShortTax) return kind;
+    const Uint32 now = getGameCycleCount();
+    if (cityBoomSpiceGateCycle == now) return cityBoomSpiceGateCache.kind;
+    cityBoomSpiceGateCycle = now;
+    auto& gate = cityBoomSpiceGateCache;
+    gate = {};
+    gate.kind = kind;
+    switch (kind) {
+        case CityBoomKind::Workers: gate.kindWorkers = std::max(1, f.cityBoomWorkerGoal); gate.kindBays = 2; break;
+        case CityBoomKind::Refineries:
+            gate.kindBays = std::max(1, f.cityBoomRefineryGoal); gate.kindWorkers = 2 * gate.kindBays; break;
+        case CityBoomKind::Greedy: gate.kindWorkers = 20; gate.kindBays = 8; break;
+        case CityBoomKind::Reactive: gate.kindWorkers = 24; gate.kindBays = 8; break;
+        default: return kind;
+    }
+    const auto& field = share ? *share : citySpiceShare();
+    const auto& data = currentGame->objectData.data;
+    const int house = getHouse()->getHouseID();
+    const int64_t workerPrice = std::max(0, data[Unit_Harvester][house].price);
+    const int64_t refineryPrice = std::max(0, data[Structure_Refinery][house].price);
+    // Per worker: harvester price + (refinery price - its free harvester)
+    // / workers-per-bay. Cross multiplication retains fractional bay shares.
+    gate.workerCapitalNumerator = std::max<int64_t>(0, workerPrice * gate.kindWorkers
+        + (refineryPrice - workerPrice) * gate.kindBays);
+    const int64_t horizonYield = int64_t(kCityBoomWorkerSpicePerMinute) * std::max(1, f.cityBoomPaybackMinutes);
+    gate.workerCap = static_cast<int>(std::min<int64_t>(std::numeric_limits<int>::max(), field.ownSpice / horizonYield));
+    const int64_t bayCap = (int64_t(gate.workerCap) * gate.kindBays + gate.kindWorkers - 1) / gate.kindWorkers;
+    gate.bayCap = static_cast<int>(std::min<int64_t>(
+        kind == CityBoomKind::Workers ? 2 : std::numeric_limits<int>::max(), bayCap));
+    gate.inert = gate.workerCap == 0 || gate.workerCapitalNumerator > horizonYield * gate.kindWorkers;
+    if (gate.inert) gate.kind = CityBoomKind::Native;
+    return gate.kind;
+}
+
 void QuantBot::planCityBoom(BuildPass& pass) {
     pass.cityBoom = cityBoomKind();
     if (pass.cityBoom == CityBoomKind::Native) return;
     const auto& f = botConfig().force;
-    const bool opening = customWave.launched == 0, spice = lastCalculatedSpice > 0;
+    // One direct share reading per build pass. Other boom decisions share the
+    // same cycle-derived gate; no decision-bearing state survives a cycle.
+    const auto* share = f.cityBoomSpiceGate && pass.cityBoom != CityBoomKind::ShortTax ? &citySpiceShare() : nullptr;
+    if (share) pass.cityBoom = cityBoomSpiceKind(share);
+    const bool opening = customWave.launched == 0, spice = share ? share->ownSpice > 0 : lastCalculatedSpice > 0;
     const int workers = getAIHarvesterCount(), bays = getAIRefineryBays();
     const int engineLimit = getHouse()->getMaxHarvesters();
     const int limit = engineLimit > 0 ? std::min(harvesterLimit, engineLimit) : harvesterLimit;
@@ -729,6 +770,73 @@ void QuantBot::planCityBoom(BuildPass& pass) {
             break;
         case CityBoomKind::Native: break;
     }
+    if (share) {
+        const auto& gate = cityBoomSpiceGateCache;
+        pass.cityBoomSpiceGate = !gate.inert;
+        pass.cityBoomWorkerCap = gate.workerCap;
+        pass.cityBoomBayCap = gate.bayCap;
+        const int64_t horizonYield = int64_t(kCityBoomWorkerSpicePerMinute) * std::max(1, f.cityBoomPaybackMinutes);
+        const auto* sim = currentGame->getCitySimulation();
+        const int house = getHouse()->getHouseID();
+        const auto& state = sim->getHouseState(house);
+        const int taxIncome = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(
+            state.taxBaseEighths, sim->getCityTax(house), state.avgLandValue));
+        int64_t taxCapital = 0;
+        // Standing city/support replacement capital, not historical spending
+        // or the later chooseCityEconomy marginal-zone forecast. Count real
+        // owned zones, civics, power and police cover; tile-only auto-roads
+        // have no recorded purchase capital and are deliberately not imputed.
+        for (const auto* structure : getStructureList()) {
+            if (structure->getOwner() != getHouse() || structure->getHealth() <= 0 || !structure->isActive()) continue;
+            const int item = structure->getItemID();
+            if (DuneCity::isCityOnlyStructure(item) || item == Structure_Palace || item == Structure_WindTrap
+                || DuneCity::getPoliceCoverage(item) > 0)
+                taxCapital += std::max(0, currentGame->objectData.data[item][structure->getProductionHouseID()].price);
+        }
+        const int64_t workerYield = int64_t(kCityBoomWorkerSpicePerMinute) * gate.kindWorkers;
+        const bool taxFaster = taxIncome > 0 && taxCapital > 0
+            && taxCapital * workerYield < gate.workerCapitalNumerator * taxIncome;
+        if (!gate.inert) {
+            // Keep caps binding after a timed/opening boom ends as well; zero
+            // targets would reactivate the native unlimited fallback lanes.
+            pass.cityBoomWorkers = std::min({limit, gate.workerCap,
+                pass.cityBoomWorkers > 0 ? pass.cityBoomWorkers : gate.kindWorkers});
+            pass.cityBoomBays = std::min(gate.bayCap,
+                pass.cityBoomBays > 0 ? pass.cityBoomBays : gate.kindBays);
+            const bool saturated = workers >= gate.workerCap && bays >= gate.bayCap;
+            const bool exhausted = bays > 0
+                && share->ownSpice * gate.kindBays < horizonYield * gate.kindWorkers * bays;
+            // A further bay also promises a worker. Do not strand funding
+            // waiting for a bay that the worker cap correctly refuses.
+            const bool noWorkerSlot = workers >= gate.workerCap && bays < pass.cityBoomBays;
+            if (saturated || exhausted || noWorkerSlot) {
+                pass.cityBoomFunding = false;
+                pass.cityBoomArmy = pass.cityBoom == CityBoomKind::Reactive || opening;
+            }
+            if (taxFaster) {
+                pass.cityBoomFunding = false;
+                pass.cityBoomArmy = false; // Yield to actual city investment, not an army-only allocation.
+            }
+        }
+        if (AITelemetry::log().enabled()) {
+            const std::array<int64_t, 6> decision{{gate.workerCap, gate.bayCap, pass.cityBoomFunding,
+                pass.cityBoomArmy, gate.inert, taxFaster}};
+            if (!cityBoomSpiceGateTraceValid || decision != lastCityBoomSpiceGateTrace) {
+                const int64_t spicePayback = (gate.workerCapitalNumerator + workerYield - 1) / workerYield;
+                const int64_t taxPayback = taxIncome > 0 && taxCapital > 0 ? (taxCapital + taxIncome - 1) / taxIncome : -1;
+                traceDecision("city_boom_spice_gate", AITelemetry::Record()
+                    .set("own_spice", share->ownSpice).set("reachable_spice", share->reachableSpice).set("rivals", share->rivals)
+                    .set("worker_cap", gate.workerCap).set("bay_cap", gate.bayCap).set("funding", pass.cityBoomFunding)
+                    .set("spice_payback_min", spicePayback).set("tax_payback_min", taxPayback).set("inert", gate.inert)
+                    .set("tax_faster", taxFaster).set("tax_per_min", taxIncome).set("tax_capital", taxCapital)
+                    .set("tax_payback_source", "standing_city_support_replacement_capital")
+                    .set("payback_rounding", "ceiling_minutes_minus_one_if_no_tax")
+                    .set("worker_yield_per_min", kCityBoomWorkerSpicePerMinute).set("horizon_min", f.cityBoomPaybackMinutes));
+                cityBoomSpiceGateTraceValid = true;
+                lastCityBoomSpiceGateTrace = decision;
+            }
+        }
+    }
     if (pass.cityBoomFunding) {
         pass.militaryBudget = std::min(pass.militaryBudget, pass.cityBoom == CityBoomKind::Greedy ? 0 : 4000);
         pass.lightBudget = pass.militaryBudget;
@@ -738,8 +846,10 @@ void QuantBot::planCityBoom(BuildPass& pass) {
 
 void QuantBot::planCityState(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
+    pass.cityLandValueServices = cityLandValueServiceScope();
     // Per-house city stats — CitySimulation now tracks these per player.
-    if (pass.cityBoom == CityBoomKind::ShortTax) {
+    if (pass.cityBoom == CityBoomKind::ShortTax
+        && !(pass.cityLandValueServices && botConfig().force.cityGrowthStageTax)) {
         auto* sim = currentGame->getCitySimulation();
         const int tax = pass.cityBoomFunding ? 3 : DuneCity::kDefaultCityTaxRate;
         if (sim->getCityTax(houseID) != tax) {
@@ -770,6 +880,22 @@ void QuantBot::planCityState(BuildPass& pass) {
         }
     }
 
+    if (pass.cityLandValueServices && botConfig().force.cityGrowthStageTax) {
+        auto* sim = currentGame->getCitySimulation();
+        const int population = QuantBotCityPolicy::displayPopulation(pass.ownTotalPop);
+        const int threshold = botConfig().force.cityGrowthTaxPopulation;
+        const int tax = population < threshold ? 3 : DuneCity::kDefaultCityTaxRate;
+        if (sim->getCityTax(houseID) != tax) {
+            // Like ShortTax and police budgets, apply the deterministic AI order
+            // directly after this cycle's command phase. No unsaved phase latch.
+            const int previous = sim->getCityTax(houseID);
+            sim->setCityTax(houseID,tax);
+            traceDecision("city_growth_tax_stage",AITelemetry::Record()
+                .set("previous",previous).set("rate",tax).set("display_population",population)
+                .set("population_threshold",threshold).set("growth_stage",population<threshold));
+        }
+    }
+
     if (pass.citySimEnabled && !builderOnly() && gameMode == GameMode::Custom) {
         auto* sim = currentGame->getCitySimulation();
         const auto& hs = sim->getHouseState(houseID);
@@ -785,7 +911,12 @@ void QuantBot::planCityState(BuildPass& pass) {
             committedPoliceMilli+=pass.itemCount[item]*DuneCity::annualPerMinute((DuneCity::getPoliceAnnualCost(item)*1000).lround());
         const int committedPoliceCost=(committedPoliceMilli+999)/1000;
         const int budgetPercent=CityServiceInvestmentPolicy::policingBudgetPercent(pass.money,taxIncome,powerCost,committedPoliceCost);
-        const int affordable=CityServiceInvestmentPolicy::affordablePoliceFunding(taxIncome,powerCost,committedPoliceCost,budgetPercent);
+        int affordable=CityServiceInvestmentPolicy::affordablePoliceFunding(taxIncome,powerCost,committedPoliceCost,budgetPercent);
+        CityLandValueBudget serviceBudget;
+        if (pass.cityLandValueServices) {
+            serviceBudget=cityLandValueBudget(pass.money,committedPoliceCost);
+            affordable=serviceBudget.funding;
+        }
         // Cuts enforce the recurring limit immediately. Recovered headroom
         // waits for review; the optional longer small-increase review prevents
         // the deadband from leaving a solvent city's funding permanently low.
@@ -803,6 +934,15 @@ void QuantBot::planCityState(BuildPass& pass) {
                 .set("nominal_cost",hs.nominalPoliceCost).set("cash",pass.money).set("recent_losses",recentLosses)
                 .set("budget_percent",budgetPercent).set("committed_police_cost",committedPoliceCost)
                 .set("reason",funding < previousFunding ? "police_budget_limit" : "police_budget_headroom"));
+            if (pass.cityLandValueServices)
+                traceDecision("city_land_value_funding_target",AITelemetry::Record()
+                    .set("previous",previousFunding).set("funding",funding)
+                    .set("target",serviceBudget.targetFunding).set("affordable",affordable)
+                    .set("spice_receipts_per_minute",serviceBudget.spiceIncome)
+                    .set("actual_tax_per_minute",serviceBudget.taxIncome)
+                    .set("power_cost",serviceBudget.powerCost).set("police_allowance",serviceBudget.allowance)
+                    .set("committed_police_cost",committedPoliceCost).set("spendable",pass.money)
+                    .set("working_cash_floor",2000));
         }
     }
 
@@ -825,6 +965,61 @@ void QuantBot::planCityState(BuildPass& pass) {
             powerDemandSample = required;
         }
     }
+}
+
+bool QuantBot::cityLandValueServiceScope() const {
+    const auto& force=botConfig().force;
+    return (force.cityLandValueServices || force.cityGrowthStageTax) && citySpiceFfaScope(4);
+}
+
+QuantBot::CityLandValueBudget QuantBot::cityLandValueBudget(int spendable, int fullPoliceCost) const {
+    CityLandValueBudget budget;
+    const auto* sim=currentGame->getCitySimulation();
+    const int house=getHouse()->getHouseID();
+    const auto& state=sim->getHouseState(house);
+    budget.targetFunding=botConfig().force.cityGrowthStageTax
+        ? 100 : botConfig().force.cityLandValueFundingPercent;
+    budget.taxIncome=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(
+        state.taxBaseEighths,sim->getCityTax(house),state.avgLandValue));
+    // Gross, actually refined spice, never an assumed worker yield. Historical
+    // receipts cease to back a service when its workers, bays or local field go.
+    // The separate cash limit below also prevents storage losses becoming cash.
+    if (getAIHarvesterCount()>0 && getAIRefineryBays()>0
+        && getHouse()->getHarvestedSpice()>0 && citySpiceShare().ownSpice>0) {
+        const int64_t elapsed=std::max<int64_t>(DuneCity::kCyclesPerMinute,getGameCycleCount());
+        budget.spiceIncome=int(std::min<int64_t>(std::numeric_limits<int>::max(),
+            int64_t(getHouse()->getHarvestedSpice().lround())*DuneCity::kCyclesPerMinute/elapsed));
+    }
+    budget.powerCost=getHouse()->isPowerRequired() ? getHouse()->getPowerRequirement()/8 : 0;
+    const int income=int(std::min<int64_t>(std::numeric_limits<int>::max(),
+        int64_t(budget.spiceIncome)+budget.taxIncome));
+    const int percent=CityServiceInvestmentPolicy::policingBudgetPercent(
+        spendable,income,budget.powerCost,fullPoliceCost);
+    // Keep the native recurring-income share for army/worker/tech spending.
+    // In addition, the next minute's entire police bill must fit above 2000
+    // uncommitted cash; starting money never masquerades as recurring income.
+    budget.allowance=std::min(std::max(0,spendable-2000),
+        CityServiceInvestmentPolicy::policingAllowance(income,budget.powerCost,percent));
+    budget.funding=fullPoliceCost>0
+        ? int(std::min<int64_t>(budget.targetFunding,int64_t(budget.allowance)*100/fullPoliceCost))
+        : budget.allowance>0 ? budget.targetFunding : 0;
+    return budget;
+}
+
+bool QuantBot::cityFirstPoliceAllocationReady() const {
+    // Bound the allocation by live/queued service, not the unsaved built-item
+    // statistics. Losing the station makes a fresh solvent rebuild eligible.
+    if (!cityLandValueServiceScope() || getHouse()->getNumItems(Structure_PoliceStation)>0
+        || getHouse()->getNumItems(Structure_HeavyFactory)==0
+        || getAIHarvesterCount()==0 || getAIRefineryBays()==0
+        || getHouse()->getHarvestedSpice()<=0 || getHouse()->getCityTaxReceipts()<=0) return false;
+    const auto& state=currentGame->getCitySimulation()->getHouseState(getHouse()->getHouseID());
+    const int zones=getHouse()->getNumItems(Structure_ZoneResidential)
+        +getHouse()->getNumItems(Structure_ZoneCommercial)+getHouse()->getNumItems(Structure_ZoneIndustrial);
+    if (state.getTotalPop()<=0 || zones<CityEconomyInvestmentPolicy::kBootstrapZoneSeed) return false;
+    return std::none_of(reservedStructures.begin(),reservedStructures.end(),[](const auto& plan) {
+        return plan.second.item==Structure_PoliceStation;
+    });
 }
 
 void QuantBot::planStrategicReserve(BuildPass& pass) {
@@ -1063,6 +1258,16 @@ bool QuantBot::openingWorkersNeeded(BuildPass& pass) {
 int QuantBot::harvesterInvestmentReserve(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    const int replacement = cityHarvesterReplacementFloor(pass);
+    if (pass.itemCount[Unit_Harvester] < replacement && !getHouse()->isGroundUnitLimitReached()
+        && (!pass.harvesterFactories.empty() || getHouse()->getNumItems(Structure_StarPort) > 0)) {
+        int price = data[Unit_Harvester][houseID].price;
+        for (const auto* factory : pass.harvesterFactories)
+            price = std::max(price, purchasePrice(factory, Unit_Harvester));
+        if (getHouse()->getNumItems(Structure_StarPort) > 0)
+            price = std::max(price, getHouse()->getChoam().getPrice(Unit_Harvester));
+        return (replacement - pass.itemCount[Unit_Harvester]) * price;
+    }
     if (!isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
         || gameMode != GameMode::Custom || builderOnly() || !(pass.vanillaEconomy || pass.citySimEnabled)
         || lastCalculatedSpice <= 0 || getHouse()->isGroundUnitLimitReached()
@@ -1597,9 +1802,58 @@ int QuantBot::workerAnnualIncome(BuildPass& pass) {
         / std::max(1,pass.fillCycles+pass.unloadCycles+std::max(0,pass.refineryTripCycles));
 }
 
+int QuantBot::cityHarvesterReplacementFloor(BuildPass& pass) {
+    if (!botConfig().force.cityHarvesterReplacement || !citySpiceFfaScope(4)) return -1;
+    int lost = getHouse()->getNumLostItems(Unit_Harvester);
+    if (ModManager::instance().isTornieFamilyContentActive())
+        lost += getHouse()->getNumLostItems(Unit_CapacityHarvester)
+            + getHouse()->getNumLostItems(Unit_FastHarvester);
+    if (lost == 0 || pass.bayAnnualIncome <= 0 || pass.fillCycles <= 0) return -1;
+    // The spending readiness floor is populated only with TechSavings enabled.
+    // Existing live-threat and power/civic emergencies always retain priority.
+    if (pass.defendingEconomy || pass.groundThreatAsset.isValid() || pass.airEngaged
+        || pass.campaignThreatProduction || pass.vanillaFfaThreatProduction
+        || (pass.techSavings && spendingEmergency(pass, Unit_Tank))
+        || spendingEmergency(pass, Structure_WindTrap)
+        || spendingEmergency(pass, Unit_MCV)
+        || spendingEmergency(pass, Unit_Carryall)
+        || std::any_of(pass.emergencyCivic.begin(), pass.emergencyCivic.end(),
+            [](bool emergency) { return emergency; })) return -1;
+    if (!pass.cityReplacementEvaluated) {
+        pass.cityReplacementEvaluated = true;
+        const int64_t spice = citySpiceShare().ownSpice;
+        if (spice <= 0) return -1;
+        // 200 spice per worker-minute is the measured native FFA winner yield,
+        // not the optimistic trip forecast. Use the forecast only for bay capacity.
+        const int minutes = std::max(1, botConfig().force.cityHarvesterReplacementMinutes);
+        pass.cityReplacementSpiceCap = int(std::min<int64_t>(INT_MAX,
+            spice / (int64_t(200) * minutes)));
+        pass.cityReplacementCapacity = int(std::min<int64_t>(INT_MAX,
+            int64_t(getAIRefineryBays()) * pass.bayAnnualIncome
+                / std::max(1, workerAnnualIncome(pass))));
+        int limit = std::max(0, harvesterLimit);
+        if (getHouse()->getMaxHarvesters() > 0)
+            limit = std::min(limit, getHouse()->getMaxHarvesters());
+        pass.cityReplacementFloor = std::min({pass.cityReplacementSpiceCap,
+            pass.cityReplacementCapacity, limit});
+    }
+    return pass.cityReplacementFloor;
+}
+
+bool QuantBot::cityHarvesterReplacementFactoryReady(BuildPass& pass) {
+    return std::any_of(pass.harvesterFactories.begin(), pass.harvesterFactories.end(),
+        [](const BuilderBase* factory) {
+            return !factory->isUpgrading() && !factory->isOnHold()
+                && factory->getProductionQueueSize() == 0
+                && factory->isAvailableToBuild(Unit_Harvester);
+        });
+}
+
 bool QuantBot::factoryPrefersHarvester(BuildPass& pass, const BuilderBase* factory) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    const int replacement = cityHarvesterReplacementFloor(pass);
+    if (replacement >= 0) return pass.itemCount[Unit_Harvester] < replacement;
     if (pass.cityBoomWorkers > 0) return pass.itemCount[Unit_Harvester] < pass.cityBoomWorkers;
     if (pass.cityBoom == CityBoomKind::Reactive) return false;
     if ((pass.campaignThreatProduction || pass.vanillaFfaThreatProduction)
@@ -3182,6 +3436,11 @@ bool QuantBot::spendingEmergency(BuildPass& pass, Uint32 item) {
 }
 
 bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade) {
+    if (pass.cityBoomSpiceGate && !upgrade) {
+        if (item == Unit_Harvester && pass.itemCount[Unit_Harvester] >= pass.cityBoomWorkerCap) return false;
+        if (item == Structure_Refinery && (pass.itemCount[Structure_Refinery] >= pass.cityBoomBayCap
+            || pass.itemCount[Unit_Harvester] >= pass.cityBoomWorkerCap)) return false;
+    }
     if (!pass.techSavings || cost <= 0) return true;
     const auto bucket = upgrade ? QuantBotSpendingPolicy::Bucket::Production
         : QuantBotBuildPolicy::spendingBucket(item);
@@ -3480,6 +3739,36 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     constexpr auto& mixItems = kMixItems;
+    if (pass.cityLandValueServices && cityFirstPoliceAllocationReady()
+        && !pass.militaryEmergency && !pass.defendingEconomy && !pass.airEngaged
+        && !pass.groundThreatAsset.isValid() && pass.civicStructuralNeed==0
+        && getHouse()->hasPower()
+        && getHouse()->getProducedPower()-getHouse()->getPowerRequirement()
+            >=pass.committedPowerDemand+std::max(0,data[Structure_PoliceStation][houseID].power)) {
+        int policeMilli=0;
+        for (Uint32 item:{Structure_PoliceStation,Structure_GunTurret,Structure_RocketTurret})
+            policeMilli+=(pass.itemCount[item]+(item==Structure_PoliceStation ? 1 : 0))
+                *DuneCity::annualPerMinute((DuneCity::getPoliceAnnualCost(item)*1000).lround());
+        const int cost=buildingCapitalCost(pass,Structure_PoliceStation);
+        const int working=std::max({2000,pass.cityWorkingReserve,cityBootstrapReserve(pass)});
+        const auto budget=cityLandValueBudget(std::max(0,pass.money-cost),(policeMilli+999)/1000);
+        if (int64_t(pass.money)>=int64_t(working)+cost && budget.funding==budget.targetFunding)
+            for (const auto* builder:pass.capitalBuilders) {
+                if (builder->getItemID()!=Structure_ConstructionYard || builder->isUpgrading()
+                    || builder->isOnHold() || builder->getProductionQueueSize()>0
+                    || !campaignAvailableToBuild(builder,Structure_PoliceStation)) continue;
+                planningBuilder=builder->getObjectID();clearPlacementCache(false,true);
+                CapitalCandidate police;
+                if (!selectCityServiceInvestment(builder,pass.money,false,police.item,police.site,
+                    false,Structure_PoliceStation)) continue;
+                police.builder=builder->getObjectID();police.price=purchasePrice(builder,police.item);
+                police.cost=cost;police.kind="city_land_value_service";police.reason="first_police_allocation";
+                police.score=1; // Explicit one-station allocation, not a return forecast.
+                pass.cityLandValuePoliceCandidate=int(pass.capitalCandidates.size());
+                pass.capitalCandidates.push_back(police);
+                break;
+            }
+    }
     // A bounded first-WOR allocation uses the same capital reservation as the
     // other suppliers. Requiring its whole price before it may claim savings
     // lets repeat zones and vehicle orders consume every incoming credit.
@@ -3961,11 +4250,15 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             worker.proceeds=QuantBotSpendingPolicy::marginalSpice(pass.spiceShare,before,after,
                 worker.delay,CityEconomyInvestmentPolicy::horizonCycles,DuneCity::kCyclesPerMinute);
             if (pass.refineryFieldRisk>0) worker.proceeds/=2;
+            const int replacement = cityHarvesterReplacementFloor(pass);
             if (!ready) worker.reason="producer_busy";
             else if (!campaignAvailableToBuild(builder,Unit_Harvester)) worker.reason="tech_unavailable";
             else if (port && getHouse()->getChoam().getNumAvailable(Unit_Harvester)<=0) worker.reason="sold_out";
             else if (getHouse()->isGroundUnitLimitReached() || (pass.engineHarvesterLimit>0
                 && pass.itemCount[Unit_Harvester]>=pass.engineHarvesterLimit)) worker.reason="unit_limit";
+            else if (replacement >= 0 && pass.itemCount[Unit_Harvester] >= replacement) worker.reason="replacement_floor_met";
+            else if (replacement > pass.itemCount[Unit_Harvester] && port
+                && cityHarvesterReplacementFactoryReady(pass)) worker.reason="replacement_factory_ready";
             else if (pass.itemCount[Unit_Harvester]>=pass.desiredWorkers && harvesterInvestmentReserve(pass)==0) worker.reason="fleet_target";
             else if (worker.proceeds <= worker.cost && harvesterInvestmentReserve(pass) == 0
                 && !(pass.cityBoomFunding && pass.itemCount[Unit_Harvester] < pass.cityBoomWorkers))
@@ -3977,6 +4270,8 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     worker.score=std::max(worker.score,5000);
                 if (pass.cityBoomFunding && pass.itemCount[Unit_Harvester] < pass.cityBoomWorkers)
                     worker.score = std::max(worker.score, 5000);
+                if (pass.itemCount[Unit_Harvester] < replacement)
+                    worker.score = std::max(worker.score, 6000);
                 worker.reason="marginal_income";
             }
             pass.capitalCandidates.push_back(worker);
@@ -4249,6 +4544,18 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         if (infantry >= 0) {
             pass.capitalChoice = firstCover >= 0 ? firstCover : infantry;
             pass.protectionCapital = true;
+        }
+    }
+    // A fully priced first police station gets one protected turn after real
+    // income, a producer and a seed town exist. Existing emergencies and
+    // suppliers keep their claims; no worker/army/tech target is changed.
+    if (pass.cityLandValueServices && !pass.protectionCapital
+        && pass.cityLandValuePoliceCandidate>=0) {
+        const auto& police=pass.capitalCandidates[pass.cityLandValuePoliceCandidate];
+        const int working=std::max({2000,pass.cityWorkingReserve,cityBootstrapReserve(pass)});
+        if (police.score>0 && int64_t(pass.money)>=int64_t(police.price)+police.foundationCost+working) {
+            pass.capitalChoice=pass.cityLandValuePoliceCandidate;
+            pass.protectionCapital=true;
         }
     }
     // The existing experimental project owns the shared capital turn.
@@ -4763,4 +5070,86 @@ void QuantBot::manageCityBuilding() {
             }
         }
     }
+}
+
+// === CityRefineryLogistics: balance established, safety-approved return trips ===
+// The build source list is explicit, so this routine lives in an existing unit.
+bool QuantBot::balanceRefineryReturn(const Harvester* harvester) {
+    if (!botConfig().force.cityRefineryLogistics || !citySpiceFfaScope(4)
+        || !harvester || harvester->getOwner() != getHouse() || !harvester->isActive()
+        || !harvester->isRespondable() || harvester->getHealth() <= 0 || harvester->wasDeviated()
+        || !harvester->isReturning() || harvester->getAmountOfSpice() <= 0
+        || harvester->isAwaitingPickup() || harvester->hasBookedCarrier()) return false;
+    // The engine's ordinary refinery returns are forced moves too. Human/role
+    // authority, rather than wasForced(), distinguishes orders we must leave alone.
+    if (unitRole(harvester, {UnitRole::Human, UnitRole::Repair, UnitRole::Defence,
+            UnitRole::Wave, UnitRole::Escort, UnitRole::ColonyGuard}) != UnitRole::Free) return false;
+    const auto* current = dynamic_cast<const StructureBase*>(harvester->getTarget());
+    if (!current || current->getOwner() != getHouse() || !current->isActive()
+        || current->getHealth() <= 0 || !current->acceptsHarvesterDropoff()) return false;
+    const Coord origin = harvester->getLocation(), currentEntry = current->getClosestPoint(origin);
+    if (!getMap().tileExists(origin) || !getMap().tileExists(currentEntry)) return false;
+    auto distance = [](Coord a, Coord b) { return std::max(std::abs(a.x-b.x), std::abs(a.y-b.y)); };
+    if (distance(origin, currentEntry) <= 3) return false;
+
+    // Same deterministic fixed-point walking-speed allowance as forecastSpiceTrip,
+    // using this worker variant's speed rather than assuming a normal harvester.
+    const FixPoint speed = currentGame->objectData.data[harvester->getItemID()][getHouse()->getHouseID()].maxspeed * 0.75_fix;
+    if (speed <= 0) return false;
+    const int cyclesPerTile = std::max(1, (FixPoint(TILESIZE) / speed).lround());
+    constexpr int unloadCycles = HARVESTERMAXSPICE * 8 / 5;
+    auto expectedCycles = [&](const StructureBase* dropoff, Coord entry) -> int64_t {
+        // Our current target's booking count includes us; other bookings are ahead
+        // of us. Occupied unloading capacity contributes one more full unload.
+        const int ahead = std::max(0, dropoff->getHarvesterDropoffBookings() - (dropoff == current ? 1 : 0))
+            + (dropoff->isHarvesterDropoffFree() ? 0 : 1);
+        return int64_t(distance(origin, entry)) * cyclesPerTile + int64_t(ahead) * unloadCycles;
+    };
+    const int64_t currentCycles = expectedCycles(current, currentEntry);
+    if (currentCycles < unloadCycles) return false;
+
+    const int width = getMap().getSizeX(), height = getMap().getSizeY();
+    // Use exactly the safety pass's field and escape-corridor rule. No new
+    // visibility decisions or path searches, and never redirect without its field.
+    if (harvesterDanger.size() != static_cast<size_t>(width) * height) return false;
+    auto danger = [&](int x, int y) { return harvesterDanger[static_cast<size_t>(y) * width + x]; };
+    const int originRegion = getMap().vehicleTerrainRegion(origin);
+    if (originRegion == 0) return false;
+
+    const Uint32 now = getGameCycleCount();
+    if (refineryReturnDropoffsCycle != now) {
+        refineryReturnDropoffsCycle = now;
+        refineryReturnDropoffs.clear();
+        for (const auto* structure : getStructureList())
+            if (structure->getOwner() == getHouse() && structure->isActive()
+                && structure->getHealth() > 0 && structure->acceptsHarvesterDropoff())
+                refineryReturnDropoffs.push_back(structure->getObjectID());
+    }
+    const StructureBase* best = current;
+    int64_t bestCycles = currentCycles;
+    for (Uint32 id : refineryReturnDropoffs) {
+        const auto* dropoff = dynamic_cast<const StructureBase*>(getObject(id));
+        if (!dropoff || dropoff == current || dropoff->getOwner() != getHouse()
+            || !dropoff->isActive() || dropoff->getHealth() <= 0 || !dropoff->acceptsHarvesterDropoff()) continue;
+        const Coord entry = dropoff->getClosestPoint(origin);
+        if (!getMap().tileExists(entry)) continue;
+        const int64_t cycles = expectedCycles(dropoff, entry);
+        if (currentCycles - cycles < unloadCycles || cycles > bestCycles
+            || (cycles == bestCycles && dropoff->getObjectID() >= best->getObjectID())) continue;
+        if (getMap().vehicleTerrainRegion(entry) != originRegion || danger(entry.x, entry.y) > 0
+            || !TacticalSafetyPolicy::escapeCorridor(origin.x, origin.y, entry.x, entry.y, danger)) continue;
+        best = dropoff;
+        bestCycles = cycles;
+    }
+    if (best == current) return false;
+
+    // Player::doMove2Object applies immediately; Harvester::setTarget unbooks the
+    // old bay and books the new one before the next worker is considered. Removing
+    // our own booking above, plus a full-unload improvement and the near-bay guard,
+    // prevents a retarget from reversing merely because it changed the bookings.
+    doMove2Object(harvester, best);
+    traceDecision("refinery_return_balance", AITelemetry::Record()
+        .set("object", harvester->getObjectID()).set("from", current->getObjectID())
+        .set("to", best->getObjectID()).set("saved_cycles", currentCycles - bestCycles));
+    return true;
 }
