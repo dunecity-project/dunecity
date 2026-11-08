@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sample_seed": 1290990,
+  "cases": [
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "seed": 1290990,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    }
+  ]
+}

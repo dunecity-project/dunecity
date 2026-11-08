@@ -1,0 +1,51 @@
+{
+  "cases": [
+    {
+      "cell": "05-mountain-pass",
+      "composition": "authored",
+      "format": "ffa4",
+      "initial_tech": null,
+      "map": "4P - 128x128 - Mountain Pass",
+      "path": "data/maps/multiplayer/4P - 128x128 - Mountain Pass.ini",
+      "seed": 10801,
+      "size": 128,
+      "spice_level": "authored"
+    },
+    {
+      "cell": "06-wormhole",
+      "composition": "authored",
+      "format": "ffa4",
+      "initial_tech": null,
+      "map": "4P - 128x128 - Wormhole",
+      "path": "data/maps/multiplayer/4P - 128x128 - Wormhole.ini",
+      "seed": 11810,
+      "size": 128,
+      "spice_level": "authored"
+    },
+    {
+      "cell": "09-fertile-basin",
+      "composition": "authored",
+      "format": "ffa6",
+      "initial_tech": null,
+      "map": "6P - 64x64 - Fertile Basin",
+      "path": "data/maps/multiplayer/6P - 64x64 - Fertile Basin.ini",
+      "seed": 10801,
+      "size": 64,
+      "spice_level": "authored"
+    },
+    {
+      "cell": "10-enclaves",
+      "composition": "authored",
+      "format": "ffa6",
+      "initial_tech": null,
+      "map": "6P - 128x128 - Enclaves",
+      "path": "data/maps/multiplayer/6P - 128x128 - Enclaves.ini",
+      "seed": 11810,
+      "size": 128,
+      "spice_level": "authored"
+    }
+  ],
+  "kind": "authored-control-diagnostic-cases",
+  "note": "Schedule specification, NOT a generated-map --case-manifest. The scenario harness consumes --cells/--cases and diagnostic control flags.",
+  "schema_version": 1
+}

@@ -1,5 +1,8 @@
 #include <catch2/catch_all.hpp>
 #include <GameInitSettings.h>
+#include <FileClasses/FileManager.h>
+#include <MapSeed.h>
+#include <globals.h>
 #include <SpiceIncome.h>
 #include <TechResearch.h>
 #include <misc/IMemoryStream.h>
@@ -9,6 +12,8 @@
 
 #include <vector>
 #include <sstream>
+#include <limits>
+#include <stdexcept>
 
 namespace {
 std::string activeTestMod = "vanilla";
@@ -24,6 +29,63 @@ struct ActiveTestMod {
     explicit ActiveTestMod(const std::string& name) { ModManager::instance().setActiveMod(name); }
     ~ActiveTestMod() { ModManager::instance().setActiveMod("vanilla"); }
 };
+
+bool isInitialSpiceTile(TERRAINTYPE terrain) {
+    return terrain == Terrain_Spice || terrain == Terrain_ThickSpice;
+}
+
+int countInitialSpiceTiles(const MapData& map) {
+    int count = 0;
+    for(int y = 0; y < map.getSizeY(); ++y) {
+        for(int x = 0; x < map.getSizeX(); ++x) {
+            if(isInitialSpiceTile(map(x, y))) ++count;
+        }
+    }
+    return count;
+}
+
+std::string initialSeededScenario(Uint32 seed, int scale, const std::string& overlays = {}) {
+    return "[BASIC]\nVersion=1\nMapScale=" + std::to_string(scale)
+        + "\n[MAP]\nSeed=" + std::to_string(seed) + "\n" + overlays;
+}
+
+GameInitSettings initialSeededSettings(bool campaign, const std::string& scenario) {
+    GameInitSettings init = campaign
+        ? GameInitSettings(HOUSE_ATREIDES, SettingsClass::GameOptionsClass{})
+        : GameInitSettings(HOUSE_ATREIDES, 8, SettingsClass::GameOptionsClass{});
+    init.setScenarioData(scenario);
+    return init;
+}
+
+std::string initialMapPositions(const std::vector<int>& positions) {
+    std::ostringstream result;
+    for(size_t i = 0; i < positions.size(); ++i) {
+        if(i != 0) result << ',';
+        result << positions[i];
+    }
+    return result.str();
+}
+
+void applyInitialFieldReference(MapData& map, int position, int offset) {
+    const int centerX = position % 64 - offset;
+    const int centerY = position / 64 - offset;
+    // Independent full-map oracle: native fields include a Euclidean radius of five.
+    for(int y = 0; y < map.getSizeY(); ++y) {
+        for(int x = 0; x < map.getSizeX(); ++x) {
+            const int dx = x - centerX;
+            const int dy = y - centerY;
+            if(map(x, y) == Terrain_Sand && dx * dx + dy * dy <= 25)
+                map(x, y) = Terrain_Spice;
+        }
+    }
+}
+
+std::string initialSettingsBytes(const GameInitSettings& init) {
+    OMemoryStream saved;
+    saved.open();
+    init.save(saved);
+    return {saved.getData(), saved.getDataLength()};
+}
 }
 
 // Standalone tests use mod identity and path naming without installing mods.
@@ -54,6 +116,13 @@ char getHouseScenarioLetter(HOUSETYPE house) {
     return house == HOUSE_ATREIDES ? 'A' : (house == HOUSE_ORDOS ? 'O' : 'H');
 }
 
+// This standalone target has no installed campaign assets and keeps pFileManager null.
+// Use the real class layout, but never invent a canonical scenario for fixture tests.
+FileManager::~FileManager() = default;
+sdl2::RWops_ptr FileManager::openCampaignFile(const std::string&) {
+    throw std::runtime_error("Canonical campaign assets are unavailable in standalone settings tests.");
+}
+
 static GameInitSettings makeCoop(bool campaign, bool bot, const std::string& botClass = "qBotSupportBrutal") {
     GameInitSettings init(HOUSE_ATREIDES, 8, SettingsClass::GameOptionsClass{});
     init.enableCoop(campaign, "Test co-op");
@@ -68,6 +137,174 @@ static GameInitSettings makeCoop(bool campaign, bool bot, const std::string& bot
     enemy.addPlayerInfo({"Sardaukar", "qBotHard"});
     init.addHouseInfo(enemy);
     return init;
+}
+
+TEST_CASE("Initial spice density is derived from immutable saved map tiles", "[city][settings][save][initial-spice]") {
+    GameInitSettings init("density.ini",
+        "[BASIC]\nVersion=2\n[MAP]\nSizeX=10\nSizeY=2\n"
+        "000=~+gGrRlLwW\n001=-^%@OQbBix\n[RANDOMSKIRMISH]\nSpice=0\n",
+        false, SettingsClass::GameOptionsClass{});
+    REQUIRE(init.getInitialSpiceTilePermille() == 500);
+    REQUIRE(init.getInitialSpiceTilePermille() == 500);
+    OMemoryStream saved;
+    saved.open();
+    init.save(saved);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    const GameInitSettings restored(input);
+    REQUIRE(restored.getInitialSpiceTilePermille() == 500);
+    REQUIRE(init.networkSnapshot("not an INI: binary checkpoint").getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[MAP]\nSizeX=10\nSizeY=1\n000=----------\n[RANDOMSKIRMISH]\nSpice=3\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == 0);
+    init.setScenarioData("[MAP]\nSizeX=10\nSizeY=1\n000=~\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[MAP]\nSeed=123\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    init.setMapData("[MAP]\nSizeX=10\nSizeY=1\n000=~+--------\nField=0\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == 200); // Explicit-grid Field stays ignored.
+}
+
+TEST_CASE("Original seeded spice density uses the native crop and saved seed",
+          "[settings][campaign][initial-spice]") {
+    const bool campaign = GENERATE(false, true);
+    const int scale = GENERATE(0, 1, 2);
+    const Uint32 seed = GENERATE(Uint32{0}, Uint32{12345}, std::numeric_limits<Uint32>::max());
+    const auto native = createMapWithSeed(seed, scale);
+    const int expectedSize = scale == 0 ? 62 : (scale == 1 ? 32 : 21);
+    REQUIRE(native.getSizeX() == expectedSize);
+    REQUIRE(native.getSizeY() == expectedSize);
+    const int expected = countInitialSpiceTiles(native) * 1000 / (expectedSize * expectedSize);
+    auto init = initialSeededSettings(campaign, initialSeededScenario(seed, scale));
+    REQUIRE(init.getInitialSpiceTilePermille() == expected);
+    init.setRandomSeed(seed ^ 0x5a5a5a5aU);
+    init.setScenarioData(init.getFiledata()); // Invalidate the cache without changing the map.
+    REQUIRE(init.getInitialSpiceTilePermille() == expected);
+}
+
+TEST_CASE("Seeded blooms remove spice and fields add only native sand",
+          "[settings][campaign][initial-spice]") {
+    const bool campaign = GENERATE(false, true);
+    constexpr Uint32 seed = 12345;
+    const auto native = createMapWithSeed(seed, 0);
+    std::vector<int> blooms;
+    std::vector<int> specials;
+    std::vector<int> fields;
+    for(int y = 0; y < native.getSizeY(); ++y) {
+        for(int x = 0; x < native.getSizeX(); ++x) {
+            const int position = (y + 1) * 64 + x + 1;
+            if(isInitialSpiceTile(native(x, y))) {
+                if((blooms.size() + specials.size()) % 2 == 0) blooms.push_back(position);
+                else specials.push_back(position);
+            } else if(native(x, y) == Terrain_Sand) {
+                fields.push_back(position);
+            }
+        }
+    }
+    REQUIRE_FALSE(blooms.empty());
+    REQUIRE_FALSE(specials.empty());
+    REQUIRE_FALSE(fields.empty());
+    const auto removals = "Bloom=" + initialMapPositions(blooms)
+        + "\nSpecial=" + initialMapPositions(specials) + "\n";
+    auto init = initialSeededSettings(campaign, initialSeededScenario(seed, 0, removals));
+    REQUIRE(init.getInitialSpiceTilePermille() == 0);
+    const int positive = static_cast<int>(fields.size()) * 1000 / (62 * 62);
+    REQUIRE(positive > 0);
+    init.setMapData(initialSeededScenario(seed, 0, removals
+        + "Field=" + initialMapPositions(fields)
+        + "\nSpiceVariantPercent=15\nSpiceVariantSeed=987\nSpiceVariantVersion=2\n"));
+    REQUIRE(init.getInitialSpiceTilePermille() == positive);
+}
+
+TEST_CASE("Seeded field circles preserve blooms, dunes and rock at cropped edges",
+          "[settings][campaign][initial-spice]") {
+    const int scale = GENERATE(0, 1, 2);
+    constexpr Uint32 seed = 12345;
+    auto expected = createMapWithSeed(seed, scale);
+    const int size = expected.getSizeX();
+    const int offset = scale == 0 ? 1 : (scale == 1 ? 16 : 11);
+    const int middle = size / 2;
+    const int bloom = offset * 64 + offset;
+    const int special = (offset + middle) * 64 + offset + middle;
+    expected(0, 0) = Terrain_SpiceBloom;
+    expected(middle, middle) = Terrain_SpecialBloom;
+    const int beforeFields = countInitialSpiceTiles(expected);
+    const std::vector<int> fields{
+        (offset + middle) * 64 + offset - 2, // Outside the crop, still reaches edge sand.
+        (offset + 2) * 64 + offset + 2,
+        (offset + size - 3) * 64 + offset + size - 3,
+        special, special // Bloom centres stay blooms, repeated fields do not add twice.
+    };
+    for(const int position : fields) applyInitialFieldReference(expected, position, offset);
+    REQUIRE(countInitialSpiceTiles(expected) > beforeFields);
+    auto init = initialSeededSettings(true, initialSeededScenario(seed, scale,
+        "Bloom=" + std::to_string(bloom) + "\nSpecial=" + std::to_string(special)
+        + "\nField=" + initialMapPositions(fields) + "\n"));
+    REQUIRE(init.getInitialSpiceTilePermille() == countInitialSpiceTiles(expected) * 1000 / (size * size));
+}
+
+TEST_CASE("Malformed original seeded settings are unknown rather than zero spice",
+          "[settings][campaign][initial-spice]") {
+    const bool campaign = GENERATE(false, true);
+    const std::vector<std::string> invalid{
+        "", "[MAP]\nSeed=12345\n", "[BASIC]\nMapScale=0\n[MAP]\n",
+        initialSeededScenario(12345, -1), initialSeededScenario(12345, 3),
+        "[BASIC]\nMapScale=0oops\n[MAP]\nSeed=12345\n",
+        "[BASIC]\nMapScale=0\n[MAP]\nSeed=garbage\n",
+        "[BASIC]\nMapScale=0\n[MAP]\nSeed=-1\n",
+        "[BASIC]\nMapScale=0\n[MAP]\nSeed=4294967296\n",
+        "[BASIC]\nMapScale=0\n[MAP]\nSeed=12345suffix\n",
+        "[BASIC]\nVersion=garbage\nMapScale=0\n[MAP]\nSeed=12345\n",
+        initialSeededScenario(12345, 0, "Bloom=65oops\n"),
+        initialSeededScenario(12345, 0, "Special=2147483648\n"),
+        initialSeededScenario(12345, 0, "Field=65,,66\n"),
+        initialSeededScenario(12345, 0, "Field=+\n"),
+        initialSeededScenario(12345, 0) + std::string("\0checkpoint", 11)
+    };
+    for(const auto& scenario : invalid) {
+        CAPTURE(scenario);
+        const auto init = initialSeededSettings(campaign, scenario);
+        REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    }
+    const GameInitSettings custom("seeded.ini", initialSeededScenario(12345, 0),
+                                  false, SettingsClass::GameOptionsClass{});
+    REQUIRE(custom.getInitialSpiceTilePermille() == -1); // Existing custom-grid contract.
+}
+
+TEST_CASE("Saved original scenario density survives cache invalidation and save load",
+          "[settings][campaign][save][initial-spice]") {
+    const bool campaign = GENERATE(false, true);
+    auto init = initialSeededSettings(campaign, initialSeededScenario(12345, 0, "Field=2080\n"));
+    const auto beforeQuery = initialSettingsBytes(init);
+    const int density = init.getInitialSpiceTilePermille();
+    REQUIRE(density > 0);
+    REQUIRE(init.getInitialSpiceTilePermille() == density);
+    REQUIRE(initialSettingsBytes(init) == beforeQuery); // No cache bytes enter a save.
+    IMemoryStream input(beforeQuery.data(), beforeQuery.size());
+    const GameInitSettings restored(input);
+    REQUIRE(restored.getInitialSpiceTilePermille() == density);
+    REQUIRE(restored.getFiledata() == init.getFiledata());
+    REQUIRE(init.networkSnapshot(beforeQuery).getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[MAP]\nSeed=invalid\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    init.setMapData(initialSeededScenario(12345, 0, "Field=2080\n"));
+    REQUIRE(init.getInitialSpiceTilePermille() == density);
+    REQUIRE(restored.getInitialSpiceTilePermille() == density);
+    const GameInitSettings next(init, 2, 0, 0);
+    REQUIRE(next.getFiledata().empty());
+    REQUIRE(next.getInitialSpiceTilePermille() == -1); // New mission must not inherit the cache.
+}
+
+TEST_CASE("Original scenarios require saved map text or an available canonical asset",
+          "[settings][campaign][initial-spice]") {
+    REQUIRE_FALSE(pFileManager);
+    const bool campaign = GENERATE(false, true);
+    auto init = initialSeededSettings(campaign, {});
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[BASIC]\nVersion=2\n[MAP]\nSizeX=10\nSizeY=1\n000=~+gGrRlLwW\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == 1000);
+    const auto bytes = initialSettingsBytes(init);
+    IMemoryStream input(bytes.data(), bytes.size());
+    const GameInitSettings restored(input);
+    REQUIRE(restored.getInitialSpiceTilePermille() == 1000);
 }
 
 TEST_CASE("Original damage is a shared rule preserved by setup, saves and campaigns", "[damage][network][save]") {

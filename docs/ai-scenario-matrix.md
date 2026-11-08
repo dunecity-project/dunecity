@@ -8,6 +8,41 @@ should beat an easy. test different levels from 1-9 ... a few of the MP popular 
 Until 1.0.847 almost every AI measurement was a 1v1 or All against Atreides. The matrix plays many
 kinds of game with one driver, `tests/ai/scenario-matrix.py`, and prints one summary table.
 
+## Income-based technology timing experiment
+
+`TechIncomeTiming` is a hashed, default-OFF QuantBot setting (`0/1/2`).
+Levels 1/2 admit optional first Repair Yard, High Tech Factory, IX, Palace,
+Research Lab and military producer/research upgrades only when net income per
+minute reaches 1.0/1.5 times the full project cost per five minutes. Income is
+the lifetime realised spice/tax receipt rate, less current upkeep, capped by
+the existing four-minute delivered-worker/shared-spice forecast. Starting cash
+is never income. The lifetime rate avoids unsaved rolling history; it responds
+more slowly to a recent economic improvement or loss than a rolling window.
+
+The policy applies only to Custom Medium/Hard/Brutal Vanilla or DuneCity games
+with remaining map spice. Campaign and no-spice maps are inert. First worker
+and carryall technology, first suppliers, recovery and civic yard upgrades
+retain native authority. Rejected optional technology does not reserve cash:
+current-tier military production remains native. This is not SimpleTechSavings.
+
+When the full-health-adjusted true rival mobile armies are no larger than
+ours, no hostile mobile combat unit is within 20 tiles of the main base and
+the economy is not under attack, the yard may buy one affordable legal next
+technology ahead of optional capacity growth. It still requires delivered
+opening workers, power, site/foundation legality and working reserves.
+All knowledge comes from deterministic simulation state, without fog or
+mission/map/seed conditions. Levels never alter unit composition or prices.
+
+Use candidate-only `tech-income-1` / `tech-income-2`; `tech-income-off` is the
+explicit native control. The audit's `tech-houses.csv` records first-owned and
+first-completed structure times; join `tech-samples.csv` at the preceding
+minute to compare live/queued army, cash and receipts at those transitions.
+Timing comparisons between winners and losers are descriptive, not causal.
+Telemetry events `income_tech_state`, `income_tech_hold`, `income_tech_early`
+record the rate, threshold level and full-knowledge safety mechanism. Do not
+set `DUNECITY_TECH_SAVINGS_AUDIT`; use equal observer modes in paired arms.
+
+
 ## How a game is played
 
 Every game is a real match played headless to its end by the balance probe:
@@ -44,6 +79,12 @@ Every game is a real match played headless to its end by the balance probe:
 For a natural-duration diagnostic, `--minutes 120` overrides only the selected
 run's cell limits. It does not change the ordinary matrix limits or winner
 assertions; use a separate results directory for the extended observation.
+For matched fresh-seed campaign screens, `--campaign-seeds 1280000 1280001`
+replaces the fixed seeds for each selected campaign mission (duplicate seeds are
+played once). `--cases` can restrict the missions. The default fixed 66-game gate,
+the idle-human AI-support seating, and every non-campaign seed remain unchanged.
+Use separate result directories for each arm and keep observer flags identical.
+
 
 ### Genuine exhaustion regression
 
@@ -77,6 +118,32 @@ With `--attack-events`, raw logs for every result instead live under
 `diagnostics/<game>/run.log`, so same-source A/B runs can compare their complete
 `PROBE_DIGEST` prefix before the first changed endgame decision.
 
+### Starport buying experiments
+
+`StarportBuying`, `StarportCashStockpile`, and `StarportEconomyPriority` are
+independent default-OFF, hashed `[Force Concentration]` levels 0/1/2, scoped to
+custom Vanilla/DuneCity games whose initial explicit map has spice (the shared
+`getInitialSpiceTilePermille()>0` prerequisite); no-spice/unknown maps and campaigns
+remain native. Buying levels admit all imports only at or below
+80%/100% of the research-adjusted factory cost; OFF keeps the native strict
+base-price combat discount test and unrestricted needed economic imports.
+Existing economy/capital funding and caps still apply. Stockpile levels preserve
+one/two factory-unit prices when an orderable port has that unit in stock but
+above the chosen price ceiling; only optional factory combat orders wait.
+Priority levels buy the existing worker shortfall before transport, then also
+try the economy planner's pending MCV at an admitted price. No worker/yard target
+is increased. Campaign purchasing is unchanged.
+
+`starport_purchase` telemetry records every accepted port queue entry, including
+capital/recovery paths, with item/name, market, base and research-adjusted factory
+price, native rule, and cash after acceptance. With `--attack-events`, the audit
+driver retains compact `starport-purchases.csv` rows with capture completeness;
+`--keep-telemetry` additionally retains raw streams. Sample mode's optional
+`--game-seed-base N` assigns consecutive engine seeds (separate from the factor
+deck's `--sample-seed`), keeping paired seats on the same seed and placing a second
+mod immediately after the first mod's cases. Compare candidate-only arms against
+native on identical schedules; economy samples and wins accompany price summaries.
+
 ### Source-separated economy curves
 
 For a real Random Skirmish city game, `tests/ai/dunecity-audit.py --attack-events`
@@ -96,6 +163,111 @@ an AI spending stall. Use `--style police-recovery-off` and
 `[General Behavior] PoliceFundingRecovery` switch. No income multiplier,
 starting grant or balance constant changes with that switch.
 
+
+## Fixed promotion controls
+
+Every AI promotion runs `--tier controls` **alongside AAA2 and campaign 66**, not instead
+of them. It is 26 unobserved games: the 13 maps in the tuning output's `CONTROL-MAPS.md`,
+each with fixed seeds **10801, 11810** and the ordinary per-seed house/start rotation.
+The candidate is Brutal QuantBot, with the mixed skirmish opponents QH/QM/QE/AH/AM
+(truncated to the player count); Tuono-Blake is QB+QH versus QM+QM.
+Six-player maps use the existing multiplayer house order. Map 12 uses `dunecity`;
+all others use `vanilla`. Limits are 60 game minutes, or 80 on 192/256-square maps;
+the ordinary 1,800-second per-game wall cap applies. Silicon Valley (#13, no spice)
+is **only an inertness check**, never a target for AI improvements. Time-limit
+draws are recorded, not converted into wins or generic smoke failures.
+
+Submit one pinned cluster command (never local games):
+
+```sh
+/usr/bin/lockf -k /tmp/dunecity-submit.lock agent-workspace run --project dunecity \
+  --owner "$OWNER" --tests --wait -- dunecity-queue submit \
+  --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev "$SHA" \
+  --tag "controls-$STYLE" -- python3 tests/ai/scenario-matrix.py \
+  --tier controls --style "$STYLE" --results "$RESULTS"
+dunecity-queue wait "$JOB"
+python3 tests/ai/compare-control-maps.py --baseline "$BASELINE" --results "$RESULTS" \
+  --in-scope 1 2 3
+```
+
+Use a fresh results directory per source/style. Omit `--style` for native. In this tier
+`--style` is **candidate-only**: it overlays just the Brutal seat (slot 0; in Tuono-Blake not
+its QH ally) through the per-house genome-phase transport of `dunecity-audit.py
+--candidate-style`. Every other seat stays native, unlike the other tiers' all-QuantBot
+`--style`. The style must be a config overlay (no `[Play Style]` section); `--genome`,
+`--game-options`, economy/tech-savings audits and observer overlays are refused.
+Each `games.csv` row records `style_seats` from the probe log (`none`, or
+`<house>=candidate-<style>`; a seat whose QuantBot config differs from native without
+that genome is listed as `<house>=config`); a mismatch fails the game.
+Comparison exits nonzero for missing/failed/duplicate games, a missing receipt or a style
+on any non-candidate seat, changed match settings,
+any lost native QB/team-1 win, or a changed digest outside `--in-scope`. That option
+lists only the map numbers the switch can affect (default 1–12); #13 must **always**
+be digest-identical. Winner, minutes and digest equality are printed per map/seed.
+Baselines use native base `98ca530ab89e47dccbc75f1703ed9e70587a97b8`, with a
+harness-only pin recorded separately:
+
+```sh
+python3 tests/ai/compare-control-maps.py --results "$NATIVE_RESULTS" \
+  --record "$BASELINE" --pin "$SHA" --job "$JOB"
+```
+
+## Fixed promotion controls
+
+Every AI promotion runs `--tier controls` **alongside AAA2 and campaign 66**, not instead
+of them. It is 26 unobserved games: the 13 maps in the tuning output's `CONTROL-MAPS.md`,
+each with fixed seeds **10801, 11810** and the ordinary per-seed house/start rotation.
+The candidate is Brutal QuantBot, with the mixed skirmish opponents QH/QM/QE/AH/AM
+(truncated to the player count); Tuono-Blake is QB+QH versus QM+QM.
+Six-player maps use the existing multiplayer house order. Map 12 uses `dunecity`;
+all others use `vanilla`. Limits are 60 game minutes, or 80 on 192/256-square maps;
+the ordinary 1,800-second per-game wall cap applies. Silicon Valley (#13, no spice)
+is **only an inertness check**, never a target for AI improvements. Time-limit
+draws are recorded, not converted into wins or generic smoke failures.
+
+Submit one pinned cluster command (never local games):
+
+```sh
+/usr/bin/lockf -k /tmp/dunecity-submit.lock agent-workspace run --project dunecity \
+  --owner "$OWNER" --tests --wait -- dunecity-queue submit \
+  --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev "$SHA" \
+  --tag "controls-$STYLE" -- python3 tests/ai/scenario-matrix.py \
+  --tier controls --style "$STYLE" --results "$RESULTS"
+dunecity-queue wait "$JOB"
+python3 tests/ai/compare-control-maps.py --baseline "$BASELINE" --results "$RESULTS" \
+  --in-scope 1 2 3
+```
+
+Use a fresh results directory per source/style. Omit `--style` for native. In this tier
+`--style` is **candidate-only**: it overlays just the Brutal seat (slot 0; in Tuono-Blake not
+its QH ally) through the per-house genome-phase transport of `dunecity-audit.py
+--candidate-style`. Every other seat stays native, unlike the other tiers' all-QuantBot
+`--style`. The style must be a config overlay (no `[Play Style]` section); `--genome`,
+`--game-options`, economy/tech-savings audits and observer overlays are refused.
+Each `games.csv` row records `style_seats` from the probe log (`none`, or
+`<house>=candidate-<style>`; a seat whose QuantBot config differs from native without
+that genome is listed as `<house>=config`); a mismatch fails the game.
+Comparison exits nonzero for missing/failed/duplicate games, a missing receipt or a style
+on any non-candidate seat, changed match settings,
+any lost native QB/team-1 win, or a changed digest outside `--in-scope`. That option
+lists only the map numbers the switch can affect (default 1–12); #13 must **always**
+be digest-identical. Winner, minutes and digest equality are printed per map/seed.
+Baselines use native base `98ca530ab89e47dccbc75f1703ed9e70587a97b8`, with a
+harness-only pin recorded separately:
+
+```sh
+python3 tests/ai/compare-control-maps.py --results "$NATIVE_RESULTS" \
+  --record "$BASELINE" --pin "$SHA" --job "$JOB"
+```
+
+For a **separate observed handmade-map study**, use `--tier controls
+--control-diagnostics --economy-samples --attack-events`, with optional
+`--control-seeds 1180100 1180101 1180102` and `--control-mod vanilla|dunecity`.
+The same candidate-only style transport is retained. Every compared arm must use
+the observer; do not compare these samples with the unobserved native gate.
+`control_diagnostics=1` is written to receipts, `--check` is forbidden, and
+`compare-control-maps.py` rejects them as promotion evidence. Ordinary controls
+still use exactly the fixed seeds, original mods and unobserved setup.
 
 ## The matrix
 
@@ -578,6 +750,25 @@ min, DuneCity 6/6 (before 5/6). 7P FFA: no idle house (before QM idle 1/4). Regr
 0/4 decided (before 3/4), the skirmish controller order is QH +0.26 > QB +0.18 > QM +0.12 > QE (Brutal
 plays 20 houses, interval -0.13..+0.48).
 
+### Pre-ladder Medium (`MediumClassic`, diagnostic, default 0)
+
+The 1.0.807 baseline gate (docs/ai-baseline-gate.md) flags vanilla Custom Medium 1v1 on its frozen maps:
+attack dispatches per house 14.6 / 15.8 (807) -> 4.6 / 3.1, Palace adoption 1.0 / 1.0 -> 0.63 / 0.13, first
+heavy factory at ~14 -> ~7.6-8 game minutes. Exact-map release bisection puts the whole step at the
+`fix/ai-late-game-2` merge `fbbeecff` (848 trial `748f9288` unchanged), i.e. at this branch's Medium changes:
+the gate counts dispatches, and one whole-army wave replaces several 40% raid shares by design.
+`[Force Concentration] MediumClassic` restores the pre-ladder Custom Medium for measurement (Easy, Hard,
+Brutal and campaigns unchanged; style overlays `medium-classic-off`, `-economy`, `-army`):
+
+- **1** (economy): no banked-credit surplus army (`planningMilitaryBudget` stops at the cap) and no
+  heavy-factory walk after the starport opening.
+- **2** (army): 1, and Medium leaves `autonomousCustomArmy()` - the standing 40% raid share
+  (`SimpleArmyPolicy::customAttack`) with its uncommitted reserve anchored at home, as Easy
+  (`QuantBot::raidShareDifficulty`).
+
+Level 2 reverts the change behind the QM v QE result above, so it stays default 0 unless a paired screen,
+including the QM v QE ladder pair, shows a net gain.
+
 ## Difficulty separation (branch `fix/difficulty-separation`, protocol 88)
 
 Stefan: a clear ladder, Brutal > Hard > Medium > Easy; "brutal should have a higher harvester limit and military
@@ -876,4 +1067,25 @@ and restore the required population before checking locked/disabled/unrelated
 technology, exactly one prerequisite Starport, pending-order deduplication
 and resumed IX/Palace construction. Earlier campaign import and MCV-recovery
 checks keep their original population and assertions.
+
+## Planned research experiment (default OFF)
+
+`[Force Concentration] CityResearchOrder=0|1|2` affects only research-enabled
+Custom DuneCity matches whose original explicit map contains spice. Level 1
+caps linear tech progression at the prerequisites of the future strategic unit
+mix (not the currently tech-filtered mix), economic workers/transports, demanded
+MCV expansion and reactive rocket defence. It does not speculate on Palace-only
+technology. Level 2 also defers new research commitments until delivered-spice
+and net-tax forecast per minute covers `max(1000, active production burn + 500)`.
+Already-funded studies are not cancelled. Native power, capital and cash-reserve
+gates still apply. Vanilla, campaigns, initially no-spice maps, research-off and
+unknown/seed-only map data retain native behavior.
+
+Styles: `research-order-off`, `research-order-plan`, `research-order-income`.
+Research is an optional engine rule, not inherently exclusive to DuneCity.
+
+For a preassigned actual seed range, `dunecity-audit.py --mode sample
+--sample-seed N --game-seed-base B --cases C` retains the ordinary balanced
+factor draws but uses map seeds `B..B+C-1` (each from both candidate seats).
+Omitting `--game-seed-base` preserves the historical schedule exactly.
 

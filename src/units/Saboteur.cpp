@@ -17,6 +17,7 @@
 
 #include <units/Saboteur.h>
 #include <Achievements/AchievementEvents.h>
+#include <players/AIDecisionLog.h>
 
 #include <globals.h>
 
@@ -113,6 +114,16 @@ bool Saboteur::update() {
                     }
 
                     ObjectBase* pObject = target.getObjPointer();
+                    // Sabotage destroys directly, bypassing CombatReward's damage path.
+                    if (AITelemetry::log().enabled()) {
+                        const int price = currentGame->objectData.data[pObject->getItemID()][pObject->getProductionHouseID()].price;
+                        const int64_t hpMilli = lround(pObject->getHealth()*1000);
+                        AITelemetry::log().write(currentGame->getGameCycleCount(), getOwner()->getHouseID(), -1,
+                            "palace_sabotage_damage", AITelemetry::Record().set("attacker", getObjectID())
+                                .set("target", pObject->getObjectID()).set("target_item", pObject->getItemID())
+                                .set("hp_milli", hpMilli).set("damage_milli", hpMilli*price/std::max(1,pObject->getMaxHealth()))
+                                .set("destroyed_price", price).set("kills", 1));
+                    }
                     AchievementEvents::damage(pObject, getObjectID(), getOwner(), true);
                     destroy();
                     pObject->setHealth(0);

@@ -7,6 +7,7 @@
  */
 
 #include <globals.h>
+#include <FileClasses/FileManager.h>
 #include <mod/ModManager.h>
 
 #include <string>
@@ -22,7 +23,6 @@ std::string ModManager::getActiveQuantBotConfigPath() const { return {}; }
 // Forward-declared minimal stubs for manager classes (satisfy header method signatures)
 class SoundPlayer {};
 class MusicPlayer {};
-class FileManager {};
 class GFXManager {};
 class SFXManager {};
 class FontManager {};

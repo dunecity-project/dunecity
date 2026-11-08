@@ -35,6 +35,8 @@ target_sources(dunelegacy_tests
         ${CMAKE_SOURCE_DIR}/src/Campaign/CoopCampaignSession.cpp
         ${CMAKE_SOURCE_DIR}/src/Campaign/CoopCampaignTransition.cpp
         ${CMAKE_SOURCE_DIR}/src/GameInitSettings.cpp
+        # Initial-spice settings fixtures reconstruct the real immutable seeded map.
+        ${CMAKE_SOURCE_DIR}/src/MapSeed.cpp
         ${CMAKE_SOURCE_DIR}/src/misc/IFileStream.cpp
         MapCatalogueTestCase.cpp
         CityTrafficPolicyTestCase.cpp
@@ -45,6 +47,7 @@ target_sources(dunelegacy_tests
         GasDeviationPolicyTestCase.cpp
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
+        QuantBotArmyCounterTestCase.cpp
         CivWarsHarvesterPolicyTestCase.cpp
         CivWarsColonisationPolicyTestCase.cpp
         ArmyPosturePolicyTestCase.cpp
@@ -887,6 +890,21 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         add_test(NAME quantbot_campaign_matrix_coverage COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_campaign_matrix.py)
         set_tests_properties(quantbot_campaign_matrix_coverage PROPERTIES TIMEOUT 60)
+        add_test(NAME quantbot_control_maps_schedule COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_control_maps.py)
+        set_tests_properties(quantbot_control_maps_schedule PROPERTIES TIMEOUT 60)
+        add_test(NAME quantbot_control_maps_schedule COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_control_maps.py)
+        set_tests_properties(quantbot_control_maps_schedule PROPERTIES TIMEOUT 60)
+        add_test(NAME quantbot_screen_manifest_schedule COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_ai_screen_manifest.py)
+        set_tests_properties(quantbot_screen_manifest_schedule PROPERTIES TIMEOUT 60)
+        add_test(NAME quantbot_initial_map_features COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_ai_map_features.py)
+        set_tests_properties(quantbot_initial_map_features PROPERTIES TIMEOUT 60)
+        add_test(NAME quantbot_control_maps_schedule COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_control_maps.py)
+        set_tests_properties(quantbot_control_maps_schedule PROPERTIES TIMEOUT 60)
         add_test(NAME quantbot_power_continuation_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_power_continuation.py)
         set_tests_properties(quantbot_power_continuation_parser PROPERTIES TIMEOUT 60)

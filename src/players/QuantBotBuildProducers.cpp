@@ -22,6 +22,7 @@
 
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
+#include <players/StarportBuyingPolicy.h>
 
 void QuantBot::buildRepair(BuildPass& pass, const StructureBase* pStructure) {
     const int creditsBeforeUpgrade = getHouse()->getCredits();
@@ -73,11 +74,13 @@ void QuantBot::buildProducer(BuildPass& pass, const StructureBase* pStructure) {
     beginBuilderTurn(pass, turn);
     if (recoverBuilderConstruction(pass, turn)) return;
     // A selected ordinary-installment project needs no legacy yard-entry cash.
-    if (pass.techSavings && buildTechSavings(pass, turn)) return;
+    if (pass.techSavings && cityHarvesterReplacementFloor(pass) <= pass.itemCount[Unit_Harvester]
+        && buildTechSavings(pass, turn)) return;
     if (upgradeYardForConcrete(pass, turn)) return;
     if (queueCampaignWindtrap(pass, turn, 0)) return;
     if (buildCampaignRepairYard(pass, turn)) return;
     reserveBuilderCash(pass, turn);
+    if (buildCityHarvesterReplacement(pass, turn)) return;
     if (turn.pBuilder->getItemID() != Structure_ConstructionYard && buildTechSavings(pass, turn)) return;
     if (buildCapitalUnits(pass, turn)) return;
 
@@ -143,13 +146,104 @@ void QuantBot::beginBuilderTurn(BuildPass& pass, BuilderTurn& turn) {
     turn.emergencyFoundationOrder = false;
 }
 
+bool QuantBot::vanillaBoomAdmits(BuildPass& pass, Uint32 item) {
+    if (pass.vanillaPlan == QuantBotVanillaPolicy::Plan::None) return true;
+    if (pass.vanillaBoldTechDeferred && (item == Structure_IX || item == Structure_Palace)) return false;
+    if (pass.vanillaBoldMilitaryHeld && !pass.defendingEconomy && QuantBotBuildPolicy::militaryItem(item)) return false;
+    if (item == Unit_Harvester)
+        return pass.itemCount[item] < pass.spiceHarvesterTarget
+            && (!pass.vanillaBoomArmy || pass.itemCount[item] < 4);
+    if (item == Unit_MCV)
+        return pass.itemCount[item] == 0 && (pass.itemCount[Structure_ConstructionYard] == 0
+            || (!pass.vanillaBoomArmy && (pass.rockExpansionNeeded || pass.colonisationNeeded)));
+    if (pass.vanillaBoomArmy && item == Unit_Carryall) return pass.itemCount[item] == 0;
+
+    const bool required = item == pass.vanillaBoomRequiredItem && !pass.orderedThisTick.count(item);
+    const bool recovery = (item == Structure_Refinery || item == Structure_HeavyFactory)
+        && pass.itemCount[item] == 0 && getHouse()->getNumLostItems(item) > 0;
+    if (!required && !recovery) {
+        if (item == Structure_Refinery && pass.itemCount[item] >= pass.vanillaBoomTargets.refineries) return false;
+        if (item == Structure_HeavyFactory && pass.itemCount[item] >= pass.vanillaBoomTargets.factories) return false;
+    }
+    if (!pass.vanillaBoomArmy || required || recovery || QuantBotBuildPolicy::militaryItem(item)) return true;
+    // Foundations are admitted together with their building, before the first
+    // slab is queued. Idle concrete expansion is disabled at the yard caller.
+    if (item == Structure_Slab1 || item == Structure_Slab4)
+        return getGameInitSettings().getGameOptions().concreteRequired;
+    if (item == Structure_WindTrap || item == Structure_NuclearPlant)
+        return pass.itemCount[Structure_WindTrap] == 0
+            || (!powerGenerationPending(pass)
+                && (!getHouse()->hasPower() || getHouse()->getProducedPower()
+                    < getHouse()->getPowerRequirement() + pass.committedPowerDemand));
+    const bool emergency = pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid();
+    if (emergency && (QuantBotBuildPolicy::defensiveEmplacement(item)
+        || item == Structure_Wall || (item == Structure_Radar && pass.itemCount[item] == 0))) return true;
+    return emergency && pass.protectionCapital && capitalPending(pass)
+        && pass.capitalCandidates[pass.capitalChoice].urgent
+        && pass.capitalCandidates[pass.capitalChoice].item == item;
+}
+
+bool QuantBot::vanillaBoomUpgradeAdmitted(BuildPass& pass, const BuilderBase* builder) {
+    if (!pass.vanillaBoomArmy || builder->getObjectID() == pass.vanillaBoomUpgradeBuilder) return true;
+    const int house = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    const auto unlocks = [&](Uint32 item) {
+        const auto& spec = data[item][house];
+        return spec.enabled && spec.builder == int(builder->getItemID())
+            && spec.techLevel <= getHouse()->getTechLevel()
+            && builder->getCurrentUpgradeLevel() < spec.upgradeLevel
+            && builder->getMaxUpgradeLevel() >= spec.upgradeLevel;
+    };
+    if (builder->getItemID() == Structure_ConstructionYard
+        && getGameInitSettings().getGameOptions().concreteRequired && unlocks(Structure_Slab4)) return true;
+    if (pass.itemCount[Structure_ConstructionYard] == 0 && pass.itemCount[Unit_MCV] == 0
+        && unlocks(Unit_MCV)) return true;
+    if (pass.itemCount[Unit_Harvester] < std::min(4, pass.vanillaBoomTargets.workers)
+        && unlocks(Unit_Harvester)) return true;
+    if (needsFirstTransport(pass) && unlocks(Unit_Carryall)) return true;
+    const bool emergency = pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid();
+    if (!emergency) return false;
+    if (builder->getItemID() == Structure_ConstructionYard)
+        return unlocks(Structure_GunTurret) || unlocks(Structure_RocketTurret);
+    // An emergency unlock is necessary only if this line cannot already
+    // produce combat units; insufficient cash is not a technology shortfall.
+    bool militaryUnlock = false;
+    for (Uint32 item : kMixItems) {
+        if (!QuantBotBuildPolicy::militaryItem(item) || data[item][house].builder != int(builder->getItemID())) continue;
+        if (campaignAvailableToBuild(builder, item)) return false;
+        if (!unlocks(item)) continue;
+        bool prerequisites = true;
+        for (int prerequisite = Structure_FirstID; prerequisite <= Structure_LastID; ++prerequisite)
+            if (data[item][house].prerequisiteStructuresSet[prerequisite]
+                && getHouse()->getNumItems(prerequisite) == 0) { prerequisites = false; break; }
+        militaryUnlock = militaryUnlock || prerequisites;
+    }
+    return militaryUnlock;
+}
+
 // Record actual queue acceptance for unit and structure production.
 bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32 itemID, int sourceLine, const char* rule) {
     const Uint32 requestedItem = itemID;
+    const bool replacementWorker = botConfig().force.cityHarvesterReplacement
+        && (requestedItem == Unit_Harvester
+            || (ModManager::instance().isTornieFamilyContentActive()
+                && (requestedItem == Unit_CapacityHarvester || requestedItem == Unit_FastHarvester)));
+    const int replacement = replacementWorker ? cityHarvesterReplacementFloor(pass) : 0;
+    if (replacementWorker && replacement >= 0 && pass.itemCount[Unit_Harvester] >= replacement) return false;
     if (itemID == Unit_Harvester) itemID = chooseTornieHarvester(turn.pBuilder, pass.money);
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.fleetRatios) {
+        if (requestedItem == Unit_Harvester && pass.itemCount[Unit_Harvester] >= pass.spiceHarvesterTarget)
+            return false;
+        if (itemID == Structure_Refinery && pass.itemCount[itemID] >= pass.fleetRefineryTarget)
+            return false;
+        if (itemID == Unit_Carryall && pass.itemCount[itemID] >= pass.transportTarget)
+            return false;
+    }
+    if (!vanillaBoomAdmits(pass, itemID)
+        || (turn.spendingItem != NONE_ID && !vanillaBoomAdmits(pass, turn.spendingItem))) return false;
     if(!cityAdmitsStructure(pass, itemID)) return false;
     if (itemID==Structure_RepairYard && !canAddRepairYard(pass.itemCount[Structure_RepairYard])) return false;
     // Also cover campaign rebuild orders, which bypass the strategic planner.
@@ -158,6 +252,45 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     if(itemID == Unit_MCV && pass.yardLimit > 0
         && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] >= pass.yardLimit) return false;
     const int quotedPrice=purchasePrice(turn.pBuilder,itemID);
+    const auto& portPolicy = botConfig().force;
+    const bool portScope = (portPolicy.starportBuying > 0 || portPolicy.starportCashStockpile > 0
+            || portPolicy.starportEconomyPriority > 0)
+        && gameMode == GameMode::Custom
+        && (getGameInitSettings().getModName() == "vanilla"
+            || ModManager::instance().isDuneCityContentActive())
+        && (getGameInitSettings().getGameType() == GameType::CustomGame
+            || getGameInitSettings().getGameType() == GameType::CustomMultiplayer)
+        && getGameInitSettings().getInitialSpiceTilePermille() > 0;
+    // The experimental ceiling applies to every accepted import, including
+    // economy/capital paths that do not visit the bargain loop.
+    if (portScope && portPolicy.starportBuying > 0
+        && turn.pBuilder->getItemID() == Structure_StarPort
+        && !StarportBuyingPolicy::admitted(quotedPrice,
+            getHouse()->radarUnitPrice(itemID,data[itemID][houseID].price),
+            portPolicy.starportBuying)) return false;
+    // Only optional factory combat orders wait for the market. Economy,
+    // construction recovery and the port itself keep their native cash access.
+    if (portScope && portPolicy.starportCashStockpile > 0
+        && turn.pBuilder->getItemID() != Structure_StarPort
+        && QuantBotBuildPolicy::militaryItem(itemID)
+        && StarportBuyingPolicy::preserveCash(pass.money, quotedPrice,
+            getHouse()->radarUnitPrice(itemID, data[itemID][houseID].price),
+            portPolicy.starportCashStockpile)) {
+        for (const auto* structure : getStructureList()) {
+            if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_StarPort
+                || structure->getHealth() <= 0 || !structure->isActive()) continue;
+            const auto* port = static_cast<const StarPort*>(structure);
+            if (!port->okToOrder() || !port->isAvailableToBuild(itemID)
+                || getHouse()->getChoam().getNumAvailable(itemID) <= 0) continue;
+            const int factory = getHouse()->radarUnitPrice(itemID, data[itemID][houseID].price);
+            if (!StarportBuyingPolicy::admitted(purchasePrice(port, itemID), factory, portPolicy.starportBuying)) {
+                if (pass.emitStatsLog) traceDecision("starport_cash_stockpile", AITelemetry::Record()
+                    .set("item",itemID).set("cash",pass.money).set("factory_price",factory)
+                    .set("market_price",purchasePrice(port,itemID)).set("level",portPolicy.starportCashStockpile));
+                return false;
+            }
+        }
+    }
     const Uint32 spendingItem = turn.spendingItem == NONE_ID ? itemID : turn.spendingItem;
     const auto spendingBucket = QuantBotBuildPolicy::spendingBucket(spendingItem);
     const bool techInstallment = pass.techSavings
@@ -245,6 +378,14 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     doProduceItem(turn.pBuilder, itemID);
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
+        if (replacement > pass.itemCount[Unit_Harvester]) {
+            const int live = getAIHarvesterCount();
+            traceDecision("harvester_replacement", AITelemetry::Record()
+                .set("live", live).set("queued", std::max(0, pass.itemCount[Unit_Harvester] - live))
+                .set("floor", replacement).set("spice_cap", pass.cityReplacementSpiceCap)
+                .set("capacity", pass.cityReplacementCapacity)
+                .set("source", turn.pBuilder->getItemID() == Structure_StarPort ? "starport" : "factory"));
+        }
         if (pass.techSavings || AITelemetry::log().enabled()) {
             const size_t slot = compositionSlot(itemID);
             if (slot < UnitMixPolicy::kSlots) {
@@ -280,6 +421,12 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
         if (pass.capacityMcvRunway && itemID==Unit_MCV) pass.capacityMcvOrderedCost+=quotedPrice;
         if (AITelemetry::log().enabled()) pass.capitalOrders.set(std::to_string(turn.pBuilder->getObjectID())+":"+std::to_string(before),
             AITelemetry::Record().set("item",itemID).set("price",quotedPrice).set("rule",rule));
+        if (turn.pBuilder->getItemID() == Structure_StarPort && AITelemetry::log().enabled())
+            traceDecision("starport_purchase", AITelemetry::Record()
+                .set("item",itemID).set("item_name",getItemNameByID(itemID))
+                .set("market_price",quotedPrice).set("normal_price",data[itemID][houseID].price)
+                .set("factory_price",getHouse()->radarUnitPrice(itemID,data[itemID][houseID].price))
+                .set("rule",rule).set("spendable_after",pass.money));
     }
     if (accepted && capitalPending(pass) && (requestedItem==pass.capitalCandidates[pass.capitalChoice].item
         || (pass.cityGrowthProtected && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()
@@ -353,6 +500,8 @@ bool QuantBot::recoverBuilderConstruction(BuildPass& pass, BuilderTurn& turn) {
 }
 
 bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
+    if (pass.vanillaBoomArmy && (pass.techResearch
+        || !pass.techUpgrade || turn.pBuilder->getObjectID() != pass.vanillaBoomUpgradeBuilder)) return false;
     if (!pass.techSavingActive || pass.techResearch || !capitalPending(pass)
         || pass.capitalChoice != pass.techCandidateIndex
         || turn.pBuilder->getObjectID() != pass.techCandidate.builder) return false;
@@ -370,7 +519,7 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
     }
     if (pass.techUpgrade) {
         if (upgradeWithLogging(pass, turn, __LINE__)) pass.capitalConsumed = true;
-        return true;
+        return !pass.vanillaBoomArmy || turn.pBuilder->isUpgrading();
     }
     if (queueFoundedStructure(pass, turn, pass.techCandidate.item, __LINE__, "saved_technology")) {
         ++pass.itemCount[pass.techCandidate.item];
@@ -381,6 +530,7 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
 }
 
 bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine) {
+    if (!vanillaBoomUpgradeAdmitted(pass, turn.pBuilder)) return false;
     const int price=turn.pBuilder->getUpgradeCost();
     const bool simpleProject = pass.techSavings && pass.techSavingActive
         && pass.techUpgrade && pass.techCandidate.builder == turn.pBuilder->getObjectID();
@@ -406,6 +556,7 @@ bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int source
 bool QuantBot::queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 item, int sourceLine, const char* rule) {
     if (turn.pBuilder->getItemID()!=Structure_ConstructionYard
         || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize()!=0
+        || !vanillaBoomAdmits(pass, item)
         || !campaignAvailableToBuild(turn.pBuilder,item) || !cityAdmitsStructure(pass, item)) return false;
     planningBuilder=turn.pBuilder->getObjectID();
     clearPlacementCache(false,true);
@@ -550,6 +701,7 @@ bool QuantBot::queueCampaignWindtrap(BuildPass& pass, BuilderTurn& turn, int nex
 Uint32 QuantBot::economicGenerator(BuildPass& pass, BuilderTurn& turn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.vanillaBoomArmy) return NONE_ID;
     if (!pass.vanillaEconomy || builderOnly() || pass.defendingEconomy
         || turn.pBuilder->getItemID()!=Structure_ConstructionYard
         || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize()!=0) return NONE_ID;
@@ -746,10 +898,13 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
     // the rock ran out under the old exhaustion rule, or because
     // the city is built out and has somewhere to settle. Both save
     // for that MCV instead of spending the same cash on units.
-    turn.expansionProducer = (pass.rockExpansionNeeded||pass.colonisationNeeded)&&pass.itemCount[Unit_MCV]==0
-        && turn.pBuilder->getItemID()==Structure_HeavyFactory;
-    const bool openingWorker = openingWorkersNeeded(pass) && getHouse()->hasPower();
-    turn.workerProducer = turn.pBuilder->getItemID() == Structure_HeavyFactory
+    const bool expansionNeeded = (pass.rockExpansionNeeded || pass.colonisationNeeded)
+        && (pass.vanillaPlan == QuantBotVanillaPolicy::Plan::None || pass.itemCount[Structure_ConstructionYard] == 0);
+    turn.expansionProducer = expansionNeeded && pass.itemCount[Unit_MCV] == 0
+        && turn.pBuilder->getItemID() == Structure_HeavyFactory;
+    const bool workerDue = !pass.vanillaBoomArmy || pass.itemCount[Unit_Harvester] < std::min(4, pass.vanillaBoomTargets.workers);
+    const bool openingWorker = workerDue && openingWorkersNeeded(pass) && getHouse()->hasPower();
+    turn.workerProducer = workerDue && turn.pBuilder->getItemID() == Structure_HeavyFactory
         && campaignAvailableToBuild(turn.pBuilder,Unit_Harvester)
         && (openingWorker || (pass.brutalEconomy && factoryPrefersHarvester(pass, turn.pBuilder)));
     const bool firstCarryall = needsFirstTransport(pass) && pass.carryallBuildAvailable && getHouse()->hasPower();
@@ -759,7 +914,7 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
         ? 0 : std::max({pass.strategicReserveCost,pass.economyReserve,pass.civicReserveCost});
     // A cramped start still needs power, income and a factory before
     // it can expand. Don't protect cash for an MCV we cannot build.
-    if ((pass.rockExpansionNeeded||pass.colonisationNeeded) && pass.mcvBuildAvailable && pass.itemCount[Unit_MCV]==0 && !turn.expansionProducer)
+    if (expansionNeeded && pass.mcvBuildAvailable && pass.itemCount[Unit_MCV]==0 && !turn.expansionProducer)
         protectedCash=std::max(protectedCash,int(data[Unit_MCV][houseID].price));
     if (!openingWorker && !turn.expansionProducer && turn.pBuilder->getItemID() != Structure_ConstructionYard)
         protectedCash = std::max(protectedCash,pass.civicReserveCost);
@@ -818,6 +973,18 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
             && pass.itemCount[Structure_Refinery] < std::min(2, pass.fundedHarvesterTarget))
             protectedCash = std::max(protectedCash, buildingCapitalCost(pass, Structure_Refinery));
     }
+    if (pass.vanillaBoomArmy && producer != Structure_ConstructionYard) {
+        // Accepted queues have already been charged. Conversion releases
+        // optional economic/tech savings, not the next real recovery quote.
+        protectedCash = capitalReserve(pass, turn.pBuilder->getObjectID());
+        if (pass.itemCount[Structure_ConstructionYard] == 0 && pass.itemCount[Unit_MCV] == 0
+            && producer != Structure_HeavyFactory && producer != Structure_StarPort)
+            protectedCash = std::max(protectedCash, data[Unit_MCV][houseID].price);
+        if (openingWorker && !turn.workerProducer)
+            protectedCash = std::max(protectedCash, data[Unit_Harvester][houseID].price);
+        if (firstCarryall && !turn.transportProducer)
+            protectedCash = std::max(protectedCash, data[Unit_Carryall][houseID].price);
+    }
     // A lost processing bay must not compete afresh with optional imports,
     // workers or technology. Live ground replacement production keeps its
     // emergency spending; all other producers leave the yard's quote intact.
@@ -826,14 +993,67 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
             && producer != Structure_HeavyFactory && producer != Structure_Barracks
             && producer != Structure_WOR)))
         protectedCash = std::max(protectedCash, campaignRefineryReplacementCost(pass));
+    // Optional capital ownership must not let another army producer consume
+    // the replacement wallet; live emergencies make this floor inactive.
+    if (producer != Structure_ConstructionYard
+        && cityHarvesterReplacementFloor(pass) > pass.itemCount[Unit_Harvester])
+        protectedCash = std::max(protectedCash, harvesterInvestmentReserve(pass));
     turn.reserve.reserved = pass.money - QuantBotBuildPolicy::spendableCredits(pass.money,protectedCash);
     pass.money -= turn.reserve.reserved;
+}
+
+bool QuantBot::buildCityHarvesterReplacement(BuildPass& pass, BuilderTurn& turn) {
+    const int floor = cityHarvesterReplacementFloor(pass);
+    if (pass.itemCount[Unit_Harvester] >= floor || getHouse()->isGroundUnitLimitReached()) return false;
+    const bool port = turn.pBuilder->getItemID() == Structure_StarPort;
+    if (!port && turn.pBuilder->getItemID() != Structure_HeavyFactory) return false;
+    if (!campaignAvailableToBuild(turn.pBuilder, Unit_Harvester)) return false;
+    // An idle factory supplies the worker without tying it up in a shipment.
+    // Busy, upgrading or held factories leave the market lane available.
+    if (port && cityHarvesterReplacementFactoryReady(pass)) return true;
+    if (turn.pBuilder->isUpgrading() || turn.pBuilder->isOnHold()) return true;
+    if (!port && turn.pBuilder->getProductionQueueSize() > 0) return true;
+    const auto* starport = port ? static_cast<const StarPort*>(turn.pBuilder) : nullptr;
+    if (starport && !starport->okToOrder()) return true;
+    const int protectedCapital = std::max(capitalReserve(pass, turn.pBuilder->getObjectID()),
+        cityBootstrapReserve(pass));
+    const int availableReserve = std::max(0, turn.reserve.reserved - protectedCapital);
+    pass.money += availableReserve;
+    bool ordered = false;
+    while (pass.itemCount[Unit_Harvester] < floor) {
+        const Uint32 item = chooseTornieHarvester(turn.pBuilder, pass.money);
+        const int price = purchasePrice(turn.pBuilder, item);
+        if (price <= 0 || pass.money < price || turn.pBuilder->isUnitLimitReached(item)
+            || (starport && getHouse()->getChoam().getNumAvailable(item) <= 0)) break;
+        if (!produceItemWithLogging(pass, turn, Unit_Harvester, __LINE__, "harvester_replacement")) break;
+        ++pass.itemCount[Unit_Harvester];
+        pass.orderedSpiceHarvester = true;
+        ordered = true;
+        if (!port) break;
+    }
+    pass.money -= availableReserve;
+    if (starport && ordered) doPlaceOrder(starport);
+    // The idle factory waits for its protected price instead of buying army.
+    return true;
 }
 
 bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.vanillaBoomArmy && turn.pBuilder->getObjectID() == pass.vanillaBoomUpgradeBuilder
+        && turn.pBuilder->getProductionQueueSize() == 0 && !turn.pBuilder->isUpgrading()
+        && upgradeWithLogging(pass, turn, __LINE__)) {
+        if (turn.capitalSupplier) pass.capitalConsumed = true;
+        return true;
+    }
+    if (turn.capitalSupplier && pass.vanillaBoldCapital == pass.capitalChoice
+        && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "vanilla_bold_upgrade") {
+        if (pass.money >= pass.capitalCandidates[pass.capitalChoice].price
+            && turn.pBuilder->getProductionQueueSize() == 0 && !turn.pBuilder->isUpgrading()
+            && upgradeWithLogging(pass, turn, __LINE__)) pass.capitalConsumed = true;
+        if (!pass.vanillaBoomArmy || turn.pBuilder->isUpgrading()) return true;
+    }
     // The capital allocator also offers workers ahead of the type-specific
     // military handler. Do not let it bypass the live-threat replacement rule.
     if ((pass.campaignThreatProduction || pass.vanillaFfaThreatProduction)
@@ -842,6 +1062,7 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
     // An optional capital choice owns the producer only when the same
     // unit/price admitted by the acceptance wrapper can actually be funded.
     const auto unitAdmitted = [&](Uint32 item) {
+        if (!vanillaBoomAdmits(pass, item)) return false;
         if (!pass.techSavings) return true;
         if (item == Unit_MCV && pass.yardLimit > 0
             && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] >= pass.yardLimit) return false;
@@ -862,6 +1083,7 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
     // A rich opening can fund its MCV now. Do not repeatedly buy
     // workers before the factory gets to unlock that construction.
     const bool unlockingVanillaMcv=!pass.postponeCapacityMcv && pass.vanillaEconomy && gameMode==GameMode::Custom
+        && vanillaBoomAdmits(pass, Unit_MCV)
         && turn.pBuilder->getItemID()==Structure_HeavyFactory
         && !campaignAvailableToBuild(turn.pBuilder,Unit_MCV)
         && turn.pBuilder->getCurrentUpgradeLevel()<turn.pBuilder->getMaxUpgradeLevel()
@@ -945,20 +1167,21 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
             - pass.infantryValue)
         : pass.vehiclePlanValue;
     if (!turn.pBuilder->isUpgrading()
-        && pass.money > (pass.techSavings && pass.militaryEmergency ? 0
+        && pass.money > (pass.vanillaBoomArmy || (pass.techSavings && pass.militaryEmergency) ? 0
             : (turn.campaignLightWorkingCash || pass.vanillaFfaLightWorkingCash) ? 0
             : pass.citySimEnabled ? 500 : 700)
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
         && pass.militaryValue < pass.lightBudget
-        && (pass.techSavings
+        && (pass.vanillaBoomArmy || (pass.techSavings
             ? (pass.militaryEmergency || UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
                 pass.compositionPrice, pass.compositionAvailable) >= UnitMixPolicy::kFirstLightSlot)
             : ((pass.citySimEnabled && pass.itemCount[Structure_HeavyFactory] == 0)
                 || ((!pass.learningUnitMix && pass.lightVehicleCount < 2)
-                    || int64_t(pass.lightVehicleValue) * 10000 < int64_t(lightPlanValue) * pass.lightVehicleBps)))) {
+                    || int64_t(pass.lightVehicleValue) * 10000 < int64_t(lightPlanValue) * pass.lightVehicleBps))))) {
 
         if (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel()
+            && vanillaBoomUpgradeAdmitted(pass, turn.pBuilder)
             && !(pass.techSavings && pass.militaryEmergency)
             && (!pass.vanillaFfaLightWorkingCash || pass.money > 700)
             && getHouse()->getCredits() > 1500 && canFundProductionUpgrade(pass,turn.pBuilder)
@@ -971,6 +1194,8 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
             for (size_t i=UnitMixPolicy::kFirstLightSlot; i<kSlots; ++i) {
                 const Uint32 candidate = mixItems[i];
                 if (!campaignAvailableToBuild(turn.pBuilder,candidate)) continue;
+                if (pass.vanillaBoomArmy && (purchasePrice(turn.pBuilder, candidate) > pass.money
+                    || int64_t(pass.militaryValue) + data[candidate][houseID].price > pass.lightBudget)) continue;
                 if (pass.techSavings) {
                     if (i == UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
                             pass.compositionPrice, pass.compositionAvailable)) itemID = candidate;
@@ -978,9 +1203,9 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
                 }
                 const auto deficit = UnitMixPolicy::deficit(pass.unitMix[i], lightPlanValue,
                     pass.itemCount[candidate], data[candidate][houseID].price);
-                if (deficit > bestDeficit) { bestDeficit = deficit; itemID = candidate; }
+                if ((pass.vanillaBoomArmy && itemID == NONE_ID) || deficit > bestDeficit) { bestDeficit = deficit; itemID = candidate; }
             }
-            if (itemID == NONE_ID && pass.techSavings && pass.militaryEmergency)
+            if (itemID == NONE_ID && pass.techSavings && (pass.militaryEmergency || pass.vanillaBoomArmy))
                 for (size_t i = UnitMixPolicy::kFirstLightSlot; i < kSlots; ++i)
                     if (campaignAvailableToBuild(turn.pBuilder, mixItems[i])
                         && purchasePrice(turn.pBuilder, mixItems[i]) <= pass.money
@@ -1064,7 +1289,7 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
         && !turn.pBuilder->isUpgrading()
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
-        && pass.money > (pass.techSavings && pass.militaryEmergency ? 0 : 450)
+        && pass.money > (pass.vanillaBoomArmy || (pass.techSavings && pass.militaryEmergency) ? 0 : 450)
         && pass.militaryValue < pass.lightBudget
         && !getHouse()->isGroundUnitLimitReached()
         && ((!pass.citySimEnabled && pass.infantryCount < 3)
@@ -1082,6 +1307,7 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
             if (candidate >= Unit_Troopers5 && !ModManager::instance().isTornieFamilyContentActive()) continue;
             if (!campaignAvailableToBuild(turn.pBuilder,candidate)) continue;
             const int value = data[candidate][houseID].price;
+            if (pass.vanillaBoomArmy && purchasePrice(turn.pBuilder, candidate) > pass.money) continue;
             if (candidate >= Unit_Troopers5
                 && (purchasePrice(turn.pBuilder,candidate) > pass.money || !infantryQuotaAdmits(pass, value))) continue;
             if (int64_t(pass.militaryValue)+value > pass.lightBudget) continue;
@@ -1110,7 +1336,7 @@ void QuantBot::buildBarracks(BuildPass& pass, BuilderTurn& turn) {
         && !turn.pBuilder->isUpgrading()
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
-        && pass.money > (pass.techSavings && pass.militaryEmergency ? 0 : 300)
+        && pass.money > (pass.vanillaBoomArmy || (pass.techSavings && pass.militaryEmergency) ? 0 : 300)
         && pass.militaryValue < pass.lightBudget
         && !getHouse()->isGroundUnitLimitReached()
         && (pass.infantryCount < 3
@@ -1118,6 +1344,8 @@ void QuantBot::buildBarracks(BuildPass& pass, BuilderTurn& turn) {
         Uint32 itemID = NONE_ID;
         for (Uint32 candidate : {Unit_Soldier, Unit_Infantry, Unit_Infantry5, Unit_GasInfantry, Unit_FlameTrooper}) {
             if (candidate >= Unit_Troopers5 && !ModManager::instance().isTornieFamilyContentActive()) continue;
+            if (pass.vanillaBoomArmy && (purchasePrice(turn.pBuilder, candidate) > pass.money
+                || int64_t(pass.militaryValue) + data[candidate][houseID].price > pass.lightBudget)) continue;
             if (candidate >= Unit_Troopers5
                 && (purchasePrice(turn.pBuilder,candidate) > pass.money
                     || int64_t(pass.militaryValue) + data[candidate][houseID].price > pass.lightBudget
@@ -1159,12 +1387,13 @@ void QuantBot::buildHighTechFactory(BuildPass& pass, BuilderTurn& turn) {
     air.airLimit = getHouse()->isAirUnitLimitReached();
     air.ornithopterAvailable = campaignAvailableToBuild(turn.pBuilder,ornithopter);
     air.carryallAvailable = campaignAvailableToBuild(turn.pBuilder,Unit_Carryall);
-    air.canUpgrade = turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel();
+    air.canUpgrade = turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel()
+        && vanillaBoomUpgradeAdmitted(pass, turn.pBuilder);
     air.spendable = pass.money; // Economy/strategic reserves were removed above.
     air.ornithopterPrice = ornithopterPrice;
     air.carryallPrice = carryallPrice;
     air.carryalls = pass.itemCount[Unit_Carryall];
-    air.carryallTarget = pass.transportTarget;
+    air.carryallTarget = pass.vanillaBoomArmy ? std::min(1, pass.transportTarget) : pass.transportTarget;
     air.armyValue = pass.militaryValue;
     air.armyLimit = pass.lightBudget;
     air.vehiclePlanValue = pass.vehiclePlanValue;
@@ -1261,6 +1490,10 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
     // acceptance wrapper reject its wallet (or an already-full yard cap).
     // Resolve Tornie's worker against the same cash used by the real order.
     const auto growthAdmitted = [&](Uint32 item, int cash, bool upgrade = false) {
+        if (upgrade ? !vanillaBoomUpgradeAdmitted(pass, turn.pBuilder) : !vanillaBoomAdmits(pass, item)) {
+            growthHeld = true;
+            return false;
+        }
         if (!pass.techSavings) return true;
         const Uint32 actualItem = upgrade ? turn.pBuilder->getItemID()
             : item == Unit_Harvester ? chooseTornieHarvester(turn.pBuilder, cash) : item;
@@ -1289,19 +1522,23 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
     const int styleYardShortfall = pass.vanillaEconomy && gameMode == GameMode::Custom
         && pass.itemCount[Structure_HeavyFactory] > 0
         ? style().minYards - pass.itemCount[Structure_ConstructionYard] - pass.itemCount[Unit_MCV] : 0;
-    const bool prioritizeMcv = prioritizeCityMcv || (!pass.postponeCapacityMcv && pass.vanillaEconomy && gameMode == GameMode::Custom
+    const bool prioritizeMcv = vanillaBoomAdmits(pass, Unit_MCV)
+        && ((fieldExpansion.yard.isValid() && pass.colonisationNeeded
+             && pass.money >= data[Unit_MCV][houseID].price + 1000) || prioritizeCityMcv
+            || (!pass.postponeCapacityMcv && pass.vanillaEconomy && gameMode == GameMode::Custom
         && !getHouse()->isGroundUnitLimitReached()
         && (DuneCity::prioritizeVanillaMcv(pass.money, getAIHarvesterCount(),
             pass.itemCount[Structure_ConstructionYard], pass.itemCount[Unit_MCV], data[Unit_MCV][houseID].price)
-            || (styleYardShortfall > 0 && pass.money >= data[Unit_MCV][houseID].price + 1000)));
+            || (styleYardShortfall > 0 && pass.money >= data[Unit_MCV][houseID].price + 1000))));
     // A built-out city needs one yard it cannot express as a
     // capacity shortfall, so the factory may still unlock MCV
     // production for it.
     const int mcvShortfall = pass.citySimEnabled
         ? std::max(pass.colonisationNeeded ? 1 : 0,
             pass.cityYardTarget - pass.itemCount[Structure_ConstructionYard] - pass.itemCount[Unit_MCV])
-        : std::max(styleYardShortfall, DuneCity::vanillaMcvShortfall(pass.money, getAIHarvesterCount(),
-            pass.itemCount[Structure_ConstructionYard], pass.itemCount[Unit_MCV]));
+        : std::max(pass.colonisationNeeded ? 1 : 0,
+            std::max(styleYardShortfall, DuneCity::vanillaMcvShortfall(pass.money, getAIHarvesterCount(),
+                pass.itemCount[Structure_ConstructionYard], pass.itemCount[Unit_MCV])));
     if (pass.emitStatsLog && AITelemetry::log().enabled())
         traceDecision("factory_economy_priority",AITelemetry::Record()
             .set("builder",turn.pBuilder->getObjectID()).set("harvesters_committed",pass.itemCount[Unit_Harvester])
@@ -1349,6 +1586,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
             }
         }
         else if ((pass.citySimEnabled || pass.vanillaEconomy) && !pass.orderedSpiceHarvester
+            && vanillaBoomAdmits(pass, Unit_Harvester)
             && factoryPrefersHarvester(pass, turn.pBuilder)
             && pass.itemCount[Unit_Harvester] < (pass.citySimEnabled ? pass.fundedHarvesterTarget : pass.spiceHarvesterTarget)
             && campaignAvailableToBuild(turn.pBuilder,Unit_Harvester) && !getHouse()->isGroundUnitLimitReached()
@@ -1422,7 +1660,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 doRepair(turn.pBuilder);
             }
         }
-        else if (pass.money > (pass.techSavings ? 0 : pass.citySimEnabled || pass.vanillaEconomy ? 500 : 2000)
+        else if (pass.money > (pass.vanillaBoomArmy || pass.techSavings ? 0 : pass.citySimEnabled || pass.vanillaEconomy ? 500 : 2000)
             && pass.militaryValue < pass.militaryBudget && !getHouse()->isGroundUnitLimitReached()) {
             // Every heavy mix slot is a candidate with its own learned share and
             // committed value - each special its own slot since 9868, so a house
@@ -1457,7 +1695,7 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 if (slot < types.size() && candidates[slot].available && candidates[slot].price <= pass.money
                     && int64_t(pass.militaryValue) + candidates[slot].price <= pass.militaryBudget)
                     selected = int(slot);
-                if (selected < 0 && pass.militaryEmergency)
+                if (selected < 0 && (pass.militaryEmergency || pass.vanillaBoomArmy))
                     selected = QuantBotBuildPolicy::largestAffordableDeficit(
                         candidates, pass.militaryValue, pass.money, pass.militaryBudget);
             } else {
@@ -1508,6 +1746,17 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
     const StarPort* pStarPort = static_cast<const StarPort*>(turn.pBuilder);
     if (pStarPort->okToOrder()) {
         const Choam& choam = getHouse()->getChoam();
+        const auto& policy = botConfig().force;
+        const bool scope = (policy.starportBuying > 0 || policy.starportCashStockpile > 0
+                || policy.starportEconomyPriority > 0)
+            && gameMode == GameMode::Custom
+            && (getGameInitSettings().getModName() == "vanilla"
+                || ModManager::instance().isDuneCityContentActive())
+            && (getGameInitSettings().getGameType() == GameType::CustomGame
+                || getGameInitSettings().getGameType() == GameType::CustomMultiplayer)
+            && getGameInitSettings().getInitialSpiceTilePermille() > 0;
+        const int priceLevel = scope ? policy.starportBuying : 0;
+        const int economyPriority = scope ? policy.starportEconomyPriority : 0;
 
         // Economic imports may use the cash held for the economy,
         // just as factory-built harvesters do. Market discounts are
@@ -1524,13 +1773,18 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             if (getHouse()->getMaxHarvesters() > 0)
                 workerTarget = getHouse()->getMaxHarvesters();
         }
+        if (pass.vanillaBoomArmy) workerTarget = std::min(workerTarget, 4);
         // The shared reservation protects the next construction,
         // transport or combat order. Spend the remainder on useful
         // workers without applying a second arbitrary half-cash cap.
         auto buyEconomicImport = [&](Uint32 item, const char* rule) {
+            if (!vanillaBoomAdmits(pass, item)) return false;
             const int price = purchasePrice(turn.pBuilder,item);
-            const int portReserve = std::max(capitalReserve(pass, turn.pBuilder->getObjectID()),
-                cityBootstrapReserve(pass));
+            const bool plannedMcv = economyPriority > 1 && item == Unit_MCV && capitalPending(pass)
+                && pass.capitalCandidates[pass.capitalChoice].item == Unit_MCV;
+            const Uint32 reserveOwner = plannedMcv ? pass.capitalCandidates[pass.capitalChoice].builder
+                : turn.pBuilder->getObjectID();
+            const int portReserve = std::max(capitalReserve(pass, reserveOwner),cityBootstrapReserve(pass));
             const int cash = pass.money + turn.reserve.reserved - portReserve;
             if (item==Unit_Harvester && !bargainWorkers && harvesterInvestmentReserve(pass)==0
                 && QuantBotSpendingPolicy::marginalSpice(pass.spiceShare,
@@ -1559,10 +1813,23 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             return true;
         };
 
+        // Do not raise the fleet or yard target: this only changes which of
+        // the already-funded economic orders gets a scarce market window.
+        if (economyPriority > 0) {
+            while (pass.itemCount[Unit_Harvester] < workerTarget)
+                if (!buyEconomicImport(Unit_Harvester, "starport_priority_worker")) break;
+            if (economyPriority > 1 && capitalPending(pass)
+                && pass.capitalCandidates[pass.capitalChoice].item == Unit_MCV
+                && StarportBuyingPolicy::admitted(purchasePrice(turn.pBuilder,Unit_MCV),
+                    getHouse()->radarUnitPrice(Unit_MCV,data[Unit_MCV][houseID].price),priceLevel))
+                buyEconomicImport(Unit_MCV, "starport_priority_planned_mcv");
+        }
+
         // The priority purchase above imports the colonist. If
         // it is still unaffordable, preserve this port's savings.
         if (turn.capitalSupplier && capitalPending(pass)
             && pass.capitalCandidates[pass.capitalChoice].item==Unit_MCV
+            && vanillaBoomAdmits(pass, Unit_MCV)
             && (!pass.techSavings || ((pass.yardLimit <= 0
                     || pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] < pass.yardLimit)
                 && spendingAdmits(pass, Unit_MCV, purchasePrice(turn.pBuilder, Unit_MCV))))) return;
@@ -1580,7 +1847,7 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
         while (pass.itemCount[Unit_Harvester] < workerTarget) {
             if (!buyEconomicImport(Unit_Harvester, "starport_spice_economy")) break;
         }
-        while (transportUseful && harvesterInvestmentReserve(pass) == 0
+        while (!pass.vanillaBoomArmy && transportUseful && harvesterInvestmentReserve(pass) == 0
             && pass.itemCount[Unit_Carryall] < pass.transportTarget)
             if (!buyEconomicImport(Unit_Carryall, "starport_transport_capacity")) break;
 
@@ -1591,9 +1858,11 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
         std::vector<Uint32> bargains;
         for (const auto& offer : pStarPort->getBuildList()) {
             const Uint32 unit = offer.itemID;
+            const int factory = priceLevel == 0 ? data[unit][houseID].price
+                : getHouse()->radarUnitPrice(unit,data[unit][houseID].price);
             if (!isUnit(unit) || unit == Unit_Harvester || unit == Unit_Carryall
-                || unit == Unit_MCV || data[unit][houseID].price <= 0
-                || purchasePrice(turn.pBuilder,unit) <= 0 || purchasePrice(turn.pBuilder,unit) >= data[unit][houseID].price) continue;
+                || unit == Unit_MCV || !StarportBuyingPolicy::admitted(
+                    purchasePrice(turn.pBuilder,unit),factory,priceLevel)) continue;
             bargains.push_back(unit);
         }
         std::sort(bargains.begin(), bargains.end(), [&](Uint32 a, Uint32 b) {
@@ -1603,8 +1872,9 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
         });
         // A bargain is still optional spending: it may not come
         // out of the cash a no-spice city needs to start earning.
-        const int bargainReserve = std::max({harvesterInvestmentReserve(pass),
-            capitalReserve(pass, turn.pBuilder->getObjectID()),cityBootstrapReserve(pass)});
+        const int bargainReserve = pass.vanillaBoomArmy ? turn.reserve.reserved
+            : std::max({harvesterInvestmentReserve(pass),
+                capitalReserve(pass, turn.pBuilder->getObjectID()),cityBootstrapReserve(pass)});
         for (Uint32 unit : bargains) {
             const int price = purchasePrice(turn.pBuilder,unit);
             const int value = data[unit][houseID].price;

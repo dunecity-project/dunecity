@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "sample_seed": 1160100,
+  "cases": [
+    {
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 2,
+      "composition": "scarce-rock",
+      "rock": 15,
+      "mountain": 5,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160101
+    },
+    {
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "composition": "scarce-rock",
+      "rock": 15,
+      "mountain": 5,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160102
+    },
+    {
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "composition": "rocky-ridges",
+      "rock": 45,
+      "mountain": 15,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160103
+    },
+    {
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 2,
+      "composition": "standard",
+      "rock": 30,
+      "mountain": 5,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160104
+    },
+    {
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "composition": "scarce-rock",
+      "rock": 15,
+      "mountain": 5,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160105
+    },
+    {
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "composition": "rocky-ridges",
+      "rock": 45,
+      "mountain": 15,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160106
+    },
+    {
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 2,
+      "composition": "rocky-ridges",
+      "rock": 45,
+      "mountain": 15,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160107
+    },
+    {
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "composition": "standard",
+      "rock": 30,
+      "mountain": 5,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160108
+    },
+    {
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "composition": "rocky-ridges",
+      "rock": 45,
+      "mountain": 15,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160109
+    },
+    {
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "composition": "scarce-rock",
+      "rock": 15,
+      "mountain": 5,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160110
+    },
+    {
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 2,
+      "composition": "standard",
+      "rock": 30,
+      "mountain": 5,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160111
+    },
+    {
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "composition": "standard",
+      "rock": 30,
+      "mountain": 5,
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "replicate": 0,
+      "seed": 1160112
+    }
+  ]
+}

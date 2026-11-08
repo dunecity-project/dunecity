@@ -299,9 +299,14 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     Uint32 admittedItem = NONE_ID;
     auto releaseUnfundedChoice = [&]() {
         const Uint32 item = yardTurn.itemID;
-        if (!pass.techSavings || item == NONE_ID || item == admittedItem
-            || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0
-            || spendingEmergency(pass, item)) return;
+        if ((!pass.techSavings && pass.techIncomeLevel == 0 && pass.vanillaPlan == QuantBotVanillaPolicy::Plan::None)
+            || item == NONE_ID || item == admittedItem
+            || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0) return;
+        const bool boomAdmitted = vanillaBoomAdmits(pass, item);
+        if (boomAdmitted && ((!pass.techSavings && pass.techIncomeLevel == 0) || spendingEmergency(pass, item))) {
+            admittedItem = item;
+            return;
+        }
         const Coord site = yardTurn.crimeServiceSite.isValid() ? yardTurn.crimeServiceSite
             : item == Structure_RocketTurret || item == Structure_GunTurret
                 ? findEffectiveTurretPlaceLocation(item) : findPlaceLocation(item);
@@ -309,7 +314,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         if (site.isValid())
             for (const auto& slab : foundationPlan(turn.pBuilder, item, site).orders)
                 cost += purchasePrice(turn.pBuilder, slab.item);
-        if (spendingAdmits(pass, item, cost)) {
+        if (boomAdmitted && spendingAdmits(pass, item, cost)) {
             admittedItem = item;
             return;
         }
@@ -323,7 +328,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             yardTurn.higherPriorityCapital = false;
         }
         yardTurn.itemID = NONE_ID;
-        yardTurn.structureRule = "technology_plan_hold";
+        yardTurn.structureRule = boomAdmitted ? "technology_plan_hold" : "vanilla_boom_hold";
         yardTurn.crimeServiceSite = Coord::Invalid();
         yardTurn.skipRemainingStructureLogic = yardTurn.serviceSavingHold = false;
         turn.installmentProject = NONE_ID;
@@ -333,6 +338,50 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     releaseUnfundedChoice();
     chooseYardEssentials(pass, turn, yardTurn);
     releaseUnfundedChoice();
+    if (pass.vanillaCoreDefence.active) {
+        // VanillaCoreDefence (default off): live-threat cover after power recovery and
+        // the essentials, ahead of optional growth. Off or out of scope it never runs.
+        chooseYardVanillaCoreDefence(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
+    if (pass.vanillaBoomArmy) {
+        // Conversion keeps actual power/defence recovery and the planner's
+        // one required prerequisite. Do not re-enter the native growth ladder.
+        if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+            && pass.protectionCapital && capitalPending(pass)
+            && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()
+            && (vanillaBoomAdmits(pass, pass.capitalCandidates[pass.capitalChoice].item)
+                || (pass.capitalCandidates[pass.capitalChoice].urgent
+                    && (pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid())
+                    && vanillaBoomUpgradeAdmitted(pass, turn.pBuilder))))
+            chooseYardCityFoundations(pass, turn, yardTurn);
+        const Uint32 required = pass.vanillaBoomRequiredItem;
+        if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+            && !turn.pBuilder->isUpgrading() && required != NONE_ID
+            && vanillaBoomAdmits(pass, required) && campaignAvailableToBuild(turn.pBuilder, required)) {
+            yardTurn.itemID = required;
+            yardTurn.structureRule = "vanilla_boom_required";
+        }
+        yardTurn.skipRemainingStructureLogic = true;
+        vetYardChoice(pass, turn, yardTurn);
+        return placeYardChoice(pass, turn, yardTurn);
+    }
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && getHouse()->hasPower()) {
+        const Uint32 item = fieldExpansion.guard.isValid() ? Uint32(Structure_GunTurret)
+            : fieldExpansion.refinery.isValid() ? Uint32(Structure_Refinery) : Uint32(NONE_ID);
+        const Coord site = item == Structure_GunTurret ? fieldExpansion.guard : fieldExpansion.refinery;
+        if (item != NONE_ID && campaignAvailableToBuild(turn.pBuilder,item)
+            && pass.money >= purchasePrice(turn.pBuilder,item) + 1000
+            && spendingAdmits(pass,item,purchasePrice(turn.pBuilder,item))) {
+            yardTurn.itemID = item;
+            yardTurn.crimeServiceSite = site;
+            yardTurn.structureRule = "spice_field_outpost";
+            yardTurn.skipRemainingStructureLogic = true;
+            // Subsequent yards must not reserve a second order for this site.
+            if (item == Structure_GunTurret) fieldExpansion.guard = Coord::Invalid();
+            else fieldExpansion.refinery = Coord::Invalid();
+        }
+    }
     // Existing processing capacity lost in a raid is recovery, not another
     // optional refinery expansion behind factory/Starport prerequisites.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
@@ -462,6 +511,33 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     releaseUnfundedChoice();
     chooseYardCityOpening(pass, turn, yardTurn);
     releaseUnfundedChoice();
+    // Advance one legal, fully funded tier when true rival armies cannot
+    // threaten us. Required power, city bootstrap, first workers and transports
+    // above keep their authority; no borrowed income or empty tech reservation.
+    if (pass.techIncomeLevel > 0 && pass.techRivalsSafe
+        && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && pass.itemCount[Structure_HeavyFactory] > 0 && !openingWorkersNeeded(pass)
+        && getHouse()->hasPower()) {
+        for (Uint32 item : {Structure_RepairYard, Structure_HighTechFactory, Structure_IX, Structure_Palace}) {
+            if (pass.itemCount[item] > 0
+                || (item == Structure_RepairYard && !canAddRepairYard(0))
+                || !campaignAvailableToBuild(turn.pBuilder, item)) continue;
+            const int cost = buildingCapitalCost(pass, item);
+            if (cost <= 0 || pass.money < cost + std::max(pass.economyReserve, pass.cityWorkingReserve)
+                || !incomeTechAdmits(pass, item, cost)
+                || !findPlaceLocation(item).isValid()
+                || ((pass.citySimEnabled || pass.powerRules) && getHouse()->getProducedPower()
+                    < getHouse()->getPowerRequirement() + pass.committedPowerDemand
+                        + std::max(0, currentGame->objectData.data[item][getHouse()->getHouseID()].power))) continue;
+            yardTurn.itemID = item;
+            yardTurn.structureRule = "income_safe_technology";
+            if (AITelemetry::log().enabled())
+                traceDecision("income_tech_early", AITelemetry::Record().set("item", item).set("cost", cost)
+                    .set("income_per_minute", pass.techIncomePerMinute).set("level", pass.techIncomeLevel)
+                    .set("own_army", pass.techOwnArmy).set("largest_rival", pass.techLargestRival));
+            break;
+        }
+    }
     chooseYardServicesAndRefineries(pass, turn, yardTurn);
     releaseUnfundedChoice();
     // Spend the first-WOR allocation only after actual emergency choices. Its
@@ -625,6 +701,7 @@ void QuantBot::chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn
     // present loss: it buys the baseline emplacements and its own
     // prerequisites, then waits behind the production core.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && (!pass.vanillaBoomArmy || pass.airEngaged)
         && yardTurn.counterAirTurrets > 0
         && pass.routineRocketsAllowed
         && pass.itemCount[Structure_RocketTurret] < yardTurn.activeRocketTurretGoal) {
@@ -632,6 +709,7 @@ void QuantBot::chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn
         bool hasRadar = pass.itemCount[Structure_Radar] > 0;
 
         if (turn.pBuilder->getCurrentUpgradeLevel() < 2) {
+            if (!vanillaBoomUpgradeAdmitted(pass, turn.pBuilder)) return;
             if (turn.pBuilder->getHealth() < turn.pBuilder->getMaxHealth() && !turn.pBuilder->isRepairing()) {
                 doRepair(turn.pBuilder);
                 logDebug("COUNTER-ORNITHOPTER: Repairing CY before upgrade (level %d)", turn.pBuilder->getCurrentUpgradeLevel());
@@ -674,6 +752,54 @@ bool QuantBot::hasPowerBufferForTurret(BuildPass& pass) {
     int powerExcess = getHouse()->getProducedPower() - getHouse()->getPowerRequirement();
     // Keep the city-specific headroom after powering the turret.
     return powerExcess >= pass.rocketPowerBuffer;
+}
+
+void QuantBot::planVanillaCoreDefence(BuildPass& pass) {
+    // Transient and per pass: the same true-state survey the unit pass reads
+    // (QuantBotArmy.cpp). Inactive when the switch is off or the game is out of scope.
+    pass.vanillaCoreDefence = surveyVanillaCoreDefence();
+}
+
+void QuantBot::chooseYardVanillaCoreDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    namespace Policy = QuantBotCoreDefencePolicy;
+    // One emplacement per pass across all yards; the house-wide cap counts queued turrets.
+    if (pass.vanillaCoreTurretOrdered || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
+        || pass.itemCount[Structure_GunTurret] + pass.itemCount[Structure_RocketTurret] >= Policy::kTurretTotalCap)
+        return;
+    const int houseID = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    // Only legal, funded emplacements: this rule never holds a yard to save for one.
+    const bool gun = campaignAvailableToBuild(turn.pBuilder, Structure_GunTurret)
+        && pass.money >= data[Structure_GunTurret][houseID].price;
+    const bool rocket = campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)
+        && hasPowerBufferForTurret(pass) && pass.money >= data[Structure_RocketTurret][houseID].price;
+    if (!gun && !rocket) return;
+    const int bps = botConfig().force.vanillaCoreDefenceThreatBps;
+    for (const auto& core : pass.vanillaCoreDefence.cores) {
+        const int groundGoal = Policy::turretGoal(core.groundThreat, bps, false);
+        const int airGoal = Policy::turretGoal(core.airThreat, bps, true);
+        // Only a Rocket Turret answers aircraft; ground cover takes the cheaper Gun
+        // Turret (no rocket power rule) when it is legal, else a Rocket Turret.
+        Uint32 item = NONE_ID;
+        if (core.airCover < airGoal && rocket) item = Structure_RocketTurret;
+        else if (core.groundCover < groundGoal) item = gun ? Uint32(Structure_GunTurret)
+            : rocket ? Uint32(Structure_RocketTurret) : Uint32(NONE_ID);
+        if (item == NONE_ID) continue;
+        const Coord site = findVanillaCoreTurretPlaceLocation(item, core);
+        if (site.isInvalid()) continue;
+        pass.vanillaCoreTurretOrdered = true;
+        yardTurn.itemID = item;
+        yardTurn.crimeServiceSite = site;
+        yardTurn.structureRule = "vanilla_core_defence";
+        yardTurn.skipRemainingStructureLogic = true;
+        traceDecision("vanilla_core_defence", AITelemetry::Record()
+            .set("builder", turn.pBuilder->getObjectID()).set("item", item).set("core", core.id)
+            .set("x", site.x).set("y", site.y)
+            .set("ground_threat", core.groundThreat).set("air_threat", core.airThreat)
+            .set("ground_cover", core.groundCover).set("air_cover", core.airCover)
+            .set("ground_goal", groundGoal).set("air_goal", airGoal).set("threat_bps", Policy::level(bps)));
+        return;
+    }
 }
 
 void QuantBot::chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
@@ -881,12 +1007,13 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
         && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()) {
         const auto& service = pass.capitalCandidates[pass.capitalChoice];
         const bool defenceUpgrade=service.kind==std::string("defence_upgrade");
+        const bool boldUpgrade=service.kind==std::string("vanilla_bold_upgrade");
         const int working=std::max(0,pass.cityPlotPrice);
         if (std::string_view(service.reason)=="early_rocket"
             && int64_t(pass.money)<int64_t(service.price)+service.foundationCost+working) {
             yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
             yardTurn.structureRule="save_early_rocket";
-        } else if (service.kind==std::string("expansion_upgrade") || defenceUpgrade) {
+        } else if (service.kind==std::string("expansion_upgrade") || defenceUpgrade || boldUpgrade) {
             yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
             yardTurn.structureRule=defenceUpgrade ? "save_defence_upgrade" : "save_expansion_upgrade";
             if (pass.money>=service.price && turn.pBuilder->getHealth()>=turn.pBuilder->getMaxHealth()
@@ -908,6 +1035,9 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
                 yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_city_construction" : "city_construction";
             else if (std::string_view(service.reason)=="early_rocket")
                 yardTurn.structureRule=yardTurn.itemID==NONE_ID ? "save_early_rocket" : "early_rocket_cover";
+            else if (std::string_view(service.kind)=="city_land_value_service")
+                yardTurn.structureRule=yardTurn.itemID==NONE_ID
+                    ? "save_city_land_value_police" : "city_land_value_police";
             yardTurn.skipRemainingStructureLogic = true;
         }
     }
@@ -958,21 +1088,24 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
     // Protect the income/rebuild core before optional tech. Walk the
     // actual mod prerequisites and save their cost, rather than
     // waiting for enemy aircraft to reveal that the yard is unready.
-    const bool completingCore=pass.itemCount[Structure_RocketTurret]>=2 && pass.missingCoreInfrastructure!=NONE_ID;
+    const bool familySupplier = pass.cityBoomWorkers > 0;
+    const bool defenceReady = pass.itemCount[Structure_RocketTurret] >= 2 || (familySupplier && pass.cityBoomFunding);
+    const bool completingCore = defenceReady && pass.missingCoreInfrastructure != NONE_ID;
     const bool openingWorkerSupplier = pass.openingSupplierDue || completingCore;
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.citySimEnabled
         && !yardTurn.higherPriorityCapital
-        && ((openingWorkerSupplier && pass.itemCount[Structure_RocketTurret] >= 2)
-            || ((pass.itemCount[Structure_Refinery] >= 3 || pass.airEngaged)
+        && ((openingWorkerSupplier && defenceReady)
+            || (!(pass.cityBoom == CityBoomKind::Greedy && pass.cityBoomFunding)
+                && (pass.itemCount[Structure_Refinery] >= 3 || pass.airEngaged)
                 && proactiveCoverageShortfall(pass) > 0
                 && data[Structure_RocketTurret][houseID].enabled
                 && data[Structure_RocketTurret][houseID].techLevel <= getHouse()->getTechLevel()))) {
         // Once basic defence exists, unlock the producer that can
         // fill the opening fleet. Starport upgrades otherwise wait
         // behind cheap lots even on a rich spice field.
-        const bool supplyingWorkers = openingWorkerSupplier && pass.itemCount[Structure_RocketTurret] >= 2;
+        const bool supplyingWorkers = openingWorkerSupplier && defenceReady;
         Uint32 step = completingCore ? pass.missingCoreInfrastructure : supplyingWorkers
-            ? (pass.itemCount[Structure_Refinery]<4 ? Structure_Refinery
+            ? (pass.itemCount[Structure_Refinery] < (familySupplier ? 2 : 4) ? Structure_Refinery
                 : pass.starportMarketAvailable ? Structure_StarPort : Structure_HeavyFactory)
             : Structure_RocketTurret;
         if (!supplyingWorkers && !hasPowerBufferForTurret(pass)) step = Structure_WindTrap;
@@ -1184,13 +1317,16 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             && getHouse()->getTechLevel() >= data[Structure_RepairYard][houseID].techLevel) {
             step = Structure_RepairYard;
         } else if (!canAddRepairYard(pass.itemCount[Structure_RepairYard])
+            && !(botConfig().force.mediumClassic >= 1 && difficulty == Difficulty::Medium
+                 && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType))
             && pass.itemCount[Structure_HeavyFactory] == 0
             && data[Structure_HeavyFactory][houseID].enabled
             && getHouse()->getTechLevel() >= data[Structure_HeavyFactory][houseID].techLevel) {
             // Medium builds no repair yard of its own, but the yard was also this
             // ladder's only way to the light factory and so to vehicle production:
             // walk to the heavy factory instead (7P FFA: Medium idle with 17
-            // harvesters and no factory, docs/ai-scenario-matrix.md).
+            // harvesters and no factory, docs/ai-scenario-matrix.md). MediumClassic
+            // 1-2 (default off) keeps the 1.0.807 Custom Medium opening without it.
             step = Structure_HeavyFactory;
         }
         // Walk missing prerequisites, stopping at a pending build.
@@ -1339,6 +1475,8 @@ void QuantBot::chooseYardCityOpening(BuildPass& pass, BuilderTurn& turn, YardTur
         || (yardTurn.coreShortfall > 0 && pass.uncoveredCoreAssets > 0);
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && yardTurn.isCitySim
         && !yardTurn.higherPriorityCapital
+        && (!(pass.cityBoom == CityBoomKind::Greedy && pass.cityBoomFunding) || pass.airEngaged
+            || pass.groundThreatAsset.isValid())
         && (coreDefenceDue
             || (!openingWorkersNeeded(pass) && pass.itemCount[Structure_HeavyFactory] > 0
                 && nonServiceConstructionOrders >= 3))
@@ -1466,6 +1604,16 @@ void QuantBot::chooseYardServicesAndRefineries(BuildPass& pass, BuilderTurn& tur
         yardTurn.itemID = Structure_RepairYard;
         yardTurn.structureRule = "early_repair_capacity";
     }
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && pass.fleetRatios
+        && pass.itemCount[Structure_Refinery] < pass.fleetRefineryTarget
+        && pass.money >= buildingCapitalCost(pass, Structure_Refinery) + 300
+        && getHouse()->hasPower()
+        && campaignAvailableToBuild(turn.pBuilder, Structure_Refinery)
+        && findPlaceLocation(Structure_Refinery).isValid()) {
+        yardTurn.itemID = Structure_Refinery;
+        yardTurn.structureRule = "fleet_ratio_capacity";
+    }
 
 
     // 3. Refinery (ratio: 1 refinery per 3 harvesters) — non-city-sim only.
@@ -1592,6 +1740,8 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.citySimEnabled
         && !yardTurn.higherPriorityCapital
         && !quietExtraTaxCover
+        && (!(pass.cityBoom == CityBoomKind::Greedy && pass.cityBoomFunding) || pass.airEngaged
+            || pass.groundThreatAsset.isValid())
         && (yardTurn.coreShortfall>0
             || (!openingWorkersNeeded(pass) && pass.itemCount[Structure_HeavyFactory]>0
                 && pass.itemCount[Structure_RocketTurret]<2))
@@ -1616,7 +1766,9 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     // the emplacement, or the yard upgrade that unlocks it. Bounded
     // by the forecast, so a city that cannot reach the price keeps
     // growing instead of idling.
-    if (yardTurn.isCitySim && yardTurn.coreShortfall>0 && !yardTurn.serviceSavingHold && !quietExtraTaxCover) {
+    if (yardTurn.isCitySim && yardTurn.coreShortfall > 0 && !yardTurn.serviceSavingHold && !quietExtraTaxCover
+        && (!(pass.cityBoom == CityBoomKind::Greedy && pass.cityBoomFunding) || pass.airEngaged
+            || pass.groundThreatAsset.isValid())) {
         const int upgradeStep=turn.pBuilder->getCurrentUpgradeLevel()<rocketUpgrade
             && turn.pBuilder->getMaxUpgradeLevel()>=rocketUpgrade ? turn.pBuilder->getUpgradeCost() : 0;
         const int wanted=upgradeStep>0 ? upgradeStep : data[Structure_RocketTurret][houseID].price;
@@ -1885,7 +2037,7 @@ void QuantBot::chooseYardMilitaryInfrastructure(BuildPass& pass, BuilderTurn& tu
 }
 
 bool QuantBot::buildResearchLab(BuildPass& pass, BuilderTurn& turn) {
-    if (!researchLabPolicyActive() || getHouse()->isTechResearchActive()
+    if (pass.vanillaBoomArmy || !researchLabPolicyActive() || getHouse()->isTechResearchActive()
         || pass.itemCount[Structure_ResearchLab] > 0
         || turn.pBuilder->getProductionQueueSize() > 0 || turn.pBuilder->isUpgrading()
         || turn.pBuilder->isOnHold()
@@ -1930,7 +2082,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     //     choice of every rule above it, and an unplaceable IX was then rejected each pass
     //     (no_site) and nothing at all was built. The Palace below likewise.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && !pass.vanillaFfaTechDeferred
+        && !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.itemCount[Structure_HeavyFactory] > 0
         && pass.itemCount[Structure_HighTechFactory] > 0
@@ -1942,7 +2094,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
         logDebug("Build IX... money: %d", pass.money);
     }
     if (pass.ixOverdue && !yardTurn.skipRemainingStructureLogic
-        && !pass.vanillaFfaTechDeferred
+        && !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.stablePower
         && pass.money > 1000
@@ -1955,7 +2107,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     }
     // Missing prerequisites never start the IX overdue timer.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && !pass.vanillaFfaTechDeferred
+        && !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
         && pass.itemCount[Structure_IX] == 0
         && pass.itemCount[Structure_HeavyFactory] > 0
         && pass.itemCount[Structure_HighTechFactory] > 0
@@ -2055,7 +2207,7 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
     // 17b. Palace (after military infrastructure)
     //       City sim: 1 palace per 30000 population
     {
-        const bool palaceAllowed = !pass.vanillaFfaTechDeferred
+        const bool palaceAllowed = !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
             && pass.itemCount[Structure_Palace] < pass.palaceTarget
             && !pass.orderedThisTick.count(Structure_Palace);
         if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
@@ -2265,6 +2417,22 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
             .set("wind_sites",windSites)
             .set("industrial_demand",pass.ownIndValve));
     }
+    // Native measurements show long raw shortages in Vanilla (building decay),
+    // and shorter city blackouts. Size anticipation from the actual next chosen
+    // consumer, plus demand already committed by every yard; never invent growth.
+    if (botConfig().force.powerLeadBuildings>0 && lastCalculatedSpice>0
+        && yardTurn.itemID!=NONE_ID && data[yardTurn.itemID][houseID].power>0
+        && !powerGenerationPending(pass)
+        && getHouse()->getProducedPower()<getHouse()->getPowerRequirement()
+            + pass.committedPowerDemand
+            + botConfig().force.powerLeadBuildings*data[yardTurn.itemID][houseID].power
+        && campaignAvailableToBuild(turn.pBuilder,Structure_WindTrap)
+        && pass.money>=buildingCapitalCost(pass,Structure_WindTrap)
+        && findPlaceLocation(Structure_WindTrap).isValid()) {
+        yardTurn.itemID=Structure_WindTrap;
+        yardTurn.structureRule="power_lead_buildings";
+        yardTurn.crimeServiceSite=Coord::Invalid();
+    }
     if (yardTurn.itemID!=NONE_ID && yardTurn.itemID!=Structure_WindTrap
         && campaignPowerNeeded(pass, std::max(0,data[yardTurn.itemID][houseID].power))
         && campaignAvailableToBuild(turn.pBuilder,Structure_WindTrap)) {
@@ -2360,7 +2528,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     }
     if (yardTurn.itemID==Structure_RocketTurret && !pass.routineRocketsAllowed
         && std::string_view(yardTurn.structureRule)!="perimeter_battery"
-        && std::string_view(yardTurn.structureRule)!="ground_threat") {
+        && std::string_view(yardTurn.structureRule)!="ground_threat"
+        && std::string_view(yardTurn.structureRule)!="vanilla_core_defence") {
         yardTurn.itemID=NONE_ID;
         yardTurn.crimeServiceSite=Coord::Invalid();
         yardTurn.structureRule="core_infrastructure_before_more_rockets";
@@ -2384,7 +2553,14 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         && protectedProject->item==yardTurn.itemID
         && (std::string_view(protectedProject->reason)=="ground_threat"
             || std::string_view(protectedProject->kind)=="city_supply");
-    if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite)
+    // VanillaCoreDefence chose its emplacement beside the threatened core (Gun Turrets too).
+    const bool coreDefenceSite = yardTurn.structureRule
+        && std::string_view(yardTurn.structureRule) == "vanilla_core_defence";
+    const bool fieldSite = yardTurn.structureRule
+        && std::string_view(yardTurn.structureRule) == "spice_field_outpost"
+        && (yardTurn.itemID == Structure_Refinery || yardTurn.itemID == Structure_GunTurret);
+    if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite
+        && !coreDefenceSite && !fieldSite)
         yardTurn.crimeServiceSite = Coord::Invalid();
 }
 
@@ -2397,6 +2573,7 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         yardTurn.itemID = variant;
         yardTurn.crimeServiceSite = Coord::Invalid();
     }
+    if (yardTurn.itemID != NONE_ID && !vanillaBoomAdmits(pass, yardTurn.itemID)) return false;
     Coord selectedPlaceLocation = Coord::Invalid();
     if (yardTurn.itemID != NONE_ID && campaignAvailableToBuild(turn.pBuilder,yardTurn.itemID)) {
         if (yardTurn.crimeServiceSite.isValid()) selectedPlaceLocation = yardTurn.crimeServiceSite;
@@ -2429,6 +2606,20 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     if (selectedPlaceLocation.isValid())
         for (const auto& foundation:foundationOrders(turn.pBuilder,yardTurn.itemID,selectedPlaceLocation))
             selectedCost+=purchasePrice(turn.pBuilder,foundation.item);
+    // Elective service orders cannot spend the working till or money owed to
+    // paid queues. Actual dangerous-crime responses retain their native route.
+    if (pass.cityLandValueServices && yardTurn.itemID==Structure_PoliceStation
+        && pass.dangerousCrimeProperties==0
+        && int64_t(pass.money)<int64_t(selectedCost)+std::max(2000,pass.cityWorkingReserve)) {
+        if (capitalPending(pass)
+            && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()
+            && pass.capitalCandidates[pass.capitalChoice].item==Structure_PoliceStation) {
+            pass.capitalChoice=-1;pass.protectionCapital=false;
+        }
+        yardTurn.itemID=NONE_ID;selectedPlaceLocation=Coord::Invalid();
+        yardTurn.crimeServiceSite=Coord::Invalid();yardTurn.skipRemainingStructureLogic=false;
+        yardTurn.structureRule="city_land_value_working_cash";
+    }
     if (yardTurn.isCitySim && !turn.pBuilder->isUpgrading() && !turn.pBuilder->isOnHold()
         && turn.pBuilder->getProductionQueueSize()==0
         && !(pass.protectionCapital && capitalPending(pass))
@@ -2559,6 +2750,15 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         if (!foundations.empty()) yardTurn.placeLocations->push_back(selectedPlaceLocation);
 
         if (produceItemWithLogging(pass, turn, yardTurn.itemID, __LINE__, yardTurn.structureRule)) {
+            if (pass.cityLandValueServices && yardTurn.itemID==Structure_PoliceStation)
+                traceDecision("city_land_value_police_order",AITelemetry::Record()
+                    .set("builder",turn.pBuilder->getObjectID()).set("x",selectedPlaceLocation.x)
+                    .set("y",selectedPlaceLocation.y).set("rule",yardTurn.structureRule)
+                    .set("protected_allocation",std::string_view(yardTurn.structureRule)=="city_land_value_police")
+                    .set("target_funding",botConfig().force.cityGrowthStageTax
+                        ? 100 : botConfig().force.cityLandValueFundingPercent)
+                    .set("price",purchasePrice(turn.pBuilder,yardTurn.itemID)).set("foundation_cost",foundationCost)
+                    .set("remaining_planning_cash",pass.money).set("working_cash_floor",2000));
             if (yardTurn.isCitySim && yardTurn.itemID != Structure_Road && yardTurn.itemID != Structure_Slab1
                 && yardTurn.itemID != Structure_Slab4) {
                 if (yardTurn.crimeServiceSite.isValid()) nonServiceConstructionOrders = 0;
@@ -2650,6 +2850,7 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
 void QuantBot::useSpareYardCapacity(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.vanillaBoomArmy) return;
     // Only use spare yard capacity, after all strategic/city choices.
     if (yardTurn.isCitySim && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && !pass.roadMaintenanceAttempted && !turn.pBuilder->isUpgrading()
