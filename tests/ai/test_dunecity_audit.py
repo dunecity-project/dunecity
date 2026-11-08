@@ -802,6 +802,11 @@ class DuneCityAuditTests(unittest.TestCase):
                                   ix_built=1, fighters=3, moving=1, targeting=1, enemies=0, enemy_value=0,
                                   covered_enemies=0, spice=0)
                     lines.append('DUNECITY_AUDIT: ' + ' '.join(f'{key}={value}' for key, value in sample.items()))
+                    fleet = dict.fromkeys(audit['FLEET_VALUES'], 0)
+                    fleet.update(fleet_steps=1, refined_spice_raw=100 * 2 ** 32,
+                                 fleet_capital_current_value=1600, fleet_capital_value_cycles=1600 * cycle)
+                    lines.append(f'DUNECITY_FLEET: minute=30 cycle={cycle} house={house} fleet='
+                                 + json.dumps(fleet, separators=(',', ':')))
                     support = dict.fromkeys(audit['TROOPER_FIELDS'], 0)
                     support.update(minute=30, cycle=cycle, house=house, wor=1, wor_built=2, trooper_live=5,
                                    trooper_queued=9, trooper_single_queued=1, trooper_squads_queued=1,
@@ -843,6 +848,8 @@ class DuneCityAuditTests(unittest.TestCase):
                     row = audit['play'](args, top, binary, game)
             self.assertEqual(launched.call_count, 1)  # This was a fixture callback, never a process.
             self.assertEqual(row['error'], '')
+            self.assertEqual(row['fleet_observer_status'], 'complete')
+            self.assertEqual(row['fleet_house_samples'], len(game['sides']))
             self.assertEqual((row['outcome'], row['winner_team']), ('time_limit', '0'))
             self.assertEqual((row['scored_winner_team'], row['win_condition']), (1, 'population'))
             self.assertEqual(json.loads(row['team_populations']), {'1': 120, '2': 100})
@@ -1080,6 +1087,21 @@ class DuneCityAuditTests(unittest.TestCase):
                 self.assertEqual(sample['boom_phase'], phase)
                 self.assertEqual(sample['flags'], expected_sample['flags'])
 
+    def test_fleet_refinery_json_survives_without_entering_numeric_detectors(self):
+        baseline = {field: '0' for field in audit['SAMPLE_VALUES'] + ('refineries', 'power_required')}
+        baseline.update(minute='5', cycle='18750', house='0', alive='1', yards='1', credits='600')
+        expected = audit['detect']([dict(baseline)])
+        for geometry in ('[]', '[{"refinery":"42","nearest_spice_distance_steps":"7"}]'):
+            with self.subTest(geometry=geometry):
+                sample = dict(baseline, fleet_refinery_metrics=geometry)
+                self.assertEqual(audit['detect']([sample]), expected)
+                self.assertEqual(sample['fleet_refinery_metrics'], geometry)
+                with tempfile.TemporaryDirectory() as directory:
+                    target = Path(directory) / 'samples.csv'
+                    audit['append'](target, audit['SAMPLE_FIELDS'], [sample])
+                    with target.open(newline='') as handle:
+                        self.assertEqual(next(csv.DictReader(handle))['fleet_refinery_metrics'], geometry)
+
     def test_legacy_samples_keep_all_minutes_and_missing_boom_fields_blank(self):
         samples = []
         for minute in range(1, 21):
@@ -1178,7 +1200,8 @@ class DuneCityAuditTests(unittest.TestCase):
                 {('matrix/fixture', '0'): house_row()})
             self.assertEqual(matched, [])
             self.assertIn('different_observer_mode' if mode else 'missing_observer_mode', rejected)
-        self.assertEqual(audit['GAME_FIELDS'][-1], 'observer_mode')
+        self.assertEqual(audit['GAME_FIELDS'][-4:], (
+            'observer_mode', 'fleet_observer_status', 'fleet_house_samples', 'fleet_refinery_samples'))
         with tempfile.TemporaryDirectory() as temporary:
             out = Path(temporary)
             audit['append'](out / 'games.csv', audit['GAME_FIELDS'], [game_row('default')])
