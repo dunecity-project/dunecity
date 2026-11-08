@@ -70,6 +70,9 @@ HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', '
 ) + TROOPER_FIELDS + ('air_kill_telemetry',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS + (
     'population', 'raw_score', 'raw_drawn', 'raw_won', 'seat_style')
 CYCLES_PER_MINUTE = 3750  # The engine's 16 ms fixed simulation tick.
+COMBAT_FIELDS = META + ('house', 'attacker_item', 'target_item', 'target_unit', 'hits',
+                        'hp_removed_milli', 'overkill_milli', 'kills', 'kill_value',
+                        'ttk_cycles', 'capture_status')
 SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_value', 'army_units', 'harvesters',
                  'structures', 'factories', 'kill_value', 'loss_value', 'power', 'need', 'population', 'tax', 'demand',
                  'built', 'structures_lost', 'base_hp', 'yards', 'yard_level', 'queue', 'upgrading', 'waiting', 'fronts',
@@ -188,10 +191,11 @@ def air_kill_capture(out, houses, final_cycle, enabled):
     One unknown air callback conservatively censors game-wide exact Trooper totals.
     """
     if not enabled:
-        return dict(status='disabled', reasons='', attribution='disabled', unknown_attribution='', events=[], decisions=[])
+        return dict(status='disabled', reasons='', attribution='disabled', unknown_attribution='', events=[], decisions=[], combat=[])
     paths = sorted((out / 'profile').rglob('events.jsonl'))
     teams = {int(house['house']): int(house['team']) for house in houses}
     reasons, events, decisions = [], [], []
+    combat, first_contact = {}, {}
     limited = False
     if len(paths) != 1:
         reasons.append('missing_capture' if not paths else 'multiple_captures')
@@ -237,6 +241,22 @@ def air_kill_capture(out, houses, final_cycle, enabled):
                             data = dict(data, state=state, state_cycle=state_cycle)
                         decisions.append(dict(session=session, seq=seq, cycle=cycle, house=int(event['house']),
                                               event=name, data=data))
+                    elif name == 'combat_target_hit':
+                        target = int(data['target'])
+                        before, after = int(data['hp_before_milli']), int(data['hp_after_milli'])
+                        first_contact.setdefault(target, cycle)
+                        key = (int(event['house']), int(data['attacker_item']),
+                               int(data['target_item']), int(bool(data['target_unit'])))
+                        row = combat.setdefault(key, dict(zip(
+                            ('house', 'attacker_item', 'target_item', 'target_unit'), key),
+                            hits=0, hp_removed_milli=0, overkill_milli=0, kills=0, kill_value=0, ttk_cycles=0))
+                        row['hits'] += 1
+                        row['hp_removed_milli'] += max(0, before - max(0, after))
+                        row['overkill_milli'] += max(0, int(data['damage']) * 1000 - before)
+                        if data['killed']:
+                            row['kills'] += 1
+                            row['kill_value'] += int(data['target_value'])
+                            row['ttk_cycles'] += cycle - first_contact.pop(target)
                     elif name == 'lethal_damage' and int(data['item']) in ENEMY_AIR_FIELDS:
                         victim, attacker_house = int(event['house']), int(data['attacker_house'])
                         object_id, attacker = int(data['object']), int(data['attacker'])
@@ -278,8 +298,10 @@ def air_kill_capture(out, houses, final_cycle, enabled):
         event['capture_complete'] = int(complete)
     status = 'complete' if complete else 'capture_limit' if limited else 'missing' if not paths else 'incomplete'
     unknown = sum(not event['attribution_complete'] for event in events)
+    for row in combat.values():
+        row['capture_status'] = status
     return dict(status=status, reasons=','.join(dict.fromkeys(reasons)), events=events, decisions=decisions,
-                attribution=('unknown' if unknown else 'complete') if complete else status,
+                combat=list(combat.values()), attribution=('unknown' if unknown else 'complete') if complete else status,
                 unknown_attribution=unknown if paths else '')
 
 
@@ -567,6 +589,8 @@ def sample_schedule(args):
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
             seed = rng.getrandbits(32)
+            if getattr(args, 'sample_game_seed_base', None) is not None:
+                seed = args.sample_game_seed_base + index
             fmt, enemy = case['format'], case['difficulty']
             count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
             houses = list(HOUSES[:count])
@@ -1102,6 +1126,8 @@ def play(args, scratch, binary, game):
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
             append(results / 'air-kills.csv', AIR_KILL_FIELDS,
                    [dict(metadata(game), **event) for event in capture['events']])
+            append(results / 'combat.csv', COMBAT_FIELDS,
+                   [dict(metadata(game), **entry) for entry in capture['combat']])
         supplemental = ({name: [] for name, _ in TECH_TABLES} if observer_off
                         else tech_audit(lines, samples, final, capture))
         for filename, fields in TECH_TABLES:
@@ -1139,7 +1165,7 @@ def run(args):
     results.mkdir(parents=True, exist_ok=True)
     for name, fields in (('games.csv', GAME_FIELDS), ('houses.csv', HOUSE_FIELDS),
                          ('samples.csv', SAMPLE_FIELDS), ('waves.csv', ATTACK_FIELDS),
-                         ('air-kills.csv', AIR_KILL_FIELDS)) + TECH_TABLES:
+                         ('air-kills.csv', AIR_KILL_FIELDS), ('combat.csv', COMBAT_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
     observer_mode = 'off' if getattr(args, 'observer_off', False) else 'on'
     if any(row.get('observer_mode') != observer_mode for row in read(results / 'games.csv')):
@@ -1935,6 +1961,8 @@ parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='m
                     help='sample: balanced seeded factor draws, each played from two candidate seats')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--sample-game-seed-base', type=int,
+                    help='sample: use consecutive game seeds from this base; factor draws remain sampled')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
@@ -1962,6 +1990,8 @@ if not 256 <= args.capture_mib <= 4096:
     parser.error('Use 256-4096 MiB of capture space')
 if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:
     parser.error('Use positive --cases and an unsigned 32-bit --sample-seed')
+if args.sample_game_seed_base is not None and not 0 <= args.sample_game_seed_base <= 0xffffffff - args.cases + 1:
+    parser.error('sample-game-seed-base plus case count must fit unsigned 32-bit seeds')
 if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and args.mod == 'Dune2R':
     parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
 if args.candidate_style and args.mode != 'sample':

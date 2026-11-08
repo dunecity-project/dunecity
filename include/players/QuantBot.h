@@ -1130,6 +1130,8 @@ private:
     /// The force bits in effect: the override if set, else the configured F, C, B, W, U, X, I,
     /// T, P, H, K and S.
     int forceBits() const;
+    /// Immutable original-map spice scope; unknown and zero-spice maps stay native.
+    bool combatTargetTuningActive() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }
     /// Vanilla Custom games whose original roster has at least two hostile teams.
     /// The tuning switches never activate in campaigns, duels or two-team matches.

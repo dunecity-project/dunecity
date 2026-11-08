@@ -151,6 +151,11 @@ struct QuantBotConfig {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
         bool focusFire;
+        /// Experimental all-mode ground combat micro: 0 native, 1 lowest HP with
+        /// native switch hysteresis, 2 strict lowest HP. Does not change movement goals.
+        int focusFireLevel;
+        /// 0 native classes, 1 artillery/rockets first, 2 harvesters then artillery.
+        int targetPriorityLevel;
         /// Wave members not yet fighting join a fight of their army within 24 tiles.
         bool converge;
         /// The wave readiness and house attack threshold as a percentage of the difficulty's

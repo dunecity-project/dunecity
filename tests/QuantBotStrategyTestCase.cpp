@@ -6,6 +6,7 @@
 #include <players/QuantBotStrategy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotSpendingPolicy.h>
+#include <players/ForceConcentrationPolicy.h>
 
 #include <array>
 #include <cstdio>
@@ -1590,4 +1591,41 @@ TEST_CASE("Strategy: each special has its own slot, share and learning", "[ai][s
     int total = 0;
     for (const int share : mix) total += share;
     REQUIRE(total == 10000);
+}
+
+TEST_CASE("Combat target levels default off and round-trip independent hashes", "[ai][config][targets]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.focusFireLevel == 0);
+    REQUIRE(defaults.force.targetPriorityLevel == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-target-levels.ini";
+    std::vector<std::string> hashes;
+    for (int focus : {0, 1, 2}) for (int priority : {0, 1, 2}) {
+        QuantBotConfig config;
+        config.force.focusFireLevel = focus;
+        config.force.targetPriorityLevel = priority;
+        REQUIRE(config.save(path.string()));
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.focusFireLevel == focus);
+        REQUIRE(loaded.force.targetPriorityLevel == priority);
+        REQUIRE(loaded.getConfigHash() == config.getConfigHash());
+        REQUIRE(std::find(hashes.begin(), hashes.end(), loaded.getConfigHash()) == hashes.end());
+        hashes.push_back(loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Combat priority levels and strict focus use stable HP and id order", "[ai][targets]") {
+    namespace F = ForceConcentrationPolicy;
+    REQUIRE(F::tunedTargetClass(F::ArmedUnit, 0, 0, true, false) == F::ArmedUnit);
+    REQUIRE(F::tunedTargetClass(F::Wall, 2, 2, false, false) == F::Wall);
+    REQUIRE(F::tunedTargetClass(F::Unarmed, 1, 0, false, true) == 0);
+    REQUIRE(F::tunedTargetClass(F::ArmedUnit, 0, 1, true, false) > F::ArmedUnit);
+    REQUIRE(F::tunedTargetClass(F::Unarmed, 0, 2, false, true)
+            > F::tunedTargetClass(F::ArmedUnit, 0, 2, true, false));
+    const F::TargetKey current{0, 100, 9}, slightlyLower{0, 90, 10}, tiedLowerId{0, 100, 8};
+    REQUIRE_FALSE(F::tunedShouldSwitch(true, current, slightlyLower, 1));
+    REQUIRE(F::tunedShouldSwitch(true, current, slightlyLower, 2));
+    REQUIRE(F::tunedShouldSwitch(true, current, tiedLowerId, 2));
+    REQUIRE_FALSE(F::tunedShouldSwitch(true, current, current, 2));
 }

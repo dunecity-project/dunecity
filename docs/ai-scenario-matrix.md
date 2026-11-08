@@ -44,6 +44,12 @@ Every game is a real match played headless to its end by the balance probe:
 For a natural-duration diagnostic, `--minutes 120` overrides only the selected
 run's cell limits. It does not change the ordinary matrix limits or winner
 assertions; use a separate results directory for the extended observation.
+For matched fresh-seed campaign screens, `--campaign-seeds 1280000 1280001`
+replaces the fixed seeds for each selected campaign mission (duplicate seeds are
+played once). `--cases` can restrict the missions. The default fixed 66-game gate,
+the idle-human AI-support seating, and every non-campaign seed remain unchanged.
+Use separate result directories for each arm and keep observer flags identical.
+
 
 ### Genuine exhaustion regression
 
