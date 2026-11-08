@@ -243,6 +243,9 @@ struct QuantBot::BuildPass {
     bool roadMaintenanceAttempted{};
     bool defendingEconomy{};
     bool campaignThreatProduction{};
+    bool vanillaFfaStarportDeferred{};
+    int vanillaFfaWaveCapitalReserve{};
+    bool vanillaFfaThreatProduction{};
     std::vector<CapitalCandidate> capitalCandidates{};
     AITelemetry::Record capitalProducers{};
     AITelemetry::Record capitalUnitOptions{};

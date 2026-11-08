@@ -1137,8 +1137,10 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         Uint32 step = NONE_ID;
         if (getHouse()->getNumItems(Structure_StarPort) == 0) {
             const int refineryGoal = std::min(4, pass.mapSpiceHarvesterTarget);
-            step = pass.itemCount[Structure_Refinery] < refineryGoal
-                ? Structure_Refinery : Structure_StarPort;
+            step = pass.itemCount[Structure_Refinery] < refineryGoal ? Structure_Refinery
+                : pass.vanillaFfaStarportDeferred ? NONE_ID : Structure_StarPort;
+            if (step == NONE_ID && pass.vanillaFfaWaveCapitalReserve > 0)
+                step = Structure_RepairYard;
         } else if (getHouse()->getNumItems(Structure_RepairYard) == 0
             && canAddRepairYard(pass.itemCount[Structure_RepairYard])
             && data[Structure_RepairYard][houseID].enabled
@@ -1651,6 +1653,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     // 5. Starport only if this map offers enabled imports (sold-out entries restock).
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && yardTurn.cityIncomeReady
+        && !pass.vanillaFfaStarportDeferred
         && pass.itemCount[Structure_StarPort] == 0
         && campaignAvailableToBuild(turn.pBuilder,Structure_StarPort)
         && findPlaceLocation(Structure_StarPort).isValid()
@@ -1995,7 +1998,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
 bool QuantBot::starportUnlocks(BuildPass& pass, BuilderTurn& turn, Uint32 goal) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
-    return pass.itemCount[Structure_StarPort] == 0
+    return !pass.vanillaFfaStarportDeferred && pass.itemCount[Structure_StarPort] == 0
         && !pass.orderedThisTick.count(Structure_StarPort)
         && campaignPermitsStructure(goal)
         && prerequisiteBlocksBuild(turn.pBuilder,goal,Structure_StarPort)

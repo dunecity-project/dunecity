@@ -796,6 +796,19 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
     if (pass.campaignThreatProduction
         && (producer == Structure_LightFactory || producer == Structure_HeavyFactory
             || producer == Structure_Barracks || producer == Structure_WOR)) protectedCash = 0;
+    if (pass.vanillaFfaThreatProduction
+        && (producer == Structure_LightFactory || producer == Structure_HeavyFactory
+            || producer == Structure_Barracks || producer == Structure_WOR)) {
+        // Only optional savings yield. Accepted queues are already deducted;
+        // required cover, first transport and first-wave capital stay funded.
+        protectedCash = std::max(pass.civicReserveCost,
+            pass.protectionCapital ? capitalReserve(pass, turn.pBuilder->getObjectID()) : 0);
+        if (firstCarryall && !turn.transportProducer)
+            protectedCash = std::max(protectedCash, data[Unit_Carryall][houseID].price);
+    }
+    if (pass.vanillaFfaWaveCapitalReserve > 0 && pass.itemCount[Structure_RepairYard] == 0
+        && producer != Structure_ConstructionYard)
+        protectedCash = std::max(protectedCash, pass.vanillaFfaWaveCapitalReserve);
     if (turn.campaignLightWorkingCash && producer == Structure_LightFactory) {
         protectedCash = std::max(pass.strategicReserveCost, pass.civicReserveCost);
         // Keep the one-worker opening from spending every receipt on light
@@ -815,7 +828,8 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
     auto& data = currentGame->objectData.data;
     // The capital allocator also offers workers ahead of the type-specific
     // military handler. Do not let it bypass the live-threat replacement rule.
-    if (pass.campaignThreatProduction && turn.pBuilder->getItemID() == Structure_HeavyFactory
+    if ((pass.campaignThreatProduction || pass.vanillaFfaThreatProduction)
+        && turn.pBuilder->getItemID() == Structure_HeavyFactory
         && canBuildMilitaryVehicle(pass, turn.pBuilder)) return false;
     // An optional capital choice owns the producer only when the same
     // unit/price admitted by the acceptance wrapper can actually be funded.

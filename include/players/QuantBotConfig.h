@@ -219,6 +219,15 @@ struct QuantBotConfig {
         bool vanillaFfaReserve;
         /// Wait for full readiness rather than the strategy's smaller repeated waves.
         bool vanillaFfaFullWaves;
+        /// With a funded worker seed and local ground production, defer the first optional
+        /// Starport until a ground wave launches; required first-wave/recovery capital stays legal.
+        bool vanillaFfaStarportAfterWave;
+        /// Below ordinary army readiness, live ground fire on our income/base puts replacement
+        /// production ahead of uncommitted optional growth, preserving recovery and the worker seed.
+        bool vanillaFfaThreatProduction;
+        /// Fresh waves reinforce the existing live army's reachable known structure objective.
+        /// Uses checkpointed wave state; immediate combat and defence keep their authority.
+        bool vanillaFfaSingleFront;
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.

@@ -942,6 +942,9 @@ void QuantBot::launchGroundHunt() {
     const bool wholeArmy=!limited && (autonomousCustomArmy() || exhausted);
     const bool ffaTargeting=(botConfig().force.vanillaFfaWeakestTarget || botConfig().force.vanillaFfaNearbyTarget)
         && vanillaMultiEnemyGame();
+    const bool ffaSingleFront = botConfig().force.vanillaFfaSingleFront && recoveryActive()
+        && vanillaMultiEnemyGame() && lastCalculatedSpice > 0;
+    const bool ffaDirected = ffaTargeting || ffaSingleFront;
     // JoinAllyWaves: the objective of an allied wave that has just left; ours joins it.
     const ObjectBase* allyFront=wholeArmy ? allyWaveObjective() : nullptr;
     std::vector<Uint32> existingHunters;
@@ -1254,6 +1257,7 @@ void QuantBot::launchGroundHunt() {
     // the thing that walked a dispatched wave back into its own base.
     const bool trackedCustomWave=(wholeArmy || recoveryActive()) && !limited && !selected.empty();
     const ObjectBase* observedFront=nullptr;
+    bool continuedFront = false;
     if (trackedCustomWave) {
         if (recoveryActive() && ArmyPosturePolicy::suppressesOffensiveDispatch(armyPosture)) return;
         // The objective is used as an OBSERVATION anchor for the front strength
@@ -1265,8 +1269,32 @@ void QuantBot::launchGroundHunt() {
             const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
             if (unit && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
         }
-        observedFront=allyFront ? allyFront : ffaTargeting ? finishObjective(lead,finishTargetTeam())
-                                                        : customWaveObjective(lead);
+        if (ffaSingleFront && !allyFront) {
+            const auto* previous = dynamic_cast<const StructureBase*>(getObject(customWave.front));
+            if (previous && knownEnemyStructure(previous) && groundAttackReachable(lead, previous)) {
+                for (const auto id : customWave.members) {
+                    const auto* member = dynamic_cast<const UnitBase*>(getObject(id));
+                    if (!member || member->getOwner() != getHouse() || member->getHealth() <= 0
+                        || !member->isActive() || !member->isAGroundUnit()
+                        || !mobileCombatItem(member->getItemID())
+                        || unitRole(member, {UnitRole::Human, UnitRole::Repair, UnitRole::Defence}) != UnitRole::Free)
+                        continue;
+                    if (member->getAttackMode() != HUNT && !member->hasATarget() && !member->isMoving()) continue;
+                    observedFront = previous;
+                    continuedFront = true;
+                    break;
+                }
+            }
+            // Preserve the native first-wave finishing choice when it already
+            // has one; otherwise establish the ordinary nearest observed front.
+            if (!observedFront && !ffaTargeting
+                && (forceVariant(kForceFinishWeakest) || forceVariant(kForceMassAssault)
+                    || (forceVariant(kForceFinishLeading) && finishLeading())))
+                observedFront = finishObjective(lead, finishTargetTeam());
+        }
+        if (!observedFront)
+            observedFront=allyFront ? allyFront : ffaTargeting ? finishObjective(lead,finishTargetTeam())
+                                                            : customWaveObjective(lead);
         if (ffaTargeting && !observedFront) observedFront=customWaveObjective(lead);
         const ArmySurvey planned=surveyArmy(observedFront);
         const auto gate=offensiveDispatchGate(planned);
@@ -1321,7 +1349,7 @@ void QuantBot::launchGroundHunt() {
     std::vector<const UnitBase*> finishers;                    // H / Z: hunt towards the weakest house
     const bool massAssault=trackedCustomWave && wholeArmy && forceVariant(kForceMassAssault);
     const bool finishWave=trackedCustomWave && wholeArmy && (forceVariant(kForceFinishWeakest) || massAssault
-        || ffaTargeting || (forceVariant(kForceFinishLeading) && finishLeading()));
+        || ffaDirected || (forceVariant(kForceFinishLeading) && finishLeading()));
     std::map<Uint32,std::vector<const UnitBase*>> assaults;    // campaign objective -> its attackers
     std::map<Uint32,std::vector<const UnitBase*>> flankers;    // campaign objective -> its flankers
     const ObjectBase* front=nullptr;
@@ -1429,9 +1457,9 @@ void QuantBot::launchGroundHunt() {
     if (!finishers.empty()) {
         const UnitBase* lead=nullptr;
         for (const auto* unit : finishers) if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
-        finishTeam=ffaTargeting && observedFront ? observedFront->getOwner()->getTeamID() : finishTargetTeam();
-        const ObjectBase* objective=allyFront ? allyFront : ffaTargeting && observedFront ? observedFront
-                                                                                       : finishObjective(lead,finishTeam);
+        finishTeam=ffaDirected ? (observedFront ? observedFront->getOwner()->getTeamID() : -1) : finishTargetTeam();
+        const ObjectBase* objective=allyFront ? allyFront : ffaDirected ? observedFront
+                                                                      : finishObjective(lead,finishTeam);
         if (!objective && massAssault) objective=observedFront;
         const Coord point=objective ? objective->getClosestPoint(lead->getLocation()) : Coord::Invalid();
         for (const auto* unit : finishers) {
@@ -1457,6 +1485,7 @@ void QuantBot::launchGroundHunt() {
         .set("hunt_party",int(partyUnits.size()))
         .set("formation_members",formationMembers)
         .set("finish_team",finishTeam)
+        .set("front_continued",continuedFront)
         .set("campaign_limited",limited).set("army_value",armyValue)
         .set("committed_value",custom ? groundCommittedValue : committedValue)
         .set("committed_units",limited ? campaignPressure().units : groundCommittedUnits)
@@ -2137,13 +2166,16 @@ void QuantBot::updateCustomWave() {
         ++it;
     }
     if (hadWave || !customWave.members.empty()) customWave.lastActive = now;
-    // Keep the observed front anchor only while it is still a thing we can see.
-    // It anchors the strength comparison and the idle-launcher rejoin fallback.
+    // Native anchors require visibility. The single-front candidate may retain
+    // a known structure for its live army, using existing checkpointed state.
     if (customWave.front != NONE_ID) {
         const auto* objective = getObject(customWave.front);
+        const bool remembered = botConfig().force.vanillaFfaSingleFront && vanillaMultiEnemyGame()
+            && lastCalculatedSpice > 0 && !customWave.members.empty() && objective
+            && objective->isAStructure() && knownEnemyStructure(static_cast<const StructureBase*>(objective));
         if (!objective || objective->getHealth() <= 0 || !objective->getOwner()
             || objective->getOwner()->getTeamID() == getHouse()->getTeamID()
-            || !objective->isVisible(getHouse()->getTeamID())) customWave.front = NONE_ID;
+            || (!remembered && !objective->isVisible(getHouse()->getTeamID()))) customWave.front = NONE_ID;
     }
 }
 

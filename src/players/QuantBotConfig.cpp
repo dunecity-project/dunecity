@@ -341,6 +341,9 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaFfaNearbyTarget = false;
     force.vanillaFfaReserve = false;
     force.vanillaFfaFullWaves = false;
+    force.vanillaFfaStarportAfterWave = false;
+    force.vanillaFfaThreatProduction = false;
+    force.vanillaFfaSingleFront = false;
     // Candidate (fix/ladder-campaign, docs/ai-scenario-matrix.md "Team games"): team waves join an
     // ally's fresh wave.
     force.joinAllyWaves = false;
@@ -679,6 +682,9 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "VanillaFfaNearbyTarget", force.vanillaFfaNearbyTarget);
         iniFile.setBoolValue("Force Concentration", "VanillaFfaReserve", force.vanillaFfaReserve);
         iniFile.setBoolValue("Force Concentration", "VanillaFfaFullWaves", force.vanillaFfaFullWaves);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaStarportAfterWave", force.vanillaFfaStarportAfterWave);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaThreatProduction", force.vanillaFfaThreatProduction);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaSingleFront", force.vanillaFfaSingleFront);
         iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
         iniFile.setBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
         iniFile.setBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
@@ -837,6 +843,9 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.vanillaFfaNearbyTarget = iniFile.getBoolValue("Force Concentration", "VanillaFfaNearbyTarget", force.vanillaFfaNearbyTarget);
     force.vanillaFfaReserve = iniFile.getBoolValue("Force Concentration", "VanillaFfaReserve", force.vanillaFfaReserve);
     force.vanillaFfaFullWaves = iniFile.getBoolValue("Force Concentration", "VanillaFfaFullWaves", force.vanillaFfaFullWaves);
+    force.vanillaFfaStarportAfterWave = iniFile.getBoolValue("Force Concentration", "VanillaFfaStarportAfterWave", force.vanillaFfaStarportAfterWave);
+    force.vanillaFfaThreatProduction = iniFile.getBoolValue("Force Concentration", "VanillaFfaThreatProduction", force.vanillaFfaThreatProduction);
+    force.vanillaFfaSingleFront = iniFile.getBoolValue("Force Concentration", "VanillaFfaSingleFront", force.vanillaFfaSingleFront);
     force.joinAllyWaves = iniFile.getBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
     force.openingCombatBudget = iniFile.getBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
     force.campaignCombatBudget = iniFile.getBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
@@ -1360,6 +1369,9 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("vanillaFfaNearbyTarget", force.vanillaFfaNearbyTarget);
     addNamed("vanillaFfaReserve", force.vanillaFfaReserve);
     addNamed("vanillaFfaFullWaves", force.vanillaFfaFullWaves);
+    addNamed("vanillaFfaStarportAfterWave", force.vanillaFfaStarportAfterWave);
+    addNamed("vanillaFfaThreatProduction", force.vanillaFfaThreatProduction);
+    addNamed("vanillaFfaSingleFront", force.vanillaFfaSingleFront);
     addNamed("joinAllyWaves", force.joinAllyWaves);
     addNamed("openingCombatBudget", force.openingCombatBudget);
     addNamed("campaignCombatBudget", force.campaignCombatBudget);

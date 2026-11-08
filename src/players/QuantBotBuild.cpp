@@ -1462,7 +1462,8 @@ int QuantBot::workerAnnualIncome(BuildPass& pass) {
 bool QuantBot::factoryPrefersHarvester(BuildPass& pass, const BuilderBase* factory) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
-    if (pass.campaignThreatProduction && canBuildMilitaryVehicle(pass, factory)) return false;
+    if ((pass.campaignThreatProduction || pass.vanillaFfaThreatProduction)
+        && canBuildMilitaryVehicle(pass, factory)) return false;
     if (harvesterInvestmentReserve(pass) > 0) return true;
     const int workers=pass.itemCount[Unit_Harvester],refs=pass.itemCount[Structure_Refinery];
     if (QuantBotSpendingPolicy::marginalSpice(pass.spiceShare,
@@ -2221,6 +2222,13 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     pass.roadMaintenanceAttempted = false;
+    const auto& force = botConfig().force;
+    const bool vanillaFfaGrowth = (force.vanillaFfaStarportAfterWave || force.vanillaFfaThreatProduction)
+        && vanillaMultiEnemyGame() && lastCalculatedSpice > 0
+        && pass.actualHarvesters >= 4 && getAIRefineryBays() > 0
+        && getHouse()->getNumItems(Structure_ConstructionYard) > 0
+        && !pass.rockExpansionNeeded && !pass.colonisationNeeded;
+    bool groundEconomyThreat = false;
 
     pass.defendingEconomy = false;
     for (const auto* unit:getUnitList()) {
@@ -2229,11 +2237,22 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         const auto* victim=unit->getTarget();
         if (victim && victim->getOwner()==getHouse() && unit->isInWeaponRange(victim)
             && (victim->isAStructure() || QuantBotInternal::harvesterItem(victim->getItemID())
-                || victim->getItemID()==Unit_RebelHarvester)) pass.defendingEconomy=true;
+                || victim->getItemID()==Unit_RebelHarvester)) {
+            pass.defendingEconomy=true;
+            if (vanillaFfaGrowth && !unit->isAFlyingUnit() && !unit->getOwner()->isNatives()
+                && unit->getHealth() > 0 && victim->getHealth() > 0 && unit->canAttack())
+                groundEconomyThreat = true;
+        }
     }
     pass.campaignThreatProduction = botConfig().force.campaignThreatProduction && pass.defendingEconomy
         && !pass.citySimEnabled && !builderOnly()
         && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman();
+    pass.vanillaFfaThreatProduction = force.vanillaFfaThreatProduction && vanillaFfaGrowth
+        && groundEconomyThreat && ownGroundArmyValue()
+            < ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), openingReadinessPercent());
+    pass.vanillaFfaStarportDeferred = force.vanillaFfaStarportAfterWave && vanillaFfaGrowth
+        && customWave.launched == 0 && pass.itemCount[Structure_StarPort] == 0;
+    bool localGroundSupplier = false;
     pass.forecastTax = pass.citySimEnabled ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,
         currentGame->getCitySimulation()->getCityTax(getHouse()->getHouseID()),pass.ownAvgLandValue)) : 0;
     pass.forecastUpkeep = pass.citySimEnabled ? getHouse()->getPowerRequirement()/8
@@ -2270,6 +2289,9 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
                 && !builder->isUpgrading() && !builder->isWaitingToPlace()
                 && !getHouse()->isUnitLimitReached(item)) currentBurn=cost/QuantBotSpendingPolicy::horizonMinutes;
             if (!campaignAvailableToBuild(builder,item)) continue;
+            if (pass.vanillaFfaStarportDeferred && builder->getItemID() == Structure_HeavyFactory
+                && builder->getHealth() > 0 && !builder->isUpgrading() && !builder->isOnHold()
+                && QuantBotBuildPolicy::militaryItem(item)) localGroundSupplier = true;
             // MCVs are occasional capital purchases, not a permanent production
             // mix. Their real queue cost is already reserved. Assuming every
             // heavy factory continuously builds MCVs grossly inflates burn.
@@ -2299,6 +2321,27 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
                 .set("current_item",builder->getCurrentProducedItem()).set("unpaid",unpaid)
                 .set("active_burn_per_minute",currentBurn).set("unit_capacity_cost",capacity)
                 .set("construction_capacity_cost",cityCapacity));
+    }
+    pass.vanillaFfaStarportDeferred &= localGroundSupplier;
+    // A first wave above tech4 requires a Repair Yard. Delaying the optional
+    // port must not strand that prerequisite behind perpetual unit spending.
+    if (pass.vanillaFfaStarportDeferred && getHouse()->getTechLevel() > 4
+        && canAddRepairYard(0) && pass.itemCount[Structure_RepairYard] == 0) {
+        for (const auto* builder : pass.capitalBuilders) {
+            if (builder->getItemID() != Structure_ConstructionYard || builder->isUpgrading()
+                || builder->isOnHold() || !campaignAvailableToBuild(builder, Structure_RepairYard)) continue;
+            planningBuilder = builder->getObjectID(); clearPlacementCache(false, true);
+            const Coord site = findPlaceLocation(Structure_RepairYard);
+            if (site.isInvalid()) continue;
+            const auto foundation = foundationPlan(builder, Structure_RepairYard, site);
+            if (!foundation.complete) continue;
+            pass.vanillaFfaWaveCapitalReserve = purchasePrice(builder, Structure_RepairYard);
+            for (const auto& slab : foundation.orders)
+                pass.vanillaFfaWaveCapitalReserve += purchasePrice(builder, slab.item);
+            break;
+        }
+        planningBuilder = NONE_ID; clearPlacementCache(false, true);
+        if (pass.vanillaFfaWaveCapitalReserve <= 0) pass.vanillaFfaStarportDeferred = false;
     }
     pass.cashBuffer = std::max(1000,pass.citySimEnabled ? pass.cityWorkingReserve : pass.economyReserve);
     pass.cashFlow = QuantBotSpendingPolicy::cashFlow(getHouse()->getCredits(),pass.money,pass.forecastNetIncome,
@@ -3055,6 +3098,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
             if (localDeficit(asset->getLocation())) { pass.militaryEmergency = true; break; }
         }
     }
+    if (pass.vanillaFfaThreatProduction) pass.militaryEmergency = true;
     pass.defenceMinimumValue = int(std::min<int64_t>(INT_MAX,
         std::max<int64_t>(std::max(3000, minWaveValue()), int64_t(pass.groundThreatValue) * 3 / 2)));
     for (const auto* unit : getUnitList()) {
@@ -3128,6 +3172,7 @@ void QuantBot::planTechSavings(BuildPass& pass) {
             item = missing;
             if (depth + 1 == Num_ItemID) return false;
         }
+        if (pass.vanillaFfaStarportDeferred && item == Structure_StarPort) return false;
         if (!data[item][house].enabled || data[item][house].techLevel > getHouse()->getTechLevel()) return false;
         for (const auto* builder : pass.capitalBuilders) {
             if (builder->getItemID() != Structure_ConstructionYard || builder->isUpgrading()
@@ -4079,6 +4124,9 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             .set("funds_parallel_production",pass.cashFlow.fundsParallelProduction).set("shared_priority",pass.sharedSpending)
             .set("prefer_funded_battery",preferFundedBattery)
             .set("starport_market_available",pass.starportMarketAvailable).set("funded_factory_opening",pass.fundedFactoryOpening)
+            .set("vanilla_ffa_port_deferred",pass.vanillaFfaStarportDeferred)
+            .set("vanilla_ffa_wave_capital",pass.vanillaFfaWaveCapitalReserve)
+            .set("vanilla_ffa_threat_production",pass.vanillaFfaThreatProduction)
             .set("funded_city_production",pass.fundedCityProduction).set("next_heavy_runway",pass.nextHeavyRunway)
             .set("city_growth_protected",pass.cityGrowthProtected)
             .set("city_growth_yards_busy",pass.cityGrowthYardsBusy)
@@ -4158,7 +4206,7 @@ void QuantBot::planBuildOrder(BuildPass& pass) {
             // A visible attacker firing on the base is a current replacement
             // need, not a reason to finish the helper's optional worker fleet.
             const Uint32 item = structure->getItemID();
-            if (pass.campaignThreatProduction
+            if ((pass.campaignThreatProduction || pass.vanillaFfaThreatProduction)
                 && (item == Structure_LightFactory || item == Structure_HeavyFactory
                     || item == Structure_Barracks || item == Structure_WOR)) priority = 8;
             pass.planningOrder.emplace_back(priority,structure->getObjectID());

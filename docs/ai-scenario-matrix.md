@@ -326,6 +326,71 @@ For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
 seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;
 see [sampler factors and research verification](quantbot-dunecity-audit.md#balanced-recovery-skirmish-sampler).
 
+For a sampler candidate/control comparison, use **`--candidate-style NAME`**,
+not `--style`: only the sampled candidate seat receives that INI; opponents
+retain their native QuantBot config even when they are Brutal too. Both seat
+assignments keep the same maps, seeds, rosters and IDs. `games.csv` records the
+candidate style and every house's effective config hash. Missing candidate
+application or a changed opponent hash is an error, not a measured game.
+The transport reuses the probe's per-house config inputs with one constant
+overlay for the whole game; no genome search or changing phases is involved.
+`--style` remains available for explicitly **all-QuantBot** experiments and is
+mutually exclusive with `--candidate-style`. Campaign/AAA `--style` comparisons
+do not change their non-QuantBot opponents.
+
+For several variations in the **same** game, use
+`--seat-styles control,A,B,C,D` (play-style names without `.ini`). `control`
+means native config, not another experimental INI. Each cohort rotates once
+through every house/start and controller tier on an unchanged map. Spare seats
+are native controls. If the list exceeds the game's capacity, consecutive
+cohorts contain at most seats-minus-one variants plus control; 1v1 therefore
+plays each variant directly against control. A sampler uses each original
+roster once per rotation instead of duplicating the singled-out candidate
+swap. An all-control list retains the ordinary unexpanded schedule and IDs.
+Sharding occurs after cohort expansion.
+
+`games.csv` retains the house/style mapping, cohort and rotation;
+`houses.csv` identifies each seat's style. Reports give each variant's placement
+score, wins, observed survival and better/tied/worse finishing order against
+opposing controls **in the same game**. Allied controls are excluded from that
+head-to-head count. Different cohorts and multiple controls are not independent
+paired trials or evidence for enabling a default. Promote a promising variant
+to the unchanged candidate-only full-mode and cross-mode gates.
+
+The vanilla FFA round isolates four default-off hashed `[Force Concentration]`
+switches: `VanillaFfaWeakestTarget` uses the existing weakest-rival hunt even
+before leading; `VanillaFfaNearbyTarget` adds 200 credits per tile to remembered
+army/turret strength; `VanillaFfaReserve` retains at least 25% of available wave
+value nearest the protected rally; `VanillaFfaFullWaves` tests 100% readiness
+instead of the smaller strategy waves. They require vanilla Custom mode and at
+least two hostile teams in the original roster; 1v1, 2v2, campaigns and cities
+keep their existing behavior. Human orders and live defence ownership remain
+authoritative; the reserve is bypassed when the economy is exhausted.
+Use the `vanilla-ffa-{weakest,nearby,reserve,full-waves}-on` styles, native
+`control` in shared games, and `vanilla-ffa-off` for candidate-only OFF parity.
+
+Round2 adds three independent default-off, hashed and registry-listed candidates:
+`VanillaFfaStarportAfterWave` defers the first optional port until a ground wave
+dispatches, once four real workers, unload capacity and a legal local Heavy
+Factory exist. Its first-wave Repair Yard remains funded at its actual price
+and legal foundation; missing/unplaceable recovery capital releases the deferral.
+`VanillaFfaThreatProduction` puts legal ground replacements before uncommitted
+optional-growth savings only under actual visible ground fire and below ordinary
+army readiness. Both require remaining spice, a yard and the worker seed, and
+leave space/yard recovery, accepted orders and required defence/transport intact.
+`VanillaFfaSingleFront` sends fresh reinforcements to the existing live army's
+known, reachable structure objective. It reuses checkpointed wave state and
+existing recovery/tracking, with no new tactical cache; local combat and defence
+still override transit. It is inactive after spice exhaustion. Their styles are
+`vanilla-ffa-{starport-after-wave,threat-production,single-front}-on`, with
+`vanilla-ffa-round2-off` for explicit OFF parity; they do not reset earlier flags.
+
+The minute audit appends `refineries` and `power_required` after all existing log
+and CSV fields without changing their order or parser. Legacy captures leave the
+new columns blank. Raw `power < need` is not a powered-mode economy penalty when
+`power_required=0`. Use `--attack-events` only for diagnostic captures that need
+spending, first dispatch and the candidate activation/front-continuation records.
+
 ```sh
 # Real games run only through the committed cluster queue, never a local mini batch.
 dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag sm-smoke -- \
