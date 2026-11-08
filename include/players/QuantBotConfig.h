@@ -222,6 +222,12 @@ struct QuantBotConfig {
         /// With a funded worker seed and local ground production, defer the first optional
         /// Starport until a ground wave launches; required first-wave/recovery capital stays legal.
         bool vanillaFfaStarportAfterWave;
+        /// Starport experiments: 0 preserves native purchasing; price levels 1/2
+        /// admit <=80/100% factory cost, savings levels retain 1/2 factory orders,
+        /// priority levels buy workers first / workers then a planned MCV.
+        int starportBuying;
+        int starportCashStockpile;
+        int starportEconomyPriority;
         /// In vanilla FFA with at least five original players, below ordinary readiness,
         /// live ground fire funds replacements before optional growth, retaining the worker seed.
         bool vanillaFfaThreatProduction;

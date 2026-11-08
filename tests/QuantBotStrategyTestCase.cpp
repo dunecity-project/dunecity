@@ -6,6 +6,7 @@
 #include <players/QuantBotStrategy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotSpendingPolicy.h>
+#include <players/StarportBuyingPolicy.h>
 
 #include <array>
 #include <cstdio>
@@ -711,6 +712,56 @@ TEST_CASE("Exhausted army dispatch defaults on and independently round-trips bot
     }
     std::filesystem::remove(path);
     std::filesystem::remove(savedPath);
+}
+
+TEST_CASE("Starport purchasing levels preserve native off and hash each experiment",
+          "[ai][starport][config]") {
+    const QuantBotConfig defaults;
+    const std::array<int QuantBotConfig::ForceSettings::*, 3> members{
+        &QuantBotConfig::ForceSettings::starportBuying,
+        &QuantBotConfig::ForceSettings::starportCashStockpile,
+        &QuantBotConfig::ForceSettings::starportEconomyPriority};
+    const std::array<const char*, 3> names{
+        "StarportBuying", "StarportCashStockpile", "StarportEconomyPriority"};
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-starport-levels-test.ini";
+    std::map<std::string, int> hashes;
+    for (int combination = 0; combination < 27; ++combination) {
+        QuantBotConfig expected = defaults;
+        int encoded = combination;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\n";
+            for (size_t i = 0; i < members.size(); ++i) {
+                REQUIRE(defaults.force.*members[i] == 0);
+                expected.force.*members[i] = encoded % 3;
+                ini << names[i] << '=' << encoded % 3 << '\n';
+                encoded /= 3;
+            }
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), combination).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        for (const auto member : members) REQUIRE(restored.force.*member == expected.force.*member);
+        REQUIRE(restored.getConfigHash() == expected.getConfigHash());
+    }
+    std::filesystem::remove(path);
+    using namespace StarportBuyingPolicy;
+    REQUIRE(admitted(799,1000,0));
+    REQUIRE_FALSE(admitted(1000,1000,0));
+    REQUIRE(admitted(800,1000,1));
+    REQUIRE_FALSE(admitted(801,1000,1));
+    REQUIRE(admitted(1000,1000,2));
+    REQUIRE_FALSE(admitted(1001,1000,2));
+    REQUIRE_FALSE(admitted(0,1000,2));
+    REQUIRE_FALSE(admitted(100,0,2));
+    REQUIRE_FALSE(preserveCash(1000,500,500,0));
+    REQUIRE_FALSE(preserveCash(1000,500,500,1));
+    REQUIRE(preserveCash(999,500,500,1));
+    REQUIRE(preserveCash(1000,500,500,2));
 }
 
 TEST_CASE("Vanilla FFA switches default off and independently persist every hashed combination",

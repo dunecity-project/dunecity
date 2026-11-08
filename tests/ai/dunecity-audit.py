@@ -137,6 +137,9 @@ TECH_HOUSE_VALUES = ('order_capture', 'spending_complete', 'mean_military_unit_c
 TECH_HOUSE_FIELDS = META + ('mod', 'house') + TECH_HOUSE_VALUES
 CHEAP_PATH_FIELDS = META + ('mod', 'house', 'rule', 'composition_basis', 'item', 'capture_complete',
                             'order_count', 'accepted_credits', 'observed_orders', 'observed_priced_credits', 'missing_prices')
+STARPORT_FIELDS = META + ('mod', 'session', 'seq', 'cycle', 'house', 'event',
+                         'item', 'item_name', 'market_price', 'normal_price', 'factory_price',
+                         'rule', 'spendable_after', 'cash', 'level', 'capture_complete')
 TECH_TABLES = (('tech-samples.csv', TECH_SAMPLE_FIELDS), ('composition.csv', COMPOSITION_FIELDS),
                ('tech-orders.csv', TECH_ORDER_FIELDS), ('tech-opportunities.csv', TECH_PLAN_FIELDS),
                ('tech-houses.csv', TECH_HOUSE_FIELDS), ('cheap-paths.csv', CHEAP_PATH_FIELDS))
@@ -231,7 +234,7 @@ def air_kill_capture(out, houses, final_cycle, enabled):
                         states[seq] = (cycle, data.get('state', {}))
                     elif name in ('production_order', 'capital_upgrade', 'city_yard_upgrade', 'capital_road_batch',
                                    'tech_research_started', 'tech_research_completed', 'tech_savings_plan',
-                                   'construction_completed'):
+                                   'construction_completed', 'starport_purchase', 'starport_cash_stockpile'):
                         if 'state' not in data and data.get('state_id') in states:
                             state_cycle, state = states[data['state_id']]
                             data = dict(data, state=state, state_cycle=state_cycle)
@@ -558,7 +561,7 @@ def game_limit(args, mod):
 def sample_schedule(args):
     games = []
     mods = ('vanilla', 'dunecity') if args.mod == 'both' else (args.mod,)
-    for mod in mods:
+    for mod_index, mod in enumerate(mods):
         minutes = game_limit(args, mod)
         rng = random.Random(f'{args.sample_seed}/{mod}')
         factors = dict(SAMPLE_FACTORS, spice_level=tuple(SPICE)[int(mod == 'vanilla'):],
@@ -567,6 +570,8 @@ def sample_schedule(args):
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
             seed = rng.getrandbits(32)
+            if getattr(args, 'game_seed_base', None) is not None:
+                seed = args.game_seed_base + mod_index * args.cases + index
             fmt, enemy = case['format'], case['difficulty']
             count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
             houses = list(HOUSES[:count])
@@ -1108,6 +1113,16 @@ def play(args, scratch, binary, game):
             append(results / filename, fields, [dict(metadata(game), mod=game.get('mod', 'dunecity'), **entry,
                                                    difficulty=difficulty_of[int(entry['house'])])
                                                for entry in supplemental[filename]])
+        if telemetry:
+            append(results / 'starport-purchases.csv', STARPORT_FIELDS,
+                   [dict(metadata(game), mod=game.get('mod', 'dunecity'),
+                         **{key: event[key] for key in ('session','seq','cycle','house','event')},
+                         **{key: event['data'].get(key, '') for key in (
+                             'item','item_name','market_price','normal_price','factory_price',
+                             'rule','spendable_after','cash','level')},
+                         capture_complete=int(capture['status'] == 'complete'))
+                    for event in capture['decisions']
+                    if event['event'] in ('starport_purchase','starport_cash_stockpile')])
         if getattr(args, 'keep_telemetry', False):
             row['diagnostics'] = retain_telemetry(results, out)
     append(results / 'games.csv', GAME_FIELDS, [row])
@@ -1935,6 +1950,8 @@ parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='m
                     help='sample: balanced seeded factor draws, each played from two candidate seats')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--game-seed-base', type=int,
+                    help='sample: explicit consecutive engine seeds, separate from factor-deck sample-seed')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
@@ -1962,6 +1979,10 @@ if not 256 <= args.capture_mib <= 4096:
     parser.error('Use 256-4096 MiB of capture space')
 if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:
     parser.error('Use positive --cases and an unsigned 32-bit --sample-seed')
+if args.game_seed_base is not None and (
+        args.mode != 'sample' or args.game_seed_base < 0
+        or args.game_seed_base + args.cases * (2 if args.mod == 'both' else 1) - 1 > 0xffffffff):
+    parser.error('--game-seed-base requires sample mode and an unsigned 32-bit engine seed range')
 if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and args.mod == 'Dune2R':
     parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
 if args.candidate_style and args.mode != 'sample':

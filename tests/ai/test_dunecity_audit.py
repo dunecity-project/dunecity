@@ -95,6 +95,24 @@ def population_case(populations, teams=None, mod='dunecity', outcome='time_limit
 
 
 class DuneCityAuditTests(unittest.TestCase):
+    def test_starport_purchase_quotes_survive_compact_decision_capture(self):
+        events = known_callbacks()
+        for name in ('starport_purchase', 'starport_cash_stockpile'):
+            events.insert(-2, dict(schema_version=1, session='fixture', seq=0, cycle=90,
+                                  house=0, event=name, data=dict(item=42, market_price=240,
+                                  normal_price=300, factory_price=270, rule='starport_bargain')))
+        for seq, event in enumerate(events, 1):
+            event['seq'] = seq
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            write_capture(out, events)
+            capture = audit['air_kill_capture'](out, HOUSES, 100, True)
+        self.assertEqual(capture['status'], 'complete')
+        quotes = [event for event in capture['decisions'] if event['event'].startswith('starport_')]
+        self.assertEqual(len(quotes), 2)
+        self.assertEqual(quotes[0]['data']['market_price'], 240)
+        self.assertEqual(quotes[0]['data']['factory_price'], 270)
+
     def test_population_win_boundary_is_inclusive_and_uses_exact_integer_arithmetic(self):
         for population, winner in ((1199, 0), (1200, 1), (1201, 1)):
             with self.subTest(population=population):
@@ -231,6 +249,22 @@ class DuneCityAuditTests(unittest.TestCase):
         ordinary = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'vanilla'])
         exporting = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'vanilla', '--export-maps', 'maps'])
         self.assertEqual(audit['schedule'](ordinary), audit['schedule'](exporting))
+
+    def test_explicit_sample_engine_seeds_preserve_factors_and_candidate_pairing(self):
+        args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both', '--cases', '12'])
+        native = audit['schedule'](args)
+        args.game_seed_base = 1270000
+        explicit = audit['schedule'](args)
+        self.assertEqual([game['seed'] for game in explicit],
+                         [seed for seed in range(1270000, 1270024) for _ in range(2)])
+        for old, new in zip(native, explicit):
+            for field in ('mod','format','size','spice_level','initial_tech','difficulty',
+                          'sides','candidate_house','candidate_seat'):
+                self.assertEqual(old[field], new[field])
+            self.assertIn('seed=' + str(new['seed']), new['skirmish'])
+        args.candidate_style = 'starport-price80'
+        styled = audit['schedule'](args)
+        self.assertEqual([game['seed'] for game in explicit], [game['seed'] for game in styled])
 
     def test_balanced_sampler_respects_both_mods_and_every_factor_level(self):
         args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
