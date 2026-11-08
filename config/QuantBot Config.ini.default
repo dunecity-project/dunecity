@@ -363,6 +363,9 @@ VanillaFfaSingleFront=0
 VanillaFfaLightWorkingCash=0
 # Optional IX/Palace deferral is scoped to vanilla FFA with at least five original players.
 VanillaFfaFundedTech=0
+# Experimental custom spice games: 0=native, 1=income >= tech cost/5min,
+# 2=income >= 1.5*tech cost/5min. Safe full-knowledge rivals allow earlier tech.
+TechIncomeTiming=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0

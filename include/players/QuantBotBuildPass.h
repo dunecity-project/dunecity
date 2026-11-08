@@ -259,6 +259,11 @@ struct QuantBot::BuildPass {
     int forecastSpice{};
     int forecastNetIncome{};
     int forecastFunding{};
+    int techIncomeLevel{};
+    int techIncomePerMinute{};
+    int64_t techOwnArmy{};
+    int64_t techLargestRival{};
+    bool techRivalsSafe{};
     int existingMilitaryCapacity{};
     int constructionCapacity{};
     int readyYards{};

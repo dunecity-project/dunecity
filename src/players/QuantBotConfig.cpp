@@ -346,6 +346,7 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaFfaSingleFront = false;
     force.vanillaFfaLightWorkingCash = false;
     force.vanillaFfaFundedTech = false;
+    force.techIncomeTiming = 0;
     // Candidate (fix/ladder-campaign, docs/ai-scenario-matrix.md "Team games"): team waves join an
     // ally's fresh wave.
     force.joinAllyWaves = false;
@@ -698,6 +699,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "VanillaFfaSingleFront", force.vanillaFfaSingleFront);
         iniFile.setBoolValue("Force Concentration", "VanillaFfaLightWorkingCash", force.vanillaFfaLightWorkingCash);
         iniFile.setBoolValue("Force Concentration", "VanillaFfaFundedTech", force.vanillaFfaFundedTech);
+        iniFile.setIntValue("Force Concentration", "TechIncomeTiming", force.techIncomeTiming);
         iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
         iniFile.setBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
         iniFile.setBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
@@ -870,6 +872,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.vanillaFfaSingleFront = iniFile.getBoolValue("Force Concentration", "VanillaFfaSingleFront", force.vanillaFfaSingleFront);
     force.vanillaFfaLightWorkingCash = iniFile.getBoolValue("Force Concentration", "VanillaFfaLightWorkingCash", force.vanillaFfaLightWorkingCash);
     force.vanillaFfaFundedTech = iniFile.getBoolValue("Force Concentration", "VanillaFfaFundedTech", force.vanillaFfaFundedTech);
+    force.techIncomeTiming = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "TechIncomeTiming", force.techIncomeTiming), 0, 2);
     force.joinAllyWaves = iniFile.getBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
     force.openingCombatBudget = iniFile.getBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
     force.campaignCombatBudget = iniFile.getBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
@@ -1408,6 +1412,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("vanillaFfaSingleFront", force.vanillaFfaSingleFront);
     addNamed("vanillaFfaLightWorkingCash", force.vanillaFfaLightWorkingCash);
     addNamed("vanillaFfaFundedTech", force.vanillaFfaFundedTech);
+    addNamed("techIncomeTiming", force.techIncomeTiming);
     addNamed("joinAllyWaves", force.joinAllyWaves);
     addNamed("openingCombatBudget", force.openingCombatBudget);
     addNamed("campaignCombatBudget", force.campaignCombatBudget);

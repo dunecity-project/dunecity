@@ -8,6 +8,41 @@ should beat an easy. test different levels from 1-9 ... a few of the MP popular 
 Until 1.0.847 almost every AI measurement was a 1v1 or All against Atreides. The matrix plays many
 kinds of game with one driver, `tests/ai/scenario-matrix.py`, and prints one summary table.
 
+## Income-based technology timing experiment
+
+`TechIncomeTiming` is a hashed, default-OFF QuantBot setting (`0/1/2`).
+Levels 1/2 admit optional first Repair Yard, High Tech Factory, IX, Palace,
+Research Lab and military producer/research upgrades only when net income per
+minute reaches 1.0/1.5 times the full project cost per five minutes. Income is
+the lifetime realised spice/tax receipt rate, less current upkeep, capped by
+the existing four-minute delivered-worker/shared-spice forecast. Starting cash
+is never income. The lifetime rate avoids unsaved rolling history; it responds
+more slowly to a recent economic improvement or loss than a rolling window.
+
+The policy applies only to Custom Medium/Hard/Brutal Vanilla or DuneCity games
+with remaining map spice. Campaign and no-spice maps are inert. First worker
+and carryall technology, first suppliers, recovery and civic yard upgrades
+retain native authority. Rejected optional technology does not reserve cash:
+current-tier military production remains native. This is not SimpleTechSavings.
+
+When the full-health-adjusted true rival mobile armies are no larger than
+ours, no hostile mobile combat unit is within 20 tiles of the main base and
+the economy is not under attack, the yard may buy one affordable legal next
+technology ahead of optional capacity growth. It still requires delivered
+opening workers, power, site/foundation legality and working reserves.
+All knowledge comes from deterministic simulation state, without fog or
+mission/map/seed conditions. Levels never alter unit composition or prices.
+
+Use candidate-only `tech-income-1` / `tech-income-2`; `tech-income-off` is the
+explicit native control. The audit's `tech-houses.csv` records first-owned and
+first-completed structure times; join `tech-samples.csv` at the preceding
+minute to compare live/queued army, cash and receipts at those transitions.
+Timing comparisons between winners and losers are descriptive, not causal.
+Telemetry events `income_tech_state`, `income_tech_hold`, `income_tech_early`
+record the rate, threshold level and full-knowledge safety mechanism. Do not
+set `DUNECITY_TECH_SAVINGS_AUDIT`; use equal observer modes in paired arms.
+
+
 ## How a game is played
 
 Every game is a real match played headless to its end by the balance probe:

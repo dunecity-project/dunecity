@@ -1,0 +1,486 @@
+{
+  "schema_version": 1,
+  "sample_seed": 1290200,
+  "cases": [
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "seed": 1290200,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 4,
+      "seed": 1290201,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 5,
+      "seed": 1290202,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "seed": 1290203,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 7,
+      "seed": 1290204,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 8,
+      "seed": 1290205,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "seed": 1290206,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 1,
+      "seed": 1290207,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 2,
+      "seed": 1290208,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "seed": 1290209,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 4,
+      "seed": 1290210,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 5,
+      "seed": 1290211,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "seed": 1290212,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 7,
+      "seed": 1290213,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 8,
+      "seed": 1290214,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "seed": 1290215,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 1,
+      "seed": 1290216,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 2,
+      "seed": 1290217,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "seed": 1290218,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 4,
+      "seed": 1290219,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 5,
+      "seed": 1290220,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "seed": 1290221,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 7,
+      "seed": 1290222,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 8,
+      "seed": 1290223,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "seed": 1290224,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 1,
+      "seed": 1290225,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 2,
+      "seed": 1290226,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "seed": 1290227,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 4,
+      "seed": 1290228,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 5,
+      "seed": 1290229,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "seed": 1290230,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 7,
+      "seed": 1290231,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 8,
+      "seed": 1290232,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "seed": 1290233,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 1,
+      "seed": 1290234,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 2,
+      "seed": 1290235,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "seed": 1290236,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 4,
+      "seed": 1290237,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 5,
+      "seed": 1290238,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "seed": 1290239,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 7,
+      "seed": 1290240,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 8,
+      "seed": 1290241,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "seed": 1290242,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 1,
+      "seed": 1290243,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 2,
+      "seed": 1290244,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "2v2",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "seed": 1290245,
+      "difficulty": "medium",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa4",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 4,
+      "seed": 1290246,
+      "difficulty": "hard",
+      "rock": 30,
+      "mountain": 5
+    },
+    {
+      "format": "ffa6",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 5,
+      "seed": 1290247,
+      "difficulty": "brutal",
+      "rock": 30,
+      "mountain": 5
+    }
+  ]
+}
