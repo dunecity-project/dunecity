@@ -8,6 +8,29 @@ Additive tech-*.csv/composition.csv sidecars retain replacement-price compositio
 accepted commitments, exact first-owned/completed technology and four-minute
 quote-budget opportunities. Raw engine outcomes and placement scores remain alongside
 the audit-only DuneCity population adjudication.
+
+Fleet metrics are pure per-tick observations, not AI estimates. samples.csv and
+houses.csv retain gross refined-spice credits (also exact Q32 refined_spice_raw),
+asset replacement capital, original-house harvester losses and unload-start to
+unload-start trip totals. Open/left/interrupted/unstarted exposures are separate
+from completed trips; one cycle is 16 ms. Bay occupancy includes empty harvesters
+waiting for pickup; unloading requires positive cargo. Tick integrals use the
+previous observed state and exclude intervals spanning observation gaps.
+For a gap-free window, spice credits per minute per replacement-capital credit
+is delta(refined_spice_raw) / 2**32 * 3750 / delta(fleet_capital_value_cycles).
+Capital built value is the engine's built ledger at current replacement prices,
+not actual expenditure (free deliveries and initial assets need not be purchases).
+refinery-samples.csv retains each refinery's eight-neighbour unweighted ground
+distance from its footprint to reachable spice, contiguous spice-patch amount,
+nearest patch's ground-component amount and union of perimeter-accessible spice.
+The same per-refinery records are embedded as fleet_refinery_metrics JSON in
+samples.csv/houses.csv, so collectors retaining only the main tables lose no fields.
+Geometry ignores fog/transient units, blocks mountains/structures, and runs no
+more than once per 3750 cycles. geometry_cycle identifies stale final snapshots;
+new refineries without a geometry snapshot and unreachable distances are blank.
+Component IDs are row-major root tile indices within that snapshot, not enduring
+field identities. Overlapping refinery supplies must not be summed. Distance is
+not a travel-time model: terrain speed, turns, traffic and carryalls are excluded.
 """
 import base64
 import argparse
@@ -35,6 +58,7 @@ sys.path.insert(0, str(root / 'tests/ai'))
 from probe_profile import finish_game, headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
 from ai_map_features import MAP_FEATURE_FIELDS, rows_from_log  # noqa: E402
+from fleet_observer import FLEET_VALUES, REFINERY_VALUES, fleet_observations  # noqa: E402
 
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
 HOUSE_IDS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
@@ -54,6 +78,7 @@ TROOPER_ITEM = 44
 TROOPER_ENEMY_AIR_FIELDS = {item: 'trooper_' + field for item, field in ENEMY_AIR_FIELDS.items()}
 AIR_COUNT_FIELDS = tuple(ENEMY_AIR_FIELDS.values()) + tuple(TROOPER_ENEMY_AIR_FIELDS.values())
 AIR_ATTRIBUTION_FIELDS = ('air_kill_attribution_complete', 'air_kill_unknown_attribution')
+REFINERY_FIELDS = META + REFINERY_VALUES
 GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes',
                       'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error', 'config_hash', 'options_hash',
                       'map_hash', 'content_hash', 'object_data_hash', 'ai_config_hashes', 'probe_sha256',
@@ -62,14 +87,15 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
                       'air_kill_unknown_attribution', 'capture_mib', 'diagnostics',
                       'mod', 'candidate_house', 'candidate_seat', 'candidate_style', 'sample_case', 'sample_seed', 'research_enabled',
                       'scoring_rule', 'scored_winner_team', 'win_condition', 'team_populations',
-                      'seat_styles', 'style_cohort', 'style_rotation', 'observer_mode')
+                      'seat_styles', 'style_cohort', 'style_rotation', 'observer_mode',
+                      'fleet_observer_status', 'fleet_house_samples', 'fleet_refinery_samples')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
                        'score', 'drawn', 'won', 'flags') + tuple(
     field for detector in DETECTORS for field in (detector, 'eligible_' + detector, 'first_' + detector)
 ) + TROOPER_FIELDS + ('air_kill_telemetry',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS + (
-    'population', 'raw_score', 'raw_drawn', 'raw_won', 'seat_style')
+    'population', 'raw_score', 'raw_drawn', 'raw_won', 'seat_style', 'harvesters', 'refineries') + FLEET_VALUES
 CYCLES_PER_MINUTE = 3750  # The engine's 16 ms fixed simulation tick.
 SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_value', 'army_units', 'harvesters',
                  'structures', 'factories', 'kill_value', 'loss_value', 'power', 'need', 'population', 'tax', 'demand',
@@ -80,7 +106,7 @@ SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_v
                  'yard_storage', 'police_funding', 'army_target', 'unit_limit', 'spice_multiplier', 'sale_credits',
                  'spent_total', 'power_spent', 'police_charged', 'refunded', 'storage_lost', 'city_net_applied',
                  'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost'
-) + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
+) + FLEET_VALUES + TROOPER_FIELDS + ('air_kills_complete',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS
 BOOM_FIELDS = ('boom_phase', 'boom_stop_minute', 'boom_own_army', 'boom_enemy_army', 'boom_near_army',
                'boom_own_economy', 'boom_leader_economy', 'boom_army_ratio_bps', 'boom_economy_ratio_bps')
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required') + BOOM_FIELDS
@@ -179,6 +205,8 @@ def append(path, fields, rows):
 
 def parse(line, marker):
     return dict(part.split('=', 1) for part in line.split(marker, 1)[1].split() if '=' in part)
+
+
 
 
 def air_kill_capture(out, houses, final_cycle, enabled):
@@ -1064,6 +1092,9 @@ def play(args, scratch, binary, game):
                 data = parse(line, marker)
                 data.update(json.loads(data.pop('economy', '{}')))
                 merged[(int(data['house']), int(data['cycle']))].update(data)
+    fleet_samples, refinery_samples = fleet_observations(lines)
+    for key, data in fleet_samples.items():
+        merged[key].update(data)
     samples = [dict(metadata(game), **data) for _, data in sorted(merged.items())]
     capture = air_kill_capture(out, final, max((int(sample['cycle']) for sample in samples), default=0),
                                telemetry)
@@ -1074,7 +1105,8 @@ def play(args, scratch, binary, game):
     air_final = {int(house['house']): dict(house=house['house'], cycle=air_cycle) for house in final}
     add_air_kill_samples(list(air_final.values()), capture)
     observer_seen = any('DUNECITY_AUDIT:' in line for line in lines)
-    missing = (not observer_off and any('power' not in sample for sample in samples))
+    missing = (not observer_off and (not samples or any(
+        'power' not in sample or 'fleet_steps' not in sample for sample in samples)))
     wrong_observer = observer_off and observer_seen
     error = '' if process.returncode == 0 and result and samples and not missing and not wrong_observer else f'rc={process.returncode};incomplete={int(missing)}'
     if wrong_observer:
@@ -1103,6 +1135,8 @@ def play(args, scratch, binary, game):
     row.update(seat_styles=json.dumps(game.get('seat_styles', {}), sort_keys=True) if game.get('seat_styles') else '',
                style_cohort=game.get('style_cohort', ''), style_rotation=game.get('style_rotation', ''),
                observer_mode='off' if observer_off else 'on')
+    row.update(fleet_observer_status='off' if observer_off else 'complete' if not missing else 'incomplete',
+               fleet_house_samples=len(fleet_samples), fleet_refinery_samples=len(refinery_samples))
     row.update({field: setup.get(field, '') for field in (
         'config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
     row.update(ai_config_hashes=','.join(f'{item["house"]}:{item["config_hash"]}' for item in configs),
@@ -1160,10 +1194,13 @@ def play(args, scratch, binary, game):
                 first_attack_minute=min(attacks[number]) if attacks[number] else '',
                 air_kill_telemetry=capture['status'],
                 **{key: last.get(key, '') for key in TROOPER_FIELDS},
+                **{key: last.get(key, '') for key in ('harvesters', 'refineries') + FLEET_VALUES},
                 **{key: air_final[number][key] for key in AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS},
                 **{key: last.get(key, '') if telemetry or key == 'storage_full_cycles' else ''
                    for key in ('storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost')},
                 flags='/'.join(d for d in DETECTORS if detectors[d])))
+        append(results / 'refinery-samples.csv', REFINERY_FIELDS,
+               [dict(metadata(game), **sample) for sample in refinery_samples])
         append(results / 'samples.csv', SAMPLE_FIELDS, samples)
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
         if telemetry:
@@ -1208,7 +1245,8 @@ def run(args):
     for name, fields in (('games.csv', GAME_FIELDS), ('houses.csv', HOUSE_FIELDS),
                          ('samples.csv', SAMPLE_FIELDS), ('waves.csv', ATTACK_FIELDS),
                          ('air-kills.csv', AIR_KILL_FIELDS),
-                         ('map-features.csv', MAP_FEATURE_FIELDS)) + TECH_TABLES:
+                         ('map-features.csv', MAP_FEATURE_FIELDS),
+                         ('refinery-samples.csv', REFINERY_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
     observer_mode = 'off' if getattr(args, 'observer_off', False) else 'on'
     if any(row.get('observer_mode') != observer_mode for row in read(results / 'games.csv')):

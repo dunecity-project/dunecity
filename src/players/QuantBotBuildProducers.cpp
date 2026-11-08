@@ -225,6 +225,14 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    if (pass.fleetRatios) {
+        if (requestedItem == Unit_Harvester && pass.itemCount[Unit_Harvester] >= pass.spiceHarvesterTarget)
+            return false;
+        if (itemID == Structure_Refinery && pass.itemCount[itemID] >= pass.fleetRefineryTarget)
+            return false;
+        if (itemID == Unit_Carryall && pass.itemCount[itemID] >= pass.transportTarget)
+            return false;
+    }
     if (!vanillaBoomAdmits(pass, itemID)
         || (turn.spendingItem != NONE_ID && !vanillaBoomAdmits(pass, turn.spendingItem))) return false;
     if(!cityAdmitsStructure(pass, itemID)) return false;

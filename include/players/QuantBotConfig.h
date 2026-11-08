@@ -246,6 +246,11 @@ struct QuantBotConfig {
         int vanillaGreedyBoomMinutes;          ///< Stop at 6, 10 or 12 minutes; fund army until minute 20.
         int vanillaReactiveArmyRatioBps;       ///< 6000 or 9000 of the strongest reachable enemy army.
         int vanillaReactiveEconomyRatioBps;    ///< 12000 or 15000 of the leading hostile economy.
+        /// Default-OFF, shared-reachable-spice bounded fleet-ratio experiment.
+        bool economicFleetRatios;
+        int fleetHarvestersPerBay;             ///< Fixed factorial levels: 2, 3, 4.
+        int fleetCarryallQuarters;             ///< Carryalls per worker in quarters: 0, 1, 2.
+        int fleetRepairYards;                  ///< New repair-yard ceiling: 0 or 1.
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.

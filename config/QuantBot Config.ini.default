@@ -473,3 +473,10 @@ LauncherKiteExtraDistance=2
 # reachable spice, affordable units, income and pending cargo are all exhausted.
 # Manual orders, defence and saboteur ownership are unchanged; 0 keeps legacy holds.
 ExhaustedArmyDispatch=1
+# Experimental fixed fleet ratios; no effect unless the master switch is on.
+# Reachable remaining spice is shared across the originally occupied houses.
+# Existing assets and accepted orders are never removed.
+EconomicFleetRatios=0
+FleetHarvestersPerBay=3
+FleetCarryallQuarters=1
+FleetRepairYards=1

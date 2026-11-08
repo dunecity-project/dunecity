@@ -575,6 +575,33 @@ inline int openingSpiceRefineries(int sustainableHarvesters) {
 inline int fundedSpiceHarvesters(int sustainable, int refineries) {
     return std::max(0, std::min(sustainable, std::max(0, refineries) * 3));
 }
+struct FleetTargets {
+    int sustainable = 0;
+    int workers = 0;
+    int refineries = 0;
+    int carryalls = 0;
+    int repairYards = 0;
+};
+// Fixed factorial levels, not an optimiser. Capacity advances one bay at a time,
+// only after the fleet fills its current ratio. Remaining shared spice must cover
+// the normal-price worker, its bay share and its requested transport share.
+inline FleetTargets economicFleetTargets(int spiceShare, int limit, int bays, int workers,
+        int perBay, int carryallQuarters, int repairYards,
+        int workerPrice, int bayPrice, int carryallPrice) {
+    FleetTargets result;
+    perBay = std::clamp(perBay, 2, 4);
+    carryallQuarters = std::clamp(carryallQuarters, 0, 2);
+    const int capitalPerWorker = std::max(2000, std::max(0, workerPrice)
+        + (std::max(0, bayPrice) + perBay - 1) / perBay
+        + (std::max(0, carryallPrice) * carryallQuarters + 3) / 4);
+    result.sustainable = std::min(std::max(0, limit), std::max(0, spiceShare) / capitalPerWorker);
+    result.workers = std::min(result.sustainable, std::max(1, bays) * perBay);
+    result.refineries = std::min((result.sustainable + perBay - 1) / perBay,
+        1 + std::max(0, workers) / perBay);
+    result.carryalls = (std::min(result.sustainable, std::max(0, workers)) * carryallQuarters + 3) / 4;
+    result.repairYards = result.sustainable > 0 ? std::clamp(repairYards, 0, 1) : 0;
+    return result;
+}
 // Compare useful capacity, available space and the ability to fund a larger
 // reserve. Small starts keep cheap wind; rich cities and blackout recovery
 // prefer nuclear. Cash already committed to other work stays protected.

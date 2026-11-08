@@ -185,6 +185,7 @@ public:
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
+    bool economicFleetRatioActive() const;
     /// CivWars rules only for two occupied opposing initial houses, never team games.
     /// Ordinary Research Lab matches remain unchanged; shared-house copilots do not add houses.
     bool civWarsRules() const;
@@ -1702,6 +1703,10 @@ private:
     void planBuildInventory(BuildPass& pass);
     /// Spendable cash, military budget, spice competition, support queues and reserves.
     void planBuildBudget(BuildPass& pass);
+    void planFleetResourceBudget(BuildPass& pass);
+    // Scratch is recomputed before every ratio decision; no unsaved tactical cache.
+    std::vector<Uint8> fleetSurveySeen;
+    std::vector<int> fleetSurveyQueue;
     /// Per-house city statistics, custom-city valve tuning and power demand sampling.
     void planCityState(BuildPass& pass);
     /// IX/Palace eligibility timers and the strategic reserve they protect.

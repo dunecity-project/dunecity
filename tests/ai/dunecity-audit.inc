@@ -5,8 +5,12 @@
 #include <dunecity/SpatialFields.h>
 #include <structures/BuilderBase.h>
 #include <structures/ConstructionYard.h>
+#include <structures/Refinery.h>
+#include <units/HarvesterHelpers.h>
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <map>
 #include <vector>
 
 namespace DuneCityAudit {
@@ -325,6 +329,367 @@ struct StorageObservation {
 };
 inline std::array<StorageObservation,NUM_HOUSES> storage;
 
+
+// Fleet study state belongs only to this diagnostic observer. In particular,
+// never resolve an ObjectPointer (even a const getter can populate its cache),
+// call a path planner, construct a unit, or consult the AI's fogged spice cache.
+struct FleetHouseObservation {
+    int harvesters{}, carryalls{}, refineries{}, repairYards{}, bays{}, occupied{}, unloading{};
+    int64_t capital{}, capitalCycles{}, harvesterCycles{}, bayCycles{}, occupiedCycles{}, unloadingCycles{};
+    int64_t unloadStarts{}, unloadCensored{}, trips{}, tripCycles{}, tripMin{-1}, tripMax{-1};
+    int64_t tripLeftCensored{}, leftCensoredCycles{}, tripCensored{}, censoredTripCycles{};
+    int64_t unstartedCensored{}, unstartedCensoredCycles{};
+};
+struct FleetHarvesterObservation {
+    int owner{-1};
+    Uint32 cycle{}, firstCycle{};
+    int64_t unloadCycle{-1};
+    int64_t cargoRaw{}, previousCargoRaw{};
+    bool inBay{}, nowInBay{}, previous{};
+};
+struct FleetFieldObservation {
+    int64_t cycle{-1};
+    int distance{-1}, field{-1}, fieldTiles{}, component{-1}, componentTiles{}, accessibleTiles{};
+    double fieldAmount{}, componentAmount{}, accessibleAmount{};
+};
+struct FleetRefineryObservation {
+    int owner{-1}, bays{}, occupied{}, unloading{};
+    Uint32 cycle{};
+    int64_t bayCycles{}, occupiedCycles{}, unloadingCycles{};
+    FleetFieldObservation field;
+};
+struct FleetSpiceComponent {
+    int root{}, tiles{};
+    double amount{};
+};
+struct FleetGeometry {
+    int64_t cycle{-1}, samples{};
+    // Reuse work buffers; geometry is O(map area), at most once per game minute.
+    std::vector<char> passable;
+    std::vector<double> spice;
+    std::vector<int> field, component, distance, nearestField, queue, accessible;
+    std::vector<FleetSpiceComponent> fields, components;
+};
+struct FleetObservation {
+    const Game* game{};
+    const Map* map{};
+    Uint32 cycle{};
+    bool initialized{};
+    int64_t steps{}, observedCycles{}, gaps{}, gapCycles{}, maxStep{};
+    std::array<FleetHouseObservation,NUM_HOUSES> houses;
+    std::map<Uint32,FleetHarvesterObservation> harvesters;
+    std::map<Uint32,FleetRefineryObservation> refineries;
+    FleetGeometry geometry;
+};
+inline FleetObservation fleet;
+
+inline void censorFleetTrip(FleetHarvesterObservation& unit, Uint32 cycle) {
+    if (unit.owner<0) return;
+    auto& house=fleet.houses[unit.owner];
+    if (unit.unloadCycle>=0) {
+        ++house.tripCensored;
+        house.censoredTripCycles+=cycle-unit.unloadCycle;
+    } else {
+        ++house.unstartedCensored;
+        house.unstartedCensoredCycles+=cycle-unit.firstCycle;
+    }
+    unit.unloadCycle=-1; unit.owner=-1;
+}
+
+inline void observeFleet(Game& game) {
+    const Uint32 cycle=game.getGameCycleCount();
+    if (!fleet.initialized || fleet.game!=&game || fleet.map!=currentGameMap || cycle<fleet.cycle) {
+        fleet=FleetObservation{};
+        fleet.game=&game; fleet.map=currentGameMap;
+    } else if (cycle==fleet.cycle) return; // sample() can revisit the same tick.
+    const bool contiguous=fleet.initialized && cycle==fleet.cycle+1;
+    if (fleet.initialized) {
+        const Uint32 elapsed=cycle-fleet.cycle;
+        fleet.maxStep=std::max(fleet.maxStep,int64_t(elapsed));
+        if (contiguous) {
+            ++fleet.observedCycles;
+            // Left-endpoint integration of every observed tick, including bays
+            // waiting for a carryall after their cargo has become empty.
+            for (auto& house:fleet.houses) {
+                house.capitalCycles+=house.capital;
+                house.harvesterCycles+=house.harvesters;
+                house.bayCycles+=house.bays;
+                house.occupiedCycles+=house.occupied;
+                house.unloadingCycles+=house.unloading;
+            }
+        } else {
+            ++fleet.gaps; fleet.gapCycles+=elapsed;
+            for (auto& entry:fleet.harvesters) {
+                censorFleetTrip(entry.second,fleet.cycle);
+                entry.second.inBay=false;
+            }
+        }
+    }
+    for (auto& house:fleet.houses) {
+        house.harvesters=house.carryalls=house.refineries=house.repairYards=0;
+        house.bays=house.occupied=house.unloading=0;
+        house.capital=0;
+    }
+    for (const auto* unit:unitList) {
+        if (unit->getHealth()<=0) continue;
+        const int owner=unit->getOwner()->getHouseID();
+        const auto item=unit->getItemID();
+        auto& house=fleet.houses[owner];
+        if (isCarryallUnit(item)) {
+            ++house.carryalls;
+            house.capital+=game.objectData.data[item][owner].price;
+        }
+        if (!isHarvesterLikeUnit(item)) continue;
+        ++house.harvesters;
+        house.capital+=game.objectData.data[item][owner].price;
+        const auto inserted=fleet.harvesters.try_emplace(unit->getObjectID());
+        auto& seen=inserted.first->second;
+        seen.previous=!inserted.second && contiguous && seen.cycle==fleet.cycle && seen.owner==owner;
+        if (seen.owner!=owner) {
+            censorFleetTrip(seen,contiguous ? cycle : fleet.cycle);
+            seen.firstCycle=cycle;
+            seen.inBay=false;
+        }
+        seen.owner=owner; seen.cycle=cycle; seen.nowInBay=false;
+        seen.previousCargoRaw=seen.cargoRaw;
+        seen.cargoRaw=harvesterGetAmountOfSpice(unit).getRawValue();
+    }
+    for (const auto* structure:structureList) {
+        if (structure->getHealth()<=0) continue;
+        const int owner=structure->getOwner()->getHouseID();
+        auto& house=fleet.houses[owner];
+        if (structure->getItemID()==Structure_RepairYard) {
+            ++house.repairYards;
+            house.capital+=game.objectData.data[Structure_RepairYard][owner].price;
+        }
+        const auto* refinery=dynamic_cast<const Refinery*>(structure);
+        if (!refinery) continue;
+        ++house.refineries;
+        house.capital+=game.objectData.data[structure->getItemID()][owner].price;
+        auto& seen=fleet.refineries[structure->getObjectID()];
+        if (seen.owner!=owner) seen=FleetRefineryObservation{};
+        if (contiguous && seen.owner==owner && seen.cycle==fleet.cycle) {
+            seen.bayCycles+=seen.bays;
+            seen.occupiedCycles+=seen.occupied;
+            seen.unloadingCycles+=seen.unloading;
+        }
+        seen.owner=owner; seen.cycle=cycle; seen.bays=refinery->getNumBays();
+        seen.occupied=seen.unloading=0;
+        house.bays+=seen.bays;
+        for (int bay=0;bay<seen.bays;++bay) {
+            if (!refinery->extractingSpice[bay]) continue;
+            ++seen.occupied; ++house.occupied;
+            // getContainedHarvester() resolves a lazy ObjectPointer; use its
+            // stored ID and the object manager's read-only lookup instead.
+            const auto* object=game.getObjectManager().getObject(refinery->harvesters[bay].getObjectID());
+            if (!object || object->getHealth()<=0 || !isHarvesterLikeObject(object)) continue;
+            auto found=fleet.harvesters.find(object->getObjectID());
+            if (found==fleet.harvesters.end()) continue;
+            auto& unit=found->second;
+            unit.nowInBay=true;
+            if (unit.cargoRaw>0) { ++seen.unloading; ++house.unloading; }
+            // A small delivery can be fully extracted on its entry tick.
+            if (unit.cargoRaw<=0 && !(unit.previous && unit.previousCargoRaw>0)) continue;
+            if (unit.inBay) continue;
+            auto& ownerStats=fleet.houses[unit.owner];
+            if (!unit.previous) {
+                ++ownerStats.unloadCensored; // Already unloading at first sight or after a gap.
+                continue;
+            }
+            ++ownerStats.unloadStarts;
+            if (unit.unloadCycle>=0) {
+                const int64_t duration=cycle-unit.unloadCycle;
+                ++ownerStats.trips; ownerStats.tripCycles+=duration;
+                if (ownerStats.tripMin<0 || duration<ownerStats.tripMin) ownerStats.tripMin=duration;
+                ownerStats.tripMax=std::max(ownerStats.tripMax,duration);
+            } else {
+                ++ownerStats.tripLeftCensored; // No preceding observed unload start.
+                ownerStats.leftCensoredCycles+=cycle-unit.firstCycle;
+            }
+            unit.unloadCycle=cycle;
+        }
+    }
+    for (auto it=fleet.harvesters.begin();it!=fleet.harvesters.end();) {
+        if (it->second.cycle!=cycle) {
+            censorFleetTrip(it->second,contiguous ? cycle : fleet.cycle);
+            it=fleet.harvesters.erase(it);
+        } else {
+            it->second.inBay=it->second.nowInBay;
+            ++it;
+        }
+    }
+    for (auto it=fleet.refineries.begin();it!=fleet.refineries.end();)
+        if (it->second.cycle!=cycle) it=fleet.refineries.erase(it);
+        else ++it;
+    fleet.initialized=true; fleet.cycle=cycle; ++fleet.steps;
+}
+
+inline void sampleFleetGeometry(Game& game) {
+    if (!currentGameMap) return;
+    auto& g=fleet.geometry;
+    const Uint32 cycle=game.getGameCycleCount(), minute=MILLI2CYCLES(60000);
+    if (g.cycle>=0 && cycle-Uint32(g.cycle)<minute) return;
+    const auto& map=*currentGameMap;
+    const int w=map.getSizeX(),h=map.getSizeY(),n=w*h;
+    g.cycle=cycle; ++g.samples;
+    g.passable.resize(n); g.spice.resize(n);
+    g.field.assign(n,-1); g.component.assign(n,-1);
+    g.distance.assign(n,-1); g.nearestField.assign(n,-1);
+    g.fields.clear(); g.components.clear(); g.queue.reserve(n);
+    for (int at=0;at<n;++at) {
+        const auto* tile=map.getTile(at%w,at/w);
+        g.passable[at]=!tile->isMountain() && !tile->hasAStructure();
+        g.spice[at]=tile->getSpice().toDouble();
+    }
+    auto neighbours=[&](int at,auto visit) {
+        const int x=at%w,y=at/w;
+        for (int dy=-1;dy<=1;++dy) for (int dx=-1;dx<=1;++dx)
+            if ((dx || dy) && x+dx>=0 && x+dx<w && y+dy>=0 && y+dy<h)
+                visit((y+dy)*w+x+dx);
+    };
+    // Eight-neighbour terrain reachability matches the engine's diagonal
+    // connectivity. Ignore fog and temporary units; block mountains and all
+    // structures. This is NOT A* travel time: no terrain/turn/speed/queue or airlift model.
+    auto components=[&](bool spiceOnly,std::vector<int>& labels,std::vector<FleetSpiceComponent>& totals) {
+        for (int seed=0;seed<n;++seed) {
+            if (labels[seed]>=0 || !g.passable[seed] || (spiceOnly && g.spice[seed]<=0)) continue;
+            const int id=int(totals.size());
+            FleetSpiceComponent total{seed,0,0};
+            g.queue.clear(); g.queue.push_back(seed); labels[seed]=id;
+            for (size_t i=0;i<g.queue.size();++i) {
+                const int at=g.queue[i];
+                if (g.spice[at]>0) { ++total.tiles; total.amount+=g.spice[at]; }
+                neighbours(at,[&](int next) {
+                    if (labels[next]<0 && g.passable[next] && (!spiceOnly || g.spice[next]>0)) {
+                        labels[next]=id; g.queue.push_back(next);
+                    }
+                });
+            }
+            totals.push_back(total);
+        }
+    };
+    components(true,g.field,g.fields);
+    components(false,g.component,g.components);
+    // One multi-source BFS, not a search per refinery. Row-major spice seeds
+    // and fixed neighbour order make equal-distance field selection deterministic.
+    g.queue.clear();
+    for (int at=0;at<n;++at) if (g.field[at]>=0) {
+        g.distance[at]=0; g.nearestField[at]=g.field[at]; g.queue.push_back(at);
+    }
+    for (size_t i=0;i<g.queue.size();++i) {
+        const int at=g.queue[i];
+        neighbours(at,[&](int next) {
+            if (g.passable[next] && g.distance[next]<0) {
+                g.distance[next]=g.distance[at]+1;
+                g.nearestField[next]=g.nearestField[at];
+                g.queue.push_back(next);
+            }
+        });
+    }
+    for (const auto* structure:structureList) {
+        const auto found=fleet.refineries.find(structure->getObjectID());
+        if (found==fleet.refineries.end()) continue;
+        auto& field=found->second.field;
+        field=FleetFieldObservation{}; field.cycle=cycle;
+        g.accessible.clear();
+        const Coord origin=structure->getLocation(),size=structure->getStructureSize();
+        int nearest=-1;
+        for (int y=origin.y-1;y<=origin.y+size.y;++y) for (int x=origin.x-1;x<=origin.x+size.x;++x) {
+            if (!map.tileExists(x,y) || (x>=origin.x && x<origin.x+size.x && y>=origin.y && y<origin.y+size.y)) continue;
+            const int at=y*w+x,component=g.component[at];
+            if (component>=0 && std::find(g.accessible.begin(),g.accessible.end(),component)==g.accessible.end())
+                g.accessible.push_back(component);
+            if (g.distance[at]>=0 && (nearest<0 || g.distance[at]<g.distance[nearest])) nearest=at;
+        }
+        for (int component:g.accessible) {
+            field.accessibleTiles+=g.components[component].tiles;
+            field.accessibleAmount+=g.components[component].amount;
+        }
+        if (nearest<0) continue;
+        const auto& patch=g.fields[g.nearestField[nearest]];
+        const auto& component=g.components[g.component[nearest]];
+        // The perimeter is one move from the refinery footprint.
+        field.distance=g.distance[nearest]+1;
+        field.field=patch.root; field.fieldTiles=patch.tiles; field.fieldAmount=patch.amount;
+        field.component=component.root; field.componentTiles=component.tiles; field.componentAmount=component.amount;
+    }
+}
+
+inline void sampleFleet(Game& game,const House* house,int minute) {
+    const int owner=house->getHouseID();
+    const auto& state=fleet.houses[owner];
+    int harvestersBuilt=0,harvestersLost=0,carryallsBuilt=0,refineriesBuilt=0,repairYardsBuilt=0;
+    int64_t builtValue=0,open=0,openCycles=0,unstarted=0,unstartedCycles=0;
+    for (int item=ItemID_Invalid+1;item<Num_ItemID;++item) {
+        const bool harvester=isHarvesterLikeUnit(item),carryall=isCarryallUnit(item);
+        const bool refinery=item==Structure_Refinery || item==Structure_Doublefinery;
+        if (!harvester && !carryall && !refinery && item!=Structure_RepairYard) continue;
+        const int built=house->getNumBuiltItems(item);
+        builtValue+=int64_t(built)*game.objectData.data[item][owner].price;
+        if (harvester) { harvestersBuilt+=built; harvestersLost+=house->getNumLostItems(item); }
+        if (carryall) carryallsBuilt+=built;
+        if (refinery) refineriesBuilt+=built;
+        if (item==Structure_RepairYard) repairYardsBuilt+=built;
+    }
+    for (const auto& entry:fleet.harvesters) {
+        const auto& unit=entry.second;
+        if (unit.owner!=owner) continue;
+        if (unit.unloadCycle>=0) {
+            ++open; openCycles+=game.getGameCycleCount()-unit.unloadCycle;
+        } else {
+            ++unstarted; unstartedCycles+=game.getGameCycleCount()-unit.firstCycle;
+        }
+    }
+    // Replacement prices, not actual expenditure: built ledger includes free
+    // deliveries where the engine counts them and is separate from live assets.
+    // Trips are successive positive-cargo UNLOAD STARTS for the same object and
+    // owner, including unloading, harvest, waiting and transport between starts.
+    // Open/censored durations are exposure, never completed trips or zero trips.
+    AITelemetry::Record row;
+    row.set("harvesters",state.harvesters).set("refineries",state.refineries)
+        .set("refined_spice",house->getHarvestedSpice().lround())
+        .set("refined_spice_raw",house->getHarvestedSpice().getRawValue())
+        .set("carryalls",state.carryalls).set("repair_yards",state.repairYards)
+        .set("harvesters_built",harvestersBuilt).set("harvesters_lost",harvestersLost)
+        .set("carryalls_built",carryallsBuilt).set("refineries_built",refineriesBuilt).set("repair_yards_built",repairYardsBuilt)
+        .set("fleet_capital_current_value",state.capital).set("fleet_capital_built_value",builtValue)
+        .set("fleet_capital_value_cycles",state.capitalCycles)
+        .set("fleet_steps",fleet.steps).set("fleet_observed_cycles",fleet.observedCycles)
+        .set("fleet_gap_count",fleet.gaps).set("fleet_gap_cycles",fleet.gapCycles).set("fleet_max_step_cycles",fleet.maxStep)
+        .set("fleet_harvester_cycles",state.harvesterCycles).set("fleet_bay_available_cycles",state.bayCycles)
+        .set("fleet_bay_occupied_cycles",state.occupiedCycles).set("fleet_bay_unloading_cycles",state.unloadingCycles)
+        .set("refinery_bays",state.bays).set("occupied_refinery_bays",state.occupied).set("unloading_refinery_bays",state.unloading)
+        .set("harvester_unload_starts",state.unloadStarts).set("harvester_unload_censored",state.unloadCensored)
+        .set("harvester_trip_count",state.trips).set("harvester_trip_cycles_sum",state.tripCycles)
+        .set("harvester_trip_cycles_min",state.tripMin).set("harvester_trip_cycles_max",state.tripMax)
+        .set("harvester_trip_left_censored",state.tripLeftCensored).set("harvester_trip_censored",state.tripCensored)
+        .set("harvester_trip_left_censored_cycles",state.leftCensoredCycles)
+        .set("harvester_trip_censored_cycles",state.censoredTripCycles)
+        .set("harvester_trip_open",open).set("harvester_trip_open_cycles",openCycles)
+        .set("harvester_trip_unstarted",unstarted).set("harvester_trip_unstarted_cycles",unstartedCycles)
+        .set("harvester_trip_unstarted_censored",state.unstartedCensored)
+        .set("harvester_trip_unstarted_censored_cycles",state.unstartedCensoredCycles)
+        .set("fleet_geometry_samples",fleet.geometry.samples).set("fleet_geometry_cycle",fleet.geometry.cycle);
+    SDL_Log("DUNECITY_FLEET: minute=%d cycle=%u house=%d fleet=%s",
+        minute,game.getGameCycleCount(),owner,row.json().c_str());
+    for (const auto* structure:structureList) {
+        if (structure->getOwner()!=house) continue;
+        const auto found=fleet.refineries.find(structure->getObjectID());
+        if (found==fleet.refineries.end()) continue;
+        const auto& refinery=found->second;
+        const auto& field=refinery.field;
+        SDL_Log("DUNECITY_REFINERY: minute=%d cycle=%u house=%d refinery=%u x=%d y=%d geometry_cycle=%lld"
+                " nearest_spice_distance_steps=%d nearest_spice_field_id=%d nearest_spice_field_tiles=%d"
+                " nearest_spice_field_amount=%.9f spice_component_id=%d spice_component_tiles=%d spice_component_amount=%.9f"
+                " accessible_spice_tiles=%d accessible_spice_amount=%.9f refinery_bays=%d occupied_refinery_bays=%d"
+                " unloading_refinery_bays=%d fleet_bay_available_cycles=%lld fleet_bay_occupied_cycles=%lld fleet_bay_unloading_cycles=%lld",
+            minute,game.getGameCycleCount(),owner,structure->getObjectID(),structure->getLocation().x,structure->getLocation().y,
+            static_cast<long long>(field.cycle),field.distance,field.field,field.fieldTiles,field.fieldAmount,
+            field.component,field.componentTiles,field.componentAmount,field.accessibleTiles,field.accessibleAmount,
+            refinery.bays,refinery.occupied,refinery.unloading,static_cast<long long>(refinery.bayCycles),
+            static_cast<long long>(refinery.occupiedCycles),static_cast<long long>(refinery.unloadingCycles));
+    }
+}
 // Every simulation tick, not a minute-sample estimate. The private ledger is
 // read only in this existing -fno-access-control probe. A capacity-loss tick is
 // excluded from income overflow: destroying a vault is not failure to buy one.
@@ -332,6 +697,7 @@ inline void observe(Game& game) {
     static const bool enabled = std::getenv("BALANCE_DUNECITY_AUDIT")!=nullptr;
     if (!enabled) return;
     const Uint32 cycle = game.getGameCycleCount();
+    observeFleet(game);
     for (int h=0; h<NUM_HOUSES; ++h) {
         const House* house = game.getHouse(h);
         if (!house || !FfaArmy::quantBotOf(house)) continue;
@@ -369,11 +735,13 @@ inline void sample(Game& game) {
     if (!std::getenv("BALANCE_DUNECITY_AUDIT")) return;
     observe(game);
     sampleMapFeatures(game);
+    sampleFleetGeometry(game);
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
     for (const House* house : EliminationMatch::playingHouses(game)) {
         const QuantBot* bot = FfaArmy::quantBotOf(house);
         if (!bot) continue;
         sampleComposition(game,house,bot,minute);
+        sampleFleet(game,house,minute);
         const auto grid = FfaArmy::baseGrid(house);
         int fighters = 0, moving = 0, targeting = 0, enemies = 0, enemyValue = 0, coveredEnemies = 0;
         int trooperLive = 0, ornithopterLive = 0, eliteOrnithopterLive = 0;

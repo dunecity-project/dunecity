@@ -633,10 +633,18 @@ int runCampaignBalanceProbe() {
             ? static_cast<Uint32>(std::strtoul(std::getenv("BALANCE_PERF_CYCLES"), nullptr, 10)) : end;
         GamePerf::run(*game, perfCycles, [&]() { ProbeDigest::periodic(*game); });
     } else {
+        // The same opt-in, read-only observer as skirmish/elimination. Do not
+        // sample controller roles or issue orders for the idle human's support.
+        const Uint32 auditMinute=MILLI2CYCLES(60000);
+        DuneCityAudit::sample(*game);
         while (!game->finished && game->getGameCycleCount() < end) {
             ProbeDigest::periodic(*game);
             game->updateGameState();
+            DuneCityAudit::observe(*game);
+            if (game->getGameCycleCount()%auditMinute==0) DuneCityAudit::sample(*game);
         }
+        if (game->getGameCycleCount()!=firstCycle && game->getGameCycleCount()%auditMinute!=0)
+            DuneCityAudit::sample(*game);
     }
     if (outcome.empty()) outcome = game->finished ? (game->won ? "won" : "lost") : "time_limit";
     {

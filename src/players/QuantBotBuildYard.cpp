@@ -1496,6 +1496,16 @@ void QuantBot::chooseYardServicesAndRefineries(BuildPass& pass, BuilderTurn& tur
         yardTurn.itemID = Structure_RepairYard;
         yardTurn.structureRule = "early_repair_capacity";
     }
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && pass.fleetRatios
+        && pass.itemCount[Structure_Refinery] < pass.fleetRefineryTarget
+        && pass.money >= buildingCapitalCost(pass, Structure_Refinery) + 300
+        && getHouse()->hasPower()
+        && campaignAvailableToBuild(turn.pBuilder, Structure_Refinery)
+        && findPlaceLocation(Structure_Refinery).isValid()) {
+        yardTurn.itemID = Structure_Refinery;
+        yardTurn.structureRule = "fleet_ratio_capacity";
+    }
 
 
     // 3. Refinery (ratio: 1 refinery per 3 harvesters) — non-city-sim only.

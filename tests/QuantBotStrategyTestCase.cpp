@@ -825,6 +825,75 @@ TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai]
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Economic fleet ratios default off and independently save load and hash every fixed level",
+          "[ai][economy][fleet-ratios][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.economicFleetRatios);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-economic-fleet-ratios.ini";
+    std::map<std::string, int> hashes;
+    int index = 0;
+    for (const bool enabled : {false, true})
+        for (const int workers : {2, 3, 4})
+            for (const int carryalls : {0, 1, 2})
+                for (const int repairs : {0, 1}) {
+                    QuantBotConfig expected = defaults;
+                    expected.force.economicFleetRatios = enabled;
+                    expected.force.fleetHarvestersPerBay = workers;
+                    expected.force.fleetCarryallQuarters = carryalls;
+                    expected.force.fleetRepairYards = repairs;
+                    {
+                        std::ofstream ini(path);
+                        ini << "[Force Concentration]\nEconomicFleetRatios=" << enabled
+                            << "\nFleetHarvestersPerBay=" << workers
+                            << "\nFleetCarryallQuarters=" << carryalls
+                            << "\nFleetRepairYards=" << repairs << '\n';
+                    }
+                    QuantBotConfig loaded;
+                    REQUIRE(loaded.applyOverrides(path.string()));
+                    REQUIRE(loaded.force.economicFleetRatios == enabled);
+                    REQUIRE(loaded.force.fleetHarvestersPerBay == workers);
+                    REQUIRE(loaded.force.fleetCarryallQuarters == carryalls);
+                    REQUIRE(loaded.force.fleetRepairYards == repairs);
+                    REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+                    REQUIRE(hashes.emplace(loaded.getConfigHash(), index++).second);
+                    REQUIRE(loaded.save(path.string()));
+                    QuantBotConfig restored;
+                    REQUIRE(restored.applyOverrides(path.string()));
+                    REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+                }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Economic fleet fixed ratios advance one bay and stop at shared available spice",
+          "[ai][economy][fleet-ratios]") {
+    using QuantBotBuildPolicy::economicFleetTargets;
+    for (const int ratio : {2, 3, 4}) {
+        const auto initial = economicFleetTargets(100000, 20, 1, 1, ratio, 1, 1, 1200, 2000, 800);
+        REQUIRE(initial.workers == ratio);
+        REQUIRE(initial.refineries == 1);
+        const auto filled = economicFleetTargets(100000, 20, 1, ratio, ratio, 1, 1, 1200, 2000, 800);
+        REQUIRE(filled.refineries == 2);
+        REQUIRE(filled.workers == ratio);
+        const auto expanded = economicFleetTargets(100000, 20, 2, ratio + 1, ratio, 1, 1, 1200, 2000, 800);
+        REQUIRE(expanded.workers == ratio * 2);
+        REQUIRE(expanded.carryalls == (ratio + 4) / 4);
+    }
+    const auto empty = economicFleetTargets(0, 40, 3, 12, 4, 2, 1, 1200, 2000, 800);
+    REQUIRE(empty.sustainable == 0);
+    REQUIRE(empty.workers == 0);
+    REQUIRE(empty.refineries == 0);
+    REQUIRE(empty.carryalls == 0);
+    REQUIRE(empty.repairYards == 0);
+    const auto scarce = economicFleetTargets(5000, 40, 6, 20, 2, 2, 1, 1200, 2000, 800);
+    REQUIRE(scarce.sustainable == 1);
+    REQUIRE(scarce.workers == 1);
+    REQUIRE(scarce.refineries == 1);
+    const auto unsupported = economicFleetTargets(100000, 3, 10, 10, 4, 0, 0, 1200, 2000, 800);
+    REQUIRE(unsupported.workers == 3);
+    REQUIRE(unsupported.carryalls == 0);
+    REQUIRE(unsupported.repairYards == 0);
+}
+
 TEST_CASE("Vanilla boom phases preserve scope and convert greedy spending at the declared stop",
           "[ai][vanilla][strategy]") {
     using namespace QuantBotVanillaPolicy;

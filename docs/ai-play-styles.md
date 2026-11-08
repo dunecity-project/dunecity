@@ -141,6 +141,32 @@ At minute 20 normal planning resumes. The greedy switch deliberately retains **1
 throughout both phases before minute 20; these cells add no formations. All switches remain default
 off, and single-family plans and out-of-scope games retain their existing behavior.
 
+### Fixed economic fleet-ratio experiment
+
+`econ-ratio-h{2,3,4}-cq{0,1,2}-r{0,1}` is the preregistered 3×3×2 factorial;
+`cq` is carryalls per harvester in quarters. `econ-ratio-off` disables the hashed
+`EconomicFleetRatios` master switch. Opponents remain native. The discrete keys
+are `FleetHarvestersPerBay`, `FleetCarryallQuarters` and `FleetRepairYards`.
+They affect new orders only, not existing assets or accepted queues.
+
+The experiment applies to Hard/Brutal vanilla/DuneCity spice economies and human
+campaign supporters; enemy campaign controllers, Tornie/CivWars and no-spice maps
+are unchanged. Ground-connected remaining spice is surveyed from owned yards and
+refinery perimeters, ignoring transient mobile traffic but not mountains or
+structure footprints, and divided among the initially occupied controllers.
+It conservatively excludes fields reachable only by an airlift. Each worker's
+normal-price capital includes its refinery and transport shares, with at least
+2,000 remaining spice per worker. Expansion advances one bay when the current
+fleet fills its selected ratio. No unloading backlog is fabricated.
+
+The throughput model is workers/bay ≈ (field fill + ground/air round-trip travel
++ unload time) / unload time. Distance raises the saturation ratio; carryalls can
+lower it, while damage and repair transit lower effective working time. The
+15-minute factorial measures these mechanisms before fresh-seed full-game
+screening. Current asset value is not cumulative capital spending. A factorial
+winner is not a promoted default; paired outcomes and the fixed controls remain
+required.
+
 ## 3. Tournament
 
 Hard. Fortress = `formation-duel.py` Random Skirmish 128/160/192, seeds 7101-7606 (one house pair per

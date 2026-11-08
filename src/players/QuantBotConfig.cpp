@@ -356,6 +356,10 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaGreedyBoomMinutes = 6;
     force.vanillaReactiveArmyRatioBps = 6000;
     force.vanillaReactiveEconomyRatioBps = 12000;
+    force.economicFleetRatios = false;
+    force.fleetHarvestersPerBay = 3;
+    force.fleetCarryallQuarters = 1;
+    force.fleetRepairYards = 1;
     // Candidate (fix/ladder-campaign, docs/ai-scenario-matrix.md "Team games"): team waves join an
     // ally's fresh wave.
     force.joinAllyWaves = false;
@@ -718,6 +722,10 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "VanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);
         iniFile.setIntValue("Force Concentration", "VanillaReactiveArmyRatioBps", force.vanillaReactiveArmyRatioBps);
         iniFile.setIntValue("Force Concentration", "VanillaReactiveEconomyRatioBps", force.vanillaReactiveEconomyRatioBps);
+        iniFile.setBoolValue("Force Concentration", "EconomicFleetRatios", force.economicFleetRatios);
+        iniFile.setIntValue("Force Concentration", "FleetHarvestersPerBay", force.fleetHarvestersPerBay);
+        iniFile.setIntValue("Force Concentration", "FleetCarryallQuarters", force.fleetCarryallQuarters);
+        iniFile.setIntValue("Force Concentration", "FleetRepairYards", force.fleetRepairYards);
         iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
         iniFile.setBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
         iniFile.setBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
@@ -905,6 +913,13 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         "Force Concentration", "VanillaReactiveArmyRatioBps", force.vanillaReactiveArmyRatioBps), 6000, 9000);
     force.vanillaReactiveEconomyRatioBps = std::clamp(iniFile.getIntValue(
         "Force Concentration", "VanillaReactiveEconomyRatioBps", force.vanillaReactiveEconomyRatioBps), 12000, 15000);
+    force.economicFleetRatios = iniFile.getBoolValue("Force Concentration", "EconomicFleetRatios", force.economicFleetRatios);
+    force.fleetHarvestersPerBay = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "FleetHarvestersPerBay", force.fleetHarvestersPerBay), 2, 4);
+    force.fleetCarryallQuarters = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "FleetCarryallQuarters", force.fleetCarryallQuarters), 0, 2);
+    force.fleetRepairYards = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "FleetRepairYards", force.fleetRepairYards), 0, 1);
     force.joinAllyWaves = iniFile.getBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
     force.openingCombatBudget = iniFile.getBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
     force.campaignCombatBudget = iniFile.getBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
@@ -1453,6 +1468,10 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("vanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);
     addNamed("vanillaReactiveArmyRatioBps", force.vanillaReactiveArmyRatioBps);
     addNamed("vanillaReactiveEconomyRatioBps", force.vanillaReactiveEconomyRatioBps);
+    addNamed("economicFleetRatios", force.economicFleetRatios);
+    addNamed("fleetHarvestersPerBay", force.fleetHarvestersPerBay);
+    addNamed("fleetCarryallQuarters", force.fleetCarryallQuarters);
+    addNamed("fleetRepairYards", force.fleetRepairYards);
     addNamed("joinAllyWaves", force.joinAllyWaves);
     addNamed("openingCombatBudget", force.openingCombatBudget);
     addNamed("campaignCombatBudget", force.campaignCombatBudget);

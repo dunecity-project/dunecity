@@ -146,6 +146,10 @@ struct QuantBot::BuildPass {
 
     // planSpiceEconomy()
     int spiceShare{};
+    bool fleetRatios{};
+    int fleetSpiceShare{};
+    int fleetNearestSpiceDistance{-1};
+    int fleetRefineryTarget{};
     int mapSpiceHarvesterTarget{};
     int spiceHarvesterTarget{};
     int fundedHarvesterTarget{};

@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {
+      "composition": "scarce-rock",
+      "difficulty": "brutal",
+      "format": "1v1",
+      "initial_tech": 3,
+      "mountain": 5,
+      "replicate": 0,
+      "rock": 15,
+      "seed": 1180099,
+      "size": 64,
+      "spice_level": "low"
+    }
+  ],
+  "sample_seed": 1180099,
+  "schema_version": 1
+}

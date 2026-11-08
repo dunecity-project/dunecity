@@ -58,7 +58,72 @@ bool QuantBot::simpleTechPolicyActive() const {
         && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal);
 }
 
+bool QuantBot::economicFleetRatioActive() const {
+    return botConfig().force.economicFleetRatios && currentGame && currentGameMap
+        && lastCalculatedSpice > 0 && (difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal)
+        && !builderOnly()
+        && !ModManager::instance().isTornieFamilyContentActive() && !civWarsRules()
+        && (!isCampaignGameType(currentGame->gameType) || isAlliedWithHuman());
+}
+
+void QuantBot::planFleetResourceBudget(BuildPass& pass) {
+    pass.fleetRatios = economicFleetRatioActive();
+    if (!pass.fleetRatios) return;
+    // Recompute from current deterministic state. Mobile traffic does not erase
+    // a field's long-term accessibility; mountains and structure footprints do.
+    const int width = getMap().getSizeX(), height = getMap().getSizeY();
+    fleetSurveySeen.assign(size_t(width) * height, 0);
+    fleetSurveyQueue.clear();
+    fleetSurveyQueue.reserve(size_t(width) * height);
+    auto visit = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= width || y >= height) return;
+        const int index = y * width + x;
+        if (fleetSurveySeen[index]) return;
+        fleetSurveySeen[index] = 1;
+        const auto* tile = getMap().getTile(x, y);
+        if (!tile->isMountain() && !tile->hasAStructure()) fleetSurveyQueue.push_back(index);
+    };
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+            || (structure->getItemID() != Structure_ConstructionYard
+                && !structure->acceptsHarvesterDropoff())) continue;
+        const Coord at = structure->getLocation(), size = getStructureSize(structure->getItemID());
+        for (int x = at.x - 1; x <= at.x + size.x; ++x) {
+            visit(x, at.y - 1); visit(x, at.y + size.y);
+        }
+        for (int y = at.y; y < at.y + size.y; ++y) {
+            visit(at.x - 1, y); visit(at.x + size.x, y);
+        }
+    }
+    int64_t available = 0;
+    size_t cursor = 0;
+    int distance = 0;
+    while (cursor < fleetSurveyQueue.size()) {
+        const size_t layerEnd = fleetSurveyQueue.size();
+        while (cursor < layerEnd) {
+            const int index = fleetSurveyQueue[cursor++], x = index % width, y = index / width;
+            const auto* tile = getMap().getTile(x, y);
+            if (tile->hasSpice()) {
+                available += tile->getSpice().lround();
+                if (pass.fleetNearestSpiceDistance < 0) pass.fleetNearestSpiceDistance = distance;
+            }
+            for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx)
+                if (dx || dy) visit(x + dx, y + dy);
+        }
+        ++distance;
+    }
+    // Initial occupied controllers define competition, never runtime House
+    // objects: eliminations cannot activate a different map/format scope.
+    pass.spiceCompetitors = 0;
+    for (const auto& house : currentGame->getGameInitSettings().getHouseInfoList())
+        if (!house.playerInfoList.empty()) ++pass.spiceCompetitors;
+    pass.fleetSpiceShare = int(std::min<int64_t>(std::numeric_limits<int>::max(),
+        available / std::max(1, pass.spiceCompetitors)));
+}
+
 bool QuantBot::canAddRepairYard(int includingQueued) const {
+    if (economicFleetRatioActive())
+        return includingQueued < botConfig().force.fleetRepairYards;
     return (currentGame && currentGame->isCitySimEnabled())
         || difficulty != Difficulty::Medium
         || includingQueued < initialItemCount[Structure_RepairYard]
@@ -539,8 +604,10 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     pass.spiceCompetitors = 0;
     for (int h = 0; h < NUM_HOUSES; ++h)  // the Natives harvest nothing
         if (getHouse(h) && !getHouse(h)->isNatives() && getHouse(h)->getNumStructures() > 0) ++pass.spiceCompetitors;
+    planFleetResourceBudget(pass);
     pass.citySpiceWorkerTarget = QuantBotBuildPolicy::desiredSpiceHarvesters(
-        lastCalculatedSpice, pass.spiceCompetitors, harvesterLimit);
+        pass.fleetRatios ? pass.fleetSpiceShare : lastCalculatedSpice,
+        pass.fleetRatios ? 1 : pass.spiceCompetitors, harvesterLimit);
     if (civWarsRules())
         pass.citySpiceWorkerTarget = QuantBotBuildPolicy::civWarsWorkerTarget(
             pass.citySpiceWorkerTarget, getHouse()->getTechLevel(), customWave.launched != 0,
@@ -851,7 +918,8 @@ void QuantBot::planStrategicReserve(BuildPass& pass) {
 void QuantBot::planSpiceEconomy(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
-    pass.spiceShare = lastCalculatedSpice / std::max(1, pass.spiceCompetitors);
+    pass.spiceShare = pass.fleetRatios ? pass.fleetSpiceShare
+        : lastCalculatedSpice / std::max(1, pass.spiceCompetitors);
     // Same competitor count and, under city sim, the same target the space
     // reservation above already used.
     // The campaign economy push no longer plans as the only house on the map: a target of 43-56
@@ -893,6 +961,18 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
             pass.strategicReserveItem = NONE_ID;
             pass.strategicReserveCost = 0;
         }
+    }
+    if (pass.fleetRatios) {
+        const auto& force = botConfig().force;
+        const auto targets = QuantBotBuildPolicy::economicFleetTargets(pass.fleetSpiceShare,
+            harvesterLimit, getAIRefineryBays(), pass.itemCount[Unit_Harvester],
+            force.fleetHarvestersPerBay, force.fleetCarryallQuarters, force.fleetRepairYards,
+            data[Unit_Harvester][houseID].price, data[Structure_Refinery][houseID].price,
+            data[Unit_Carryall][houseID].price);
+        pass.mapSpiceHarvesterTarget = targets.sustainable;
+        pass.spiceHarvesterTarget = pass.fundedHarvesterTarget = targets.workers;
+        pass.fleetRefineryTarget = targets.refineries;
+        pass.repairBaseline = pass.repairTarget = targets.repairYards;
     }
     pass.citySpiceCapacityRunway = botConfig().force.citySpiceCapacityRunway && pass.citySimEnabled
         && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
@@ -1038,6 +1118,7 @@ int QuantBot::harvesterInvestmentReserve(BuildPass& pass) {
 }
 
 bool QuantBot::needsFirstTransport(BuildPass& pass) {
+    if (pass.fleetRatios && botConfig().force.fleetCarryallQuarters == 0) return false;
     // Preserve early carryalls while Brutal continues growing its fleet.
     if (pass.brutalEconomy ? CityEconomyInvestmentPolicy::openingWorkersNeeded(pass.itemCount[Unit_Harvester],pass.fundedHarvesterTarget)
                           : openingWorkersNeeded(pass)) return false;
@@ -1343,6 +1424,9 @@ AITelemetry::Record QuantBot::decisionState(BuildPass& pass) {
         .set("res_pop", pass.ownResPop).set("com_pop", pass.ownComPop).set("ind_pop", pass.ownIndPop)
         .set("land_value", pass.ownAvgLandValue).set("spice_remaining", lastCalculatedSpice)
         .set("spice_share", pass.spiceShare).set("map_harvester_target", pass.mapSpiceHarvesterTarget)
+        .set("fleet_ratios",pass.fleetRatios).set("fleet_spice_share",pass.fleetSpiceShare)
+        .set("fleet_nearest_spice_distance",pass.fleetNearestSpiceDistance)
+        .set("fleet_refinery_target",pass.fleetRefineryTarget)
         .set("city_spice_transition",pass.citySpiceTransition)
         .set("harvester_target", pass.spiceHarvesterTarget).set("refinery_harvester_target",
             QuantBotBuildPolicy::refineryThroughputHarvesterTarget(pass.spiceShare, 0,
@@ -2786,6 +2870,9 @@ void QuantBot::planOpeningProduction(BuildPass& pass) {
         getHouse()->getNumItems(Structure_RepairYard));
     pass.transportTarget = QuantBotBuildPolicy::supportQueueTarget(pass.transportBaseline,
         getHouse()->getNumItems(Unit_Carryall),pass.itemCount[Unit_Carryall],pass.busyTransports,int(pass.pickupQueue.size()));
+    if (pass.fleetRatios)
+        pass.transportBaseline = pass.transportTarget = (std::min(pass.mapSpiceHarvesterTarget,
+            pass.itemCount[Unit_Harvester]) * botConfig().force.fleetCarryallQuarters + 3) / 4;
 }
 
 void QuantBot::planDefenceCoverage(BuildPass& pass) {
@@ -3597,6 +3684,21 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 economy.reason=std::string_view(economy.kind)=="city_growth_power" ? "unlock_demanded_city_growth"
                     : economy.score>0 ? "marginal_income" : "no_marginal_income";
                 pass.capitalCandidates.push_back(economy);
+            }
+            if (pass.fleetRatios && pass.itemCount[Structure_Refinery] < pass.fleetRefineryTarget
+                && campaignAvailableToBuild(builder, Structure_Refinery)) {
+                CapitalCandidate capacity;
+                capacity.builder = builder->getObjectID();
+                capacity.item = Structure_Refinery;
+                capacity.kind = "fleet_ratio_capacity";
+                capacity.reason = "selected_workers_per_bay";
+                capacity.site = findPlaceLocation(Structure_Refinery);
+                capacity.price = purchasePrice(builder, Structure_Refinery);
+                capacity.cost = buildingCapitalCost(pass, Structure_Refinery);
+                if (capacity.site.isValid() && pass.money >= capacity.cost + 300) {
+                    capacity.score = 3500;
+                    pass.capitalCandidates.push_back(capacity);
+                }
             }
             if (pass.groundThreatAsset.isValid()
                 && campaignAvailableToBuild(builder,Structure_RocketTurret)) {
