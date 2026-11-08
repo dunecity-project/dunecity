@@ -181,6 +181,16 @@ missions with `--style campaign-player-house-off` / `campaign-player-house-on`;
 repeat with `--campaign-human-partner` for the partner arm and run the two-seed
 vanilla All against Atreides gate separately.
 
+Measured on `08eafddc` (2026-11-08), `~/Documents/projects/outputs/ai-recovery-20261108/fixes/CampaignRole/`:
+AI-only **4W/11L/51T → 56W/10L/0T**, paired score Δ **+1.00 [95% CI +0.81,+1.19]**.
+All four prior wins remain wins; seven time-outs become losses, so the role fix alone
+does not pass the all-missions-win gate. Its 66 final digests match the original
+human-partner arm. That arm remains **56W/10L/0T**, with all 66 digests unchanged;
+vanilla AAA remains **2/2** at **36.47/34.54 min**, also digest-identical.
+OFF equivalence is recorded for 17 AI-only and 22 partner missions plus both AAA seeds;
+the redundant remaining OFF games were cancelled with integrator approval. The switch
+remains default off pending owner review.
+
 The independent, hashed `[Force Concentration]` candidates
 `CampaignMilitaryOpening` and `CampaignAdaptiveReadiness` also default off.
 The first establishes one available combat producer after the first refinery,
