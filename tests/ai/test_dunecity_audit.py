@@ -268,6 +268,22 @@ class DuneCityAuditTests(unittest.TestCase):
                 counts = Counter(game[factor] for game in rows)
                 self.assertLessEqual(max(counts.values()) - min(counts.values()), 1)
 
+    def test_sample_enemy_override_preserves_map_draws_and_changes_all_other_controllers(self):
+        args = audit['parser'].parse_args([
+            '--mode', 'sample', '--mod', 'vanilla', '--cases', '12', '--sample-seed', '10403'])
+        ordinary = audit['schedule'](args)
+        args.sample_enemy = 'brutal'
+        fixed = audit['schedule'](args)
+        self.assertEqual(len(fixed), 24)
+        self.assertEqual(Counter(game['format'] for game in fixed),
+                         {'1v1': 6, '2v2': 6, 'ffa4': 6, 'ffa6': 6})
+        for old, new in zip(ordinary, fixed):
+            for field in ('skirmish', 'seed', 'size', 'spice_level', 'initial_tech',
+                          'candidate_house', 'candidate_seat', 'sample_case'):
+                self.assertEqual(old[field], new[field])
+            self.assertEqual(new['difficulty'], 'brutal')
+            self.assertTrue(all(level == 'brutal' for _, _, level in new['sides']))
+
     def test_sampler_swaps_only_the_candidate_seat_and_shards_cover_the_same_cases(self):
         args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both', '--cases', '13'])
         games = audit['schedule'](args)
