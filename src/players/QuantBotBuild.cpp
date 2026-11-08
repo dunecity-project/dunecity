@@ -3965,7 +3965,11 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     // Crime protection keeps the winning allocation; growth resumes after its
     // order is accepted. A lone opening yard retains its tech path.
     Uint32 dedicatedCityYard=NONE_ID;
-    if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1 && !pass.protectionCapital) {
+    const bool threatBudget = botConfig().force.cityThreatBudget && pass.citySimEnabled
+        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && lastCalculatedSpice > 0 && pass.defendingEconomy;
+    if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1 && !pass.protectionCapital
+        && !threatBudget) {
         for (const auto* builder:pass.capitalBuilders) {
             if (builder->getItemID()!=Structure_ConstructionYard || builder->isUpgrading()
                 || builder->isOnHold()) continue;
@@ -3991,7 +3995,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         }
         planningBuilder=NONE_ID;clearPlacementCache(false,true);
     }
-    if (!pass.cityGrowthProtected && pass.citySimEnabled
+    if (!pass.cityGrowthProtected && pass.citySimEnabled && !threatBudget
         && (getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=24
             || botConfig().force.cityGrowthPower)
         && pass.capitalChoice>=0 && pass.capitalCandidates[pass.capitalChoice].kind==std::string("military")) {

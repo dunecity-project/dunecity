@@ -292,6 +292,9 @@ struct QuantBotConfig {
         /// may save below its first heavy factory's quote when forecast net
         /// income covers the founded quote plus all queued production debt.
         bool cityFirstFactorySaving;
+        /// Experimental/default off: a spice-backed Custom city under direct
+        /// attack keeps military capital ahead of the ordinary growth interleave.
+        bool cityThreatBudget;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;
