@@ -155,10 +155,10 @@ def default_build_dir(root):
 
 def probe_binary(out):
     """The balance-probe binary run-campaign-balance.py prepared for --output-dir out, for
-    --prebuilt-probe reuse. Windows runs it from the game's output directory (data is found
-    beside the executable), so the run directory records its path instead of holding a copy."""
+    --prebuilt-probe reuse. Windows and Linux run it from the game's output directory (data is
+    found beside the executable), so the run directory records its path instead of holding a copy."""
     out = Path(out)
-    if sys.platform == 'win32':
+    if sys.platform != 'darwin':
         return Path((out / 'balance-probe-path.txt').read_text().strip())
     return out / 'balance-probe.app/Contents/MacOS/balance-probe'
 

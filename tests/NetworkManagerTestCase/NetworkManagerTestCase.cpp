@@ -31,7 +31,7 @@ static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
 static constexpr int kWireCoopCampaignControl = 25;
 static constexpr int kWireCoopSetupTransfer = 26;
-static constexpr int kWireProtocolVersion = 114;
+static constexpr int kWireProtocolVersion = 115;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -131,7 +131,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 112 changes network init to MOD18: fixed research rules and Mountain Scenery (save 9883).
     // 113 adds MOD19's shared technology installment rule (save 9884).
     // 114 restores the installed QuantBot decision policy with installment payment accounting.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 114);
+    // 115 enables the campaign AI-support QuantBot defaults (save format unchanged).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 115);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

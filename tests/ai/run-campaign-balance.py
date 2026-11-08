@@ -36,6 +36,7 @@ import subprocess
 import sys
 import tempfile
 WINDOWS = sys.platform == 'win32'
+MACOS = sys.platform == 'darwin'
 if not WINDOWS:
     import fcntl
 
@@ -707,7 +708,9 @@ else:
         main = main.replace('                              videoFlags);',
                             '                              videoFlags | SDL_WINDOW_HIDDEN);')
     position = main.index('int main(')
-    probe_includes = ['tests/ai/windows-probe-compat.inc'] if WINDOWS else []
+    # Windows' shim includes robustlist-iterator-traits.inc itself; Linux (libstdc++) needs only that.
+    probe_includes = (['tests/ai/windows-probe-compat.inc'] if WINDOWS else
+                      [] if MACOS else ['tests/ai/robustlist-iterator-traits.inc'])
     probe_includes.append('tests/ai/campaign-balance-probe.inc')
     native_trackpad_probe = sys.platform == 'darwin' and args.controls_probe and args.real_video
     if native_trackpad_probe:
@@ -723,7 +726,9 @@ else:
         compile_command, link, game_dir = windows_probe_commands(build)
         object_suffix, link_inputs = '.obj', ('.obj', '.lib')
     else:
-        target = 'bin/dunecity.app/Contents/MacOS/dunecity'
+        # macOS links an app bundle; Linux links bin/dunecity beside its copied game data.
+        target = 'bin/dunecity.app/Contents/MacOS/dunecity' if MACOS else 'bin/dunecity'
+        game_dir = build/'bin'
         commands = subprocess.check_output(['ninja','-C',str(build),'-t','commands',target],text=True).splitlines()
         compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
         for option in ('-include','-MT','-MF'):
@@ -742,12 +747,17 @@ else:
                                       .replace('@OBJECT@', '@NATIVE_OBJECT@') for arg in compile_command]
             position = native_compile_command.index('-c')
             native_compile_command[position:position] = ['-x', 'objective-c++', '-fobjc-arc']
+        if not MACOS:
+            # Linux links through a response file (@CMakeFiles/dunecity.rsp) that ninja deletes after
+            # the build; its compilation database expands it (-x) into the full link command.
+            commands = [entry['command'] for entry in json.loads(subprocess.check_output(
+                ['ninja','-C',str(build),'-t','compdb','-x'],text=True))]
         link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
         link = link[link.index('&&')+1:]
         link = link[:link.index('&&')]
         link[link.index('-o')+1] = '@BINARY@'
         link = ['@OBJECT@' if arg.endswith('/main.cpp.o') else arg for arg in link]
-        object_suffix, link_inputs = '.o', ('.o', '.a', '.dylib', '.tbd')
+        object_suffix, link_inputs = '.o', ('.o', '.a', '.so', '.dylib', '.tbd')
         if native_compile_command:
             link.insert(link.index('@OBJECT@') + 1, '@NATIVE_OBJECT@')
     if args.quantbot_object:
@@ -840,15 +850,16 @@ else:
         stale_entries = sorted((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)[:-4]
         for stale in stale_entries:
             remove_tree(stale)
-        if WINDOWS:
-            # Windows finds the game data beside the executable (SDL_GetBasePath), so the probe
-            # runs from the game's own output directory rather than a per-run copy.
+        if not MACOS:
+            # Windows and Linux find the game data beside the executable (SDL_GetBasePath), so the
+            # probe runs from the game's own output directory rather than a per-run copy.
+            suffix = '.exe' if WINDOWS else ''
             for stale in stale_entries:
-                (game_dir/f'balance-probe-{stale.name}.exe').unlink(missing_ok=True)
-            binary = game_dir/f'balance-probe-{entry.name}.exe'
+                (game_dir/f'balance-probe-{stale.name}{suffix}').unlink(missing_ok=True)
+            binary = game_dir/f'balance-probe-{entry.name}{suffix}'
             if rebuilt or not binary.is_file():
                 shutil.copy2(entry/executable, binary)
-    if WINDOWS:
+    if not MACOS:
         (out/'balance-probe-path.txt').write_text(str(binary) + '\n')
     else:
         app = out/'balance-probe.app/Contents'
