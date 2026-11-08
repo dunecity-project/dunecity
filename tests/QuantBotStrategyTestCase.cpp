@@ -756,6 +756,46 @@ TEST_CASE("Vanilla FFA switches default off and independently persist every hash
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Team coordination switches default off, persist and hash independently",
+          "[ai][team][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.teamSynchroniseAttacks);
+    REQUIRE(defaults.force.teamDefenceSharePercent == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-team-config-test.ini";
+    std::map<std::string, int> hashes;
+    for (int sync : {0, 1}) for (int share : {0, 25, 50}) {
+        QuantBotConfig expected = defaults;
+        expected.force.teamSynchroniseAttacks = sync != 0;
+        expected.force.teamDefenceSharePercent = share;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nTeamSynchroniseAttacks=" << sync
+                << "\nTeamDefenceSharePercent=" << share << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.teamSynchroniseAttacks == expected.force.teamSynchroniseAttacks);
+        REQUIRE(loaded.force.teamDefenceSharePercent == share);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), sync * 100 + share).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    for (int invalid : {-1, 1, 24, 26, 49, 51, 100}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nTeamDefenceSharePercent=" << invalid << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.teamDefenceSharePercent == 0);
+        REQUIRE(loaded.getConfigHash() == defaults.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Accepted campaign defaults retain an explicit all-off control",
           "[ai][campaign][production][config]") {
     const QuantBotConfig defaults;

@@ -1166,6 +1166,15 @@ private:
     /// JoinAllyWaves (Custom Hard/Brutal team play): the objective of an allied QuantBot's
     /// whole-army wave launched within the last kAllyWaveJoinMs, or nullptr.
     const ObjectBase* allyWaveObjective() const;
+    /// Scope comes from occupied original controllers, never ambient/runtime houses.
+    bool teamCoordinationGame() const;
+    /// Lowest-house-id live allied bot advertising the shared synchronised plan.
+    const QuantBot* teamAttackCoordinator() const;
+    bool teamAttackReady() const;
+    const ObjectBase* teamAttackObjective() const;
+    void wakeTeamAttackPartners();
+    bool alliedDefenceBuilding(const ObjectBase* building) const;
+    void helpAttackedAlly();
     /// FinishWhenLeading: our team's ground army is worth more than the strongest enemy team's
     /// remembered army (enemyThreatEstimate) - the leader of a free-for-all.
     bool finishLeading() const { return teamGroundArmyValue() > enemyThreatEstimate(); }

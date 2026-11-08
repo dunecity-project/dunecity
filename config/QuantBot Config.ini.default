@@ -363,6 +363,10 @@ VanillaFfaSingleFront=0
 VanillaFfaLightWorkingCash=0
 # Optional IX/Palace deferral is scoped to vanilla FFA with at least five original players.
 VanillaFfaFundedTech=0
+# Custom Vanilla/DuneCity teams only; the styled seat coordinates its allied QuantBot's waves.
+TeamSynchroniseAttacks=0
+# Ally-base rescue as a percent of ground army HP value: 0 (native), 25, or 50.
+TeamDefenceSharePercent=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0
