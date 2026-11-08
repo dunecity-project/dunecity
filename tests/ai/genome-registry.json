@@ -1,5 +1,7 @@
 [
   {"id": "focus_fire", "name": "Force Concentration: FocusFire", "section": "Force Concentration", "key": "FocusFire", "kind": "bool", "levels": [0, 1], "default": 1, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
+  {"id": "focus_fire_level", "name": "Force Concentration: FocusFireLevel", "section": "Force Concentration", "key": "FocusFireLevel", "kind": "int", "levels": [0, 1, 2], "default": 0, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
+  {"id": "target_priority_level", "name": "Force Concentration: TargetPriorityLevel", "section": "Force Concentration", "key": "TargetPriorityLevel", "kind": "int", "levels": [0, 1, 2], "default": 0, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
   {"id": "converge", "name": "Force Concentration: Converge", "section": "Force Concentration", "key": "Converge", "kind": "bool", "levels": [0, 1], "default": 1, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
   {"id": "bundle", "name": "Force Concentration: Bundle", "section": "Force Concentration", "key": "Bundle", "kind": "bool", "levels": [0, 1], "default": 1, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
   {"id": "launch_from_bundle", "name": "Force Concentration: LaunchFromBundle", "section": "Force Concentration", "key": "LaunchFromBundle", "kind": "bool", "levels": [0, 1], "default": 1, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},

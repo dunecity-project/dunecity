@@ -422,15 +422,26 @@ bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBas
     const int reach = unit->getWeaponRange() + 3;
     const ObjectBase* best = nullptr;
     Force::TargetKey bestKey;
+    const auto& settings = botConfig().force;
+    const auto keyOf = [&](const ObjectBase* object) {
+        auto key = targetKeyOf(object);
+        const int item = object->getItemID();
+        const bool artillery = item == Unit_Launcher || item == Unit_EliteLauncher
+            || item == Unit_SiegeTank || item == Unit_Trooper || item == Unit_Troopers;
+        key.cls = Force::tunedTargetClass(key.cls, settings.focusFireLevel, settings.targetPriorityLevel,
+            artillery, item == Unit_Harvester || item == Unit_RebelHarvester);
+        return key;
+    };
     for (const auto* enemy : enemies) {
         if (tiles(at, enemy->getClosestPoint(at)) > reach) continue;
         if (!unit->canAttack(enemy) || !unit->isInWeaponRange(enemy)) continue;
-        const auto key = targetKeyOf(enemy);
+        const auto key = keyOf(enemy);
         if (key.cls == Force::Wall) continue;
         if (!best || Force::betterTarget(key, bestKey)) { best = enemy; bestKey = key; }
     }
     if (!best) return false;
-    if (current && !Force::shouldSwitch(unit->isInWeaponRange(current), targetKeyOf(current), bestKey)) return false;
+    if (current && !Force::tunedShouldSwitch(unit->isInWeaponRange(current), keyOf(current), bestKey,
+                                          settings.focusFireLevel)) return false;
     doAttackObject(unit, best, false);
     ++forceStats.focusSwitches;
     return true;
@@ -479,6 +490,8 @@ void QuantBot::focusFireNoOverkill(const std::vector<const UnitBase*>& hunters, 
 }
 
 void QuantBot::concentrateForces() {
+    const bool tactical = !builderOnly()
+        && (botConfig().force.focusFireLevel > 0 || botConfig().force.targetPriorityLevel > 0);
     const bool noOverkill = forceVariant(kForceNoOverkill);
     const bool focus = forceVariant(kForceFocusFire) && !noOverkill, convergeOn = forceVariant(kForceConverge);
     const bool turretsFirst = forceVariant(kForceTurretPriority), sonicLanes = forceVariant(kForceSonicClearLane);
@@ -488,7 +501,7 @@ void QuantBot::concentrateForces() {
     std::set<Uint32> sieging;
     if (forceVariant(kForceSiegeStandoff)) siegeStandoff(sieging);
     else siegeHeld.clear();
-    if (!focus && !convergeOn && !noOverkill && !turretsFirst && !sonicLanes) return;
+    if (!tactical && !focus && !convergeOn && !noOverkill && !turretsFirst && !sonicLanes) return;
     AITelemetry::PerformanceScope perfScope("ai.concentrateForces", getGameCycleCount(), getHouse()->getHouseID());
     const int myTeam = getHouse()->getTeamID();
     // Visible enemy ground units and buildings, in list order.
@@ -545,6 +558,16 @@ void QuantBot::concentrateForces() {
         focusFireNoOverkill(hunters, enemies);
     }
     for (const auto* unit : getUnitList()) {
+        // The experiment extends the existing focus policy to campaign/support and
+        // guarding ground fighters. Never take manual, repair, retreat or STOP units.
+        const bool tacticalFighter = tactical && unit->getOwner() == getHouse()
+            && unit->getHealth() > 0 && unit->isActive() && unit->isRespondable()
+            && unit->isAGroundUnit() && unit->canAttack() && mobileCombatItem(unit->getItemID())
+            && unit->getItemID() != Unit_Deviator && !unit->wasForced()
+            && (unit->getAttackMode() == HUNT || unit->getAttackMode() == GUARD || unit->getAttackMode() == AREAGUARD)
+            && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free;
+        if (tacticalFighter && !escaping(unit) && !sieging.count(unit->getObjectID())
+            && focusFire(unit, enemies)) continue;
         if (!hunter(unit) || escaping(unit) || sieging.count(unit->getObjectID())) continue;
         if (sonicLanes && unit->getItemID() == Unit_SonicTank && sonicClearTarget(unit, enemies, friends)) continue;
         if (!turrets.empty() && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave && attackTurretInReach(unit, turrets))

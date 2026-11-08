@@ -51,6 +51,21 @@ inline bool shouldSwitch(bool currentInRange, const TargetKey& current, const Ta
     return best.health * 10000 <= current.health * kSwitchHealthBps;
 }
 
+/// Experimental rankings share the native deterministic HP/id comparator.
+/// Focus removes native class bias; priority overlays only the named classes.
+inline int tunedTargetClass(int nativeClass, int focusLevel, int priorityLevel,
+                            bool artillery, bool harvester) {
+    if (nativeClass == Wall) return Wall;
+    if (priorityLevel >= 2 && harvester) return 6;
+    if (priorityLevel >= 1 && artillery) return 5;
+    return focusLevel > 0 ? 0 : nativeClass;
+}
+
+inline bool tunedShouldSwitch(bool inRange, const TargetKey& current, const TargetKey& best, int level) {
+    return level >= 2 ? (best.id != current.id && (!inRange || betterTarget(best, current)))
+                      : shouldSwitch(inRange, current, best);
+}
+
 /// Attack-value focus fire without overkill (Churchill, Saffidine & Buro 2012, "NOK-AV"): the
 /// target in reach that removes the most enemy damage per hit point dealt.
 struct ValueKey {

@@ -1126,3 +1126,29 @@ are unchanged; protocol 99 is not consumed. No revised-branch build, ctest, all-
 ladder result is claimed. The parent owns combined acceptance on `build-int`, including
 `quantbot_match_score`, `quantbot_strategy`, all-against-Atreides and the ladder; test-only candidate
 styles must not be treated as shipped defaults.
+
+## Combat target experiments (2026-11-08)
+
+`focus-fire-off/1/2` changes only `FocusFireLevel`; `target-priority-off/1/2`
+changes only `TargetPriorityLevel`, in `[Force Concentration]`. Both default to
+zero and omit their hash contributions at zero, retaining native strategy seeds.
+Native Custom hunters prefer armed units, then fewer remaining HP, switching
+only for a better class or at most 75% of the current target's HP. Focus level 1
+removes that class bias; level 2 also removes the HP-switch hysteresis. Priority
+level 1 elevates launchers, siege tanks and rocket infantry; level 2 puts enemy
+harvesters above those units. Both use stable object-ID ties.
+
+These experiments reuse the focus controller and also permit unforced guarding
+and campaign ground fighters; human-owned orders, repair, STOP/retreat, Deviators,
+aircraft, close-threat escape and siege holds retain their existing authority.
+Only attackable targets already in weapon range qualify.
+
+With `dunecity-audit.py --attack-events`, `combat.csv` aggregates actual hostile
+damage callbacks by attacker house and target item: hit counts, HP removed,
+overkill HP, killing blows, victim-price kill value and first-hostile-hit-to-death
+cycles. Time-to-kill is global first contact, including other houses' damage;
+it is not a duel estimate. These diagnostic records do not enter simulation
+state, saves or digests. A complete telemetry stream is required for exact totals.
+Use `houses.csv` kill_value/loss_value for the match exchange ratio; also report
+spice, harvesters/refineries, army value and credits from `samples.csv`.
+

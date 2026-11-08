@@ -351,6 +351,11 @@ Strategy=false
 # absent. It only acts when the match's Research Lab game option is enabled.
 # Basic income, power, defence and accepted production commitments keep their funding first.
 [Force Concentration]
+# Combat target experiments: 0 preserves native targeting and config hash.
+# Focus 1: lowest HP with 75% switch hysteresis; 2: strict lowest HP.
+# Priority 1: artillery/rocket infantry first; 2: harvesters before artillery.
+FocusFireLevel=0
+TargetPriorityLevel=0
 # Independent vanilla multi-enemy tuning; inert in 1v1, two-team matches, cities and campaigns.
 VanillaFfaWeakestTarget=0
 VanillaFfaNearbyTarget=0

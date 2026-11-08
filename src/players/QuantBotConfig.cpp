@@ -312,6 +312,8 @@ QuantBotConfig::QuantBotConfig() {
     // fire + converge + waves at 60% readiness (FCQ) beat the previous defaults; bundling the
     // idle reserve forward and launching waves from the bundle (BWFCQ) beats FCQ.
     force.focusFire = true;
+    force.focusFireLevel = 0;
+    force.targetPriorityLevel = 0;
     force.converge = true;
     force.waveReadinessPercent = 60;
     force.bundle = true;
@@ -673,6 +675,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
 
         // === FORCE CONCENTRATION ===
         iniFile.setBoolValue("Force Concentration", "FocusFire", force.focusFire);
+        iniFile.setIntValue("Force Concentration", "FocusFireLevel", force.focusFireLevel);
+        iniFile.setIntValue("Force Concentration", "TargetPriorityLevel", force.targetPriorityLevel);
         iniFile.setBoolValue("Force Concentration", "Converge", force.converge);
         iniFile.setIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent);
         iniFile.setBoolValue("Force Concentration", "Bundle", force.bundle);
@@ -844,6 +848,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         else waveFormation = parsed;
     }
     force.focusFire = iniFile.getBoolValue("Force Concentration", "FocusFire", force.focusFire);
+    force.focusFireLevel = std::clamp(iniFile.getIntValue("Force Concentration", "FocusFireLevel", force.focusFireLevel), 0, 2);
+    force.targetPriorityLevel = std::clamp(iniFile.getIntValue("Force Concentration", "TargetPriorityLevel", force.targetPriorityLevel), 0, 2);
     force.converge = iniFile.getBoolValue("Force Concentration", "Converge", force.converge);
     force.waveReadinessPercent = std::clamp(
         iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
@@ -1383,6 +1389,9 @@ std::string QuantBotConfig::getConfigHash() const {
     configStr += "|/REC|";
     configStr += "|FORCE";
     addNamed("focusFire", force.focusFire);
+    // OFF preserves the native config hash, including strategy's seeded choices.
+    if (force.focusFireLevel) addNamed("focusFireLevel", force.focusFireLevel);
+    if (force.targetPriorityLevel) addNamed("targetPriorityLevel", force.targetPriorityLevel);
     addNamed("converge", force.converge);
     addNamed("waveReadinessPercent", force.waveReadinessPercent);
     addNamed("bundle", force.bundle);
