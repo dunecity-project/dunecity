@@ -1,0 +1,20 @@
+{
+  "bridge_scope": "Private diagnostic main, read-only native observations, exact frozen maps and requested options; no AI/engine/content gameplay changes",
+  "capabilities": {
+    "local_observer": "native local spectator",
+    "research": "unsupported/off"
+  },
+  "native_tree": "bc198f99146a49adc7ea330604564ea1ef4932e9",
+  "observation_contract": "native_inventory_activity_episodes_v1",
+  "observation_fields": [
+    "first_inactive_cycle",
+    "terminal_inactive_since_cycle",
+    "revival_count",
+    "inactive_cycles"
+  ],
+  "parity_dispatcher": "tests/ai/formation-duel.py replaced by historical exact-map parity dispatcher (test harness only)",
+  "portability_repairs": [],
+  "release": "1.0.847side+8a8e4833",
+  "schema_version": 1,
+  "source_commit": "8a8e48334269363fb517b1abf186408c575fd9cc"
+}
