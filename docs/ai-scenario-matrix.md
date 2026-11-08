@@ -466,6 +466,35 @@ Do not compare an observed screen with an observer-off gate. Any screen winner
 still needs the full candidate-only vanilla96 against observer-off native on the
 same pin, plus AAA2 and the cross-mode/default gates, before proposing ON.
 
+### Vanilla six-refinery FFA promotion (2026-11-08, protocol 116)
+
+The round-2 paired gates promote exactly three `[Force Concentration]` defaults:
+`VanillaRefineryBoom=1`, `VanillaRefineryBoomRefineries=6` and `VanillaBoomFfaOnly=1`.
+The other boom families and all earlier FFA experiments remain OFF. The opening
+targets six refineries and two workers per refinery until minute 10, subject to
+the existing funding, placement and spice limits; it does not cancel accepted queues.
+Its original-roster FFA scope requires at least three hostile occupied houses and
+multiple hostile teams. Cities, campaigns, no-spice games, asymmetric survival,
+duels and two-team matches retain their existing policy.
+
+The promotion evidence is the pooled 192-game paired gate: native **66 wins**
+versus **77 wins**, **+5.7 percentage points**, 95% CI **[+1.0, +10.4]**.
+Campaign **66/66** digests were unchanged, AAA2 was exact, and duel/team gates
+were identical. Protocol **116** separates the new deterministic default from
+115 peers; the save format stays **9884**.
+
+`vanilla-boom-refinery-6` still explicitly names the promoted ON arm.
+`vanilla-boom-off` explicitly restores all pre-promotion boom defaults, including
+the inactive four-refinery level and FFA-only OFF. The older `vanilla-ffa-*`
+styles also pin those three old values in **both** their ON and OFF arms, so
+their historical isolated comparisons do not silently acquire the new boom.
+For a same-build historical baseline with scenario-matrix or the control-map
+suite, pass `--style vanilla-boom-off`; an unstyled `native`/`control` arm always
+means the current binary's defaults, not frozen historical settings. The AAA
+harness has no native/reference style to freeze: it exercises the current
+defaults, and its asymmetric two-team setup remains outside the boom scope.
+
+
 ```sh
 # Real games run only through the committed cluster queue, never a local mini batch.
 dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag sm-smoke -- \

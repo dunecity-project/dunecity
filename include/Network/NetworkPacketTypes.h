@@ -355,7 +355,9 @@
 // 115: Campaign AI-support QuantBot defaults ON: MilitaryOpening, AdaptiveReadiness,
 //      ThreatProduction, FundedLightOpening, LightWorkingCash, LightIncomeSeed and
 //      IdleCashFactory (2000 credits). Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            115
+// 116: Vanilla FFA six-refinery boom defaults ON (VanillaRefineryBoom, VanillaBoomFfaOnly);
+//      deterministic opening decisions differ from 115. Save format remains 9884.
+#define NETWORK_PROTOCOL_VERSION            116
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

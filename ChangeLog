@@ -1,3 +1,8 @@
+Unreleased
+	* AI: Enable QuantBot's six-refinery Vanilla FFA boom by default after its paired gates.
+		- Other boom families remain opt-in; campaigns, duels and two-team games keep their policy.
+		- Network protocol 116; save format remains 9884.
+
 version 0.98.6.6
 	* NEW: Dynamic Performance Optimization for Multiplayer
 		- Adaptive token budget (5k-25k) automatically scales pathfinding based on real-time FPS

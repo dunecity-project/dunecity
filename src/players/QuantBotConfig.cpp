@@ -347,12 +347,13 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaFfaLightWorkingCash = false;
     force.vanillaFfaFundedTech = false;
     force.vanillaHarvesterBoom = false;
-    force.vanillaRefineryBoom = false;
+    // Paired FFA gate: six-refinery opening, FFA only; other boom families remain opt-in.
+    force.vanillaRefineryBoom = true;
     force.vanillaGreedyBoom = false;
     force.vanillaReactiveBoom = false;
-    force.vanillaBoomFfaOnly = false;
+    force.vanillaBoomFfaOnly = true;
     force.vanillaHarvesterBoomWorkers = 8;
-    force.vanillaRefineryBoomRefineries = 4;
+    force.vanillaRefineryBoomRefineries = 6;
     force.vanillaGreedyBoomMinutes = 6;
     force.vanillaReactiveArmyRatioBps = 6000;
     force.vanillaReactiveEconomyRatioBps = 12000;

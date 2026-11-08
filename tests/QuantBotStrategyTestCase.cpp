@@ -757,7 +757,7 @@ TEST_CASE("Vanilla FFA switches default off and independently persist every hash
     std::filesystem::remove(path);
 }
 
-TEST_CASE("Vanilla boom families default off and persist independent hashed combinations",
+TEST_CASE("Vanilla boom defaults select six-refinery FFA and persist independent hashed combinations",
           "[ai][vanilla][strategy][config]") {
     const QuantBotConfig defaults;
     const std::array<bool QuantBotConfig::ForceSettings::*, 5> members{
@@ -766,7 +766,8 @@ TEST_CASE("Vanilla boom families default off and persist independent hashed comb
         &QuantBotConfig::ForceSettings::vanillaBoomFfaOnly};
     const std::array<const char*, 5> names{"VanillaHarvesterBoom", "VanillaRefineryBoom", "VanillaGreedyBoom",
         "VanillaReactiveBoom", "VanillaBoomFfaOnly"};
-    for (const auto member : members) REQUIRE_FALSE(defaults.force.*member);
+    const std::array<bool, 5> enabled{false, true, false, false, true};
+    for (size_t i = 0; i < members.size(); ++i) REQUIRE((defaults.force.*members[i]) == enabled[i]);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-bold-config-test.ini";
     std::map<std::string, unsigned> hashes;
     for (unsigned mask = 0; mask < (1u << members.size()); ++mask) {
@@ -804,6 +805,7 @@ TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai]
     const std::array<std::vector<int>, 5> levels{{{8, 12}, {4, 6}, {6, 10, 12}, {6000, 9000}, {12000, 15000}}};
     const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-boom-level-test.ini";
     const QuantBotConfig defaults;
+    REQUIRE(defaults.force.vanillaRefineryBoomRefineries == 6);
     for (size_t i = 0; i < members.size(); ++i) for (const int value : levels[i]) {
         QuantBotConfig expected = defaults;
         expected.force.*members[i] = value;
