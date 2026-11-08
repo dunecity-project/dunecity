@@ -627,6 +627,42 @@ TEST_CASE("Exhausted army dispatch defaults on and independently round-trips bot
     std::filesystem::remove(savedPath);
 }
 
+TEST_CASE("Campaign opening switches default off and independently round-trip their hashes",
+          "[ai][campaign][opening][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignMilitaryOpening);
+    REQUIRE_FALSE(defaults.force.campaignAdaptiveReadiness);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-opening-test.ini";
+    const auto savedPath = std::filesystem::temp_directory_path() / "quantbot-campaign-opening-saved-test.ini";
+    for (const bool production : {false, true}) {
+        for (const bool readiness : {false, true}) {
+            QuantBotConfig expected = defaults;
+            expected.force.campaignMilitaryOpening = production;
+            expected.force.campaignAdaptiveReadiness = readiness;
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\nCampaignMilitaryOpening=" << production
+                    << "\nCampaignAdaptiveReadiness=" << readiness << '\n';
+            }
+            QuantBotConfig loaded;
+            REQUIRE(loaded.applyOverrides(path.string()));
+            REQUIRE(loaded.force.campaignMilitaryOpening == production);
+            REQUIRE(loaded.force.campaignAdaptiveReadiness == readiness);
+            REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+            REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (!production && !readiness));
+            REQUIRE(loaded.force.campaignPlayerHouse == defaults.force.campaignPlayerHouse);
+            REQUIRE(loaded.save(savedPath.string()));
+            QuantBotConfig restored;
+            REQUIRE(restored.applyOverrides(savedPath.string()));
+            REQUIRE(restored.force.campaignMilitaryOpening == production);
+            REQUIRE(restored.force.campaignAdaptiveReadiness == readiness);
+            REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+        }
+    }
+    std::filesystem::remove(path);
+    std::filesystem::remove(savedPath);
+}
+
 TEST_CASE("Campaign player house defaults off and independently round-trips both hashed states",
           "[ai][campaign][config]") {
     const QuantBotConfig defaults;

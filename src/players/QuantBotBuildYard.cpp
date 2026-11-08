@@ -333,6 +333,43 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     releaseUnfundedChoice();
     chooseYardEssentials(pass, turn, yardTurn);
     releaseUnfundedChoice();
+    // A campaign's small starting army needs replacements before the
+    // economy can compound. The normal refinery/starport ladders otherwise
+    // consume every opening order, including on missions with no factory.
+    if (botConfig().force.campaignMilitaryOpening && !pass.citySimEnabled
+        && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman()
+        && !builderOnly() && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && pass.itemCount[Structure_Refinery] > 0
+        && pass.itemCount[Structure_LightFactory] == 0 && pass.itemCount[Structure_HeavyFactory] == 0
+        && pass.itemCount[Structure_Barracks] == 0 && pass.itemCount[Structure_WOR] == 0) {
+        const int house = getHouse()->getHouseID();
+        const auto& data = currentGame->objectData.data;
+        for (Uint32 producer : {Structure_LightFactory, Structure_Barracks, Structure_WOR}) {
+            const auto& spec = data[producer][house];
+            if (!spec.enabled || spec.builder != int(turn.pBuilder->getItemID())
+                || spec.techLevel > getHouse()->getTechLevel()) continue;
+            Uint32 step = producer;
+            for (int depth = 0; step != NONE_ID && depth < Structure_LastID; ++depth) {
+                if (pass.itemCount[step] > 0) break;
+                if (campaignAvailableToBuild(turn.pBuilder, step)) {
+                    if (findPlaceLocation(step).isValid()) {
+                        yardTurn.skipRemainingStructureLogic = true;
+                        yardTurn.itemID = pass.money >= buildingCapitalCost(pass, step) ? step : NONE_ID;
+                        yardTurn.serviceSavingHold = yardTurn.itemID == NONE_ID;
+                        yardTurn.structureRule = yardTurn.itemID == NONE_ID
+                            ? "save_campaign_combat_producer" : "campaign_combat_producer";
+                    }
+                    break;
+                }
+                Uint32 prerequisite = NONE_ID;
+                for (int item = Structure_FirstID; item <= Structure_LastID; ++item)
+                    if (data[step][house].prerequisiteStructuresSet[item]
+                        && getHouse()->getNumItems(item) == 0) { prerequisite = item; break; }
+                step = prerequisite;
+            }
+            if (yardTurn.skipRemainingStructureLogic) break;
+        }
+    }
     // Power recovery and a present air threat keep priority. Storage consumes
     // only its own price, leaving useful army/defence/city spending available.
     if ((botConfig().force.storageCapacity || pass.techSavings)

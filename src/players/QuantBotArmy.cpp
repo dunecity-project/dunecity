@@ -540,11 +540,12 @@ void QuantBot::releaseExhaustedArmyRepairs() {
 
 int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
     int required = std::max(0, configuredThreshold);
-    // The human's ally measures its wave against the strongest opposing house's army (unit counts
-    // x prices, as the production allocator values them) after the opening, not against a
-    // skirmish-sized limit a campaign enemy never fields: it held 5,650-7,780 for 20 minutes
-    // against two empty enemy armies (vanilla Harkonnen m21) waiting for 8,000.
-    if (isAlliedWithHuman() && !isCampaignEnemy() && getGameCycleCount() >= MILLI2CYCLES(15 * 60000)) {
+    // Reuse the campaign partner's established opposing-house army measure.
+    // The candidate applies it from the opening instead of waiting fifteen
+    // minutes, but cannot raise the configured threshold.
+    const bool adaptive = botConfig().force.campaignAdaptiveReadiness;
+    if (isAlliedWithHuman() && !isCampaignEnemy()
+        && (adaptive || getGameCycleCount() >= MILLI2CYCLES(15 * 60000))) {
         int strongest = 0;
         for (int h=0; h<NUM_HOUSES; ++h) {
             const House* house = getHouse(h);
@@ -557,7 +558,8 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
                     value += house->getNumItems(item) * currentGame->objectData.data[item][h].price;
             strongest = std::max(strongest, value);
         }
-        required = std::min(std::max(2000, strongest * 5 / 4), militaryValueLimit * 3 / 4);
+        const int opponentThreshold = std::min(std::max(2000, strongest * 5 / 4), militaryValueLimit * 3 / 4);
+        required = adaptive ? std::min(required, opponentThreshold) : opponentThreshold;
     }
     // Once the map is depleted, stop waiting for a larger army. A leftover
     // cash balance or a few cheap survivors must not keep the game idle.

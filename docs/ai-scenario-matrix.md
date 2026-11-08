@@ -181,6 +181,22 @@ missions with `--style campaign-player-house-off` / `campaign-player-house-on`;
 repeat with `--campaign-human-partner` for the partner arm and run the two-seed
 vanilla All against Atreides gate separately.
 
+The independent, hashed `[Force Concentration]` candidates
+`CampaignMilitaryOpening` and `CampaignAdaptiveReadiness` also default off.
+The first establishes one available combat producer after the first refinery,
+before repeat refinery/storage/Starport expansion, preserving power and live
+air-defence priority. It walks the actual prerequisite tree and saves for the
+producer rather than spending its price on another refinery. The second applies
+the existing partner readiness measure (1.25x the strongest opposing house's
+army, floor 2,000 and ceiling 75% of its military limit) from the first wave,
+capped by the configured threshold, instead of waiting fifteen minutes.
+Authored campaign opponents and noncampaign skirmishes are unchanged.
+Use `campaign-opening-off` / `campaign-opening-on` for the paired combination;
+`campaign-military-opening-on` and `campaign-adaptive-readiness-on` isolate each
+change. These styles do not enable `CampaignPlayerHouse`: add that switch only
+when comparing the AI-only role-fixed arm.
+
+
 For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
 seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;
 see [sampler factors and research verification](quantbot-dunecity-audit.md#balanced-recovery-skirmish-sampler).
