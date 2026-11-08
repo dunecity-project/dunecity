@@ -33,6 +33,25 @@ int QuantBot::recentFactoryLossCount() const {
     });
 }
 
+bool QuantBot::campaignEconomySupport() const {
+    return currentGame && !currentGame->isCitySimEnabled() && !builderOnly()
+        && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman();
+}
+
+int QuantBot::campaignRefineryReplacementCost(BuildPass& pass) {
+    if (!botConfig().force.campaignRefineryDefence || !campaignEconomySupport()
+        || lastCalculatedSpice <= 0 || getHouse()->getNumLostItems(Structure_Refinery) == 0)
+        return 0;
+    const int target = QuantBotBuildPolicy::desiredSpiceRefineries(
+        pass.spiceHarvesterTarget, pass.itemCount[Unit_Harvester]);
+    if (pass.itemCount[Structure_Refinery] >= target) return 0;
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getItemID() == Structure_ConstructionYard
+            && campaignAvailableToBuild(static_cast<const BuilderBase*>(structure), Structure_Refinery))
+            return buildingCapitalCost(pass, Structure_Refinery);
+    return 0;
+}
+
 bool QuantBot::simpleTechPolicyActive() const {
     return currentGame && botConfig().force.simpleTechSavings && gameMode == GameMode::Custom
         && !isCampaignGameType(currentGame->gameType) && !builderOnly()
