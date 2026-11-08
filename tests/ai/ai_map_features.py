@@ -11,6 +11,9 @@ anchor supplies export-only topology when no yard exists). Largest-component
 ties use the first row-major component. Distances are Euclidean tile distances
 between primary yard origins, falling back to primary MCV origins, not paths.
 Densities divide tile counts by width*height; blooms are not harvestable spice.
+The observer also emits exact map_tile_count/initial_spice_tiles/mountain_tiles
+and physical-house coordinate/squared-distance pairs. These are integer
+evidence, independent of the retained %.9f density/distance display fields.
 
 Exports describe map input, not necessarily engine cycle zero: CY starts deploy
 MCVs after generating the INI. Their free/origin counts remain blank until
@@ -52,11 +55,15 @@ MAP_FEATURE_FIELDS = (
     'rock_initial_free', 'rock_free', 'rock_in_range', 'rock_committed',
     'free2x2_count', 'free3x2_count', 'in_range2x2_count', 'in_range3x2_count',
     'in_range3x3_count', 'base_x', 'base_y',
+    'map_tile_count', 'initial_spice_tiles', 'mountain_tiles',
+    'base_distance_pair_count', 'base_distance_min_squared',
+    'base_start_coordinates', 'base_distance_squared_pairs',
 )
 _FLOAT_FIELDS = {'initial_spice_density', 'initial_spice_amount', 'mountain_density',
                  'base_distance_min', 'base_distance_mean'}
+_TEXT_FIELDS = {'base_start_coordinates', 'base_distance_squared_pairs'}
 _METRICS = set(MAP_FEATURE_FIELDS) - {'id', 'house', 'map_hash', 'size',
-                                   'measurement_status', 'evidence_sha256'}
+                                   'measurement_status', 'evidence_sha256'} - _TEXT_FIELDS
 _HOUSES = {name: index for index, name in enumerate((
     'harkonnen', 'atreides', 'ordos', 'fremen', 'sardaukar', 'mercenary',
     'neutral', 'rebels', 'custom', 'wildspade', 'kleshmersh', 'tharpique'))}
@@ -132,6 +139,8 @@ def _row(game, setup, house=''):
 
 
 def _assign(row, data):
+    for field in _TEXT_FIELDS.intersection(data):
+        row[field] = data[field]
     for field in _METRICS.intersection(data):
         raw = data[field]
         if raw in ('', None):
@@ -177,14 +186,29 @@ def rows_from_log(lines, game, setup=None):
     Negative engine sentinels and all absent measurements stay blank.
     """
     rows, evidence, complete = {}, defaultdict(list), set()
+    distance_pairs = {}
     setup = dict(setup or {})
     for line in lines:
-        marker = next((name for name in ('DUNECITY_MAP_FEATURE:', 'DUNECITY_ROCK:',
-                                        'DUNECITY_ROCK_KEY:') if name in line), None)
+        marker = next((name for name in ('DUNECITY_MAP_FEATURE:', 'DUNECITY_MAP_DISTANCE:',
+                                        'DUNECITY_ROCK:', 'DUNECITY_ROCK_KEY:') if name in line), None)
         if not marker:
             continue
         data = _parse(line, marker)
         if data.get('cycle') != '0':
+            continue
+        if marker == 'DUNECITY_MAP_DISTANCE:':
+            pair = {field: int(data[field]) for field in (
+                'house', 'other_house', 'base_x', 'base_y', 'other_base_x', 'other_base_y',
+                'dx', 'dy', 'distance_squared')}
+            if (pair['dx'] != pair['base_x'] - pair['other_base_x']
+                    or pair['dy'] != pair['base_y'] - pair['other_base_y']
+                    or pair['distance_squared'] != pair['dx'] ** 2 + pair['dy'] ** 2):
+                raise ValueError('Inconsistent integer start-coordinate distance evidence')
+            key = pair['house'], pair['other_house']
+            text = line[line.index(marker):].rstrip() + '\n'
+            if key in distance_pairs and distance_pairs[key][0] != pair:
+                raise ValueError('Conflicting integer start-coordinate distance evidence')
+            distance_pairs[key] = pair, text
             continue
         house = _house(data.get('house', ''))
         if house == '' and marker != 'DUNECITY_MAP_FEATURE:':
@@ -208,7 +232,24 @@ def rows_from_log(lines, game, setup=None):
                         raise ValueError(f'Conflicting {target} at cycle zero for {game.get("id")}/{house}')
             row['cycle'] = 0
         evidence[house].append(line[line.index(marker):].rstrip() + '\n')
+    coordinates = {}
+    for pair, text in distance_pairs.values():
+        for owner, x, y in ((pair['house'], pair['base_x'], pair['base_y']),
+                            (pair['other_house'], pair['other_base_x'], pair['other_base_y'])):
+            if owner in coordinates and coordinates[owner] != (x, y):
+                raise ValueError('Conflicting physical-house start-coordinate evidence')
+            coordinates[owner] = x, y
     for house, row in rows.items():
+        if distance_pairs:
+            selected = [pair for pair, text in distance_pairs.values()
+                        if house == '' or int(house) in (pair['house'], pair['other_house'])]
+            if row['base_distance_pair_count'] == len(selected):
+                row['base_start_coordinates'] = ';'.join(
+                    f'{owner}:{x}:{y}' for owner, (x, y) in sorted(coordinates.items()))
+                row['base_distance_squared_pairs'] = ';'.join(
+                    f'{pair["house"]}:{pair["other_house"]}:{pair["distance_squared"]}'
+                    for pair in sorted(selected, key=lambda pair: (pair['house'], pair['other_house'])))
+                evidence[house].extend(text for pair, text in distance_pairs.values())
         row['measurement_status'] = 'engine_start' if house in complete else 'engine_start_partial'
         row['evidence_sha256'] = _sha(''.join(evidence[house]).encode())
     return [rows[house] for house in sorted(rows, key=lambda value: int(value) if value else -1)]

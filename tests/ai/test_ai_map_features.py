@@ -60,6 +60,29 @@ class MapFeatureReceiptTests(unittest.TestCase):
         self.assertEqual(rows[1]['map_hash'], 'receipt-hash')
         self.assertEqual(rows[0]['size'], '5')
 
+    def test_integer_start_evidence_retains_physical_houses_and_raw_display(self):
+        lines = [
+            'DUNECITY_MAP_DISTANCE: cycle=0 house=0 other_house=4 base_x=4 base_y=7 '
+            'other_base_x=1 other_base_y=3 dx=3 dy=4 distance_squared=25',
+            'DUNECITY_MAP_FEATURE: cycle=0 house=-1 width=8 height=8 player_count=2 '
+            'initial_spice_density=0.015624999 map_tile_count=64 initial_spice_tiles=1 '
+            'mountain_tiles=3 base_distance_pair_count=1 base_distance_min_squared=25',
+            'DUNECITY_MAP_FEATURE: cycle=0 house=4 width=8 height=8 player_count=2 '
+            'base_x=1 base_y=3 base_distance_pair_count=1 base_distance_min_squared=25',
+        ]
+        rows = {row['house']: row for row in features.rows_from_log(lines, self.game)}
+        self.assertEqual(rows['']['map_tile_count'], 64)
+        self.assertEqual(rows['']['initial_spice_tiles'], 1)
+        self.assertEqual(rows['']['mountain_tiles'], 3)
+        self.assertEqual(rows['']['initial_spice_density'], 0.015624999)
+        self.assertEqual(rows['']['base_distance_min_squared'], 25)
+        self.assertEqual(rows['']['base_start_coordinates'], '0:4:7;4:1:3')
+        self.assertEqual(rows['4']['base_start_coordinates'], '0:4:7;4:1:3')
+        self.assertEqual(rows['4']['base_distance_squared_pairs'], '0:4:25')
+        self.assertEqual(rows['4']['base_x'], 1)  # Runtime house, not candidate/roster index.
+        with self.assertRaisesRegex(ValueError, 'integer start-coordinate'):
+            features.rows_from_log([lines[0].replace('distance_squared=25', 'distance_squared=26')], self.game)
+
     def test_legacy_rock_and_key_start_receipts_supply_exact_counts(self):
         lines = [
             'DUNECITY_ROCK: minute=0 cycle=0 house=0 rock_initial_area=25 rock_initial_free=21 '

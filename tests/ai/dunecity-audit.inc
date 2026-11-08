@@ -38,6 +38,12 @@ struct MapFeatureCounts {
     int area{}, free{}, origins22{}, origins32{}, origins33{};
 };
 
+struct MapFeatureDistances {
+    std::array<double,2> values{-1,-1};
+    int pairCount{};
+    int64_t minimumSquared=-1;
+};
+
 struct MapFeatureObservation {
     const Game* game{};
     const Map* map{};
@@ -151,19 +157,30 @@ inline void sampleMapFeatures(Game& game) {
         allBases=allBases && bases[owner].isValid();
     }
     auto distances=[&](int owner) {
-        std::array<double,2> result{-1,-1};
+        MapFeatureDistances result;
         if (!allBases || houses.size()<2) return result;
         double total=0,minimum=0;
-        int pairs=0;
         for (size_t a=0;a<houses.size();++a) for (size_t b=a+1;b<houses.size();++b) {
             const int first=houses[a]->getHouseID(),second=houses[b]->getHouseID();
             if (owner>=0 && first!=owner && second!=owner) continue;
+            const int64_t dx=int64_t(bases[first].x)-bases[second].x;
+            const int64_t dy=int64_t(bases[first].y)-bases[second].y;
+            const int64_t squared=dx*dx+dy*dy;
             const double distance=std::hypot(double(bases[first].x-bases[second].x),
                 double(bases[first].y-bases[second].y));
-            if (!pairs || distance<minimum) minimum=distance;
-            total+=distance; ++pairs;
+            if (!result.pairCount || distance<minimum) minimum=distance;
+            if (result.minimumSquared<0 || squared<result.minimumSquared) result.minimumSquared=squared;
+            total+=distance; ++result.pairCount;
+            // Exact integer evidence alongside the unchanged floating display.
+            // Pair identities are physical runtime houses, never candidate seats.
+            if (owner<0)
+                SDL_Log("DUNECITY_MAP_DISTANCE: cycle=0 house=%d other_house=%d"
+                        " base_x=%d base_y=%d other_base_x=%d other_base_y=%d"
+                        " dx=%lld dy=%lld distance_squared=%lld",
+                    first,second,bases[first].x,bases[first].y,bases[second].x,bases[second].y,
+                    static_cast<long long>(dx),static_cast<long long>(dy),static_cast<long long>(squared));
         }
-        if (pairs) result={minimum,total/pairs};
+        if (result.pairCount) result.values={minimum,total/result.pairCount};
         return result;
     };
     auto emit=[&](int owner,const MapFeatureCounts& measured,int formations,int largest,int largestOrigins,
@@ -176,11 +193,14 @@ inline void sampleMapFeatures(Game& game) {
                 " largest_component_free3x3=%d rock_initial_area=%d rock_initial_free=%d rock_free=%d"
                 " rock_in_range=%d rock_committed=%d free2x2_count=%d free3x2_count=%d"
                 " in_range2x2_count=%d in_range3x2_count=%d in_range3x3_count=%d"
-                " base_x=%d base_y=%d base_distance_min=%.9f base_distance_mean=%.9f",
+                " base_x=%d base_y=%d base_distance_min=%.9f base_distance_mean=%.9f"
+                " map_tile_count=%d initial_spice_tiles=%d mountain_tiles=%d"
+                " base_distance_pair_count=%d base_distance_min_squared=%lld",
             owner,w,h,houses.size(),double(spiceTiles)/n,spiceAmount,double(mountains)/n,
             measured.area,formations,largest,measured.origins33,largestOrigins,measured.area,measured.free,
             measured.free,rangeTiles,reserved,measured.origins22,measured.origins32,range22,range32,range33,
-            base.x,base.y,distance[0],distance[1]);
+            base.x,base.y,distance.values[0],distance.values[1],n,spiceTiles,mountains,
+            distance.pairCount,static_cast<long long>(distance.minimumSquared));
     };
     MapFeatureCounts total;
     int largest=-1,reserved=0;
