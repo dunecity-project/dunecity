@@ -107,8 +107,11 @@ def play(args, scratch, binary, game):
     name = 'g' + hashlib.sha256(game['id'].encode()).hexdigest()[:12]
     out = Path(scratch) / name
     results = Path(args.results)
-    evidence = results / 'diagnostics' / name
-    evidence.mkdir(parents=True, exist_ok=True)
+    # The cluster archives scratch evidence, not arbitrary files in results/.
+    # Do not create out yet: the ordinary runner requires it not to exist.
+    evidence = out / 'diagnostics'
+    console = Path(scratch) / (name + '.runner.log')
+    runner_profile = Path(scratch) / (name + '.runner.pstats')
     measurement = evidence / 'native.json'
     env = dict(os.environ, DUNECITY_SIM_MEASURE=str(measurement),
                DUNECITY_SIM_SAMPLE_SECONDS=str(args.sample_seconds), DUNECITY_ASSET_TIMING='1')
@@ -119,7 +122,7 @@ def play(args, scratch, binary, game):
     if args.heap_tools:
         env['BALANCE_HEAP_TOOLS'] = '1'
     if args.malloc_stacks and sys.platform == 'darwin':
-        env['MallocStackLogging'] = 'lite'
+        env['DUNECITY_SIM_MALLOC_STACKS'] = 'lite'
     case, bench = case_arguments(game['case'])
     cmd = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
            '--prebuilt-probe', str(binary), '--output-dir', str(out), '--capture-mib', '256',
@@ -127,22 +130,19 @@ def play(args, scratch, binary, game):
     if args.ai_telemetry:
         cmd.remove('--no-ai-telemetry')
     if args.runner_profile:
-        cmd = [sys.executable, '-m', 'cProfile', '-o', str(evidence / 'runner.pstats')] + cmd[1:]
+        cmd = [sys.executable, '-m', 'cProfile', '-o', str(runner_profile)] + cmd[1:]
     env['BALANCE_DUNECITY_AUDIT'] = '1'
-    rc, cpu, _ = measure_runner(cmd, evidence / 'runner.log', env=env, cwd=root)
-    if args.runner_profile and (evidence / 'runner.pstats').exists():
+    rc, cpu, _ = measure_runner(cmd, console, env=env, cwd=root)
+    evidence.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(console, evidence / 'runner.log')
+    console.unlink()
+    if args.runner_profile and runner_profile.exists():
         import pstats
         with (evidence / 'runner-profile.txt').open('w') as stream:
-            pstats.Stats(str(evidence / 'runner.pstats'), stream=stream).strip_dirs().sort_stats('cumulative').print_stats(100)
-        (evidence / 'runner.pstats').unlink()
+            pstats.Stats(str(runner_profile), stream=stream).strip_dirs().sort_stats('cumulative').print_stats(100)
+        runner_profile.unlink()
     parse_started = time.process_time()
     lines = (out / 'run.log').read_text(errors='replace').splitlines() if (out / 'run.log').exists() else []
-    shutil.copy2(out / 'run.log', evidence / 'run.log') if (out / 'run.log').exists() else None
-    if (out / 'summary.json').exists():
-        shutil.copy2(out / 'summary.json', evidence / 'summary.json')
-    for pattern in ('heap-*.txt', 'vmmap-*.txt', 'malloc-*.txt'):
-        for source in out.glob(pattern):
-            shutil.copy2(source, evidence / source.name)
     native = json.loads(measurement.read_text()) if measurement.exists() else {}
     timing = next((fields(line, 'PROBE_TIMING:') for line in lines if 'PROBE_TIMING:' in line), {})
     digests = [fields(line, 'PROBE_DIGEST:') for line in lines if 'PROBE_DIGEST:' in line]
@@ -151,6 +151,8 @@ def play(args, scratch, binary, game):
     signature = {'digests': digests, 'results': [line.split('INFO: ', 1)[-1].strip() for line in lines
                                               if any(marker in line for marker in markers)]}
     error = '' if rc == 0 and native and timing and digests and digests[-1].get('final') == '1' else f'rc={rc};incomplete'
+    if args.sample_seconds and sys.platform == 'darwin' and not (evidence / 'native.sample.txt').is_file():
+        error = ';'.join(filter(None, (error, 'sample_missing')))
     startup = [line.split('ASSET_STARTUP:', 1)[1].strip() for line in lines if 'ASSET_STARTUP:' in line]
     row = dict(id=game['id'], case=game['case'], round=game['round'], host=platform.node(), platform=sys.platform,
                started_epoch=epoch_started, ended_epoch=time.time(), startup_wall_s=native.get('startup_wall_s', ''),
@@ -174,6 +176,12 @@ def play(args, scratch, binary, game):
                                    or 'FORMATION_DUEL_MAP:' in line])
         row['bench'] = json.dumps(bench, separators=(',', ':'))
     append(results / 'games.csv', row)
+    if not os.environ.get('CLUSTER_SCRATCH'):
+        retained = results / 'diagnostics' / name
+        shutil.copytree(evidence, retained, dirs_exist_ok=True)
+        for source in out.iterdir():
+            if source.is_file() and source.suffix in ('.log', '.json', '.txt'):
+                shutil.copy2(source, retained / source.name)
     finish_game(scratch, out, bool(error))
     return row
 

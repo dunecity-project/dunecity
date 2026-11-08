@@ -6,6 +6,7 @@ process's user + kernel time. Sampling/profile-tool costs are kept separate.
 import json
 import os
 import platform
+import re
 import statistics
 import subprocess
 import sys
@@ -13,6 +14,17 @@ import threading
 import time
 from pathlib import Path
 from contextlib import nullcontext
+
+
+def loop_steady_rss(samples, startup_wall_s, loop_ms):
+    """Median only within the measured simulation loop, excluding asset startup."""
+    if startup_wall_s is None or loop_ms is None:
+        return None
+    seconds = float(loop_ms) / 1000
+    lower = float(startup_wall_s) + max(0.25, seconds * 0.25)
+    upper = float(startup_wall_s) + seconds * 0.9
+    values = [rss for wall, rss in samples if lower <= wall <= upper]
+    return round(statistics.median(values), 3) if values else None
 
 
 def measure_runner(command, console, *, env, cwd):
@@ -93,6 +105,9 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     started, monitor_started = time.monotonic(), time.process_time()
+    env = dict(env)
+    if sys.platform == 'darwin' and env.get('DUNECITY_SIM_MALLOC_STACKS'):
+        env['MallocStackLogging'] = env.pop('DUNECITY_SIM_MALLOC_STACKS')
     process = subprocess.Popen(command, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT)
     samples, tools, errors = [], [], []
     probe_cpu, peak, returncode = 0.0, 0.0, None
@@ -107,7 +122,8 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
             with output.with_suffix('.sample-console.txt').open('w') as console:
                 result = subprocess.run(['/usr/bin/sample', str(process.pid), str(sample_seconds), '1',
                                          '-mayDie', '-file', str(destination)],
-                                        stdout=console, stderr=subprocess.STDOUT, timeout=sample_seconds + 30)
+                                        stdout=console, stderr=subprocess.STDOUT,
+                                        timeout=max(300, sample_seconds + 60))
             tools.append({'tool': 'sample', 'returncode': result.returncode, 'file': destination.name})
         except (OSError, subprocess.TimeoutExpired) as error:
             errors.append(str(error))
@@ -143,7 +159,7 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
                                           capture_output=True, text=True, check=False)
                 rss = float(observed.stdout.strip() or 0) / 1024
             samples.append([round(now - started, 3), round(rss, 3)])
-            if sample_seconds and sys.platform == 'darwin' and sample_thread is None and now - started >= 3:
+            if sample_seconds and sys.platform == 'darwin' and sample_thread is None and startup_wall is not None:
                 sample_thread = threading.Thread(target=profile, name='probe-sample', daemon=True)
                 sample_thread.start()
             if returncode is None:
@@ -161,14 +177,16 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
                 peak = usage.ru_maxrss / ((1 << 20) if sys.platform == 'darwin' else 1024)
         elapsed = time.monotonic() - started
         if sample_thread:
-            sample_thread.join(timeout=sample_seconds + 35)
-        steady = [rss for wall, rss in samples if wall >= max(3, elapsed * 0.25) and wall <= elapsed * 0.9]
+            sample_thread.join(timeout=max(310, sample_seconds + 70))
+        log_text = Path(log.name).read_text(errors='replace')
+        timing = re.search(r'PROBE_TIMING: [^\n]*\bloop_ms=(\d+)', log_text)
+        loop_ms = int(timing[1]) if timing else None
         row = dict(schema=1, host=platform.node(), platform=sys.platform, cpu_count=os.cpu_count(),
                    command=[str(value) for value in command], wall_s=round(elapsed, 6),
                    cpu_s=round(probe_cpu, 6), peak_rss_mib=round(peak, 3),
                    startup_wall_s=round(startup_wall, 3) if startup_wall is not None else None,
                    startup_resolution_s=0.25,
-                   steady_rss_mib=round(statistics.median(steady), 3) if steady else None,
+                   loop_ms=loop_ms, steady_rss_mib=loop_steady_rss(samples, startup_wall, loop_ms),
                    rss_samples=samples, monitor_cpu_s=round(time.process_time() - monitor_started, 6),
                    profile_tools=tools, errors=errors, returncode=returncode, timed_out=timed_out)
         output.write_text(json.dumps(row, indent=2) + '\n')
