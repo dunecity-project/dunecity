@@ -101,7 +101,16 @@ struct World {
         game->bReplay = true;
         game->initGame(init);
         require(game->gameType == GameType::CustomGame && game->isObserving() == !passiveOpponentImmortal
-                && pLocalHouse && pLocalPlayer, "Offline fixture did not initialize its genuine local view");
+                && pLocalPlayer, "Offline fixture did not initialize its genuine local view");
+        if(passiveOpponentImmortal) {
+            require(pLocalHouse && pLocalPlayer->getHouse() == pLocalHouse,
+                    "The passive human opponent lost its local house");
+        } else {
+            require(!pLocalHouse && !pLocalPlayer->getHouse()
+                    && pLocalPlayer->getPlayerID() == Player::OBSERVER_PLAYER_ID
+                    && !game->getPlayerByID(Player::OBSERVER_PLAYER_ID),
+                    "The trooper-support observer acquired a participant's house or controller slot");
+        }
         game->bReplay = false;
         game->initializeGameLoop();
         game->bPause = false;

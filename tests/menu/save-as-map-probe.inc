@@ -150,7 +150,14 @@ struct Match {
         game->bReplay = true; // The same diagnostic-only briefing suppression as the skirmish fixture.
         game->initGame(init);
         game->bReplay = false;
-        menuRequire(currentGameMap && pLocalHouse && pLocalPlayer, "Save as Map game did not initialize");
+        menuRequire(currentGameMap && pLocalPlayer, "Save as Map game did not initialize");
+        if(game->isObserving()) {
+            menuRequire(!pLocalHouse && !pLocalPlayer->getHouse(),
+                        "Save as Map observer acquired a participant's house");
+        } else {
+            menuRequire(pLocalHouse && pLocalPlayer->getHouse() == pLocalHouse,
+                        "Save as Map participant lost its local house");
+        }
         game->initializeGameLoop();
         game->bPause = false;
     }
@@ -327,7 +334,7 @@ ExportedMap saveThroughPause(Game& game, const GameInitSettings& init, const Sna
     const auto data = MatchMapExport::mapData(game, moment);
     const auto path = MatchMapExport::destination(name, data);
     menuRequire(!existsFile(path), "Save as Map fixture output already exists in its isolated profile");
-    InGameMenu pause(false, getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3));
+    InGameMenu pause(false, getHouseColorRGB(getHouseVisualHouse(game.getInterfaceHouseID()), 3));
     menuRequire(pause.saveMapButton.isVisible() && pause.saveMapButton.isEnabled()
                 && pause.saveMapButton.getParent(), "Custom/skirmish pause menu hides Save as Map");
     requirePauseFit(pause);
@@ -612,7 +619,7 @@ void verifyAvailability(const GameInitSettings& randomInit) {
                     "Offline spectator cannot export a custom/skirmish map");
         menuRequire(MatchMapExport::mapData(*match.game, Moment::Start) == watched.getFiledata(),
                     "Offline spectator start export is not the embedded generated map");
-        InGameMenu pause(false, getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3));
+        InGameMenu pause(false, getHouseColorRGB(getHouseVisualHouse(match.game->getInterfaceHouseID()), 3));
         menuRequire(pause.saveMapButton.isVisible() && pause.saveMapButton.isEnabled(),
                     "Offline spectator pause menu hides Save as Map");
         requirePauseFit(pause);
@@ -622,6 +629,26 @@ void verifyAvailability(const GameInitSettings& randomInit) {
         menuRequire(dialog != nullptr, "Offline spectator Save as Map does not open its dialog");
         requireDialogFit(*dialog);
         menuCapture(*dialog, "save-as-map-offline-spectator-dialog");
+        const auto before = match.game->computeStateDigest();
+        for(const auto moment : {Moment::Start, Moment::Current}) {
+            const std::string name = moment == Moment::Start
+                ? "save-as-map-offline-spectator-start" : "save-as-map-offline-spectator-current";
+            const auto data = MatchMapExport::mapData(*match.game, moment);
+            const auto path = MatchMapExport::destination(name, data);
+            menuRequire(!existsFile(path), "Observer map output already exists in its isolated profile");
+            dialog->mapName.setText(name);
+            selectMoment(*dialog, moment, name);
+            click(dialog->saveButton);
+            menuRequire(dialog->getSavedPath() == path && existsFile(path)
+                        && readCompleteFile(path) == data
+                        && MatchMapExport::playerCount(data) == static_cast<int>(watched.getHouseInfoList().size()),
+                        "Houseless observer Save as Map lost map bytes or participant starts");
+            menuCapture(*dialog, name + "-saved");
+            dismissMessage(*dialog);
+            menuRequire(!pLocalHouse && !pLocalPlayer->getHouse()
+                        && match.game->computeStateDigest() == before,
+                        "Observer map export acquired a house or changed the live match");
+        }
         click(dialog->cancelButton);
         pause.processChildWindowOpenCloses();
     }
@@ -638,7 +665,7 @@ void verifyAvailability(const GameInitSettings& randomInit) {
         }
         Match match(campaign);
         menuRequire(!MatchMapExport::available(*match.game), "Campaign incorrectly permits Save as Map");
-        InGameMenu pause(false, getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3));
+        InGameMenu pause(false, getHouseColorRGB(getHouseVisualHouse(match.game->getInterfaceHouseID()), 3));
         menuRequire(!pause.saveMapButton.isVisible() && !pause.saveMapButton.isEnabled(),
                     "Campaign pause menu exposes Save as Map");
         pause.onSaveMap();
