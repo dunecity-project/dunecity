@@ -587,8 +587,8 @@ int runOwnershipProbe() {
                 interface.aiRoleButton.handleMouseLeft(5, 5, true);
                 interface.aiRoleButton.handleMouseLeft(5, 5, false);
                 const Command* sent = nullptr;
-                for(const auto& cycle : game->getCommandManager().timeslot)
-                    for(const auto& command : cycle)
+                for(const auto& [cycle,commands] : game->getCommandManager().timeslot)
+                    for(const auto& command : commands)
                         if(command.getCommandID() == CMD_AI_SUPPORT_ROLE) sent = &command;
                 if(!sent || sent->getParameter() != std::vector<Uint32>{static_cast<Uint32>(AIRole::Fighter)}
                    || sent->getPlayerID() != pLocalPlayer->getPlayerID())
@@ -640,7 +640,7 @@ int runOwnershipProbe() {
             question->onButton(QSTBOX_BUTTON1);
             game->pInGameMenu->processChildWindowOpenCloses();
             size_t skipCount = 0;
-            for(const auto& slot : game->getCommandManager().timeslot)
+            for(const auto& [cycle,slot] : game->getCommandManager().timeslot)
                 for(const auto& command : slot) if(command.getCommandID() == CMD_CAMPAIGN_SKIP) ++skipCount;
             if(skipCount != 1) throw std::runtime_error("confirmation did not queue exactly one skip command");
             game->getCommandManager().timeslot = commandsBefore;

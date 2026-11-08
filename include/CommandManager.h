@@ -27,6 +27,7 @@
 #include <Network/CommandList.h>
 
 #include <vector>
+#include <map>
 
 /**
     The command manager collects all the given user commands (e.g. move unit u to position (x,y)) . These commands might be transfered over a network.
@@ -79,7 +80,7 @@ public:
     */
     void load(InputStream& stream);
     void discardCommandsFrom(Uint32 cycle) {
-        if(timeslot.size()>cycle) timeslot.resize(cycle);
+        timeslot.erase(timeslot.lower_bound(cycle), timeslot.end());
         // Truncation can remove local commands from inside the current window without
         // moving its bounds, so the next direct emission must not be suppressed as an
         // unchanged repeat of what was sent before the rewrite.
@@ -87,7 +88,9 @@ public:
     }
     const std::vector<Command>& commandsAt(Uint32 cycle) const {
         static const std::vector<Command> empty;
-        return cycle<timeslot.size() ? timeslot[cycle] : empty;
+        if(cycle > lastCommandCycle) return empty;
+        const auto it = timeslot.find(cycle);
+        return it == timeslot.end() ? empty : it->second;
     }
 
 
@@ -135,7 +138,12 @@ public:
     void executeCommands(Uint32 CycleNumber) const;
 
 private:
-    std::vector< std::vector<Command> > timeslot;   ///< a vector of vectors containing the scheduled commands. At index x is a list of all commands scheduled for game cycle x.
+    // Only occupied cycles have storage. Ordered keys retain the replay's
+    // ascending-cycle serialization; each cycle retains its stable player order.
+    std::map<Uint32, std::vector<Command>> timeslot;
+    // Conservative upper bound avoids a tree lookup after the newest command.
+    // Truncation may leave it high, never below a retained command's cycle.
+    Uint32 lastCommandCycle = 0;
     std::unique_ptr<OutputStream> pStream;          ///< a stream all added commands will be written to. May be nullptr
     bool bReadOnly;                                 ///< true = addCommand() is a NO-OP, false = addCommand() has normal behaviour
     Uint32 networkCycleBuffer;                      ///< the number of frames a command is given in advance

@@ -620,7 +620,7 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
     // Nothing a read-only window does may reach the command queue.
     auto commandCount = [&]() {
         std::size_t count = 0;
-        for(const auto& slot : game.cmdManager.timeslot) count += slot.size();
+        for(const auto& [cycle,slot] : game.cmdManager.timeslot) count += slot.size();
         return count;
     };
     // An observer may now read any house's budget, by request: the window opens,

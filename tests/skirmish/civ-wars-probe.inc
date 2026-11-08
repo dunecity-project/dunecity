@@ -174,7 +174,7 @@ void runCivResearchGame(const GameInitSettings& init) {
     };
     auto commands = [&]() {
         int count = 0;
-        for(const auto& slot : game->cmdManager.timeslot) for(const auto& command : slot)
+        for(const auto& [cycle,slot] : game->cmdManager.timeslot) for(const auto& command : slot)
             count += command.getCommandID() == CMD_RESEARCH_TECH_LEVEL;
         return count;
     };

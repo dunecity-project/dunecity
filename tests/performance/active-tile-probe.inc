@@ -50,6 +50,117 @@ void requireRegistryCoversMap(const char* when) {
     require(withTimers <= registered, when);
 }
 
+void checkOccupantStorage() {
+    Tile tile;
+    for (Uint32 id : {20u, 10u, 20u}) tile.assignAirUnit(id);
+    for (Uint32 id : {30u, 40u, 30u}) tile.assignInfantry(id, 0);
+    for (Uint32 id : {50u, 60u, 50u}) tile.assignUndergroundUnit(id);
+    for (Uint32 id : {70u, 80u, 70u}) tile.assignNonInfantryGroundObject(id);
+    auto ids = [](const auto& list) { return std::vector<Uint32>(list.begin(), list.end()); };
+    require(ids(tile.getAirUnitList()) == std::vector<Uint32>{20, 10, 20}, "Air insertion order and duplicates");
+    require(ids(tile.getInfantryList()) == std::vector<Uint32>{30, 40, 30}, "Infantry insertion order and duplicates");
+    require(ids(tile.getUndergroundUnitList()) == std::vector<Uint32>{50, 60, 50}, "Underground insertion order and duplicates");
+    require(ids(tile.getNonInfantryGroundObjectList()) == std::vector<Uint32>{70, 80, 70}, "Ground insertion order and duplicates");
+    require(tile.infantryNotFull(), "Three infantry leave room");
+    tile.assignInfantry(90, 3);
+    tile.assignInfantry(100, 4);
+    require(!tile.infantryNotFull(), "Five infantry fill a tile");
+    // Destruction loops advance before removing the current node.
+    auto successor = std::next(tile.getAirUnitList().begin());
+    tile.unassignAirUnit(20);
+    require(*successor == 10 && ids(tile.getAirUnitList()) == std::vector<Uint32>{10},
+            "Removing all matching air ids preserves successor iterators");
+    tile.unassignInfantry(30, 0);
+    tile.unassignUndergroundUnit(50);
+    tile.unassignNonInfantryGroundObject(70);
+    require(ids(tile.getInfantryList()) == std::vector<Uint32>{40, 90, 100} && tile.infantryNotFull(),
+            "Infantry removal preserves order and frees room");
+    require(ids(tile.getUndergroundUnitList()) == std::vector<Uint32>{60}, "Underground removal preserves order");
+    require(ids(tile.getNonInfantryGroundObjectList()) == std::vector<Uint32>{80}, "Ground removal preserves order");
+    OMemoryStream saved;
+    saved.open();
+    tile.save(saved);
+    Tile restored;
+    IMemoryStream in(saved.getData(), saved.getDataLength());
+    restored.load(in);
+    require(in.getRemainingLength() == 0, "Occupant tile load consumes exactly its bytes");
+    require(ids(restored.getAirUnitList()) == ids(tile.getAirUnitList())
+            && ids(restored.getInfantryList()) == ids(tile.getInfantryList())
+            && ids(restored.getUndergroundUnitList()) == ids(tile.getUndergroundUnitList())
+            && ids(restored.getNonInfantryGroundObjectList()) == ids(tile.getNonInfantryGroundObjectList()),
+            "All four occupant registries survive save/load in order");
+    OMemoryStream again;
+    again.open();
+    restored.save(again);
+    require(std::string(again.getData(), again.getDataLength()) == std::string(saved.getData(), saved.getDataLength()),
+            "Occupant save/load preserves the tile wire format");
+}
+
+void checkCommandHistoryStorage() {
+    constexpr Uint32 late = 375000;
+    const Command first(1, CMD_UNIT_SETMODE, 11, 0);
+    const Command second(1, CMD_UNIT_SETMODE, 33, 2);
+    const Command otherPlayer(2, CMD_UNIT_SETMODE, 22, 1);
+    CommandManager history;
+    auto recording = std::make_unique<OMemoryStream>();
+    recording->open();
+    const auto* recorded = recording.get();
+    history.setStream(std::move(recording));
+    history.addCommand(otherPlayer, late);
+    history.addCommand(first, 5);
+    history.addCommand(first, late);
+    history.addCommand(second, late);
+    require(history.timeslot.size() == 2, "Only the two occupied command cycles allocate slots");
+    require(history.commandsAt(0).empty() && history.commandsAt(late + 1).empty(),
+            "Sparse missing cycles are empty before and after the history");
+    require(history.commandsAt(late).size() == 3, "All commands at the same cycle are retained");
+    auto savedBytes = [](const CommandManager& manager) {
+        OMemoryStream out;
+        out.open();
+        manager.save(out);
+        return std::string(out.getData(), out.getDataLength());
+    };
+    // The legacy save format is cycle + Command, in ascending cycle order
+    // and stable player-id order within a cycle, even after out-of-order input.
+    OMemoryStream expected;
+    expected.open();
+    expected.writeUint32(5); first.save(expected);
+    expected.writeUint32(late); first.save(expected);
+    expected.writeUint32(late); second.save(expected);
+    expected.writeUint32(late); otherPlayer.save(expected);
+    const std::string canonical(expected.getData(), expected.getDataLength());
+    require(savedBytes(history) == canonical, "Sparse history preserves exact legacy save bytes and command order");
+    OMemoryStream expectedRecording;
+    expectedRecording.open();
+    expectedRecording.writeUint32(late); otherPlayer.save(expectedRecording);
+    expectedRecording.writeUint32(5); first.save(expectedRecording);
+    expectedRecording.writeUint32(late); first.save(expectedRecording);
+    expectedRecording.writeUint32(late); second.save(expectedRecording);
+    require(std::string(recorded->getData(), recorded->getDataLength())
+                == std::string(expectedRecording.getData(), expectedRecording.getDataLength()),
+            "Replay recording keeps the original insertion-order wire bytes");
+    CommandManager replay;
+    IMemoryStream in(canonical.data(), canonical.size());
+    replay.load(in);
+    require(in.getRemainingLength() == 0 && savedBytes(replay) == canonical,
+            "Legacy command records load and re-save without a format change");
+    history.discardCommandsFrom(late);
+    require(history.timeslot.size() == 1 && history.commandsAt(late).empty()
+                && history.commandsAt(5).size() == 1,
+            "Truncation drops only the requested future commands");
+    history.addCommand(otherPlayer, 1);
+    require(history.commandsAt(1).size() == 1, "Earlier cycles remain insertable after truncation");
+    history.discardCommandsFrom(0);
+    require(history.timeslot.empty(), "Truncation at zero releases every retained cycle");
+    history.addCommand(second, late + 1);
+    require(history.commandsAt(late + 1).size() == 1, "A cleared sparse history accepts a new distant cycle");
+    const std::string beforeRejected = savedBytes(history);
+    history.addCommand(first, std::numeric_limits<Uint32>::max());
+    history.setReadOnly(true);
+    history.addCommand(first, late + 2);
+    require(savedBytes(history) == beforeRejected, "Maximum-cycle and read-only rejection are unchanged");
+}
+
 } // namespace
 
 int runActiveTileProbe() {
@@ -125,6 +236,8 @@ int runActiveTileProbe() {
     // the member relies on the -fno-access-control this probe is compiled with.
     const Uint32 fixtureVersion = game->loadedSavegameVersion;
     game->loadedSavegameVersion = SAVEGAMEVERSION;
+    checkOccupantStorage();
+    checkCommandHistoryStorage();
     {
         IMemoryStream restoring(bytes.data(), bytes.size());
         currentGameMap->load(restoring);

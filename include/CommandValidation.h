@@ -181,8 +181,8 @@ inline bool isAcceptableCommandTotal(std::size_t totalCommands) {
 
 /// Bounds for replay and savegame command streams. These are local files rather than network
 /// input, so they are deliberately generous: at the default game speed 4 million cycles is
-/// about eighteen hours of play. What they stop is a crafted file making CommandManager resize
-/// its per-cycle vector to four billion entries or accumulate commands without end.
+/// about eighteen hours of play. The supported timeline and total command count remain
+/// bounded even when a downloaded replay or a crash-truncated file contains bad records.
 constexpr Uint32 kMaxReplayCycle = 4u * 1000u * 1000u;
 constexpr std::size_t kMaxReplayCommands = 4u * 1000u * 1000u;
 

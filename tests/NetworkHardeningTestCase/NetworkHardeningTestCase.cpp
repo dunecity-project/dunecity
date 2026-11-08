@@ -938,7 +938,7 @@ TEST_CASE("Commands: cycle windows bound the scheduling vector",
     REQUIRE(CommandValidation::isAcceptableCommandCycle(0, currentCycle, buffer));
     REQUIRE(CommandValidation::isAcceptableCommandCycle(currentCycle - 100, currentCycle, buffer));
 
-    // A cycle number of four billion would resize the timeslot vector to four billion entries.
+    // Arbitrarily distant cycles remain outside the negotiated command window.
     REQUIRE_FALSE(CommandValidation::isAcceptableCommandCycle(0xFFFFFFFEu, currentCycle, buffer));
     REQUIRE_FALSE(CommandValidation::isAcceptableCommandCycle(0x80000000u, currentCycle, buffer));
     REQUIRE_FALSE(CommandValidation::isAcceptableCommandCycle(
