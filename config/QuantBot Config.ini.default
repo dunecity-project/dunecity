@@ -391,6 +391,8 @@ CampaignIdleCashFactoryCredits=2000
 CampaignRefineryDefence=0
 # Save the full first Light Factory/foundation/unit runway before optional extra refineries.
 CampaignFactoryRunway=0
+# Campaign AI-support harvest jobs: 0=OFF, 1=home side of enemy-base frontier, 2=four tiles inward.
+CampaignHomeFields=0
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.

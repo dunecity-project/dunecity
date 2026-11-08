@@ -13,6 +13,12 @@ inline bool needsRefineryRefuge(bool returning,bool full,bool hasCargo,bool safe
     return hasCargo && (returning || full || !safeField);
 }
 
+// A worker job must be nearer its own base than a hostile base. The stronger
+// level leaves an inward buffer; equality is deterministic and remains legal.
+inline bool homeFieldAllowed(int homeDistance, int enemyDistance, int level) {
+    return level <= 0 || homeDistance + (level >= 2 ? 4 : 0) <= enemyDistance;
+}
+
 // Inactive worms have no usable map position. Keep visibility ahead of the
 // location read, so neither sleeping nor hidden enemies contribute observations.
 template<class Object>

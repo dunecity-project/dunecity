@@ -6,6 +6,7 @@
 #include <players/QuantBotStrategy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotSpendingPolicy.h>
+#include <players/TacticalSafetyPolicy.h>
 
 #include <array>
 #include <cstdio>
@@ -960,6 +961,38 @@ TEST_CASE("Campaign round-two economy controls independently persist every hashe
         }
     }
     std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign home fields have two independently hashed persistent levels",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHomeFields == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-home-fields-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int level : {0, 1, 2}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHomeFields=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHomeFields == level);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHomeFields = level;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), level).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHomeFields == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+    REQUIRE(TacticalSafetyPolicy::homeFieldAllowed(100, 1, 0));
+    REQUIRE(TacticalSafetyPolicy::homeFieldAllowed(7, 7, 1));
+    REQUIRE_FALSE(TacticalSafetyPolicy::homeFieldAllowed(8, 7, 1));
+    REQUIRE_FALSE(TacticalSafetyPolicy::homeFieldAllowed(7, 10, 2));
+    REQUIRE(TacticalSafetyPolicy::homeFieldAllowed(7, 11, 2));
 }
 
 TEST_CASE("Campaign funded light opening independently persists both hashed states",

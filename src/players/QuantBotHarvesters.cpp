@@ -71,6 +71,30 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     const Coord origin = harvester->getLocation(), destination = harvester->getDestination();
     auto distance = [](Coord a, Coord b) { return std::max(std::abs(a.x-b.x),std::abs(a.y-b.y)); };
     const int mapW = getMap().getSizeX(), mapH = getMap().getSizeY();
+    int homeFieldsLevel = botConfig().force.campaignHomeFields > 0
+        && campaignEconomySupport() && lastCalculatedSpice > 0
+        ? botConfig().force.campaignHomeFields : 0;
+    const Coord home = homeFieldsLevel > 0
+        ? findBaseCentre(getHouse()->getHouseID()) : Coord::Invalid();
+    if (home.isInvalid()) homeFieldsLevel = 0;
+    std::array<Coord, NUM_HOUSES> enemyBases;
+    int enemyBaseCount = 0;
+    if (homeFieldsLevel > 0) {
+        for (int house = 0; house < NUM_HOUSES; ++house) {
+            const House* enemy = getHouse(house);
+            if (!enemy || enemy->isNatives() || enemy->getTeamID() == getHouse()->getTeamID()) continue;
+            const Coord centre = findBaseCentre(house);
+            if (centre.isValid()) enemyBases[enemyBaseCount++] = centre;
+        }
+    }
+    auto homeField = [&](Coord p) {
+        if (homeFieldsLevel == 0) return true;
+        if (p.isInvalid()) return false;
+        int enemyDistance = std::numeric_limits<int>::max();
+        for (int i = 0; i < enemyBaseCount; ++i)
+            enemyDistance = std::min(enemyDistance, distance(p, enemyBases[i]));
+        return TacticalSafetyPolicy::homeFieldAllowed(distance(p, home), enemyDistance, homeFieldsLevel);
+    };
     // harvesterDanger's size stays a live test: scrambleUnitsAndDefend() below can refresh it.
     auto danger = [&](Coord p) {
         return p.isValid() && p.x < mapW && p.y < mapH
@@ -131,7 +155,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
             && target->acceptsHarvesterDropoff() && danger(target->getClosestPoint(origin))==0
             && routeSafe(target->getClosestPoint(origin))
             && (harvester->getAttackMode()==STOP
-                || (job.isValid() && danger(job)==0 && memoryPenalty(job)==0 && spiceRouteSafe(job)))) {
+                || (job.isValid() && homeField(job) && danger(job)==0 && memoryPenalty(job)==0 && spiceRouteSafe(job)))) {
             state.controlled=true;
             return true;
         }
@@ -139,7 +163,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     // Do not hold a safe vehicle after enemies leave. Keep its existing safe job.
     if (!threatened && !harvester->isReturning() && destination.isValid()
         && danger(destination)==0 && memoryPenalty(destination)==0
-        && harvester->getAttackMode() != STOP && !newHarvester && spiceRouteSafe(destination)) {
+        && harvester->getAttackMode() != STOP && !newHarvester && homeField(destination) && spiceRouteSafe(destination)) {
         state.controlled = false;
         state.retreatUntil = 0;
         return false;
@@ -173,7 +197,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     auto crowdPenalty = [&](Coord candidate) { return crowdField.at(candidate.x,candidate.y); };
     Coord best = Coord::Invalid();
     int bestScore = std::numeric_limits<int>::max();
-    int safeFields = 0, rejectedRoutes = 0;
+    int safeFields = 0, rejectedRoutes = 0, rejectedHomeFields = 0;
     // Spice membership and plain-tile flags are the only things shared between the
     // harvesters of one checkAllUnits() pass; they are properties of the tile, not
     // of a harvester. Everything that genuinely varies per harvester or changes as
@@ -242,6 +266,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
         const size_t cell = static_cast<size_t>(candidate.y)*mapW+candidate.x;
         if ((dangerCells && dangerCells[cell]>0) || remembered[cell]
             || (!spice.plain[i] && !harvester->canPass(candidate.x,candidate.y))) continue;
+        if (!homeField(candidate)) { ++rejectedHomeFields; continue; }
         ++safeFields;
         scores.push_back(distance(origin,candidate)*3 + crowdPenalty(candidate));
         candidates.push_back(candidate);
@@ -277,7 +302,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
             // Replace the remembered job before unloading, so deploy/carryall
             // return resumes at the alternate field rather than the old one.
             const Coord job=harvester->getGuardPoint();
-            const bool replaceJob=job.isInvalid() || danger(job)>0 || memoryPenalty(job)>0 || !spiceRouteSafe(job);
+            const bool replaceJob=job.isInvalid() || !homeField(job) || danger(job)>0 || memoryPenalty(job)>0 || !spiceRouteSafe(job);
             if (replaceJob) {
                 doSetAttackMode(harvester,foundSpice ? HARVEST : STOP);
                 if (foundSpice) doMove2Pos(harvester,best.x,best.y,false);
@@ -322,6 +347,8 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
             .set("x",origin.x).set("y",origin.y).set("destination_x",best.x).set("destination_y",best.y)
             .set("danger",danger(origin)).set("old_destination_danger",danger(destination))
             .set("safe_fields",safeFields).set("rejected_routes",rejectedRoutes)
+            .set("home_fields_level",homeFieldsLevel).set("home_fields_rejected",rejectedHomeFields)
+            .set("home_x",home.x).set("home_y",home.y)
             .set("memory_penalty",best.isValid()?memoryPenalty(best):0)
             .set("crowding_penalty",best.isValid()?crowdPenalty(best):0)
             .set("cargo",harvester->getAmountOfSpice().lround()));

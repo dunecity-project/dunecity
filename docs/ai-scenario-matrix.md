@@ -50,6 +50,18 @@ played once). `--cases` can restrict the missions. The default fixed 66-game gat
 the idle-human AI-support seating, and every non-campaign seed remain unchanged.
 Use separate result directories for each arm and keep observer flags identical.
 
+Campaign support field experiment: `[Force Concentration] CampaignHomeFields`
+is hashed and defaults to 0 (OFF). Level 1 rejects spice jobs closer to any
+hostile base centre than the support AI's own base; level 2 leaves a four-tile
+inward margin. Base centres use live deterministic structures, ignoring fog.
+Existing immediate-danger, route, unloading and ownership rules remain.
+It does not increase refinery or worker targets and is inert without spice,
+outside classic campaign human support, or at level 0. Styles:
+`campaign-home-fields-off`, `campaign-home-fields-home`, `campaign-home-fields-margin`.
+The hypothesis is worker survival without drawing the whole opening army into
+an enemy base to rescue a worker; measure worker deaths and defence-response
+locations as well as delivered spice, army, idle cash and wins.
+
 
 ### Genuine exhaustion regression
 

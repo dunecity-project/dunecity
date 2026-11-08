@@ -281,6 +281,9 @@ struct QuantBotConfig {
         /// Save the first campaign light factory's founded quote and first unit before extra refineries.
         /// Independent hashed candidate, default off.
         bool campaignFactoryRunway;
+        /// Campaign AI support keeps worker jobs on its side of the base-distance frontier.
+        /// Hashed, default 0 (OFF); 1 = home side, 2 = four-tile inward margin.
+        int campaignHomeFields;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.
