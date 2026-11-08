@@ -60,13 +60,24 @@ bool QuantBot::simpleTechPolicyActive() const {
 }
 
 bool QuantBot::economicFleetRatioActive() const {
-    return botConfig().force.economicFleetRatios && currentGame && currentGameMap
+    const auto& force = botConfig().force;
+    return (force.economicFleetRatios || (force.cityFleetRatios > 0 && cityEconomyExperimentScope()))
+        && currentGame && currentGameMap
         && lastCalculatedSpice > 0 && (difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal)
         && !builderOnly()
         && !ModManager::instance().isTornieFamilyContentActive()
         && !currentGame->getGameInitSettings().isCivilizationWars()
         && currentGame->getGameInitSettings().getModName() != "CivWars"
         && (!isCampaignGameType(currentGame->gameType) || isAlliedWithHuman());
+}
+
+// Read only while economicFleetRatioActive(): an explicit EconomicFleetRatios
+// configuration keeps its values, otherwise CityFleetRatios' fixed level applies.
+QuantBotBuildPolicy::FleetRatioLevel QuantBot::fleetRatioTreatment() const {
+    const auto& force = botConfig().force;
+    if (force.economicFleetRatios)
+        return {force.fleetHarvestersPerBay, force.fleetCarryallQuarters, force.fleetRepairYards};
+    return QuantBotBuildPolicy::cityFleetRatioLevel(force.cityFleetRatios);
 }
 
 void QuantBot::planFleetResourceBudget(BuildPass& pass) {
@@ -126,7 +137,7 @@ void QuantBot::planFleetResourceBudget(BuildPass& pass) {
 
 bool QuantBot::canAddRepairYard(int includingQueued) const {
     if (economicFleetRatioActive())
-        return includingQueued < botConfig().force.fleetRepairYards;
+        return includingQueued < fleetRatioTreatment().repairYards;
     return (currentGame && currentGame->isCitySimEnabled())
         || difficulty != Difficulty::Medium
         || includingQueued < initialItemCount[Structure_RepairYard]
@@ -482,12 +493,12 @@ void QuantBot::planTechResearch(BuildPass& pass) {
     const bool required = researchRequired(pass);
     if (!pass.cityResearchAllowed || (!required && !civWarsRules()) || getHouse()->isTechResearchActive() || getHouse()->getTechLevel() >= 9
         || !techInvestmentReady(pass)) return;
-    if (pass.techIncomeLevel > 0) {
+    if (pass.techIncomeLevel > 0 || pass.cityTechRefineries > 0) {
         const bool ownsLab = getHouse()->getNumItems(Structure_ResearchLab) > 0;
         const int cost = ownsLab ? getHouse()->getTechResearchCost()
             : buildingCapitalCost(pass, Structure_ResearchLab);
-        // A rate-held project must not keep an unactionable research reserve
-        // away from current-tier units after startTechResearch refuses it.
+        // A rate- or refinery-held project must not keep an unactionable research
+        // reserve away from current-tier units after startTechResearch refuses it.
         if (!incomeTechAdmits(pass, Structure_ResearchLab, cost, ownsLab)) return;
     }
     if (getHouse()->getNumItems(Structure_ResearchLab) == 0) {
@@ -1448,10 +1459,10 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
     if (pass.cityBoom == CityBoomKind::Reactive && lastCalculatedSpice <= 0)
         pass.spiceHarvesterTarget = pass.fundedHarvesterTarget = 0;
     if (pass.fleetRatios) {
-        const auto& force = botConfig().force;
+        const auto fleet = fleetRatioTreatment();
         const auto targets = QuantBotBuildPolicy::economicFleetTargets(pass.fleetSpiceShare,
             harvesterLimit, getAIRefineryBays(), pass.itemCount[Unit_Harvester],
-            force.fleetHarvestersPerBay, force.fleetCarryallQuarters, force.fleetRepairYards,
+            fleet.harvestersPerBay, fleet.carryallQuarters, fleet.repairYards,
             data[Unit_Harvester][houseID].price, data[Structure_Refinery][houseID].price,
             data[Unit_Carryall][houseID].price, !pass.harvesterFactories.empty());
         pass.mapSpiceHarvesterTarget = targets.sustainable;
@@ -1616,7 +1627,7 @@ int QuantBot::harvesterInvestmentReserve(BuildPass& pass) {
 }
 
 bool QuantBot::needsFirstTransport(BuildPass& pass) {
-    if (pass.fleetRatios && botConfig().force.fleetCarryallQuarters == 0) return false;
+    if (pass.fleetRatios && fleetRatioTreatment().carryallQuarters == 0) return false;
     // Preserve early carryalls while Brutal continues growing its fleet.
     if (pass.brutalEconomy ? CityEconomyInvestmentPolicy::openingWorkersNeeded(pass.itemCount[Unit_Harvester],pass.fundedHarvesterTarget)
                           : openingWorkersNeeded(pass)) return false;
@@ -2143,7 +2154,11 @@ int QuantBot::workerAnnualIncome(BuildPass& pass) {
 }
 
 int QuantBot::cityHarvesterReplacementFloor(BuildPass& pass) {
-    if (!botConfig().force.cityHarvesterReplacement || !citySpiceFfaScope(4)) return -1;
+    const auto& force = botConfig().force;
+    // Batch3 CityWorkerReplacement applies the City FFA floor to every City
+    // economy roster with its own payback horizon; the FFA switch keeps precedence.
+    const bool ffa = force.cityHarvesterReplacement && citySpiceFfaScope(4);
+    if (!ffa && (force.cityWorkerReplacement == 0 || !cityEconomyExperimentScope())) return -1;
     int lost = getHouse()->getNumLostItems(Unit_Harvester);
     if (ModManager::instance().isTornieFamilyContentActive())
         lost += getHouse()->getNumLostItems(Unit_CapacityHarvester)
@@ -2165,7 +2180,8 @@ int QuantBot::cityHarvesterReplacementFloor(BuildPass& pass) {
         if (spice <= 0) return -1;
         // 200 spice per worker-minute is the measured native FFA winner yield,
         // not the optimistic trip forecast. Use the forecast only for bay capacity.
-        const int minutes = std::max(1, botConfig().force.cityHarvesterReplacementMinutes);
+        const int minutes = std::max(1, ffa ? force.cityHarvesterReplacementMinutes
+            : QuantBotBuildPolicy::cityWorkerReplacementMinutes(force.cityWorkerReplacement));
         pass.cityReplacementSpiceCap = int(std::min<int64_t>(INT_MAX,
             spice / (int64_t(200) * minutes)));
         pass.cityReplacementCapacity = int(std::min<int64_t>(INT_MAX,
@@ -3159,15 +3175,29 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     pass.forecastSpice = std::min(pass.spiceShare,fleetRate*QuantBotSpendingPolicy::horizonMinutes);
     pass.forecastNetIncome = pass.forecastSpice+(pass.forecastTax-pass.forecastUpkeep)*QuantBotSpendingPolicy::horizonMinutes;
     pass.forecastFunding = std::max(0,pass.money+pass.forecastNetIncome);
+    // Batch3 refinery gates (docs/ai-scenario-matrix.md, "Batch3 City economy
+    // experiments") size from this pass's spice plan.
+    const bool cityEconomy = lastCalculatedSpice > 0 && cityEconomyExperimentScope();
+    if (cityEconomy) {
+        pass.cityTechRefineries = QuantBotBuildPolicy::cityRefineryGateBays(
+            force.cityTechRefineries, pass.spiceHarvesterTarget);
+        pass.cityYardRefineries = QuantBotBuildPolicy::cityRefineryGateBays(
+            force.cityYardRefineries, pass.spiceHarvesterTarget);
+    }
     // Shared-spice-limited sustainable income from the delivered fleet and
     // current tax base, never starting cash or workers still in production.
-    if (force.techIncomeTiming > 0 && gameMode == GameMode::Custom
+    // CityCapitalPacing applies the same levels to research-enabled City
+    // economy matches only; TechIncomeTiming keeps precedence.
+    const bool techIncomeScope = force.techIncomeTiming > 0 && gameMode == GameMode::Custom
         && !isCampaignGameType(currentGame->gameType) && !builderOnly()
         && (getGameInitSettings().getModName() == "vanilla"
             || ModManager::instance().isDuneCityContentActive()) && lastCalculatedSpice > 0
         && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard
-            || difficulty == Difficulty::Brutal)) {
-        pass.techIncomeLevel = force.techIncomeTiming;
+            || difficulty == Difficulty::Brutal);
+    const int incomeLevel = techIncomeScope ? force.techIncomeTiming
+        : cityEconomy && researchLabPolicyActive() ? force.cityCapitalPacing : 0;
+    if (incomeLevel > 0) {
+        pass.techIncomeLevel = incomeLevel;
         // Lifetime realised gross receipts are saved simulation state. Cap by
         // the current shared-spice/fleet forecast and subtract current upkeep;
         // an idle worker or starting-credit windfall is not income.
@@ -3197,16 +3227,16 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         for (const int64_t value : army) pass.techLargestRival = std::max(pass.techLargestRival, value);
         pass.techRivalsSafe = QuantBotBuildPolicy::incomeTechnologySafe(
             pass.techOwnArmy, pass.techLargestRival, localThreat);
-        if (pass.strategicReserveItem != NONE_ID
-            && !incomeTechAdmits(pass, pass.strategicReserveItem, pass.strategicReserveCost)) {
-            pass.strategicReserveItem = NONE_ID;
-            pass.strategicReserveCost = 0;
-        }
         if (pass.emitStatsLog && AITelemetry::log().enabled())
             traceDecision("income_tech_state", AITelemetry::Record()
                 .set("level", pass.techIncomeLevel).set("income_per_minute", pass.techIncomePerMinute)
                 .set("own_army", pass.techOwnArmy).set("largest_rival", pass.techLargestRival)
                 .set("local_threat", localThreat).set("rivals_safe", pass.techRivalsSafe));
+    }
+    if ((pass.techIncomeLevel > 0 || pass.cityTechRefineries > 0) && pass.strategicReserveItem != NONE_ID
+        && !incomeTechAdmits(pass, pass.strategicReserveItem, pass.strategicReserveCost)) {
+        pass.strategicReserveItem = NONE_ID;
+        pass.strategicReserveCost = 0;
     }
     pass.existingMilitaryCapacity = 0; pass.constructionCapacity = 0; pass.readyYards = 0;
     pass.continuedMilitaryCost = 0; pass.continuedConstructionCost = 0;
@@ -3387,7 +3417,7 @@ bool QuantBot::repairPolicyMaintains(BuildPass& pass, const StructureBase* struc
 bool QuantBot::canFundCapacityMcv(BuildPass& pass, int price, Uint32 supplier) {
     if (pass.vanillaBoomArmy && pass.itemCount[Structure_ConstructionYard] > 0) return false;
     if (pass.itemCount[Structure_ConstructionYard]>0 && !pass.rockExpansionNeeded && !pass.colonisationNeeded
-        && !cityOpeningCapitalFunded(pass,price,supplier)) return false;
+        && (!cityOpeningCapitalFunded(pass,price,supplier) || getAIRefineryBays() < pass.cityYardRefineries)) return false;
     return !pass.capacityMcvRunway || int64_t(pass.cashFlow.projectedCash)-pass.capacityMcvOrderedCost
         >= int64_t(price)+pass.cashBuffer;
 }
@@ -3615,7 +3645,7 @@ void QuantBot::planOpeningProduction(BuildPass& pass) {
         getHouse()->getNumItems(Unit_Carryall),pass.itemCount[Unit_Carryall],pass.busyTransports,int(pass.pickupQueue.size()));
     if (pass.fleetRatios)
         pass.transportBaseline = pass.transportTarget = (std::min(pass.mapSpiceHarvesterTarget,
-            pass.itemCount[Unit_Harvester]) * botConfig().force.fleetCarryallQuarters + 3) / 4;
+            pass.itemCount[Unit_Harvester]) * fleetRatioTreatment().carryallQuarters + 3) / 4;
 }
 
 void QuantBot::planDefenceCoverage(BuildPass& pass) {
@@ -3958,7 +3988,7 @@ bool QuantBot::spendingEmergency(BuildPass& pass, Uint32 item) {
 }
 
 bool QuantBot::incomeTechAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade) {
-    if (pass.techIncomeLevel == 0
+    if ((pass.techIncomeLevel == 0 && pass.cityTechRefineries == 0)
         || !QuantBotBuildPolicy::incomeTechnologyProject(item, upgrade, getHouse()->getNumItems(item))) return true;
     // Opening harvest/transport unlocks pay for the income being measured, and
     // must not be held behind that income. Construction/civics upgrades are not
@@ -3975,6 +4005,7 @@ bool QuantBot::incomeTechAdmits(BuildPass& pass, Uint32 item, int cost, bool upg
             && spec.techLevel <= getHouse()->getTechLevel()
             && producer->getCurrentUpgradeLevel() < spec.upgradeLevel) return true;
     }
+    if (getAIRefineryBays() < pass.cityTechRefineries) return false;
     return QuantBotBuildPolicy::incomeTechnologyAdmitted(pass.techIncomeLevel, pass.techIncomePerMinute, cost);
 }
 
@@ -3988,7 +4019,7 @@ bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgra
         if (pass.emitStatsLog && AITelemetry::log().enabled())
             traceDecision("income_tech_hold", AITelemetry::Record().set("item", item).set("cost", cost)
                 .set("upgrade", upgrade).set("income_per_minute", pass.techIncomePerMinute)
-                .set("level", pass.techIncomeLevel));
+                .set("level", pass.techIncomeLevel).set("refinery_bays", pass.cityTechRefineries));
         return false;
     }
     if (!pass.techSavings || cost <= 0) return true;

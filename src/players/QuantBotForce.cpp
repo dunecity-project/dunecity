@@ -181,11 +181,20 @@ QuantBotVanillaPolicy::Plan QuantBot::vanillaBoldPlan(QuantBotVanillaPolicy::Obs
     return receipt.plan;
 }
 
-bool QuantBot::citySpiceFfaScope(unsigned minimumControllers) const {
+bool QuantBot::citySpiceScope() const {
     if (!autonomousCustomArmy() || fighterOnly() || !currentGame->isCitySimEnabled()
         || getGameInitSettings().getModName() != "dunecity") return false;
     const auto type = getGameInitSettings().getGameType();
-    if (type != GameType::CustomGame && type != GameType::CustomMultiplayer) return false;
+    return (type == GameType::CustomGame || type == GameType::CustomMultiplayer)
+        && getGameInitSettings().getInitialSpiceTilePermille() > 0;
+}
+
+bool QuantBot::cityEconomyExperimentScope() const {
+    return citySpiceScope() && !getGameInitSettings().isCivilizationWars();
+}
+
+bool QuantBot::citySpiceFfaScope(unsigned minimumControllers) const {
+    if (!citySpiceScope()) return false;
     unsigned occupied = 0;
     std::array<int, NUM_HOUSES> teams{};
     for (const auto& row : getGameInitSettings().getHouseInfoList()) {
@@ -195,7 +204,7 @@ bool QuantBot::citySpiceFfaScope(unsigned minimumControllers) const {
         if (occupied == teams.size()) return false;
         teams[occupied++] = row.team;
     }
-    return occupied >= minimumControllers && getGameInitSettings().getInitialSpiceTilePermille() > 0;
+    return occupied >= minimumControllers;
 }
 
 const QuantBot::CitySpiceShare& QuantBot::citySpiceShare() const {

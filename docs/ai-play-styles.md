@@ -1459,6 +1459,14 @@ the CityResearchOrder lab fix and VanillaArmyCounters' initial-spice scope.
 exclusions and acceptance receipts are in
 `outputs/ai-tuning-20261108/BatchIntegration/ledger.md`.
 
+## Shared experiment batch 3
+
+Batch3 adds five City-only economy masters, each hashed and default OFF
+(`docs/ai-scenario-matrix.md`, "Batch3 City economy experiments"), on top of
+the CityResearchOrder level-2 default. `experiment-batch-3-off` disables the
+Batch1, Batch2 and Batch3 masters and keeps that default. Owners, pins and
+receipts are in `outputs/ai-tuning-20261108/BatchIntegration/ledger.md`.
+
 ## Duel openings (default 2: DuneCity light raid)
 
 `[Force Concentration] DuelOpeningPlan` is a hashed integer: `0` native,

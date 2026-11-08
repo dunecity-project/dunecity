@@ -299,11 +299,12 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     Uint32 admittedItem = NONE_ID;
     auto releaseUnfundedChoice = [&]() {
         const Uint32 item = yardTurn.itemID;
-        if ((!pass.techSavings && pass.techIncomeLevel == 0 && pass.vanillaPlan == QuantBotVanillaPolicy::Plan::None)
+        const bool incomeGate = pass.techIncomeLevel > 0 || pass.cityTechRefineries > 0;
+        if ((!pass.techSavings && !incomeGate && pass.vanillaPlan == QuantBotVanillaPolicy::Plan::None)
             || item == NONE_ID || item == admittedItem
             || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0) return;
         const bool boomAdmitted = vanillaBoomAdmits(pass, item);
-        if (boomAdmitted && ((!pass.techSavings && pass.techIncomeLevel == 0) || spendingEmergency(pass, item))) {
+        if (boomAdmitted && ((!pass.techSavings && !incomeGate) || spendingEmergency(pass, item))) {
             admittedItem = item;
             return;
         }
