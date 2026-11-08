@@ -288,7 +288,10 @@ def schedule(args):
         if cell['kind'] == 'campaign':
             for house in ('atreides', 'harkonnen', 'ordos'):
                 for level, mission in campaign_missions():
-                    for seed in seeds_for('campaign', f'{house}{mission}', count):
+                    seeds = getattr(args, 'campaign_seeds', None)
+                    if seeds is None:
+                        seeds = seeds_for('campaign', f'{house}{mission}', count)
+                    for seed in dict.fromkeys(seeds):
                         games.append(campaign_game(cell, house, level, mission, seed))
             continue
         seeds = aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
@@ -1038,6 +1041,9 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--campaign-seeds', nargs='+', type=int,
+                    help='Explicit fresh campaign seeds, shared across selected missions; default retains '
+                         'the fixed campaign gate seeds. Does not alter non-campaign games.')
 parser.add_argument('--minutes', type=int, choices=range(1, 121),
                     help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
