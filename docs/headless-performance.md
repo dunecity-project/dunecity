@@ -45,6 +45,49 @@ size and mtime). Every ctest `quantbot_*` probe and every `run-campaign-balance.
 after the first reuses it instead of compiling and linking `balance-main.cpp` again
 (~10 s each). `--prebuilt-probe` still works and skips even the check.
 
+## Simulation-only assets
+
+Batch runners (`scenario-matrix.py`, `dunecity-audit.py`, `formation-duel.py`,
+`run-all-against-atreides.py` and `headless-bench.py`) opt into
+`DUNECITY_HEADLESS_ASSETS=1`. Set that environment variable to `0` for a full-asset
+control. A direct `run-campaign-balance.py` invocation keeps full assets unless
+`--headless-assets` or the environment explicitly enables the mode.
+
+In this mode `GFXManager` does not decode, scale or recolour object sprites, portraits,
+editor art or menu animations. Object texture handles are null: units, structures,
+bullets, explosions and tiles keep their simulation frame counts and geometry in
+their own fields, independently of texture dimensions. Mod activation does not rebuild
+the graphics manager. Global palettes and house-colour mappings remain unchanged.
+
+The probe still constructs a real `GameInterface` and updates its radar. Its sidebar,
+top bar, news-ticker border, radar animation and builder arrows/caps retain the ordinary
+factory-generated assets and exact dimensions. Lazy font loading remains available for
+those controls' real text metrics and human-partner tutorial messages; unrelated menu
+fonts are not requested. Sound/voice decoding, the audio device and music playback are
+disabled. Renderer, screenshot and fixture probes automatically keep full assets even
+when a batch's environment requests the headless mode.
+
+Ordinary Vanilla/DuneCity runs may also share a read-only bundled-mod payload under
+`BUILD/headless-mod-cache/`. The exact engine seeds it once. Its binary SHA256 and
+source fingerprint select the cache, a cross-process lock serializes publication,
+and each reader validates every payload file's SHA256. Publication is an atomic rename;
+published files are never written. A stale, corrupt or inaccessible cache falls back
+to normal private-profile installation without replacing the shared data. Each game's
+active-mod pointer and Workshop snapshots stay private. Custom maps/options, loaded
+saves, custom mods and fixture probes do not use shared payloads.
+
+Probe cleanup preserves immutable revision files while games use them, then clears
+the Windows ReadOnly bit only when deleting a private disposable tree. Real
+permission/locked-file errors still propagate; output directories must still be
+new. Cleanup never changes permissions in the published shared mod payload.
+
+For opt-in start-up attribution, the shared simulation-throughput harness records
+`ASSET_STARTUP` phases: `bundled_mods`, `graphics`, `sounds`, `voices`, `activate_mod`
+and `probe_setup`. Phases are inclusive (`sounds` contains `voices`), and
+`probe_setup` begins only after the common engine start-up. Its native measurement
+also records process-to-loop wall time with the sampling resolution stated in JSON.
+
+
 ## Where the time goes (profiles with `sample`)
 
 192 map, 40-minute Hard duel, game minutes 0:20-1:20 under load, origin/main 1.0.842,
@@ -183,16 +226,43 @@ skirmish_generator_tests, active_tile_probe and all 29 `quantbot_*`: 36/36 passe
 ~10 s). No pathfinding/performance probes are registered in ctest; their runners in
 `tests/pathfinding` and `tests/performance` were not run.
 
+## Long-game heap attribution
+
+`tests/ai/simulation-throughput.py` is a cluster-distributable harness for the fixed
+duels, 160x160 six-house city/classic games, a human-partner campaign mission and
+both All Against Atreides seeds. Native CPU/peak RSS and a sampled RSS series are
+kept separately from the Python runner's costs; raw logs and comparison signatures
+stay under `--results/diagnostics`.
+
+For a macOS retained-heap investigation, submit that harness through the ordinary
+commit-pinned cluster wrapper with `--machines pro --cases city160,vanilla160,campaign`
+and `--heap-profile --heap-tools --malloc-stacks`. The city/classic caps are 120/90
+game minutes. `SIM_HEAP` records the initialized world, every ten game minutes and
+the final cycle. Its vector totals are **requested capacity bytes**, not allocator
+overhead; sightings, tile occupants and unit path nodes are explicitly counts.
+macOS rows also contain RSS, physical footprint and allocator live/reserved bytes.
+`heap-<cycle>.txt`, `vmmap-<cycle>.txt` and `malloc-<cycle>.txt` retain allocator and
+stack attribution beside each game's log. These hooks are off by default and are
+compiled only into the private balance probe.
+
+Do not use stack-logging/heap-tool runs for throughput or OOM sizing: profiling
+changes both runtime and memory use. Use an unprofiled paired run on the same
+named host for those measurements, and compare every digest/result/formation line.
+
+Tile occupancy registries use `std::forward_list` rather than `std::list`.
+They need stable successor iterators when destruction removes the current object,
+but never traverse backwards. Empty tiles no longer retain four reverse links and
+size counters; live nodes also need only one link. Insertion order, duplicate IDs,
+remove-all semantics and the existing count-plus-IDs save encoding are preserved.
+Appending walks the tile's short occupant list instead of retaining a tail pointer;
+the infantry fullness check stops after the existing five-unit occupancy limit.
+No simulation or AI history is discarded or capped.
+
 ## Not done (ideas, measured costs above)
 
-- Skip graphics in headless batches: start-up `GFXManager` + mod re-activation is ~1 s and
-  most of the 420-740 MB per process. Needs a headless flag through `GFXManager`, the
-  sidebar and every caller that reads surfaces; not worth the risk for ~1-5% of a duel.
-- Shared read-only mod payload instead of copying 36 MB into every fresh profile (~0.3 s).
 - `Map::removeObjectFromMap` scans all tiles per removal (2-3%); an exact faster version
   needs an object-to-tiles index kept in step with every assign/unassign.
 - `ObjectManager` is a `std::map` (lookups in `Tile::getGroundObject`, `ObjectPointer`); a hash
   index beside it would speed lookups, iteration order must stay the map's.
 - A*: smaller `TileData` (56 bytes), `reserve` for the frontier, unchecked tile access.
 - Build flags: LTO/`-mcpu=native` were not tried; release flags unchanged.
-- Audio: probes still open the dummy device and play OPL music (~1% of a core).

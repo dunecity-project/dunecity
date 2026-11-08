@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include "../performance/sim-heap.inc"
 
 namespace ProbeDigest {
 
@@ -117,6 +118,7 @@ inline void dump(Game& game, std::uint64_t digest) {
 
 /// Logs a digest when the current cycle is on the interval.
 inline void periodic(Game& game) {
+    SimHeap::snapshot(game);
     const Uint32 cycle = game.getGameCycleCount();
     if (interval() != 0 && cycle % interval() == 0) {
         const std::uint64_t digest = deep(game);
@@ -127,6 +129,7 @@ inline void periodic(Game& game) {
 
 /// The final digest, whatever the interval.
 inline void atEnd(Game& game) {
+    SimHeap::snapshot(game, true);
     SDL_Log("PROBE_DIGEST: cycle=%u digest=%016llx final=1", game.getGameCycleCount(),
             static_cast<unsigned long long>(deep(game)));
 }

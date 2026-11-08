@@ -32,7 +32,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 sys.path.insert(0, str(root / 'tests/ai'))
-from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import finish_game, headless_asset_arguments, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
 import match_score  # noqa: E402
 
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
@@ -835,6 +835,7 @@ def command(args, binary, game, out):
            '--capture-mib', str(getattr(args, 'capture_mib', 256)),
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--house', tracked,
            '--scenario-sides', sides, '--local-spectator', '--skirmish', game['skirmish']]
+    cmd += headless_asset_arguments()
     if not (args.attack_events or getattr(args, 'keep_telemetry', False)):
         cmd += ['--no-ai-telemetry']
     if game.get('require_research'):
@@ -1100,6 +1101,7 @@ def build_probe(args, scratch):
     if args.prebuilt_probe:
         return args.prebuilt_probe
     out = scratch / 'probe'
+    remove_tree(out)
     subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
                     '--output-dir', str(out), '--scenario', '--mod', 'vanilla' if args.mod == 'both' else args.mod, '--skirmish',
                     'size=64,base=cy,army=0,spice=0', '--scenario-sides',
@@ -1108,7 +1110,7 @@ def build_probe(args, scratch):
                     '--build-only'],
                    # Prepare only: no unrequested warm-up game outside the sampled schedule.
                    cwd=root, check=True, capture_output=True, text=True)
-    shutil.rmtree(out / 'profile', ignore_errors=True)
+    remove_tree(out / 'profile')
     return probe_binary(out)
 
 

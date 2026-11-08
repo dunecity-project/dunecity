@@ -60,12 +60,12 @@ void runSourceforgeRegressionsProbe(Game& game) {
     for(int group=0;group<NUMSELECTEDLISTS;++group)
         require(!pLocalPlayer->getGroupList(group).count(tank->getObjectID()) && !pLocalPlayer->getGroupList(group).count(second->getObjectID()),"Ctrl+0 retained group membership");
     game.selectedList.insert(0xfffffffe);key(SDLK_0);require(game.selectedList.empty(),"Plain 0 stale selection failed");
-    auto modeCount=[&](){int count=0;for(const auto& slot:game.cmdManager.timeslot)for(const auto& command:slot)if(command.getCommandID()==CMD_UNIT_SETMODE)++count;return count;};
+    auto modeCount=[&](){int count=0;for(const auto& [cycle,slot]:game.cmdManager.timeslot)for(const auto& command:slot)if(command.getCommandID()==CMD_UNIT_SETMODE)++count;return count;};
     select({tank});settings.general.wasdCamera=false;
     int count=modeCount();key(SDLK_s);require(modeCount()==count+1,"S did not queue Stop");
     settings.general.wasdCamera=true;count=modeCount();key(SDLK_s);require(modeCount()==count,"WASD S stopped instead of scrolling");
     key(SDLK_s,KMOD_SHIFT);require(modeCount()==count+1,"Shift+S did not stop with WASD");
-    for(auto& slot:game.cmdManager.timeslot) {
+    for(auto& [cycle,slot]:game.cmdManager.timeslot) {
         for(const auto& command:slot)if(command.getCommandID()==CMD_UNIT_SETMODE)command.executeCommand();
     }
     require(tank->getAttackMode()==STOP,"Queued Stop did not execute");

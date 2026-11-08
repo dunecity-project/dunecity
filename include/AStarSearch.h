@@ -25,6 +25,7 @@
 #include <memory>
 #include <vector>
 #include <array>
+#include <cassert>
 
 class UnitBase;
 class Map;
@@ -113,11 +114,17 @@ public:
 
 private:
     struct TileData {
-        Coord    parentCoord;
-        size_t   openListIndex;
         FixPoint g;
         FixPoint h;
         FixPoint f;
+        Coord    parentCoord;
+        // The frontier cannot exceed the map's tile count; its serialized index
+        // is already Uint32. Grouping the wide fields keeps this entry at 48 B.
+        Uint32   openListIndex;
+        Uint32   passabilityEpoch;
+        // Which search last wrote this entry. Anything else is logically a
+        // freshly zeroed entry, so a reused buffer no longer has to be cleared.
+        Uint32   generation;
         bool     bInOpenList;
         bool     bClosed;
         // Zero = unchecked, one = blocked, two = passable. Cached per slice, not
@@ -127,16 +134,11 @@ private:
         // and with a static world it returns the same answer, which is what keeps
         // a sliced search exactly equal to the whole search.
         unsigned char passability;
-        Uint32   passabilityEpoch;
-        // Which search last wrote this entry. Anything else is logically a
-        // freshly zeroed entry, so a reused buffer no longer has to be cleared.
-        Uint32   generation;
     };
+    static_assert(sizeof(TileData) == 48, "A* tile scratch must stay compact");
 
 
-    // Every read and write of the scratch buffer goes through here, which is
-    // what lets the clear be deferred to first touch without changing any
-    // value a search can observe.
+    // First touch materializes a logically zeroed tile in the current search.
     inline TileData& getMapData(const Coord& coord) const {
         TileData& entry = mapData[coord.y * sizeX + coord.x];
 
@@ -147,6 +149,14 @@ private:
 
         return entry;
     };
+
+    // Heap slots only name entries initialized by insertion or validated load().
+    // Sifting must not repeat the lazy-generation branch for every moved slot.
+    inline TileData& getInitializedMapData(const Coord& coord) const {
+        TileData& entry = mapData[coord.y * sizeX + coord.x];
+        assert(entry.generation == generation);
+        return entry;
+    }
 
     // The frontier is a binary heap on f. Each slot carries a copy of its tile's f, so
     // sifting compares slots without a scratch-buffer lookup per comparison; the copy is
@@ -166,7 +176,7 @@ private:
 
             // copy parent to position of current
             openList[current] = openList[parent];
-            getMapData(openList[current].coord).openListIndex = current;
+            getInitializedMapData(openList[current].coord).openListIndex = static_cast<Uint32>(current);
 
             // go up one level in the tree
             current = parent;
@@ -174,13 +184,12 @@ private:
         }
 
         openList[current] = bottom;
-        getMapData(bottom.coord).openListIndex = current;
+        getInitializedMapData(bottom.coord).openListIndex = static_cast<Uint32>(current);
     };
 
-    void putOnOpenListIfBetter(const Coord& coord, const Coord& parentCoord, FixPoint g, FixPoint h) {
+    void putOnOpenListIfBetter(TileData& entry, const Coord& coord, const Coord& parentCoord, FixPoint g, FixPoint h) {
         FixPoint f = g + h;
 
-        TileData& entry = getMapData(coord);
         if(entry.bInOpenList == false) {
             // not yet in openlist => add at the end of the open list
             entry.g = g;
@@ -189,7 +198,7 @@ private:
             entry.parentCoord = parentCoord;
             entry.bInOpenList = true;
             openList.push_back({coord, f});
-            entry.openListIndex = openList.size() - 1;
+            entry.openListIndex = static_cast<Uint32>(openList.size() - 1);
 
             trickleUp(openList.size() - 1);
         } else {
@@ -211,10 +220,10 @@ private:
 
     Coord extractMin() {
         const Coord ret = openList[0].coord;
-        getMapData(ret).bInOpenList = false;
+        getInitializedMapData(ret).bInOpenList = false;
 
         openList[0] = openList.back();
-        getMapData(openList[0].coord).openListIndex = 0;
+        getInitializedMapData(openList[0].coord).openListIndex = 0;
         openList.pop_back();
 
         if (openList.empty())
@@ -254,14 +263,14 @@ private:
 
             // shift child up
             openList[current] = openList[smallerChild];
-            getMapData(openList[current].coord).openListIndex = current;
+            getInitializedMapData(openList[current].coord).openListIndex = static_cast<Uint32>(current);
 
             // go down one level in the tree
             current = smallerChild;
         }
 
         openList[current] = top;
-        getMapData(top.coord).openListIndex = current;
+        getInitializedMapData(top.coord).openListIndex = static_cast<Uint32>(current);
 
         return ret;
     };

@@ -255,29 +255,6 @@ class CandidateQualificationTests(unittest.TestCase):
                     proof['effective_options_sha256'] = gate.sha(gate.canonical(proof['effective_options']).encode())
                     self.assertEqual(self.verdict(proofs)['status'], 'unverified')
 
-    def test_source_identity_matches_committed_blobs_not_modified_worktree(self):
-        import subprocess
-        from source_provenance import source_fingerprint, pinned_source_fingerprint
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            subprocess.run(['git', 'init', '--quiet', str(root)], check=True)
-            (root / 'source.cpp').write_bytes(b'int source = 1;\n')
-            subprocess.run(['git', 'config', 'core.symlinks', 'false'], cwd=root, check=True)
-            (root / 'logical-link').write_bytes(b'source.cpp')
-            subprocess.run(['git', 'add', 'source.cpp'], cwd=root, check=True)
-            link_oid = subprocess.check_output(['git', 'hash-object', '-w', 'logical-link'], cwd=root, text=True).strip()
-            subprocess.run(['git', 'update-index', '--add', '--cacheinfo',
-                            '120000,' + link_oid + ',logical-link'], cwd=root, check=True)
-            subprocess.run(['git', '-c', 'user.name=Source contract', '-c', 'user.email=source@example.invalid',
-                            'commit', '--quiet', '-m', 'Source fixture'], cwd=root, check=True)
-            source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
-            certified = pinned_source_fingerprint(root, source)
-            self.assertEqual(source_fingerprint(root, root / 'build', root / 'out'), certified)
-            (root / 'source.cpp').write_bytes(b'int source = 2;\n')
-            self.assertNotEqual(source_fingerprint(root, root / 'build', root / 'out'), certified)
-            self.assertEqual(pinned_source_fingerprint(root, source), certified)
-
-
     def test_capture_preserves_source_fingerprint_error(self):
         proof = self.proof(gate.NAMES[0], self.contracts[gate.NAMES[0]]['seeds'][0])
         encoded = base64.b64encode(json.dumps(dict(schema_version=1, genomes=[self.item])).encode()).decode()
@@ -314,6 +291,53 @@ class CandidateQualificationTests(unittest.TestCase):
                                       qualification_source=self.source, results=temp, qualification_smoke=True)
             with patch.object(gate, 'verdicts', return_value={self.identity: dict(status='feasible')}):
                 self.assertFalse(gate.check_run(args))
+
+
+class SourceIdentityTests(unittest.TestCase):
+    def test_source_identity_matches_committed_blobs_not_modified_worktree(self):
+        import subprocess
+        from source_provenance import source_fingerprint, pinned_source_fingerprint
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            subprocess.run(['git', 'init', '--quiet', str(root)], check=True)
+            (root / 'source.cpp').write_bytes(b'int source = 1;\n')
+            (root / 'nested').mkdir()
+            for index in range(24):
+                (root / 'nested' / f'{index}.bin').write_bytes(bytes(range(256)) * (index + 1))
+            for name in ('build-sibling', 'out-sibling'):
+                (root / name).mkdir()
+                (root / name / 'source.bin').write_bytes(b'included sibling\0payload')
+            subprocess.run(['git', 'config', 'core.symlinks', 'false'], cwd=root, check=True)
+            (root / 'logical-link').write_bytes(b'source.cpp')
+            subprocess.run(['git', 'add', 'source.cpp', 'nested', 'build-sibling', 'out-sibling'], cwd=root, check=True)
+            link_oid = subprocess.check_output(['git', 'hash-object', '-w', 'logical-link'], cwd=root, text=True).strip()
+            subprocess.run(['git', 'update-index', '--add', '--cacheinfo',
+                            '120000,' + link_oid + ',logical-link'], cwd=root, check=True)
+            subprocess.run(['git', '-c', 'user.name=Source contract', '-c', 'user.email=source@example.invalid',
+                            'commit', '--quiet', '-m', 'Source fixture'], cwd=root, check=True)
+            source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+            certified = pinned_source_fingerprint(root, source)
+            resolved = []
+            resolve = Path.resolve
+            def counted_resolve(path, *args, **kwargs):
+                resolved.append(path)
+                return resolve(path, *args, **kwargs)
+            with patch.object(Path, 'resolve', counted_resolve):
+                self.assertEqual(source_fingerprint(root, root / 'build', root / 'out'), certified)
+            self.assertEqual(resolved.count((root / 'nested').resolve()), 1)
+            # Excluded generated inputs stay excluded even when removed after
+            # being listed in the index. They must not turn into source errors.
+            for name in ('build', 'out'):
+                directory = root / name
+                directory.mkdir()
+                generated = directory / 'gone.txt'
+                generated.write_text('excluded')
+                subprocess.run(['git', 'add', str(generated.relative_to(root))], cwd=root, check=True)
+                generated.unlink()
+            self.assertEqual(source_fingerprint(root, root / 'build', root / 'out'), certified)
+            (root / 'source.cpp').write_bytes(b'int source = 2;\n')
+            self.assertNotEqual(source_fingerprint(root, root / 'build', root / 'out'), certified)
+            self.assertEqual(pinned_source_fingerprint(root, source), certified)
 
 
 if __name__ == '__main__':

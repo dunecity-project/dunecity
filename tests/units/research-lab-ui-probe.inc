@@ -81,7 +81,7 @@ ResearchLabInterface* select(Game& game, ResearchLab* lab) {
 
 size_t commandCount(const Game& game) {
     size_t count = 0;
-    for(const auto& slot : game.cmdManager.timeslot) count += slot.size();
+    for(const auto& [cycle,slot] : game.cmdManager.timeslot) count += slot.size();
     return count;
 }
 

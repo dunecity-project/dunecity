@@ -23,7 +23,7 @@ void runStatsUiProbe(Game& game) {
     };
     auto commandCount=[&]() {
         size_t count=0;
-        for(const auto& slot:game.cmdManager.timeslot) count+=slot.size();
+        for(const auto& [cycle,slot]:game.cmdManager.timeslot) count+=slot.size();
         return count;
     };
     auto capture=[&](const char* name) {

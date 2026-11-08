@@ -14,6 +14,7 @@ import hashlib
 import os
 from pathlib import Path
 import subprocess
+import stat
 
 
 SOURCE_FINGERPRINT_VERSION = 'dunecity-simulation-source-v2'
@@ -29,7 +30,10 @@ def _entry_header(digest, name, logical_link, size):
 
 def source_fingerprint(root: Path, build: Path, output: Path) -> str:
     root = root.resolve()
-    excluded = (build.resolve(), output.resolve())
+    excluded_names = tuple(os.path.normcase(os.fspath(path.resolve())) for path in (build, output))
+    # Include the separator: "build/" is excluded, but "build-sibling/" is not.
+    # PurePath containment can allocate every ancestor on supported Python versions.
+    excluded_prefixes = tuple(os.path.join(name, '') for name in excluded_names)
     names = subprocess.check_output(
         ['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
         cwd=root).decode('utf-8', errors='surrogateescape').split('\0')
@@ -37,24 +41,38 @@ def source_fingerprint(root: Path, build: Path, output: Path) -> str:
     tracked_links = {entry.split(b'\t', 1)[1].decode('utf-8', errors='surrogateescape')
                      for entry in entries if entry.startswith(b'120000 ')}
     digest = hashlib.sha256(SOURCE_FINGERPRINT_VERSION.encode() + b'\0')
+    # A source directory is shared by many files. Resolve its symlinks once per
+    # invocation, not once for every file; file contents are still read in full.
+    resolved_parents = {}
     for name in sorted(set(filter(None, names))):
         relative = Path(name)
         if any(part in ('__pycache__', 'node_modules', '.pytest_cache') for part in relative.parts):
             continue
         path = root / relative
-        actual_link = path.is_symlink()
+        try:
+            info = path.lstat()
+        except OSError:
+            info = None
+        actual_link = info is not None and stat.S_ISLNK(info.st_mode)
         logical_link = actual_link or name in tracked_links
-        resolved = path.absolute() if logical_link else path.resolve()
-        if any(resolved == target or target in resolved.parents for target in excluded):
+        if logical_link:
+            resolved = path.absolute()
+        else:
+            parent = path.parent
+            if parent not in resolved_parents:
+                resolved_parents[parent] = parent.resolve()
+            resolved = resolved_parents[parent] / path.name
+        resolved_name = os.path.normcase(os.fspath(resolved))
+        if resolved_name in excluded_names or resolved_name.startswith(excluded_prefixes):
             continue
-        if not actual_link and not path.is_file():
+        if not actual_link and (info is None or not stat.S_ISREG(info.st_mode)):
             raise RuntimeError(f'Cannot fingerprint source input: {name}')
         if logical_link:
             target = os.fsencode(os.readlink(path)) if actual_link else path.read_bytes()
             _entry_header(digest, name, True, len(target))
             digest.update(target)
             continue
-        _entry_header(digest, name, False, path.stat().st_size)
+        _entry_header(digest, name, False, info.st_size)
         with path.open('rb') as stream:
             while True:
                 chunk = stream.read(1024 * 1024)

@@ -17,6 +17,7 @@
  */
 
 #include <FileClasses/GFXManager.h>
+#include <FileClasses/HeadlessAssets.h>
 #include <dunecity/CitySpritePolicy.h>
 #include <FileClasses/EnhancedAtlasCache.h>
 
@@ -319,6 +320,29 @@ static std::unique_ptr<Animation> loadPngStripAnimation(const std::string& filen
 
 
 GFXManager::GFXManager() {
+    const HeadlessAssets::StartupTimer startupTimer("graphics");
+    if(HeadlessAssets::enabled()) {
+        // Simulation animation counts and footprints live in the object classes,
+        // not in texture dimensions. GameInterface/RadarView still exist in a
+        // probe: retain their exact layout assets, not invented placeholder sizes.
+        const PictureFactory factory;
+        uiGraphic[UI_SideBar][HOUSE_HARKONNEN] = factory.createSideBar(false);
+        uiGraphic[UI_TopBar][HOUSE_HARKONNEN] = factory.createTopBar();
+        uiGraphic[UI_MessageBox][HOUSE_HARKONNEN] = factory.createMessageBoxBorder();
+        uiGraphic[UI_BuilderListUpperCap][HOUSE_HARKONNEN] = factory.createBuilderListUpperCap();
+        uiGraphic[UI_BuilderListLowerCap][HOUSE_HARKONNEN] = factory.createBuilderListLowerCap();
+        auto radar = loadWsafile("STATIC.WSA");
+        uiGraphic[UI_RadarAnimation][HOUSE_HARKONNEN] =
+            Scaler::doubleSurfaceNN(radar->getAnimationAsPictureRow(NUM_STATIC_ANIMATIONS_PER_ROW).get());
+        auto choam = loadShpfile(pFileManager->exists("CHOAM." + _("LanguageFileExtension"))
+            ? "CHOAM." + _("LanguageFileExtension") : "CHOAMSHP.SHP");
+        uiGraphic[UI_ButtonUp][HOUSE_HARKONNEN] = choam->getPicture(0);
+        uiGraphic[UI_ButtonUp_Pressed][HOUSE_HARKONNEN] = choam->getPicture(1);
+        uiGraphic[UI_ButtonDown][HOUSE_HARKONNEN] = choam->getPicture(2);
+        uiGraphic[UI_ButtonDown_Pressed][HOUSE_HARKONNEN] = choam->getPicture(3);
+        pBackgroundSurface = convertSurfaceToDisplayFormat(factory.createBackground().get());
+        return;
+    }
 
     // open all shp files
     std::unique_ptr<Shpfile> units = loadShpfile("UNITS.SHP");
@@ -4772,6 +4796,7 @@ static sdl2::surface_ptr createCustomMapEditorStar(SDL_Surface* source) {
 // Clears objPicTex + objPic (NOT uiGraphic - preserves
 // mentat background and editor sidebar icons).
 void GFXManager::invalidateAllSpriteTextures() {
+    if(HeadlessAssets::enabled()) return;
     enhancedInfantryOverlay.clear();
     for(auto& house : greenWindtrapTex) for(auto& texture : house) texture.reset();
     SDL_Log("GFXManager::invalidateAllSpriteTextures(): clearing textures and derived house sprite caches");
@@ -6109,6 +6134,7 @@ void GFXManager::rebuildModDependentEditorGraphics() {
 }
 
 void GFXManager::reloadAllObjectGraphicsForActiveMod() {
+    if(HeadlessAssets::enabled()) return;
     // Build the complete object set through the newly active mod, but keep
     // this manager alive: menus retain pointers to its UI and background
     // textures while a saved game is running.
@@ -6333,6 +6359,7 @@ SDL_Texture* GFXManager::getZoomedObjPic(unsigned int id, int house, unsigned in
     if(id >= NUM_OBJPICS) {
         THROW(std::invalid_argument, "GFXManager::getZoomedObjPic(): Unit Picture with ID %u is not available!", id);
     }
+    if(HeadlessAssets::enabled()) return nullptr;
     house = usesSharedCityAtlas(id) ? HOUSE_HARKONNEN : getHouseVisualHouse(house);
     if(!isValidHouseColorSlot(house)) {
         house = HOUSE_HARKONNEN;
@@ -6526,6 +6553,7 @@ zoomable_texture GFXManager::getObjPic(unsigned int id, int house, bool greenWin
     if(id >= NUM_OBJPICS) {
         THROW(std::invalid_argument, "GFXManager::getObjPic(): Unit Picture with ID %u is not available!", id);
     }
+    if(HeadlessAssets::enabled()) return {};
 
     const int requestedHouse = house;
     int visualHouse = usesSharedCityAtlas(id) ? HOUSE_HARKONNEN : getHouseVisualHouse(requestedHouse);
@@ -7281,6 +7309,7 @@ void GFXManager::resetDuneCityGraphicsSkins() {
 void GFXManager::setDuneCityHouseGraphicsSkin(int house, bool useDune2) {
     if(house < 0 || house >= static_cast<int>(NUM_HOUSES)) return;
     duneCityHouseUsesDune2[house] = useDune2;
+    if(HeadlessAssets::enabled()) return;
     static const std::array<unsigned int, 3> zoneObjPics = {
         ObjPic_ZoneResidential, ObjPic_ZoneCommercial, ObjPic_ZoneIndustrial
     };

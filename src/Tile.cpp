@@ -42,6 +42,26 @@
 
 namespace {
 
+void appendOccupant(std::forward_list<Uint32>& occupants, Uint32 id) {
+    auto tail = occupants.before_begin();
+    for (auto it = occupants.begin(); it != occupants.end(); ++it) tail = it;
+    occupants.insert_after(tail, id);
+}
+
+std::forward_list<Uint32> readOccupants(InputStream& stream) {
+    std::forward_list<Uint32> occupants;
+    const Uint32 count = stream.readUint32();
+    stream.requireReadableElements(count, sizeof(Uint32));
+    auto tail = occupants.before_begin();
+    for (Uint32 i = 0; i < count; ++i) tail = occupants.insert_after(tail, stream.readUint32());
+    return occupants;
+}
+
+void writeOccupants(OutputStream& stream, const std::forward_list<Uint32>& occupants) {
+    stream.writeUint32(static_cast<Uint32>(std::distance(occupants.begin(), occupants.end())));
+    for (Uint32 id : occupants) stream.writeUint32(id);
+}
+
 bool isThinSpiceTerrain(int terrainType) noexcept {
     return terrainType == Terrain_Spice
         || terrainType == Terrain_GreenSpice
@@ -289,19 +309,19 @@ void Tile::load(InputStream& stream) {
     }
 
     if (bHasAirUnits) {
-        assignedAirUnitList = stream.readUint32List();
+        assignedAirUnitList = readOccupants(stream);
     }
 
     if (bHasInfantry) {
-        assignedInfantryList = stream.readUint32List();
+        assignedInfantryList = readOccupants(stream);
     }
 
     if (bHasUndergroundUnits) {
-        assignedUndergroundUnitList = stream.readUint32List();
+        assignedUndergroundUnitList = readOccupants(stream);
     }
 
     if (bHasNonInfantryGroundObjects) {
-        assignedNonInfantryGroundObjectList = stream.readUint32List();
+        assignedNonInfantryGroundObjectList = readOccupants(stream);
     }
 
     if (currentGame && currentGame->getLoadedSavegameVersion() >= 9807) {
@@ -383,19 +403,19 @@ void Tile::save(OutputStream& stream) const {
     }
 
     if (!assignedAirUnitList.empty()) {
-        stream.writeUint32List(assignedAirUnitList);
+        writeOccupants(stream, assignedAirUnitList);
     }
 
     if (!assignedInfantryList.empty()) {
-        stream.writeUint32List(assignedInfantryList);
+        writeOccupants(stream, assignedInfantryList);
     }
 
     if (!assignedUndergroundUnitList.empty()) {
-        stream.writeUint32List(assignedUndergroundUnitList);
+        writeOccupants(stream, assignedUndergroundUnitList);
     }
 
     if (!assignedNonInfantryGroundObjectList.empty()) {
-        stream.writeUint32List(assignedNonInfantryGroundObjectList);
+        writeOccupants(stream, assignedNonInfantryGroundObjectList);
     }
 
     stream.writeUint8(static_cast<Uint8>(cityZoneType_));
@@ -405,7 +425,7 @@ void Tile::save(OutputStream& stream) const {
 }
 
 void Tile::assignAirUnit(Uint32 newObjectID) {
-    assignedAirUnitList.push_back(newObjectID);
+    appendOccupant(assignedAirUnitList, newObjectID);
     Map::noteObjectAssigned(*this);
 }
 
@@ -414,7 +434,7 @@ void Tile::assignNonInfantryGroundObject(Uint32 newObjectID) {
     // checks the next tile, and searches refresh occupancy each slice. Structures
     // bump the revision on placement/destruction, mountain changes in setType(),
     // and repaired zone footprints in Game::loadSaveGame().
-    assignedNonInfantryGroundObjectList.push_back(newObjectID);
+    appendOccupant(assignedNonInfantryGroundObjectList, newObjectID);
     Map::noteObjectAssigned(*this);
 }
 
@@ -445,14 +465,14 @@ int Tile::assignInfantry(Uint32 newObjectID, Sint8 currentPosition) {
         newPosition = std::max(static_cast<Sint8>(0), std::min(newPosition, static_cast<Sint8>(NUM_INFANTRY_PER_TILE)));
     }
 
-    assignedInfantryList.push_back(newObjectID);
+    appendOccupant(assignedInfantryList, newObjectID);
     Map::noteObjectAssigned(*this);
     return newPosition;
 }
 
 
 void Tile::assignUndergroundUnit(Uint32 newObjectID) {
-    assignedUndergroundUnitList.push_back(newObjectID);
+    appendOccupant(assignedUndergroundUnitList, newObjectID);
     Map::noteObjectAssigned(*this);
 }
 
