@@ -84,6 +84,7 @@ def source_fingerprint(source):
                      and '__pycache__' not in p.parts and not p.name.endswith(('.pyc', '.bak')))
     paths.extend(source / name for name in (
         'tests/ai/run-campaign-balance.py', 'tests/ai/windows-probe-compat.inc',
+        'tests/ai/robustlist-iterator-traits.inc',
         'tests/network/run-spectator-end-probe.py', 'tests/network/spectator-end-probe.inc'))
     for path in sorted(paths, key=lambda p: p.relative_to(source).as_posix()):
         digest.update(path.relative_to(source).as_posix().encode() + b'\0')
