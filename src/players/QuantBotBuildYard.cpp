@@ -299,7 +299,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     Uint32 admittedItem = NONE_ID;
     auto releaseUnfundedChoice = [&]() {
         const Uint32 item = yardTurn.itemID;
-        if (!pass.techSavings || item == NONE_ID || item == admittedItem
+        if ((!pass.techSavings && pass.techIncomeLevel == 0) || item == NONE_ID || item == admittedItem
             || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize() > 0
             || spendingEmergency(pass, item)) return;
         const Coord site = yardTurn.crimeServiceSite.isValid() ? yardTurn.crimeServiceSite
@@ -462,6 +462,33 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     releaseUnfundedChoice();
     chooseYardCityOpening(pass, turn, yardTurn);
     releaseUnfundedChoice();
+    // Advance one legal, fully funded tier when true rival armies cannot
+    // threaten us. Required power, city bootstrap, first workers and transports
+    // above keep their authority; no borrowed income or empty tech reservation.
+    if (pass.techIncomeLevel > 0 && pass.techRivalsSafe
+        && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && pass.itemCount[Structure_HeavyFactory] > 0 && !openingWorkersNeeded(pass)
+        && getHouse()->hasPower()) {
+        for (Uint32 item : {Structure_RepairYard, Structure_HighTechFactory, Structure_IX, Structure_Palace}) {
+            if (pass.itemCount[item] > 0
+                || (item == Structure_RepairYard && !canAddRepairYard(0))
+                || !campaignAvailableToBuild(turn.pBuilder, item)) continue;
+            const int cost = buildingCapitalCost(pass, item);
+            if (cost <= 0 || pass.money < cost + std::max(pass.economyReserve, pass.cityWorkingReserve)
+                || !incomeTechAdmits(pass, item, cost)
+                || !findPlaceLocation(item).isValid()
+                || ((pass.citySimEnabled || pass.powerRules) && getHouse()->getProducedPower()
+                    < getHouse()->getPowerRequirement() + pass.committedPowerDemand
+                        + std::max(0, currentGame->objectData.data[item][getHouse()->getHouseID()].power))) continue;
+            yardTurn.itemID = item;
+            yardTurn.structureRule = "income_safe_technology";
+            if (AITelemetry::log().enabled())
+                traceDecision("income_tech_early", AITelemetry::Record().set("item", item).set("cost", cost)
+                    .set("income_per_minute", pass.techIncomePerMinute).set("level", pass.techIncomeLevel)
+                    .set("own_army", pass.techOwnArmy).set("largest_rival", pass.techLargestRival));
+            break;
+        }
+    }
     chooseYardServicesAndRefineries(pass, turn, yardTurn);
     releaseUnfundedChoice();
     // Spend the first-WOR allocation only after actual emergency choices. Its

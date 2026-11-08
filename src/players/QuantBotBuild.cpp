@@ -2344,6 +2344,54 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     pass.forecastSpice = std::min(pass.spiceShare,fleetRate*QuantBotSpendingPolicy::horizonMinutes);
     pass.forecastNetIncome = pass.forecastSpice+(pass.forecastTax-pass.forecastUpkeep)*QuantBotSpendingPolicy::horizonMinutes;
     pass.forecastFunding = std::max(0,pass.money+pass.forecastNetIncome);
+    // Shared-spice-limited sustainable income from the delivered fleet and
+    // current tax base, never starting cash or workers still in production.
+    if (force.techIncomeTiming > 0 && gameMode == GameMode::Custom
+        && !isCampaignGameType(currentGame->gameType) && !builderOnly()
+        && (pass.citySimEnabled || pass.vanillaEconomy) && lastCalculatedSpice > 0
+        && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard
+            || difficulty == Difficulty::Brutal)) {
+        pass.techIncomeLevel = force.techIncomeTiming;
+        // Lifetime realised gross receipts are saved simulation state. Cap by
+        // the current shared-spice/fleet forecast and subtract current upkeep;
+        // an idle worker or starting-credit windfall is not income.
+        const int64_t receipts = int64_t(getHouse()->getHarvestedSpice().lround())
+            + getHouse()->getCityTaxReceipts().lround();
+        const int64_t realised = receipts * MILLI2CYCLES(60000)
+            / std::max<Uint32>(1, currentGame->getGameCycleCount()) - pass.forecastUpkeep;
+        pass.techIncomePerMinute = int(std::max<int64_t>(0, std::min<int64_t>(realised,
+            pass.forecastNetIncome / QuantBotSpendingPolicy::horizonMinutes)));
+        std::array<int64_t, NUM_HOUSES> army{};
+        const Coord base = getHouse()->getCenterOfMainBase();
+        bool localThreat = pass.defendingEconomy;
+        for (const auto* unit : getUnitList()) {
+            const auto* owner = unit->getOwner();
+            if (!owner || owner->isNatives() || !unit->isActive() || unit->getHealth() <= 0
+                || !unit->canAttack() || !QuantBotInternal::mobileCombatItem(unit->getItemID())) continue;
+            const int64_t value = CombatPowerPolicy::unitPower(
+                data[unit->getItemID()][unit->getProductionHouseID()].price,
+                unit->getHealth().lround(), unit->getMaxHealth());
+            if (owner->getTeamID() == getHouse()->getTeamID()) {
+                if (owner == getHouse()) pass.techOwnArmy += value;
+            } else {
+                army[owner->getHouseID()] += value;
+                if (base.isValid() && blockDistance(base, unit->getLocation()) <= 20) localThreat = true;
+            }
+        }
+        for (const int64_t value : army) pass.techLargestRival = std::max(pass.techLargestRival, value);
+        pass.techRivalsSafe = QuantBotBuildPolicy::incomeTechnologySafe(
+            pass.techOwnArmy, pass.techLargestRival, localThreat);
+        if (pass.strategicReserveItem != NONE_ID
+            && !incomeTechAdmits(pass, pass.strategicReserveItem, pass.strategicReserveCost)) {
+            pass.strategicReserveItem = NONE_ID;
+            pass.strategicReserveCost = 0;
+        }
+        if (pass.emitStatsLog && AITelemetry::log().enabled())
+            traceDecision("income_tech_state", AITelemetry::Record()
+                .set("level", pass.techIncomeLevel).set("income_per_minute", pass.techIncomePerMinute)
+                .set("own_army", pass.techOwnArmy).set("largest_rival", pass.techLargestRival)
+                .set("local_threat", localThreat).set("rivals_safe", pass.techRivalsSafe));
+    }
     pass.existingMilitaryCapacity = 0; pass.constructionCapacity = 0; pass.readyYards = 0;
     pass.continuedMilitaryCost = 0; pass.continuedConstructionCost = 0;
     pass.activeProductionBurn = 0;
@@ -3076,7 +3124,27 @@ bool QuantBot::spendingEmergency(BuildPass& pass, Uint32 item) {
     return item < Num_ItemID && pass.emergencyCivic[item];
 }
 
+bool QuantBot::incomeTechAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade) {
+    if (pass.techIncomeLevel == 0
+        || !QuantBotBuildPolicy::incomeTechnologyProject(item, upgrade, getHouse()->getNumItems(item))) return true;
+    // Opening harvest/transport unlocks pay for the income being measured, and
+    // must not be held behind that income. Construction/civics upgrades are not
+    // optional military technology and are outside this gate altogether.
+    if ((item == Structure_HeavyFactory && upgrade && openingFleetIncomplete(pass))
+        || (item == Structure_HighTechFactory && needsFirstTransport(pass))
+        || (item == Structure_ResearchLab && pass.itemCount[Structure_HeavyFactory] == 0
+            && pass.itemCount[Structure_LightFactory] == 0)) return true;
+    return QuantBotBuildPolicy::incomeTechnologyAdmitted(pass.techIncomeLevel, pass.techIncomePerMinute, cost);
+}
+
 bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade) {
+    if (!incomeTechAdmits(pass, item, cost, upgrade)) {
+        if (pass.emitStatsLog && AITelemetry::log().enabled())
+            traceDecision("income_tech_hold", AITelemetry::Record().set("item", item).set("cost", cost)
+                .set("upgrade", upgrade).set("income_per_minute", pass.techIncomePerMinute)
+                .set("level", pass.techIncomeLevel));
+        return false;
+    }
     if (!pass.techSavings || cost <= 0) return true;
     const auto bucket = upgrade ? QuantBotSpendingPolicy::Bucket::Production
         : QuantBotBuildPolicy::spendingBucket(item);
