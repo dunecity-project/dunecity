@@ -82,6 +82,12 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
                 manifest = json.loads((destination / 'manifest.json').read_text())
                 if manifest['identity'] != identity or manifest['files'] != payload_hashes(destination / 'mods'):
                     raise RuntimeError('Shared headless mod fingerprint differs')
+                if sys.platform == 'win32':
+                    # Windows copies keep the ReadOnly attribute, leaving undeletable
+                    # files in every profile; the hash check above is the integrity guard.
+                    for path in (destination / 'mods').rglob('*'):
+                        if path.is_file():
+                            path.chmod(0o644)
                 return destination / 'mods'
             with scratch_dir('headless-mod-seed') as scratch:
                 seed_env = dict(env, DUNECITY_USERDIR=str(scratch / 'profile'),
@@ -98,12 +104,11 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
                     shutil.copytree(scratch / 'profile/mods' / name, staged / 'mods' / name)
                 (staged / 'manifest.json').write_text(
                     json.dumps({'identity': identity, 'files': payload_hashes(staged / 'mods')}, sort_keys=True) + '\n')
-            # Read-only files on both platforms; read-only directories on POSIX.
-            for path in staged.rglob('*'):
-                if path.is_file():
-                    path.chmod(0o444)
-                elif sys.platform != 'win32':
-                    path.chmod(0o555)
+            # Read-only on POSIX only. Windows copies keep the ReadOnly attribute, which
+            # leaves undeletable files in every profile; readers verify every byte instead.
+            if sys.platform != 'win32':
+                for path in staged.rglob('*'):
+                    path.chmod(0o444 if path.is_file() else 0o555)
             staged.rename(destination)
             staged = None
             return destination / 'mods'
