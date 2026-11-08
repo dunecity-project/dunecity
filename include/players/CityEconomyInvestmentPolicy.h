@@ -72,9 +72,37 @@ inline bool openingRefineryInvestment(bool brutal, int workers, int target, int 
 // threshold, and nothing has to be stored in the save to notice.
 inline bool spiceEconomyViable(int sustainableWorkers) { return sustainableWorkers > 0; }
 
+// Start the tax transition two planning horizons before the current working
+// fleet exhausts its share. This deliberately tests earlier reinvestment than
+// the existing four-minute marginal-spice ROI gate. Queued workers are not
+// working income, and a collapsed fleet still recovers its first two workers.
+inline bool spiceTransitionDue(int remainingShare, int actualWorkers, int actualBays,
+                               int workerPerMinute, int bayPerMinute) {
+    if (remainingShare <= 0 || actualWorkers < 2 || actualBays <= 0) return false;
+    const int64_t throughput = std::min(int64_t(actualWorkers)*std::max(0,workerPerMinute),
+        int64_t(actualBays)*std::max(0,bayPerMinute));
+    return int64_t(remainingShare)*DuneCity::kCyclesPerMinute <= throughput*2*horizonCycles;
+}
+
 // The smallest city that pays its own bills: the same four 100-credit lots
 // that preferRefinery() already trades a 400-credit refinery against.
 constexpr int kBootstrapZoneSeed = 4;
+
+// Bank one additional growth slot per two standing ordinary infrastructure
+// buildings. The seed district is exempt; live counts (including queued zones)
+// avoid relying on unsaved lifetime statistics or a new checkpoint-only cache.
+inline bool singleYardGrowthDue(int infrastructure, int zonesIncludingQueued) {
+    const int extraZones = std::max(0,zonesIncludingQueued-kBootstrapZoneSeed);
+    return int64_t(infrastructure) >= (int64_t(extraZones)+1)*2;
+}
+
+// Bound only standing plots' speculative maturity. The caller still reserves
+// all queued loads and the larger observed growth through cityGrowthPowerHeadroom.
+inline int boundedMatureZonePower(int currentPower, int maturePower,
+                                  int maturePowerPerZone, int yards) {
+    return int(std::min<int64_t>(std::max(0,maturePower),int64_t(std::max(0,currentPower))
+        + int64_t(std::max(0,maturePowerPerZone))*std::max(1,yards)));
+}
 
 // Tax is only income once it can be banked. A house with no storage capacity
 // at all drops every credit its city earns on arrival, so the first capacity

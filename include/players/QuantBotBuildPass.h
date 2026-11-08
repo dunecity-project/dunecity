@@ -149,6 +149,7 @@ struct QuantBot::BuildPass {
     int mapSpiceHarvesterTarget{};
     int spiceHarvesterTarget{};
     int fundedHarvesterTarget{};
+    bool citySpiceCapacityRunway{};
     int busyRefineries{};
     int freeRefineries{};
     int unbookedRefineries{};
@@ -199,6 +200,7 @@ struct QuantBot::BuildPass {
     int fillCycles{};
     int unloadCycles{};
     int bayAnnualIncome{};
+    bool citySpiceTransition{};
     CityEconomyInvestmentPolicy::Investment lastEconomyInvestment{};
     bool cityRefineryCatchup{};
     bool cityRefineryOpening{};

@@ -348,6 +348,18 @@ struct QuantBotConfig {
         /// Experimental/default off: continue funding city research after the
         /// opening fleet, retaining power, income, bootstrap and live-threat gates.
         bool cityContinuousResearch;
+        /// Experimental/default off: wind down extra workers and refinery bays
+        /// when the working fleet can exhaust its remaining spice share shortly.
+        bool citySpiceTransition;
+        /// Experimental/default off: optional MCVs and producer upgrades retain
+        /// working capital in spice-backed Custom cities as well as tax cities.
+        bool citySpiceCapacityRunway;
+        /// Experimental/default off: a single yard reserves profitable growth
+        /// against two completed ordinary infrastructure orders per extra zone.
+        bool citySingleYardGrowth;
+        /// Experimental/default off: cash-constrained spice cities reserve one
+        /// zone's latent growth per yard, not full maturity of every standing lot.
+        bool cityPowerGrowthHorizon;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;

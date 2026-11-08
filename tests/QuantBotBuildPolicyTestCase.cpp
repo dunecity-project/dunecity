@@ -295,6 +295,44 @@ TEST_CASE("City opening grows beyond two workers before optional tech", "[quantb
     CHECK_FALSE(preferFactoryHarvester(2,120,300,80000,300,true));
 }
 
+TEST_CASE("Spice transition uses the working fleet and finite remaining fields", "[quantbot][city][economy]") {
+    using namespace CityEconomyInvestmentPolicy;
+    CHECK(spiceTransitionDue(4800,2,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(4801,2,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(0,2,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(-1,2,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(100,1,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(100,2,0,300,600));
+    CHECK_FALSE(spiceTransitionDue(100,2,1,0,600));
+    CHECK(spiceTransitionDue(4800,12,1,300,600)); // Bays, not hypothetical workers, limit receipts.
+    CHECK_FALSE(spiceTransitionDue(4801,12,1,300,600));
+    CHECK(spiceTransitionDue(std::numeric_limits<int>::max(),100000,100000,100000,100000));
+}
+
+TEST_CASE("Single-yard growth spends live infrastructure allowance beyond the seed", "[quantbot][city][economy]") {
+    using namespace CityEconomyInvestmentPolicy;
+    CHECK_FALSE(singleYardGrowthDue(1,4));
+    CHECK(singleYardGrowthDue(2,4));
+    CHECK_FALSE(singleYardGrowthDue(3,5));
+    CHECK(singleYardGrowthDue(4,5));
+    CHECK_FALSE(singleYardGrowthDue(12,10));
+    CHECK(singleYardGrowthDue(14,10));
+    CHECK_FALSE(singleYardGrowthDue(std::numeric_limits<int>::max(),std::numeric_limits<int>::max()));
+}
+
+TEST_CASE("Bounded city power growth preserves observed and committed loads", "[quantbot][city][economy]") {
+    using namespace CityEconomyInvestmentPolicy;
+    using QuantBotBuildPolicy::cityGrowthPowerHeadroom;
+    CHECK(boundedMatureZonePower(200,1200,120,1) == 320);
+    CHECK(boundedMatureZonePower(200,1200,120,2) == 440);
+    CHECK(boundedMatureZonePower(200,250,120,1) == 250);
+    CHECK(cityGrowthPowerHeadroom(200,boundedMatureZonePower(200,1200,120,1),80,24) == 144);
+    CHECK(cityGrowthPowerHeadroom(200,boundedMatureZonePower(200,1200,120,1),400,24) == 424);
+    CHECK(cityGrowthPowerHeadroom(200,boundedMatureZonePower(200,1200,120,1),0,600) == 720);
+    CHECK(boundedMatureZonePower(std::numeric_limits<int>::max(),std::numeric_limits<int>::max(),
+        std::numeric_limits<int>::max(),std::numeric_limits<int>::max()) == std::numeric_limits<int>::max());
+}
+
 TEST_CASE("Refinery forecasts count the first delivery and only marginal shared-bay income", "[quantbot][city]") {
     using namespace CityEconomyInvestmentPolicy;
     // A new worker completes one full load within four minutes, not zero income

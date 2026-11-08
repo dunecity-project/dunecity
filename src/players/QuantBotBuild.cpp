@@ -243,6 +243,7 @@ bool QuantBot::canFundTechInvestment(BuildPass& pass, int cost) {
 bool QuantBot::cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 supplier) {
     // Protect a tax-dependent opening, not productive spice-backed expansion.
     // Financial runway must not inherit research's fleet/crime prerequisites.
+    if (pass.citySpiceCapacityRunway) return canFundWorkingCapital(pass,cost,supplier);
     return !pass.citySimEnabled || !botConfig().force.cityOpeningCapital
         || pass.spiceEconomyViable || canFundWorkingCapital(pass,cost,supplier);
 }
@@ -253,12 +254,21 @@ bool QuantBot::canFundProductionUpgrade(BuildPass& pass, const BuilderBase* buil
         return getHouse()->getCredits() >= builder->getUpgradeCost();
     // Yard upgrades unlock concrete, power, civics and reactive turrets. They
     // keep their existing prerequisite budgets; only producer tech is optional.
-    if (!pass.citySimEnabled || !botConfig().force.cityOpeningCapital
+    if (!pass.citySimEnabled || (!botConfig().force.cityOpeningCapital && !pass.citySpiceCapacityRunway)
         || builder->getItemID()==Structure_ConstructionYard
         || pass.defendingEconomy || pass.airEngaged) return true;
     const bool constructionRecovery=builder->getItemID()==Structure_HeavyFactory
         && !campaignAvailableToBuild(builder,Unit_MCV)
         && (pass.itemCount[Structure_ConstructionYard]==0 || pass.rockExpansionNeeded || pass.colonisationNeeded);
+    if (pass.citySpiceCapacityRunway) {
+        const auto& data = currentGame->objectData.data;
+        const int houseID = getHouse()->getHouseID();
+        if (pass.existingMilitaryCapacity == 0
+            || (builder->getItemID() == Structure_HeavyFactory && openingFleetIncomplete(pass)
+                && builder->getCurrentUpgradeLevel() < data[Unit_Harvester][houseID].upgradeLevel)
+            || (builder->getItemID() == Structure_HighTechFactory && needsFirstTransport(pass)
+                && builder->getCurrentUpgradeLevel() < data[Unit_Carryall][houseID].upgradeLevel)) return true;
+    }
     return constructionRecovery
         || cityOpeningCapitalFunded(pass,builder->getUpgradeCost(),builder->getObjectID());
 }
@@ -854,6 +864,10 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
     pass.fundedHarvesterTarget = pass.citySimEnabled
         ? CityEconomyInvestmentPolicy::factoryHarvesterTarget(pass.spiceHarvesterTarget,harvesterLimit)
         : QuantBotBuildPolicy::fundedSpiceHarvesters(pass.mapSpiceHarvesterTarget,getAIRefineryBays());
+    pass.citySpiceCapacityRunway = botConfig().force.citySpiceCapacityRunway && pass.citySimEnabled
+        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && lastCalculatedSpice > 0
+        && CityEconomyInvestmentPolicy::spiceEconomyViable(pass.mapSpiceHarvesterTarget);
     pass.busyRefineries = 0; pass.freeRefineries = 0; pass.unbookedRefineries = 0; pass.waitingHarvesters = 0; pass.waitingCargo = 0; pass.blockedRefineryReturns = 0;
     pass.fieldReturnersBlocked = 0;
     auto refineryWaitingForTransport=[](const StructureBase* structure) -> int {
@@ -1034,8 +1048,19 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
         && (!pass.citySimEnabled || !ModManager::instance().isTornieFamilyContentActive()))
         pass.committedPowerDemand += std::max(0,pass.itemCount[Structure_ResearchLab]
             - getHouse()->getNumItems(Structure_ResearchLab)) * std::max(0,data[Structure_ResearchLab][houseID].power);
+    int matureZonePower = pass.matureZonePower;
+    if (botConfig().force.cityPowerGrowthHorizon && pass.citySimEnabled
+        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && lastCalculatedSpice > 0
+        && pass.money < int64_t(buildingCapitalCost(pass,Structure_WindTrap))
+            + std::max(1000,pass.cityWorkingReserve)) {
+        const int zonePower = std::max({DuneCity::getZonePower(Structure_ZoneResidential,3),
+            DuneCity::getZonePower(Structure_ZoneCommercial,3),DuneCity::getZonePower(Structure_ZoneIndustrial,3)});
+        matureZonePower = CityEconomyInvestmentPolicy::boundedMatureZonePower(pass.currentZonePower,
+            pass.matureZonePower,zonePower,getHouse()->getNumItems(Structure_ConstructionYard));
+    }
     pass.zoneGrowthHeadroom = QuantBotBuildPolicy::cityGrowthPowerHeadroom(
-        pass.currentZonePower,pass.matureZonePower,projectedPowerDemandGrowth,pass.committedPowerDemand);
+        pass.currentZonePower,matureZonePower,projectedPowerDemandGrowth,pass.committedPowerDemand);
     pass.cityPowerReserve = pass.citySimEnabled ? QuantBotBuildPolicy::cityPowerReserve(
         getHouse()->getPowerRequirement(), pass.largestGenerator) + pass.zoneGrowthHeadroom : 0;
     pass.nuclearPlan = pass.citySimEnabled && !needsFirstTransport(pass)
@@ -1221,6 +1246,19 @@ void QuantBot::planCivicNeedAndTrips(BuildPass& pass) {
     pass.fillCycles = (FixPoint(HARVESTERMAXSPICE)/HARVESTSPEED).lround();
     pass.unloadCycles = HARVESTERMAXSPICE*8/5;
     pass.bayAnnualIncome = int(DuneCity::kCyclesPerMinute)*15/32;
+    pass.citySpiceTransition = botConfig().force.citySpiceTransition && pass.citySimEnabled
+        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && lastCalculatedSpice > 0
+        && CityEconomyInvestmentPolicy::spiceTransitionDue(pass.spiceShare,pass.actualHarvesters,
+            getAIRefineryBays(),workerAnnualIncome(pass),pass.bayAnnualIncome);
+    if (pass.citySpiceTransition) {
+        const bool workerReserved = pass.itemCount[Unit_Harvester] < pass.fundedHarvesterTarget;
+        // Accepted orders finish; only new fleet commitments stop. Losses below
+        // two working harvesters reopen normal recovery on the next build pass.
+        pass.spiceHarvesterTarget = std::min(pass.spiceHarvesterTarget,pass.itemCount[Unit_Harvester]);
+        pass.fundedHarvesterTarget = std::min(pass.fundedHarvesterTarget,pass.itemCount[Unit_Harvester]);
+        if (workerReserved) pass.cityWorkingReserve -= currentGame->objectData.data[Unit_Harvester][houseID].price;
+    }
 
     pass.cityRefineryCatchup = false; pass.cityRefineryOpening = false;
 }
@@ -1255,6 +1293,7 @@ AITelemetry::Record QuantBot::decisionState(BuildPass& pass) {
         .set("city_yard_target", pass.cityYardTarget)
         .set("city_mcv_cash", pass.citySimEnabled ? pass.money : 0)
         .set("city_mcv_working_reserve", pass.citySimEnabled ? std::max(1000, pass.cityWorkingReserve) : 0)
+        .set("city_spice_capacity_runway",pass.citySpiceCapacityRunway)
         .set("city_mcv_shortfall", pass.citySimEnabled ? std::max(0, pass.cityYardTarget - pass.cityConstructionCapacity) : 0)
         .set("vanilla_yard_target", pass.vanillaEconomy ? DuneCity::vanillaYardTarget(
             pass.money, getAIHarvesterCount()) : 0)
@@ -1267,6 +1306,7 @@ AITelemetry::Record QuantBot::decisionState(BuildPass& pass) {
         .set("res_pop", pass.ownResPop).set("com_pop", pass.ownComPop).set("ind_pop", pass.ownIndPop)
         .set("land_value", pass.ownAvgLandValue).set("spice_remaining", lastCalculatedSpice)
         .set("spice_share", pass.spiceShare).set("map_harvester_target", pass.mapSpiceHarvesterTarget)
+        .set("city_spice_transition",pass.citySpiceTransition)
         .set("harvester_target", pass.spiceHarvesterTarget).set("refinery_harvester_target",
             QuantBotBuildPolicy::refineryThroughputHarvesterTarget(pass.spiceShare, 0,
                 getAIRefineryBays(), harvesterLimit))
@@ -1566,7 +1606,8 @@ Uint32 QuantBot::chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, 
             industry ? 0 : pollution,crime,unfinished);
     }
     Coord refinerySite = Coord::Invalid();
-    if ((pass.spiceShare>0 || pass.unloadingBacklog) && campaignAvailableToBuild(builder,Structure_Refinery))
+    if ((!pass.citySpiceTransition || pass.unloadingBacklog)
+        && (pass.spiceShare>0 || pass.unloadingBacklog) && campaignAvailableToBuild(builder,Structure_Refinery))
         refinerySite = findPlaceLocation(Structure_Refinery);
     Coord forecastSite=refinerySite;
     if(forecastSite.isInvalid()) for(const auto* structure:getStructureList())
@@ -4099,6 +4140,37 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             break;
         }
         planningBuilder=NONE_ID;clearPlacementCache(false,true);
+    }
+    // A single yard may spend a bounded live infrastructure allowance on the
+    // same profitable zone candidates. Do not divert urgent service, committed
+    // power, first combat capability or the opening import supplier.
+    if (botConfig().force.citySingleYardGrowth && pass.sharedSpending && pass.citySimEnabled
+        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && lastCalculatedSpice > 0 && pass.cityYards == 1 && !pass.protectionCapital
+        && !pass.defendingEconomy && !pass.airEngaged && pass.dangerousCrimeProperties == 0
+        && pass.civicStructuralNeed == 0 && !pass.openingSupplierDue
+        && pass.cityZonesIncludingQueued >= CityEconomyInvestmentPolicy::kBootstrapZoneSeed
+        && getHouse()->getNumItems(Structure_HeavyFactory) > 0
+        && getHouse()->getProducedPower()-getHouse()->getPowerRequirement() >= pass.committedPowerDemand+24
+        && nonServiceConstructionOrders >= 2) {
+        int infrastructure = 0;
+        for (const Uint32 item : {Structure_WindTrap,Structure_NuclearPlant,Structure_Refinery,Structure_Silo,
+                Structure_Barracks,Structure_WOR,Structure_LightFactory,Structure_HeavyFactory,
+                Structure_HighTechFactory,Structure_Radar,Structure_StarPort,Structure_RepairYard,
+                Structure_IX,Structure_Palace,Structure_ResearchLab})
+            infrastructure += getHouse()->getNumItems(item);
+        if (CityEconomyInvestmentPolicy::singleYardGrowthDue(infrastructure,pass.cityZonesIncludingQueued))
+            for (size_t i=0;i<pass.capitalCandidates.size();++i) {
+                auto& growth = pass.capitalCandidates[i];
+                if (std::string_view(growth.kind) != "economy" || !DuneCity::isCityZoneStructure(growth.item)
+                    || growth.score <= 0 || growth.proceeds <= growth.cost
+                    || pass.money < int64_t(growth.price)+growth.foundationCost) continue;
+                growth.reason = "single_yard_growth";
+                dedicatedCityYard = growth.builder;
+                pass.capitalChoice = int(i);
+                pass.cityGrowthProtected = true;
+                break;
+            }
     }
     if (!pass.cityGrowthProtected && pass.citySimEnabled && !threatBudget
         && (getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=24
