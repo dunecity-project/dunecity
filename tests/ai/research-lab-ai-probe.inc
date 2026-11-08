@@ -154,12 +154,14 @@ struct World {
                     if (structure->getOwner() == owner)
                         if (auto* lot = dynamic_cast<ZoneStructure*>(structure)) lot->setStartingLevel(3);
             initializePhysicalCity();
-            if (control == Control::Crime) {
+            if (control == Control::Crime || control == Control::City) {
+                // Crime injects dangerous crime; City pins the same lots crime-free.
                 auto& crime = game->getCitySimulation()->crimeRateMap_;
                 for (const auto* structure : structureList)
                     if (structure->getOwner() == owner && DuneCity::isCityZoneStructure(structure->getItemID())) {
                         const Coord p = structure->getLocation();
-                        crime.set(p.x / crime.getBlockSize(), p.y / crime.getBlockSize(), 220);
+                        crime.set(p.x / crime.getBlockSize(), p.y / crime.getBlockSize(),
+                                  control == Control::Crime ? 220 : 0);
                     }
             }
         }
@@ -488,6 +490,12 @@ inline void researchOrderLabCapital() {
     {
         World world("dunecity", "qBotHard", false, Control::City);
         auto pass = world.observePlan();
+        SDL_Log("RESEARCH_ORDER_LAB_FIXTURE: city=%d allowed=%d net=%d bootstrap=%d fleet_gap=%d crime=%d "
+                "research_required=%d credits=%d lab_buildable=%d",
+                int(pass.citySimEnabled), int(pass.cityResearchAllowed), pass.forecastNetIncome,
+                int(world.bot->cityBootstrapNeeded(pass)), int(world.bot->openingFleetIncomplete(pass)),
+                pass.dangerousCrimeProperties, int(world.bot->researchRequired(pass)), world.owner->getCredits(),
+                int(world.yard->isAvailableToBuild(Structure_ResearchLab)));
         require(pass.citySimEnabled && pass.cityResearchAllowed && pass.forecastNetIncome > 0
                 && !world.bot->cityBootstrapNeeded(pass) && !world.bot->openingFleetIncomplete(pass)
                 && pass.dangerousCrimeProperties <= 0 && !world.bot->researchRequired(pass)
