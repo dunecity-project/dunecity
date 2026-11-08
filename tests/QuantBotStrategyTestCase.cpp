@@ -834,7 +834,7 @@ TEST_CASE("Campaign light working cash independently persists both hashed states
 TEST_CASE("Campaign light income seed independently persists both hashed states",
           "[ai][campaign][production][config]") {
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.campaignLightIncomeSeed);
+    REQUIRE(defaults.force.campaignLightIncomeSeed);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-income-seed-test.ini";
     for (const bool enabled : {false, true, false}) {
         QuantBotConfig expected = defaults;
@@ -849,7 +849,7 @@ TEST_CASE("Campaign light income seed independently persists both hashed states"
         REQUIRE(loaded.force.campaignLightWorkingCash == defaults.force.campaignLightWorkingCash);
         REQUIRE(loaded.force.campaignFundedLightOpening == defaults.force.campaignFundedLightOpening);
         REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
-        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == !enabled);
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == enabled);
         REQUIRE(loaded.save(path.string()));
         QuantBotConfig restored;
         REQUIRE(restored.applyOverrides(path.string()));

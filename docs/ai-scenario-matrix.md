@@ -294,30 +294,32 @@ digests, within 50 minutes. The remaining losses are Atreides 6/9/20, Harkonnen
 (56/59), but those references win A6/A9 (both) and A20/H22 (1.0.807); preserving
 those historical mission wins is not yet established.
 
-The round commit adopts exactly five defaults ON: `CampaignMilitaryOpening`,
+The accepted round defaults are `CampaignMilitaryOpening`,
 `CampaignAdaptiveReadiness`, `CampaignThreatProduction`,
-`CampaignFundedLightOpening`, and `CampaignLightWorkingCash`, together with the
-protocol/save version bump. All five are confined to non-city campaigns;
-AdaptiveReadiness explicitly excludes city simulation so city campaigns retain
-control behaviour. `CampaignPlayerHouse` and `CampaignLightIncomeSeed` remain
-OFF. The constructor, shipped INI and registry defaults agree. Historical
-ablation styles explicitly override the adopted settings, and
-`campaign-opening-off` explicitly disables all five plus IncomeSeed for digest
-comparison with the original control.
+`CampaignFundedLightOpening`, `CampaignLightWorkingCash`, and
+`CampaignLightIncomeSeed`, together with Main's protocol/save version bump.
+All six are confined to non-city campaigns with human support; AdaptiveReadiness
+explicitly excludes city simulation. `CampaignPlayerHouse` remains OFF.
+Constructor, shipped INI and registry defaults agree. `campaign-defaults-on`
+selects all six; `campaign-income-seed-off` retains the five-switch diagnostic;
+`campaign-opening-off` explicitly disables all six for original-control digest
+comparison. Historical ablation styles override the adopted settings explicitly.
 
 Working cash without the factory gate starts O4 replacement production at
 2.92 min and buys 36 Raiders, but never dispatches: the one-worker army grows
 slower than its readiness requirement (3,990 versus 5,000 at 19.21 min), then
-loses at 40.51 min. The independent default-OFF candidate `CampaignLightIncomeSeed`
-protects only the second refinery's founded quote from working-cash light
-production until that refinery is queued. It does not wait for worker delivery
-or change factory admission. Its diagnostic style
-`campaign-light-income-seed-on` (funded factory gate OFF) wins O4 by conquest at
-**17.71 min**, digest `f8d68a18d4f2a43a`, on `a764605b`; that one-mission result is
-not counted as an improvement to the 61W set. `campaign-defaults-income-seed-on`
-enables only IncomeSeed on top of the adopted defaults for the paired full-set
-and AAA gate. Full results and decisions live in
-`~/Documents/projects/outputs/ai-tuning-20261108/CampaignLane/ledger.md`.
+loses at 40.51 min. `CampaignLightIncomeSeed` protects only the second refinery's
+founded quote from working-cash light production until that refinery is queued.
+It does not wait for worker delivery or change factory admission.
+Its diagnostic style `campaign-light-income-seed-on` (funded factory gate OFF)
+wins O4 by conquest at **17.71 min**, digest `f8d68a18d4f2a43a`, on `a764605b`.
+The separate full-set arm on `98ddf9d7` achieves **62W/4L**: it preserves all
+61 prior wins and adds A6 (21.03 min), but O4 still loses. Main accepted Seed ON
+under the no-control-win-lost plus gain rule. All three 68-game confirmation
+arms pass AAA2 with the original digests; defaults reproduce 66/66 prior61
+campaign digests, and explicit all-OFF reproduces 66/66 original control digests.
+Remaining losses are **A9/A20/H22/O4**. Full paired rows and economy diagnostics
+are in `~/Documents/projects/outputs/ai-tuning-20261108/CampaignLane/ledger.md`.
 
 
 For the recovery skirmish **sample** (48 balanced cases per mod, both candidate

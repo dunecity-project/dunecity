@@ -352,7 +352,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignThreatProduction = true;
     force.campaignFundedLightOpening = true;
     force.campaignLightWorkingCash = true;
-    force.campaignLightIncomeSeed = false;
+    force.campaignLightIncomeSeed = true;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
     force.clearMcvFootprint = true;

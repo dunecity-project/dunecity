@@ -251,7 +251,7 @@ struct QuantBotConfig {
         bool campaignLightWorkingCash;
         /// Working-cash light production protects the second refinery's quote
         /// until that refinery is queued, without waiting for worker delivery.
-        /// Independent, hashed candidate; default off.
+        /// Hashed; default on. OFF retains unrestricted working-cash light production.
         bool campaignLightIncomeSeed;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
