@@ -298,6 +298,10 @@ struct QuantBotConfig {
         /// Free-for-all finishing: the Palace's Death Hand aims at the densest cluster of seen
         /// enemy turrets guarding the house the waves are attacking.
         bool deathHandTurrets;
+        /// Palace experiments: 0 native, 1 richest economy cluster, 2 richest economy/army.
+        int palaceValueTarget;
+        /// 0 native, 1 accompany hunting army, 2 wait for its actual enemy contact.
+        int palaceWaveTiming;
         /// Campaign survival: while an enemy can fire a Death Hand, the yard, refineries and
         /// factories are placed apart so one missile cannot take out several of them.
         bool spreadVsDeathHand;

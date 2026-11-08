@@ -1,4 +1,6 @@
 [
+  {"id": "palace_value_target", "name": "Palace true value target", "section": "Force Concentration", "key": "PalaceValueTarget", "kind": "int", "levels": [0, 1, 2], "default": 0, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
+  {"id": "palace_wave_timing", "name": "Palace wave timing", "section": "Force Concentration", "key": "PalaceWaveTiming", "kind": "int", "levels": [0, 1, 2], "default": 0, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
   {"id": "focus_fire", "name": "Force Concentration: FocusFire", "section": "Force Concentration", "key": "FocusFire", "kind": "bool", "levels": [0, 1], "default": 1, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
   {"id": "converge", "name": "Force Concentration: Converge", "section": "Force Concentration", "key": "Converge", "kind": "bool", "levels": [0, 1], "default": 1, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
   {"id": "bundle", "name": "Force Concentration: Bundle", "section": "Force Concentration", "key": "Bundle", "kind": "bool", "levels": [0, 1], "default": 1, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},

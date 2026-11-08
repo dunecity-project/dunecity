@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <string_view>
 
 // QuantBot strategies (docs/ai-play-styles.md, "Strategies"): the pick is a pure function of the
 // game seed, the house and the config, so every peer, replay and reload plays the same strategy;
@@ -647,6 +648,32 @@ TEST_CASE("Launcher extra kite distance is independently loaded saved bounded an
         REQUIRE(restored.force.launcherKiteExtraDistance == config.force.launcherKiteExtraDistance);
         REQUIRE(restored.getConfigHash() == config.getConfigHash());
         REQUIRE(restored.force.trooperSupport == QuantBotConfig{}.force.trooperSupport);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Palace experiments default off and independently round trip bounded hashed levels", "[ai][palace][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.palaceValueTarget == 0);
+    REQUIRE(defaults.force.palaceWaveTiming == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-palace-experiments.ini";
+    for (const char* key : {"PalaceValueTarget", "PalaceWaveTiming"}) {
+        for (int level : {-1, 0, 1, 2, 3}) {
+            QuantBotConfig config;
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\n" << key << '=' << level << '\n';
+            }
+            REQUIRE(config.applyOverrides(path.string()));
+            const bool targeting = std::string_view(key) == "PalaceValueTarget";
+            REQUIRE(config.force.palaceValueTarget == (targeting ? std::clamp(level, 0, 2) : 0));
+            REQUIRE(config.force.palaceWaveTiming == (targeting ? 0 : std::clamp(level, 0, 2)));
+            REQUIRE((config.getConfigHash() == defaults.getConfigHash()) == (level <= 0));
+            REQUIRE(config.save(path.string()));
+            QuantBotConfig restored;
+            REQUIRE(restored.applyOverrides(path.string()));
+            REQUIRE(restored.getConfigHash() == config.getConfigHash());
+        }
     }
     std::filesystem::remove(path);
 }

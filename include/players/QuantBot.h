@@ -111,6 +111,10 @@ public:
     /// cannot finish this AI-owned repair. Explicit human and defence claims win.
     bool declinesUnfundedRepair(const UnitBase* unit) const;
     void onScriptedReinforcement(const UnitBase* unit);
+    /// Palace experiments are confined to original spice-bearing Custom maps.
+    bool palaceExperimentScope() const;
+    bool palaceWeaponDue() const;
+    const ObjectBase* palaceValueTarget() const;
     void finishTelemetry() override;
     void onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) override;
     /**
