@@ -405,6 +405,17 @@ space/yard recovery keep their existing rules. Styles:
 `vanilla-ffa-round3-off`. New capital-plan fields and `front_continued` are built
 only in their enabled vanilla switch scope, not for OFF/campaign telemetry.
 
+The scoped follow-up retains the hashed, default-OFF keys
+`VanillaFfaThreatProduction` and `VanillaFfaFundedTech`, but activates them only
+in vanilla multi-enemy skirmishes with **at least five original occupied player
+houses**. Original setup, not current survivors, determines match size; no
+mission, map-name or seed condition participates. Four-player FFA, 1v1, teams,
+other mods and campaigns remain inert. The existing nine-switch round-trip/hash
+fixture still covers both keys. Acceptance uses fresh sample seed9202, both arms
+observer-off, requiring a gain inside the five-plus-player stratum and identical
+native digests in every smaller match. The earlier observed9101 screen is
+discovery evidence, not the fresh-seed acceptance gate.
+
 For outcome/digest promotion gates use **`--observer-off`** in both arms.
 It removes `BALANCE_DUNECITY_AUDIT`, keeps real elimination samples/final results,
 and leaves power/refinery/audit-dependent metrics unmeasured rather than inventing

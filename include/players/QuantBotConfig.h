@@ -222,8 +222,8 @@ struct QuantBotConfig {
         /// With a funded worker seed and local ground production, defer the first optional
         /// Starport until a ground wave launches; required first-wave/recovery capital stays legal.
         bool vanillaFfaStarportAfterWave;
-        /// Below ordinary army readiness, live ground fire on our income/base puts replacement
-        /// production ahead of uncommitted optional growth, preserving recovery and the worker seed.
+        /// In vanilla FFA with at least five original players, below ordinary readiness,
+        /// live ground fire funds replacements before optional growth, retaining the worker seed.
         bool vanillaFfaThreatProduction;
         /// Fresh waves reinforce the existing live army's reachable known structure objective.
         /// Uses checkpointed wave state; immediate combat and defence keep their authority.
@@ -231,8 +231,8 @@ struct QuantBotConfig {
         /// Below ordinary readiness, let a funded light-unit order use its real price rather
         /// than the blanket 700-credit entry floor. Existing reserves and mix stay authoritative.
         bool vanillaFfaLightWorkingCash;
-        /// Fund up to eight sustainable workers and ordinary army readiness before optional
-        /// IX/Palace savings or orders; keep the port, transport and first combat supplier legal.
+        /// In vanilla FFA with at least five original players, fund up to eight sustainable
+        /// workers and ordinary readiness before optional IX/Palace savings or orders.
         bool vanillaFfaFundedTech;
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that

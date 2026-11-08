@@ -2283,22 +2283,30 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     auto& data = currentGame->objectData.data;
     pass.roadMaintenanceAttempted = false;
     const auto& force = botConfig().force;
-    const bool vanillaFfaEconomyScope = (force.vanillaFfaStarportAfterWave || force.vanillaFfaThreatProduction
-            || force.vanillaFfaLightWorkingCash || force.vanillaFfaFundedTech)
+    const auto& originalHouses = currentGame->getGameInitSettings().getHouseInfoList();
+    // Initial occupied houses, not current survivors, define the stable match-size scope.
+    pass.vanillaFfaLargeScope = (force.vanillaFfaThreatProduction || force.vanillaFfaFundedTech)
+        && vanillaMultiEnemyGame()
+        && std::count_if(originalHouses.begin(), originalHouses.end(),
+            [](const auto& house) { return !house.playerInfoList.empty(); }) >= 5;
+    const bool vanillaFfaThreatPolicy = force.vanillaFfaThreatProduction && pass.vanillaFfaLargeScope;
+    const bool vanillaFfaTechPolicy = force.vanillaFfaFundedTech && pass.vanillaFfaLargeScope;
+    const bool vanillaFfaEconomyScope = (force.vanillaFfaStarportAfterWave || vanillaFfaThreatPolicy
+            || force.vanillaFfaLightWorkingCash || vanillaFfaTechPolicy)
         && vanillaMultiEnemyGame() && lastCalculatedSpice > 0
         && pass.actualHarvesters >= 4 && getAIRefineryBays() > 0
         && getHouse()->getNumItems(Structure_ConstructionYard) > 0
         && !pass.rockExpansionNeeded && !pass.colonisationNeeded;
     const bool vanillaFfaGrowth = vanillaFfaEconomyScope
-        && (force.vanillaFfaStarportAfterWave || force.vanillaFfaThreatProduction);
-    const bool seedNeeded = force.vanillaFfaFundedTech && vanillaFfaEconomyScope
+        && (force.vanillaFfaStarportAfterWave || vanillaFfaThreatPolicy);
+    const bool seedNeeded = vanillaFfaTechPolicy && vanillaFfaEconomyScope
         && pass.actualHarvesters < std::min(8, pass.spiceHarvesterTarget);
     const bool checkReadiness = vanillaFfaEconomyScope
-        && (force.vanillaFfaLightWorkingCash || (force.vanillaFfaFundedTech && !seedNeeded));
+        && (force.vanillaFfaLightWorkingCash || (vanillaFfaTechPolicy && !seedNeeded));
     const bool armyReady = !checkReadiness || bundleArmyReady();
     pass.vanillaFfaLightWorkingCash = force.vanillaFfaLightWorkingCash
         && vanillaFfaEconomyScope && !armyReady;
-    pass.vanillaFfaTechDeferred = force.vanillaFfaFundedTech
+    pass.vanillaFfaTechDeferred = vanillaFfaTechPolicy
         && vanillaFfaEconomyScope && (seedNeeded || !armyReady);
     bool groundEconomyThreat = false;
 
@@ -2319,7 +2327,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     pass.campaignThreatProduction = botConfig().force.campaignThreatProduction && pass.defendingEconomy
         && !pass.citySimEnabled && !builderOnly()
         && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman();
-    pass.vanillaFfaThreatProduction = force.vanillaFfaThreatProduction && vanillaFfaGrowth
+    pass.vanillaFfaThreatProduction = vanillaFfaThreatPolicy && vanillaFfaGrowth
         && groundEconomyThreat && ownGroundArmyValue()
             < ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), openingReadinessPercent());
     pass.vanillaFfaStarportDeferred = force.vanillaFfaStarportAfterWave && vanillaFfaGrowth
@@ -4222,17 +4230,18 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         }
         auto observeVanillaFfa = [&](AITelemetry::Record& details) -> AITelemetry::Record& {
             const auto& force = botConfig().force;
-            if (!(force.vanillaFfaStarportAfterWave || force.vanillaFfaThreatProduction
-                    || force.vanillaFfaLightWorkingCash || force.vanillaFfaFundedTech)
+            const bool largeSwitch = pass.vanillaFfaLargeScope
+                && (force.vanillaFfaThreatProduction || force.vanillaFfaFundedTech);
+            if (!(force.vanillaFfaStarportAfterWave || force.vanillaFfaLightWorkingCash || largeSwitch)
                 || !vanillaMultiEnemyGame()) return details;
             if (force.vanillaFfaStarportAfterWave)
                 details.set("vanilla_ffa_port_deferred",pass.vanillaFfaStarportDeferred)
                     .set("vanilla_ffa_wave_capital",pass.vanillaFfaWaveCapitalReserve);
-            if (force.vanillaFfaThreatProduction)
+            if (force.vanillaFfaThreatProduction && pass.vanillaFfaLargeScope)
                 details.set("vanilla_ffa_threat_production",pass.vanillaFfaThreatProduction);
             if (force.vanillaFfaLightWorkingCash)
                 details.set("vanilla_ffa_light_working_cash",pass.vanillaFfaLightWorkingCash);
-            if (force.vanillaFfaFundedTech)
+            if (force.vanillaFfaFundedTech && pass.vanillaFfaLargeScope)
                 details.set("vanilla_ffa_tech_deferred",pass.vanillaFfaTechDeferred);
             return details;
         };

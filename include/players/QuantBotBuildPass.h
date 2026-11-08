@@ -247,6 +247,7 @@ struct QuantBot::BuildPass {
     bool campaignThreatProduction{};
     bool vanillaFfaStarportDeferred{};
     int vanillaFfaWaveCapitalReserve{};
+    bool vanillaFfaLargeScope{};
     bool vanillaFfaThreatProduction{};
     bool vanillaFfaLightWorkingCash{};
     bool vanillaFfaTechDeferred{};

@@ -357,9 +357,11 @@ VanillaFfaNearbyTarget=0
 VanillaFfaReserve=0
 VanillaFfaFullWaves=0
 VanillaFfaStarportAfterWave=0
+# Replacement production is scoped to vanilla FFA with at least five original players.
 VanillaFfaThreatProduction=0
 VanillaFfaSingleFront=0
 VanillaFfaLightWorkingCash=0
+# Optional IX/Palace deferral is scoped to vanilla FFA with at least five original players.
 VanillaFfaFundedTech=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
