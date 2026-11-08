@@ -572,7 +572,7 @@ void runArmyRecoveryProbe(Game& game) {
                 if(bot->defenceAssignments.count(unit->getObjectID())
                     && bot->defenceAssignments[unit->getObjectID()]==victim->getObjectID()
                     && unit->getAttackMode()==HUNT
-                    && (unit->isHuntingToward() || unit->getTarget()==raider))
+                    && (unit->isHuntingToward() || currentGame->getObjectManager().getObject(unit->target.getObjectID())==raider))
                     defended=true;
             require(defended,"Emergency base defence was blocked by the recovery posture");
             // And the recall must not steal an assigned defender back.
@@ -1144,7 +1144,7 @@ void runArmyRecoveryProbe(Game& game) {
                 for(const auto id:bot->customWave.members) {
                     const auto* unit=dynamic_cast<const UnitBase*>(bot->getObject(id));
                     if(!unit || !unit->isAGroundUnit()) continue;
-                    require(unit->getTarget()!=anchor || !unit->wasForced(),
+                    require(currentGame->getObjectManager().getObject(unit->target.getObjectID())!=anchor || !unit->wasForced(),
                         "A dispatched attacker was forced onto a controller-chosen target");
                 }
             }

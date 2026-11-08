@@ -974,3 +974,39 @@ estimates, never exact cycle-duration or true peak claims. If exact values becom
 necessary, the cheapest addition is probe-only accumulators alongside the existing
 per-cycle storage counters, not saved AI state.
 
+### Read-only observer boundary — 2026-11-08
+
+`ObjectBase::getTarget()` is not an observational getter: resolving a vanished
+target clears the mutable `ObjectPointer` ID. Probes instead read the raw ID
+and resolve it through `ObjectManager::getObject()`, leaving simulation state
+untouched. Repair/refinery occupancy observations retain their active-job/bay
+guards and use the same pure lookup. Fingerprints keep their raw-ID or resolved-ID
+semantics without ever normalising the underlying simulation pointers.
+
+Passive observers must not call QuantBot policy predicates either. `unitRole()`
+and repair-funding predicates can transitively resolve an enemy aircraft's
+target; other strategic getters can populate AI caches. The campaign endgame
+audit therefore drops `exhausted`, `idle_ready`, `held_repairs`, `reserved`,
+`unfunded`, `role`, `candidate` and `candidate_item`, retaining stored facts and
+an explicit `policy_measured=0` marker.
+
+In the default pure FFA observer, role/free-reserve classifications are unmeasured
+(`-1`, `roles_measured=0`), not zero. Garrison/held-home verdicts and an uncached
+assembly anchor are unmeasured. Perimeter and outnumbered values are read only
+from an already-current cache; observers never refresh it. Pure army values,
+positions, remembered sightings, stored bundle/rally points and counters remain
+measured, and reports/maps identify missing values.
+
+The mandatory army-deploys regression alone passes
+`--army-deploys-regression-observer`, which enables the explicitly non-pure
+historical role/cache path. Its original measurements and thresholds remain in
+force; this mode is never digest or A/B evidence. Ordinary runners clear inherited
+activation, scenario mode rejects the flag, and A/B harnesses assert its absence.
+Pure/unmeasured reserve values cannot silently satisfy the regression gate.
+
+Observer acceptance compares fresh observed/unobserved runs on one frozen pin
+with identical defaults, telemetry and cases: campaign A21/O2/O21, both canonical
+AAA seeds and a few city house rotations. Only the economy-observer flag differs.
+No engine or AI policy change, network/save bump or diagnostic policy mirror is
+part of this repair.
+

@@ -54,9 +54,9 @@ void runHarvesterSafetyProbe(Game& game) {
             require(worker->getAttackMode()==HARVEST,"Safe alternate job is not harvesting");
         }
         oldJob(HARVESTERMAXSPICE);check();
-        require(worker->getTarget()==refinery && worker->isReturning(),"Full load did not unload safely");
+        require(currentGame->getObjectManager().getObject(worker->target.getObjectID())==refinery && worker->isReturning(),"Full load did not unload safely");
         require(worker->getGuardPoint()==safeField,"Unloading retained dangerous old job");
-        check();require(worker->getTarget()==refinery,"Safety cancelled safe unloading");
+        check();require(currentGame->getObjectManager().getObject(worker->target.getObjectID())==refinery,"Safety cancelled safe unloading");
         // The real deploy hook uses guardPoint after unloading or a carryall trip.
         worker->setTarget(nullptr);worker->setAmountOfSpice(0);
         currentGameMap->removeObjectFromMap(worker->getObjectID());worker->deploy(origin+Coord(3,4));
@@ -67,9 +67,9 @@ void runHarvesterSafetyProbe(Game& game) {
         currentGameMap->getTile(safeField)->setType(Terrain_Sand);oldJob(0);check();
         require(worker->getAttackMode()==STOP && !worker->isReturning(),"No alternate field caused base/field loop");
         oldJob(100);check();
-        require(worker->getTarget()==refinery && worker->getAttackMode()==STOP,
+        require(currentGame->getObjectManager().getObject(worker->target.getObjectID())==refinery && worker->getAttackMode()==STOP,
             "No safe field failed to unload cargo and disable the old job");
-        check();require(worker->getTarget()==refinery,"Stopped post-unload job interrupted cargo return");
+        check();require(currentGame->getObjectManager().getObject(worker->target.getObjectID())==refinery,"Stopped post-unload job interrupted cargo return");
         worker->setTarget(nullptr);worker->setAmountOfSpice(0);
         currentGameMap->removeObjectFromMap(worker->getObjectID());worker->deploy(origin+Coord(3,4));
         check();require(worker->getAttackMode()==STOP && !worker->isReturning(),
@@ -93,7 +93,7 @@ void runHarvesterSafetyProbe(Game& game) {
         require(deviator->canAttack(borrowed),"Deviator targeting excludes harvesters");
         unitList.clear();unitList.push_back(borrowed);unitList.push_back(deviator);
         bot->doAttackObject(deviator,borrowed,true);
-        require(deviator->getTarget()==borrowed && deviator->wasForced(),
+        require(currentGame->getObjectManager().getObject(deviator->target.getObjectID())==borrowed && deviator->wasForced(),
             "QuantBot Deviator order did not retain the fixture target");
         require(borrowed->getAttackMode()==STOP,"Capture target was not stopped");
         const Uint32 captureStart=game.gameCycleCount;
@@ -135,7 +135,7 @@ void runHarvesterSafetyProbe(Game& game) {
             reset(borrowed->getSpiceCapacity()/2-1,DEVIATIONTIME);inspect();
             require(!borrowed->isReturning(),"Captured worker returned below half too early");
             reset(borrowed->getSpiceCapacity()/2,DEVIATIONTIME);inspect();
-            require(borrowed->isReturning() && borrowed->getTarget()==refinery,
+            require(borrowed->isReturning() && currentGame->getObjectManager().getObject(borrowed->target.getObjectID())==refinery,
                 "Captured half-full worker did not return to deviator refinery");
             const FixPoint cargo=borrowed->getAmountOfSpice();
             const FixPoint before=owner->getHarvestedSpice(),enemyBefore=enemy->getHarvestedSpice();
@@ -156,7 +156,7 @@ void runHarvesterSafetyProbe(Game& game) {
             reset(10,deadline+1);inspect();
             require(!borrowed->isReturning(),"Deadline return fired before T-10s");
             borrowed->deviationTimer=deadline;inspect();
-            require(borrowed->isReturning() && borrowed->getTarget()==refinery,
+            require(borrowed->isReturning() && currentGame->getObjectManager().getObject(borrowed->target.getObjectID())==refinery,
                 "Low cargo did not return at T-10s");
             const FixPoint deadlineBefore=owner->getHarvestedSpice();
             const Uint32 deadlineStart=game.gameCycleCount;
@@ -200,7 +200,7 @@ void runHarvesterSafetyProbe(Game& game) {
             const int booked=refinery->getHarvesterDropoffBookings();
             borrowed->update();
             require(borrowed->getOwner()==enemy && !borrowed->isReturning()
-                && !borrowed->getTarget() && refinery->getHarvesterDropoffBookings()==booked-1,
+                && !currentGame->getObjectManager().getObject(borrowed->target.getObjectID()) && refinery->getHarvesterDropoffBookings()==booked-1,
                 "Mid-return expiry left stale return target or booking");
             reset(100,1);inspect();borrowed->setReturned();
             require(!borrowed->isActive(),"Unload expiry fixture did not enter refinery");

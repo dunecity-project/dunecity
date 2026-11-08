@@ -940,13 +940,22 @@ launched 347-, 324- and 282-unit waves (74,300-82,400) within 1.3 minutes, then 
 every 1.5-3 minutes with 98-185 units; Sardaukar, the weakest, held its perimeter, now outside its city
 (`fix1-m25.png`, `fix-harkonnen-m25-rendered.png`). No house was eliminated in those 20 minutes.
 
-**Harness.** `tests/ai/ffa-army.inc` (`FFA_ARMY_SAMPLE` every game minute in every elimination or
-vanilla match: army inside/outside its base - within 2 tiles of an own building - per QuantBot role,
-at the bundle/perimeter, stuck units, the outnumbered verdict with the remembered enemy summed and per
-team; `BALANCE_FFA_DUMP` map dumps drawn by `tests/ai/ffa-map.py`; `--ffa-screenshot` renders the game
-view). `vanilla-match.py` plays generated FFA maps `rs<size>-dunecity|vanilla` (one Fortress start per
-house, 20,000-credit armies, 40,000 cities, Rock High, Spice Medium, his game options), `--ffa x` (one
-label, one game per seed), `army.csv` and an army-deployment report table.
+**Harness.** `tests/ai/ffa-army.inc` logs `FFA_ARMY_SAMPLE` every game minute in every
+elimination or vanilla match: raw army inside/outside its base and on roads, stored
+points/counters, pure estimates and remembered enemy values. The default path never
+evaluates policy to classify roles. `roles_measured=0` and negative role/free-reserve values
+mean unmeasured, not zero; garrison/held-home verdicts are likewise unmeasured.
+Perimeter/outnumbered caches are read only when already current. `BALANCE_FFA_DUMP`
+map dumps are drawn by `tests/ai/ffa-map.py`; screenshots use stored bundle/rally
+points. `vanilla-match.py` plays generated FFA maps `rs<size>-dunecity|vanilla`
+(one Fortress start per house, 20,000-credit armies, 40,000 cities, Rock High,
+Spice Medium, his game options), `--ffa x` (one label, one game per seed), `army.csv`
+and an army-deployment report table. Missing policy measurements render as
+`n/a (unmeasured)`. The mandatory army-deploys regression explicitly enables its
+historical role/cache evaluation with `--army-deploys-regression-observer`; its
+thresholds stay unchanged. That probe-only mode is deliberately non-pure and must
+never be used for A/B or digest comparisons. A pure/unmeasured reserve sample
+cannot pass its reserve clause.
 
 **Regression test** `quantbot_ffa_army_deploys` (`tests/ai/run-ffa-army-deploys.py`, mandatory, AGENTS.md):
 rs160-dunecity, four QuantBot Brutal; fails without a 30+ unit wave by minute 8 or with a house's idle

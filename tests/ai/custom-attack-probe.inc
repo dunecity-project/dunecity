@@ -174,7 +174,7 @@ void runExhaustedArmyProbe(Game& game) {
         };
         auto order=[](const UnitBase* unit) {
             return std::make_tuple(unit->getAttackMode(),unit->getDestination(),unit->getGuardPoint(),
-                                   unit->getTarget(),unit->wasForced());
+                                   currentGame->getObjectManager().getObject(unit->target.getObjectID()),unit->wasForced());
         };
         auto expectHeld=[&](const char* why) {
             reset();
@@ -302,15 +302,15 @@ void runExhaustedArmyProbe(Game& game) {
 
         config->force.exhaustedArmyDispatch=false;reset();
         damaged->doRepair();
-        require(damaged->getTarget()==yard && damaged->goingToRepairYard,
+        require(currentGame->getObjectManager().getObject(damaged->target.getObjectID())==yard && damaged->goingToRepairYard,
             "Exhausted army fixture did not establish a real repair-yard booking");
         const auto humanOrder=order(manual),defenderOrder=order(defender),sabotageOrder=order(saboteur);
         bot->launchGroundHunt();
-        require(damaged->getTarget()==yard && damaged->goingToRepairYard,
+        require(currentGame->getObjectManager().getObject(damaged->target.getObjectID())==yard && damaged->goingToRepairYard,
             "Legacy OFF cancelled an AI repair trip");
         config->force.exhaustedArmyDispatch=true;invalidate();
         bot->launchGroundHunt();
-        require(damaged->getTarget()!=yard && !damaged->goingToRepairYard
+        require(currentGame->getObjectManager().getObject(damaged->target.getObjectID())!=yard && !damaged->goingToRepairYard
             && damaged->getAttackMode()==HUNT,
             "Exhausted dispatch did not cancel and launch an unaffordable AI repair trip");
         require(order(manual)==humanOrder && order(defender)==defenderOrder
@@ -320,7 +320,7 @@ void runExhaustedArmyProbe(Game& game) {
             && damaged->isActive() && yard->isFree() && house->hasCarryalls(),
             "Released repair fixture would not otherwise qualify for engine automatic repair");
         damaged->checkPos();
-        require(damaged->getTarget()!=yard && !damaged->goingToRepairYard,
+        require(currentGame->getObjectManager().getObject(damaged->target.getObjectID())!=yard && !damaged->goingToRepairYard,
             "The engine immediately rebooked a released unaffordable AI repair");
 
         // A real yard admits only one inbound booking. Exercise each protected
@@ -328,7 +328,7 @@ void runExhaustedArmyProbe(Game& game) {
         for (auto* protectedUnit:{manual,defender}) {
             config->force.exhaustedArmyDispatch=false;reset();
             protectedUnit->doRepair();
-            require(protectedUnit->getTarget()==yard && protectedUnit->goingToRepairYard,
+            require(currentGame->getObjectManager().getObject(protectedUnit->target.getObjectID())==yard && protectedUnit->goingToRepairYard,
                 "Protected repair traveller was never booked with the real yard");
             const auto protectedOrder=order(protectedUnit);
             config->force.exhaustedArmyDispatch=true;invalidate();
@@ -339,10 +339,10 @@ void runExhaustedArmyProbe(Game& game) {
 
         config->force.exhaustedArmyDispatch=false;reset();
         damaged->doRepair();damaged->setGettingRepaired();
-        require(!damaged->isActive() && yard->getContainedRepairUnit()==damaged,
+        require(!damaged->isActive() && (yard->repairingAUnit ? reinterpret_cast<UnitBase*>(currentGame->getObjectManager().getObject(yard->repairUnit.getObjectID())) : nullptr)==damaged,
             "Exhausted army fixture did not enter the actual repair bay");
         bot->launchGroundHunt();
-        require(!damaged->isActive() && yard->getContainedRepairUnit()==damaged,
+        require(!damaged->isActive() && (yard->repairingAUnit ? reinterpret_cast<UnitBase*>(currentGame->getObjectManager().getObject(yard->repairUnit.getObjectID())) : nullptr)==damaged,
             "Legacy OFF released an unpaid repair-yard occupant");
         config->force.exhaustedArmyDispatch=true;invalidate();
         bot->attack(bot->militaryUnitValue());
@@ -359,7 +359,7 @@ void runExhaustedArmyProbe(Game& game) {
             invalidate();
             damaged->doRepair();damaged->setGettingRepaired();
             damaged->setGuardPoint(yard->getLocation());
-            require(yard->getContainedRepairUnit()==damaged && !damaged->isActive(),
+            require((yard->repairingAUnit ? reinterpret_cast<UnitBase*>(currentGame->getObjectManager().getObject(yard->repairUnit.getObjectID())) : nullptr)==damaged && !damaged->isActive(),
                 "Fractional repair fixture did not enter the actual repair bay");
             require(bot->declinesUnfundedRepair(damaged)!=funded,
                 "Repair ownership ignored the real rounded-credit payment threshold");
@@ -367,12 +367,12 @@ void runExhaustedArmyProbe(Game& game) {
             require((damaged->getHealth()==damaged->getMaxHealth())==funded,
                 "Actual repair progress disagreed with the cash-to-finish boundary");
             if (!funded) {
-                require(yard->getContainedRepairUnit()==damaged && !damaged->isActive(),
+                require((yard->repairingAUnit ? reinterpret_cast<UnitBase*>(currentGame->getObjectManager().getObject(yard->repairUnit.getObjectID())) : nullptr)==damaged && !damaged->isActive(),
                     "The underfunded repair control did not actually stall in its bay");
                 bot->releaseExhaustedArmyRepairs();
                 require(yard->isFree() && damaged->isActive(),
                     "The real fractional-cash repair hold was not released when it could not finish");
-            } else if (yard->getContainedRepairUnit()==damaged) {
+            } else if ((yard->repairingAUnit ? reinterpret_cast<UnitBase*>(currentGame->getObjectManager().getObject(yard->repairUnit.getObjectID())) : nullptr)==damaged) {
                 // A paid repair may still await its legitimately booked carryall.
                 require(!bot->declinesUnfundedRepair(damaged),
                     "A completed funded repair was mistaken for an unpaid hold");
@@ -384,11 +384,11 @@ void runExhaustedArmyProbe(Game& game) {
         for (auto* protectedUnit:{manual,defender}) {
             config->force.exhaustedArmyDispatch=false;reset();
             protectedUnit->doRepair();protectedUnit->setGettingRepaired();
-            require(yard->getContainedRepairUnit()==protectedUnit && !protectedUnit->isActive(),
+            require((yard->repairingAUnit ? reinterpret_cast<UnitBase*>(currentGame->getObjectManager().getObject(yard->repairUnit.getObjectID())) : nullptr)==protectedUnit && !protectedUnit->isActive(),
                 "Protected repair occupant was never admitted to the real bay");
             config->force.exhaustedArmyDispatch=true;invalidate();
             bot->launchGroundHunt();
-            require(yard->getContainedRepairUnit()==protectedUnit && !protectedUnit->isActive(),
+            require((yard->repairingAUnit ? reinterpret_cast<UnitBase*>(currentGame->getObjectManager().getObject(yard->repairUnit.getObjectID())) : nullptr)==protectedUnit && !protectedUnit->isActive(),
                 "Exhausted dispatch evicted a human or defender's repair-yard occupant");
             yard->deployRepairUnit();
         }

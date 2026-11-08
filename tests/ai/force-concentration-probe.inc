@@ -200,7 +200,7 @@ void runForceConcentrationProbe(Game& game) {
                 bot->forceStats=QuantBot::ForceStats();
                 bot->concentrateForces();
                 std::vector<Uint32> chosen;
-                for(auto* tank:tanks) chosen.push_back(tank->getTarget() ? tank->getTarget()->getObjectID() : NONE_ID);
+                for(auto* tank:tanks) chosen.push_back(currentGame->getObjectManager().getObject(tank->target.getObjectID()) ? currentGame->getObjectManager().getObject(tank->target.getObjectID())->getObjectID() : NONE_ID);
                 return chosen;
             };
             const auto first=targets(false);

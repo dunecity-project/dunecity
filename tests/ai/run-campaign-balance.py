@@ -299,6 +299,9 @@ parser.add_argument('--game-options', type=Path,
                     help='Apply this INI file\'s [Game Options] section (a player\'s Dune City.ini format) last')
 parser.add_argument('--elimination-match', action='store_true',
                     help='Play until one team is left (also as a local spectator) and log per-minute house samples')
+parser.add_argument('--army-deploys-regression-observer', action='store_true',
+                    help='Only for the mandatory army-deploys regression: retain historical non-pure role '
+                         'evaluation; never use this mode for A/B or digest comparisons')
 parser.add_argument('--ffa-screenshot', type=Path,
                     help='With --elimination-match or --match-sides: save a rendered PNG of --house\'s army (centred '
                          'between its assembly point and its forward bundle) at the first sample, at --viewport')
@@ -486,6 +489,8 @@ parser.add_argument('--seed', type=int, default=486409243)
 parser.add_argument('--minutes', type=int, default=20)
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
 args = parser.parse_args()
+if args.army_deploys_regression_observer and args.scenario:
+    parser.error('--army-deploys-regression-observer is forbidden for scenario/A/B/AAA games.')
 if args.civ_wars:
     if args.mod != 'CivWars' or not args.local_spectator:
         parser.error('--civ-wars needs --mod CivWars and --local-spectator.')
@@ -859,6 +864,11 @@ env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
            BALANCE_HOUSE=str(house_names.index(args.house)),BALANCE_HARVESTER_LIMIT=str(args.harvester_limit))
+# Never inherit the regression's non-pure observer into an ordinary probe.
+env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
+if args.army_deploys_regression_observer:
+    env['BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER'] = '1'
+assert args.army_deploys_regression_observer or 'BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER' not in env
 # A batch's inherited asset mode must never turn a renderer/UI assertion into
 # a null-texture test. Direct CTests remain full-asset by default.
 headless_assets = args.headless_assets and not (

@@ -957,7 +957,11 @@ def play(args, scratch, binary, game):
     probe_sha256 = hashlib.sha256(Path(binary).read_bytes()).hexdigest()
     started = time.monotonic()
     cmd = command(args, binary, game, out)
-    env = dict(os.environ, BALANCE_DUNECITY_AUDIT='1', DUNECITY_TECH_SAVINGS_AUDIT='1')
+    assert '--army-deploys-regression-observer' not in cmd
+    env = dict(os.environ, BALANCE_DUNECITY_AUDIT='1')
+    env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
+    env.pop('DUNECITY_TECH_SAVINGS_AUDIT', None)
+    assert 'BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER' not in env
     if getattr(args, 'candidate_style', None) or getattr(args, 'seat_styles', None):
         for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
             env.pop(key, None)

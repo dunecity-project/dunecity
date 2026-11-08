@@ -115,7 +115,8 @@ void runArmyRecoveryContinuationProbe(std::unique_ptr<Game>& game) {
                 orders.writeSint32(unit->getDestination().x); orders.writeSint32(unit->getDestination().y);
                 orders.writeSint32(unit->getGuardPoint().x); orders.writeSint32(unit->getGuardPoint().y);
                 orders.writeBool(unit->wasForced()); orders.writeBool(unit->isMoving());
-                orders.writeUint32(unit->getTarget() ? unit->getTarget()->getObjectID() : NONE_ID);
+                const auto* target=world.getObjectManager().getObject(unit->target.getObjectID());
+                orders.writeUint32(target ? target->getObjectID() : NONE_ID);
                 orders.writeUint32(unit->getAttackMode());
             });
             std::string houseState;

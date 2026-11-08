@@ -180,7 +180,7 @@ public:
         // grants the existing shared-house lease. Never edit or refresh that ledger.
         Command(pilot->getPlayerID(), CMD_UNIT_ATTACKOBJECT, aircraftID, targetID).executeCommand();
         humanAuthorityHeld = attackerBot->humanControls(aircraft);
-        if (aircraft->getTarget() != target || !humanAuthorityHeld)
+        if (currentGame->getObjectManager().getObject(aircraft->target.getObjectID()) != target || !humanAuthorityHeld)
             throw std::runtime_error("Real human ornithopter attack command or its ordinary lease was not accepted");
         injected = true;
         SDL_Log("CIV_AIR_STRIKE: cycle=%u object=%u owner=%d target=%u x=%d y=%d health_raw=%lld "

@@ -151,7 +151,9 @@ Uint64 digest(Game& game) {
         if(const auto* r = dynamic_cast<const Refinery*>(object)) {
             hash.mixInt32(r->getNumBookings());
             for(int bay = 0; bay < r->getNumBays(); ++bay) {
-                const auto* occupant = r->getContainedHarvester(bay); hash.mixUint32(occupant ? occupant->getObjectID() : NONE_ID);
+                const auto* occupant = r->extractingSpice[bay]
+                    ? game.getObjectManager().getObject(r->harvesters[bay].getObjectID()) : nullptr;
+                hash.mixUint32(occupant ? occupant->getObjectID() : NONE_ID);
             }
         }
         if(const auto* trap = dynamic_cast<const WindTrap*>(object)) hash.mixUint8(trap->isPowerUpgraded());
@@ -472,7 +474,9 @@ void busyState(std::unique_ptr<Game>& game) {
     std::ofstream fields(out("busy-state-fields.txt"));
     fields<<"cycle="<<game->getGameCycleCount()<<" rng="<<game->randomGen.getSeed()<<" chaos_exchanged="<<exchanged<<'\n';
     fields<<"refinery="<<refinery->getObjectID()<<" bookings="<<refinery->getNumBookings()<<" occupied="<<refinery->getNumOccupiedBays()<<'\n';
-    for(int bay=0;bay<2;++bay) {const auto* u=dynamic_cast<const Harvester*>(refinery->getContainedHarvester(bay));
+    for(int bay=0;bay<2;++bay) {const auto* u=dynamic_cast<const Harvester*>(
+        bay < refinery->getNumBays() && refinery->extractingSpice[bay]
+            ? game->getObjectManager().getObject(refinery->harvesters[bay].getObjectID()) : nullptr);
         fields<<"bay="<<bay<<" object="<<u->getObjectID()<<" item="<<u->getItemID()<<" cargo_raw="<<u->getAmountOfSpice().getRawValue()<<" active="<<u->isActive()<<'\n';}
     fields<<"slowed="<<slowed->getObjectID()<<" timer="<<slowed->getSlowTimer()<<" speed_factor_raw="<<slowed->getMovementSpeedFactor().getRawValue()<<" step_offset_raw="<<slowed->dynastyStepTimeOffset.getRawValue()<<'\n';
     fields<<"research_active="<<owner->getRadarResearchActive()<<" remaining="<<owner->getRadarResearchRemaining()<<'\n';
@@ -520,7 +524,7 @@ void aircraftOrders(std::unique_ptr<Game>& game) {
             for(int tick=0;tick<96;++tick) {
                 game->updateGameState();
                 air=dynamic_cast<UnitBase*>(game->getObjectManager().getObject(airID));
-                require(air && air->getTarget()==worker && air->wasForced(),
+                require(air && currentGame->getObjectManager().getObject(air->target.getObjectID())==worker && air->wasForced(),
                     "Explicit aircraft worker target was replaced during refresh cadence");
             }
             require(air->getAttackMode()==(family ? HUNT : STOP),"Aircraft order changed unrelated-mod mode");

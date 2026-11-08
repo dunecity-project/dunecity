@@ -821,7 +821,7 @@ inline void productionAndAirDefence(HOUSETYPE house) {
     bird->angle = destinationDrawnAngle(bird->getLocation(), producer->getLocation());
     bird->drawnAngle = lround(bird->angle) % NUM_ANGLES;
     Command(world.pilot->getPlayerID(), CMD_UNIT_ATTACKOBJECT, birdID, producerID).executeCommand();
-    require(bird->getTarget() == producer && bird->getOwner()->getTeamID() != world.owner->getTeamID(),
+    require(currentGame->getObjectManager().getObject(bird->target.getObjectID()) == producer && bird->getOwner()->getTeamID() != world.owner->getTeamID(),
             "Genuine hostile pilot did not order the real base attack");
     const Uint32 combatStart = world.game->getGameCycleCount();
     const Uint32 combatEnd = combatStart + MILLI2CYCLES(90000);
@@ -844,7 +844,7 @@ inline void productionAndAirDefence(HOUSETYPE house) {
         strikeCycles += strike;
         for (Uint32 id : produced)
             if (const auto* unit = dynamic_cast<const UnitBase*>(world.game->getObjectManager().getObject(id)))
-                if (unit->getTarget() && unit->getTarget()->getObjectID() == birdID) { ++targetedCycles; break; }
+                if (currentGame->getObjectManager().getObject(unit->target.getObjectID()) && currentGame->getObjectManager().getObject(unit->target.getObjectID())->getObjectID() == birdID) { ++targetedCycles; break; }
         if (!live || live->getHealth() <= 0) break;
     }
     const auto* live = world.game->getObjectManager().getObject(birdID);

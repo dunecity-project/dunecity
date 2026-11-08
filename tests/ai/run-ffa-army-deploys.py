@@ -16,6 +16,10 @@ Brutal, one match per --seeds seed (map and match seed alike, --jobs at a time),
       --inside-minutes consecutive sampled minutes;
   * on no seed has a house been eliminated by --eliminated-minutes.
 
+This self-contained regression explicitly retains its historical, non-pure role
+observer. It is never evidence for an A/B or digest comparison; tuning observers
+remain pure and do not enable its regression-only flag.
+
 Why the elimination check spans three seeds: whether one particular FFA has eliminated
 somebody by minute 30 is chance. Any change that touches the match at all reorders it: about a
 third of seeds do (8-9 of 24 in the 1.0.848 sweep). The city-airplane change
@@ -32,6 +36,10 @@ every deploy check passed (19 waves, four by minute 8, largest 70). Controlled O
 Ordos died at 21.2 OFF and survived to 30.6 ON with 14200 army value at minute 20 versus 0
 (HANDOVER, docs/quantbot-dunecity-audit.md). The stuck-army failure this guards against never
 eliminates anyone within 45 minutes, so minute 35 still catches it.
+
+Observer-only samples can omit role measurements (roles_measured=0 or negative free values).
+These fail the reserve measurement prerequisite, not the game-behavior check; historical measured
+samples without roles_measured retain their original interpretation.
 
   run-ffa-army-deploys.py --build-dir build --output-dir build/ffa-army-deploys
 """
@@ -62,7 +70,7 @@ def play(args, seed):
                '--house', HOUSES[0], '--match-sides', ','.join(f'{h}:default' for h in HOUSES),
                '--local-spectator', '--enemy-difficulty', 'brutal', '--partner-difficulty', 'brutal',
                '--minutes', str(minutes), '--capture-mib', '256', '--wall-timeout', str(args.wall_timeout),
-               '--path-workers', '1', '--no-ai-telemetry']
+               '--path-workers', '1', '--no-ai-telemetry', '--army-deploys-regression-observer']
     outcome = subprocess.run(command, cwd=root, capture_output=True, text=True)
     runs = sorted(out.glob('run-*'), key=lambda p: p.stat().st_mtime)
     log = runs[-1] / 'run.log' if runs else None
@@ -87,7 +95,20 @@ def deploy_failures(args, lines):
     per_house = defaultdict(list)
     for sample in army:
         per_house[sample['house']].append(sample)
+    if not army:
+        failures.append('reserve measurement unavailable: no FFA_ARMY_SAMPLE rows')
     for house, samples in sorted(per_house.items()):
+        outside = sum(int(s['outside_value']) for s in samples) / max(1, sum(int(s['army_value']) for s in samples))
+        garrisoned_rows = [s for s in samples if s.get('garrisoned') in ('0', '1')]
+        garrisoned_text = (str(sum(s['garrisoned'] == '1' for s in garrisoned_rows))
+                           if garrisoned_rows else 'n/a (unmeasured)')
+        position = f'army outside its base {outside:.0%}, garrisoned in {garrisoned_text}'
+        if any(s.get('roles_measured') == '0' or
+               any(s.get(f) in ('', None) or int(s[f]) < 0
+                   for f in ('free_value', 'free_inside_value')) for s in samples):
+            print(f'house {house}: {len(samples)} minutes sampled, reserve n/a (unmeasured), {position}')
+            failures.append(f'house {house} reserve measurement unavailable')
+            continue
         best = run = 0
         inside_minutes = 0
         for sample in sorted(samples, key=lambda s: int(s['minute'])):
@@ -96,10 +117,8 @@ def deploy_failures(args, lines):
             inside_minutes += inside
             run = run + 1 if inside else 0
             best = max(best, run)
-        outside = sum(int(s['outside_value']) for s in samples) / max(1, sum(int(s['army_value']) for s in samples))
         print(f'house {house}: {len(samples)} minutes sampled, reserve 80%+ inside its base in {inside_minutes} '
-              f'(longest stretch {best}), army outside its base {outside:.0%}, garrisoned in '
-              f'{sum(s.get("garrisoned") == "1" for s in samples)}')
+              f'(longest stretch {best}), {position}')
         if best > args.inside_minutes:
             failures.append(f'house {house} kept its reserve inside its base for {best} minutes in a row')
     return failures

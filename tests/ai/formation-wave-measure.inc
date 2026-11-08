@@ -150,7 +150,7 @@ inline bool inTargetArea(const UnitBase* unit, int myTeam, const std::vector<Foo
 
 /// Is this unit engaging: an enemy target within max(weapon, view) range?
 inline bool engaging(const UnitBase* unit, int myTeam) {
-    const auto* target = unit->getTarget();
+    const auto* target = currentGame->getObjectManager().getObject(unit->target.getObjectID());
     return target && target->getOwner() && target->getOwner()->getTeamID() != myTeam
         && blockDistance(unit->getLocation(), target->getClosestPoint(unit->getLocation())).lround()
                <= unit->huntTowardRange();

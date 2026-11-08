@@ -27,6 +27,9 @@ Fortress with a 20,000-credit army and in DuneCity a 40,000 city (Rock High, Spi
 Stefan's 4P DuneCity free-for-all - from the seed (map seed and match seed), played in that mod
 with --game-options (default his options, tests/performance/data/stefan-game-options.ini).
 
+Army role metrics may be unavailable in observer-only samples (roles_measured=0 or negative
+role values). Reports show those reserve metrics as unmeasured, retaining raw position statistics.
+
 Labels: as formation-duel.py, plus "default" (the configured rules), a test-only play style
 suffix @style (tests/ai/play-styles/<style>.ini, docs/ai-play-styles.md), e.g. default@rush, and a
 strategy suffix #random or #<Mix>-<Tempo>[-fixed], e.g. default#QuadMass-Swarm (houses.csv records
@@ -91,7 +94,7 @@ SAMPLE_ROW_FIELDS = KEY + ('house', 'label') + SAMPLE_FIELDS
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'shots30', 'loss60',
                'kill60', 'survivors', 'lost_before_contact', 'together_at_contact', 'engaged10')
 WAVE_ROW_FIELDS = KEY + ('label',) + WAVE_FIELDS
-ARMY_FIELDS = ('minute', 'army_value', 'inside_value', 'outside_value', 'on_road_value', 'wave_value', 'defence_value',
+ARMY_FIELDS = ('minute', 'roles_measured', 'army_value', 'inside_value', 'outside_value', 'on_road_value', 'wave_value', 'defence_value',
                'free_value', 'free_inside_value', 'at_bundle_value', 'at_perimeter_value', 'stuck_value', 'outnumbered',
                'garrisoned', 'own_estimate', 'enemy_sum', 'enemy_strongest', 'bundle_base_tiles', 'perimeter_base_tiles')
 ARMY_ROW_FIELDS = KEY + ('house', 'label') + ARMY_FIELDS
@@ -271,6 +274,7 @@ def play(args, scratch, binary, key):
             command += ['--game-options', str(args.game_options)]
     if not args.ai_telemetry:
         command.append('--no-ai-telemetry')
+    assert '--army-deploys-regression-observer' not in command
     started = time.time()
     outcome = subprocess.run(command, cwd=root, capture_output=True, text=True)
     wall = round(time.time() - started)
@@ -748,9 +752,19 @@ def report_ffa_army(args, games, houses, waves, army):
             first_text = (f'{statistics.median(firsts):.1f}' if len(finite) * 2 > len(firsts) else f'>{args.minutes}') + \
                 f' ({len(finite)}/{len(firsts)} games)'
             outside = sum(number(a['outside_value']) for a in rows) / max(1, sum(number(a['army_value']) for a in rows))
-            free = sum(number(a['free_value']) for a in rows)
-            free_inside = sum(number(a['free_inside_value']) for a in rows) / max(1, free)
-            garrisoned = sum(1 for a in rows if a['garrisoned'] == '1') / max(1, len(rows))
+            roles_measured = bool(rows) and all(
+                a.get('roles_measured') not in ('0', 0) and
+                all(a.get(f) not in ('', None) and number(a[f]) >= 0
+                    for f in ('free_value', 'free_inside_value')) for a in rows)
+            if roles_measured:
+                free = sum(number(a['free_value']) for a in rows)
+                free_inside = sum(number(a['free_inside_value']) for a in rows) / max(1, free)
+                free_inside_text = f'{free_inside:.0%}'
+            else:
+                free_inside_text = 'n/a (unmeasured)'
+            garrisoned_rows = [a for a in rows if a.get('garrisoned') in ('0', '1')]
+            garrisoned_text = (f'{sum(a["garrisoned"] == "1" for a in garrisoned_rows) / len(garrisoned_rows):.0%}'
+                               if garrisoned_rows else 'n/a (unmeasured)')
             stretches = []
             for key in keys:
                 for house in {a['house'] for a in rows if tuple(a[k] for k in KEY) == key}:
@@ -759,8 +773,8 @@ def report_ffa_army(args, games, houses, waves, army):
             members = [number(w['members']) for w in ws]
             print(f'| {tag} | {name} | {len(group)} | {ended} | {statistics.mean(length):.1f} | {first_text} | '
                   f'{sum(1 for h in hs if h["eliminated_s"]) / len(group):.2f} | {len(ws) / max(1, len(hs)):.1f} | '
-                  f'{statistics.median(members) if members else 0:.0f} | {outside:.0%} | {free_inside:.0%} | '
-                  f'{garrisoned:.0%} | {statistics.median(stretches) if stretches else 0:.0f} / '
+                  f'{statistics.median(members) if members else 0:.0f} | {outside:.0%} | {free_inside_text} | '
+                  f'{garrisoned_text} | {statistics.median(stretches) if stretches else 0:.0f} / '
                   f'{max(stretches) if stretches else 0} |')
 
 

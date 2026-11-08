@@ -204,7 +204,7 @@ void runLauncherKitingProbe(Game& game) {
                     SDL_Log("LAUNCHER_KITE_PAIR: difficulty=%d item=%u extra=%d approach=%d end=%d move_ticks=%d fire_ticks=%d damage=%d fire_gap=%d mode=%d target=%u visible=%d",
                         int(difficulty),unsigned(item),extra,band,endGap,moveTicks,fireTicks,
                         (health-approaching->getHealth()).lround(),gap(artillery,approaching),
-                        int(artillery->getAttackMode()),unsigned(artillery->getTarget() ? artillery->getTarget()->getObjectID() : NONE_ID),
+                        int(artillery->getAttackMode()),unsigned(currentGame->getObjectManager().getObject(artillery->target.getObjectID()) ? currentGame->getObjectManager().getObject(artillery->target.getObjectID())->getObjectID() : NONE_ID),
                         int(approaching->isVisible(owner->getTeamID())));
                     require(approaching->getHealth()<health && gap(artillery,approaching)>reach,
                         "Paired launcher failed to land a rocket while standing off");
@@ -265,7 +265,7 @@ void runLauncherKitingProbe(Game& game) {
             else launcher->setAngle(sectionOnePose);
             require(launcher->getAngle()==sectionOnePose,"Fixture launcher pose was not restored");
             closer->doAttackObject(launcher,true);
-            require(closer->getTarget()==launcher && closer->isInWeaponRange(launcher),
+            require(currentGame->getObjectManager().getObject(closer->target.getObjectID())==launcher && closer->isInWeaponRange(launcher),
                 "Fixture enemy is not shooting the launcher");
             const int before=gap(launcher,closer);
             require(before<=band,"Fixture enemy did not start inside the close band");
@@ -361,7 +361,7 @@ void runLauncherKitingProbe(Game& game) {
             const Coord standing=launcher->getLocation();
             bot->checkAllUnits();
             require(!launcher->wasForced() && launcher->getAttackMode()==HUNT
-                && (launcher->getDestination()==idle || launcher->getTarget()==closer),
+                && (launcher->getDestination()==idle || currentGame->getObjectManager().getObject(launcher->target.getObjectID())==closer),
                 "An ordinary pass moved a launcher that no enemy was close to");
             tick(30);
             require(launcher->getLocation()==standing,
@@ -396,14 +396,14 @@ void runLauncherKitingProbe(Game& game) {
             require(launcher->wasForced() && launcher->getAttackMode()==HUNT
                 && blockDistance(launcher->getDestination(),closer->getLocation()).lround()>gap(launcher,closer),
                 "Focus fire took a launcher out of its close-range escape");
-            require(bot->forceStats.focusSwitches==switchesBefore && launcher->getTarget()!=focusVictim,
+            require(bot->forceStats.focusSwitches==switchesBefore && currentGame->getObjectManager().getObject(launcher->target.getObjectID())!=focusVictim,
                 "Focus fire gave an escaping launcher an attack order");
             park(closer,Coord(20+band+2,20));
             hunt(launcher,origin+Coord(20,20));
             require(bot->launcherEscapeRange(launcher,closer)==0 && launcher->isInWeaponRange(closer),
                 "Fixture healthy tank is not an in-range, non-threatening enemy");
             bot->checkAllUnits();
-            require(launcher->getTarget()==focusVictim && !launcher->wasForced()
+            require(currentGame->getObjectManager().getObject(launcher->target.getObjectID())==focusVictim && !launcher->wasForced()
                 && launcher->getAttackMode()==HUNT,
                 "A standing-off launcher did not take the focus target");
             const FixPoint victimBefore=focusVictim->getHealth(), healthyBefore=closer->getHealth();
@@ -422,7 +422,7 @@ void runLauncherKitingProbe(Game& game) {
                 " gap=%d target_is_victim=%d forced=%d mode=%d",
                 int(difficulty),focusTicks,int(focusShots.size()),victimBefore.lround(),
                 focusVictim->getHealth().lround(),healthyBefore.lround(),closer->getHealth().lround(),
-                gap(launcher,focusVictim),int(launcher->getTarget()==focusVictim),
+                gap(launcher,focusVictim),int(currentGame->getObjectManager().getObject(launcher->target.getObjectID())==focusVictim),
                 int(launcher->wasForced()),int(launcher->getAttackMode()));
             require(focusVictim->getHealth()<victimBefore,
                 "The launcher never hit its focus target");
@@ -494,7 +494,7 @@ void runLauncherKitingProbe(Game& game) {
             closer->setHealth(closer->getMaxHealth());
             closer->doSetAttackMode(AREAGUARD);
             closer->doAttackObject(yard,true);
-            require(closer->getTarget()==yard && closer->isInWeaponRange(yard),
+            require(currentGame->getObjectManager().getObject(closer->target.getObjectID())==yard && closer->isInWeaponRange(yard),
                 "Emergency fixture invader is not actually attacking the yard");
             hunt(launcher,origin+Coord(6,5));
             require(gap(launcher,closer)<=band,
@@ -584,7 +584,7 @@ void runLauncherKitingProbe(Game& game) {
                 // an unforced attack (the Deviator is never focused).
                 require(unit->getAttackMode()==HUNT && !unit->wasForced()
                     && (unit->getDestination()==destination
-                        || (unit==tank && unit->getTarget()==closer)),
+                        || (unit==tank && currentGame->getObjectManager().getObject(unit->target.getObjectID())==closer)),
                     "An ordinary pass took a hunting attacker out of engine Hunt");
             }
 
@@ -709,7 +709,7 @@ void runLauncherKitingProbe(Game& game) {
                 bot->checkAllUnits();
                 tick(60);
                 moved=blockDistance(start,launcher->getLocation()).lround();
-                const ObjectBase* held=launcher->getTarget();
+                const ObjectBase* held=currentGame->getObjectManager().getObject(launcher->target.getObjectID());
                 engaged=held!=nullptr && launcher->isInWeaponRange(held);
             }
             SDL_Log("LAUNCHER_ADVANCE_DIAG: moved=%d engaged=%d passes=%d mode=%d tracked=%d"
@@ -850,7 +850,7 @@ void runLauncherKitingProbe(Game& game) {
                     for(const auto* shot:bulletList)
                         if(shot->shooterID==foot->getObjectID()
                             && shot->bulletID==Bullet_SmallRocket) firedSmallRocket=true;
-                    aimed=aimed || foot->getTarget()==raider;
+                    aimed=aimed || currentGame->getObjectManager().getObject(foot->target.getObjectID())==raider;
                     removedAirHp=raider->getHealth()<airFull;
                 }
                 airSpeed=savedAirSpeed;
@@ -953,7 +953,7 @@ void runLauncherKitingProbe(Game& game) {
                         const Coord drop=origin+pocket+Coord(-2,-2);
                         otherPassenger->doRequestCarryallDrop(drop.x,drop.y);
                         require(otherPassenger->getCarrier()==carrier
-                                && carrier->getTarget()==otherPassenger,
+                                && currentGame->getObjectManager().getObject(carrier->target.getObjectID())==otherPassenger,
                             "Repair-only fixture failed to book the carrier to its other passenger");
                     }
                     if(wantsRepair) light->doRepair();
@@ -966,13 +966,13 @@ void runLauncherKitingProbe(Game& game) {
                     require(light->isAwaitingPickup()==wantsPickup,
                         "Light raider did not acquire the requested real pickup state");
                     if(wantsPickup) require(light->getCarrier()==carrier
-                            && carrier->getTarget()==light && carrier->isBooked(),
+                            && currentGame->getObjectManager().getObject(carrier->target.getObjectID())==light && carrier->isBooked(),
                         "Light raider pickup lacks reciprocal carrier ownership");
-                    auto* repair=wantsRepair ? dynamic_cast<RepairYard*>(light->getTarget()) : nullptr;
+                    auto* repair=wantsRepair ? dynamic_cast<RepairYard*>(currentGame->getObjectManager().getObject(light->target.getObjectID())) : nullptr;
                     require(!wantsRepair || (repair && repair->getNumBookings()>0),
                         "Damaged light raider did not book a real repair yard");
                     const int yardBookings=repair ? repair->getNumBookings() : 0;
-                    const auto* serviceTarget=light->getTarget();
+                    const auto* serviceTarget=currentGame->getObjectManager().getObject(light->target.getObjectID());
                     const Coord serviceDestination=light->getDestination();
                     const auto serviceMode=light->getAttackMode();
                     const int before=gap(light,threat);
@@ -983,24 +983,24 @@ void runLauncherKitingProbe(Game& game) {
 
                     const bool preserve=enabled && service!=ServiceCase::Free;
                     if(preserve) {
-                        require(light->getTarget()==serviceTarget
+                        require(currentGame->getObjectManager().getObject(light->target.getObjectID())==serviceTarget
                                 && light->getDestination()==serviceDestination
                                 && light->getAttackMode()==serviceMode,
                             "Periodic raider micro replaced an owned service order");
                         if(wantsRepair) require(repair->getNumBookings()==yardBookings,
                             "Periodic raider micro released the repair-yard booking");
                         if(wantsPickup) require(light->isAwaitingPickup()
-                                && light->getCarrier()==carrier && carrier->getTarget()==light,
+                                && light->getCarrier()==carrier && currentGame->getObjectManager().getObject(carrier->target.getObjectID())==light,
                             "Periodic raider micro released a promised pickup");
                     } else {
                         require(light->wasForced() && light->getDestination().isValid()
                                 && blockDistance(light->getDestination(),threat->getLocation()).lround()>before,
                             "The off-arm or unreserved light raider did not take its ordinary escape");
-                        if(wantsRepair) require(light->getTarget()!=serviceTarget
+                        if(wantsRepair) require(currentGame->getObjectManager().getObject(light->target.getObjectID())!=serviceTarget
                                 && repair->getNumBookings()==yardBookings-1,
                             "The off arm did not reproduce the repair-target cancellation");
                         if(wantsPickup) require(!light->isAwaitingPickup()
-                                && light->getCarrier()==nullptr && carrier->getTarget()!=light,
+                                && light->getCarrier()==nullptr && currentGame->getObjectManager().getObject(carrier->target.getObjectID())!=light,
                             "The off arm did not reproduce reciprocal pickup cancellation");
                     }
                     SDL_Log("SERVICE_OWNERSHIP_DIAG: item=%d enabled=%d service=%d preserved=%d",

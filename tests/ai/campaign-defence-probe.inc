@@ -43,10 +43,10 @@ void runCampaignDefenceProbe(Game& game) {
             require(blockDistance(tank->getLocation(),launcher->getLocation())>tank->getWeaponRange(),"Fixture launcher must outrange idle tank");
             require(!tank->isInWeaponRange(launcher),"Weapon-range query ignored its argument without a current target");
             tank->handleDamage(1,launcher->getObjectID(),launcher->getOwner());
-            require(tank->getTarget()==launcher,"Outranged campaign tank did not retaliate when hit");
+            require(currentGame->getObjectManager().getObject(tank->target.getObjectID())==launcher,"Outranged campaign tank did not retaliate when hit");
             require(tank->getAttackMode()==AREAGUARD,"Retaliating tank must use Area Guard");
             bot->updateCampaignWave();bot->checkAllUnits();
-            require(tank->getTarget()==launcher,"Wave enforcement cancelled defensive retaliation");
+            require(currentGame->getObjectManager().getObject(tank->target.getObjectID())==launcher,"Wave enforcement cancelled defensive retaliation");
             require(bot->campaignWave.members.empty(),"Self-defense incorrectly launched an assault wave");
             const auto contact=launcher->getLocation();
             Coord withdrawn=Coord::Invalid();
@@ -57,7 +57,7 @@ void runCampaignDefenceProbe(Game& game) {
                         && !currentGameMap->getTile(x,y)->isMountain()) withdrawn=Coord(x,y);
             require(withdrawn.isValid(),"No fixture location outside defensive contact");
             launcher->setLocation(withdrawn);bot->updateCampaignWave();bot->checkAllUnits();
-            require(tank->getTarget()!=launcher,"Defender pursued attacker outside its response area");
+            require(currentGame->getObjectManager().getObject(tank->target.getObjectID())!=launcher,"Defender pursued attacker outside its response area");
             launcher->setLocation(contact);
 
             // Artillery outside the previous seven-tile perimeter must bring
@@ -71,9 +71,9 @@ void runCampaignDefenceProbe(Game& game) {
             if (tier==QuantBot::Difficulty::Easy) launcher->getOwner()->ai=false;
             building->handleDamage(1,launcher->getObjectID(),launcher->getOwner());
             launcher->getOwner()->ai=attackerWasAI;
-            require(tank->getTarget()==launcher || backup->getTarget()==launcher,"Base hit did not scramble reinforcements");
+            require(currentGame->getObjectManager().getObject(tank->target.getObjectID())==launcher || currentGame->getObjectManager().getObject(backup->target.getObjectID())==launcher,"Base hit did not scramble reinforcements");
             bot->updateCampaignWave();bot->checkAllUnits();
-            require(tank->getTarget()==launcher || backup->getTarget()==launcher,"Base defenders lost their response order");
+            require(currentGame->getObjectManager().getObject(tank->target.getObjectID())==launcher || currentGame->getObjectManager().getObject(backup->target.getObjectID())==launcher,"Base defenders lost their response order");
             structureList.clear();
 
             // A remote spice field remains protected without any nearby base.
@@ -81,9 +81,9 @@ void runCampaignDefenceProbe(Game& game) {
             bot->defenceAssignments.clear();bot->defenceResponseCycles.clear();
             unitList.push_back(worker);worker->setHealth(worker->getMaxHealth());
             worker->handleDamage(1,launcher->getObjectID(),launcher->getOwner());
-            require(tank->getTarget()==launcher || backup->getTarget()==launcher,"Remote harvester received no reinforcements");
+            require(currentGame->getObjectManager().getObject(tank->target.getObjectID())==launcher || currentGame->getObjectManager().getObject(backup->target.getObjectID())==launcher,"Remote harvester received no reinforcements");
             bot->updateCampaignWave();bot->checkAllUnits();
-            require(tank->getTarget()==launcher || backup->getTarget()==launcher,"Harvester rescue was cancelled by wave limits");
+            require(currentGame->getObjectManager().getObject(tank->target.getObjectID())==launcher || currentGame->getObjectManager().getObject(backup->target.getObjectID())==launcher,"Harvester rescue was cancelled by wave limits");
             unitList.remove(worker);
 
             bot->defenceAssignments.clear();
@@ -111,7 +111,7 @@ void runCampaignDefenceProbe(Game& game) {
         bot->doSetAttackMode(tank,AREAGUARD);bot->doAttackObject(tank,launcher,true);
         bot->campaignWave.members.insert(tank->getObjectID());
         bot->updateCampaignWave();bot->campaignControlsUnit(tank);
-        require(bot->campaignWave.members.count(tank->getObjectID()) && tank->getTarget()==launcher,
+        require(bot->campaignWave.members.count(tank->getObjectID()) && currentGame->getObjectManager().getObject(tank->target.getObjectID())==launcher,
             "Easy withdrew damaged attacker despite having no repair yard");
         bot->campaignWave.members.clear();bot->attackTimer=0;bot->militaryValueLimit=0;
         for(auto* unit:{tank,backup}) {
@@ -150,7 +150,7 @@ void runCampaignDefenceProbe(Game& game) {
         bot->defenceAssignments[saboteurID]=launcherID;
         bot->onDamage(saboteur,1,launcherID);
         bot->checkAllUnits();bot->updateCampaignWave();
-        require(saboteur->getAttackMode()==AREAGUARD && saboteur->wasForced() && saboteur->getTarget()==launcher,
+        require(saboteur->getAttackMode()==AREAGUARD && saboteur->wasForced() && currentGame->getObjectManager().getObject(saboteur->target.getObjectID())==launcher,
             "AI changed an explicit saboteur order");
         saboteur->doMove2Pos(saboteur->getLocation(),false);saboteur->doSetAttackMode(HUNT);
         bot->checkAllUnits();bot->updateCampaignWave();

@@ -252,8 +252,8 @@ void runWaveFormationProbe(Game& game) {
             // (a wide Line can meet the map's own Atreides base first).
             std::vector<const ObjectBase*> enemies(raiders.begin(),raiders.end());
             for(const auto* unit:wave.fighters)
-                if(unit->getTarget() && unit->getTarget()->getOwner()->getTeamID()!=owner->getTeamID())
-                    enemies.push_back(unit->getTarget());
+                if(currentGame->getObjectManager().getObject(unit->target.getObjectID()) && currentGame->getObjectManager().getObject(unit->target.getObjectID())->getOwner()->getTeamID()!=owner->getTeamID())
+                    enemies.push_back(currentGame->getObjectManager().getObject(unit->target.getObjectID()));
             int contactRange=INT32_MAX;
             for(const auto* unit:wave.fighters)
                 for(const auto* foe:enemies)
@@ -265,7 +265,7 @@ void runWaveFormationProbe(Game& game) {
                 if(currentGame->getObjectManager().getObject(rosterIds.at(unit))!=unit) continue;
                 ++alive;
                 require(unit->getAttackMode()==HUNT,"A member left Hunt when the formation broke");
-                if(unit->getTarget() || unit->isHuntingToward() || unit->isMoving()) ++fighting;
+                if(currentGame->getObjectManager().getObject(unit->target.getObjectID()) || unit->isHuntingToward() || unit->isMoving()) ++fighting;
             }
             require(alive>0 && fighting==alive,"A member did not go into the fight after the break");
             SDL_Log("WAVE_FORMATION_PROBE: shape=%s members=%zu forming_s=%.1f marching_s=%.1f lane_steps=%d fighting=%d",

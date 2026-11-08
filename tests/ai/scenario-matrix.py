@@ -455,6 +455,8 @@ def play(args, scratch, binary, game):
     remove_tree(out)
     started = time.time()
     env = dict(os.environ)
+    env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
+    env.pop('BALANCE_DUNECITY_AUDIT', None)
     candidate_dir = out.with_suffix('.candidate')
     if getattr(args, 'genome', None):
         # Explicit, candidate-only transport; never inherit a style or another run's overlays.
@@ -466,7 +468,10 @@ def play(args, scratch, binary, game):
         env['BALANCE_SCENARIO_DUMP_MAP'] = str(candidate_dir / 'map.ini')
     if getattr(args, 'economy_samples', False):
         env['BALANCE_DUNECITY_AUDIT'] = '1'
-    outcome = subprocess.run(command(args, binary, game, out), cwd=root, capture_output=True, text=True, env=env)
+    cmd = command(args, binary, game, out)
+    assert '--army-deploys-regression-observer' not in cmd
+    assert 'BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER' not in env
+    outcome = subprocess.run(cmd, cwd=root, capture_output=True, text=True, env=env)
     wall = round(time.time() - started)
     log = out / 'run.log'
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []

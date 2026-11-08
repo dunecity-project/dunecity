@@ -12,6 +12,10 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import contextlib
+import io
+import importlib.util
+from types import SimpleNamespace
 
 
 HARNESS = Path(__file__).with_name('genome-match.py')
@@ -39,6 +43,68 @@ def arguments(*argv):
         '--seeds', '8101', '--pairs', 'candidate:default', '--mods', 'vanilla',
         '--difficulties', 'hard', '--sizes', '128', '--bases', 'cy', '--spice', 'medium',
         '--houses', 'harkonnen', 'atreides', *argv])
+
+
+class ArmyMeasurementTests(unittest.TestCase):
+    def test_reserve_report_requires_measured_roles(self):
+        vanilla = league['vanilla']
+        self.assertIn('roles_measured', vanilla.ARMY_FIELDS)
+        key = dict(tag='test', difficulty='brutal', map='test', seed='1', sides='test')
+        game = dict(key, error='', winner='0', end_s='600')
+        sample = dict(key, house='0', minute='3', army_value='100', inside_value='80',
+                      outside_value='20', free_value='100', free_inside_value='80', garrisoned='0')
+        for changes, expected in (({}, '80%'), ({'roles_measured': ''}, '80%'),
+                                  ({'roles_measured': '0'}, 'n/a (unmeasured)'),
+                                  ({'garrisoned': '-1'}, '80%'),
+                                  ({'free_value': '-1', 'free_inside_value': '-1'}, 'n/a (unmeasured)')):
+            with self.subTest(changes=changes), contextlib.redirect_stdout(io.StringIO()) as output:
+                vanilla.report_ffa_army(SimpleNamespace(tags=['test'], minutes=10), [game], [], [],
+                                        [dict(sample, **changes)])
+            self.assertIn(f'| 20% | {expected} |', output.getvalue())
+            garrisoned = 'n/a (unmeasured)' if changes.get('garrisoned') == '-1' else '0%'
+            self.assertIn(f'| {expected} | {garrisoned} | 1 / 1 |', output.getvalue())
+
+    def test_unmeasured_reserve_cannot_pass_deployment_gate(self):
+        path = Path(__file__).with_name('run-ffa-army-deploys.py')
+        spec = importlib.util.spec_from_file_location('ffa_deploys', path)
+        deploy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(deploy)
+        args = SimpleNamespace(wave_minutes=8, wave_members=30, reserve_value=5000, inside_minutes=6)
+        wave = 'FORMATION_WAVE: launched=3750 members=30'
+        sample = ('FFA_ARMY_SAMPLE: house=0 minute=3 army_value=10000 outside_value=2000 '
+                  'free_value={free} free_inside_value={inside} {marker}')
+        for free, inside, marker, unavailable in (
+                (10000, 8000, '', False), (10000, 8000, 'roles_measured=1', False),
+                (10000, 8000, 'roles_measured=0', True), (-1, -1, '', True),
+                (10000, -1, '', True)):
+            with self.subTest(free=free, inside=inside, marker=marker):
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    failures = deploy.deploy_failures(args, [
+                        wave, sample.format(free=free, inside=inside, marker=marker)])
+                self.assertEqual(bool(failures), unavailable)
+                if unavailable:
+                    self.assertIn('measurement unavailable', failures[0])
+                    self.assertIn('reserve n/a (unmeasured)', output.getvalue())
+                    self.assertNotIn('longest stretch', output.getvalue())
+                self.assertIn('army outside its base 20%', output.getvalue())
+
+    def test_only_deployment_regression_opts_into_legacy_observer(self):
+        path = Path(__file__).with_name('run-ffa-army-deploys.py')
+        spec = importlib.util.spec_from_file_location('ffa_deploys_observer', path)
+        deploy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(deploy)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            run = output / 'seed-9101' / 'run-0000'
+            run.mkdir(parents=True)
+            (run / 'run.log').write_text('regression fixture\n', encoding='utf-8')
+            args = SimpleNamespace(output_dir=output, build_dir=output / 'unused-build',
+                                   eliminated_minutes=35, size=160, wall_timeout=1500)
+            with patch.object(deploy.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as process:
+                self.assertEqual(deploy.play(args, 9101), ['regression fixture'])
+            command = process.call_args.args[0]
+            self.assertIn('--army-deploys-regression-observer', command)
+            self.assertNotIn('--scenario', command)
 
 
 class GenomeMatchTests(unittest.TestCase):

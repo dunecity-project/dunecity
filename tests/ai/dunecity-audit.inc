@@ -178,7 +178,7 @@ inline void sample(Game& game) {
             if (unit->getOwner() == house) {
                 ++fighters;
                 moving += int(unit->isMoving());
-                const auto* target = unit->getTarget();
+                const auto* target = game.getObjectManager().getObject(unit->target.getObjectID());
                 if (target && target->getHealth() > 0 && target->getOwner()
                     && target->getOwner()->getTeamID() != house->getTeamID()) ++targeting;
             } else if (unit->getOwner()->getTeamID() != house->getTeamID()
