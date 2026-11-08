@@ -333,6 +333,19 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     releaseUnfundedChoice();
     chooseYardEssentials(pass, turn, yardTurn);
     releaseUnfundedChoice();
+    // Existing processing capacity lost in a raid is recovery, not another
+    // optional refinery expansion behind factory/Starport prerequisites.
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
+        const int replacement = campaignRefineryReplacementCost(pass);
+        if (replacement > 0 && campaignAvailableToBuild(turn.pBuilder, Structure_Refinery)
+            && findPlaceLocation(Structure_Refinery).isValid()) {
+            yardTurn.skipRemainingStructureLogic = true;
+            yardTurn.itemID = pass.money >= replacement ? Structure_Refinery : NONE_ID;
+            yardTurn.serviceSavingHold = yardTurn.itemID == NONE_ID;
+            yardTurn.structureRule = yardTurn.itemID == NONE_ID
+                ? "save_campaign_refinery_replacement" : "campaign_refinery_replacement";
+        }
+    }
     // A campaign's small starting army needs replacements before the
     // economy can compound. The normal refinery/starport ladders otherwise
     // consume every opening order, including on missions with no factory.
@@ -362,6 +375,11 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
                     protectedCash = std::max(protectedCash, data[Unit_Harvester][house].price);
                 if (!pass.campaignThreatProduction && needsFirstTransport(pass))
                     protectedCash = std::max(protectedCash, data[Unit_Carryall][house].price);
+                // The idle-cash experiment changes first-factory admission,
+                // not unit prices, composition or existing queue commitments.
+                if (botConfig().force.campaignIdleCashFactory && lastCalculatedSpice > 0
+                    && pass.money >= botConfig().force.campaignIdleCashFactoryCredits)
+                    protectedCash = 0;
                 const int factoryCost = buildingCapitalCost(pass, producer);
                 const int entryCash = turn.campaignLightWorkingCash ? 1 : 701;
                 bool fundedUnit = false;
@@ -378,7 +396,19 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
                     if (prerequisites && int64_t(pass.money) >= int64_t(factoryCost) + protectedCash
                             + std::max(entryCash, unit.price)) { fundedUnit = true; break; }
                 }
-                if (!fundedUnit) break;
+                if (!fundedUnit) {
+                    // Low-tech support already uses actual working cash. Save
+                    // the complete factory/foundation/first-unit quote instead
+                    // of repeatedly spending its partial runway on extra bays.
+                    if (botConfig().force.campaignFactoryRunway && turn.campaignLightWorkingCash
+                        && lastCalculatedSpice > 0 && campaignAvailableToBuild(turn.pBuilder, producer)
+                        && findPlaceLocation(producer).isValid()) {
+                        yardTurn.skipRemainingStructureLogic = true;
+                        yardTurn.serviceSavingHold = true;
+                        yardTurn.structureRule = "save_campaign_factory_runway";
+                    }
+                    break;
+                }
             }
             Uint32 step = producer;
             for (int depth = 0; step != NONE_ID && depth < Structure_LastID; ++depth) {
@@ -1137,8 +1167,14 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         Uint32 step = NONE_ID;
         if (getHouse()->getNumItems(Structure_StarPort) == 0) {
             const int refineryGoal = std::min(4, pass.mapSpiceHarvesterTarget);
-            step = pass.itemCount[Structure_Refinery] < refineryGoal
-                ? Structure_Refinery : Structure_StarPort;
+            const bool campaignFactory = botConfig().force.campaignFactoryBeforeStarport
+                && campaignEconomySupport() && lastCalculatedSpice > 0
+                && pass.itemCount[Structure_LightFactory] == 0
+                && pass.itemCount[Structure_HeavyFactory] == 0
+                && data[Structure_LightFactory][houseID].enabled
+                && getHouse()->getTechLevel() >= data[Structure_LightFactory][houseID].techLevel;
+            step = pass.itemCount[Structure_Refinery] < refineryGoal ? Structure_Refinery
+                : campaignFactory ? Structure_LightFactory : Structure_StarPort;
         } else if (getHouse()->getNumItems(Structure_RepairYard) == 0
             && canAddRepairYard(pass.itemCount[Structure_RepairYard])
             && data[Structure_RepairYard][houseID].enabled

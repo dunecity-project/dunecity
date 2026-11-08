@@ -353,6 +353,11 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignFundedLightOpening = true;
     force.campaignLightWorkingCash = true;
     force.campaignLightIncomeSeed = true;
+    force.campaignFactoryBeforeStarport = false;
+    force.campaignIdleCashFactory = false;
+    force.campaignIdleCashFactoryCredits = 1500;
+    force.campaignRefineryDefence = false;
+    force.campaignFactoryRunway = false;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
     force.clearMcvFootprint = true;
@@ -689,6 +694,11 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignFundedLightOpening", force.campaignFundedLightOpening);
         iniFile.setBoolValue("Force Concentration", "CampaignLightWorkingCash", force.campaignLightWorkingCash);
         iniFile.setBoolValue("Force Concentration", "CampaignLightIncomeSeed", force.campaignLightIncomeSeed);
+        iniFile.setBoolValue("Force Concentration", "CampaignFactoryBeforeStarport", force.campaignFactoryBeforeStarport);
+        iniFile.setBoolValue("Force Concentration", "CampaignIdleCashFactory", force.campaignIdleCashFactory);
+        iniFile.setIntValue("Force Concentration", "CampaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits);
+        iniFile.setBoolValue("Force Concentration", "CampaignRefineryDefence", force.campaignRefineryDefence);
+        iniFile.setBoolValue("Force Concentration", "CampaignFactoryRunway", force.campaignFactoryRunway);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
         iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -847,6 +857,12 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignFundedLightOpening = iniFile.getBoolValue("Force Concentration", "CampaignFundedLightOpening", force.campaignFundedLightOpening);
     force.campaignLightWorkingCash = iniFile.getBoolValue("Force Concentration", "CampaignLightWorkingCash", force.campaignLightWorkingCash);
     force.campaignLightIncomeSeed = iniFile.getBoolValue("Force Concentration", "CampaignLightIncomeSeed", force.campaignLightIncomeSeed);
+    force.campaignFactoryBeforeStarport = iniFile.getBoolValue("Force Concentration", "CampaignFactoryBeforeStarport", force.campaignFactoryBeforeStarport);
+    force.campaignIdleCashFactory = iniFile.getBoolValue("Force Concentration", "CampaignIdleCashFactory", force.campaignIdleCashFactory);
+    force.campaignIdleCashFactoryCredits = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits), 1500, 2000);
+    force.campaignRefineryDefence = iniFile.getBoolValue("Force Concentration", "CampaignRefineryDefence", force.campaignRefineryDefence);
+    force.campaignFactoryRunway = iniFile.getBoolValue("Force Concentration", "CampaignFactoryRunway", force.campaignFactoryRunway);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
     force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1370,6 +1386,11 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignFundedLightOpening", force.campaignFundedLightOpening);
     addNamed("campaignLightWorkingCash", force.campaignLightWorkingCash);
     addNamed("campaignLightIncomeSeed", force.campaignLightIncomeSeed);
+    addNamed("campaignFactoryBeforeStarport", force.campaignFactoryBeforeStarport);
+    addNamed("campaignIdleCashFactory", force.campaignIdleCashFactory);
+    addNamed("campaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits);
+    addNamed("campaignRefineryDefence", force.campaignRefineryDefence);
+    addNamed("campaignFactoryRunway", force.campaignFactoryRunway);
     addNamed("capacityMcvRunway", force.capacityMcvRunway);
     addNamed("respectServiceOwnership", force.respectServiceOwnership);
     addNamed("clearMcvFootprint", force.clearMcvFootprint);

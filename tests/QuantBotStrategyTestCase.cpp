@@ -859,6 +859,54 @@ TEST_CASE("Campaign light income seed independently persists both hashed states"
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Campaign round-two economy switches default off and independently persist every hashed arm",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    const std::array<bool QuantBotConfig::ForceSettings::*, 4> members{
+        &QuantBotConfig::ForceSettings::campaignFactoryBeforeStarport,
+        &QuantBotConfig::ForceSettings::campaignIdleCashFactory,
+        &QuantBotConfig::ForceSettings::campaignRefineryDefence,
+        &QuantBotConfig::ForceSettings::campaignFactoryRunway};
+    const std::array<const char*, 4> names{
+        "CampaignFactoryBeforeStarport", "CampaignIdleCashFactory",
+        "CampaignRefineryDefence", "CampaignFactoryRunway"};
+    for (const auto member : members) REQUIRE_FALSE(defaults.force.*member);
+    REQUIRE(defaults.force.campaignIdleCashFactoryCredits == 1500);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-round-two-config-test.ini";
+    std::map<std::string, unsigned> hashes;
+    for (const int threshold : {1500, 2000}) {
+        for (unsigned mask = 0; mask < (1u << members.size()); ++mask) {
+            QuantBotConfig expected = defaults;
+            expected.force.campaignIdleCashFactoryCredits = threshold;
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\nCampaignIdleCashFactoryCredits=" << threshold << '\n';
+                for (size_t i = 0; i < members.size(); ++i) {
+                    expected.force.*members[i] = (mask & (1u << i)) != 0;
+                    ini << names[i] << '=' << (expected.force.*members[i]) << '\n';
+                }
+            }
+            QuantBotConfig loaded;
+            REQUIRE(loaded.applyOverrides(path.string()));
+            for (const auto member : members) REQUIRE((loaded.force.*member) == (expected.force.*member));
+            REQUIRE(loaded.force.campaignIdleCashFactoryCredits == threshold);
+            REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+            REQUIRE(hashes.emplace(loaded.getConfigHash(), mask).second);
+            REQUIRE(loaded.force.campaignMilitaryOpening == defaults.force.campaignMilitaryOpening);
+            REQUIRE(loaded.force.campaignFundedLightOpening == defaults.force.campaignFundedLightOpening);
+            REQUIRE(loaded.force.campaignLightWorkingCash == defaults.force.campaignLightWorkingCash);
+            REQUIRE(loaded.force.campaignLightIncomeSeed == defaults.force.campaignLightIncomeSeed);
+            REQUIRE(loaded.save(path.string()));
+            QuantBotConfig restored;
+            REQUIRE(restored.applyOverrides(path.string()));
+            for (const auto member : members) REQUIRE((restored.force.*member) == (expected.force.*member));
+            REQUIRE(restored.force.campaignIdleCashFactoryCredits == threshold);
+            REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+        }
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign funded light opening independently persists both hashed states",
           "[ai][campaign][production][config]") {
     const QuantBotConfig defaults;

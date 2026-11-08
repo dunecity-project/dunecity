@@ -253,6 +253,19 @@ struct QuantBotConfig {
         /// until that refinery is queued, without waiting for worker delivery.
         /// Hashed; default on. OFF retains unrestricted working-cash light production.
         bool campaignLightIncomeSeed;
+        /// Classic campaign support buys a usable first vehicle factory before the Starport ladder.
+        /// Independent hashed candidate, default off.
+        bool campaignFactoryBeforeStarport;
+        /// Classic campaign support uses idle uncommitted cash for its first vehicle factory.
+        /// Independent hashed candidate, default off; only the two documented thresholds are screened.
+        bool campaignIdleCashFactory;
+        int campaignIdleCashFactoryCredits;
+        /// Reuse whole-army assignments for an attacked campaign refinery and protect replacement funding.
+        /// Independent hashed candidate, default off; city and skirmish games are unchanged.
+        bool campaignRefineryDefence;
+        /// Save the first campaign light factory's founded quote and first unit before extra refineries.
+        /// Independent hashed candidate, default off.
+        bool campaignFactoryRunway;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

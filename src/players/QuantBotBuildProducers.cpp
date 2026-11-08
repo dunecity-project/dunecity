@@ -805,6 +805,14 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
             && pass.itemCount[Structure_Refinery] < std::min(2, pass.fundedHarvesterTarget))
             protectedCash = std::max(protectedCash, buildingCapitalCost(pass, Structure_Refinery));
     }
+    // A lost processing bay must not compete afresh with optional imports,
+    // workers or technology. Live ground replacement production keeps its
+    // emergency spending; all other producers leave the yard's quote intact.
+    if (producer != Structure_ConstructionYard
+        && (!pass.campaignThreatProduction || (producer != Structure_LightFactory
+            && producer != Structure_HeavyFactory && producer != Structure_Barracks
+            && producer != Structure_WOR)))
+        protectedCash = std::max(protectedCash, campaignRefineryReplacementCost(pass));
     turn.reserve.reserved = pass.money - QuantBotBuildPolicy::spendableCredits(pass.money,protectedCash);
     pass.money -= turn.reserve.reserved;
 }

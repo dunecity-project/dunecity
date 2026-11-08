@@ -96,7 +96,9 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             attackedBuilding = protectedAsset;
         else if (attackingOwnedBuilding(intruder)) attackedBuilding = intruder->getTarget();
     }
-    if (attackedBuilding && wholeArmyBaseDefence()) {
+    const bool campaignRefinery = attackedBuilding && attackedBuilding->getItemID() == Structure_Refinery
+        && botConfig().force.campaignRefineryDefence && campaignEconomySupport();
+    if (attackedBuilding && (wholeArmyBaseDefence() || campaignRefinery)) {
         scrambleWholeArmyToDefend(intruder,attackedBuilding);
         return;
     }
@@ -266,11 +268,13 @@ bool QuantBot::baseDefenceAssignment(const UnitBase* unit) const {
     // A scramble records the building the unit was sent to; every other defence
     // assignment records a hostile contact. The upkeep in checkAllUnits() ends
     // the scramble once the unit is neither walking there nor fighting.
-    if (!unit || !wholeArmyBaseDefence()) return false;
+    if (!unit) return false;
     const auto assignment=defenceAssignments.find(unit->getObjectID());
     if (assignment==defenceAssignments.end()) return false;
     const auto* assigned=getObject(assignment->second);
-    return assigned && assigned->isAStructure() && assigned->getOwner()==getHouse();
+    return assigned && assigned->isAStructure() && assigned->getOwner()==getHouse()
+        && (wholeArmyBaseDefence() || (assigned->getItemID() == Structure_Refinery
+            && botConfig().force.campaignRefineryDefence && campaignEconomySupport()));
 }
 
 void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const ObjectBase* building) {
@@ -3574,8 +3578,10 @@ void QuantBot::retreatAllUnits() {
         }
         // A forward building can also be shelled by an enemy turret. Recheck
         // those real targets on the same cadence as mobile attackers.
-        if (wholeArmyBaseDefence()) for (const auto* intruder:getStructureList())
-            if (intruder->isVisible(getHouse()->getTeamID()) && attackingOwnedBuilding(intruder))
+        const bool campaignRefineryDefence = botConfig().force.campaignRefineryDefence && campaignEconomySupport();
+        if (wholeArmyBaseDefence() || campaignRefineryDefence) for (const auto* intruder:getStructureList())
+            if (intruder->isVisible(getHouse()->getTeamID()) && attackingOwnedBuilding(intruder)
+                && (wholeArmyBaseDefence() || intruder->getTarget()->getItemID() == Structure_Refinery))
                 scrambleUnitsAndDefend(intruder);
         // Aircraft on any building we own, main base or outlying colony, on the
         // same cadence and before regrouping can claim the launchers again.
@@ -3620,7 +3626,7 @@ void QuantBot::retreatAllUnits() {
             if (target && target->isAStructure() && target->getOwner()==getHouse()) {
                 const auto* fighting=unit ? unit->getTarget() : nullptr;
                 const bool onJob=unit && unit->getOwner()==getHouse() && unit->getHealth()>0
-                    && wholeArmyBaseDefence() && unit->getAttackMode()==HUNT
+                    && baseDefenceAssignment(unit) && unit->getAttackMode()==HUNT
                     && target->getHealth()>0
                     && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free
                     && (unit->isHuntingToward() || unit->wasForced()

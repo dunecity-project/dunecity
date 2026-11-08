@@ -1751,6 +1751,8 @@ private:
     bool openingFleetIncomplete(const BuildPass& pass) const;
     bool openingWorkersNeeded(BuildPass& pass);
     int harvesterInvestmentReserve(BuildPass& pass);
+    bool campaignEconomySupport() const;
+    int campaignRefineryReplacementCost(BuildPass& pass);
     bool needsFirstTransport(BuildPass& pass);
     static int initialCityPopulation(Uint32 item);
     bool cityAdmitsStructure(BuildPass& pass, Uint32 item);
