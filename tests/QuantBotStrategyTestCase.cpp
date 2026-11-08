@@ -1588,3 +1588,44 @@ TEST_CASE("Strategy: each special has its own slot, share and learning", "[ai][s
     for (const int share : mix) total += share;
     REQUIRE(total == 10000);
 }
+
+TEST_CASE("Campaign seeded runway and bounded fleet independently persist every hashed arm",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignCombatBudget);
+    REQUIRE_FALSE(defaults.force.campaignSeededFactoryRunway);
+    REQUIRE(defaults.force.campaignOpeningWorkerLimit == 4);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-round-three-config-test.ini";
+    std::map<std::string, unsigned> hashes;
+    for (const int workers : {4, 6}) {
+        for (unsigned mask = 0; mask < 4; ++mask) {
+            QuantBotConfig expected = defaults;
+            expected.force.campaignCombatBudget = (mask & 1) != 0;
+            expected.force.campaignSeededFactoryRunway = (mask & 2) != 0;
+            expected.force.campaignOpeningWorkerLimit = workers;
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\nCampaignCombatBudget=" << expected.force.campaignCombatBudget
+                    << "\nCampaignSeededFactoryRunway=" << expected.force.campaignSeededFactoryRunway
+                    << "\nCampaignOpeningWorkerLimit=" << workers << '\n';
+            }
+            QuantBotConfig loaded;
+            REQUIRE(loaded.applyOverrides(path.string()));
+            REQUIRE(loaded.force.campaignCombatBudget == expected.force.campaignCombatBudget);
+            REQUIRE(loaded.force.campaignSeededFactoryRunway == expected.force.campaignSeededFactoryRunway);
+            REQUIRE(loaded.force.campaignOpeningWorkerLimit == workers);
+            REQUIRE(loaded.force.campaignIdleCashFactory);
+            REQUIRE(loaded.force.campaignIdleCashFactoryCredits == 2000);
+            REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+            REQUIRE(hashes.emplace(loaded.getConfigHash(), mask).second);
+            REQUIRE(loaded.save(path.string()));
+            QuantBotConfig restored;
+            REQUIRE(restored.applyOverrides(path.string()));
+            REQUIRE(restored.force.campaignCombatBudget == expected.force.campaignCombatBudget);
+            REQUIRE(restored.force.campaignSeededFactoryRunway == expected.force.campaignSeededFactoryRunway);
+            REQUIRE(restored.force.campaignOpeningWorkerLimit == workers);
+            REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+        }
+    }
+    std::filesystem::remove(path);
+}

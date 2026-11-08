@@ -239,7 +239,8 @@ bool QuantBot::openingCombatBudgetActive() const {
 
 bool QuantBot::campaignCombatBudgetActive() const {
     if (!botConfig().force.campaignCombatBudget || difficulty < Difficulty::Hard || builderOnly()
-        || !currentGame || !isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
+        || !currentGame || currentGame->isCitySimEnabled() || lastCalculatedSpice <= 0
+        || !isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
         || initialMilitaryValue < 0 || initialItemCount[Structure_HeavyFactory] > 0
         || campaignWave.launched != 0) return false;
     const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
@@ -632,7 +633,8 @@ void QuantBot::update() {
 	int oldLimit = harvesterLimit;
 	harvesterLimit = std::min(baseHarvesterLimit, std::max(1, maxHarvestersForSpice));
     if (campaignCityEconomy()) harvesterLimit=std::min(harvesterLimit,campaignHarvesterTarget());
-    if (campaignCombatBudgetActive()) harvesterLimit=std::min(harvesterLimit,4);
+    if (campaignCombatBudgetActive())
+        harvesterLimit=std::min(harvesterLimit,botConfig().force.campaignOpeningWorkerLimit);
 
 	// Log when the limit changes
 	if (oldLimit != harvesterLimit) {

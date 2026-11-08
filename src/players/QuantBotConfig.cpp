@@ -349,6 +349,7 @@ QuantBotConfig::QuantBotConfig() {
     force.joinAllyWaves = false;
     force.openingCombatBudget = false;
     force.campaignCombatBudget = false;
+    force.campaignOpeningWorkerLimit = 4;
     force.campaignPlayerHouse = false;
     force.campaignMilitaryOpening = true;
     force.campaignAdaptiveReadiness = true;
@@ -361,6 +362,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignIdleCashFactoryCredits = 2000;
     force.campaignRefineryDefence = false;
     force.campaignFactoryRunway = false;
+    force.campaignSeededFactoryRunway = false;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
     force.clearMcvFootprint = true;
@@ -697,6 +699,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
         iniFile.setBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
         iniFile.setBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
+        iniFile.setIntValue("Force Concentration", "CampaignOpeningWorkerLimit", force.campaignOpeningWorkerLimit);
         iniFile.setBoolValue("Force Concentration", "CampaignPlayerHouse", force.campaignPlayerHouse);
         iniFile.setBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
         iniFile.setBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
@@ -709,6 +712,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CampaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits);
         iniFile.setBoolValue("Force Concentration", "CampaignRefineryDefence", force.campaignRefineryDefence);
         iniFile.setBoolValue("Force Concentration", "CampaignFactoryRunway", force.campaignFactoryRunway);
+        iniFile.setBoolValue("Force Concentration", "CampaignSeededFactoryRunway", force.campaignSeededFactoryRunway);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
         iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -867,6 +871,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.joinAllyWaves = iniFile.getBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
     force.openingCombatBudget = iniFile.getBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
     force.campaignCombatBudget = iniFile.getBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
+    force.campaignOpeningWorkerLimit = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignOpeningWorkerLimit", force.campaignOpeningWorkerLimit), 4, 6);
     force.campaignPlayerHouse = iniFile.getBoolValue("Force Concentration", "CampaignPlayerHouse", force.campaignPlayerHouse);
     force.campaignMilitaryOpening = iniFile.getBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
     force.campaignAdaptiveReadiness = iniFile.getBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
@@ -880,6 +886,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         iniFile.getIntValue("Force Concentration", "CampaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits), 1500, 2000);
     force.campaignRefineryDefence = iniFile.getBoolValue("Force Concentration", "CampaignRefineryDefence", force.campaignRefineryDefence);
     force.campaignFactoryRunway = iniFile.getBoolValue("Force Concentration", "CampaignFactoryRunway", force.campaignFactoryRunway);
+    force.campaignSeededFactoryRunway = iniFile.getBoolValue("Force Concentration", "CampaignSeededFactoryRunway", force.campaignSeededFactoryRunway);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
     force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1403,6 +1410,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("joinAllyWaves", force.joinAllyWaves);
     addNamed("openingCombatBudget", force.openingCombatBudget);
     addNamed("campaignCombatBudget", force.campaignCombatBudget);
+    addNamed("campaignOpeningWorkerLimit", force.campaignOpeningWorkerLimit);
     addNamed("campaignPlayerHouse", force.campaignPlayerHouse);
     addNamed("campaignMilitaryOpening", force.campaignMilitaryOpening);
     addNamed("campaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
@@ -1415,6 +1423,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits);
     addNamed("campaignRefineryDefence", force.campaignRefineryDefence);
     addNamed("campaignFactoryRunway", force.campaignFactoryRunway);
+    addNamed("campaignSeededFactoryRunway", force.campaignSeededFactoryRunway);
     addNamed("capacityMcvRunway", force.capacityMcvRunway);
     addNamed("respectServiceOwnership", force.respectServiceOwnership);
     addNamed("clearMcvFootprint", force.clearMcvFootprint);

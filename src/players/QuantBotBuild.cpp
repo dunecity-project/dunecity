@@ -999,6 +999,10 @@ int QuantBot::harvesterInvestmentReserve(BuildPass& pass) {
         && market.getPrice(Unit_Harvester) < data[Unit_Harvester][houseID].price
         && getHouse()->getMaxHarvesters() > 0) target = getHouse()->getMaxHarvesters();
     if (getHouse()->getMaxHarvesters() > 0) target = std::min(target, getHouse()->getMaxHarvesters());
+    // A discounted catalogue must not reserve the full engine ceiling while
+    // the campaign is deliberately funding its first army from a small fleet.
+    if (campaignCombatBudgetActive())
+        target = std::min(target, botConfig().force.campaignOpeningWorkerLimit);
     return std::max(0, target-pass.itemCount[Unit_Harvester]) * data[Unit_Harvester][houseID].price;
 }
 

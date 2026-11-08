@@ -236,9 +236,10 @@ struct QuantBotConfig {
         /// then fund their first full combat wave before optional fleet/yard expansion. Initial
         /// heavy-factory starts, Easy/Medium and campaign games are unchanged.
         bool openingCombatBudget;
-        /// The equivalent four-worker first-wave budget for a Hard/Brutal campaign partner of a
-        /// human that started without a heavy factory. Enemy controllers and Easy/Medium stay as-is.
+        /// A bounded worker first-wave budget for a classic Hard/Brutal campaign partner.
+        /// Discounted imports respect the same target; cities, enemy controllers and Easy/Medium stay as-is.
         bool campaignCombatBudget;
+        int campaignOpeningWorkerLimit; ///< Two screened opening-fleet targets: four or six workers.
         /// The campaign's selected player house uses normal player-side economy and attacks,
         /// even when its QuantBot is the sole controller. Authored enemy houses are unchanged.
         bool campaignPlayerHouse;
@@ -275,6 +276,9 @@ struct QuantBotConfig {
         /// Save the first campaign light factory's founded quote and first unit before extra refineries.
         /// Independent hashed candidate, default off.
         bool campaignFactoryRunway;
+        /// Save the first low-tech factory runway only after two refineries are funded.
+        /// Independent hashed candidate, default off; unlike FactoryRunway it preserves the second income seed.
+        bool campaignSeededFactoryRunway;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

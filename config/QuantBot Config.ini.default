@@ -387,6 +387,12 @@ CampaignIdleCashFactoryCredits=2000
 CampaignRefineryDefence=0
 # Save the full first Light Factory/foundation/unit runway before optional extra refineries.
 CampaignFactoryRunway=0
+# Round-3 classic campaign candidates; both policies remain OFF pending full paired gates.
+# Fund the first wave with a four- or six-worker opening; discounted Starport workers obey it.
+CampaignCombatBudget=0
+CampaignOpeningWorkerLimit=4
+# Save the first Light Factory/unit runway after the second refinery is funded, never before it.
+CampaignSeededFactoryRunway=0
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.

@@ -397,10 +397,14 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
                             + std::max(entryCash, unit.price)) { fundedUnit = true; break; }
                 }
                 if (!fundedUnit) {
-                    // Low-tech support already uses actual working cash. Save
-                    // the complete factory/foundation/first-unit quote instead
-                    // of repeatedly spending its partial runway on extra bays.
-                    if (botConfig().force.campaignFactoryRunway && turn.campaignLightWorkingCash
+                    // Keep the second income source ahead of the narrowed
+                    // runway experiment. Queue-inclusive counting releases the
+                    // economy as soon as that refinery's full quote is booked.
+                    const bool seededRunway = botConfig().force.campaignSeededFactoryRunway
+                        && pass.itemCount[Structure_Refinery] >= 2
+                        && getHouse()->getNumBuiltItems(Structure_LightFactory) == 0;
+                    if ((botConfig().force.campaignFactoryRunway || seededRunway)
+                        && turn.campaignLightWorkingCash
                         && lastCalculatedSpice > 0 && campaignAvailableToBuild(turn.pBuilder, producer)
                         && findPlaceLocation(producer).isValid()) {
                         yardTurn.skipRemainingStructureLogic = true;
