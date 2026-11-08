@@ -887,6 +887,9 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         add_test(NAME quantbot_campaign_matrix_coverage COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_campaign_matrix.py)
         set_tests_properties(quantbot_campaign_matrix_coverage PROPERTIES TIMEOUT 60)
+        add_test(NAME quantbot_control_maps_schedule COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_control_maps.py)
+        set_tests_properties(quantbot_control_maps_schedule PROPERTIES TIMEOUT 60)
         add_test(NAME quantbot_power_continuation_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_power_continuation.py)
         set_tests_properties(quantbot_power_continuation_parser PROPERTIES TIMEOUT 60)
