@@ -737,6 +737,11 @@ bool QuantBot::buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn) {
 void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    turn.campaignLightWorkingCash = botConfig().force.campaignLightWorkingCash
+        && !pass.citySimEnabled && !pass.techSavings && !builderOnly()
+        && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman()
+        && (!data[Structure_HeavyFactory][houseID].enabled
+            || data[Structure_HeavyFactory][houseID].techLevel > getHouse()->getTechLevel());
     // The factory that has to supply the next yard: either because
     // the rock ran out under the old exhaustion rule, or because
     // the city is built out and has somewhere to settle. Both save
@@ -791,6 +796,15 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
     if (pass.campaignThreatProduction
         && (producer == Structure_LightFactory || producer == Structure_HeavyFactory
             || producer == Structure_Barracks || producer == Structure_WOR)) protectedCash = 0;
+    if (turn.campaignLightWorkingCash && producer == Structure_LightFactory) {
+        protectedCash = std::max(pass.strategicReserveCost, pass.civicReserveCost);
+        // Keep the one-worker opening from spending every receipt on light
+        // units. Queue-inclusive counting releases this seed as soon as its
+        // refinery is funded; the worker does not have to be delivered.
+        if (botConfig().force.campaignLightIncomeSeed
+            && pass.itemCount[Structure_Refinery] < std::min(2, pass.fundedHarvesterTarget))
+            protectedCash = std::max(protectedCash, buildingCapitalCost(pass, Structure_Refinery));
+    }
     turn.reserve.reserved = pass.money - QuantBotBuildPolicy::spendableCredits(pass.money,protectedCash);
     pass.money -= turn.reserve.reserved;
 }
@@ -904,8 +918,14 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
     auto& data = currentGame->objectData.data;
     constexpr auto& mixItems = kMixItems;
     constexpr size_t kSlots = UnitMixPolicy::kSlots;
+    const int lightPlanValue = turn.campaignLightWorkingCash
+        ? std::max(0, QuantBotBuildPolicy::fundedArmyTarget(pass.militaryValue, pass.lightBudget, pass.money)
+            - pass.infantryValue)
+        : pass.vehiclePlanValue;
     if (!turn.pBuilder->isUpgrading()
-        && pass.money > (pass.techSavings && pass.militaryEmergency ? 0 : pass.citySimEnabled ? 500 : 700)
+        && pass.money > (pass.techSavings && pass.militaryEmergency ? 0
+            : turn.campaignLightWorkingCash ? 0
+            : pass.citySimEnabled ? 500 : 700)
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
         && pass.militaryValue < pass.lightBudget
@@ -914,7 +934,7 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
                 pass.compositionPrice, pass.compositionAvailable) >= UnitMixPolicy::kFirstLightSlot)
             : ((pass.citySimEnabled && pass.itemCount[Structure_HeavyFactory] == 0)
                 || ((!pass.learningUnitMix && pass.lightVehicleCount < 2)
-                    || int64_t(pass.lightVehicleValue) * 10000 < int64_t(pass.vehiclePlanValue) * pass.lightVehicleBps)))) {
+                    || int64_t(pass.lightVehicleValue) * 10000 < int64_t(lightPlanValue) * pass.lightVehicleBps)))) {
 
         if (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel()
             && !(pass.techSavings && pass.militaryEmergency)
@@ -933,7 +953,7 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
                             pass.compositionPrice, pass.compositionAvailable)) itemID = candidate;
                     continue;
                 }
-                const auto deficit = UnitMixPolicy::deficit(pass.unitMix[i], pass.vehiclePlanValue,
+                const auto deficit = UnitMixPolicy::deficit(pass.unitMix[i], lightPlanValue,
                     pass.itemCount[candidate], data[candidate][houseID].price);
                 if (deficit > bestDeficit) { bestDeficit = deficit; itemID = candidate; }
             }

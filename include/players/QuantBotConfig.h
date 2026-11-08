@@ -242,6 +242,17 @@ struct QuantBotConfig {
         /// A campaign player's ground producers can spend economic savings while
         /// visible attackers are firing on its income/base. Independent, hashed; default off.
         bool campaignThreatProduction;
+        /// Delay the campaign opening Light Factory until its first unit and
+        /// ordinary producer cash protection are funded. Independent, hashed; default off.
+        bool campaignFundedLightOpening;
+        /// Before heavy-factory technology, campaign light production funds growth
+        /// from real uncommitted cash instead of a 2,000-credit economic buffer.
+        /// Independent, hashed candidate; default off.
+        bool campaignLightWorkingCash;
+        /// Working-cash light production protects the second refinery's quote
+        /// until that refinery is queued, without waiting for worker delivery.
+        /// Independent, hashed candidate; default off.
+        bool campaignLightIncomeSeed;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

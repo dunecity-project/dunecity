@@ -368,6 +368,12 @@ CampaignAdaptiveReadiness=0
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Independent hashed candidate; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=0
+# Campaign opening Light Factories wait until the first unit and protected cash are funded.
+CampaignFundedLightOpening=0
+# Before heavy-factory technology, fund campaign light growth from real uncommitted cash.
+CampaignLightWorkingCash=0
+# Protect a second refinery's founded quote from low-tech light units until it is queued.
+CampaignLightIncomeSeed=0
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.

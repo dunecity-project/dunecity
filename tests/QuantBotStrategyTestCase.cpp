@@ -770,6 +770,86 @@ TEST_CASE("Campaign threat production defaults off and independently round-trips
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Campaign light working cash independently persists both hashed states",
+          "[ai][campaign][production][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignLightWorkingCash);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-working-cash-test.ini";
+    for (const bool enabled : {false, true, false}) {
+        QuantBotConfig expected = defaults;
+        expected.force.campaignLightWorkingCash = enabled;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignLightWorkingCash=" << enabled << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignLightWorkingCash == enabled);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == !enabled);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignLightWorkingCash == enabled);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign light income seed independently persists both hashed states",
+          "[ai][campaign][production][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignLightIncomeSeed);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-income-seed-test.ini";
+    for (const bool enabled : {false, true, false}) {
+        QuantBotConfig expected = defaults;
+        expected.force.campaignLightIncomeSeed = enabled;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignLightIncomeSeed=" << enabled << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignLightIncomeSeed == enabled);
+        REQUIRE_FALSE(loaded.force.campaignLightWorkingCash);
+        REQUIRE_FALSE(loaded.force.campaignFundedLightOpening);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == !enabled);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignLightIncomeSeed == enabled);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign funded light opening independently persists both hashed states",
+          "[ai][campaign][production][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignFundedLightOpening);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-funded-light-test.ini";
+    for (const bool enabled : {false, true, false}) {
+        QuantBotConfig expected = defaults;
+        expected.force.campaignFundedLightOpening = enabled;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignFundedLightOpening=" << enabled << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignFundedLightOpening == enabled);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == !enabled);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignFundedLightOpening == enabled);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign player house defaults off and independently round-trips both hashed states",
           "[ai][campaign][config]") {
     const QuantBotConfig defaults;

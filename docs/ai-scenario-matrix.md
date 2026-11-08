@@ -252,6 +252,60 @@ Evidence: `~/Documents/projects/outputs/ai-recovery-20261108/fixes/CampaignOpeni
 `bounded-seed13/`, `bounded-seed-aaa2/`). These results do not pass the
 all-missions-win recovery gate.
 
+The next campaign tuning round isolated the cheap ablations on `fa5228ac`,
+paired against a fresh 66-mission control on `c598fc46`. The fresh OFF arm
+matches all 66 original control digests:
+
+| Campaign switches, no military opening | Won | Lost | New control losses | Rescued |
+|---|---:|---:|---:|---|
+| Threat production only | 56 | 10 | 0 | — |
+| Adaptive readiness only | 56 | 10 | 0 | — |
+| Readiness + threat production | 57 | 9 | 0 | Harkonnen 21 (31.85 min) |
+
+Readiness plus threat is the first clean campaign improvement: it preserves all
+56 control wins. Its paired score difference is +0.0303, with normal 95% interval
+[-0.0291,+0.0897], so the one-mission gain is not an established aggregate
+statistical improvement. Neither isolated switch rescues Harkonnen 21. AAA2
+passes with both original control digests; defaults remain OFF pending the
+cross-mode adoption gate.
+
+Independent default-off hashed light-production candidates investigate the
+observed idle factory. `CampaignFundedLightOpening` leaves normal yard economy
+active until the opening Light Factory, a legal first vehicle, and the
+producer's protected cash can all be funded together; it does not wait for a
+particular delivered-worker count. Its completed paired 66-mission run is
+**58W/8L**, preserving all 56 control wins and rescuing Harkonnen 21 plus Ordos 6.
+The isolated real-price-entry experiment (`CampaignAffordableLight`) still had
+four regressions and an Ordos 4 loss on the weak 14; its switch/code were
+removed, with the result and immutable test pin retained in the ledger.
+
+Ordos 4 telemetry isolates another hold: at 2.55–9.13 min, its 100% Raider mix
+targets exactly the existing four Raiders' 600 credits. Composition planning
+still subtracts the 2,000-credit economy buffer after live-threat producer
+admission releases it. `CampaignLightWorkingCash` tests matching light growth
+to genuinely uncommitted cash before heavy-factory technology, while preserving
+strategic/civic protection, prices, commitments, army budgets and unit limits.
+Combining it with the funded factory gate (`7b3001e4`,
+`campaign-light-funded-working-on`) achieves **61W/5L**, preserving every control
+win and rescuing Atreides 2/5, Harkonnen 21, and Ordos 5/6. Paired score difference
+is +0.1515, normal 95% interval [+0.0229,+0.2802]. AAA2 passes both original
+digests, within 50 minutes. The remaining losses are Atreides 6/9/20, Harkonnen
+22, and Ordos 4. Aggregate campaign wins exceed the 1.0.796/1.0.807 references
+(56/59), but those references win A6/A9 (both) and A20/H22 (1.0.807); preserving
+those historical mission wins is not yet established.
+
+Working cash without the factory gate starts O4 replacement production at
+2.92 min and buys 36 Raiders, but never dispatches: the one-worker army grows
+slower than its readiness requirement (3,990 versus 5,000 at 19.21 min), then
+loses at 40.51 min. The next independent default-OFF candidate,
+`CampaignLightIncomeSeed`, protects only the second refinery's founded quote
+from working-cash light production until that refinery is queued. It does not
+wait for a delivered worker, change factory admission, or alter OFF behaviour.
+`campaign-light-income-seed-on` isolates this from the working-cash arm; this
+fourth code variation is prepared for the integrator's shared second round,
+not counted as a measured win. Full paired results and decisions live in
+`~/Documents/projects/outputs/ai-tuning-20261108/CampaignLane/ledger.md`.
+
 
 For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
 seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;
