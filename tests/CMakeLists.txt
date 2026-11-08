@@ -45,6 +45,7 @@ target_sources(dunelegacy_tests
         GasDeviationPolicyTestCase.cpp
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
+        QuantBotArmyCounterTestCase.cpp
         CivWarsHarvesterPolicyTestCase.cpp
         CivWarsColonisationPolicyTestCase.cpp
         ArmyPosturePolicyTestCase.cpp

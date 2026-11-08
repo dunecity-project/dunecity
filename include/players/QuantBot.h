@@ -39,6 +39,7 @@ class Harvester;
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
 #include <players/QuantBotVanillaPolicy.h>
+#include <players/QuantBotCoreDefencePolicy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/AIDecisionLog.h>
 #include <dunecity/SpatialFields.h>
@@ -453,6 +454,28 @@ private:
     /// at its building. Human orders, repair runs, booked carryall pickups,
     /// workers, builders, transports and aircraft keep their units.
     void scrambleWholeArmyToDefend(const ObjectBase* intruder, const ObjectBase* building);
+    /// VanillaCoreDefence (default off; docs/ai-play-styles.md): one refinery or combat factory
+    /// of ours that the strongest single hostile team's live mobile army can reach. Threats are
+    /// purchase price x health share of armed units within QuantBotCoreDefencePolicy's band.
+    struct CoreDefenceCore {
+        Uint32 id{NONE_ID};
+        Coord at{Coord::Invalid()};          ///< The core's centre tile.
+        Coord approach{Coord::Invalid()};    ///< That team's nearest contact of its larger arm.
+        int groundThreat{}, airThreat{};
+        int groundCover{}, airCover{};       ///< Live, powered and reserved turrets reaching the centre.
+        Uint32 groundContact{NONE_ID}, airContact{NONE_ID};
+    };
+    /// Transient per-pass survey of the true simulation state; never saved or cached.
+    struct CoreDefenceSurvey {
+        bool active{};
+        int ownValue{}, ownUnits{};          ///< Our live mobile ground army.
+        std::vector<CoreDefenceCore> cores;  ///< Threatened cores only, strongest threat first.
+    };
+    /// A standing post: AREAGUARD plus a saved defenceAssignments entry naming the
+    /// core itself. Scrambles, rescues and district responses replace it as before.
+    bool vanillaCoreGuardAssignment(const UnitBase* unit) const;
+    CoreDefenceSurvey surveyVanillaCoreDefence() const;
+    void holdVanillaCoreDefence(const CoreDefenceSurvey& survey);
     /// How close to the attacked building a troop's own fight, or the enemy
     /// strength it faces, counts as this battle.
     static constexpr int kBaseScrambleContactTiles = 8;
@@ -541,6 +564,9 @@ private:
                                       int* crimeBenefit = nullptr, int* crimeHotspot = nullptr);
 
     Coord findEffectiveTurretPlaceLocation(Uint32 itemID);
+    /// A legal 1x1 emplacement within \a item's reach of \a core's centre, facing its approach
+    /// and outside the live contacts' own reach where possible. One bounded window per call.
+    Coord findVanillaCoreTurretPlaceLocation(Uint32 item, const CoreDefenceCore& core);
     Coord findThreatTurretPlaceLocation(Coord asset, Coord approach);
     Coord findCoveredDefencePlaceLocation(Uint32 item, Coord home);
     /// Site for an enemy-facing battery emplacement, in city mode as well as
@@ -1138,6 +1164,9 @@ private:
     /// The tuning switches never activate in campaigns, duels or two-team matches.
     bool vanillaMultiEnemyGame() const;
     bool vanillaBoomGame() const;
+    /// Independent scope for the two default-OFF policies: original occupied
+    /// no-allies FFA4/6, autonomous Custom Brutal Vanilla with sustainable spice.
+    bool vanillaFfaTuningGame() const;
     bool vanillaReactiveKnowledge() const;
     QuantBotVanillaPolicy::Plan vanillaBoldPlan(QuantBotVanillaPolicy::Observation& receipt) const;
     void vanillaReactiveSurvey(QuantBotVanillaPolicy::Observation& receipt, int* firstTeam = nullptr,
@@ -1718,6 +1747,9 @@ private:
     void traceBuildState(BuildPass& pass);
     /// Learned unit mix, anti-air floor and the funded army plan.
     void planUnitMix(BuildPass& pass);
+    /// VanillaArmyCounters: the native mix blended toward counters of the strongest
+    /// terrain-reachable hostile team's live army (players/QuantBotArmyCounterPolicy.h).
+    UnitMixPolicy::Mix vanillaArmyCounterMix(const BuildPass& pass, const UnitMixPolicy::Mix& native) const;
     /// Income forecast, producer lanes and the shared-spending decision.
     void planCapitalForecast(BuildPass& pass);
     /// City yards, civic reserve, storage and the no-spice bootstrap.
@@ -1726,6 +1758,8 @@ private:
     void planOpeningProduction(BuildPass& pass);
     /// Rocket coverage, core infrastructure and crime exposure.
     void planDefenceCoverage(BuildPass& pass);
+    /// VanillaCoreDefence: this pass's transient core-threat survey (inactive when off/out of scope).
+    void planVanillaCoreDefence(BuildPass& pass);
     /// Net-income buckets, a legal next technology and its bounded savings plan.
     bool simpleTechPolicyActive() const;
     void planTechSavings(BuildPass& pass);
@@ -1853,6 +1887,8 @@ private:
     void chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Essential infrastructure, power recovery and economic generation.
     void chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// VanillaCoreDefence: at most one Gun/Rocket Turret per pass for the most threatened short core.
+    void chooseYardVanillaCoreDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// No-spice opening, civics, services and the seed economy.
     void chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Core protection, power reserve, reactor and production recovery.

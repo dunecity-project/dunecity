@@ -7,12 +7,14 @@
 #include <players/UnitMixPolicy.h>
 #include <players/QuantBotSpendingPolicy.h>
 #include <players/QuantBotVanillaPolicy.h>
+#include <players/QuantBotCoreDefencePolicy.h>
 
 #include <array>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <map>
 
 // QuantBot strategies (docs/ai-play-styles.md, "Strategies"): the pick is a pure function of the
@@ -823,6 +825,147 @@ TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai]
         REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
     }
     std::filesystem::remove(path);
+}
+
+TEST_CASE("Vanilla core defence and army counters default off and persist every hashed level combination",
+          "[ai][vanilla][strategy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.vanillaCoreDefence);
+    REQUIRE_FALSE(defaults.force.vanillaArmyCounters);
+    REQUIRE(defaults.force.vanillaCoreDefenceThreatBps == 5000);
+    REQUIRE(defaults.force.vanillaArmyCounterBlendBps == 5000);
+    const std::array<bool QuantBotConfig::ForceSettings::*, 2> switches{
+        &QuantBotConfig::ForceSettings::vanillaCoreDefence, &QuantBotConfig::ForceSettings::vanillaArmyCounters};
+    const std::array<int QuantBotConfig::ForceSettings::*, 2> levels{
+        &QuantBotConfig::ForceSettings::vanillaCoreDefenceThreatBps,
+        &QuantBotConfig::ForceSettings::vanillaArmyCounterBlendBps};
+    const std::array<const char*, 2> switchNames{"VanillaCoreDefence", "VanillaArmyCounters"};
+    const std::array<const char*, 2> levelNames{"VanillaCoreDefenceThreatBps", "VanillaArmyCounterBlendBps"};
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-core-counter-config-test.ini";
+    std::map<std::string, unsigned> hashes;
+    // Every switch and level is hashed independently: 2 switches x 2 levels each = 16 cells.
+    for (unsigned mask = 0; mask < 16u; ++mask) {
+        QuantBotConfig expected = defaults;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\n";
+            for (size_t i = 0; i < switches.size(); ++i) {
+                expected.force.*switches[i] = (mask & (1u << i)) != 0;
+                expected.force.*levels[i] = (mask & (4u << i)) != 0 ? 10000 : 5000;
+                ini << switchNames[i] << '=' << (expected.force.*switches[i]) << '\n'
+                    << levelNames[i] << '=' << (expected.force.*levels[i]) << '\n';
+            }
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        for (size_t i = 0; i < switches.size(); ++i) {
+            REQUIRE((loaded.force.*switches[i]) == (expected.force.*switches[i]));
+            REQUIRE((loaded.force.*levels[i]) == (expected.force.*levels[i]));
+        }
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), mask).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        for (size_t i = 0; i < switches.size(); ++i) {
+            REQUIRE((restored.force.*switches[i]) == (expected.force.*switches[i]));
+            REQUIRE((restored.force.*levels[i]) == (expected.force.*levels[i]));
+        }
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Vanilla core defence and army counter levels load only as 5000 or 10000",
+          "[ai][vanilla][strategy][config]") {
+    const std::array<int QuantBotConfig::ForceSettings::*, 2> members{
+        &QuantBotConfig::ForceSettings::vanillaCoreDefenceThreatBps,
+        &QuantBotConfig::ForceSettings::vanillaArmyCounterBlendBps};
+    const std::array<const char*, 2> names{"VanillaCoreDefenceThreatBps", "VanillaArmyCounterBlendBps"};
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-vanilla-core-counter-level-test.ini";
+    const QuantBotConfig defaults;
+    for (size_t i = 0; i < members.size(); ++i)
+        for (const int value : {-10000, 0, 4999, 5000, 7500, 9999, 10000, 10001, 20000}) {
+            const int level = value == 10000 ? 10000 : 5000;
+            QuantBotConfig expected = defaults;
+            expected.force.*members[i] = level;
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\n" << names[i] << '=' << value << '\n';
+            }
+            QuantBotConfig loaded;
+            REQUIRE(loaded.applyOverrides(path.string()));
+            REQUIRE(loaded.force.*members[i] == level);
+            REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+            REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (level == 5000));
+        }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Vanilla core defence policy is FFA-scoped, threat-sized and capped", "[ai][vanilla][strategy]") {
+    using namespace QuantBotCoreDefencePolicy;
+    // Scope: the original occupied rows of an autonomous Custom Brutal Vanilla game with spice.
+    REQUIRE(tuningScope(true, false, true, true, 1, 3, true));         // FFA4
+    REQUIRE(tuningScope(true, false, true, true, 1, 5, true));         // FFA6
+    REQUIRE_FALSE(tuningScope(false, false, true, true, 1, 3, true));  // not autonomous Custom Brutal
+    REQUIRE_FALSE(tuningScope(true, true, true, true, 1, 3, true));    // city
+    REQUIRE_FALSE(tuningScope(true, false, false, true, 1, 3, true));  // another mod
+    REQUIRE_FALSE(tuningScope(true, false, true, false, 1, 3, true));  // no sustainable spice
+    REQUIRE_FALSE(tuningScope(true, false, true, true, 2, 4, true));   // allies (2v2v2)
+    REQUIRE_FALSE(tuningScope(true, false, true, true, 1, 1, false));  // duel
+    REQUIRE_FALSE(tuningScope(true, false, true, true, 1, 2, true));   // FFA3
+    REQUIRE_FALSE(tuningScope(true, false, true, true, 1, 3, false));  // 1v3 against one team
+
+    REQUIRE(level(5000) == 5000);
+    REQUIRE(level(10000) == 10000);
+    REQUIRE(level(0) == 5000);
+    REQUIRE(level(7500) == 5000);
+    REQUIRE(level(10001) == 5000);
+
+    // The band: the attacker's own weapon range plus 24 tiles; a negative range counts as 0.
+    REQUIRE(kApproachTiles == 24);
+    REQUIRE(inThreatBand(24, 0));
+    REQUIRE_FALSE(inThreatBand(25, 0));
+    REQUIRE(inThreatBand(29, 5));
+    REQUIRE_FALSE(inThreatBand(30, 5));
+    REQUIRE(inThreatBand(24, -3));
+    REQUIRE_FALSE(inThreatBand(25, -3));
+
+    REQUIRE(response(3000, 5000) == 1500);
+    REQUIRE(response(3000, 10000) == 3000);
+    REQUIRE(response(3000, 7500) == 1500);
+    REQUIRE(response(0, 10000) == 0);
+    REQUIRE(response(-1, 10000) == 0);
+    REQUIRE(response(std::numeric_limits<int>::max(), 10000) == std::numeric_limits<int>::max());
+    REQUIRE(response(std::numeric_limits<int>::max(), 5000) == std::numeric_limits<int>::max() / 2);
+
+    // Emplacements: none without a threat, one per 1,000 response credits, per-core caps.
+    REQUIRE(kTurretTotalCap == 16);
+    REQUIRE(turretGoal(0, 10000, false) == 0);
+    REQUIRE(turretGoal(0, 10000, true) == 0);
+    REQUIRE(turretGoal(1, 5000, false) == 0);
+    REQUIRE(turretGoal(2, 5000, false) == 1);
+    REQUIRE(turretGoal(2000, 5000, false) == 1);
+    REQUIRE(turretGoal(2000, 10000, false) == 2);
+    REQUIRE(turretGoal(2001, 10000, false) == 3);
+    REQUIRE(turretGoal(100000, 10000, false) == kGroundTurretsPerCore);
+    REQUIRE(turretGoal(100000, 10000, true) == kAirTurretsPerCore);
+    REQUIRE(turretGoal(std::numeric_limits<int>::max(), 10000, false) == 3);
+    REQUIRE(turretGoal(std::numeric_limits<int>::max(), 5000, true) == 2);
+
+    // Guards: the response value, no guard at zero threat, at most a third of the army and eight units.
+    REQUIRE(kGuardRadius == 4);
+    REQUIRE(kOrdersPerPass == 4);
+    REQUIRE(guardGoal(3000, 5000) == 1500);
+    REQUIRE(guardGoal(3000, 10000) == 3000);
+    REQUIRE(guardGoal(0, 10000) == 0);
+    REQUIRE(guardValueLimit(3000) == 1000);
+    REQUIRE(guardValueLimit(-5) == 0);
+    REQUIRE(guardCountLimit(2) == 0);
+    REQUIRE(guardCountLimit(9) == 3);
+    REQUIRE(guardCountLimit(30) == kMaxGuards);
+    REQUIRE(guardCountLimit(-3) == 0);
 }
 
 TEST_CASE("Vanilla boom phases preserve scope and convert greedy spending at the declared stop",

@@ -1604,6 +1604,76 @@ Coord QuantBot::findThreatTurretPlaceLocation(Coord asset, Coord approach) {
     return best;
 }
 
+Coord QuantBot::findVanillaCoreTurretPlaceLocation(Uint32 item, const CoreDefenceCore& core) {
+    AITelemetry::PerformanceScope perfScope("ai.findVanillaCoreTurretPlaceLocation",getGameCycleCount(),getHouse()->getHouseID(),item);
+    if (core.at.isInvalid()) return Coord::Invalid();
+    const auto& data=currentGame->objectData.data;
+    // Every site keeps the core's centre inside the emplacement's own reach, so the
+    // search is one bounded window, never a whole-map sweep.
+    const int range=std::max(1,data[item][getHouse()->getHouseID()].weaponrange-1);
+    const int clusterRadius=FrontBatteryPolicy::clusterRadius(range+1);
+    std::vector<Coord> turrets;
+    turrets.reserve(getHouse()->getNumItems(Structure_RocketTurret)
+        +getHouse()->getNumItems(Structure_GunTurret)+reservedStructures.size());
+    for (const auto* structure:getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0
+            && (structure->getItemID()==Structure_RocketTurret || structure->getItemID()==Structure_GunTurret))
+            turrets.push_back(structure->getLocation());
+    for (const auto& entry:reservedStructures)
+        if (entry.first!=planningBuilder
+            && (entry.second.item==Structure_RocketTurret || entry.second.item==Structure_GunTurret))
+            turrets.push_back(entry.second.location);
+    // Return fire from the true live attackers (no visibility filter): a turret
+    // started inside their guns dies before it stands.
+    struct Contact { Coord at; int reach; int64_t value; };
+    std::vector<Contact> contacts;
+    for (const auto* unit:getUnitList()) {
+        if (!unit->isActive() || unit->getHealth()<=0 || !unit->getOwner() || !unit->canAttack()
+            || unit->getOwner()->getTeamID()==getHouse()->getTeamID()) continue;
+        const int reach=std::max(0,unit->getWeaponRange())+1;
+        if (blockDistance(unit->getLocation(),core.at).lround()>range+reach) continue;
+        const int price=std::max(0,data[unit->getItemID()][unit->getProductionHouseID()].price);
+        contacts.push_back({unit->getLocation(),reach,
+            std::max<int64_t>(1,(FixPoint(price)*unit->getHealth()/unit->getMaxHealth()).lround())});
+    }
+    Coord best=Coord::Invalid();
+    using Rank=std::tuple<int64_t,int,int>;
+    Rank bestRank{};
+    for (int y=std::max(0,core.at.y-range);y<=std::min(getMap().getSizeY()-1,core.at.y+range);++y)
+        for (int x=std::max(0,core.at.x-range);x<=std::min(getMap().getSizeX()-1,core.at.x+range);++x) {
+            const Coord at(x,y);
+            if (blockDistance(at,core.at)>range
+                || !placeableAmongOwnUnits(x,y,1,1,item)
+                || overlapsReservedStructure(x,y,1,1)
+                || !preservesGroundAccess(item,at)
+                || !cityRoadImpact(getMap(),x,y,1,1,item).preservesConnections) continue;
+            int nearest=-1,cluster=0;
+            for (const Coord turret:turrets) {
+                const int d=std::max(std::abs(turret.x-x),std::abs(turret.y-y));
+                if (nearest<0 || d<nearest) nearest=d;
+                if (d<=clusterRadius) ++cluster;
+            }
+            if (!FrontBatteryPolicy::spacedEnough(nearest)
+                || !FrontBatteryPolicy::withinClusterLimit(cluster)) continue;
+            int exits=0;
+            for (int dy=-1;dy<=1;++dy) for (int dx=-1;dx<=1;++dx) {
+                if ((!dx && !dy) || !getMap().tileExists(x+dx,y+dy)) continue;
+                const auto* tile=getMap().getTile(x+dx,y+dy);
+                if (!tile->isMountain() && !tile->hasAStructure()) ++exits;
+            }
+            if (!FrontBatteryPolicy::keepsCorridor(exits)) continue;
+            int64_t exposure=0;
+            for (const auto& contact:contacts)
+                if (blockDistance(at,contact.at).lround()<=contact.reach) exposure+=contact.value;
+            // Least return fire first, then the side facing the attack, then the core.
+            const Rank rank{-exposure,
+                core.approach.isValid() ? -blockDistance(at,core.approach).lround() : 0,
+                -blockDistance(at,core.at).lround()};
+            if (best.isInvalid() || rank>bestRank) { bestRank=rank;best=at; }
+        }
+    return best;
+}
+
 Coord QuantBot::findCoveredDefencePlaceLocation(Uint32 item, Coord home) {
     AITelemetry::PerformanceScope perfScope("ai.findCoveredDefencePlaceLocation",getGameCycleCount(),getHouse()->getHouseID(),item);
     const Coord size=getStructureSize(item);

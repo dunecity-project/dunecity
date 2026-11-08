@@ -338,6 +338,12 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     releaseUnfundedChoice();
     chooseYardEssentials(pass, turn, yardTurn);
     releaseUnfundedChoice();
+    if (pass.vanillaCoreDefence.active) {
+        // VanillaCoreDefence (default off): live-threat cover after power recovery and
+        // the essentials, ahead of optional growth. Off or out of scope it never runs.
+        chooseYardVanillaCoreDefence(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
     if (pass.vanillaBoomArmy) {
         // Conversion keeps actual power/defence recovery and the planner's
         // one required prerequisite. Do not re-enter the native growth ladder.
@@ -703,6 +709,54 @@ bool QuantBot::hasPowerBufferForTurret(BuildPass& pass) {
     int powerExcess = getHouse()->getProducedPower() - getHouse()->getPowerRequirement();
     // Keep the city-specific headroom after powering the turret.
     return powerExcess >= pass.rocketPowerBuffer;
+}
+
+void QuantBot::planVanillaCoreDefence(BuildPass& pass) {
+    // Transient and per pass: the same true-state survey the unit pass reads
+    // (QuantBotArmy.cpp). Inactive when the switch is off or the game is out of scope.
+    pass.vanillaCoreDefence = surveyVanillaCoreDefence();
+}
+
+void QuantBot::chooseYardVanillaCoreDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    namespace Policy = QuantBotCoreDefencePolicy;
+    // One emplacement per pass across all yards; the house-wide cap counts queued turrets.
+    if (pass.vanillaCoreTurretOrdered || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
+        || pass.itemCount[Structure_GunTurret] + pass.itemCount[Structure_RocketTurret] >= Policy::kTurretTotalCap)
+        return;
+    const int houseID = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    // Only legal, funded emplacements: this rule never holds a yard to save for one.
+    const bool gun = campaignAvailableToBuild(turn.pBuilder, Structure_GunTurret)
+        && pass.money >= data[Structure_GunTurret][houseID].price;
+    const bool rocket = campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)
+        && hasPowerBufferForTurret(pass) && pass.money >= data[Structure_RocketTurret][houseID].price;
+    if (!gun && !rocket) return;
+    const int bps = botConfig().force.vanillaCoreDefenceThreatBps;
+    for (const auto& core : pass.vanillaCoreDefence.cores) {
+        const int groundGoal = Policy::turretGoal(core.groundThreat, bps, false);
+        const int airGoal = Policy::turretGoal(core.airThreat, bps, true);
+        // Only a Rocket Turret answers aircraft; ground cover takes the cheaper Gun
+        // Turret (no rocket power rule) when it is legal, else a Rocket Turret.
+        Uint32 item = NONE_ID;
+        if (core.airCover < airGoal && rocket) item = Structure_RocketTurret;
+        else if (core.groundCover < groundGoal) item = gun ? Uint32(Structure_GunTurret)
+            : rocket ? Uint32(Structure_RocketTurret) : Uint32(NONE_ID);
+        if (item == NONE_ID) continue;
+        const Coord site = findVanillaCoreTurretPlaceLocation(item, core);
+        if (site.isInvalid()) continue;
+        pass.vanillaCoreTurretOrdered = true;
+        yardTurn.itemID = item;
+        yardTurn.crimeServiceSite = site;
+        yardTurn.structureRule = "vanilla_core_defence";
+        yardTurn.skipRemainingStructureLogic = true;
+        traceDecision("vanilla_core_defence", AITelemetry::Record()
+            .set("builder", turn.pBuilder->getObjectID()).set("item", item).set("core", core.id)
+            .set("x", site.x).set("y", site.y)
+            .set("ground_threat", core.groundThreat).set("air_threat", core.airThreat)
+            .set("ground_cover", core.groundCover).set("air_cover", core.airCover)
+            .set("ground_goal", groundGoal).set("air_goal", airGoal).set("threat_bps", Policy::level(bps)));
+        return;
+    }
 }
 
 void QuantBot::chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
@@ -2390,7 +2444,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     }
     if (yardTurn.itemID==Structure_RocketTurret && !pass.routineRocketsAllowed
         && std::string_view(yardTurn.structureRule)!="perimeter_battery"
-        && std::string_view(yardTurn.structureRule)!="ground_threat") {
+        && std::string_view(yardTurn.structureRule)!="ground_threat"
+        && std::string_view(yardTurn.structureRule)!="vanilla_core_defence") {
         yardTurn.itemID=NONE_ID;
         yardTurn.crimeServiceSite=Coord::Invalid();
         yardTurn.structureRule="core_infrastructure_before_more_rockets";
@@ -2414,7 +2469,11 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         && protectedProject->item==yardTurn.itemID
         && (std::string_view(protectedProject->reason)=="ground_threat"
             || std::string_view(protectedProject->kind)=="city_supply");
-    if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite)
+    // VanillaCoreDefence chose its emplacement beside the threatened core (Gun Turrets too).
+    const bool coreDefenceSite = yardTurn.structureRule
+        && std::string_view(yardTurn.structureRule) == "vanilla_core_defence";
+    if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite
+        && !coreDefenceSite)
         yardTurn.crimeServiceSite = Coord::Invalid();
 }
 

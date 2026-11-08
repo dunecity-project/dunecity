@@ -22,6 +22,7 @@
 
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
+#include <players/QuantBotArmyCounterPolicy.h>
 #include <cstdlib>
 #include <string_view>
 
@@ -138,6 +139,7 @@ void QuantBot::build(int militaryValue) {
     planCityBootstrap(pass);
     planOpeningProduction(pass);
     planDefenceCoverage(pass);
+    planVanillaCoreDefence(pass);
     planTechSavings(pass);
     planCapitalCandidates(pass);
     planVanillaBoldCapital(pass);
@@ -2020,6 +2022,11 @@ void QuantBot::planUnitMix(BuildPass& pass) {
                                                   totalLostValue, priorArmyValue);
     // Test-only play styles (docs/ai-play-styles.md): inert in every real game.
     pass.unitMix = styledUnitMix(pass.unitMix, available);
+    // VanillaArmyCounters (default off): re-weight the buildable part of the mix toward the
+    // live army of the strongest reachable hostile team. The anti-air floor below still
+    // protects its minimum share afterwards.
+    if (botConfig().force.vanillaArmyCounters && vanillaFfaTuningGame())
+        pass.unitMix = vanillaArmyCounterMix(pass, pass.unitMix);
     // Damage-based learning does not value air deterrence, so protect a minimum
     // mobile anti-air share while a visible hostile wing is active.
     // The floor only exists while hostile aircraft are genuinely visible and
@@ -2212,6 +2219,115 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     }
 
     // End of adaptive unit prioritisation algorithm
+}
+
+// VanillaArmyCounters (docs/ai-play-styles.md): the native mix re-weighted toward the units
+// that answer the live army of the strongest terrain-reachable hostile team
+// (players/QuantBotArmyCounterPolicy.h). Every live unit is read from the simulation, not
+// sightings or telemetry, so each peer computes the same mix.
+UnitMixPolicy::Mix QuantBot::vanillaArmyCounterMix(const BuildPass& pass, const UnitMixPolicy::Mix& native) const {
+    namespace Counter = QuantBotArmyCounterPolicy;
+    const int blendBps = botConfig().force.vanillaArmyCounterBlendBps;
+    if (blendBps <= 0) return native;
+    const auto& data = currentGame->objectData.data;
+    const int houseID = getHouse()->getHouseID();
+    const int myTeam = getHouse()->getTeamID();
+    // A slot is a candidate only while a live factory of ours can build it now: the build
+    // list's faction, tech, upgrade and prerequisite rules, and the unit limits. Starport
+    // offers are market purchases, not a supplier to plan production around.
+    Counter::Candidates candidates{};
+    bool anyCandidate = false;
+    for (const auto* structure : getStructureList()) {
+        const Uint32 factory = structure->getItemID();
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0 || !structure->isActive()
+            || (factory != Structure_LightFactory && factory != Structure_HeavyFactory
+                && factory != Structure_HighTechFactory)) continue;
+        const auto* builder = static_cast<const BuilderBase*>(structure);
+        for (size_t i = 0; i < UnitMixPolicy::kSlots; ++i) {
+            const Uint32 item = kMixItems[i];
+            if (candidates[i].available || !campaignAvailableToBuild(builder, item)
+                || getHouse()->isUnitLimitReached(item)) continue;
+            const auto& spec = data[item][houseID];
+            candidates[i] = {{int(item), spec.price, spec.hitpoints, spec.weapondamage,
+                spec.weaponreloadtime, isFlyingUnit(item)}, true};
+            anyCandidate = true;
+        }
+    }
+    if (!anyCandidate) return native;
+
+    // The hostile army: armed mobile combat units of other teams, alive and not carried or
+    // in a repair bay. Workers, transports, MCVs, saboteurs and worms are no army.
+    auto hostileArmy = [&](const UnitBase* unit) {
+        const House* owner = unit->getOwner();
+        return owner && !owner->isNatives() && owner->getTeamID() != myTeam
+            && unit->getHealth() > 0 && unit->isActive() && unit->canAttack()
+            && QuantBotInternal::mobileCombatItem(unit->getItemID())
+            && Counter::armyType(int(unit->getItemID()));
+    };
+    auto value = [&](const UnitBase* unit) {
+        return CombatPowerPolicy::unitValue(data[unit->getItemID()][unit->getProductionHouseID()].price,
+            unit->getHealth().lround(), unit->getMaxHealth());
+    };
+    // Truly reachable: able to attack one of our core structures over terrain
+    // (Map::terrainAttackReachable: aircraft fly, infantry climb mountains, a vehicle needs a
+    // connected firing position). A vehicle's answer depends only on its terrain region and
+    // weapon range, so the survey asks the cached connectivity once per pair.
+    const Map& map = getMap();
+    auto core = [&](const StructureBase* structure) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) return false;
+        switch (structure->getItemID()) {
+            case Structure_Wall: case Structure_Slab1: case Structure_Slab4:
+            case Structure_Road: case Structure_PowerLine: return false;
+            default: return true;
+        }
+    };
+    struct Reach { int region; int range; bool reachable; };
+    std::array<Reach, 32> reach{};
+    size_t reaches = 0;
+    auto reachable = [&](const UnitBase* unit) {
+        if (!unit->isAGroundUnit() || unit->isInfantry()) return true;
+        const int region = map.vehicleTerrainRegion(unit->getLocation());
+        const int range = unit->getWeaponRange();
+        if (region != 0)
+            for (size_t i = 0; i < reaches; ++i)
+                if (reach[i].region == region && reach[i].range == range) return reach[i].reachable;
+        bool result = false;
+        for (const auto* structure : getStructureList())
+            if (core(structure) && map.terrainAttackReachable(*unit, *structure)) { result = true; break; }
+        if (region != 0 && reaches < reach.size()) reach[reaches++] = {region, range, result};
+        return result;
+    };
+
+    // The strongest team by reachable live value, then that team's composition.
+    Counter::Teams<size_t(NUM_HOUSES)> teams;
+    for (const auto* unit : getUnitList())
+        if (hostileArmy(unit) && reachable(unit))
+            teams.add(unit->getOwner()->getTeamID(), int(unit->getItemID()), value(unit));
+    const int team = teams.strongest();
+    if (team < 0) return native;
+    Counter::Composition<32> force;
+    for (const auto* unit : getUnitList()) {
+        if (!hostileArmy(unit) || unit->getOwner()->getTeamID() != team || !reachable(unit)) continue;
+        const Uint32 item = unit->getItemID();
+        const auto& spec = data[item][unit->getProductionHouseID()];
+        force.add({int(item), spec.price, spec.hitpoints, spec.weapondamage, spec.weaponreloadtime,
+            isFlyingUnit(item)}, value(unit));
+    }
+
+    const bool originalDamage = getGameInitSettings().getGameOptions().originalUnitDamage;
+    const auto target = Counter::counterTarget(force, candidates, OrdinaryDamagePolicy::modeOf(originalDamage));
+    const auto mix = Counter::blend(native, candidates, target, blendBps);
+    if (pass.emitStatsLog && AITelemetry::log().enabled()) {
+        AITelemetry::Record slots;
+        for (size_t i = 0; i < UnitMixPolicy::kSlots; ++i)
+            slots.set(std::to_string(kMixItems[i]), AITelemetry::Record()
+                .set("candidate", Counter::judged(candidates[i])).set("answer_value", target.value[i])
+                .set("native_bps", native[i]).set("counter_bps", mix[i]));
+        traceDecision("vanilla_army_counter", AITelemetry::Record().set("team", team)
+            .set("team_value", force.total).set("unanswered_value", target.unanswered)
+            .set("blend_bps", blendBps).set("original_unit_damage", originalDamage).set("slots", slots));
+    }
+    return mix;
 }
 
 // Would ordering one more of \a value still leave infantry inside their share of

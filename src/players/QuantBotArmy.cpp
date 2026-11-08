@@ -22,6 +22,8 @@
 
 #include <FormationOrders.h>
 
+#include <tuple>
+
 using QuantBotInternal::mobileCombatItem;
 
 namespace QuantBotInternal {
@@ -36,6 +38,252 @@ bool mobileCombatItem(Uint32 item) {
         && item != Unit_Frigate;
 }
 } // namespace QuantBotInternal
+
+namespace {
+/// The real production/economy cores VanillaCoreDefence protects: refineries and combat factories.
+bool vanillaDefenceCore(Uint32 item) {
+    return item == Structure_Refinery || item == Structure_LightFactory || item == Structure_HeavyFactory
+        || item == Structure_HighTechFactory || item == Structure_Barracks || item == Structure_WOR;
+}
+/// Live value: purchase price times remaining health share, never below one credit.
+int liveValue(const ObjectBase* object) {
+    const int price = currentGame->objectData.data[object->getItemID()][object->getProductionHouseID()].price;
+    return std::max(1, (FixPoint(std::max(0, price)) * object->getHealth() / object->getMaxHealth()).lround());
+}
+} // namespace
+
+QuantBot::CoreDefenceSurvey QuantBot::surveyVanillaCoreDefence() const {
+    namespace Policy = QuantBotCoreDefencePolicy;
+    CoreDefenceSurvey survey;
+    if (!botConfig().force.vanillaCoreDefence || !vanillaFfaTuningGame()) return survey;
+    survey.active = true;
+    const int myTeam = getHouse()->getTeamID();
+    const int house = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    // The true live state, read once per pass: no visibility filter, fog memory,
+    // saved estimate or per-unit path search takes part.
+    std::vector<std::pair<const UnitBase*, int>> enemies;
+    for (const auto* unit : getUnitList()) {
+        if (!unit->isActive() || unit->getHealth() <= 0 || !unit->getOwner() || !unit->canAttack()
+            || !mobileCombatItem(unit->getItemID())) continue;
+        if (unit->getOwner() == getHouse()) {
+            if (unit->isAGroundUnit()) { survey.ownValue += liveValue(unit); ++survey.ownUnits; }
+        } else if (unit->getOwner()->getTeamID() != myTeam) enemies.emplace_back(unit, liveValue(unit));
+    }
+    if (enemies.empty()) return survey;
+    const bool rocketsDark = currentGame->getGameInitSettings().getGameOptions().rocketTurretsNeedPower
+        && getHouse()->getProducedPower() < getHouse()->getPowerRequirement();
+    for (const auto* asset : getStructureList()) {
+        if (asset->getOwner() != getHouse() || asset->getHealth() <= 0 || !vanillaDefenceCore(asset->getItemID()))
+            continue;
+        // Aggregate per hostile team; the strongest single team is the threat.
+        struct Team {
+            int id{}, ground{}, air{}, groundDistance{INT32_MAX}, airDistance{INT32_MAX};
+            Uint32 groundContact{NONE_ID}, airContact{NONE_ID};
+        };
+        std::array<Team, NUM_HOUSES> teams{};
+        size_t teamCount = 0;
+        for (const auto& [enemy, value] : enemies) {
+            const int distance = blockDistance(enemy->getLocation(),
+                asset->getClosestPoint(enemy->getLocation())).lround();
+            // The cheap band first, then real attack ability and the engine's cached
+            // terrain components (aircraft and infantry are never terrain-bound).
+            if (!Policy::inThreatBand(distance, enemy->getWeaponRange()) || !enemy->canAttack(asset)
+                || !getMap().terrainAttackReachable(*enemy, *asset)) continue;
+            const int teamID = enemy->getOwner()->getTeamID();
+            size_t t = 0;
+            while (t < teamCount && teams[t].id != teamID) ++t;
+            if (t == teamCount) {
+                if (teamCount == teams.size()) continue;
+                teams[teamCount++].id = teamID;
+            }
+            auto& team = teams[t];
+            const bool air = enemy->isAFlyingUnit();
+            (air ? team.air : team.ground) += value;
+            int& nearest = air ? team.airDistance : team.groundDistance;
+            Uint32& contact = air ? team.airContact : team.groundContact;
+            if (distance < nearest || (distance == nearest && enemy->getObjectID() < contact)) {
+                nearest = distance;
+                contact = enemy->getObjectID();
+            }
+        }
+        const Team* strongest = nullptr;
+        for (size_t t = 0; t < teamCount; ++t) {
+            const int64_t value = int64_t(teams[t].ground) + teams[t].air;
+            const int64_t best = strongest ? int64_t(strongest->ground) + strongest->air : -1;
+            if (value > best || (value == best && teams[t].id < strongest->id)) strongest = &teams[t];
+        }
+        if (!strongest) continue;
+        CoreDefenceCore core;
+        core.id = asset->getObjectID();
+        core.at = asset->getLocation() + Coord(asset->getStructureSizeX()/2, asset->getStructureSizeY()/2);
+        core.groundThreat = strongest->ground;
+        core.airThreat = strongest->air;
+        core.groundContact = strongest->groundContact;
+        core.airContact = strongest->airContact;
+        if (const auto* lead = getObject(core.groundThreat >= core.airThreat ? core.groundContact : core.airContact))
+            core.approach = lead->getLocation();
+        // Usable cover: standing (rockets only while powered) and reserved emplacements
+        // whose own reach includes the core's centre.
+        const auto cover = [&](Uint32 item, Coord at) {
+            if ((item != Structure_GunTurret && item != Structure_RocketTurret)
+                || (item == Structure_RocketTurret && rocketsDark)
+                || blockDistance(at, core.at) > std::max(1, data[item][house].weaponrange - 1)) return;
+            ++core.groundCover;
+            if (item == Structure_RocketTurret) ++core.airCover;
+        };
+        for (const auto* turret : getStructureList())
+            if (turret->getOwner() == getHouse() && turret->getHealth() > 0) cover(turret->getItemID(), turret->getLocation());
+        for (const auto& entry : reservedStructures) cover(entry.second.item, entry.second.location);
+        survey.cores.push_back(core);
+    }
+    std::sort(survey.cores.begin(), survey.cores.end(), [](const CoreDefenceCore& a, const CoreDefenceCore& b) {
+        const int64_t x = int64_t(a.groundThreat) + a.airThreat, y = int64_t(b.groundThreat) + b.airThreat;
+        return x != y ? x > y : a.id < b.id;
+    });
+    return survey;
+}
+
+bool QuantBot::vanillaCoreGuardAssignment(const UnitBase* unit) const {
+    if (!botConfig().force.vanillaCoreDefence || !unit || unit->getAttackMode() != AREAGUARD
+        || customWave.members.count(unit->getObjectID())) return false;
+    const auto it = defenceAssignments.find(unit->getObjectID());
+    if (it == defenceAssignments.end()) return false;
+    const auto* core = getObject(it->second);
+    return core && core->isAStructure() && core->getOwner() == getHouse() && core->getHealth() > 0
+        && vanillaDefenceCore(core->getItemID());
+}
+
+void QuantBot::holdVanillaCoreDefence(const CoreDefenceSurvey& survey) {
+    namespace Policy = QuantBotCoreDefencePolicy;
+    struct Candidate { const UnitBase* unit; int value; Uint32 core; };
+    std::vector<Candidate> candidates;
+    if (!survey.cores.empty()) for (const auto* unit : getUnitList()) {
+        if (!orderableCombatUnit(unit) || !unit->isAGroundUnit() || !unit->canAttack()
+            || !mobileCombatItem(unit->getItemID()) || unit->getAttackMode() == RETREAT
+            || static_cast<const GroundUnit*>(unit)->isAwaitingPickup()
+            || forceHeld(unit->getObjectID()) || huntPartyOf(unit->getObjectID())
+            || unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::Escort, UnitRole::ColonyGuard})
+                != UnitRole::Free) continue;
+        const bool posted = vanillaCoreGuardAssignment(unit);
+        // A new post never takes a live emergency or rescue, a wave member, a forced
+        // transit, a fight in progress or an engine Hunt: only the idle home reserve.
+        if (!posted && (unitRole(unit, {UnitRole::Defence, UnitRole::Wave}) != UnitRole::Free
+            || unit->wasForced() || unit->hasATarget() || unit->getAttackMode() == HUNT)) continue;
+        candidates.push_back({unit, liveValue(unit),
+            posted ? defenceAssignments.at(unit->getObjectID()) : Uint32(NONE_ID)});
+    }
+    const int bps = botConfig().force.vanillaCoreDefenceThreatBps;
+    int valueLeft = Policy::guardValueLimit(survey.ownValue);
+    int unitsLeft = Policy::guardCountLimit(survey.ownUnits);
+    int orders = Policy::kOrdersPerPass;
+    int newPosts = 0, moved = 0;
+    std::set<Uint32> kept;
+    std::set<int64_t> taken;
+    const auto key = [&](Coord p) { return int64_t(p.y) * getMap().getSizeX() + p.x; };
+    std::vector<size_t> order(candidates.size());
+    std::vector<Coord> slots;
+    for (const auto& core : survey.cores) {
+        const auto* asset = dynamic_cast<const StructureBase*>(getObject(core.id));
+        if (!asset || unitsLeft <= 0 || candidates.empty()) continue;
+        // Bounded standing tiles beside this core, shared by all of its guards.
+        slots.clear();
+        const Coord origin = asset->getLocation();
+        for (int y = origin.y - Policy::kGuardRadius; y < origin.y + asset->getStructureSizeY() + Policy::kGuardRadius; ++y)
+            for (int x = origin.x - Policy::kGuardRadius; x < origin.x + asset->getStructureSizeX() + Policy::kGuardRadius; ++x) {
+                const Coord at(x, y);
+                if (!getMap().tileExists(at)) continue;
+                const auto* tile = getMap().getTile(at);
+                if (!tile->hasAStructure() && !tile->isSpiceBloom() && !onPlannedSite(at)
+                    && blockDistance(at, asset->getClosestPoint(at)).lround() <= Policy::kGuardRadius)
+                    slots.push_back(at);
+            }
+        for (const bool air : {false, true}) {
+            const auto* contact = getObject(air ? core.airContact : core.groundContact);
+            int goal = Policy::guardGoal(air ? core.airThreat : core.groundThreat, bps);
+            if (!contact || goal <= 0) continue;
+            // Guards already holding this core first, then the nearest; ids break ties.
+            for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+            std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                const auto rank = [&](const Candidate& c) {
+                    return std::make_tuple(c.core != core.id,
+                        blockDistance(c.unit->getLocation(), core.at).lround(), c.unit->getObjectID());
+                };
+                return rank(candidates[a]) < rank(candidates[b]);
+            });
+            for (const size_t index : order) {
+                if (goal <= 0 || unitsLeft <= 0) break;
+                const auto& candidate = candidates[index];
+                const auto* unit = candidate.unit;
+                const Uint32 id = unit->getObjectID();
+                const bool here = candidate.core == core.id;
+                if (kept.count(id) || candidate.value > valueLeft || !unit->canAttack(contact)
+                    || (!here && orders <= 0)) continue;
+                const int region = unit->isInfantry() ? 0 : getMap().vehicleTerrainRegion(unit->getLocation());
+                const auto standable = [&](Coord p) {
+                    return !taken.count(key(p)) && (p == unit->getLocation() || unit->canPass(p.x, p.y))
+                        && (unit->isInfantry() || (region != 0 && getMap().vehicleTerrainRegion(p) == region));
+                };
+                // A guard keeps its post across passes and save/load while it stays legal;
+                // a new post faces the approach, then stays close to the unit.
+                Coord post = Coord::Invalid();
+                if (here && std::find(slots.begin(), slots.end(), unit->getGuardPoint()) != slots.end()
+                    && standable(unit->getGuardPoint())) post = unit->getGuardPoint();
+                else {
+                    std::pair<int, int> best{};
+                    for (const Coord p : slots) {
+                        if (!standable(p)) continue;
+                        const std::pair<int, int> rank{
+                            core.approach.isValid() ? blockDistance(p, core.approach).lround() : 0,
+                            blockDistance(p, unit->getLocation()).lround()};
+                        if (post.isInvalid() || rank < best) { post = p; best = rank; }
+                    }
+                }
+                if (post.isInvalid()) continue;
+                if (!here) {
+                    // Area Guard first: GUARD would cancel the walk. The engine's Area Guard
+                    // then engages every hostile in reach and returns to the post.
+                    if (unit->getAttackMode() != AREAGUARD) doSetAttackMode(unit, AREAGUARD);
+                    groundSquad.erase(id);
+                    --orders;
+                    ++newPosts;
+                }
+                const_cast<UnitBase*>(unit)->setGuardPoint(post);
+                // Never interrupt a fight; walk back only when idle away from the post.
+                const bool atPost = blockDistance(unit->getLocation(), post).lround() <= 1;
+                const bool heading = unit->getDestination().isValid()
+                    && blockDistance(unit->getDestination(), post).lround() <= 1;
+                if (!unit->hasATarget() && !atPost && !heading && (!here || orders > 0)) {
+                    doMove2Pos(unit, post.x, post.y, false);
+                    if (here) --orders;
+                    ++moved;
+                }
+                defenceAssignments[id] = core.id;
+                kept.insert(id);
+                taken.insert(key(post));
+                valueLeft -= candidate.value;
+                goal -= candidate.value;
+                --unitsLeft;
+            }
+        }
+    }
+    // Posts no longer justified by a live threat end here; the unit returns to ordinary
+    // regrouping where it stands. Other owners' entries are never touched.
+    int released = 0;
+    for (auto it = defenceAssignments.begin(); it != defenceAssignments.end();) {
+        if (!kept.count(it->first)
+            && vanillaCoreGuardAssignment(dynamic_cast<const UnitBase*>(getObject(it->first)))) {
+            it = defenceAssignments.erase(it);
+            ++released;
+        } else ++it;
+    }
+    if (newPosts || moved || released) traceDecision("vanilla_core_guard", AITelemetry::Record()
+        .set("threatened_cores", int(survey.cores.size()))
+        .set("top_ground_threat", survey.cores.empty() ? 0 : survey.cores.front().groundThreat)
+        .set("top_air_threat", survey.cores.empty() ? 0 : survey.cores.front().airThreat)
+        .set("guards", int(kept.size())).set("posted", newPosts).set("moved", moved).set("released", released)
+        .set("threat_bps", Policy::level(bps)).set("own_value", survey.ownValue));
+}
 
 
 void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingSpice, const ObjectBase* protectedAsset) {
@@ -269,6 +517,7 @@ bool QuantBot::baseDefenceAssignment(const UnitBase* unit) const {
     // assignment records a hostile contact. The upkeep in checkAllUnits() ends
     // the scramble once the unit is neither walking there nor fighting.
     if (!unit) return false;
+    if (vanillaCoreGuardAssignment(unit)) return false; // Standing posts yield to real emergencies.
     const auto assignment=defenceAssignments.find(unit->getObjectID());
     if (assignment==defenceAssignments.end()) return false;
     const auto* assigned=getObject(assignment->second);
@@ -1572,6 +1821,7 @@ bool QuantBot::activeDefenceAssignment(const UnitBase* unit) const {
     // in checkAllUnits() releases it; the recall and the ordinary rally must
     // not claim it on the way.
     if (baseDefenceAssignment(unit)) return true;
+    if (vanillaCoreGuardAssignment(unit)) return true;
     const auto* target=getObject(assignment->second);
     if (!target || target->getHealth()<=0 || !target->isActive() || !target->getOwner()
         || target->getOwner()->getTeamID()==getHouse()->getTeamID()) return false;
@@ -3661,6 +3911,14 @@ void QuantBot::retreatAllUnits() {
             // it has met, and while enemies remain at that building. After that
             // it is an ordinary hunter, free to answer the next attack.
             if (target && target->isAStructure() && target->getOwner()==getHouse()) {
+                // A VanillaCoreDefence standing post (Area Guard, not a scramble):
+                // holdVanillaCoreDefence() below keeps or ends it this same pass.
+                if (vanillaCoreGuardAssignment(unit) && unit->isActive() && unit->getHealth() > 0
+                    && target->getHealth() > 0
+                    && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free) {
+                    ++it;
+                    continue;
+                }
                 const auto* fighting=unit ? unit->getTarget() : nullptr;
                 const bool onJob=unit && unit->getOwner()==getHouse() && unit->getHealth()>0
                     && baseDefenceAssignment(unit) && unit->getAttackMode()==HUNT
@@ -3729,6 +3987,7 @@ void QuantBot::retreatAllUnits() {
                 }
             }
         }
+        if (config.force.vanillaCoreDefence) holdVanillaCoreDefence(surveyVanillaCoreDefence());
         releaseExhaustedArmyRepairs();
         // Recall the tracked wave before ordinary regrouping claims its members.
         // Its own budget, separate from the four reactive rally orders, because a
@@ -3845,6 +4104,9 @@ void QuantBot::retreatAllUnits() {
                     continue;
                 }
             }
+            // A saved stationary core post owns its local Area Guard attack and
+            // movement, not a new formation. Emergency and repair ran first.
+            if (vanillaCoreGuardAssignment(pUnit)) continue;
 
             // Colonist escorts stay beside their MCV, ahead of rally, raids,
             // prey assignment and every other role below.

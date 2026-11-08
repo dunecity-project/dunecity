@@ -115,6 +115,26 @@ bool QuantBot::vanillaMultiEnemyGame() const {
     return false;
 }
 
+bool QuantBot::vanillaFfaTuningGame() const {
+    if (!autonomousCustomArmy() || difficulty != Difficulty::Brutal) return false;
+    int friendlyControllers = 0, hostileControllers = 0, firstHostileTeam = -1;
+    bool multipleHostileTeams = false;
+    // These are the original occupied controller rows, not runtime House
+    // objects, survivors, guests or a policy-dependent roster.
+    for (const auto& house : currentGame->getGameInitSettings().getHouseInfoList()) {
+        if (house.playerInfoList.empty()) continue;
+        if (house.team == getHouse()->getTeamID()) ++friendlyControllers;
+        else {
+            ++hostileControllers;
+            if (firstHostileTeam < 0) firstHostileTeam = house.team;
+            else if (firstHostileTeam != house.team) multipleHostileTeams = true;
+        }
+    }
+    return QuantBotCoreDefencePolicy::tuningScope(true, currentGame->isCitySimEnabled(),
+        currentGame->getGameInitSettings().getModName() == "vanilla", lastCalculatedSpice > 0,
+        friendlyControllers, hostileControllers, multipleHostileTeams);
+}
+
 bool QuantBot::vanillaBoomGame() const {
     if (!autonomousCustomArmy() || currentGame->isCitySimEnabled()
         || currentGame->getGameInitSettings().getModName() != "vanilla" || lastCalculatedSpice <= 0)

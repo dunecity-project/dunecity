@@ -16,6 +16,7 @@
  */
 
 #include <players/QuantBotConfig.h>
+#include <players/QuantBotCoreDefencePolicy.h>
 #include <FormationPlanner.h>
 #include <FileClasses/FileManager.h>
 #include <FileClasses/INIFile.h>
@@ -356,6 +357,10 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaGreedyBoomMinutes = 6;
     force.vanillaReactiveArmyRatioBps = 6000;
     force.vanillaReactiveEconomyRatioBps = 12000;
+    force.vanillaCoreDefence = false;
+    force.vanillaCoreDefenceThreatBps = 5000;
+    force.vanillaArmyCounters = false;
+    force.vanillaArmyCounterBlendBps = 5000;
     // Candidate (fix/ladder-campaign, docs/ai-scenario-matrix.md "Team games"): team waves join an
     // ally's fresh wave.
     force.joinAllyWaves = false;
@@ -718,6 +723,10 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "VanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);
         iniFile.setIntValue("Force Concentration", "VanillaReactiveArmyRatioBps", force.vanillaReactiveArmyRatioBps);
         iniFile.setIntValue("Force Concentration", "VanillaReactiveEconomyRatioBps", force.vanillaReactiveEconomyRatioBps);
+        iniFile.setBoolValue("Force Concentration", "VanillaCoreDefence", force.vanillaCoreDefence);
+        iniFile.setIntValue("Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
+        iniFile.setBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
+        iniFile.setIntValue("Force Concentration", "VanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);
         iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
         iniFile.setBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
         iniFile.setBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
@@ -905,6 +914,13 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         "Force Concentration", "VanillaReactiveArmyRatioBps", force.vanillaReactiveArmyRatioBps), 6000, 9000);
     force.vanillaReactiveEconomyRatioBps = std::clamp(iniFile.getIntValue(
         "Force Concentration", "VanillaReactiveEconomyRatioBps", force.vanillaReactiveEconomyRatioBps), 12000, 15000);
+    force.vanillaCoreDefence = iniFile.getBoolValue("Force Concentration", "VanillaCoreDefence", force.vanillaCoreDefence);
+    // Exactly two preregistered intensities: any value other than 10000 is the 5000 level.
+    force.vanillaCoreDefenceThreatBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
+        "Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps));
+    force.vanillaArmyCounters = iniFile.getBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
+    force.vanillaArmyCounterBlendBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
+        "Force Concentration", "VanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps));
     force.joinAllyWaves = iniFile.getBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
     force.openingCombatBudget = iniFile.getBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
     force.campaignCombatBudget = iniFile.getBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
@@ -1453,6 +1469,10 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("vanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);
     addNamed("vanillaReactiveArmyRatioBps", force.vanillaReactiveArmyRatioBps);
     addNamed("vanillaReactiveEconomyRatioBps", force.vanillaReactiveEconomyRatioBps);
+    addNamed("vanillaCoreDefence", force.vanillaCoreDefence);
+    addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
+    addNamed("vanillaArmyCounters", force.vanillaArmyCounters);
+    addNamed("vanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);
     addNamed("joinAllyWaves", force.joinAllyWaves);
     addNamed("openingCombatBudget", force.openingCombatBudget);
     addNamed("campaignCombatBudget", force.campaignCombatBudget);

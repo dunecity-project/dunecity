@@ -378,6 +378,12 @@ VanillaRefineryBoomRefineries=4
 VanillaGreedyBoomMinutes=6
 VanillaReactiveArmyRatioBps=6000
 VanillaReactiveEconomyRatioBps=12000
+# Independent Custom Brutal Vanilla FFA experiments: original occupied FFA4/6, no allies, spice > 0.
+# Threat and blend have only two fixed levels: 5000 (50%) or 10000 (100%). Neither enables boom.
+VanillaCoreDefence=0
+VanillaCoreDefenceThreatBps=5000
+VanillaArmyCounters=0
+VanillaArmyCounterBlendBps=5000
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0

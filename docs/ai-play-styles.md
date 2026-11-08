@@ -141,6 +141,87 @@ At minute 20 normal planning resumes. The greedy switch deliberately retains **1
 throughout both phases before minute 20; these cells add no formations. All switches remain default
 off, and single-family plans and out-of-scope games retain their existing behavior.
 
+### Vanilla FFA core defence and army counters (test-only cells)
+
+Two independent switches, `VanillaCoreDefence` and `VanillaArmyCounters`, each with exactly two
+preregistered levels (`VanillaCoreDefenceThreatBps`, `VanillaArmyCounterBlendBps`: 5000 or 10000; any
+other value loads as 5000). All four keys are saved and hashed; both switches are default off, are never
+promoted here, and neither enables or combines with a boom family. The pure arithmetic is
+`include/players/QuantBotCoreDefencePolicy.h`.
+
+**Scope (both).** `QuantBot::vanillaFfaTuningGame()`: an autonomous Custom army at Brutal, city
+simulation off, mod `vanilla`, sustainable map spice above zero, and - from the original occupied
+controller rows, never runtime houses, survivors or another policy switch - ours alone on its team with
+at least three hostile controllers on more than one hostile team (FFA4/FFA6). Duels, team games,
+campaigns, no-spice and city games never run either policy. Off or out of scope, every existing path is
+unchanged by construction.
+
+**Core defence threat.** Each pass reads the live simulation state only (no visibility filter, fog
+memory, telemetry or saved estimate). Cores are our refineries, light/heavy/high-tech factories,
+barracks and WORs. A hostile armed mobile unit threatens a core when it is within its own weapon range
+plus 24 tiles, can attack it, and the engine's cached terrain components connect the two (no per-unit
+path search). Its value is purchase price x remaining health share. Per core the strongest single
+hostile team is the threat (ties: lower team ID), split into ground and air; the level scales it to the
+response value (50% or 100%). Zero threat means no guard and no turret: the policy protects threatened
+cores, it does not hold army back or raise spending.
+
+**Standing guards.** Idle home ground fighters worth up to the response value per arm hold Area Guard
+posts on free tiles within four tiles of the core, chosen nearest the threat's approach. Caps: a third of
+our live ground army's value and units, eight guards, four new posts or walk orders per unit pass. A post
+is the existing saved `defenceAssignments` entry naming the core, so it survives save/load without new
+state. A new post never takes a unit in a live emergency, rescue or wave, a hunt party, a force hold, a
+forced transit, a fight, a retreat, a pickup, or a human, repair, escort or colony-guard role.
+Scrambles, anti-air rescues and district responses still override posts, and posts end when the
+threat goes.
+
+**Turrets.** One emplacement per 1,000 response credits and arm: at most three ground and two
+anti-air covers per core and sixteen Gun/Rocket Turrets per house. Live turrets (Rocket Turrets only
+while powered) and reserved ones whose reach includes the core's centre count as cover. At most one
+emplacement per build pass, after power recovery and the essentials and before optional growth, and
+only when legal, already funded and admitted by the existing spending plan: a Rocket Turret for air
+cover (with the power buffer), otherwise a Gun Turret, else a Rocket Turret. The site is one bounded
+window within the turret's range minus one of the core's centre, under the existing placement legality
+and front-battery spacing, cluster and corridor rules: least live return fire first, then nearest the
+approach, then nearest the core. The rule `vanilla_core_defence` passes the routine-rocket gate as
+`ground_threat` does.
+
+**Army counters.** `QuantBot::vanillaArmyCounterMix` runs in `planUnitMix` after the style mix and
+before the mobile anti-air floor, which still applies afterwards; off, it costs one switch read.
+- *Hostile army* (live simulation state, no visibility or telemetry): units of another team, not
+  natives, alive, active and armed, of a vanilla combat type (no workers, carryalls, MCVs, saboteurs,
+  worms or frigates). A unit counts when `Map::terrainAttackReachable` connects it to any of our core
+  structures (not walls, slabs, roads or power lines); aircraft and infantry always count, and vehicle
+  answers are cached per terrain region and weapon range. A team's value is the sum of
+  `CombatPowerPolicy::unitValue` (price x health share). The strongest team has the most value (ties:
+  lower team ID). With no reachable hostile army the native mix stands.
+- *Exchange model* (`include/players/QuantBotArmyCounterPolicy.h`): ObjectData price, hit points,
+  damage and reload per production house, the native weapons and shot counts, `OrdinaryDamagePolicy`
+  centre damage under the match's damage rules, the full payload against aircraft. Only
+  `CombatPowerPolicy::airCapableItem` types hit aircraft, a Sonic Tank never hits a Sonic Tank, and a
+  ranged Trooper fires at 3/4. A candidate's worth against one hostile type is the value it destroys
+  per credit and reload cycle times its survival against the whole team's value-weighted kill rate, so
+  ornithopters only pay off against teams without anti-air. Per hostile type the worths become shares
+  through `UnitMixPolicy::sharpenScores`, weighted by that type's live value. Range, speed, splash,
+  accuracy and terrain are not modelled; Deviator gas (no hit-point damage) counts neither way.
+- *Candidates and authority*: the mix slots a live owned Light, Heavy or High-Tech Factory can build
+  now (`campaignAvailableToBuild` and the unit limit); the Starport is not a supplier. Only those slots,
+  Deviator excepted, are re-weighted, and only among themselves: their combined native share is kept,
+  every other slot keeps its exact native share, hostile value nothing buildable can damage keeps the
+  native proportions, and with nothing answerable the native mix stands. No technology purchase,
+  queue override or budget change.
+- *Blend*: 5000 is halfway between the native and the counter mix, 10000 the full counter mix
+  (integer basis points summing to 10000).
+
+**Cells, traces and fixtures.** `vanilla-core-defence-{off,50,100}` and
+`vanilla-army-counters-{off,50,100}` each set only their own switch (0 in the off cells) and level, the
+other new switch off at 5000, `VanillaBoomFfaOnly=1` and every boom family off. Decision traces:
+`vanilla_core_guard` (unit pass: threatened cores, top threats, guards kept, posted, moved and
+released), `vanilla_core_defence` (yard: turret, site, threat, cover and goals) and, with stats
+logging, `vanilla_army_counter` (team, team value, unanswered value, blend and per-slot candidate,
+answer value, native and counter shares). Pure fixtures: `tests/QuantBotStrategyTestCase.cpp`
+(`[ai][vanilla]`: config, levels and core-defence policy) and `tests/QuantBotArmyCounterTestCase.cpp`
+(`[army-counters]`).
+
 ## 3. Tournament
 
 Hard. Fortress = `formation-duel.py` Random Skirmish 128/160/192, seeds 7101-7606 (one house pair per

@@ -246,6 +246,12 @@ struct QuantBotConfig {
         int vanillaGreedyBoomMinutes;          ///< Stop at 6, 10 or 12 minutes; fund army until minute 20.
         int vanillaReactiveArmyRatioBps;       ///< 6000 or 9000 of the strongest reachable enemy army.
         int vanillaReactiveEconomyRatioBps;    ///< 12000 or 15000 of the leading hostile economy.
+        /// Independent default-OFF Custom Brutal Vanilla FFA4/6 policies (docs/ai-play-styles.md,
+        /// "Vanilla FFA core defence and army counters"); neither enables boom.
+        bool vanillaCoreDefence;               ///< Guards and turrets for threatened refineries/combat factories.
+        int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
+        bool vanillaArmyCounters;              ///< Unit mix blended toward counters of the strongest reachable team.
+        int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.
         /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.

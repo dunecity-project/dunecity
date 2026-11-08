@@ -314,6 +314,8 @@ struct QuantBot::BuildPass {
     int groundThreatValue{};
     int groundTurretGoal{};
     int groundTurretCover{};
+    CoreDefenceSurvey vanillaCoreDefence{};
+    bool vanillaCoreTurretOrdered{};
     Uint32 missingCoreInfrastructure{};
     bool coreInfrastructureReady{};
     bool cityCoreInfrastructureReady{};
