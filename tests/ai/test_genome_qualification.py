@@ -46,7 +46,7 @@ class CandidateQualificationTests(unittest.TestCase):
                     source_fingerprint_version=contract['source_fingerprint_version'], working_tree_modified=False, error='',
                     setup=dict(seed=str(seed), cycle='0', observing='1', city_sim='0', style='default',
                                options_hash=gate.native_options_hash(effective, contract['rule_schema'])),
-                    result=dict(mode='match', cycle=str(35 * gate.CPM), winner_team='2', outcome='lost'),
+                    result=dict(mode='match', cycle=str(35 * gate.CPM), winner_team='2', outcome='decided'),
                     roster=[dict(house=str(gate.NUMBERS[house]), team=str(team),
                                  players='qBotBrutal' if code == 'QB' else 'AIPlayerHard')
                             for house, team, code in gate.ROSTER],
@@ -234,7 +234,7 @@ class CandidateQualificationTests(unittest.TestCase):
     def test_native_result_shape_uses_existing_setup_seed_only(self):
         proof = self.proof(gate.NAMES[0], self.contracts[gate.NAMES[0]]['seeds'][0])
         proof['result'] = gate._markers([
-            'SCENARIO_RESULT: mode=match cycle=131250 end_s=2100.0 minutes=35.00 outcome=lost '
+            'SCENARIO_RESULT: mode=match cycle=131250 end_s=2100.0 minutes=35.00 outcome=decided '
             'winner_team=2 triggers=0 fired=0 win_flags=0 quota=0 city_pop=0'], 'SCENARIO_RESULT')[0]
         self.assertNotIn('seed', proof['result'])
         self.assertEqual(gate.native_verdict(proof, self.item, self.source, self.contracts[gate.NAMES[0]],

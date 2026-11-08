@@ -272,7 +272,7 @@ def native_verdict(proof, item, source, contract, registry, phase_minutes):
                 or not 0 < phase_minutes[1] < phase_minutes[2] <= 10000):
             return 'unverified'
         result, setup = proof['result'], proof['setup']
-        if result.get('mode') != 'match' or result.get('outcome') not in ('won', 'lost', 'time_limit'):
+        if result.get('mode') != 'match' or result.get('outcome') not in ('won', 'lost', 'decided', 'time_limit'):
             return 'unverified'
         identity = genome_model.genome_id(item)
         expected = phase_payloads(item, contract, phase_minutes, registry)

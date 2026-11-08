@@ -603,7 +603,8 @@ def run(args):
 # ---- Checks and report ------------------------------------------------------------------
 
 def outcome_label(row):
-    # A detached spectator can have a raw "lost" outcome when another team wins.
+    # An observed match has no house of its own: its outcome is "decided" (older rows: the
+    # anchor house's raw "lost"), so the winning team is the result.
     if row['category'] != 'campaign' and row['winner_team'] not in ('', '0', '-1'):
         return f'team {row["winner_team"]} won'
     return row['outcome'] or '?'

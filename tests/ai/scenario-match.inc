@@ -204,7 +204,8 @@ inline std::string classesOf(const House* house) {
 }
 
 /// Plays the game to its end (see the file comment). Returns "won"/"lost" for @a trackedHouse's
-/// team (the campaign's own result in a campaign), or "time_limit".
+/// team (the campaign's own result in a campaign), "decided" when a local observer watches a
+/// match (it plays no house), or "time_limit".
 inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, bool constructionYardOnly) {
     if (constructionYardOnly) deployMcvs(game);
     const auto& init = game.getGameInitSettings();
@@ -302,6 +303,10 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     if (campaign) {
         outcome = game.finished ? (game.won ? "won" : "lost") : "time_limit";
         winnerTeam = !game.finished ? 0 : (game.won && tracked ? tracked->getTeamID() : -1);
+    } else if (game.isObserving()) {
+        // The observer's view is anchored to some AI house, but it plays none: only the
+        // winning team is a result, never that anchor house's win or loss.
+        outcome = winner == 0 ? "time_limit" : "decided";
     } else {
         outcome = winner == 0 ? "time_limit" : (tracked && winner == tracked->getTeamID() ? "won" : "lost");
     }
