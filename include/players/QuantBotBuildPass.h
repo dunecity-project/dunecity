@@ -280,6 +280,10 @@ struct QuantBot::BuildPass {
     int64_t techOwnArmy{};
     int64_t techLargestRival{};
     bool techRivalsSafe{};
+    // Batch3 refinery gates: bays required before optional producer technology
+    // (CityTechRefineries) or an optional extra yard (CityYardRefineries); 0 = none.
+    int cityTechRefineries{};
+    int cityYardRefineries{};
     int existingMilitaryCapacity{};
     int constructionCapacity{};
     int readyYards{};

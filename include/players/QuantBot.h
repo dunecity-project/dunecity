@@ -56,6 +56,8 @@ class Harvester;
 #include <vector>
 #include <list>
 
+namespace QuantBotBuildPolicy { struct FleetRatioLevel; }
+
 class QuantBot : public Player
 {
 public:
@@ -192,6 +194,9 @@ public:
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
     bool economicFleetRatioActive() const;
+    /// The active fleet-ratio treatment: EconomicFleetRatios' configured values, or
+    /// CityFleetRatios' fixed level when only that City switch is in scope.
+    QuantBotBuildPolicy::FleetRatioLevel fleetRatioTreatment() const;
     /// CivWars rules only for two occupied opposing initial houses, never team games.
     /// Ordinary Research Lab matches remain unchanged; shared-house copilots do not add houses.
     bool civWarsRules() const;
@@ -1214,6 +1219,10 @@ private:
     /// Economic experiments use original occupied controllers and saved grid
     /// metadata, never surviving Houses or map/mission identifiers.
     bool citySpiceFfaScope(unsigned minimumControllers) const;
+    /// Any-roster DuneCity Custom skirmish whose original map starts with spice.
+    bool citySpiceScope() const;
+    /// Batch3 City economy experiments: citySpiceScope() outside Civilization Wars.
+    bool cityEconomyExperimentScope() const;
     /// Stefan's spice rule (full knowledge, true simulation state, never fog):
     /// spice on tiles whose vehicle terrain region one of our anchors opens onto
     /// is credited to the house whose nearest anchor (Chebyshev to the footprint)

@@ -29,6 +29,26 @@ inline bool incomeTechnologyProject(Uint32 item, bool upgrade, int owned) {
         || item == Structure_IX || item == Structure_Palace || item == Structure_ResearchLab);
 }
 
+// Batch3 City economy levels (docs/ai-scenario-matrix.md, "Batch3 City economy
+// experiments"). CityTechRefineries/CityYardRefineries hold optional capital
+// until 3 (level 1) or 5 (level 2) refinery bays stand, but never ask for more
+// bays than the house's own spice plan (one bay per three planned workers), so a
+// spice-poor base is not starved of technology or yards. 0 = no gate.
+inline int cityRefineryGateBays(int level, int plannedWorkers) {
+    if (level <= 0) return 0;
+    return std::min(level == 1 ? 3 : 5, std::max(1, (std::max(0, plannedWorkers) + 2) / 3));
+}
+// CityFleetRatios: EconomicFleetRatios with a fixed treatment. Level 1 is the
+// EconRatios City survivor h3-cq1-r1, level 2 its tied-best generated DuneCity
+// efficiency partner h4-cq1-r1 (workers per bay, carryalls per four workers,
+// repair-yard ceiling).
+struct FleetRatioLevel { int harvestersPerBay, carryallQuarters, repairYards; };
+inline FleetRatioLevel cityFleetRatioLevel(int level) {
+    return level == 2 ? FleetRatioLevel{4, 1, 1} : FleetRatioLevel{3, 1, 1};
+}
+// CityWorkerReplacement: the City FFA replacement floor's payback horizon.
+inline int cityWorkerReplacementMinutes(int level) { return level == 2 ? 15 : 10; }
+
 // Zero disables the reservation; otherwise one service order per N orders.
 // An outbreak only needs one dangerous district and a six-minute buildup, so
 // waiting for a quarter of the developed city to reach the dangerous band

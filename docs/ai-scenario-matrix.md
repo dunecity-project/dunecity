@@ -44,6 +44,42 @@ Telemetry events `income_tech_state`, `income_tech_hold`, `income_tech_early`
 record the rate, threshold level and full-knowledge safety mechanism. Do not
 set `DUNECITY_TECH_SAVINGS_AUDIT`; use equal observer modes in paired arms.
 
+## Batch3 City economy experiments
+
+Five hashed, default-OFF `[Force Concentration]` integers (`0` OFF, `1`/`2`
+levels) re-test economy-freeing ideas only where earlier unscoped arms gained:
+`QuantBot::cityEconomyExperimentScope()`, an autonomous Custom
+Medium/Hard/Brutal QuantBot in a DuneCity-mod city game
+(`CustomGame`/`CustomMultiplayer`) whose map starts with spice
+(`getInitialSpiceTilePermille() > 0`), outside Civilization Wars. Vanilla,
+campaigns, Civilization Wars and no-spice maps are inert, so of the fixed
+controls only map 12 exercises them. No map, mission or seed predicate is used.
+
+- `CityCapitalPacing`: TechIncomeTiming's 1x/2x income gate and its safe-rival
+  early technology, in research-enabled scope games with remaining spice. An
+  explicit `TechIncomeTiming` keeps precedence.
+- `CityFleetRatios`: EconomicFleetRatios on Hard/Brutal with remaining spice;
+  level 1 is `h3-cq1-r1`, level 2 `h4-cq1-r1`. An explicit
+  `EconomicFleetRatios` keeps its configured values.
+- `CityTechRefineries`: optional producer technology (TechIncomeTiming's
+  project list and exemptions) and new studies wait until 3 (level 1) or 5
+  (level 2) refinery bays stand, never more than one bay per three workers of
+  the spice plan (minimum 1). A held study keeps no research reserve.
+- `CityYardRefineries`: an optional capacity MCV (a yard stands; no rock
+  expansion or colonisation need) waits for the same bay count.
+- `CityWorkerReplacement`: `CityHarvesterReplacement`'s lost-worker floor for
+  every roster, paid back in 10 (level 1) or 15 (level 2) minutes at 200 spice
+  per worker-minute. The FFA switch keeps precedence in its own scope.
+
+Candidate-only overlays are `city-capital-pacing-1/2`, `city-fleet-ratios-1/2`,
+`city-tech-refineries-1/2`, `city-yard-refineries-1/2` and
+`city-worker-replacement-1/2`; `experiment-batch-3-off` is the OFF proof
+overlay. `income_tech_hold` records the refinery gate as `refinery_bays`.
+The screen24 cells (`tests/ai/screen-designs/b3-city-screen24-cases.json`, fresh
+seeds 1300000-1300011) keep the TechTiming screen's format/size/spice/tech/tier
+layout. Preregistrations and results are in
+`outputs/ai-tuning-20261108/B3-*/ledger.md`.
+
 
 ## How a game is played
 

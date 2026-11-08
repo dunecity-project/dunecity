@@ -450,6 +450,11 @@ QuantBotConfig::QuantBotConfig() {
     force.cityLandValueFundingPercent = 60;
     force.cityGrowthStageTax = false;
     force.cityGrowthTaxPopulation = 3000;
+    force.cityCapitalPacing = 0;
+    force.cityFleetRatios = 0;
+    force.cityTechRefineries = 0;
+    force.cityYardRefineries = 0;
+    force.cityWorkerReplacement = 0;
     force.retreatPreserve = false;
     force.retreatPreserveLevel = 1;
     force.harvesterRaid = false;
@@ -864,6 +869,11 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CityLandValueFundingPercent", force.cityLandValueFundingPercent);
         iniFile.setBoolValue("Force Concentration", "CityGrowthStageTax", force.cityGrowthStageTax);
         iniFile.setIntValue("Force Concentration", "CityGrowthTaxPopulation", force.cityGrowthTaxPopulation);
+        iniFile.setIntValue("Force Concentration", "CityCapitalPacing", force.cityCapitalPacing);
+        iniFile.setIntValue("Force Concentration", "CityFleetRatios", force.cityFleetRatios);
+        iniFile.setIntValue("Force Concentration", "CityTechRefineries", force.cityTechRefineries);
+        iniFile.setIntValue("Force Concentration", "CityYardRefineries", force.cityYardRefineries);
+        iniFile.setIntValue("Force Concentration", "CityWorkerReplacement", force.cityWorkerReplacement);
         iniFile.setBoolValue("Force Concentration", "RetreatPreserve", force.retreatPreserve);
         iniFile.setIntValue("Force Concentration", "RetreatPreserveLevel", force.retreatPreserveLevel);
         iniFile.setBoolValue("Force Concentration", "HarvesterRaid", force.harvesterRaid);
@@ -1122,6 +1132,11 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityLandValueFundingPercent = iniFile.getIntValue("Force Concentration", "CityLandValueFundingPercent", force.cityLandValueFundingPercent) == 100 ? 100 : 60;
     force.cityGrowthStageTax = iniFile.getBoolValue("Force Concentration", "CityGrowthStageTax", force.cityGrowthStageTax);
     force.cityGrowthTaxPopulation = iniFile.getIntValue("Force Concentration", "CityGrowthTaxPopulation", force.cityGrowthTaxPopulation) == 6000 ? 6000 : 3000;
+    force.cityCapitalPacing = std::clamp(iniFile.getIntValue("Force Concentration", "CityCapitalPacing", force.cityCapitalPacing), 0, 2);
+    force.cityFleetRatios = std::clamp(iniFile.getIntValue("Force Concentration", "CityFleetRatios", force.cityFleetRatios), 0, 2);
+    force.cityTechRefineries = std::clamp(iniFile.getIntValue("Force Concentration", "CityTechRefineries", force.cityTechRefineries), 0, 2);
+    force.cityYardRefineries = std::clamp(iniFile.getIntValue("Force Concentration", "CityYardRefineries", force.cityYardRefineries), 0, 2);
+    force.cityWorkerReplacement = std::clamp(iniFile.getIntValue("Force Concentration", "CityWorkerReplacement", force.cityWorkerReplacement), 0, 2);
     force.retreatPreserve = iniFile.getBoolValue("Force Concentration", "RetreatPreserve", force.retreatPreserve);
     force.retreatPreserveLevel = std::clamp(iniFile.getIntValue("Force Concentration", "RetreatPreserveLevel", force.retreatPreserveLevel), 1, 2);
     force.harvesterRaid = iniFile.getBoolValue("Force Concentration", "HarvesterRaid", force.harvesterRaid);
@@ -1728,6 +1743,12 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("cityLandValueFundingPercent", force.cityLandValueFundingPercent);
     addNamed("cityGrowthStageTax", force.cityGrowthStageTax);
     addNamed("cityGrowthTaxPopulation", force.cityGrowthTaxPopulation);
+    // Batch3 City levels: absent (OFF) keeps the native multiplayer hash.
+    if (force.cityCapitalPacing != 0) addNamed("cityCapitalPacing", force.cityCapitalPacing);
+    if (force.cityFleetRatios != 0) addNamed("cityFleetRatios", force.cityFleetRatios);
+    if (force.cityTechRefineries != 0) addNamed("cityTechRefineries", force.cityTechRefineries);
+    if (force.cityYardRefineries != 0) addNamed("cityYardRefineries", force.cityYardRefineries);
+    if (force.cityWorkerReplacement != 0) addNamed("cityWorkerReplacement", force.cityWorkerReplacement);
     addNamed("retreatPreserve", force.retreatPreserve);
     addNamed("retreatPreserveLevel", force.retreatPreserveLevel);
     addNamed("harvesterRaid", force.harvesterRaid);

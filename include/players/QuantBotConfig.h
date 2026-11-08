@@ -467,6 +467,20 @@ struct QuantBotConfig {
         /// own population, normal 7% at/above it, with full service funding.
         bool cityGrowthStageTax;
         int cityGrowthTaxPopulation;
+        /// Batch3 City economy experiments, each 0 = OFF (default), 1/2 = hashed levels
+        /// (docs/ai-scenario-matrix.md, "Batch3 City economy experiments"). Only DuneCity
+        /// Custom skirmish on an initially spice-bearing map (QuantBot::cityEconomyExperimentScope);
+        /// Vanilla, campaigns, Civilization Wars and no-spice maps are inert.
+        /// TechIncomeTiming's 1x/2x income gate for producer technology, research-enabled only.
+        int cityCapitalPacing;
+        /// EconomicFleetRatios targets, Hard/Brutal: 1 = h3-cq1-r1, 2 = h4-cq1-r1.
+        int cityFleetRatios;
+        /// Optional producer technology waits for 3 (1) / 5 (2) refinery bays, capped by the spice plan.
+        int cityTechRefineries;
+        /// An optional extra yard waits for 3 (1) / 5 (2) refinery bays, capped by the spice plan.
+        int cityYardRefineries;
+        /// Lost workers are replaced first while spice per worker pays back in 10 (1) / 15 (2) minutes.
+        int cityWorkerReplacement;
         /// Experimental/default OFF: true local-force withdrawal, early vehicle
         /// repair and full-knowledge field safety in Vanilla/DuneCity skirmishes.
         bool retreatPreserve;

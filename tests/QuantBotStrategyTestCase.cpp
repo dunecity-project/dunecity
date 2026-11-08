@@ -1249,6 +1249,84 @@ TEST_CASE("Duel opening plans default off and round trip independent hashed leve
     std::filesystem::remove(path);
 }
 
+namespace {
+
+// Batch3 City economy switches (docs/ai-scenario-matrix.md, "Batch3 City economy
+// experiments"): default 0; levels 1/2 load, save and hash distinctly; level 0
+// keeps the default hash; larger values clamp to level 2.
+void requireBatch3CityLevels(const char* key, int QuantBotConfig::ForceSettings::*member) {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.*member == 0);
+    const auto path = std::filesystem::temp_directory_path() / (std::string("quantbot-batch3-") + key + ".ini");
+    std::set<std::string> hashes;
+    for (int level = 0; level <= 3; ++level) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\n" << key << '=' << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.*member == std::min(level, 2));
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (level == 0));
+        REQUIRE(hashes.insert(loaded.getConfigHash()).second == (level <= 2));
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.*member == loaded.force.*member);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
+} // namespace
+
+TEST_CASE("CityCapitalPacing levels are default off, hashed and use the income gate", "[ai][city][config]") {
+    requireBatch3CityLevels("CityCapitalPacing", &QuantBotConfig::ForceSettings::cityCapitalPacing);
+    using QuantBotBuildPolicy::incomeTechnologyAdmitted;
+    REQUIRE(incomeTechnologyAdmitted(1, 1000, 1000));
+    REQUIRE_FALSE(incomeTechnologyAdmitted(2, 1999, 1000));
+    REQUIRE(incomeTechnologyAdmitted(2, 2000, 1000));
+}
+
+TEST_CASE("CityFleetRatios levels are default off, hashed and fixed fleet treatments", "[ai][city][config]") {
+    requireBatch3CityLevels("CityFleetRatios", &QuantBotConfig::ForceSettings::cityFleetRatios);
+    using QuantBotBuildPolicy::cityFleetRatioLevel;
+    for (const int level : {1, 2}) {
+        const auto ratios = cityFleetRatioLevel(level);
+        REQUIRE(ratios.harvestersPerBay == (level == 2 ? 4 : 3));
+        REQUIRE(ratios.carryallQuarters == 1);
+        REQUIRE(ratios.repairYards == 1);
+    }
+}
+
+TEST_CASE("CityTechRefineries levels are default off, hashed and capped by the spice plan", "[ai][city][config]") {
+    requireBatch3CityLevels("CityTechRefineries", &QuantBotConfig::ForceSettings::cityTechRefineries);
+    using QuantBotBuildPolicy::cityRefineryGateBays;
+    REQUIRE(cityRefineryGateBays(0, 30) == 0);
+    REQUIRE(cityRefineryGateBays(1, 30) == 3);
+    REQUIRE(cityRefineryGateBays(2, 30) == 5);
+    // One bay per three planned workers; a spice-poor plan still needs one bay.
+    REQUIRE(cityRefineryGateBays(2, 12) == 4);
+    REQUIRE(cityRefineryGateBays(1, 4) == 2);
+    REQUIRE(cityRefineryGateBays(2, 0) == 1);
+    REQUIRE(cityRefineryGateBays(1, -3) == 1);
+}
+
+TEST_CASE("CityYardRefineries levels are default off, hashed and never exceed the tech gate", "[ai][city][config]") {
+    requireBatch3CityLevels("CityYardRefineries", &QuantBotConfig::ForceSettings::cityYardRefineries);
+    using QuantBotBuildPolicy::cityRefineryGateBays;
+    for (int workers = 0; workers <= 20; ++workers) {
+        REQUIRE(cityRefineryGateBays(1, workers) <= cityRefineryGateBays(2, workers));
+        REQUIRE(cityRefineryGateBays(2, workers) <= std::max(1, (workers + 2) / 3));
+    }
+}
+
+TEST_CASE("CityWorkerReplacement levels are default off, hashed and set the payback horizon", "[ai][city][config]") {
+    requireBatch3CityLevels("CityWorkerReplacement", &QuantBotConfig::ForceSettings::cityWorkerReplacement);
+    REQUIRE(QuantBotBuildPolicy::cityWorkerReplacementMinutes(1) == 10);
+    REQUIRE(QuantBotBuildPolicy::cityWorkerReplacementMinutes(2) == 15);
+}
+
 TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai][vanilla][strategy][config]") {
     const std::array<int QuantBotConfig::ForceSettings::*, 6> members{
         &QuantBotConfig::ForceSettings::vanillaHarvesterBoomWorkers,
