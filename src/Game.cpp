@@ -6172,42 +6172,33 @@ void Game::endObservationWithoutHost() {
 void Game::setGameWon() {
     // A campaign's authored objective is independent of who is watching it. Network viewers
     // follow the host; only a local campaign observer ends on the mission's native rules.
-    if(isObserving()) {
-        if(localObserver && gameType == GameType::Campaign && !bQuitGame && !finished) {
-            won = true;
-            finished = true;
-            finishedLevelCycle = gameCycleCount;
-            const House* objective = getOutcomeHouse();
-            watchedWinnerTeam = objective ? objective->getTeamID() : 0;
-        }
-        return;
-    }
+    const bool observing = isObserving();
+    if(observing && !(localObserver && gameType == GameType::Campaign)) return;
     if(!bQuitGame && !finished) {
-        AchievementEvents::finish(true);
+        if(!observing) AchievementEvents::finish(true);
         won = true;
         finished = true;
         finishedLevelCycle = gameCycleCount;  // MULTIPLAYER FIX (Issue #9): Use cycle count
-        soundPlayer->playVoice(YourMissionIsComplete,pLocalHouse->getHouseID());
+        if(observing) {
+            const House* objective = getOutcomeHouse();
+            watchedWinnerTeam = objective ? objective->getTeamID() : 0;
+        } else {
+            soundPlayer->playVoice(YourMissionIsComplete,pLocalHouse->getHouseID());
+        }
     }
 }
 
 
 void Game::setGameLost() {
-    if(isObserving()) {
-        if(localObserver && gameType == GameType::Campaign && !bQuitGame && !finished) {
-            won = false;
-            finished = true;
-            finishedLevelCycle = gameCycleCount;
-            watchedWinnerTeam = 0;
-        }
-        return;
-    }
+    const bool observing = isObserving();
+    if(observing && !(localObserver && gameType == GameType::Campaign)) return;
     if(!bQuitGame && !finished) {
-        AchievementEvents::finish(false);
+        if(!observing) AchievementEvents::finish(false);
         won = false;
         finished = true;
         finishedLevelCycle = gameCycleCount;  // MULTIPLAYER FIX (Issue #9): Use cycle count
-        soundPlayer->playVoice(YouHaveFailedYourMission,pLocalHouse->getHouseID());
+        if(observing) watchedWinnerTeam = 0;
+        else soundPlayer->playVoice(YouHaveFailedYourMission,pLocalHouse->getHouseID());
     }
 }
 
