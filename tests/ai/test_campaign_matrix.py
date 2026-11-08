@@ -20,7 +20,7 @@ exec(compile(ast.Module(body=prefix, type_ignores=[]), str(HARNESS), 'exec'), ma
 
 
 class CampaignCoverageTests(unittest.TestCase):
-    def test_every_real_vanilla_mission_once_with_authored_enemies_and_no_human(self):
+    def test_every_real_vanilla_mission_once_with_authored_enemies_and_ai_support(self):
         args = matrix['parser'].parse_args([
             '--tier', 'full', '--categories', 'campaign',
             '--cells', '^campaign/player-brutal-v-campaign-ai/vanilla$'])
@@ -36,10 +36,11 @@ class CampaignCoverageTests(unittest.TestCase):
             for game in own:
                 self.assertEqual(game['partner'], 'brutal')
                 self.assertEqual(game['enemy_ai'], 'campaign')
-                self.assertTrue(game['ai_only'])
+                self.assertFalse(game['ai_only'])
+                self.assertTrue(game['id'].endswith('#human-partner'))
                 self.assertEqual(game['expect'], ('campaign_won',))
                 command = matrix['command'](args, Path('unused-probe'), game, Path('unused-output'))
-                self.assertIn('--campaign-ai-only', command)
+                self.assertNotIn('--campaign-ai-only', command)
                 self.assertNotIn('--local-spectator', command)
                 self.assertEqual(command[command.index('--enemy-ai') + 1], 'campaign')
                 self.assertEqual(command[command.index('--mission') + 1], str(game['mission']))
@@ -48,6 +49,18 @@ class CampaignCoverageTests(unittest.TestCase):
             args.shard = k, 4
             shard_ids.extend(game['id'] for game in matrix['schedule'](args))
         self.assertEqual(Counter(shard_ids), Counter(game['id'] for game in games))
+
+    def test_ai_only_diagnostic_drops_the_human_seat(self):
+        args = matrix['parser'].parse_args([
+            '--tier', 'full', '--categories', 'campaign', '--campaign-ai-only',
+            '--cells', '^campaign/player-brutal-v-campaign-ai/vanilla$'])
+        games = matrix['schedule'](args)
+        self.assertEqual(len(games), 66)
+        for game in games:
+            self.assertTrue(game['ai_only'])
+            self.assertNotIn('#human-partner', game['id'])
+            self.assertEqual(game['expect'], ('campaign_won',))
+            self.assertIn('--campaign-ai-only', matrix['command'](args, Path('unused-probe'), game, Path('unused-output')))
 
 
 if __name__ == '__main__':

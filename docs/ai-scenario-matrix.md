@@ -171,15 +171,20 @@ opponents. Merge shard directories with the existing `--report DIR1 DIR2 ...`.
 The default 80-minute cap is not a victory condition: unfinished quotas and other
 unfinished missions fail. Historical smoke expectations are unchanged.
 
+**The campaign gate is the AI-support setup** (Stefan, 2026-11-08: QuantBot always
+plays the campaign as AI support beside a human). The default schedule gives the
+selected house an idle human seat plus the Brutal QuantBot support, so the AI has to
+carry both roles; IDs end `#human-partner`. `--campaign-ai-only` keeps the old
+no-human diagnostic and is never gate evidence.
+
 `[Force Concentration] CampaignPlayerHouse` (default off) identifies the selected
 campaign house from `GameInitSettings`, independently of registered human seats.
 ON gives its sole QuantBot the same Custom economic planning, player-side
 readiness and attacks as an existing human partner; authored enemy-house roles
 and human-partner behaviour are unchanged. OFF retains the old human-presence
-role test, including its AI-only campaign opening stall. Compare the same 66
-missions with `--style campaign-player-house-off` / `campaign-player-house-on`;
-repeat with `--campaign-human-partner` for the partner arm and run the two-seed
-vanilla All against Atreides gate separately.
+role test, including its AI-only campaign opening stall. It only matters for
+`--campaign-ai-only`; the AI-support gate is digest-identical either way, so the
+switch is parked off.
 
 Measured on `08eafddc` (2026-11-08), `~/Documents/projects/outputs/ai-recovery-20261108/fixes/CampaignRole/`:
 AI-only **4W/11L/51T → 56W/10L/0T**, paired score Δ **+1.00 [95% CI +0.81,+1.19]**.

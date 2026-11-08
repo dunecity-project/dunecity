@@ -33,9 +33,11 @@ full run splits across machines; --report reads one or more results directories 
 summary table. Games already in games.csv are skipped; each game's run directory is deleted as
 soon as its rows are written. Smoke timeouts retain their engine log in timeout-*.log;
 --attack-events keeps raw engine logs under diagnostics/; --keep-telemetry additionally retains
-the complete events.jsonl. --cases filters game IDs, and --campaign-human-partner adds an idle
-human seat to the vanilla campaign diagnostic without changing its win expectation. These
-diagnostic games have distinct IDs and cannot stand in for the AI-only gate. Scores use
+the complete events.jsonl. --cases filters game IDs. The vanilla campaign gate plays the way the
+game is played: an idle human seat with the Brutal QuantBot as its AI support, which therefore has
+to carry the whole campaign (IDs end #human-partner, win expectation unchanged).
+--campaign-ai-only is the diagnostic without the human seat; its IDs are the bare cell names.
+These diagnostic games cannot stand in for the gate. Scores use
 tests/ai/match_score.py placement scores.
 """
 import argparse
@@ -303,7 +305,7 @@ def schedule(args):
                 games.append(match_game(cell, index, seed, '#swap'))
     for cell in smoke_campaigns() if args.tier == 'smoke' and (not args.categories or 'campaign' in args.categories) else ():
         games.append(cell)
-    if getattr(args, 'campaign_human_partner', False):
+    if not getattr(args, 'campaign_ai_only', False):
         for game in games:
             if game['kind'] == 'campaign' and game.get('ai_only'):
                 game['ai_only'] = False
@@ -1034,9 +1036,10 @@ parser.add_argument('--minutes', type=int, choices=range(1, 121),
                     help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
 parser.add_argument('--cases', help='Only scheduled game IDs matching this regular expression (diagnostic subset)')
-parser.add_argument('--campaign-human-partner', action='store_true',
-                    help='Diagnostic: add the pre-existing idle human seat to AI-only campaign cells; '
-                         'keeps the win expectation and labels results #human-partner, never AI-only gate evidence')
+parser.add_argument('--campaign-ai-only', action='store_true',
+                    help='Diagnostic: play the vanilla campaign cell without the idle human seat, so its '
+                         'Brutal QuantBot is the only player-side house; never gate evidence. The default '
+                         'is the real setup, an idle human with QuantBot AI support (#human-partner IDs)')
 parser.add_argument('--game-options', type=Path,
                     help='Overlay this INI after each cell\'s own game options; use a distinct results '
                          'directory for each comparison arm')
