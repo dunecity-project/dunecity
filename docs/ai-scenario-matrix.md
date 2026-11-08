@@ -97,6 +97,47 @@ an AI spending stall. Use `--style police-recovery-off` and
 starting grant or balance constant changes with that switch.
 
 
+## Fixed promotion controls
+
+Every AI promotion runs `--tier controls` **alongside AAA2 and campaign 66**, not instead
+of them. It is 26 unobserved games: the 13 maps in the tuning output's `CONTROL-MAPS.md`,
+each with fixed seeds **10801, 11810** and the ordinary per-seed house/start rotation.
+The candidate is Brutal QuantBot, with the mixed skirmish opponents QH/QM/QE/AH/AM
+(truncated to the player count); Tuono-Blake is QB+QH versus QM+QM.
+Six-player maps use the existing multiplayer house order. Map 12 uses `dunecity`;
+all others use `vanilla`. Limits are 60 game minutes, or 80 on 192/256-square maps;
+the ordinary 1,800-second per-game wall cap applies. Silicon Valley (#13, no spice)
+is **only an inertness check**, never a target for AI improvements. Time-limit
+draws are recorded, not converted into wins or generic smoke failures.
+
+Submit one pinned cluster command (never local games):
+
+```sh
+/usr/bin/lockf -k /tmp/dunecity-submit.lock agent-workspace run --project dunecity \
+  --owner "$OWNER" --tests --wait -- dunecity-queue submit \
+  --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev "$SHA" \
+  --tag "controls-$STYLE" -- python3 tests/ai/scenario-matrix.py \
+  --tier controls --style "$STYLE" --results "$RESULTS"
+dunecity-queue wait "$JOB"
+python3 tests/ai/compare-control-maps.py --baseline "$BASELINE" --results "$RESULTS" \
+  --in-scope 1 2 3
+```
+
+Use a fresh results directory per source/style. Omit `--style` for native. The existing
+style convention applies the explicit style to every QuantBot; opponents' difficulty
+and teams do not change. Do not enable economy/tech-savings audit or observer overlays.
+Comparison exits nonzero for missing/failed/duplicate games, changed match settings,
+any lost native QB/team-1 win, or a changed digest outside `--in-scope`. That option
+lists only the map numbers the switch can affect (default 1–12); #13 must **always**
+be digest-identical. Winner, minutes and digest equality are printed per map/seed.
+Baselines use native base `98ca530ab89e47dccbc75f1703ed9e70587a97b8`, with a
+harness-only pin recorded separately:
+
+```sh
+python3 tests/ai/compare-control-maps.py --results "$NATIVE_RESULTS" \
+  --record "$BASELINE" --pin "$SHA" --job "$JOB"
+```
+
 ## The matrix
 
 Controller codes: QE/QM/QH/QB = QuantBot Easy/Medium/Hard/Brutal, AE/AM/AH = AI Player Easy/Medium/Hard.

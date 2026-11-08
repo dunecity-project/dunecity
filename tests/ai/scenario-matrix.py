@@ -77,7 +77,7 @@ CLASSES = {'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBr
            'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard'}
 QUANTBOT_ORDER = ('QB', 'QH', 'QM', 'QE')
 DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
-CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team')
+CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team', 'controls')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
                'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint') \
@@ -138,6 +138,38 @@ def ffa(*codes):
 
 def skirmish_spec(size, base, army, **extra):
     return ','.join([f'size={size}', f'base={base}', f'army={army}'] + [f'{k}={v}' for k, v in extra.items()])
+
+
+def control_cells():
+    """Mandatory fixed controls; two seeds rotate houses/starts as in other match cells."""
+    maps = (
+        '2P - 64x64 - Bottle Neck',
+        '2P - 128x31 - 1v1 - Sihaya-Pip',
+        '2P - 192x192 - Kleiner Lvl',
+        '4P - 64x128 - 2v2 - Tuono-Blake',
+        '4P - 128x128 - Mountain Pass',
+        '4P - 128x128 - Wormhole',
+        '4P - 128x128 - Habbanya-Froiud',
+        '5P - 128x128 - Fortress',
+        '6P - 64x64 - Fertile Basin',
+        '6P - 128x128 - Enclaves',
+        '6P - 256x256 - Alkozeltser 4',
+        '4P - 192x192 - DuneCity',
+        '4P - 64x64 - Silicon Valley',
+    )
+    cells = []
+    for number, name in enumerate(maps, 1):
+        players = int(name[0])
+        slots = ffa(*('QB', 'QH', 'QM', 'QE', 'AH', 'AM')[:players])
+        if number == 4:
+            # Standard stronger-v-weaker team cell, with one Brutal candidate.
+            slots = team_slots(['QB', 'QH'], ['QM', 'QM'])
+        named = ['harkonnen', 'atreides', 'ordos', 'fremen', 'sardaukar', 'mercenary'] if players == 6 else None
+        short = name.rsplit(' - ', 1)[-1].lower().replace(' ', '-')
+        cells.append(match('controls', f'{number:02d}-{short}', 'dunecity' if number == 12 else 'vanilla',
+                           slots, path=mp_map(name), houses=named, full=2,
+                           minutes=80 if '192x192' in name or '256x256' in name else 60))
+    return cells
 
 
 def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
@@ -272,8 +304,12 @@ def aaa_seeds(count):
 
 
 def schedule(args):
+    if args.tier == 'controls' and getattr(args, 'economy_samples', False):
+        raise SystemExit('Control games are unobserved: --economy-samples is not allowed')
     games = []
-    for cell in matrix(getattr(args, 'ladder_seeds', LADDER_SEEDS), getattr(args, 'team_seeds', TEAM_SEEDS)):
+    cells = control_cells() if args.tier == 'controls' else matrix(
+        getattr(args, 'ladder_seeds', LADDER_SEEDS), getattr(args, 'team_seeds', TEAM_SEEDS))
+    for cell in cells:
         if args.categories and cell['category'] not in args.categories:
             continue
         if getattr(args, 'cells', None) and not re.search(args.cells, f'{cell["category"]}/{cell["name"]}/{cell["mod"]}'):
@@ -291,7 +327,8 @@ def schedule(args):
                     for seed in seeds_for('campaign', f'{house}{mission}', count):
                         games.append(campaign_game(cell, house, level, mission, seed))
             continue
-        seeds = aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
+        seeds = ((10801, 11810) if cell['category'] == 'controls' else
+                 aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count))
         for index, seed in enumerate(seeds):
             game = match_game(cell, index, seed)
             if game['id'] == 'skirmish/4p-ffa-medium-smallarmy/vanilla/90866':
@@ -457,6 +494,11 @@ def play(args, scratch, binary, game):
     env = dict(os.environ)
     env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
     env.pop('BALANCE_DUNECITY_AUDIT', None)
+    env.pop('DUNECITY_TECH_SAVINGS_AUDIT', None)
+    if args.tier == 'controls':
+        # Native means no inherited experiment; --style remains explicit in command().
+        env.pop('BALANCE_SCENARIO_STYLE', None)
+        env.pop('DUNECITY_QUANTBOT_OVERLAY', None)
     candidate_dir = out.with_suffix('.candidate')
     if getattr(args, 'genome', None):
         # Explicit, candidate-only transport; never inherit a style or another run's overlays.
@@ -604,6 +646,13 @@ def run(args):
                           f'{" " + row["error"] if row["error"] else ""}', flush=True)
     if getattr(args, 'genome', None) and not genome_qualification.check_run(args):
         sys.exit(1)
+    if args.tier == 'controls':
+        rows = {row['id']: row for row in read(results / 'games.csv')}
+        problems = [game['id'] for game in schedule(args)
+                    if game['id'] not in rows or rows[game['id']]['error'] or not rows[game['id']]['digest']]
+        if problems:
+            raise SystemExit('Incomplete control games: ' + ', '.join(problems))
+        return  # Time limits, especially no-spice #13, are compared with native, not smoke failures.
     if args.tier == 'smoke' or getattr(args, 'check', False):
         sys.exit(0 if smoke_checks(args, results) else 1)
 
@@ -1031,7 +1080,7 @@ def shard(text):
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('--tier', choices=('smoke', 'full'), default='full')
+parser.add_argument('--tier', choices=('smoke', 'full', 'controls'), default='full')
 parser.add_argument('--build-dir', default=str(root / 'build-int'))
 parser.add_argument('--results', help='Directory for games.csv and houses.csv (games already there are skipped)')
 parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories '
