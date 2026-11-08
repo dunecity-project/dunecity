@@ -80,8 +80,8 @@ DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
 CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team', 'controls')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
-               'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint') \
-              + genome_qualification.FIELDS
+               'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint',
+               'style_seats') + genome_qualification.FIELDS
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
@@ -304,8 +304,10 @@ def aaa_seeds(count):
 
 
 def schedule(args):
-    if args.tier == 'controls' and getattr(args, 'economy_samples', False):
-        raise SystemExit('Control games are unobserved: --economy-samples is not allowed')
+    if args.tier == 'controls' and (getattr(args, 'economy_samples', False) or getattr(args, 'genome', None)
+                                    or getattr(args, 'game_options', None)):
+        raise SystemExit('Control games are unobserved native matches: no --economy-samples, --genome '
+                         'or --game-options (a candidate is a --style on the Brutal seat only)')
     games = []
     cells = control_cells() if args.tier == 'controls' else matrix(
         getattr(args, 'ladder_seeds', LADDER_SEEDS), getattr(args, 'team_seeds', TEAM_SEEDS))
@@ -446,7 +448,7 @@ def command(args, binary, game, out):
     cmd += headless_asset_arguments()
     if not (getattr(args, 'attack_events', False) or getattr(args, 'keep_telemetry', False)):
         cmd += ['--no-ai-telemetry']
-    if getattr(args, 'style', None):
+    if getattr(args, 'style', None) and args.tier != 'controls':
         cmd += ['--scenario-style', args.style]
     options_path = game.get('options')
     if getattr(args, 'genome', None):
@@ -474,8 +476,61 @@ def command(args, binary, game, out):
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
     if getattr(args, 'genome', None):
         cmd += ['--genome-phase-dir', str(out.with_suffix('.candidate'))]
+    elif directory := control_style_inputs(args, game, out):
+        cmd += ['--genome-phase-dir', str(directory)]
     cmd += ['--skirmish', game['skirmish']] if game['skirmish'] else ['--custom-map', str(game['path'])]
     return cmd
+
+
+def control_style_inputs(args, game, out):
+    """Controls: --style overlays only the candidate seat (slot 0, the Brutal QuantBot) through the
+    per-house genome-phase transport of dunecity-audit.py --candidate-style. Every other seat,
+    including a QuantBot ally, keeps the native config."""
+    if args.tier != 'controls' or not getattr(args, 'style', None):
+        return None
+    style = args.style
+    source = root / 'tests/ai/play-styles' / f'{style}.ini'
+    if Path(style).name != style or not source.is_file():
+        raise SystemExit(f'Unknown play style: {style}')
+    payload = source.read_bytes()
+    if re.search(rb'^\s*\[\s*Play Style\s*\]', payload, re.IGNORECASE | re.MULTILINE):
+        raise SystemExit('Candidate-only control styles must be config overlays (no [Play Style] section)')
+    house, _, code = game['sides'][0]
+    if code != 'QB':
+        raise SystemExit(f'Control candidate seat is {code}, not QB: {game["id"]}')
+    directory = out.with_suffix('.candidate')
+    remove_tree(directory)
+    directory.mkdir(parents=True)
+    number = HOUSE_NUMBERS[house]
+    for phase in ('opening', 'mid', 'late'):
+        (directory / f'{number}-{phase}.ini').write_bytes(payload)
+    (directory / 'schedule.ini').write_text('[Schedule]\nopening=0\nmid=9999\nlate=10000\n\n[Genomes]\n'
+                                            f'{number}=candidate-{style}\n', encoding='utf-8')
+    return directory
+
+
+def style_seats(lines):
+    """Seats whose QuantBot config differs from the native config, with the genome that changed it
+    ('config' without one); 'none' when every QuantBot played native. A global style is 'style=NAME'."""
+    setup = next((parse(l, 'SCENARIO_SETUP:') for l in lines if 'SCENARIO_SETUP:' in l), {})
+    native = setup.get('config_hash', '')
+    configs = {row['house']: row.get('config_hash', '') for l in lines if 'SCENARIO_AI_CONFIG:' in l
+               for row in [parse(l, 'SCENARIO_AI_CONFIG:')]}
+    genomes = {row['house']: row.get('genome', '') for l in lines if 'GENOME_PHASE:' in l
+               for row in [parse(l, 'GENOME_PHASE:')]}
+    if not native or not configs:
+        return ''
+    seats = sorted({h for h, c in configs.items() if c != native} | set(genomes), key=int)
+    parts = [f'{h}={genomes.get(h, "config")}' for h in seats]
+    if setup.get('style', 'default') != 'default':
+        parts.insert(0, f'style={setup["style"]}')
+    return ' '.join(parts) or 'none'
+
+
+def expected_style_seats(args, game):
+    if not getattr(args, 'style', None):
+        return 'none'
+    return f'{HOUSE_NUMBERS[game["sides"][0][0]]}=candidate-{args.style}'
 
 
 def win_type(result, houses, campaign):
@@ -496,9 +551,9 @@ def play(args, scratch, binary, game):
     env.pop('BALANCE_DUNECITY_AUDIT', None)
     env.pop('DUNECITY_TECH_SAVINGS_AUDIT', None)
     if args.tier == 'controls':
-        # Native means no inherited experiment; --style remains explicit in command().
-        env.pop('BALANCE_SCENARIO_STYLE', None)
-        env.pop('DUNECITY_QUANTBOT_OVERLAY', None)
+        # Native means no inherited experiment; a --style reaches the candidate seat only.
+        for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
+            env.pop(key, None)
     candidate_dir = out.with_suffix('.candidate')
     if getattr(args, 'genome', None):
         # Explicit, candidate-only transport; never inherit a style or another run's overlays.
@@ -540,7 +595,12 @@ def play(args, scratch, binary, game):
            'error': '' if outcome.returncode == 0 and result else f'rc={outcome.returncode}',
            'endgame_audit': json.dumps(endgame_audit, sort_keys=True, separators=(',', ':')),
            'source_commit': summary.get('sourceCommit', ''),
-           'source_fingerprint': summary.get('sourceFingerprint', '')}
+           'source_fingerprint': summary.get('sourceFingerprint', ''),
+           'style_seats': style_seats(lines)}
+    if args.tier == 'controls':
+        remove_tree(candidate_dir)
+        if not row['error'] and row['style_seats'] != expected_style_seats(args, game):
+            row['error'] = f'style seats {row["style_seats"] or "unrecorded"} != {expected_style_seats(args, game)}'
     winner = result.get('winner_team', '')
     row['winner'] = '+'.join(sorted({code_of.get(int(h['house']), '?') for h in houses if h['team'] == winner})) \
         if winner not in ('', '0', '-1') and not campaign else ''
@@ -1121,8 +1181,9 @@ parser.add_argument('--list', action='store_true', help='Print the scheduled gam
 parser.add_argument('--report', dest='report_dirs', nargs='+', metavar='RESULTS',
                     help='Print the summary table of these results directories')
 parser.add_argument('--draw-score', type=match_score.check_draw_score, default=match_score.DRAW_SCORE)
-parser.add_argument('--style', help='A play style (tests/ai/play-styles/<style>.ini) every QuantBot plays by: the on '
-                                    'arm of a candidate config switch; compare with a run without it (same seeds)')
+parser.add_argument('--style', help='A play style (tests/ai/play-styles/<style>.ini): the on arm of a candidate config '
+                                    'switch; compare with a run without it (same seeds). Every QuantBot plays by it, '
+                                    'except in --tier controls, where only the Brutal candidate seat does')
 parser.add_argument('--compare', dest='compare_dirs', nargs=2, metavar=('CONTROL', 'CANDIDATE'),
                     help='Paired A/B of two results directories over their common game ids (ladder: the stronger '
                          'side; team: the Hard team; campaign: the required player/partner won)')

@@ -12,6 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 BASE = '98ca530ab89e47dccbc75f1703ed9e70587a97b8'
 IDENTITY = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'limit')
+HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
 
 
 def expected_ids():
@@ -47,6 +48,31 @@ def validate(rows):
     return by_id
 
 
+def check_style_seats(rows, *, required):
+    """Every row's receipt: 'none' (native) or the one style on the candidate seat only (the first
+    side, the Brutal QuantBot). Returns the style ('' for native). Rows played before the receipt
+    existed (the recorded baseline) have no field and are accepted only when not required."""
+    styles = set()
+    for row in rows:
+        seats = row.get('style_seats')
+        if seats is None or seats == '':
+            if required:
+                raise ValueError(f'No style-seat receipt (old all-QuantBot harness?): {row["id"]}')
+            styles.add('')
+            continue
+        if seats == 'none':
+            styles.add('')
+            continue
+        house, _, code = row['sides'].split()[0].split(':')
+        match = re.fullmatch(r'(\d+)=candidate-([A-Za-z0-9._-]+)', seats)
+        if code != 'QB' or not match or int(match.group(1)) != HOUSE_NUMBERS[house]:
+            raise ValueError(f'Style on a non-candidate seat ({seats}; candidate {house} QB): {row["id"]}')
+        styles.add(match.group(2))
+    if len(styles) != 1:
+        raise ValueError(f'Mixed styles in one controls run: {sorted(styles)}')
+    return styles.pop()
+
+
 def csv_rows(directory):
     path = Path(directory)
     if path.is_dir():
@@ -62,6 +88,8 @@ def winner(row):
 def record(args):
     rows = csv_rows(args.results)
     validate(rows)
+    if check_style_seats(rows, required=True):
+        raise ValueError('A baseline must be native (style_seats none on every game)')
     if any(row['source_commit'] != args.pin for row in rows):
         raise ValueError('Recorded source does not match --pin')
     if args.base != BASE:
@@ -81,7 +109,12 @@ def compare(args):
     if baseline.get('schema') != 1 or baseline.get('base') != BASE or baseline.get('style') != 'native':
         raise ValueError('Not a native controls baseline for the required base')
     native = validate(baseline['games'])
-    candidate = validate(csv_rows(args.results))
+    if check_style_seats(baseline['games'], required=False):
+        raise ValueError('The baseline is not native')
+    rows = csv_rows(args.results)
+    candidate = validate(rows)
+    style = check_style_seats(rows, required=True)
+    print(f'Candidate: {style or "native"} (candidate seat only)')
     problems = []
     print('| Map | Seed | Native winner/min | Candidate winner/min | Digest equal | Native win lost |')
     print('|---|---:|---|---|---|---|')
@@ -101,8 +134,7 @@ def compare(args):
               f'{winner(new)}/{new["minutes"]} | {"yes" if equal else "NO"} | {"YES" if lost else "no"} |')
     for problem in problems:
         print('FAIL: ' + problem, file=sys.stderr)
-    print(f'Controls: {"FAIL" if problems else "PASS"} ({len(candidate)} games; '
-          f'{len(problems)} violations; map 13 always digest-identical)')
+    print(f'Controls: {"FAIL" if problems else "PASS"} ({len(candidate)} games; {len(problems)} violations)')
     return 1 if problems else 0
 
 
