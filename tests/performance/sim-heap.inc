@@ -1,7 +1,7 @@
 // Test-only retained-storage census, included in the access-relaxed balance probe.
 // BALANCE_HEAP_PROFILE=1: snapshot at setup, every ten game minutes and at end.
 // BALANCE_HEAP_TOOLS=1: also retain macOS heap/vmmap and malloc stack reports.
-// Container bytes are requested capacity, not allocator overhead; RSS is separate.
+// Bytes are vector capacity and map payload, excluding tree links/allocator overhead.
 #include <AStarSearch.h>
 #include <Map.h>
 #include <Tile.h>
@@ -94,8 +94,9 @@ inline void snapshot(Game& game, bool final = false) {
                 + std::distance(tile.assignedNonInfantryGroundObjectList.begin(), tile.assignedNonInfantryGroundObjectList.end());
         }
     }
-    size_t history = bytes(game.cmdManager.timeslot), commands = 0, occupiedCycles = 0;
-    for (const auto& slot : game.cmdManager.timeslot) {
+    size_t history = game.cmdManager.timeslot.size() * sizeof(decltype(game.cmdManager.timeslot)::value_type);
+    size_t commands = 0, occupiedCycles = 0;
+    for (const auto& [scheduledCycle, slot] : game.cmdManager.timeslot) {
         history += bytes(slot);
         occupiedCycles += !slot.empty();
         commands += slot.size();

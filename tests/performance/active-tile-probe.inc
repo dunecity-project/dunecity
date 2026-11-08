@@ -96,6 +96,71 @@ void checkOccupantStorage() {
             "Occupant save/load preserves the tile wire format");
 }
 
+void checkCommandHistoryStorage() {
+    constexpr Uint32 late = 375000;
+    const Command first(1, CMD_UNIT_SETMODE, 11, 0);
+    const Command second(1, CMD_UNIT_SETMODE, 33, 2);
+    const Command otherPlayer(2, CMD_UNIT_SETMODE, 22, 1);
+    CommandManager history;
+    auto recording = std::make_unique<OMemoryStream>();
+    recording->open();
+    const auto* recorded = recording.get();
+    history.setStream(std::move(recording));
+    history.addCommand(otherPlayer, late);
+    history.addCommand(first, 5);
+    history.addCommand(first, late);
+    history.addCommand(second, late);
+    require(history.timeslot.size() == 2, "Only the two occupied command cycles allocate slots");
+    require(history.commandsAt(0).empty() && history.commandsAt(late + 1).empty(),
+            "Sparse missing cycles are empty before and after the history");
+    require(history.commandsAt(late).size() == 3, "All commands at the same cycle are retained");
+    auto savedBytes = [](const CommandManager& manager) {
+        OMemoryStream out;
+        out.open();
+        manager.save(out);
+        return std::string(out.getData(), out.getDataLength());
+    };
+    // The legacy save format is cycle + Command, in ascending cycle order
+    // and stable player-id order within a cycle, even after out-of-order input.
+    OMemoryStream expected;
+    expected.open();
+    expected.writeUint32(5); first.save(expected);
+    expected.writeUint32(late); first.save(expected);
+    expected.writeUint32(late); second.save(expected);
+    expected.writeUint32(late); otherPlayer.save(expected);
+    const std::string canonical(expected.getData(), expected.getDataLength());
+    require(savedBytes(history) == canonical, "Sparse history preserves exact legacy save bytes and command order");
+    OMemoryStream expectedRecording;
+    expectedRecording.open();
+    expectedRecording.writeUint32(late); otherPlayer.save(expectedRecording);
+    expectedRecording.writeUint32(5); first.save(expectedRecording);
+    expectedRecording.writeUint32(late); first.save(expectedRecording);
+    expectedRecording.writeUint32(late); second.save(expectedRecording);
+    require(std::string(recorded->getData(), recorded->getDataLength())
+                == std::string(expectedRecording.getData(), expectedRecording.getDataLength()),
+            "Replay recording keeps the original insertion-order wire bytes");
+    CommandManager replay;
+    IMemoryStream in(canonical.data(), canonical.size());
+    replay.load(in);
+    require(in.getRemainingLength() == 0 && savedBytes(replay) == canonical,
+            "Legacy command records load and re-save without a format change");
+    history.discardCommandsFrom(late);
+    require(history.timeslot.size() == 1 && history.commandsAt(late).empty()
+                && history.commandsAt(5).size() == 1,
+            "Truncation drops only the requested future commands");
+    history.addCommand(otherPlayer, 1);
+    require(history.commandsAt(1).size() == 1, "Earlier cycles remain insertable after truncation");
+    history.discardCommandsFrom(0);
+    require(history.timeslot.empty(), "Truncation at zero releases every retained cycle");
+    history.addCommand(second, late + 1);
+    require(history.commandsAt(late + 1).size() == 1, "A cleared sparse history accepts a new distant cycle");
+    const std::string beforeRejected = savedBytes(history);
+    history.addCommand(first, std::numeric_limits<Uint32>::max());
+    history.setReadOnly(true);
+    history.addCommand(first, late + 2);
+    require(savedBytes(history) == beforeRejected, "Maximum-cycle and read-only rejection are unchanged");
+}
+
 } // namespace
 
 int runActiveTileProbe() {
@@ -172,6 +237,7 @@ int runActiveTileProbe() {
     const Uint32 fixtureVersion = game->loadedSavegameVersion;
     game->loadedSavegameVersion = SAVEGAMEVERSION;
     checkOccupantStorage();
+    checkCommandHistoryStorage();
     {
         IMemoryStream restoring(bytes.data(), bytes.size());
         currentGameMap->load(restoring);

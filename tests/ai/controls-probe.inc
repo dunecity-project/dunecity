@@ -25,7 +25,7 @@ void runControlsProbe(Game& game) {
     auto require=[](bool ok,const char* why) { if(!ok){SDL_Log("CONTROLS_FAIL: %s",why);throw std::runtime_error(why);} };
     auto commands=[&](CMDTYPE type) {
         int count=0;
-        for(const auto& slot:game.cmdManager.timeslot)for(const auto& command:slot)
+        for(const auto& [cycle,slot]:game.cmdManager.timeslot)for(const auto& command:slot)
             if(command.getCommandID()==type)++count;
         return count;
     };
@@ -197,7 +197,7 @@ void runControlsProbe(Game& game) {
         SDL_PushEvent(&e); game.doInput();
     };
     auto totalCommands = [&]() {
-        size_t count=0; for(const auto& slot:game.cmdManager.timeslot) count+=slot.size(); return count;
+        size_t count=0; for(const auto& [cycle,slot]:game.cmdManager.timeslot) count+=slot.size(); return count;
     };
     select();
     screenborder->setNewScreenCenter(Coord(currentGameMap->getSizeX()*TILESIZE/2,

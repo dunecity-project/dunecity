@@ -79,7 +79,7 @@ void reserve(Game& game, Uint32 yardID, Uint32 item, Coord plot) {
 
 int countCommands(Game& game, CMDTYPE id) {
     int count = 0;
-    for(const auto& slot : game.cmdManager.timeslot) for(const auto& command : slot) if(command.getCommandID() == id) ++count;
+    for(const auto& [cycle,slot] : game.cmdManager.timeslot) for(const auto& command : slot) if(command.getCommandID() == id) ++count;
     return count;
 }
 
@@ -339,7 +339,7 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     clickItem(Structure_WindTrap, KMOD_SHIFT);
     require(!game->isPlanningPlacement(), "Rule off: no planning cursor");
     bool multiple = false;
-    for(auto& slot : game->cmdManager.timeslot) {
+    for(auto& [cycle,slot] : game->cmdManager.timeslot) {
         for(auto it = slot.begin(); it != slot.end(); ++it) {
             if(it->getCommandID() == CMD_BUILDER_PRODUCEITEM) {
                 const auto p = it->getParameter();

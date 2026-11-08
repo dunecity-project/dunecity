@@ -219,6 +219,17 @@ Appending walks the tile's short occupant list instead of retaining a tail point
 the infantry fullness check stops after the existing five-unit occupancy limit.
 No simulation or AI history is discarded or capped.
 
+Command chronology stores only occupied cycles in an ordered map. The measured
+120-minute city control on Windows (`cbd25197`, 160 FFA6) requested 13,196,400 bytes
+for its dense command history although only 1,733 cycles held 5,962 commands.
+All commands remain retained: missing cycles still execute nothing, truncation
+removes only the requested future, and ordinary saves still emit ascending
+32-bit cycle plus the unchanged `Command` record, with stable player-id ordering
+within a cycle. Live replay recording keeps insertion order. Network windows
+still include their empty cycles. No save/replay/network format or version changes.
+The sparse census includes map payload and command-vector/parameter capacity;
+tree links and allocator overhead are excluded, as are all other allocator costs.
+
 Private dummy-video balance probes return unused allocator pages to the OS once
 all setup and requested-mod reloading have finished, before recording the setup/
 loop boundary. This is independent of asset skipping and never frees a live

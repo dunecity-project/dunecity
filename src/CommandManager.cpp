@@ -56,9 +56,9 @@ void CommandManager::addCommand(const Command& cmd) {
 }
 
 void CommandManager::save(OutputStream& stream) const {
-    for(unsigned int i=0;i<timeslot.size();i++) {
-        for(const Command& command : timeslot[i]) {
-            stream.writeUint32(i);
+    for(const auto& [cycle, commands] : timeslot) {
+        for(const Command& command : commands) {
+            stream.writeUint32(cycle);
             command.save(stream);
         }
     }
@@ -174,11 +174,9 @@ void CommandManager::update() {
     for(Uint32 i = windowStart; i < windowEnd; i++) {
         std::vector<Command> commands;
 
-        if(i < timeslot.size()) {
-            for(Command& command : timeslot[i]) {
-                if(command.getPlayerID() == pLocalPlayer->getPlayerID()) {
-                    commands.push_back(command);
-                }
+        for(const Command& command : commandsAt(i)) {
+            if(command.getPlayerID() == pLocalPlayer->getPlayerID()) {
+                commands.push_back(command);
             }
         }
 
@@ -210,8 +208,8 @@ void CommandManager::addCommandList(const std::string& playername, const Command
             continue;
         }
 
-        // addCommand() resizes its timeslot vector to the cycle number, so a cycle far in the
-        // future is an unbounded allocation.
+        // Sparse storage does not change the agreed command window: a peer
+        // still cannot schedule commands arbitrarily far into the future.
         if(!CommandValidation::isAcceptableCommandCycle(commandListEntry.cycle, currentCycle,
                                                         networkCycleBuffer)) {
             rejectionReason = "cycle outside the acceptable window";
@@ -291,22 +289,19 @@ void CommandManager::addCommand(const Command& cmd, Uint32 CycleNumber) {
     if(bReadOnly == false) {
 
         if(CycleNumber == std::numeric_limits<Uint32>::max()) {
-            // CycleNumber+1 would wrap to 0 and leave timeslot[CycleNumber] out of bounds.
+            // Preserve the existing maximum-cycle rejection for every caller.
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                         "CommandManager: refusing a command scheduled for the maximum cycle");
             return;
         }
 
-        if(CycleNumber >= timeslot.size()) {
-            timeslot.resize(static_cast<std::size_t>(CycleNumber) + 1);
-        }
-
-        timeslot[CycleNumber].push_back(cmd);
-        std::stable_sort(   timeslot[CycleNumber].begin(),
-                            timeslot[CycleNumber].end(),
-                            [](const Command& cmd1, const Command& cmd2) {
-                                return (cmd1.getPlayerID() < cmd2.getPlayerID());
-                            });
+        auto& commands = timeslot[CycleNumber];
+        commands.push_back(cmd);
+        std::stable_sort(commands.begin(), commands.end(),
+                         [](const Command& cmd1, const Command& cmd2) {
+                             return cmd1.getPlayerID() < cmd2.getPlayerID();
+                         });
+        lastCommandCycle = std::max(lastCommandCycle, CycleNumber);
 
         // Only our own commands appear in what update() emits, so only they can change an
         // otherwise unchanged direct window. This is the same predicate update() selects
@@ -324,11 +319,7 @@ void CommandManager::addCommand(const Command& cmd, Uint32 CycleNumber) {
 }
 
 void CommandManager::executeCommands(Uint32 CycleNumber) const {
-    if(CycleNumber >= timeslot.size()) {
-        return;
-    }
-
-    for(const Command& command : timeslot[CycleNumber]) {
+    for(const Command& command : commandsAt(CycleNumber)) {
         command.executeCommand();
     }
 }
