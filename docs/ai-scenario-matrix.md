@@ -196,6 +196,16 @@ Use `campaign-opening-off` / `campaign-opening-on` for the paired combination;
 change. These styles do not enable `CampaignPlayerHouse`: add that switch only
 when comparing the AI-only role-fixed arm.
 
+`CampaignThreatProduction` is a separate default-off hashed candidate for the
+remaining funding hold: while a visible enemy is actually firing at the
+campaign player's buildings or harvesters, ground producers plan before
+economic expansion and can spend economic savings on replacements. A heavy
+factory that can afford a military vehicle does not choose another worker in
+that pass. Existing queued obligations, prices, unit budgets and unit limits
+remain enforced; without a live attack, normal economic priorities resume.
+`campaign-threat-production-on` isolates it; `campaign-opening-funded-on`
+enables all three opening/readiness/funding candidates.
+
 
 For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
 seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;

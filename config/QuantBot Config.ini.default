@@ -360,6 +360,9 @@ CampaignMilitaryOpening=0
 # Size campaign player-side readiness to enemy strength without a fifteen-minute delay.
 # Independent hashed candidate; OFF preserves the old fixed opening threshold.
 CampaignAdaptiveReadiness=0
+# Fund campaign player-side ground production before economic savings during live base attacks.
+# Independent hashed candidate; real prices, military budgets and unit limits stay unchanged.
+CampaignThreatProduction=0
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.

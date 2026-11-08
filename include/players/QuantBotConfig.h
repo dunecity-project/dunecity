@@ -228,6 +228,9 @@ struct QuantBotConfig {
         /// Campaign player-side readiness scales to enemy strength from the first wave.
         /// Independent, hashed candidate; OFF retains the fifteen-minute fixed opening floor.
         bool campaignAdaptiveReadiness;
+        /// A campaign player's ground producers can spend economic savings while
+        /// visible attackers are firing on its income/base. Independent, hashed; default off.
+        bool campaignThreatProduction;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

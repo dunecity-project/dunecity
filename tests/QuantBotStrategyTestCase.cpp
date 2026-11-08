@@ -663,6 +663,34 @@ TEST_CASE("Campaign opening switches default off and independently round-trip th
     std::filesystem::remove(savedPath);
 }
 
+TEST_CASE("Campaign threat production defaults off and independently round-trips both hashed states",
+          "[ai][campaign][production][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignThreatProduction);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-threat-test.ini";
+    for (const bool enabled : {false, true, false}) {
+        QuantBotConfig expected = defaults;
+        expected.force.campaignThreatProduction = enabled;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignThreatProduction=" << enabled << '\n';
+        }
+        QuantBotConfig config;
+        REQUIRE(config.applyOverrides(path.string()));
+        REQUIRE(config.force.campaignThreatProduction == enabled);
+        REQUIRE(config.getConfigHash() == expected.getConfigHash());
+        REQUIRE((config.getConfigHash() == defaults.getConfigHash()) == !enabled);
+        REQUIRE_FALSE(config.force.campaignMilitaryOpening);
+        REQUIRE_FALSE(config.force.campaignAdaptiveReadiness);
+        REQUIRE(config.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignThreatProduction == enabled);
+        REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign player house defaults off and independently round-trips both hashed states",
           "[ai][campaign][config]") {
     const QuantBotConfig defaults;
