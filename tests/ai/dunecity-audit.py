@@ -59,15 +59,16 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
                       'source_commit', 'source_fingerprint', 'source_fingerprint_error',
                       'air_kill_telemetry', 'air_kill_telemetry_reasons', 'air_kill_attribution',
                       'air_kill_unknown_attribution', 'capture_mib', 'diagnostics',
-                      'mod', 'candidate_house', 'candidate_seat', 'sample_case', 'sample_seed', 'research_enabled',
-                      'scoring_rule', 'scored_winner_team', 'win_condition', 'team_populations')
+                      'mod', 'candidate_house', 'candidate_seat', 'candidate_style', 'sample_case', 'sample_seed', 'research_enabled',
+                      'scoring_rule', 'scored_winner_team', 'win_condition', 'team_populations',
+                      'seat_styles', 'style_cohort', 'style_rotation')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
                        'score', 'drawn', 'won', 'flags') + tuple(
     field for detector in DETECTORS for field in (detector, 'eligible_' + detector, 'first_' + detector)
 ) + TROOPER_FIELDS + ('air_kill_telemetry',) + AIR_ATTRIBUTION_FIELDS + AIR_COUNT_FIELDS + (
-    'population', 'raw_score', 'raw_drawn', 'raw_won')
+    'population', 'raw_score', 'raw_drawn', 'raw_won', 'seat_style')
 CYCLES_PER_MINUTE = 3750  # The engine's 16 ms fixed simulation tick.
 SAMPLE_VALUES = ('minute', 'cycle', 'house', 'team', 'alive', 'credits', 'army_value', 'army_units', 'harvesters',
                  'structures', 'factories', 'kill_value', 'loss_value', 'power', 'need', 'population', 'tax', 'demand',
@@ -588,6 +589,7 @@ def sample_schedule(args):
                                   city=args.city, limit=minutes, style=args.style or 'default', mod=mod,
                                   minutes=minutes, skirmish=spec, candidate_house=HOUSE_IDS[houses[seat]],
                                   candidate_seat='swapped' if swapped else 'original',
+                                  candidate_style=getattr(args, 'candidate_style', None) or '',
                                   sample_case=index + 1, sample_seed=args.sample_seed,
                                   require_research=mod == 'dunecity'))
     return games
@@ -603,8 +605,52 @@ def shard(text):
     raise argparse.ArgumentTypeError('--shard K/N with 1 <= K <= N')
 
 
+def seat_styles_argument(text):
+    names = tuple(name.strip() for name in text.split(','))
+    if not 2 <= len(names) <= 6 or 'control' not in names or any(not name for name in names):
+        raise argparse.ArgumentTypeError('--seat-styles needs control plus 1-5 styles (or 2-6 controls)')
+    variants = [name for name in names if name != 'control']
+    if len(variants) != len(set(variants)):
+        raise argparse.ArgumentTypeError('--seat-styles repeats a non-control variant')
+    for name in variants:
+        if Path(name).name != name or not (root / 'tests/ai/play-styles' / (name + '.ini')).is_file():
+            raise argparse.ArgumentTypeError('--seat-styles must name existing play-style INIs or control')
+    return names
+
+
+def seat_style_schedule(args, games):
+    names = getattr(args, 'seat_styles', None)
+    if not names:
+        return games
+    variants = [name for name in names if name != 'control']
+    scheduled = []
+    for game in games:
+        seats = len(game['sides'])
+        if not variants:
+            # Native all-control remains exactly today's schedule, including IDs and both candidate seats.
+            scheduled.append(dict(game, seat_styles={str(HOUSE_IDS[house]): 'control'
+                                                     for house, _, _ in game['sides']},
+                                  style_cohort='control', style_rotation=0))
+            continue
+        if args.mode == 'sample' and game['candidate_seat'] != 'original':
+            continue  # The full rotation, not a second singled-out candidate, supplies the seat control.
+        for first in range(0, len(variants), seats - 1):
+            cohort = variants[first:first + seats - 1]
+            labels = ['control'] + cohort
+            labels += ['control'] * (seats - len(labels))
+            identity = hashlib.sha256(','.join(labels).encode()).hexdigest()[:12]
+            for rotation in range(seats):
+                assignments = {str(HOUSE_IDS[house]): labels[(seat + rotation) % seats]
+                               for seat, (house, _, _) in enumerate(game['sides'])}
+                scheduled.append(dict(game, id=f'{game["id"]}/seat-styles/{identity}/r{rotation}',
+                                      seat_styles=assignments, style_cohort=','.join(cohort),
+                                      style_rotation=rotation))
+    return scheduled
+
+
 def schedule(args):
     games = sample_schedule(args) if args.mode == 'sample' else matrix_schedule(args)
+    games = seat_style_schedule(args, games)
     if args.shard:
         k, n = args.shard
         games = games[k - 1::n]
@@ -746,6 +792,37 @@ def detect(samples):
     return {field: value for detector in DETECTORS for field, value in (
         (detector, int(detector in first)), ('eligible_' + detector, int(detector in eligible)),
         ('first_' + detector, first.get(detector, '')))}
+def seat_style_assignments(game):
+    if game.get('seat_styles'):
+        return game['seat_styles']
+    if game.get('candidate_style'):
+        return {str(game['candidate_house']): game['candidate_style']}
+    return {}
+
+
+def seat_style_inputs(args, game, out):
+    """Constant per-house config overlays; no genome search or within-game phase changes."""
+    if getattr(args, 'candidate_style', None) and (args.mode != 'sample' or args.style):
+        raise ValueError('--candidate-style requires --mode sample and cannot be combined with --style')
+    assignments = {house: style for house, style in seat_style_assignments(game).items() if style != 'control'}
+    if not assignments:
+        return None
+    prefix = 'seat' if game.get('seat_styles') else 'candidate'
+    directory = out.with_suffix('.candidate')
+    directory.mkdir(parents=True, exist_ok=True)
+    schedule = '[Schedule]\nopening=0\nmid=9999\nlate=10000\n\n[Genomes]\n'
+    for house, style in assignments.items():
+        source = root / 'tests/ai/play-styles' / (style + '.ini')
+        if not style or Path(style).name != style or not source.is_file():
+            raise ValueError('Per-seat styles must name an existing play-style INI')
+        schedule += f'{house}={prefix}-{style}\n'
+        payload = source.read_bytes()
+        for phase in ('opening', 'mid', 'late'):
+            (directory / f'{house}-{phase}.ini').write_bytes(payload)
+    (directory / 'schedule.ini').write_text(schedule, encoding='utf-8')
+    return directory
+
+
 
 
 def command(args, binary, game, out):
@@ -780,6 +857,8 @@ def command(args, binary, game, out):
         cmd += ['--game-options', str(args.game_options)]
     if args.style:
         cmd += ['--scenario-style', args.style]
+    if directory := seat_style_inputs(args, game, out):
+        cmd += ['--genome-phase-dir', str(directory)]
     return cmd
 
 
@@ -849,6 +928,26 @@ def research_verified(game, setup, lines):
     required = {HOUSE_IDS[house] for house, _, _ in game['sides']}
     return (setup.get('research_enabled') == '1' and set(initial) == required
             and all(item.get('research_enabled') == '1' for item in observed))
+def seat_styles_verified(game, setup, configs, lines):
+    assignments = seat_style_assignments(game)
+    if not assignments:
+        return True
+    native = setup.get('config_hash')
+    observed = {row.get('house'): row.get('config_hash') for row in configs}
+    phases = [parse(line, 'GENOME_PHASE:') for line in lines if 'GENOME_PHASE:' in line]
+    expected = {str(HOUSE_IDS[name]) for name, _, _ in game['sides']}
+    overlaid = {house: style for house, style in assignments.items() if style != 'control'}
+    if (not native or setup.get('style') != 'default' or set(observed) != expected
+            or not set(assignments) <= expected
+            or any(observed[house] != native for house in expected - overlaid.keys())
+            or len(phases) != len(overlaid) or {row.get('house') for row in phases} != set(overlaid)):
+        return False
+    prefix = 'seat' if game.get('seat_styles') else 'candidate'
+    return all(row.get('phase') == 'opening' and row.get('cycle') == '0'
+               and row.get('genome') == prefix + '-' + overlaid[row['house']]
+               and row.get('config_hash') == observed[row['house']] for row in phases)
+
+
 
 
 def play(args, scratch, binary, game):
@@ -858,6 +957,9 @@ def play(args, scratch, binary, game):
     started = time.monotonic()
     cmd = command(args, binary, game, out)
     env = dict(os.environ, BALANCE_DUNECITY_AUDIT='1', DUNECITY_TECH_SAVINGS_AUDIT='1')
+    if getattr(args, 'candidate_style', None) or getattr(args, 'seat_styles', None):
+        for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
+            env.pop(key, None)
     if getattr(args, 'export_maps', None):
         env['BALANCE_SCENARIO_DUMP_MAP'] = str((out / 'export-map.ini').resolve())
         env['BALANCE_SCENARIO_DUMP_OPTIONS'] = str((out / 'export-options.ini').resolve())
@@ -895,6 +997,8 @@ def play(args, scratch, binary, game):
     research = setup.get('research_enabled', '')
     if not research_verified(game, setup, lines):
         error = ';'.join(filter(None, (error, 'research_enabled_not_verified')))
+    if not seat_styles_verified(game, setup, configs, lines):
+        error = ';'.join(filter(None, (error, 'seat_styles_not_verified')))
     if 'candidate_house' in game and str(game['candidate_house']) not in {house['house'] for house in final}:
         error = ';'.join(filter(None, (error, 'candidate_result_missing')))
     scored = {}
@@ -910,7 +1014,9 @@ def play(args, scratch, binary, game):
                wall_s=round(time.monotonic() - started, 3), digest=digest, attack_telemetry=int(telemetry), error=error)
     row.update(mod=game.get('mod', 'dunecity'), research_enabled=research,
                **{field: game.get(field, '') for field in
-                  ('candidate_house', 'candidate_seat', 'sample_case', 'sample_seed')})
+                  ('candidate_house', 'candidate_seat', 'candidate_style', 'sample_case', 'sample_seed')})
+    row.update(seat_styles=json.dumps(game.get('seat_styles', {}), sort_keys=True) if game.get('seat_styles') else '',
+               style_cohort=game.get('style_cohort', ''), style_rotation=game.get('style_rotation', ''))
     row.update({field: setup.get(field, '') for field in (
         'config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
     row.update(ai_config_hashes=','.join(f'{item["house"]}:{item["config_hash"]}' for item in configs),
@@ -960,6 +1066,7 @@ def play(args, scratch, binary, game):
                 population=house.get('population', ''),
                 raw_score=round(raw_scores[number].score, 4), raw_drawn=int(raw_scores[number].drawn),
                 raw_won=int(house['team'] == result.get('winner_team')),
+                seat_style=seat_style_assignments(game).get(str(number), 'control'),
                 attack_telemetry=int(telemetry),
                 attack_count=len(attacks[number]) if telemetry else '',
                 first_attack_minute=min(attacks[number]) if attacks[number] else '',
@@ -983,6 +1090,8 @@ def play(args, scratch, binary, game):
         if getattr(args, 'keep_telemetry', False):
             row['diagnostics'] = retain_telemetry(results, out)
     append(results / 'games.csv', GAME_FIELDS, [row])
+    if not error:
+        shutil.rmtree(out.with_suffix('.candidate'), ignore_errors=True)
     finish_game(scratch, out, bool(error))
     return row
 
@@ -1152,9 +1261,62 @@ def sample_comparison(control, candidate):
               f'{population[0]} -> {population[1]} | {result.verdict} |')
 
 
+def seat_style_report(games, houses):
+    """Descriptive same-game comparisons; extra controls and rotations are not independent trials."""
+    completed = {game['id']: game for game in games if game.get('seat_styles') and not game.get('error')}
+    by_game = defaultdict(list)
+    for house in houses:
+        if house['id'] in completed:
+            by_game[house['id']].append(house)
+    groups = defaultdict(list)
+    for game_id, game in completed.items():
+        assignments = json.loads(game['seat_styles']) if isinstance(game['seat_styles'], str) else game['seat_styles']
+        rows = by_game[game_id]
+        controls = [row for row in rows if assignments.get(row['house']) == 'control']
+        for row in rows:
+            style = assignments.get(row['house'])
+            if style is None:
+                continue
+            end = float(game['minutes'])
+            eliminated = float(row['eliminated_s']) if row.get('eliminated_s', '') != '' else None
+            survival = end if row['alive'] == '1' else (
+                min(end, eliminated / 60) if eliminated is not None and eliminated >= 0 else None)
+            order = (1, 0) if row['alive'] == '1' else (
+                (0, eliminated) if eliminated is not None and eliminated >= 0 else None)
+            finishing = []
+            for control in controls:
+                if control['house'] == row['house'] or control['team'] == row['team']:
+                    continue
+                when = float(control['eliminated_s']) if control.get('eliminated_s', '') != '' else None
+                other = (1, 0) if control['alive'] == '1' else (
+                    (0, when) if when is not None and when >= 0 else None)
+                if order is not None and other is not None:
+                    finishing.append(1 if order > other else -1 if order < other else 0)
+            value = dict(row=row, survival=survival, finishing=finishing)
+            groups[(game.get('mod', 'dunecity'), game['format'], game.get('style_cohort', ''), style)].append(value)
+    print(f'Per-seat games complete {len(completed)}/{sum(bool(game.get("seat_styles")) for game in games)}. '
+          'Each cohort rotates through every seat/start and controller tier. '
+          'Scores/wins are team outcomes; survival and finishing order are per-house. '
+          'Spare seats are native controls. Cohorts are reported separately; these are descriptive observations, '
+          'not independent control pairs or an automatic default-on gate.')
+    print('| Mod | Format | Cohort | Variant | House histories | Wins | Mean placement score | Survival min (measured) | Better/tied/worse than opposing control |')
+    print('|---|---|---|---|---|---|---|---|---|')
+    for (mod, fmt, cohort, style), entries in sorted(groups.items()):
+        surviving = [value['survival'] for value in entries if value['survival'] is not None]
+        survival = f'{statistics.mean(surviving):.2f} ({len(surviving)}/{len(entries)})' if surviving else 'unmeasured'
+        finishing = [order for value in entries for order in value['finishing']]
+        against = '/'.join(str(finishing.count(order)) for order in (1, 0, -1)) if finishing else 'unmeasured'
+        print(f'| {mod} | {fmt} | {cohort} | {style} | {len(entries)} | '
+              f'{sum(value["row"]["won"] == "1" for value in entries)} | '
+              f'{statistics.mean(float(value["row"]["score"]) for value in entries):+.3f} | {survival} | {against} |')
+
+
 def report(directories):
     games = load(directories, 'games.csv', ('id',))
     houses = load(directories, 'houses.csv', ('id', 'house'))
+    if any(game.get('seat_styles') for game in games):
+        seat_style_report(games, houses)
+        return
     if any(game.get('candidate_house', '') != '' for game in games):
         sample_report(games, houses)
         return
@@ -1733,7 +1895,12 @@ parser.add_argument('--sample-seed', type=int, default=9101, help='sample: repro
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
-parser.add_argument('--style', help='QuantBot switch overlay from tests/ai/play-styles/ (same-build A/B)')
+styles = parser.add_mutually_exclusive_group()
+styles.add_argument('--style', help='All-QuantBot overlay from tests/ai/play-styles/ (not candidate-only)')
+styles.add_argument('--candidate-style',
+                    help='sample only: play-style INI applied only to the candidate seat; opponents keep native config')
+styles.add_argument('--seat-styles', type=seat_styles_argument, metavar='control,A,B,C',
+                    help='Constant per-seat INIs, rotated through every seat; native control fills spare seats')
 parser.add_argument('--attack-events', action='store_true',
                     help='Enable existing AI telemetry, retain exact ground dispatches in waves.csv, and report passivity metrics')
 parser.add_argument('--keep-telemetry', action='store_true',
@@ -1752,6 +1919,8 @@ if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:
     parser.error('Use positive --cases and an unsigned 32-bit --sample-seed')
 if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and args.mod == 'Dune2R':
     parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
+if args.candidate_style and args.mode != 'sample':
+    parser.error('--candidate-style requires --mode sample')
 if args.compare:
     compare(*args.compare)
 elif args.report_dirs:

@@ -292,6 +292,150 @@ class DuneCityAuditTests(unittest.TestCase):
             shard_ids.extend(game['id'] for game in audit['schedule'](args))
         self.assertEqual(Counter(shard_ids), Counter(game['id'] for game in games))
 
+    def test_candidate_style_changes_only_the_config_assignment_not_the_sample(self):
+        ordinary = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
+        candidate = audit['parser'].parse_args([
+            '--mode', 'sample', '--mod', 'both', '--candidate-style', 'launcher-kite-off'])
+        control_games = audit['schedule'](ordinary)
+        candidate_games = audit['schedule'](candidate)
+        for control, changed in zip(control_games, candidate_games):
+            self.assertEqual(changed['candidate_style'], 'launcher-kite-off')
+            self.assertEqual(dict(changed, candidate_style=''), control)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            audit['parser'].parse_args(['--style', 'launcher-kite-on', '--candidate-style', 'launcher-kite-off'])
+        with tempfile.TemporaryDirectory() as temporary:
+            for game in candidate_games[:2]:
+                out = Path(temporary) / game['candidate_seat']
+                command = audit['command'](candidate, Path('unused-probe'), game, out)
+                self.assertNotIn('--scenario-style', command)
+                directory = Path(command[command.index('--genome-phase-dir') + 1])
+                schedule = audit['configparser'].ConfigParser()
+                schedule.read(directory / 'schedule.ini')
+                self.assertEqual(dict(schedule['Genomes']), {
+                    str(game['candidate_house']): 'candidate-launcher-kite-off'})
+                self.assertEqual(dict(schedule['Schedule']), {
+                    'opening': '0', 'mid': '9999', 'late': '10000'})
+                payload = (HARNESS.parent / 'play-styles/launcher-kite-off.ini').read_bytes()
+                expected = {f'{game["candidate_house"]}-{phase}.ini' for phase in ('opening', 'mid', 'late')}
+                self.assertEqual({path.name for path in directory.glob('*.ini')} - {'schedule.ini'}, expected)
+                for name in expected:
+                    self.assertEqual((directory / name).read_bytes(), payload)
+            self.assertNotIn('--genome-phase-dir', audit['command'](
+                ordinary, Path('unused-probe'), control_games[0], Path(temporary) / 'control'))
+
+    def test_candidate_style_rejects_non_sample_and_non_style_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            args = audit['parser'].parse_args(['--candidate-style', 'launcher-kite-off'])
+            with self.assertRaisesRegex(ValueError, 'requires --mode sample'):
+                audit['command'](args, Path('unused-probe'), audit['schedule'](args)[0], Path(temporary) / 'out')
+            args.mode = 'sample'
+            args.candidate_style = '../launcher-kite-off'
+            with self.assertRaisesRegex(ValueError, 'existing play-style INI'):
+                audit['command'](args, Path('unused-probe'), audit['schedule'](args)[0], Path(temporary) / 'out')
+
+    def test_candidate_style_requires_native_opponents_and_exact_candidate_application(self):
+        game = dict(candidate_house=2, candidate_style='launcher-kite-off',
+                    sides=[('harkonnen', 1, 'brutal'), ('ordos', 2, 'brutal')])
+        setup = dict(config_hash='native', style='default')
+        configs = [dict(house='0', config_hash='native'), dict(house='2', config_hash='candidate')]
+        lines = ['GENOME_PHASE: house=2 genome=candidate-launcher-kite-off phase=opening '
+                 'cycle=0 config_hash=candidate']
+        self.assertTrue(audit['seat_styles_verified'](game, setup, configs, lines))
+        # An explicit OFF/native overlay is valid too, but it still needs an application receipt.
+        off_configs = [dict(row, config_hash='native') for row in configs]
+        self.assertTrue(audit['seat_styles_verified'](
+            game, setup, off_configs, [lines[0].replace('config_hash=candidate', 'config_hash=native')]))
+        self.assertFalse(audit['seat_styles_verified'](game, setup, configs, []))
+        self.assertFalse(audit['seat_styles_verified'](game, dict(setup, style='global'), configs, lines))
+        self.assertFalse(audit['seat_styles_verified'](
+            game, setup, [dict(house='0', config_hash='candidate'), configs[1]], lines))
+        self.assertFalse(audit['seat_styles_verified'](game, setup, configs, lines * 2))
+        self.assertFalse(audit['seat_styles_verified'](
+            game, setup, configs, [lines[0].replace('house=2', 'house=0')]))
+        self.assertTrue(audit['seat_styles_verified']({}, {}, [], []))
+
+    def test_all_control_seat_styles_preserve_the_native_schedule_and_transport(self):
+        ordinary = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
+        control = audit['parser'].parse_args([
+            '--mode', 'sample', '--mod', 'both', '--seat-styles', 'control,control,control,control'])
+        for before, after in zip(audit['schedule'](ordinary), audit['schedule'](control)):
+            self.assertEqual({key: value for key, value in after.items()
+                              if key not in ('seat_styles', 'style_cohort', 'style_rotation')}, before)
+            self.assertEqual(set(after['seat_styles'].values()), {'control'})
+            self.assertEqual(set(after['seat_styles']), {str(audit['HOUSE_IDS'][house])
+                                                       for house, _, _ in after['sides']})
+            self.assertNotIn('--genome-phase-dir', audit['command'](
+                control, Path('unused-probe'), after, Path('unused-output')))
+
+    def test_multi_variant_cohorts_rotate_every_style_across_every_seat_and_tier(self):
+        args = audit['parser'].parse_args([
+            '--mode', 'sample', '--mod', 'both', '--cases', '13', '--seat-styles',
+            'control,launcher-kite-off,campaign-opening-off,campaign-threat-production-on'])
+        games = audit['schedule'](args)
+        cohorts = {}
+        for game in games:
+            cohorts.setdefault((game['mod'], game['sample_case'], game['style_cohort']), []).append(game)
+            self.assertEqual(game['candidate_seat'], 'original')
+            self.assertIn('control', game['seat_styles'].values())
+        self.assertEqual({game['format'] for game in games}, {'1v1', '2v2', 'ffa4', 'ffa6'})
+        for rotations in cohorts.values():
+            seats = len(rotations[0]['sides'])
+            self.assertEqual(len(rotations), seats)
+            self.assertEqual({game['style_rotation'] for game in rotations}, set(range(seats)))
+            self.assertEqual(len({game['skirmish'] for game in rotations}), 1)
+            self.assertEqual(len({str(game['sides']) for game in rotations}), 1)
+            for style in rotations[0]['style_cohort'].split(','):
+                exposure = Counter((house, tier) for game in rotations for house, _, tier in game['sides']
+                                   if game['seat_styles'][str(audit['HOUSE_IDS'][house])] == style)
+                self.assertEqual(set(exposure.values()), {1})
+                self.assertEqual(len(exposure), seats)
+        shards = []
+        for k in range(1, 4):
+            args.shard = k, 3
+            shards.extend(game['id'] for game in audit['schedule'](args))
+        self.assertEqual(Counter(shards), Counter(game['id'] for game in games))
+
+    def test_multi_seat_inputs_assign_only_named_variants_and_verify_every_receipt(self):
+        args = audit['parser'].parse_args([
+            '--mode', 'matrix', '--formats', 'ffa4', '--seat-styles',
+            'control,launcher-kite-off,campaign-opening-off'])
+        game = audit['schedule'](args)[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            command = audit['command'](args, Path('unused-probe'), game, Path(temporary) / 'out')
+            directory = Path(command[command.index('--genome-phase-dir') + 1])
+            schedule = audit['configparser'].ConfigParser()
+            schedule.read(directory / 'schedule.ini')
+            applied = {house: style for house, style in game['seat_styles'].items() if style != 'control'}
+            self.assertEqual(dict(schedule['Genomes']), {house: 'seat-' + style for house, style in applied.items()})
+            configs = [dict(house=house, config_hash='changed' if house in applied else 'native')
+                       for house in game['seat_styles']]
+            phases = [f'GENOME_PHASE: house={house} genome=seat-{style} phase=opening cycle=0 config_hash=changed'
+                      for house, style in applied.items()]
+            setup = dict(config_hash='native', style='default')
+            self.assertTrue(audit['seat_styles_verified'](game, setup, configs, phases))
+            self.assertFalse(audit['seat_styles_verified'](game, setup, configs, phases[:-1]))
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            audit['parser'].parse_args(['--seat-styles', 'control,launcher-kite-off,launcher-kite-off'])
+
+    def test_seat_style_report_uses_survival_and_opposing_control_finishing_order(self):
+        game = dict(id='fixture', mod='vanilla', format='ffa4', minutes='30', error='',
+                    style_cohort='a,b', seat_styles=json.dumps({'0': 'control', '1': 'control', '2': 'a', '3': 'b'}))
+        rows = [dict(id='fixture', house=str(house), team=str(house + 1), won=str(int(house == 3)),
+                     score=score, alive=str(int(alive)), eliminated_s=str(eliminated))
+                for house, score, alive, eliminated in (
+                    (0, '-1', False, 600), (1, '0', True, -1),
+                    (2, '-0.3', False, 1200), (3, '1', True, -1))]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            audit['seat_style_report']([game], rows)
+        self.assertIn('| a | 1 | 0 | -0.300 | 20.00 (1/1) | 1/0/1 |', output.getvalue())
+        self.assertIn('| b | 1 | 1 | +1.000 | 30.00 (1/1) | 1/1/0 |', output.getvalue())
+        rows[0]['team'] = rows[2]['team']
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            audit['seat_style_report']([game], rows)
+        self.assertIn('| a | 1 | 0 | -0.300 | 20.00 (1/1) | 0/0/1 |', output.getvalue())
+
     def test_dunecity_sampler_requires_observed_research_even_at_tech_nine(self):
         args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'dunecity'])
         game = next(game for game in audit['schedule'](args) if game['initial_tech'] == 9)
