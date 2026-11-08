@@ -257,6 +257,18 @@ For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
 seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;
 see [sampler factors and research verification](quantbot-dunecity-audit.md#balanced-recovery-skirmish-sampler).
 
+For a sampler candidate/control comparison, use **`--candidate-style NAME`**,
+not `--style`: only the sampled candidate seat receives that INI; opponents
+retain their native QuantBot config even when they are Brutal too. Both seat
+assignments keep the same maps, seeds, rosters and IDs. `games.csv` records the
+candidate style and every house's effective config hash. Missing candidate
+application or a changed opponent hash is an error, not a measured game.
+The transport reuses the probe's per-house config inputs with one constant
+overlay for the whole game; no genome search or changing phases is involved.
+`--style` remains available for explicitly **all-QuantBot** experiments and is
+mutually exclusive with `--candidate-style`. Campaign/AAA `--style` comparisons
+do not change their non-QuantBot opponents.
+
 ```sh
 # Real games run only through the committed cluster queue, never a local mini batch.
 dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag sm-smoke -- \

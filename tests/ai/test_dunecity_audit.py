@@ -292,6 +292,68 @@ class DuneCityAuditTests(unittest.TestCase):
             shard_ids.extend(game['id'] for game in audit['schedule'](args))
         self.assertEqual(Counter(shard_ids), Counter(game['id'] for game in games))
 
+    def test_candidate_style_changes_only_the_config_assignment_not_the_sample(self):
+        ordinary = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])
+        candidate = audit['parser'].parse_args([
+            '--mode', 'sample', '--mod', 'both', '--candidate-style', 'launcher-kite-off'])
+        control_games = audit['schedule'](ordinary)
+        candidate_games = audit['schedule'](candidate)
+        for control, changed in zip(control_games, candidate_games):
+            self.assertEqual(changed['candidate_style'], 'launcher-kite-off')
+            self.assertEqual(dict(changed, candidate_style=''), control)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            audit['parser'].parse_args(['--style', 'launcher-kite-on', '--candidate-style', 'launcher-kite-off'])
+        with tempfile.TemporaryDirectory() as temporary:
+            for game in candidate_games[:2]:
+                out = Path(temporary) / game['candidate_seat']
+                command = audit['command'](candidate, Path('unused-probe'), game, out)
+                self.assertNotIn('--scenario-style', command)
+                directory = Path(command[command.index('--genome-phase-dir') + 1])
+                schedule = audit['configparser'].ConfigParser()
+                schedule.read(directory / 'schedule.ini')
+                self.assertEqual(dict(schedule['Genomes']), {
+                    str(game['candidate_house']): 'candidate-launcher-kite-off'})
+                self.assertEqual(dict(schedule['Schedule']), {
+                    'opening': '0', 'mid': '9999', 'late': '10000'})
+                payload = (HARNESS.parent / 'play-styles/launcher-kite-off.ini').read_bytes()
+                expected = {f'{game["candidate_house"]}-{phase}.ini' for phase in ('opening', 'mid', 'late')}
+                self.assertEqual({path.name for path in directory.glob('*.ini')} - {'schedule.ini'}, expected)
+                for name in expected:
+                    self.assertEqual((directory / name).read_bytes(), payload)
+            self.assertNotIn('--genome-phase-dir', audit['command'](
+                ordinary, Path('unused-probe'), control_games[0], Path(temporary) / 'control'))
+
+    def test_candidate_style_rejects_non_sample_and_non_style_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            args = audit['parser'].parse_args(['--candidate-style', 'launcher-kite-off'])
+            with self.assertRaisesRegex(ValueError, 'requires --mode sample'):
+                audit['command'](args, Path('unused-probe'), audit['schedule'](args)[0], Path(temporary) / 'out')
+            args.mode = 'sample'
+            args.candidate_style = '../launcher-kite-off'
+            with self.assertRaisesRegex(ValueError, 'existing play-style INI'):
+                audit['command'](args, Path('unused-probe'), audit['schedule'](args)[0], Path(temporary) / 'out')
+
+    def test_candidate_style_requires_native_opponents_and_exact_candidate_application(self):
+        game = dict(candidate_house=2, candidate_style='launcher-kite-off',
+                    sides=[('harkonnen', 1, 'brutal'), ('ordos', 2, 'brutal')])
+        setup = dict(config_hash='native', style='default')
+        configs = [dict(house='0', config_hash='native'), dict(house='2', config_hash='candidate')]
+        lines = ['GENOME_PHASE: house=2 genome=candidate-launcher-kite-off phase=opening '
+                 'cycle=0 config_hash=candidate']
+        self.assertTrue(audit['candidate_style_verified'](game, setup, configs, lines))
+        # An explicit OFF/native overlay is valid too, but it still needs an application receipt.
+        off_configs = [dict(row, config_hash='native') for row in configs]
+        self.assertTrue(audit['candidate_style_verified'](
+            game, setup, off_configs, [lines[0].replace('config_hash=candidate', 'config_hash=native')]))
+        self.assertFalse(audit['candidate_style_verified'](game, setup, configs, []))
+        self.assertFalse(audit['candidate_style_verified'](game, dict(setup, style='global'), configs, lines))
+        self.assertFalse(audit['candidate_style_verified'](
+            game, setup, [dict(house='0', config_hash='candidate'), configs[1]], lines))
+        self.assertFalse(audit['candidate_style_verified'](game, setup, configs, lines * 2))
+        self.assertFalse(audit['candidate_style_verified'](
+            game, setup, configs, [lines[0].replace('house=2', 'house=0')]))
+        self.assertTrue(audit['candidate_style_verified']({}, {}, [], []))
+
     def test_dunecity_sampler_requires_observed_research_even_at_tech_nine(self):
         args = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'dunecity'])
         game = next(game for game in audit['schedule'](args) if game['initial_tech'] == 9)

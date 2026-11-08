@@ -59,7 +59,7 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
                       'source_commit', 'source_fingerprint', 'source_fingerprint_error',
                       'air_kill_telemetry', 'air_kill_telemetry_reasons', 'air_kill_attribution',
                       'air_kill_unknown_attribution', 'capture_mib', 'diagnostics',
-                      'mod', 'candidate_house', 'candidate_seat', 'sample_case', 'sample_seed', 'research_enabled',
+                      'mod', 'candidate_house', 'candidate_seat', 'candidate_style', 'sample_case', 'sample_seed', 'research_enabled',
                       'scoring_rule', 'scored_winner_team', 'win_condition', 'team_populations')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
@@ -588,6 +588,7 @@ def sample_schedule(args):
                                   city=args.city, limit=minutes, style=args.style or 'default', mod=mod,
                                   minutes=minutes, skirmish=spec, candidate_house=HOUSE_IDS[houses[seat]],
                                   candidate_seat='swapped' if swapped else 'original',
+                                  candidate_style=getattr(args, 'candidate_style', None) or '',
                                   sample_case=index + 1, sample_seed=args.sample_seed,
                                   require_research=mod == 'dunecity'))
     return games
@@ -746,6 +747,28 @@ def detect(samples):
     return {field: value for detector in DETECTORS for field, value in (
         (detector, int(detector in first)), ('eligible_' + detector, int(detector in eligible)),
         ('first_' + detector, first.get(detector, '')))}
+def candidate_style_inputs(args, game, out):
+    """Reuse the probe's per-house config transport, without any genome search or phase changes."""
+    style = getattr(args, 'candidate_style', None)
+    if not style:
+        return None
+    if args.mode != 'sample' or args.style:
+        raise ValueError('--candidate-style requires --mode sample and cannot be combined with --style')
+    source = root / 'tests/ai/play-styles' / (style + '.ini')
+    if not style or Path(style).name != style or not source.is_file():
+        raise ValueError('--candidate-style must name an existing play-style INI')
+    directory = out.with_suffix('.candidate')
+    directory.mkdir(parents=True, exist_ok=True)
+    house = game['candidate_house']
+    (directory / 'schedule.ini').write_text(
+        f'[Schedule]\nopening=0\nmid=9999\nlate=10000\n\n[Genomes]\n{house}=candidate-{style}\n',
+        encoding='utf-8')
+    payload = source.read_bytes()
+    for phase in ('opening', 'mid', 'late'):
+        (directory / f'{house}-{phase}.ini').write_bytes(payload)
+    return directory
+
+
 
 
 def command(args, binary, game, out):
@@ -780,6 +803,8 @@ def command(args, binary, game, out):
         cmd += ['--game-options', str(args.game_options)]
     if args.style:
         cmd += ['--scenario-style', args.style]
+    if directory := candidate_style_inputs(args, game, out):
+        cmd += ['--genome-phase-dir', str(directory)]
     return cmd
 
 
@@ -849,6 +874,22 @@ def research_verified(game, setup, lines):
     required = {HOUSE_IDS[house] for house, _, _ in game['sides']}
     return (setup.get('research_enabled') == '1' and set(initial) == required
             and all(item.get('research_enabled') == '1' for item in observed))
+def candidate_style_verified(game, setup, configs, lines):
+    if not game.get('candidate_style'):
+        return True
+    house = str(game['candidate_house'])
+    native = setup.get('config_hash')
+    observed = {row.get('house'): row.get('config_hash') for row in configs}
+    phases = [parse(line, 'GENOME_PHASE:') for line in lines if 'GENOME_PHASE:' in line]
+    expected = {str(HOUSE_IDS[name]) for name, _, _ in game['sides']}
+    return (bool(native) and setup.get('style') == 'default' and set(observed) == expected
+            and all(observed[other] == native for other in expected - {house})
+            and len(phases) == 1 and phases[0].get('house') == house
+            and phases[0].get('phase') == 'opening' and phases[0].get('cycle') == '0'
+            and phases[0].get('genome') == 'candidate-' + game['candidate_style']
+            and phases[0].get('config_hash') == observed[house])
+
+
 
 
 def play(args, scratch, binary, game):
@@ -858,6 +899,9 @@ def play(args, scratch, binary, game):
     started = time.monotonic()
     cmd = command(args, binary, game, out)
     env = dict(os.environ, BALANCE_DUNECITY_AUDIT='1', DUNECITY_TECH_SAVINGS_AUDIT='1')
+    if getattr(args, 'candidate_style', None):
+        for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
+            env.pop(key, None)
     if getattr(args, 'export_maps', None):
         env['BALANCE_SCENARIO_DUMP_MAP'] = str((out / 'export-map.ini').resolve())
         env['BALANCE_SCENARIO_DUMP_OPTIONS'] = str((out / 'export-options.ini').resolve())
@@ -895,6 +939,8 @@ def play(args, scratch, binary, game):
     research = setup.get('research_enabled', '')
     if not research_verified(game, setup, lines):
         error = ';'.join(filter(None, (error, 'research_enabled_not_verified')))
+    if not candidate_style_verified(game, setup, configs, lines):
+        error = ';'.join(filter(None, (error, 'candidate_style_not_verified')))
     if 'candidate_house' in game and str(game['candidate_house']) not in {house['house'] for house in final}:
         error = ';'.join(filter(None, (error, 'candidate_result_missing')))
     scored = {}
@@ -910,7 +956,7 @@ def play(args, scratch, binary, game):
                wall_s=round(time.monotonic() - started, 3), digest=digest, attack_telemetry=int(telemetry), error=error)
     row.update(mod=game.get('mod', 'dunecity'), research_enabled=research,
                **{field: game.get(field, '') for field in
-                  ('candidate_house', 'candidate_seat', 'sample_case', 'sample_seed')})
+                  ('candidate_house', 'candidate_seat', 'candidate_style', 'sample_case', 'sample_seed')})
     row.update({field: setup.get(field, '') for field in (
         'config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
     row.update(ai_config_hashes=','.join(f'{item["house"]}:{item["config_hash"]}' for item in configs),
@@ -983,6 +1029,8 @@ def play(args, scratch, binary, game):
         if getattr(args, 'keep_telemetry', False):
             row['diagnostics'] = retain_telemetry(results, out)
     append(results / 'games.csv', GAME_FIELDS, [row])
+    if not error:
+        shutil.rmtree(out.with_suffix('.candidate'), ignore_errors=True)
     finish_game(scratch, out, bool(error))
     return row
 
@@ -1733,7 +1781,10 @@ parser.add_argument('--sample-seed', type=int, default=9101, help='sample: repro
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
-parser.add_argument('--style', help='QuantBot switch overlay from tests/ai/play-styles/ (same-build A/B)')
+styles = parser.add_mutually_exclusive_group()
+styles.add_argument('--style', help='All-QuantBot overlay from tests/ai/play-styles/ (not candidate-only)')
+styles.add_argument('--candidate-style',
+                    help='sample only: play-style INI applied only to the candidate seat; opponents keep native config')
 parser.add_argument('--attack-events', action='store_true',
                     help='Enable existing AI telemetry, retain exact ground dispatches in waves.csv, and report passivity metrics')
 parser.add_argument('--keep-telemetry', action='store_true',
@@ -1752,6 +1803,8 @@ if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:
     parser.error('Use positive --cases and an unsigned 32-bit --sample-seed')
 if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and args.mod == 'Dune2R':
     parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
+if args.candidate_style and args.mode != 'sample':
+    parser.error('--candidate-style requires --mode sample')
 if args.compare:
     compare(*args.compare)
 elif args.report_dirs:
