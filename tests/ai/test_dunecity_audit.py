@@ -1065,6 +1065,21 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertEqual((row['minute'], row['cycle'], row['refineries'], row['power_required']),
                          ('20', '75000', '4', '0'))
 
+    def test_boom_phase_receipts_do_not_enter_numeric_detector_inputs(self):
+        baseline = {field: '0' for field in audit['SAMPLE_VALUES'] + ('refineries', 'power_required')}
+        baseline.update(minute='5', cycle='18750', house='0', alive='1', yards='1', credits='600')
+        expected_sample = dict(baseline)
+        expected = audit['detect']([expected_sample])
+        for phase in ('off', 'harvester', 'refinery', 'greedy_economy', 'greedy_army',
+                      'reactive_economy', 'reactive_army'):
+            with self.subTest(phase=phase):
+                sample = dict(baseline)
+                sample.update({field: '0' for field in audit['BOOM_FIELDS']})
+                sample['boom_phase'] = phase
+                self.assertEqual(audit['detect']([sample]), expected)
+                self.assertEqual(sample['boom_phase'], phase)
+                self.assertEqual(sample['flags'], expected_sample['flags'])
+
     def test_legacy_samples_keep_all_minutes_and_missing_boom_fields_blank(self):
         samples = []
         for minute in range(1, 21):
