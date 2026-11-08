@@ -187,12 +187,6 @@ public:
     bool civWarsRules() const;
     /// Lane geometry is authorised only by the generated map's canonical marker.
     bool isCivWarsMatch() const;
-    enum class CityBoldPlan { Native, SpiceBoom, TwinYard, TaxTakeoff, NeighbourRush, TechLance };
-    /// Opt-in spice-backed Custom DuneCity FFA plan; occupied controllers define scope.
-    /// Adaptive recomputes from current visible strength/resources, without unsaved decisions.
-    CityBoldPlan boldCityPlan() const;
-    mutable Uint32 boldAdaptiveCycle = std::numeric_limits<Uint32>::max();
-    mutable CityBoldPlan boldAdaptivePlan = CityBoldPlan::Native;
     AIRole getRole() const { return role; }
     /// The Builder role (formerly "AI Support"): builds and runs the economy, never commands the army.
     bool builderOnly() const { return role == AIRole::Builder; }
@@ -1140,6 +1134,24 @@ private:
     /// Vanilla Custom games whose original roster has at least two hostile teams.
     /// The tuning switches never activate in campaigns, duels or two-team matches.
     bool vanillaMultiEnemyGame() const;
+    enum class CityBoomKind { Native, Workers, Refineries, Greedy, ShortTax, Reactive };
+    CityBoomKind cityBoomKind() const;
+    mutable Uint32 cityBoomKindCycle = std::numeric_limits<Uint32>::max();
+    mutable CityBoomKind cityBoomKindCache = CityBoomKind::Native;
+    /// True simulation state, never visibility: health-weighted mobile armies
+    /// whose terrain connects to our base, and the strongest local incursion.
+    /// Economic capital is cash + workers/bays + four minutes of observed
+    /// average spice income and the actual city's current tax-income forecast.
+    struct CityBoomSurvey {
+        int64_t ownArmy = 0, strongestArmy = 0, ownNearbyArmy = 0, nearbyArmy = 0;
+        int64_t ownEconomy = 0, leaderEconomy = 0;
+        int targetTeam = -1;
+        bool threatened = false, funding = false;
+    };
+    const CityBoomSurvey& cityBoomSurvey() const;
+    mutable Uint32 cityBoomSurveyCycle = std::numeric_limits<Uint32>::max();
+    mutable CityBoomSurvey cityBoomSurveyCache;
+    mutable std::vector<const StructureBase*> cityBoomBaseSites;
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
     /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
     /// Medium/Hard/Brutal.
@@ -1699,6 +1711,7 @@ private:
     void planBuildInventory(BuildPass& pass);
     /// Spendable cash, military budget, spice competition, support queues and reserves.
     void planBuildBudget(BuildPass& pass);
+    void planCityBoom(BuildPass& pass);
     /// Per-house city statistics, custom-city valve tuning and power demand sampling.
     void planCityState(BuildPass& pass);
     /// IX/Palace eligibility timers and the strategic reserve they protect.

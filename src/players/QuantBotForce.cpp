@@ -25,8 +25,6 @@
 
 #include "QuantBotInternal.h"
 
-#include <array>
-
 using QuantBotInternal::mobileCombatItem;
 namespace Force = ForceConcentrationPolicy;
 
@@ -99,7 +97,7 @@ int QuantBot::forceBits() const {
         | (force.perimeterTurrets ? kForceThreatTurrets : 0)
         | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0)
         | (force.turretPriority ? kForceTurretPriority : 0) | (force.pressOn ? kForcePressOn : 0)
-        | ((force.finishWeakest || boldCityPlan() == CityBoldPlan::NeighbourRush) ? kForceFinishWeakest : 0)
+        | ((force.finishWeakest || cityBoomKind() == CityBoomKind::Reactive) ? kForceFinishWeakest : 0)
         | (force.fortifiedWaves ? kForceFortifiedWaves : 0)
         | (force.sonicClearLane ? kForceSonicClearLane : 0) | (force.spendAtCap ? kForceSpendAtCap : 0)
         | (force.siegeStandoff ? kForceSiegeStandoff : 0) | (force.massAssault ? kForceMassAssault : 0)
@@ -118,61 +116,161 @@ bool QuantBot::vanillaMultiEnemyGame() const {
     return false;
 }
 
-
-QuantBot::CityBoldPlan QuantBot::boldCityPlan() const {
+QuantBot::CityBoomKind QuantBot::cityBoomKind() const {
     const auto& f = botConfig().force;
-    if (!(f.cityBoldSpiceBoom || f.cityBoldTwinYard || f.cityBoldTaxTakeoff
-            || f.cityBoldNeighbourRush || f.cityBoldTechLance || f.cityBoldAdaptive)
-        || !currentGame || gameMode != GameMode::Custom || builderOnly() || fighterOnly()
-        || isCampaignGameType(currentGame->gameType) || !currentGame->isCitySimEnabled()
-        || getGameInitSettings().getModName() != "dunecity" || lastCalculatedSpice <= 0)
-        return CityBoldPlan::Native;
+    if (!currentGame || !(f.cityBoomWorkers || f.cityBoomRefineries || f.cityBoomGreedy
+            || f.cityBoomShortTax || f.cityBoomReactive)) return CityBoomKind::Native;
+    const Uint32 now = getGameCycleCount();
+    if (cityBoomKindCycle == now) return cityBoomKindCache;
+    cityBoomKindCycle = now;
+    cityBoomKindCache = CityBoomKind::Native;
+    if (!autonomousCustomArmy() || fighterOnly() || !currentGame->isCitySimEnabled()
+        || getGameInitSettings().getModName() != "dunecity") return cityBoomKindCache;
     unsigned occupied = 0;
     std::array<int, NUM_HOUSES> teams{};
-    for (const auto& house : getGameInitSettings().getHouseInfoList()) {
-        if (house.playerInfoList.empty()) continue;
+    for (const auto& row : getGameInitSettings().getHouseInfoList()) {
+        if (row.playerInfoList.empty()) continue;
         for (unsigned i = 0; i < occupied; ++i)
-            if (teams[i] == house.team) return CityBoldPlan::Native; // FFA, not alliances.
-        if (occupied == teams.size()) return CityBoldPlan::Native;
-        teams[occupied++] = house.team;
+            if (teams[i] == row.team) return cityBoomKindCache;
+        if (occupied == teams.size()) return cityBoomKindCache;
+        teams[occupied++] = row.team;
     }
-    if (occupied < 5 || getGameInitSettings().getInitialSpiceTilePermille() <= 0) return CityBoldPlan::Native;
-    if (f.cityBoldSpiceBoom) return CityBoldPlan::SpiceBoom;
-    if (f.cityBoldTwinYard) return CityBoldPlan::TwinYard;
-    if (f.cityBoldTaxTakeoff) return CityBoldPlan::TaxTakeoff;
-    if (f.cityBoldNeighbourRush) return CityBoldPlan::NeighbourRush;
-    if (f.cityBoldTechLance) return CityBoldPlan::TechLance;
-    if (getGameCycleCount() < MILLI2CYCLES(4 * 60000)) return CityBoldPlan::Native;
-    // Per-cycle scratch only: no new saved state and no repeated unit-list scan
-    // from forceBits()'s per-unit callers. Reconstructed after a checkpoint load.
-    if (boldAdaptiveCycle == getGameCycleCount()) return boldAdaptivePlan;
-    boldAdaptiveCycle = getGameCycleCount();
-    int64_t own = 0, strongest = 0;
-    std::array<int64_t, NUM_HOUSES> armies{};
-    for (const auto* unit : getUnitList()) {
-        if (!unit->isActive() || unit->getHealth() <= 0 || !unit->isAGroundUnit()
-            || !unit->canAttack() || !mobileCombatItem(unit->getItemID())) continue;
-        const bool mine = unit->getOwner() == getHouse();
-        if (!mine && !unit->isVisible(getHouse()->getTeamID())) continue;
-        const int price = currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price;
-        const int64_t value = CombatPowerPolicy::unitPower(price, unit->getHealth().lround(), unit->getMaxHealth());
-        if (mine) own += value;
-        else for (unsigned i = 0; i < occupied; ++i)
-            if (teams[i] == unit->getOwner()->getTeamID()) {
-                armies[i] += value; strongest = std::max(strongest, armies[i]); break;
-            }
-    }
-    boldAdaptivePlan = Force::outnumbered(own, strongest) ? CityBoldPlan::TaxTakeoff
-        : lastCalculatedSpice / int(occupied) >= 30000 ? CityBoldPlan::SpiceBoom
-                                                     : CityBoldPlan::NeighbourRush;
-    return boldAdaptivePlan;
+    if (occupied < 5 || getGameInitSettings().getInitialSpiceTilePermille() <= 0) return cityBoomKindCache;
+    cityBoomKindCache = f.cityBoomWorkers ? CityBoomKind::Workers
+        : f.cityBoomRefineries ? CityBoomKind::Refineries
+        : f.cityBoomGreedy ? CityBoomKind::Greedy
+        : f.cityBoomShortTax ? CityBoomKind::ShortTax : CityBoomKind::Reactive;
+    return cityBoomKindCache;
 }
+
+const QuantBot::CityBoomSurvey& QuantBot::cityBoomSurvey() const {
+    if (cityBoomSurveyCycle == getGameCycleCount()) return cityBoomSurveyCache;
+    cityBoomSurveyCycle = getGameCycleCount();
+    auto& survey = cityBoomSurveyCache;
+    survey = {};
+    cityBoomBaseSites.clear(); // Retain capacity; no per-survey heap churn.
+    if (cityBoomKind() != CityBoomKind::Reactive) return survey;
+    std::array<bool, NUM_HOUSES> enemy{};
+    std::array<int64_t, NUM_HOUSES> armies{}, economies{}, reachable{}, local{};
+    std::array<int, NUM_HOUSES> distance;
+    distance.fill(std::numeric_limits<int>::max());
+    const int ownID = getHouse()->getHouseID(), ownTeam = getHouse()->getTeamID();
+    // The initial controller roster defines opponents; live Houses supply
+    // their actual state, never an enemy count or a fog-dependent estimate.
+    for (const auto& row : getGameInitSettings().getHouseInfoList()) {
+        if (row.playerInfoList.empty() || row.team == ownTeam) continue;
+        for (int h = 0; h < NUM_HOUSES; ++h)
+            if (const auto* house = getHouse(h); house && !house->isNatives()
+                && house->isAlive() && house->getTeamID() == row.team) enemy[h] = true;
+    }
+    const auto* sim = currentGame->getCitySimulation();
+    const int64_t elapsed = std::max<int64_t>(DuneCity::kCyclesPerMinute, getGameCycleCount());
+    auto economicCapital = [&](const House* house) {
+        const int h = house->getHouseID();
+        const auto& state = sim->getHouseState(h);
+        const int tax = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(
+            state.taxBaseEighths, sim->getCityTax(h), state.avgLandValue));
+        const int64_t spice = int64_t(house->getHarvestedSpice().lround()) * DuneCity::kCyclesPerMinute / elapsed;
+        const auto& data = currentGame->objectData.data;
+        return int64_t(house->getCredits())
+            + int64_t(house->getNumItems(Unit_Harvester)) * data[Unit_Harvester][h].price
+            + int64_t(house->getNumItems(Structure_Refinery)) * data[Structure_Refinery][h].price
+            + 4 * (spice + tax);
+    };
+    survey.ownEconomy = economicCapital(getHouse());
+    for (int h = 0; h < NUM_HOUSES; ++h) if (enemy[h]) {
+        economies[h] = economicCapital(getHouse(h));
+        survey.leaderEconomy = std::max(survey.leaderEconomy, economies[h]);
+    }
+    const ObjectBase* anchor = nullptr;
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0 || !structure->isActive()) continue;
+        switch (structure->getItemID()) {
+            case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+                continue;
+            default: break;
+        }
+        cityBoomBaseSites.push_back(structure);
+        if (!anchor || (structure->getItemID() == Structure_ConstructionYard
+            && anchor->getItemID() != Structure_ConstructionYard)) anchor = structure;
+    }
+    if (!anchor) for (const auto* unit : getUnitList())
+        if (unit->getOwner() == getHouse() && unit->getHealth() > 0 && unit->isActive()) { anchor = unit; break; }
+    if (!anchor) return survey;
+    for (const auto* unit : getUnitList()) {
+        const auto* owner = unit->getOwner();
+        if (!owner || owner->isNatives() || !unit->isActive() || unit->getHealth() <= 0
+            || !unit->canAttack() || !mobileCombatItem(unit->getItemID())) continue;
+        const int h = owner->getHouseID();
+        if (h != ownID && !enemy[h]) continue;
+        const int64_t value = CombatPowerPolicy::unitValue(
+            currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price,
+            unit->getHealth().lround(), unit->getMaxHealth());
+        bool reaches = !unit->isAGroundUnit(), near = false;
+        for (const auto* base : cityBoomBaseSites) {
+            const Coord closest = base->getClosestPoint(unit->getLocation());
+            const int dx = closest.x - unit->getX(), dy = closest.y - unit->getY();
+            const bool close = std::abs(dx) <= Force::kPoolThreatTiles && std::abs(dy) <= Force::kPoolThreatTiles
+                && dx * dx + dy * dy <= Force::kPoolThreatTiles * Force::kPoolThreatTiles;
+            if (!reaches || close) {
+                // Shared terrain-region cache, not a per-unit path search.
+                const bool canReach = groundAttackReachable(unit, base);
+                reaches |= canReach;
+                near |= close && canReach;
+            }
+            if (reaches && near) break;
+        }
+        if (cityBoomBaseSites.empty()) reaches = groundAttackReachable(unit, anchor);
+        if (h == ownID) {
+            survey.ownArmy += value;
+            if (near) survey.ownNearbyArmy += value;
+        } else {
+            armies[h] += value;
+            if (reaches) reachable[h] += value;
+            if (near) local[h] += value;
+        }
+    }
+    // Nearby incursions are grouped by opponent, not summed across FFA rivals.
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        survey.strongestArmy = std::max(survey.strongestArmy, reachable[h]);
+        survey.nearbyArmy = std::max(survey.nearbyArmy, local[h]);
+    }
+    for (const auto* structure : getStructureList()) {
+        if (!structure->getOwner() || structure->getOwner()->isNatives()
+            || !enemy[structure->getOwner()->getHouseID()] || structure->getHealth() <= 0 || !structure->isActive()) continue;
+        switch (structure->getItemID()) {
+            case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+                continue;
+            default: break;
+        }
+        const int h = structure->getOwner()->getHouseID();
+        distance[h] = std::min(distance[h], tiles(anchor->getLocation(), structure->getLocation()));
+    }
+    std::array<int, 2> neighbours{{-1, -1}};
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        if (!enemy[h] || distance[h] == std::numeric_limits<int>::max()) continue;
+        if (neighbours[0] < 0 || distance[h] < distance[neighbours[0]]) {
+            neighbours[1] = neighbours[0]; neighbours[0] = h;
+        } else if (neighbours[1] < 0 || distance[h] < distance[neighbours[1]]) neighbours[1] = h;
+    }
+    int weakest = -1;
+    for (int h : neighbours) if (h >= 0
+        && (weakest < 0 || armies[h] + economies[h] < armies[weakest] + economies[weakest]
+            || (armies[h] + economies[h] == armies[weakest] + economies[weakest] && h < weakest))) weakest = h;
+    if (weakest >= 0) survey.targetTeam = getHouse(weakest)->getTeamID();
+    const auto& f = botConfig().force;
+    survey.threatened = survey.nearbyArmy > survey.ownNearbyArmy;
+    survey.funding = !survey.threatened
+        && survey.ownArmy * 10000 >= survey.strongestArmy * f.cityBoomArmyRatioBps
+        && survey.ownEconomy * 10000 < survey.leaderEconomy * f.cityBoomEconomyRatioBps;
+    return survey;
+}
+
 
 int QuantBot::waveReadinessPercent() const {
     if (!autonomousCustomArmy()) return 100;
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
-    if (boldCityPlan() == CityBoldPlan::NeighbourRush) return 100;
     if (botConfig().force.vanillaFfaFullWaves && vanillaMultiEnemyGame()) return 100;
     // A small start buys one full wave before its tempo starts splitting production into raids.
     // This ends only when that wave actually launches, not when its first heavy factory stands.
@@ -342,7 +440,6 @@ std::vector<Uint32> QuantBot::homeReserve(const std::vector<Uint32>& ids) const 
     std::vector<Uint32> kept;
     int share = Force::reserveShareBps(ownGroundArmyValue(), enemyThreatEstimate());
     if (botConfig().force.vanillaFfaReserve && vanillaMultiEnemyGame()) share = std::max(share, 2500);
-    if (boldCityPlan() == CityBoldPlan::NeighbourRush) share /= 2;
     if (share <= 0) return kept;
     const Coord home = protectedRally.isValid() ? protectedRally : findBaseCentre(getHouse()->getHouseID());
     if (home.isInvalid()) return kept;
@@ -781,14 +878,15 @@ bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
         default: break;
     }
     const Coord at = structure->getLocation();
-    return getMap().tileExists(at) && getMap().getTile(at)->isExploredByTeam(getHouse()->getTeamID());
+    return getMap().tileExists(at) && (cityBoomKind() == CityBoomKind::Reactive
+        || getMap().getTile(at)->isExploredByTeam(getHouse()->getTeamID()));
 }
 
 int QuantBot::finishTargetTeam() const {
+    if (cityBoomKind() == CityBoomKind::Reactive) return cityBoomSurvey().targetTeam;
     // Ordered by team id (std::map), scanned in list order: the same choice on every peer.
     std::map<int, Force::TeamStrength> teams;
-    const bool nearby = (botConfig().force.vanillaFfaNearbyTarget && vanillaMultiEnemyGame())
-        || boldCityPlan() == CityBoldPlan::NeighbourRush;
+    const bool nearby = botConfig().force.vanillaFfaNearbyTarget && vanillaMultiEnemyGame();
     const Coord home = nearby ? findBaseCentre(getHouse()->getHouseID()) : Coord::Invalid();
     for (const auto* structure : getStructureList()) {
         if (!knownEnemyStructure(structure)) continue;

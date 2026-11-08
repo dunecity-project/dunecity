@@ -451,28 +451,46 @@ TEST_CASE("City building economy candidates are opt-in and independently loaded 
     std::filesystem::remove(path);
 }
 
-TEST_CASE("Bold city strategy packages are opt-in and independently round-trip their hash", "[ai][city][config][bold]") {
-    using Force = QuantBotConfig::ForceSettings;
-    const std::array<bool Force::*, 6> fields{{
-        &Force::cityBoldSpiceBoom, &Force::cityBoldTwinYard, &Force::cityBoldTaxTakeoff,
-        &Force::cityBoldNeighbourRush, &Force::cityBoldTechLance, &Force::cityBoldAdaptive}};
+TEST_CASE("City boom families and discrete levels are opt-in loaded saved and independently hashed", "[ai][city][config]") {
+    using ForceSettings = QuantBotConfig::ForceSettings;
+    const std::array<bool ForceSettings::*, 5> switches{{
+        &ForceSettings::cityBoomWorkers, &ForceSettings::cityBoomRefineries, &ForceSettings::cityBoomGreedy,
+        &ForceSettings::cityBoomShortTax, &ForceSettings::cityBoomReactive}};
     const QuantBotConfig defaults;
-    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-bold-test.ini";
-    for (const auto field : fields) REQUIRE_FALSE(defaults.force.*field);
+    for (auto member : switches) REQUIRE_FALSE(defaults.force.*member);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-boom-family-test.ini";
     std::set<std::string> hashes;
-    for (unsigned mask = 0; mask < 64; ++mask) {
-        QuantBotConfig expected;
-        for (size_t i = 0; i < fields.size(); ++i) expected.force.*fields[i] = (mask & (1u << i)) != 0;
-        REQUIRE(hashes.insert(expected.getConfigHash()).second);
+    auto roundTrip = [&](const QuantBotConfig& expected) {
         REQUIRE(expected.save(path.string()));
-        QuantBotConfig restored;
-        REQUIRE(restored.applyOverrides(path.string()));
-        for (const auto field : fields) REQUIRE(restored.force.*field == expected.force.*field);
-        REQUIRE(restored.getConfigHash() == expected.getConfigHash());
-        REQUIRE(defaults.save(path.string()));
-        REQUIRE(restored.applyOverrides(path.string()));
-        REQUIRE(restored.getConfigHash() == defaults.getConfigHash());
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        for (auto member : switches) REQUIRE(loaded.force.*member == expected.force.*member);
+        REQUIRE(loaded.force.cityBoomWorkerGoal == expected.force.cityBoomWorkerGoal);
+        REQUIRE(loaded.force.cityBoomRefineryGoal == expected.force.cityBoomRefineryGoal);
+        REQUIRE(loaded.force.cityBoomGreedyMinutes == expected.force.cityBoomGreedyMinutes);
+        REQUIRE(loaded.force.cityBoomTaxMinutes == expected.force.cityBoomTaxMinutes);
+        REQUIRE(loaded.force.cityBoomArmyRatioBps == expected.force.cityBoomArmyRatioBps);
+        REQUIRE(loaded.force.cityBoomEconomyRatioBps == expected.force.cityBoomEconomyRatioBps);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.insert(loaded.getConfigHash()).second);
+    };
+    for (unsigned mask = 0; mask < (1u << switches.size()); ++mask) {
+        auto expected = defaults;
+        for (unsigned i = 0; i < switches.size(); ++i) expected.force.*switches[i] = (mask & (1u << i)) != 0;
+        roundTrip(expected);
     }
+    struct Level { int ForceSettings::*member; int initial, alternate; };
+    const std::array<Level, 6> levels{{
+        {&ForceSettings::cityBoomWorkerGoal, 16, 24}, {&ForceSettings::cityBoomRefineryGoal, 6, 10},
+        {&ForceSettings::cityBoomGreedyMinutes, 6, 10}, {&ForceSettings::cityBoomTaxMinutes, 6, 10},
+        {&ForceSettings::cityBoomArmyRatioBps, 6000, 9000}, {&ForceSettings::cityBoomEconomyRatioBps, 12000, 15000}}};
+    for (const auto& level : levels) {
+        REQUIRE(defaults.force.*level.member == level.initial);
+        auto expected = defaults;
+        expected.force.*level.member = level.alternate;
+        roundTrip(expected);
+    }
+    REQUIRE(hashes.size() == 38);
     std::filesystem::remove(path);
 }
 

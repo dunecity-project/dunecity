@@ -247,11 +247,6 @@ QuantBotColonisationPolicy::Demand QuantBot::colonisationDemand(int mcvsIncludin
         // tactical survey. Departure still requires its gathered escort.
         demand.strategicSiteWanted=income&&ownGroundArmyValue()>=std::max(1,minWaveValue());
     }
-    if (boldCityPlan() == CityBoldPlan::TwinYard && getGameCycleCount() >= MILLI2CYCLES(4 * 60000)
-        && demand.yards < 2 && demand.siteAvailable && getAIHarvesterCount() >= 4
-        && ownGroundArmyValue() >= 1000) {
-        demand.strategicSiteWanted = true;
-    }
     return demand;
 }
 
@@ -857,8 +852,6 @@ bool QuantBot::expansionDefenceReady(bool needsLocalSpace) const {
     // reported room again while its rock held no legal footprint at all.
     const bool builtOut = needsLocalSpace
         || (rockSurveyCycle != std::numeric_limits<Uint32>::max() && baseBuiltOut());
-    if (boldCityPlan() == CityBoldPlan::TwinYard && getHouse()->getNumItems(Structure_ConstructionYard) < 2)
-        return getHouse()->getNumItems(Structure_HeavyFactory) > 0;
     // Complete the core first. Rocket cover is not a prerequisite: the new
     // rock has no turrets until a yard stands on it, and the yard is what
     // builds them there (expansionTurretsMissing() orders its three covers).

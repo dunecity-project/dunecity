@@ -591,9 +591,12 @@ int QuantBot::houseAttackThreshold() const {
         ? config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent : config.attackThresholdPercent;
     const FixPoint threshold = FixPoint(static_cast<int>(percent * 100)) / 100;
     const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
-    return reachableAttackThreshold(vanillaCustom
+    const int required = reachableAttackThreshold(vanillaCustom
         ? DuneCity::vanillaAttackThreshold((militaryValueLimit * threshold).lround(), static_cast<int>(difficulty))
         : (militaryValueLimit * threshold).lround());
+    const auto boom = cityBoomKind();
+    return lastCalculatedSpice > 0 && customWave.launched == 0 && boom != CityBoomKind::Native && boom != CityBoomKind::ShortTax
+        ? std::max(12000, required) : required;
 }
 
 namespace {
@@ -629,10 +632,6 @@ int QuantBot::reachableAttackThreshold(int required) const {
                                   customMapLimit(config.getSettings(static_cast<int>(Difficulty::Medium))));
         required = std::min(required, (base * (FixPoint(static_cast<int>(own * 100)) / 100)).lround());
     }
-    const auto bold = boldCityPlan();
-    if (bold == CityBoldPlan::NeighbourRush) required = std::min(required, 3500);
-    else if (bold == CityBoldPlan::SpiceBoom || bold == CityBoldPlan::TechLance)
-        required = std::max(required, 12000);
     return required;
 }
 

@@ -958,21 +958,24 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
     // Protect the income/rebuild core before optional tech. Walk the
     // actual mod prerequisites and save their cost, rather than
     // waiting for enemy aircraft to reveal that the yard is unready.
-    const bool completingCore=pass.itemCount[Structure_RocketTurret]>=2 && pass.missingCoreInfrastructure!=NONE_ID;
+    const bool familySupplier = pass.cityBoomWorkers > 0;
+    const bool defenceReady = pass.itemCount[Structure_RocketTurret] >= 2 || (familySupplier && pass.cityBoomFunding);
+    const bool completingCore = defenceReady && pass.missingCoreInfrastructure != NONE_ID;
     const bool openingWorkerSupplier = pass.openingSupplierDue || completingCore;
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.citySimEnabled
         && !yardTurn.higherPriorityCapital
-        && ((openingWorkerSupplier && pass.itemCount[Structure_RocketTurret] >= 2)
-            || ((pass.itemCount[Structure_Refinery] >= 3 || pass.airEngaged)
+        && ((openingWorkerSupplier && defenceReady)
+            || (!(pass.cityBoom == CityBoomKind::Greedy && pass.cityBoomFunding)
+                && (pass.itemCount[Structure_Refinery] >= 3 || pass.airEngaged)
                 && proactiveCoverageShortfall(pass) > 0
                 && data[Structure_RocketTurret][houseID].enabled
                 && data[Structure_RocketTurret][houseID].techLevel <= getHouse()->getTechLevel()))) {
         // Once basic defence exists, unlock the producer that can
         // fill the opening fleet. Starport upgrades otherwise wait
         // behind cheap lots even on a rich spice field.
-        const bool supplyingWorkers = openingWorkerSupplier && pass.itemCount[Structure_RocketTurret] >= 2;
+        const bool supplyingWorkers = openingWorkerSupplier && defenceReady;
         Uint32 step = completingCore ? pass.missingCoreInfrastructure : supplyingWorkers
-            ? (pass.itemCount[Structure_Refinery]<4 ? Structure_Refinery
+            ? (pass.itemCount[Structure_Refinery] < (familySupplier ? 2 : 4) ? Structure_Refinery
                 : pass.starportMarketAvailable ? Structure_StarPort : Structure_HeavyFactory)
             : Structure_RocketTurret;
         if (!supplyingWorkers && !hasPowerBufferForTurret(pass)) step = Structure_WindTrap;
@@ -1339,6 +1342,8 @@ void QuantBot::chooseYardCityOpening(BuildPass& pass, BuilderTurn& turn, YardTur
         || (yardTurn.coreShortfall > 0 && pass.uncoveredCoreAssets > 0);
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && yardTurn.isCitySim
         && !yardTurn.higherPriorityCapital
+        && (!(pass.cityBoom == CityBoomKind::Greedy && pass.cityBoomFunding) || pass.airEngaged
+            || pass.groundThreatAsset.isValid())
         && (coreDefenceDue
             || (!openingWorkersNeeded(pass) && pass.itemCount[Structure_HeavyFactory] > 0
                 && nonServiceConstructionOrders >= 3))
@@ -1592,6 +1597,8 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.citySimEnabled
         && !yardTurn.higherPriorityCapital
         && !quietExtraTaxCover
+        && (!(pass.cityBoom == CityBoomKind::Greedy && pass.cityBoomFunding) || pass.airEngaged
+            || pass.groundThreatAsset.isValid())
         && (yardTurn.coreShortfall>0
             || (!openingWorkersNeeded(pass) && pass.itemCount[Structure_HeavyFactory]>0
                 && pass.itemCount[Structure_RocketTurret]<2))
@@ -1616,7 +1623,9 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     // the emplacement, or the yard upgrade that unlocks it. Bounded
     // by the forecast, so a city that cannot reach the price keeps
     // growing instead of idling.
-    if (yardTurn.isCitySim && yardTurn.coreShortfall>0 && !yardTurn.serviceSavingHold && !quietExtraTaxCover) {
+    if (yardTurn.isCitySim && yardTurn.coreShortfall > 0 && !yardTurn.serviceSavingHold && !quietExtraTaxCover
+        && (!(pass.cityBoom == CityBoomKind::Greedy && pass.cityBoomFunding) || pass.airEngaged
+            || pass.groundThreatAsset.isValid())) {
         const int upgradeStep=turn.pBuilder->getCurrentUpgradeLevel()<rocketUpgrade
             && turn.pBuilder->getMaxUpgradeLevel()>=rocketUpgrade ? turn.pBuilder->getUpgradeCost() : 0;
         const int wanted=upgradeStep>0 ? upgradeStep : data[Structure_RocketTurret][houseID].price;
