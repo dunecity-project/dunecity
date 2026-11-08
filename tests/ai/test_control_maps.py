@@ -1,7 +1,13 @@
 """Control-map schedule, candidate-only style transport and receipts: no builds or games."""
+import argparse
 import ast
 import configparser
+import contextlib
+import csv
+from fractions import Fraction
 import importlib.util
+import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -33,6 +39,40 @@ def controls(*extra):
 
 def receipt(game, seats):
     return {'id': game['id'], 'sides': ' '.join(f'{h}:{t}:{c}' for h, t, c in game['sides']), 'style_seats': seats}
+
+
+def gate_rows(style, winners=(), changed=()):
+    """Complete synthetic 26-game receipt: team 1 wins the ids in winners, team 2 the rest;
+    ids in changed get a different final digest."""
+    rows = []
+    for index, game in enumerate(matrix['schedule'](controls())):
+        house = game['sides'][0][0]
+        rows.append({'id': game['id'], 'category': game['category'], 'cell': game['cell'], 'seed': str(game['seed']),
+                     'mod': game['mod'], 'map': game['map'], 'limit': str(game['minutes']),
+                     'sides': ' '.join(f'{h}:{t}:{c}' for h, t, c in game['sides']),
+                     'winner_team': '1' if game['id'] in winners else '2', 'winner': 'QB', 'minutes': '10.00',
+                     'digest': f'{index + (1000 if game["id"] in changed else 0):016x}', 'error': '',
+                     'source_commit': 'a' * 40,
+                     'style_seats': f'{matrix["HOUSE_NUMBERS"][house]}=candidate-{style}' if style else 'none'})
+    return rows
+
+
+def run_compare(native_rows, candidate_rows, **options):
+    with tempfile.TemporaryDirectory() as scratch:
+        baseline = Path(scratch) / 'baseline.json'
+        baseline.write_text(json.dumps({'schema': 1, 'base': compare.BASE, 'style': 'native', 'games': native_rows}))
+        results = Path(scratch) / 'games.csv'
+        with results.open('w', newline='') as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(candidate_rows[0]))
+            writer.writeheader()
+            writer.writerows(candidate_rows)
+        args = argparse.Namespace(baseline=str(baseline), results=str(results), in_scope=list(range(1, 13)),
+                                  min_kept_ratio=Fraction(3, 4))
+        vars(args).update(options)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            code = compare.compare(args)
+        return code, output.getvalue()
 
 
 class ControlMapTests(unittest.TestCase):
@@ -154,6 +194,36 @@ class ControlMapTests(unittest.TestCase):
                 check(rows, required=True)
         self.assertEqual(check([{k: v for k, v in receipt(games[0], 'none').items() if k != 'style_seats'}],
                                required=False), '')
+
+    def test_comparator_requires_three_quarters_of_native_wins_and_silicon_identity(self):
+        games = [game['id'] for game in matrix['schedule'](controls())]
+        wins = [gid for gid in games if gid.split('/')[1][:2] in ('01', '02', '03', '04')]
+        silicon = [gid for gid in games if gid.startswith('controls/13-')]
+        native = gate_rows('', winners=wins + silicon[:1])
+        self.assertEqual(len(wins), 8)
+
+        code, text = run_compare(native, gate_rows(STYLE, winners=wins[2:] + silicon[:1], changed=wins[:2]))
+        self.assertEqual(code, 0, text)
+        self.assertIn('Native QB/team-1 wins on maps 1-12: 8; kept 6; ratio 0.750 (rule >= 75%): PASS', text)
+        self.assertIn('Silicon Valley (map 13) digests identical: 2/2: PASS', text)
+        self.assertEqual(text.count('LOST: '), 2)
+        self.assertIn('Controls: PASS (26 games; 0 violations; native wins kept 6/8)', text)
+
+        code, text = run_compare(native, gate_rows(STYLE, winners=wins[3:] + silicon[:1], changed=wins[:3]))
+        self.assertEqual(code, 1)
+        self.assertIn('FAIL: native wins kept 5/8 below 75%', text)
+
+        code, text = run_compare(native, gate_rows(STYLE, winners=wins[1:] + silicon[:1], changed=wins[:1]),
+                                 min_kept_ratio=Fraction(1))
+        self.assertEqual(code, 1)
+        self.assertIn('FAIL: native wins kept 7/8 below 100%', text)
+
+        # A lost Silicon Valley win is not counted, but any Silicon Valley digest change fails.
+        code, text = run_compare(native, gate_rows(STYLE, winners=wins, changed=silicon[:1]))
+        self.assertEqual(code, 1)
+        self.assertIn('kept 8; ratio 1.000 (rule >= 75%): PASS', text)
+        self.assertIn('Silicon Valley (map 13) digests identical: 1/2: FAIL', text)
+        self.assertIn(f'FAIL: {silicon[0]}: out-of-scope digest changed', text)
 
 
 if __name__ == '__main__':

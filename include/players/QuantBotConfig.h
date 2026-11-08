@@ -481,6 +481,18 @@ struct QuantBotConfig {
         int cityYardRefineries;
         /// Lost workers are replaced first while spice per worker pays back in 10 (1) / 15 (2) minutes.
         int cityWorkerReplacement;
+        /// Map-scoped repairs of control-map losses, each 0 = OFF (default), 1/2 = hashed levels
+        /// (docs/ai-scenario-matrix.md, "Map-scoped repairs"). Fixed thresholds on the immutable
+        /// original explicit grid (GameInitSettings::getInitialTerrain); unknown and initially
+        /// spiceless maps are never scoped. Native values of PressOn, FinishWhenLeading and
+        /// JoinAllyWaves where mountain is at least 8% (1) / 6% (2) of the tiles.
+        int closingMountainScope;
+        /// VanillaArmyCounters stays inert where thick spice is below 20% of the spice tiles (1),
+        /// or also where rock contiguity is below 0.45 (2).
+        int vanillaArmyCounterMapScope;
+        /// FocusFireLevel plays native (0) on maps of at least 192x192 tiles (1), or also below
+        /// 1,000 tiles per original occupied controller (2).
+        int focusFireMapScope;
         /// Experimental/default OFF: true local-force withdrawal, early vehicle
         /// repair and full-knowledge field safety in Vanilla/DuneCity skirmishes.
         bool retreatPreserve;

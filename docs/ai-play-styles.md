@@ -1467,6 +1467,12 @@ the CityResearchOrder level-2 default. `experiment-batch-3-off` disables the
 Batch1, Batch2 and Batch3 masters and keeps that default. Owners, pins and
 receipts are in `outputs/ai-tuning-20261108/BatchIntegration/ledger.md`.
 
+B3m is Batch3 on top of the DuelOpeningPlan=2 and CampaignHomeFields=2 defaults,
+plus three default-OFF map-scoped repairs (`docs/ai-scenario-matrix.md`,
+"Map-scoped repairs"). `experiment-batch-3-off` still sets every Batch1-3 master
+to 0, including those two promoted defaults, so on B3m it reproduces the Batch3
+pin rather than B3m's native defaults; B3m's own all-new-OFF state is native.
+
 ## Duel openings (default 2: DuneCity light raid)
 
 `[Force Concentration] DuelOpeningPlan` is a hashed integer: `0` native,

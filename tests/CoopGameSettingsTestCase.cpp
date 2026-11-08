@@ -163,6 +163,40 @@ TEST_CASE("Initial spice density is derived from immutable saved map tiles", "[c
     REQUIRE(init.getInitialSpiceTilePermille() == 200); // Explicit-grid Field stays ignored.
 }
 
+TEST_CASE("Initial terrain counts come from the same immutable saved explicit grid",
+          "[settings][save][initial-terrain]") {
+    GameInitSettings init("terrain.ini",
+        "[BASIC]\nVersion=2\n[MAP]\nSizeX=5\nSizeY=4\n000=%%%%~\n001=%%%%+\n002=%%%@-\n003=G~-@L\n",
+        false, SettingsClass::GameOptionsClass{});
+    const auto requireGrid = [](const InitialTerrain& terrain) {
+        REQUIRE(terrain.known);
+        REQUIRE(terrain.tiles == 20);
+        REQUIRE(terrain.spice == 5);
+        REQUIRE(terrain.thickSpice == 3);
+        REQUIRE(terrain.mountain == 2);
+        REQUIRE(terrain.rock == 11);
+        REQUIRE(terrain.rockWindows == 1);
+    };
+    requireGrid(init.getInitialTerrain());
+    requireGrid(init.getInitialTerrain());
+    REQUIRE(init.getInitialSpiceTilePermille() == 250); // The same five spice tiles.
+    OMemoryStream saved;
+    saved.open();
+    init.save(saved);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    const GameInitSettings restored(input);
+    requireGrid(restored.getInitialTerrain());
+    REQUIRE_FALSE(init.networkSnapshot("not an INI: binary checkpoint").getInitialTerrain().known);
+    init.setScenarioData("[MAP]\nSizeX=10\nSizeY=1\n000=~\n");
+    REQUIRE_FALSE(init.getInitialTerrain().known);
+    init.setScenarioData("[MAP]\nSeed=123\nSizeX=1\nSizeY=1\n000=@\n");
+    REQUIRE_FALSE(init.getInitialTerrain().known); // A generator-seeded custom map has no grid.
+    init.setMapData("[MAP]\nSizeX=2\nSizeY=1\n000=@-\n");
+    REQUIRE(init.getInitialTerrain().known);
+    REQUIRE(init.getInitialTerrain().mountain == 1);
+    REQUIRE(init.getInitialTerrain().spice == 0);
+}
+
 TEST_CASE("Original seeded spice density uses the native crop and saved seed",
           "[settings][campaign][initial-spice]") {
     const bool campaign = GENERATE(false, true);

@@ -730,6 +730,51 @@ int GameInitSettings::getInitialSpiceTilePermille() const {
     return initialSpiceTilePermille;
 }
 
+const InitialTerrain& GameInitSettings::getInitialTerrain() const {
+    // The same scenario source and validity rules as getInitialSpiceTilePermille(), except that a
+    // seeded original map has no explicit grid to measure and stays unknown.
+    static const InitialTerrain unknown{};
+    const bool originalMap = gameType == GameType::Campaign || gameType == GameType::Skirmish;
+    if(!originalMap && gameType != GameType::CustomGame && gameType != GameType::CustomMultiplayer) return unknown;
+    if(initialTerrainCached) return initialTerrain;
+    initialTerrainCached = true;
+    initialTerrain = InitialTerrain{};
+    try {
+        sdl2::RWops_ptr source;
+        if(!filedata.empty()) {
+            if(filedata.size() > static_cast<size_t>(std::numeric_limits<int>::max())
+               || (originalMap && filedata.find('\0') != std::string::npos)) return initialTerrain;
+            source.reset(SDL_RWFromConstMem(filedata.data(), static_cast<int>(filedata.size())));
+        } else if(originalMap && pFileManager && !filename.empty()) {
+            source = pFileManager->openCampaignFile(filename);
+        }
+        if(!source) return initialTerrain;
+        INIFile map(source.get());
+        if(originalMap) {
+            int version = 1;
+            if(map.hasKey("BASIC", "Version")
+               && !parseInitialSpiceInteger(map.getStringValue("BASIC", "Version"), version))
+                return initialTerrain;
+            if(version < 2) return initialTerrain;
+        }
+        const int width = map.getIntValue("MAP", "SizeX", 0);
+        const int height = map.getIntValue("MAP", "SizeY", 0);
+        if(width <= 0 || height <= 0 || (!originalMap && map.hasKey("MAP", "Seed"))) return initialTerrain;
+        std::vector<std::string> rows;
+        rows.reserve(static_cast<size_t>(height));
+        for(int y = 0; y < height; ++y) {
+            auto key = std::to_string(y);
+            if(key.size() < 3) key.insert(0, 3-key.size(), '0');
+            rows.push_back(map.getStringValue("MAP", key));
+            if(rows.back().size() != static_cast<size_t>(width)) return initialTerrain;
+        }
+        initialTerrain = countInitialTerrain(width, rows);
+    } catch(const std::exception&) {
+        // Missing assets, failed streams and malformed scenarios stay unknown.
+    }
+    return initialTerrain;
+}
+
 bool GameInitSettings::isCivilizationWars() const {
     // LoadMultiplayer.filedata holds a binary checkpoint until its saved map settings
     // replace it. Never scan those bytes, a filename or a mod name for a marker.

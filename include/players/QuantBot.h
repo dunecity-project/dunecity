@@ -1203,6 +1203,15 @@ private:
     int forceBits() const;
     /// Immutable original-map spice scope; unknown and zero-spice maps stay native.
     bool combatTargetTuningActive() const;
+    /// Map-scoped repairs (players/QuantBotMapScopePolicy.h; docs/ai-scenario-matrix.md,
+    /// "Map-scoped repairs"). ClosingMountainScope: the native force settings on a mountain-rich
+    /// original map, else the configured ones. Read only PressOn, FinishWhenLeading and
+    /// JoinAllyWaves through it.
+    const QuantBotConfig::ForceSettings& closingForce() const;
+    /// FocusFireLevel in effect: native (0) where FocusFireMapScope applies.
+    int effectiveFocusFireLevel() const;
+    /// VanillaArmyCounterMapScope: VanillaArmyCounters stays inert on this original map.
+    bool armyCountersMapExcluded() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }
     /// Vanilla Custom games whose original roster has at least two hostile teams.
     /// The tuning switches never activate in campaigns, duels or two-team matches.

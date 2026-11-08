@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Record a complete native controls receipt, or check a candidate against it."""
+"""Record a complete native controls receipt, or check a candidate against it.
+
+Controls rule (Stefan 2026-11-09): the candidate keeps at least --min-kept-ratio (default 75%) of
+the native QB/team-1 wins on maps 1-12, map 13 (Silicon Valley, no spice) stays digest-identical,
+and maps outside --in-scope stay digest-identical. --min-kept-ratio 1 is the former strict veto."""
 import argparse
 import csv
 import datetime
 import json
+from fractions import Fraction
 from pathlib import Path
 import re
 import subprocess
@@ -117,7 +122,8 @@ def compare(args):
     candidate = validate(rows)
     style = check_style_seats(rows, required=True)
     print(f'Candidate: {style or "native"} (candidate seat only)')
-    problems = []
+    problems, lost_wins = [], []
+    native_wins = silicon_games = silicon_equal = 0
     print('| Map | Seed | Native winner/min | Candidate winner/min | Digest equal | Native win lost |')
     print('|---|---:|---|---|---|---|')
     for gid in sorted(native):
@@ -128,15 +134,33 @@ def compare(args):
         number = int(gid.split('/')[1].split('-')[0])
         equal = old['digest'] == new['digest']
         lost = old['winner_team'] == '1' and new['winner_team'] != '1'
-        if lost and number != 13:
-            problems.append(f'{gid}: native candidate-side win lost')
+        if number == 13:
+            silicon_games += 1
+            silicon_equal += equal
+        elif old['winner_team'] == '1':
+            native_wins += 1
+            if lost:
+                lost_wins.append(gid)
         if not equal and number not in args.in_scope:
             problems.append(f'{gid}: out-of-scope digest changed')
         print(f'| {old["map"]} | {old["seed"]} | {winner(old)}/{old["minutes"]} | '
               f'{winner(new)}/{new["minutes"]} | {"yes" if equal else "NO"} | {"YES" if lost else "no"} |')
+    for gid in lost_wins:
+        print(f'LOST: {gid}: native candidate-side win lost')
+    kept = native_wins - len(lost_wins)
+    kept_enough = kept >= args.min_kept_ratio * native_wins
+    rule = f'{float(args.min_kept_ratio):.0%}'
+    ratio = f'{kept / native_wins:.3f}' if native_wins else 'n/a'
+    print(f'Native QB/team-1 wins on maps 1-12: {native_wins}; kept {kept}; ratio {ratio} (rule >= {rule}): '
+          f'{"PASS" if kept_enough else "FAIL"}')
+    print(f'Silicon Valley (map 13) digests identical: {silicon_equal}/{silicon_games}: '
+          f'{"PASS" if silicon_equal == silicon_games else "FAIL"}')
+    if not kept_enough:
+        problems.append(f'native wins kept {kept}/{native_wins} below {rule}')
     for problem in problems:
         print('FAIL: ' + problem, file=sys.stderr)
-    print(f'Controls: {"FAIL" if problems else "PASS"} ({len(candidate)} games; {len(problems)} violations)')
+    print(f'Controls: {"FAIL" if problems else "PASS"} ({len(candidate)} games; {len(problems)} violations; '
+          f'native wins kept {kept}/{native_wins})')
     return 1 if problems else 0
 
 
@@ -151,9 +175,14 @@ def main():
     parser.add_argument('--job', help='Native cluster job ID')
     parser.add_argument('--in-scope', nargs='*', type=int, choices=range(1, 13), default=list(range(1, 13)),
                         help='Map numbers allowed to change digests (default 1-12; empty means none)')
+    parser.add_argument('--min-kept-ratio', type=Fraction, default=Fraction(3, 4),
+                        help='Share of native QB/team-1 wins on maps 1-12 the candidate must keep '
+                             '(default 0.75; 1 = no native win may be lost)')
     args = parser.parse_args()
     if args.record and (not args.pin or not args.job):
         parser.error('--record requires --pin and --job')
+    if not 0 <= args.min_kept_ratio <= 1:
+        parser.error('--min-kept-ratio must be between 0 and 1')
     try:
         if args.record:
             record(args)

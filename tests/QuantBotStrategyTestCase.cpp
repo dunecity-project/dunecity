@@ -12,6 +12,7 @@
 #include <players/QuantBotFieldExpansionPolicy.h>
 #include <players/StarportBuyingPolicy.h>
 #include <players/TacticalSafetyPolicy.h>
+#include <players/QuantBotMapScopePolicy.h>
 
 #include <array>
 #include <cstdio>
@@ -1325,6 +1326,90 @@ TEST_CASE("CityWorkerReplacement levels are default off, hashed and set the payb
     requireBatch3CityLevels("CityWorkerReplacement", &QuantBotConfig::ForceSettings::cityWorkerReplacement);
     REQUIRE(QuantBotBuildPolicy::cityWorkerReplacementMinutes(1) == 10);
     REQUIRE(QuantBotBuildPolicy::cityWorkerReplacementMinutes(2) == 15);
+}
+
+// Map-scoped repairs (players/QuantBotMapScopePolicy.h; docs/ai-scenario-matrix.md, "Map-scoped
+// repairs") share the Batch3 level contract: default 0, levels 1/2 hashed, level 0 the default hash.
+TEST_CASE("Map-scoped repair levels are default off, hashed and persisted", "[ai][config][map-scope]") {
+    requireBatch3CityLevels("ClosingMountainScope", &QuantBotConfig::ForceSettings::closingMountainScope);
+    requireBatch3CityLevels("VanillaArmyCounterMapScope", &QuantBotConfig::ForceSettings::vanillaArmyCounterMapScope);
+    requireBatch3CityLevels("FocusFireMapScope", &QuantBotConfig::ForceSettings::focusFireMapScope);
+}
+
+namespace {
+
+InitialTerrain measuredTerrain(int64_t tiles, int64_t spice, int64_t thick, int64_t mountain, int64_t rock,
+                               int64_t windows) {
+    InitialTerrain terrain;
+    terrain.known = true;
+    terrain.tiles = tiles;
+    terrain.spice = spice;
+    terrain.thickSpice = thick;
+    terrain.mountain = mountain;
+    terrain.rock = rock;
+    terrain.rockWindows = windows;
+    return terrain;
+}
+
+} // namespace
+
+TEST_CASE("Map scopes count the original explicit grid", "[ai][map-scope]") {
+    const auto terrain = countInitialTerrain(5, {"%%%%~", "%%%%+", "%%%@-", "G~-@L"});
+    REQUIRE(terrain.known);
+    REQUIRE(terrain.tiles == 20);
+    REQUIRE(terrain.spice == 5);
+    REQUIRE(terrain.thickSpice == 3);
+    REQUIRE(terrain.mountain == 2);
+    REQUIRE(terrain.rock == 11);
+    REQUIRE(terrain.rockWindows == 1);
+}
+
+TEST_CASE("ClosingMountainScope applies from 8% (level 1) or 6% (level 2) mountain", "[ai][force][map-scope]") {
+    using QuantBotMapScopePolicy::mountainRich;
+    for (const int level : {1, 2}) {
+        const int64_t threshold = level == 1 ? 800 : 600;
+        REQUIRE(mountainRich(level, measuredTerrain(10000, 500, 100, threshold, 3000, 1500)));
+        REQUIRE_FALSE(mountainRich(level, measuredTerrain(10000, 500, 100, threshold - 1, 3000, 1500)));
+    }
+    const auto rich = measuredTerrain(10000, 500, 100, 2000, 3000, 1500);
+    REQUIRE_FALSE(mountainRich(0, rich));
+    REQUIRE_FALSE(mountainRich(1, measuredTerrain(10000, 0, 0, 2000, 3000, 1500))); // no spice
+    auto unknown = rich;
+    unknown.known = false;
+    REQUIRE_FALSE(mountainRich(2, unknown));
+}
+
+TEST_CASE("VanillaArmyCounterMapScope applies below 20% thick spice or 0.45 rock contiguity",
+          "[ai][vanilla][map-scope]") {
+    using QuantBotMapScopePolicy::thinOrFragmented;
+    for (const int level : {1, 2}) {
+        REQUIRE(thinOrFragmented(level, measuredTerrain(10000, 1000, 199, 0, 3000, 2000)));
+        REQUIRE_FALSE(thinOrFragmented(level, measuredTerrain(10000, 1000, 200, 0, 3000, 2000)));
+    }
+    // Level 2 also scopes fragmented rock: 449 / 450 windows per 1000 rock tiles.
+    REQUIRE(thinOrFragmented(2, measuredTerrain(10000, 1000, 200, 0, 1000, 449)));
+    REQUIRE_FALSE(thinOrFragmented(2, measuredTerrain(10000, 1000, 200, 0, 1000, 450)));
+    REQUIRE_FALSE(thinOrFragmented(1, measuredTerrain(10000, 1000, 200, 0, 1000, 0)));
+    REQUIRE_FALSE(thinOrFragmented(2, measuredTerrain(10000, 1000, 200, 0, 0, 0)));
+    REQUIRE_FALSE(thinOrFragmented(0, measuredTerrain(10000, 1000, 0, 0, 1000, 0)));
+    REQUIRE_FALSE(thinOrFragmented(2, measuredTerrain(10000, 0, 0, 0, 1000, 0))); // no spice
+}
+
+TEST_CASE("FocusFireMapScope applies from 192x192 tiles or below 1000 tiles per controller",
+          "[ai][force][map-scope]") {
+    using QuantBotMapScopePolicy::hugeOrCrowded;
+    for (const int level : {1, 2}) {
+        REQUIRE(hugeOrCrowded(level, measuredTerrain(192 * 192, 500, 100, 0, 3000, 2000), 2));
+        REQUIRE_FALSE(hugeOrCrowded(level, measuredTerrain(192 * 192 - 1, 500, 100, 0, 3000, 2000), 2));
+    }
+    // Six controllers on 64x64 (683 tiles each) are crowded at level 2 only.
+    REQUIRE(hugeOrCrowded(2, measuredTerrain(64 * 64, 500, 100, 0, 1000, 500), 6));
+    REQUIRE_FALSE(hugeOrCrowded(1, measuredTerrain(64 * 64, 500, 100, 0, 1000, 500), 6));
+    REQUIRE(hugeOrCrowded(2, measuredTerrain(5999, 500, 100, 0, 1000, 500), 6));
+    REQUIRE_FALSE(hugeOrCrowded(2, measuredTerrain(6000, 500, 100, 0, 1000, 500), 6));
+    REQUIRE_FALSE(hugeOrCrowded(2, measuredTerrain(4096, 500, 100, 0, 1000, 500), 0));
+    REQUIRE_FALSE(hugeOrCrowded(0, measuredTerrain(256 * 256, 500, 100, 0, 1000, 500), 6));
+    REQUIRE_FALSE(hugeOrCrowded(2, measuredTerrain(256 * 256, 0, 0, 0, 1000, 500), 6)); // no spice
 }
 
 TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai][vanilla][strategy][config]") {

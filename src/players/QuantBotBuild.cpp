@@ -2699,9 +2699,9 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     // VanillaArmyCounters (default off): re-weight the buildable part of the mix toward the
     // live army of the strongest reachable hostile team. The anti-air floor below still
     // protects its minimum share afterwards. Initial map spice (not current spice) keeps
-    // an initially spiceless map inert.
+    // an initially spiceless map inert, and VanillaArmyCounterMapScope thin-spice maps.
     if (botConfig().force.vanillaArmyCounters && QuantBotArmyCounterPolicy::active(vanillaFfaTuningGame(),
-            currentGame->getGameInitSettings().getInitialSpiceTilePermille()))
+            currentGame->getGameInitSettings().getInitialSpiceTilePermille()) && !armyCountersMapExcluded())
         pass.unitMix = vanillaArmyCounterMix(pass, pass.unitMix);
     // Damage-based learning does not value air deterrence, so protect a minimum
     // mobile anti-air share while a visible hostile wing is active.

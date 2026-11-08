@@ -80,6 +80,42 @@ seeds 1300000-1300011) keep the TechTiming screen's format/size/spice/tech/tier
 layout. Preregistrations and results are in
 `outputs/ai-tuning-20261108/B3-*/ledger.md`.
 
+## Map-scoped repairs
+
+The control-map rule's repair step (a passer that lost native wins tests a
+variant scoped by the lost maps' observable features) gets three hashed,
+default-OFF `[Force Concentration]` integers (`0` OFF, `1`/`2` levels). Each
+reads fixed thresholds from `GameInitSettings::getInitialTerrain()`: counts of
+the original explicit `[MAP]` grid of the saved scenario, the same source as the
+initial spice density (rock is `%`, mountain `@`, spice and thick spice the
+initial-spice tiles and their thick variants; rock contiguity is 3x3 all-rock
+windows per rock tile). Seeded original maps, generator-seeded custom maps and
+missing or malformed scenarios are unknown, and unknown or initially spiceless
+maps are never scoped: Silicon Valley (map 13) keeps measuring the unscoped
+candidate. No map name, mission or seed is read
+(`players/QuantBotMapScopePolicy.h`).
+
+- `ClosingMountainScope`: PressOn, FinishWhenLeading and JoinAllyWaves play
+  their compiled native values when mountain is at least 8% (level 1) or 6%
+  (level 2) of the tiles. It acts only on candidates that change those genes.
+- `VanillaArmyCounterMapScope`: VanillaArmyCounters stays inert when thick
+  spice is below 20% of the spice tiles (level 1), or also when rock contiguity
+  is below 0.45 (level 2).
+- `FocusFireMapScope`: FocusFireLevel plays native (0) on maps of at least
+  192x192 tiles (level 1), or also below 1,000 tiles per original occupied
+  controller (level 2).
+
+Generated sample maps are 96-160 tiles square with at least 1,536 tiles per
+controller; the SweepLane screen/fresh/confirm maps measured 5% mountain and the
+counters paired96 maps thick share 0.24-0.53 and rock contiguity 0.61-0.84. All
+three scopes are therefore inert on those decks, and only fixed and bundled maps
+exercise them. Candidate-only overlays are
+`closing-mountain-1-<sweep genome>` (a SweepLane genome plus level 1),
+`vanilla-army-counters-100-map-scope-1/2` and `focus-fire-2-map-scope-1/2`.
+Preregistrations and results are in
+`outputs/ai-tuning-20261108/B3m-ClosingMountainScope`, `B3m-VanillaArmyCounterMapScope`
+and `B3m-FocusFireMapScope` (`ledger.md`).
+
 
 ## How a game is played
 

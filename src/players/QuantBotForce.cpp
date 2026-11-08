@@ -24,6 +24,7 @@
 // are a vector in creation order with ordered member sets, and only integer arithmetic decides.
 
 #include "QuantBotInternal.h"
+#include <players/QuantBotMapScopePolicy.h>
 
 using QuantBotInternal::mobileCombatItem;
 namespace Force = ForceConcentrationPolicy;
@@ -92,16 +93,17 @@ int64_t volleyOf(const UnitBase* unit) {
 int QuantBot::forceBits() const {
     if (forceVariantOverride != kNoForceOverride) return forceVariantOverride;
     const auto& force = botConfig().force;
+    const auto& closing = closingForce();
     return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0)
         | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0)
         | (force.perimeterTurrets ? kForceThreatTurrets : 0)
         | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0)
-        | (force.turretPriority ? kForceTurretPriority : 0) | (force.pressOn ? kForcePressOn : 0)
+        | (force.turretPriority ? kForceTurretPriority : 0) | (closing.pressOn ? kForcePressOn : 0)
         | ((force.finishWeakest || cityBoomSpiceKind() == CityBoomKind::Reactive) ? kForceFinishWeakest : 0)
         | (force.fortifiedWaves ? kForceFortifiedWaves : 0)
         | (force.sonicClearLane ? kForceSonicClearLane : 0) | (force.spendAtCap ? kForceSpendAtCap : 0)
         | (force.siegeStandoff ? kForceSiegeStandoff : 0) | (force.massAssault ? kForceMassAssault : 0)
-        | (force.finishWhenLeading ? kForceFinishLeading : 0);
+        | (closing.finishWhenLeading ? kForceFinishLeading : 0);
 }
 
 bool QuantBot::vanillaMultiEnemyGame() const {
@@ -794,7 +796,7 @@ const ObjectBase* QuantBot::vultureObjective(const UnitBase* lead, int team) con
 }
 
 const ObjectBase* QuantBot::allyWaveObjective() const {
-    if (!botConfig().force.joinAllyWaves || difficulty < Difficulty::Hard || !autonomousCustomArmy()) return nullptr;
+    if (!closingForce().joinAllyWaves || difficulty < Difficulty::Hard || !autonomousCustomArmy()) return nullptr;
     const Uint32 now = getGameCycleCount();
     const Uint32 window = MILLI2CYCLES(kAllyWaveJoinMs);
     // Our own wave that left inside the window is the one being joined, never a reason to join
@@ -1119,8 +1121,36 @@ int QuantBot::perimeterTurrets() const {
 
 bool QuantBot::combatTargetTuningActive() const {
     const auto& settings = botConfig().force;
-    if (builderOnly() || (!settings.focusFireLevel && !settings.targetPriorityLevel) || !currentGame) return false;
+    if (builderOnly() || (!effectiveFocusFireLevel() && !settings.targetPriorityLevel) || !currentGame) return false;
     return currentGame->getGameInitSettings().getInitialSpiceTilePermille() > 0;
+}
+
+const QuantBotConfig::ForceSettings& QuantBot::closingForce() const {
+    const auto& force = botConfig().force;
+    if (!force.closingMountainScope || !currentGame
+        || !QuantBotMapScopePolicy::mountainRich(force.closingMountainScope,
+                                                 currentGame->getGameInitSettings().getInitialTerrain()))
+        return force;
+    static const QuantBotConfig native;
+    return native.force;
+}
+
+int QuantBot::effectiveFocusFireLevel() const {
+    const auto& force = botConfig().force;
+    if (!force.focusFireLevel || !force.focusFireMapScope || !currentGame) return force.focusFireLevel;
+    const auto& init = currentGame->getGameInitSettings();
+    // Original occupied controller rows, not surviving Houses.
+    int controllers = 0;
+    for (const auto& house : init.getHouseInfoList())
+        if (!house.playerInfoList.empty()) ++controllers;
+    return QuantBotMapScopePolicy::hugeOrCrowded(force.focusFireMapScope, init.getInitialTerrain(), controllers)
+        ? 0 : force.focusFireLevel;
+}
+
+bool QuantBot::armyCountersMapExcluded() const {
+    const int level = botConfig().force.vanillaArmyCounterMapScope;
+    return level && currentGame
+        && QuantBotMapScopePolicy::thinOrFragmented(level, currentGame->getGameInitSettings().getInitialTerrain());
 }
 
 bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies) {
@@ -1135,7 +1165,7 @@ bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBas
     Force::TargetKey bestKey;
     const auto& settings = botConfig().force;
     const bool tuning = combatTargetTuningActive();
-    const int focusLevel = tuning ? settings.focusFireLevel : 0;
+    const int focusLevel = tuning ? effectiveFocusFireLevel() : 0;
     const int priorityLevel = tuning ? settings.targetPriorityLevel : 0;
     const auto keyOf = [&](const ObjectBase* object) {
         auto key = targetKeyOf(object);
