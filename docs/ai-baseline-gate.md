@@ -278,7 +278,12 @@ submission; output-only files are not visible in a committed worker archive.
 `pilot` uses six compatible Vanilla switches and a resolution-VI half fraction
 (32 runs), so all fifteen two-factor terms are separately identifiable. The
 smaller IV design discloses its aliased interaction groups instead of naming
-an unsupported individual interaction.
+an unsupported individual interaction. Map cells use Random Skirmish sizes and
+5% terrain steps (scarce rock 15/5, standard 30/5, rocky ridges 45/15 percent
+rock/mountain); the generator and `--case-manifest` reject anything the probe
+would clamp. `--cases FILE --case-label NAME` replays explicit cells with the
+same styles, for example a supplement replacing rejected cells. Give it its own
+`sample_seed`, so its case numbers never merge with another manifest's CRN clusters.
 
 `tournament --variants A B C --formats ffa4 ffa6 --seeds SEED... --output OUT`
 emits the harness's `--seat-styles control,A,B,...` syntax. Complete fixed-size

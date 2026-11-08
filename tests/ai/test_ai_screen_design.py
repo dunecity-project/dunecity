@@ -38,6 +38,46 @@ class ScreeningDesignTest(unittest.TestCase):
         self.assertEqual(sorted(coverage['initial_tech'].values()), [12, 12, 12])
         self.assertEqual(sorted(coverage['composition'].values()), [12, 12, 12])
         self.assertEqual(len({row['seed'] for row in manifest['cases']}), 36)
+        for cell in manifest['cases']:
+            self.assertEqual((cell['rock'] % 5, cell['mountain'] % 5), (0, 0))
+
+    def test_rejects_recipes_the_probe_would_clamp(self):
+        cell = dict(format='ffa4', size=128, spice_level='low', initial_tech=6, seed=1, rock=12, mountain=5)
+        with self.assertRaisesRegex(ValueError, 'Unsupported'):
+            design.validate_cases(dict(schema_version=1, sample_seed=1, cases=[cell]))
+        with self.assertRaisesRegex(ValueError, 'Unsupported'):
+            design.validate_cases(dict(schema_version=1, sample_seed=1, cases=[dict(cell, rock=15, size=100)]))
+        with self.assertRaisesRegex(ValueError, 'duplicate'):
+            design.validate_cases(dict(schema_version=1, sample_seed=1,
+                                       cases=[dict(cell, rock=15), dict(cell, rock=45, mountain=15)]))
+
+    def test_explicit_supplement_reuses_styles_and_names_its_case_file(self):
+        cells = [dict(format='ffa4', size=64, spice_level='low', initial_tech=3, seed=9, rock=15, mountain=5),
+                 dict(format='ffa6', size=160, spice_level='high', initial_tech=9, seed=10, rock=45, mountain=15)]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'cases.json').write_text(json.dumps(dict(schema_version=1, sample_seed=77, cases=cells)))
+            base = ['--source-root', str(root / 'source'), '--cases', str(root / 'cases.json')]
+            args = design.parser().parse_args(['pilot', '--output', str(root / 'supplement'),
+                                               '--case-label', 'supplement'] + base)
+            original = design.parser().parse_args(['pilot', '--output', str(root / 'original'),
+                                                   '--source-root', str(root / 'source')])
+            with contextlib.redirect_stdout(io.StringIO()):
+                first = design.factorial(original, design.pilot_spec())
+                plan = design.factorial(args, design.pilot_spec())
+            self.assertEqual([run['ini_sha256'] for run in plan['runs']],
+                             [run['ini_sha256'] for run in first['runs']])
+            self.assertTrue((root / 'source/tests/ai/screen-designs/supplement-cases.json').is_file())
+            self.assertTrue(all('tests/ai/screen-designs/supplement-cases.json' in item['argv']
+                                for item in plan['commands']))
+            self.assertEqual(plan['sample_seed'], 77)
+            self.assertEqual(plan['game_counts']['factorial'], 33 * 4)
+            tournament = design.parser().parse_args(['tournament', '--output', str(root / 'mixed'),
+                '--variants', 'a', 'b', '--case-label', 'mixed-supplement'] + base)
+            with contextlib.redirect_stdout(io.StringIO()):
+                mixed = design.tournament(tournament)
+            self.assertEqual(sorted(item['sample_seed'] for item in mixed['commands']), [81, 83])
+            self.assertEqual(mixed['games'], 4 + 6)
 
     def test_pilot_dealiases_all_two_factor_terms(self):
         with tempfile.TemporaryDirectory() as temporary:

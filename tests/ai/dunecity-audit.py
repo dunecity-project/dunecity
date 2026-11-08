@@ -580,10 +580,13 @@ def manifest_sample_schedule(args):
         spice, tech, seed = cell['spice_level'], int(cell['initial_tech']), int(cell['seed'])
         enemy = cell.get('difficulty', 'brutal')
         rock, mountain = int(cell.get('rock', 30)), int(cell.get('mountain', 5))
-        if (fmt not in ('1v1', '2v2', 'ffa4', 'ffa6') or not 32 <= size <= 256
+        # Random Skirmish map sizes and 5% terrain steps: scenario-match rejects
+        # any recipe the generator would clamp, so fail before queueing arms.
+        if (fmt not in ('1v1', '2v2', 'ffa4', 'ffa6') or size not in (64, 96, 128, 160, 192, 256)
                 or spice not in SPICE or spice == 'none' or not 1 <= tech <= 9
                 or not 0 <= seed <= 0xffffffff or enemy not in CLASSES
-                or not 1 <= rock <= 90 or not 0 <= mountain <= 50 or rock + mountain >= 100):
+                or rock % 5 or mountain % 5 or not 5 <= rock <= 90 or not 0 <= mountain <= 50
+                or rock + mountain >= 100):
             raise ValueError(f'Unsupported case-manifest cell {index + 1}')
         count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
         houses = list(HOUSES[:count])

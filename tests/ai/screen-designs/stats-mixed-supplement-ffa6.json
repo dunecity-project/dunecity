@@ -1,0 +1,84 @@
+{
+  "cases": [
+    {
+      "composition": "scarce-rock",
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "initial_tech": 3,
+      "mountain": 5,
+      "replaces_case": 1,
+      "replaces_reason": "original recipe off the engine 5% terrain step; never played",
+      "rock": 15,
+      "seed": 2026110811,
+      "size": 64,
+      "spice_level": "low"
+    },
+    {
+      "composition": "rocky-ridges",
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "initial_tech": 9,
+      "mountain": 15,
+      "replaces_case": 3,
+      "replaces_reason": "original recipe off the engine 5% terrain step; never played",
+      "rock": 45,
+      "seed": 2026110813,
+      "size": 160,
+      "spice_level": "low"
+    },
+    {
+      "composition": "rocky-ridges",
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "initial_tech": 6,
+      "mountain": 15,
+      "replaces_case": 4,
+      "replaces_reason": "original recipe off the engine 5% terrain step; never played",
+      "rock": 45,
+      "seed": 2026110814,
+      "size": 64,
+      "spice_level": "medium"
+    },
+    {
+      "composition": "scarce-rock",
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "initial_tech": 9,
+      "mountain": 5,
+      "replaces_case": 5,
+      "replaces_reason": "original recipe off the engine 5% terrain step; never played",
+      "rock": 15,
+      "seed": 2026110815,
+      "size": 128,
+      "spice_level": "medium"
+    },
+    {
+      "composition": "rocky-ridges",
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "initial_tech": 3,
+      "mountain": 15,
+      "replaces_case": 8,
+      "replaces_reason": "original recipe off the engine 5% terrain step; never played",
+      "rock": 45,
+      "seed": 2026110818,
+      "size": 128,
+      "spice_level": "high"
+    },
+    {
+      "composition": "scarce-rock",
+      "difficulty": "brutal",
+      "format": "ffa6",
+      "initial_tech": 6,
+      "mountain": 5,
+      "replaces_case": 9,
+      "replaces_reason": "original recipe off the engine 5% terrain step; never played",
+      "rock": 15,
+      "seed": 2026110819,
+      "size": 160,
+      "spice_level": "high"
+    }
+  ],
+  "sample_seed": 2026110815,
+  "schema_version": 1
+}

@@ -25,9 +25,32 @@ import shlex
 
 FORMATS = ('1v1', '2v2', 'ffa4', 'ffa6')
 SPICES = ('low', 'medium', 'high')
-COMPOSITIONS = ({'name': 'scarce-rock', 'rock': 12, 'mountain': 5},
+# Random Skirmish terrain uses 5% steps summing to 100 (SkirmishGenerator
+# kTerrainStep); scenario-match rejects any recipe the engine would round.
+COMPOSITIONS = ({'name': 'scarce-rock', 'rock': 15, 'mountain': 5},
                 {'name': 'standard', 'rock': 30, 'mountain': 5},
-                {'name': 'rocky-ridges', 'rock': 48, 'mountain': 15})
+                {'name': 'rocky-ridges', 'rock': 45, 'mountain': 15})
+MAP_SIZES = (64, 96, 128, 160, 192, 256)
+
+
+def validate_cases(manifest):
+    """Reject cells the probe would clamp, before any arm is queued."""
+    if manifest.get('schema_version') != 1 or not manifest.get('cases'):
+        raise ValueError('Case manifest needs schema_version=1 and nonempty cases')
+    if not 0 <= int(manifest['sample_seed']) <= 0xffffffff:
+        raise ValueError('Case manifest sample_seed must be unsigned 32-bit')
+    # A seed may recur across formats (different rosters make different maps), never within one.
+    seen = set()
+    for index, cell in enumerate(manifest['cases'], 1):
+        rock, mountain = int(cell.get('rock', 30)), int(cell.get('mountain', 5))
+        seed = int(cell['seed'])
+        if (cell['format'] not in FORMATS or int(cell['size']) not in MAP_SIZES
+                or cell['spice_level'] not in SPICES or not 1 <= int(cell['initial_tech']) <= 9
+                or not 0 <= seed <= 0xffffffff or (cell['format'], seed) in seen
+                or rock % 5 or mountain % 5 or rock < 5 or mountain < 0 or rock + mountain > 95):
+            raise ValueError(f'Unsupported or duplicate case {index}: {cell}')
+        seen.add((cell['format'], seed))
+    return manifest
 
 
 def fractional_columns(k):
@@ -137,6 +160,14 @@ def base_command(args, case_file, result):
             '--export-maps', 'maps', '--results', str(result)]
 
 
+def explicit_cases(args):
+    """An explicit manifest (e.g. a supplement replacing rejected cells) or the generated grid."""
+    if args.cases:
+        return validate_cases(json.loads(args.cases.read_text()))
+    return validate_cases(cases(args.seed, args.formats, args.sizes, args.spices, args.techs,
+                                getattr(args, 'replicates', 1)))
+
+
 def factorial(args, spec=None):
     spec = spec or json.loads(args.spec.read_text())
     factors = spec['factors']
@@ -158,9 +189,9 @@ def factorial(args, spec=None):
         columns = [1 << i for i in range(m)] + [word]
     root = args.output.resolve()
     case_path = root / 'cases.json'
-    case_data = cases(args.seed, args.formats, args.sizes, args.spices, args.techs, args.replicates)
+    case_data = explicit_cases(args)
     write_json(case_path, case_data)
-    source_case = Path('tests/ai/screen-designs') / (args.prefix + '-cases.json')
+    source_case = Path('tests/ai/screen-designs') / ((args.case_label or args.prefix) + '-cases.json')
     write_json(args.source_root / source_case, case_data)
     runs, commands = [], []
     for row in range(1 << m):
@@ -179,7 +210,7 @@ def factorial(args, spec=None):
     commands.append(dict(style='control', argv=base_command(args, source_case, Path(control['result_dir'])),
                          games=2 * len(case_data['cases'])))
     games_per_arm = 2 * len(case_data['cases'])
-    plan = dict(schema_version=1, kind='fractional-factorial', seed=args.seed,
+    plan = dict(schema_version=1, kind='fractional-factorial', seed=args.seed, sample_seed=case_data['sample_seed'],
                 source_base=args.source_base, factors=factors, fixed=spec.get('fixed', {}),
                 columns=dict(zip(names, columns)), resolution=resolution(columns),
                 interaction_aliases=alias_groups(factors, columns), runs=runs, arms=runs + [control],
@@ -202,43 +233,54 @@ def tournament(args):
         raise ValueError('Supply unique non-control variants; native control is added explicitly')
     if len(variants) < 1:
         raise ValueError('Supply at least one existing variant')
-    if len(set(args.seeds)) != len(args.seeds) or any(not 0 <= seed <= 0xffffffff for seed in args.seeds):
-        raise ValueError('Use distinct unsigned 32-bit seeds')
     if any(fmt not in ('ffa4', 'ffa6') for fmt in args.formats):
         raise ValueError('Tournament is FFA4/FFA6 only')
+    if args.cases:
+        manifest = validate_cases(json.loads(args.cases.read_text()))
+        base_seed = int(manifest['sample_seed'])
+        rows_by_format = {fmt: [cell for cell in manifest['cases'] if cell['format'] == fmt]
+                          for fmt in args.formats}
+    else:
+        if not args.seeds or len(set(args.seeds)) != len(args.seeds):
+            raise ValueError('Use --cases FILE or distinct --seeds')
+        base_seed = args.seed
+        rows_by_format = {}
+        for fmt in args.formats:
+            rows_by_format[fmt] = [dict(format=fmt, size=args.sizes[i % len(args.sizes)],
+                spice_level=args.spices[(i // len(args.sizes)) % len(args.spices)],
+                initial_tech=args.techs[(i + i // len(args.sizes)) % len(args.techs)],
+                difficulty='brutal', seed=seed, composition=COMPOSITIONS[(i + 2 * (i // len(args.sizes))) % 3]['name'],
+                **{key: COMPOSITIONS[(i + 2 * (i // len(args.sizes))) % 3][key] for key in ('rock', 'mountain')})
+                for i, seed in enumerate(args.seeds)]
+    if not all(rows_by_format.values()):
+        raise ValueError('Every tournament format needs at least one case')
     planned = sum(comb(len(variants), min(int(fmt[-1]) - 1, len(variants)))
-                  * int(fmt[-1]) * len(args.seeds) for fmt in args.formats)
+                  * int(fmt[-1]) * len(rows_by_format[fmt]) for fmt in args.formats)
     if planned > args.max_games:
         raise ValueError(f'Exact pair-balanced design needs {planned} games, above --max-games={args.max_games}; choose fewer hand-picked variants or explicitly raise the limit')
     root = args.output.resolve()
     commands, assignment_rows = [], []
+    label = args.case_label or f'tournament-{args.seed}'
     for fmt in args.formats:
-        if fmt not in ('ffa4', 'ffa6'):
-            raise ValueError('Tournament is FFA4/FFA6 only')
         seats = int(fmt[-1])
+        # Formats get distinct sample seeds, so their case numbers never share a CRN cluster key.
+        case_data = validate_cases(dict(schema_version=1, sample_seed=(base_seed + seats) & 0xffffffff,
+                                        cases=rows_by_format[fmt]))
+        write_json(root / f'cases-{fmt}.json', case_data)
+        source_case = Path('tests/ai/screen-designs') / f'{label}-{fmt}.json'
+        write_json(args.source_root / source_case, case_data)
         take = min(seats - 1, len(variants))
         # All same-sized subsets give exact pair balance (an incomplete block
         # design). A cyclic-only cohort schedule does not balance opponents.
         for ci, cohort in enumerate(itertools.combinations(variants, take)):
             labels = ['control'] + list(cohort)
             labels += ['control'] * (seats - len(labels))
-            case_path = root / f'cases-{fmt}.json'
-            case_rows = [dict(format=fmt, size=args.sizes[i % len(args.sizes)],
-                              spice_level=args.spices[(i // len(args.sizes)) % len(args.spices)],
-                              initial_tech=args.techs[(i + i // len(args.sizes)) % len(args.techs)],
-                              difficulty='brutal', seed=seed,
-                              **{key: COMPOSITIONS[(i + 2 * (i // len(args.sizes))) % 3][key]
-                                 for key in ('rock', 'mountain')})
-                         for i, seed in enumerate(args.seeds)]
-            write_json(case_path, dict(schema_version=1, sample_seed=args.seed, cases=case_rows))
-            source_case = Path('tests/ai/screen-designs') / f'tournament-{args.seed}-{fmt}.json'
-            write_json(args.source_root / source_case,
-                       dict(schema_version=1, sample_seed=args.seed, cases=case_rows))
+            seeds = [cell['seed'] for cell in case_data['cases']]
             result = root / 'runs' / f'{fmt}-cohort-{ci:03d}'
             command = base_command(args, source_case, result) + ['--seat-styles', ','.join(labels)]
             commands.append(dict(format=fmt, cohort=list(cohort), result_dir=str(result),
-                                 argv=command, games=len(args.seeds) * seats))
-            for seed in args.seeds:
+                                 sample_seed=case_data['sample_seed'], argv=command, games=len(seeds) * seats))
+            for seed in seeds:
                 for rotation in range(seats):
                     assignment_rows.append(dict(format=fmt, seed=seed, cohort=ci, rotation=rotation,
                         seats=[labels[(seat + rotation) % seats] for seat in range(seats)]))
@@ -278,6 +320,9 @@ def parser():
         sub.add_argument('--source-root', type=Path, default=Path('.'))
         sub.add_argument('--source-base', default='235bb65e8d22c2fc1e35f61c1b02e15a9a6f6aa3')
         sub.add_argument('--seed', type=int, default=2026110807)
+        sub.add_argument('--cases', type=Path,
+                         help='Explicit schema-v1 case manifest instead of the generated grid (for example a supplement)')
+        sub.add_argument('--case-label', help='Name of the pinned tests/ai/screen-designs case file(s)')
         sub.add_argument('--formats', nargs='+', choices=FORMATS,
                          default=['ffa4', 'ffa6'] if name == 'tournament' else list(FORMATS))
         sub.add_argument('--sizes', nargs='+', type=int, default=[64, 128, 160])
@@ -288,7 +333,7 @@ def parser():
         sub.add_argument('--mod', choices=('vanilla', 'dunecity'), default='vanilla')
         if name == 'tournament':
             sub.add_argument('--variants', nargs='+', required=True)
-            sub.add_argument('--seeds', nargs='+', type=int, required=True)
+            sub.add_argument('--seeds', nargs='+', type=int)
             sub.add_argument('--max-games', type=int, default=10000)
         else:
             sub.add_argument('--replicates', type=int, default=1)
