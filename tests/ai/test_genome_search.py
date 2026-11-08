@@ -416,7 +416,7 @@ class GenomeSearchTests(unittest.TestCase):
     def test_joint_seed_is_measured_without_fake_fitness_or_extra_offspring(self):
         plan = search.screen_plan(self.registry, self.genes[:1], parameter_sweeps=False, fraction=False)
         report = dict(pareto_fronts=[[g['id'] for g in plan['genomes']]], genomes={}, niches={})
-        genes = ['simple_tech_savings', 'threat_turrets', 'more_rocket_turrets']
+        genes = ['simple_tech_savings', 'press_on', 'more_rocket_turrets']
         result = search.evolve(plan, report, self.registry, 1, population=4, offspring=6,
                                seed_genes=genes, seed_combinations=[genes])
         self.assertEqual(len(result['lineage']), 6)

@@ -498,13 +498,12 @@ def evaluate_check(check, samples, events, setup, residential):
             'funded_opportunities': len(funded), 'funded_rejections': rejected}
     if kind == 'lowcash_nuclear':
         choices = [e for e in events if e['event'] == 'city_generator_choice']
-        required = ('compact_nuclear', 'installments', 'nuclear', 'nuclear_available', 'nuclear_site', 'cash', 'nuclear_price')
+        required = ('installments', 'nuclear', 'nuclear_available', 'nuclear_site', 'cash', 'nuclear_price')
         if any(any(k not in e['data'] for k in required) for e in choices):
             return 'unverified', 'lowcash_nuclear_opportunity_fields_missing', {}
-        # compact_nuclear is the engine's actual-site/foundation/dominance and
-        # real funding decision, not a blanket requirement to replace all wind.
-        # Its cash is spendable cash, not a full-price-in-hand denominator.
-        opportunities = [e for e in choices if e['data']['compact_nuclear'] and e['data']['installments']
+        # Observe the live planner's actual selected installment project, not a
+        # blanket requirement to replace all wind. Cash is spendable cash.
+        opportunities = [e for e in choices if e['data']['installments']
             and e['data']['nuclear'] and e['data']['nuclear_available'] and e['data']['nuclear_site']
             and 0 <= e['data']['cash'] < e['data']['nuclear_price']]
         if not opportunities:
@@ -600,7 +599,7 @@ def project_event(row):
         return None
     fields = {'production_order': ('item', 'accepted', 'quoted_price', 'capital_plan'),
               'city_generator_choice': ('nuclear', 'nuclear_available', 'nuclear_site', 'cash', 'nuclear_price',
-                                       'compact_nuclear', 'installments'),
+                                       'installments'),
               'mcv_deployment': ('mcv', 'x', 'y', 'deployed')}
     for name_ in CITY_EVENTS:
         fields[name_] = ('object', 'item', 'powered', 'old_level', 'new_level', 'population_before', 'population_after', 'score')

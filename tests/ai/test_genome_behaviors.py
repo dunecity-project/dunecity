@@ -231,7 +231,7 @@ class BehaviorContracts(unittest.TestCase):
     def test_lowcash_nuclear_requires_new_order_completion_and_native_payment(self):
         rows = [sample(house=4, nuclear=2, nuclear_built=0, nuclear_queued=0, economy={}),
                 sample('finished', house=4, nuclear=2, nuclear_built=0, nuclear_queued=0, economy={})]
-        choice = event('city_generator_choice', dict(compact_nuclear=1, installments=1, nuclear=1,
+        choice = event('city_generator_choice', dict(installments=1, nuclear=1,
             nuclear_available=1, nuclear_site=1, cash=327, nuclear_price=2000), house=4)
         self.assertEqual(self.check('lowcash_nuclear', rows, [choice])[0], 'fail')
         order = event('production_order', {'item': 25, 'accepted': 1, 'quoted_price': 2000}, 111, 4)

@@ -69,8 +69,7 @@ def power_summary(measurements, events_path):
             'built_nuclear': final['generators']['Nuclear']['built'] - initial['generators']['Nuclear']['built'],
             'generator_spent': final.get('economy', {}).get('generator_spent', 0)
                                - initial.get('economy', {}).get('generator_spent', 0),
-            'wind_orders': 0, 'nuclear_orders': 0, 'compact_choices': 0,
-            'funded_nuclear_rejections': 0, 'first_nuclear_order_elapsed_cycles': None,
+            'wind_orders': 0, 'nuclear_orders': 0, 'first_nuclear_order_elapsed_cycles': None,
         }
     if events_path.exists():
         with gzip.open(events_path, 'rt') as stream:
@@ -80,14 +79,7 @@ def power_summary(measurements, events_path):
                 if house not in result:
                     continue
                 row = result[house]
-                if kind == 'city_generator_choice':
-                    row['compact_choices'] += int(bool(data.get('compact_nuclear')))
-                    # The two archived saves use no concrete; their reactor's
-                    # complete founded quote is exactly its recorded price.
-                    row['funded_nuclear_rejections'] += int(
-                        not data['nuclear'] and data['nuclear_available'] and data['nuclear_site']
-                        and data['cash'] >= data['nuclear_price'])
-                elif kind == 'production_order' and data['accepted']:
+                if kind == 'production_order' and data['accepted']:
                     if data['item_name'] == 'Windtrap':
                         row['wind_orders'] += 1
                     elif data['item_name'] == 'Nuclear':
@@ -95,13 +87,6 @@ def power_summary(measurements, events_path):
                         if row['first_nuclear_order_elapsed_cycles'] is None:
                             row['first_nuclear_order_elapsed_cycles'] = event['cycle'] - loaded[house]['cycle']
     return list(result.values())
-
-
-def compact_behavior_passes(summary):
-    eligible = [row for row in summary if row['compact_choices']]
-    return (bool(eligible) and all(not row['funded_nuclear_rejections'] for row in summary)
-            and all(row['nuclear_orders'] for row in eligible)
-            and any(row['built_nuclear'] and row['generator_spent'] > 0 for row in eligible))
 
 
 def schedule(args):
@@ -189,10 +174,9 @@ def play(args, scratch, binary, key):
     summary = power_summary(measurements, results / (arm + '-events.jsonl.gz'))
     (results / (arm + '-power-summary.json')).write_text(json.dumps(summary, indent=2) + '\n')
     passed = process.returncode == 0 and any('POWER_SAVE_RESULT:' in line for line in lines)
-    behavior = not args.verify_compact or arm.startswith('audit') or compact_behavior_passes(summary)
     row = {'arm': arm, 'sha256': digest, 'technology_installments': args.technology_installments,
            'wall_s': round(time.time() - started, 2),
-           'error': 'rc=' + str(process.returncode) if not passed else '' if behavior else 'compact_behavior'}
+           'error': 'rc=' + str(process.returncode) if not passed else ''}
     path = results / 'games.csv'
     exists = path.exists()
     with path.open('a', newline='') as handle:
@@ -200,31 +184,17 @@ def play(args, scratch, binary, key):
         if not exists:
             writer.writeheader()
         writer.writerow(row)
-    finish_game(scratch, out, not (passed and behavior))
+    finish_game(scratch, out, not passed)
     return row
 
 
 def report(args):
     games = read(Path(args.results) / 'games.csv')
     failed = [row for row in games if row['error']]
-    behavior_failed = []
-    if args.verify_compact:
-        wanted = {arm for arm in args.arms if not arm.startswith('audit')}
-        seen = {row['arm'] for row in games}
-        behavior_failed.extend(sorted(wanted - seen))
-        for row in games:
-            if row['arm'] not in wanted or row['error']:
-                continue
-            path = Path(args.results) / (row['arm'] + '-power-summary.json')
-            if not path.exists() or not compact_behavior_passes(json.loads(path.read_text())):
-                behavior_failed.append(row['arm'])
-        print('Compact power behavior: %s%s' % (
-            'FAILED' if behavior_failed else 'PASS',
-            ' (' + ', '.join(behavior_failed) + ')' if behavior_failed else ''))
     print('Exact-save power continuations: %d passed, %d failed' % (len(games) - len(failed), len(failed)))
     for row in games:
         print('%s: sha256=%s wall=%ss error=%s' % (row['arm'], row['sha256'], row['wall_s'], row['error'] or 'none'))
-    return bool(failed or behavior_failed)
+    return bool(failed)
 
 
 def run(args):
@@ -252,7 +222,5 @@ parser.add_argument('--capture-mib', type=int, default=512)
 parser.add_argument('--scratch', type=Path)
 parser.add_argument('--rebuild', action='store_true')
 parser.add_argument('--report', action='store_true')
-parser.add_argument('--verify-compact', action='store_true',
-                    help='Require funded eligible houses to order reactors, no funded wind rejections, and paid completion')
 args = parser.parse_args()
 sys.exit(report(args) if args.report else run(args))

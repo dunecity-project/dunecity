@@ -17,8 +17,11 @@ formation/strategy choices, wave thresholds, launcher distance, timers, recovery
 ratios, force budgets, unit ratios, priority weights and tuned tech-band mixes.
 That first source pin is `b10df0c63cf6ade5eb5057f9086a1cfac719f25d`.
 The feature-only cut removes nine experimental booleans and their test styles.
-The registry now contains **336 genes**: 335 native QuantBot config keys and one
-whole-game rule. It contains only settings still accepted by the live parser;
+The registry now contains **340 genes**: 339 native QuantBot config keys and one
+whole-game rule, including the four independent default-OFF campaign candidates
+`CampaignPlayerHouse`, `CampaignMilitaryOpening`, `CampaignAdaptiveReadiness`
+and `CampaignThreatProduction`.
+It contains only settings still accepted by the live parser;
 old chromosomes and full overlays remain tied to their original source pin and
 must not be reinterpreted against this registry.
 
@@ -423,8 +426,8 @@ python3 tests/ai/genome_search.py interactions --genes focus_fire converge \
   --output INTERACTIONS.json.gz
 python3 tests/ai/genome_search.py evolve --plan SCREEN.json.gz \
   --report REPORT/report.json.gz --payoffs REPORT/payoffs.json --generation 1 \
-  --seed-genes simple_tech_savings threat_turrets --race-seeds 110601 110602 \
-  --seed-combinations simple_tech_savings,threat_turrets,more_rocket_turrets \
+  --seed-genes simple_tech_savings press_on --race-seeds 110601 110602 \
+  --seed-combinations simple_tech_savings,press_on,more_rocket_turrets \
   --behaviour BEHAVIOUR/games.csv --evaluation-rev FULL_COMMIT_SHA --output ROUND1.json.gz
 python3 tests/ai/genome_search.py race --plan SCREEN.json.gz ROUND1.json.gz \
   --elites ELITE... --seeds EIGHT_HELD_OUT_SEEDS... \

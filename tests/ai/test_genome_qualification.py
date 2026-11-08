@@ -181,7 +181,7 @@ class CandidateQualificationTests(unittest.TestCase):
                 self.assertEqual(actual, gate.phase_payloads(self.item, contract, args.phase_minutes, self.registry))
                 self.assertNotIn('[Map]', actual['schedule.ini'])
                 self.assertEqual(actual['schedule.ini'].split('[Genomes]\n')[1].strip(), '1=' + self.item['id'])
-                self.assertIn('firstfactoryownprerequisites=1', actual['1-opening.ini'].lower())
+                self.assertIn('threatturrets=1', actual['1-opening.ini'].lower())
                 self.assertEqual(gate.options((directory / 'game-options.ini').read_text())['technology installments'], '0')
 
     def test_registered_global_rule_is_applied_not_silently_dropped(self):
