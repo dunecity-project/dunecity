@@ -77,6 +77,26 @@ With `--attack-events`, raw logs for every result instead live under
 `diagnostics/<game>/run.log`, so same-source A/B runs can compare their complete
 `PROBE_DIGEST` prefix before the first changed endgame decision.
 
+### Starport buying experiments
+
+`StarportBuying`, `StarportCashStockpile`, and `StarportEconomyPriority` are
+independent default-OFF, hashed `[Force Concentration]` levels 0/1/2, scoped to
+custom Vanilla/DuneCity games. Buying levels admit optional combat imports at
+80%/100% of the research-adjusted factory cost; OFF keeps the native strict
+base-price discount test. Needed economic imports and construction recovery
+retain their existing admission and funding rules. Stockpile levels preserve
+one/two factory-unit prices when an orderable port has that unit in stock but
+above the chosen price ceiling; only optional factory combat orders wait.
+Priority levels buy the existing worker shortfall before transport, then also
+try the economy planner's pending MCV at an admitted price. No worker/yard target
+is increased. Campaign purchasing is unchanged.
+
+`starport_purchase` telemetry records every accepted port queue entry, including
+capital/recovery paths, with item/name, market, base and research-adjusted factory
+price, native rule, and cash after acceptance. Retain it with the audit driver's
+`--keep-telemetry`; compare candidate-only arms against native on identical sample
+schedules. Economy samples and wins must accompany the purchase-price summary.
+
 ### Source-separated economy curves
 
 For a real Random Skirmish city game, `tests/ai/dunecity-audit.py --attack-events`

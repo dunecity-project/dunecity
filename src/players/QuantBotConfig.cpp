@@ -342,6 +342,9 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaFfaReserve = false;
     force.vanillaFfaFullWaves = false;
     force.vanillaFfaStarportAfterWave = false;
+    force.starportBuying = 0;
+    force.starportCashStockpile = 0;
+    force.starportEconomyPriority = 0;
     force.vanillaFfaThreatProduction = false;
     force.vanillaFfaSingleFront = false;
     force.vanillaFfaLightWorkingCash = false;
@@ -694,6 +697,9 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "VanillaFfaReserve", force.vanillaFfaReserve);
         iniFile.setBoolValue("Force Concentration", "VanillaFfaFullWaves", force.vanillaFfaFullWaves);
         iniFile.setBoolValue("Force Concentration", "VanillaFfaStarportAfterWave", force.vanillaFfaStarportAfterWave);
+        iniFile.setIntValue("Force Concentration", "StarportBuying", force.starportBuying);
+        iniFile.setIntValue("Force Concentration", "StarportCashStockpile", force.starportCashStockpile);
+        iniFile.setIntValue("Force Concentration", "StarportEconomyPriority", force.starportEconomyPriority);
         iniFile.setBoolValue("Force Concentration", "VanillaFfaThreatProduction", force.vanillaFfaThreatProduction);
         iniFile.setBoolValue("Force Concentration", "VanillaFfaSingleFront", force.vanillaFfaSingleFront);
         iniFile.setBoolValue("Force Concentration", "VanillaFfaLightWorkingCash", force.vanillaFfaLightWorkingCash);
@@ -866,6 +872,9 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.vanillaFfaReserve = iniFile.getBoolValue("Force Concentration", "VanillaFfaReserve", force.vanillaFfaReserve);
     force.vanillaFfaFullWaves = iniFile.getBoolValue("Force Concentration", "VanillaFfaFullWaves", force.vanillaFfaFullWaves);
     force.vanillaFfaStarportAfterWave = iniFile.getBoolValue("Force Concentration", "VanillaFfaStarportAfterWave", force.vanillaFfaStarportAfterWave);
+    force.starportBuying = std::clamp(iniFile.getIntValue("Force Concentration", "StarportBuying", force.starportBuying), 0, 2);
+    force.starportCashStockpile = std::clamp(iniFile.getIntValue("Force Concentration", "StarportCashStockpile", force.starportCashStockpile), 0, 2);
+    force.starportEconomyPriority = std::clamp(iniFile.getIntValue("Force Concentration", "StarportEconomyPriority", force.starportEconomyPriority), 0, 2);
     force.vanillaFfaThreatProduction = iniFile.getBoolValue("Force Concentration", "VanillaFfaThreatProduction", force.vanillaFfaThreatProduction);
     force.vanillaFfaSingleFront = iniFile.getBoolValue("Force Concentration", "VanillaFfaSingleFront", force.vanillaFfaSingleFront);
     force.vanillaFfaLightWorkingCash = iniFile.getBoolValue("Force Concentration", "VanillaFfaLightWorkingCash", force.vanillaFfaLightWorkingCash);
@@ -1404,6 +1413,9 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("vanillaFfaReserve", force.vanillaFfaReserve);
     addNamed("vanillaFfaFullWaves", force.vanillaFfaFullWaves);
     addNamed("vanillaFfaStarportAfterWave", force.vanillaFfaStarportAfterWave);
+    if (force.starportBuying) addNamed("starportBuying", force.starportBuying);
+    if (force.starportCashStockpile) addNamed("starportCashStockpile", force.starportCashStockpile);
+    if (force.starportEconomyPriority) addNamed("starportEconomyPriority", force.starportEconomyPriority);
     addNamed("vanillaFfaThreatProduction", force.vanillaFfaThreatProduction);
     addNamed("vanillaFfaSingleFront", force.vanillaFfaSingleFront);
     addNamed("vanillaFfaLightWorkingCash", force.vanillaFfaLightWorkingCash);

@@ -357,6 +357,12 @@ VanillaFfaNearbyTarget=0
 VanillaFfaReserve=0
 VanillaFfaFullWaves=0
 VanillaFfaStarportAfterWave=0
+# Starport experiments: 0=native; Buying 1=80%,2=100% factory-price ceiling.
+# Stockpile 1/2 retains the price of one/two factory units for a cheaper window.
+# EconomyPriority 1=workers before transport,2=also the economy planner's MCV.
+StarportBuying=0
+StarportCashStockpile=0
+StarportEconomyPriority=0
 # Replacement production is scoped to vanilla FFA with at least five original players.
 VanillaFfaThreatProduction=0
 VanillaFfaSingleFront=0
