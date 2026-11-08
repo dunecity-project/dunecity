@@ -792,6 +792,32 @@ TEST_CASE("Vanilla boom families default off and persist independent hashed comb
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Duel opening plans default off and round trip independent hashed levels", "[ai][duel][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.duelOpeningPlan == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-duel-opening-config-test.ini";
+    std::map<std::string, int> hashes;
+    for (int level = 0; level <= 3; ++level) {
+        QuantBotConfig expected = defaults;
+        expected.force.duelOpeningPlan = level;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nDuelOpeningPlan=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.duelOpeningPlan == level);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), level).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.duelOpeningPlan == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai][vanilla][strategy][config]") {
     const std::array<int QuantBotConfig::ForceSettings::*, 5> members{
         &QuantBotConfig::ForceSettings::vanillaHarvesterBoomWorkers,

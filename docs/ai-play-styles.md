@@ -1139,3 +1139,25 @@ are unchanged; protocol 99 is not consumed. No revised-branch build, ctest, all-
 ladder result is claimed. The parent owns combined acceptance on `build-int`, including
 `quantbot_match_score`, `quantbot_strategy`, all-against-Atreides and the ladder; test-only candidate
 styles must not be treated as shipped defaults.
+
+## Experimental duel openings (default OFF)
+
+`[Force Concentration] DuelOpeningPlan` is a hashed integer: `0` native,
+`1` fast second refinery, `2` early light harvester pressure, `3` first heavy
+factory. Candidate-only test overlays are `duel-opening-off`, `-refinery`,
+`-raid`, and `-heavy`. The scope is autonomous Custom Hard/Brutal QuantBot,
+Vanilla or DuneCity, exactly two occupied controllers on opposing teams, with
+spice present. The plan expires at eight game minutes. Other formats and
+campaign support do not enter the policy; zero preserves the native config hash.
+
+The second-refinery plan surveys the yard's mountain-connected ground component,
+ignoring temporary traffic/buildings, divides remaining spice between both
+controllers conservatively, and requires four refinery purchase prices in that
+share before advancing to two refineries. Power recovery and live air defence
+retain priority. Raid builds up to four light vehicles and uses the existing
+raider ownership/micro path at minutes 4–8, permitting full-knowledge harvester
+targets. Heavy walks the actual mod prerequisites after the first income bay;
+neither factory plan invents unavailable technology or bypasses purchase admission.
+
+These are experiment arms, not accepted improvements. Evidence, coverage and
+funnel decisions live in `outputs/ai-tuning-20261108/DuelOpening/ledger.md`.

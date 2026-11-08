@@ -989,6 +989,8 @@ private:
     UnitMixPolicy::Weights startingPrior(const UnitMixPolicy::Slots& available) const;
     /// The opening and wave rules of the style (if a test style is active) or else the tempo.
     bool lightFirstOpening() const;
+    int duelOpeningPlan() const;
+    int duelReachableSpiceShare(const StructureBase* yard) const;
     int minWaveUnits() const;
     int minWaveValue() const;
     /// An Infantry mix strategy: Custom vanilla then founds a barracks and a WOR too.

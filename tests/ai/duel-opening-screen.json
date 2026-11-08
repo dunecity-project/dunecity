@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "sample_seed": 1220000,
+  "cases": [
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220000
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220001
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220002
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220003
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220004
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220005
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220006
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220007
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220008
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220009
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220010
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220011
+    }
+  ]
+}

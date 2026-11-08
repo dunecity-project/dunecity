@@ -1052,6 +1052,20 @@ void QuantBot::buildLightFactory(BuildPass& pass, BuilderTurn& turn) {
     auto& data = currentGame->objectData.data;
     constexpr auto& mixItems = kMixItems;
     constexpr size_t kSlots = UnitMixPolicy::kSlots;
+    // A finite opening raid, not a permanent light-unit composition.
+    if (duelOpeningPlan() == 2 && pass.lightVehicleCount < 4
+        && !turn.pBuilder->isUpgrading() && turn.pBuilder->getProductionQueueSize() == 0) {
+        for (const Uint32 item : {Uint32(Unit_Quad), Uint32(Unit_RaiderTrike), Uint32(Unit_Trike)}) {
+            if (!campaignAvailableToBuild(turn.pBuilder, item) || pass.money < purchasePrice(turn.pBuilder, item)) continue;
+            if (produceItemWithLogging(pass, turn, item, __LINE__, "duel_opening_raid")) {
+                ++pass.itemCount[item];
+                ++pass.lightVehicleCount;
+                pass.lightVehicleValue += data[item][houseID].price;
+                pass.militaryValue += data[item][houseID].price;
+                return;
+            }
+        }
+    }
     const int lightPlanValue = turn.campaignLightWorkingCash
         ? std::max(0, QuantBotBuildPolicy::fundedArmyTarget(pass.militaryValue, pass.lightBudget, pass.money)
             - pass.infantryValue)
