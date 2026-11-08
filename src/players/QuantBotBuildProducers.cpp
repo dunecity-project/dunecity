@@ -799,6 +799,10 @@ bool QuantBot::buildCapitalUnits(BuildPass& pass, BuilderTurn& turn) {
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    // The capital allocator also offers workers ahead of the type-specific
+    // military handler. Do not let it bypass the live-threat replacement rule.
+    if (pass.campaignThreatProduction && turn.pBuilder->getItemID() == Structure_HeavyFactory
+        && canBuildMilitaryVehicle(pass, turn.pBuilder)) return false;
     // An optional capital choice owns the producer only when the same
     // unit/price admitted by the acceptance wrapper can actually be funded.
     const auto unitAdmitted = [&](Uint32 item) {
