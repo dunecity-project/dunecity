@@ -1033,8 +1033,9 @@ class DuneCityAuditTests(unittest.TestCase):
 
     def test_refinery_and_power_mode_samples_append_without_reordering_old_fields(self):
         old_fields = audit['META'] + audit['SAMPLE_VALUES'] + ('flags',)
-        self.assertEqual(audit['SAMPLE_FIELDS'][:-11], old_fields)
-        self.assertEqual(audit['SAMPLE_FIELDS'][-11:-9], ('refineries', 'power_required'))
+        self.assertEqual(audit['SAMPLE_FIELDS'][:len(old_fields)], old_fields)
+        self.assertEqual(audit['SAMPLE_FIELDS'][len(old_fields):len(old_fields) + 2],
+                         ('refineries', 'power_required'))
         prefix = 'DUNECITY_AUDIT: minute=5 cycle=18750 house=0 power=100 need=150 spice=10000'
         for suffix, expected in (('', ('', '')), (' refineries=4 power_required=0', ('4', '0')),
                                  (' refineries=2 power_required=1', ('2', '1'))):
