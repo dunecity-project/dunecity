@@ -50,6 +50,20 @@ class CampaignCoverageTests(unittest.TestCase):
             shard_ids.extend(game['id'] for game in matrix['schedule'](args))
         self.assertEqual(Counter(shard_ids), Counter(game['id'] for game in games))
 
+    def test_explicit_fresh_campaign_seeds_keep_support_and_other_categories(self):
+        options = ['--tier', 'full', '--categories', 'campaign', 'aaa',
+                   '--cells', 'player-brutal-v-campaign-ai/vanilla|qb-v-4ah/vanilla']
+        native = matrix['schedule'](matrix['parser'].parse_args(options))
+        fresh = matrix['schedule'](matrix['parser'].parse_args(
+            options + ['--campaign-seeds', '1280000', '1280001', '1280000']))
+        campaign = [game for game in fresh if game['kind'] == 'campaign']
+        self.assertEqual(len(campaign), 132)
+        self.assertEqual({game['seed'] for game in campaign}, {1280000, 1280001})
+        self.assertTrue(all(not game['ai_only'] and game['id'].endswith('#human-partner')
+                            for game in campaign))
+        self.assertEqual([game for game in native if game['kind'] != 'campaign'],
+                         [game for game in fresh if game['kind'] != 'campaign'])
+
     def test_ai_only_diagnostic_drops_the_human_seat(self):
         args = matrix['parser'].parse_args([
             '--tier', 'full', '--categories', 'campaign', '--campaign-ai-only',
