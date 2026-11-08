@@ -651,6 +651,32 @@ TEST_CASE("Launcher extra kite distance is independently loaded saved bounded an
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Palace experiments default off and independently round trip bounded hashed levels", "[ai][palace][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.palaceValueTarget == 0);
+    REQUIRE(defaults.force.palaceWaveTiming == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-palace-experiments.ini";
+    for (const char* key : {"PalaceValueTarget", "PalaceWaveTiming"}) {
+        for (int level : {-1, 0, 1, 2, 3}) {
+            QuantBotConfig config;
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\n" << key << '=' << level << '\n';
+            }
+            REQUIRE(config.applyOverrides(path.string()));
+            const bool targeting = std::string_view(key) == "PalaceValueTarget";
+            REQUIRE(config.force.palaceValueTarget == (targeting ? std::clamp(level, 0, 2) : 0));
+            REQUIRE(config.force.palaceWaveTiming == (targeting ? 0 : std::clamp(level, 0, 2)));
+            REQUIRE((config.getConfigHash() == defaults.getConfigHash()) == (level <= 0));
+            REQUIRE(config.save(path.string()));
+            QuantBotConfig restored;
+            REQUIRE(restored.applyOverrides(path.string()));
+            REQUIRE(restored.getConfigHash() == config.getConfigHash());
+        }
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Exhausted army dispatch defaults on and independently round-trips both hashed states",
           "[ai][army][recovery][config]") {
     const QuantBotConfig defaults;

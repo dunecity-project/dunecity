@@ -351,6 +351,11 @@ Strategy=false
 # absent. It only acts when the match's Research Lab game option is enabled.
 # Basic income, power, defence and accepted production commitments keep their funding first.
 [Force Concentration]
+# Palace trials, Custom Hard/Brutal with immutable initial spice; 0 preserves native.
+# Target: 1 economy clusters; 2 economy or army by true purchase value.
+# Timing: 1 hunting wave; 2 engaged wave. Bounded release every 60/120 seconds.
+PalaceValueTarget=0
+PalaceWaveTiming=0
 # Independent vanilla multi-enemy tuning; inert in 1v1, two-team matches, cities and campaigns.
 VanillaFfaWeakestTarget=0
 VanillaFfaNearbyTarget=0

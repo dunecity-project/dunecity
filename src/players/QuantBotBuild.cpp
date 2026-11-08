@@ -85,12 +85,84 @@ bool QuantBot::isCivWarsMatch() const {
     return civWarsRules() && currentGame->getGameInitSettings().isCivilizationWars();
 }
 
+bool QuantBot::palaceExperimentScope() const {
+    return currentGame && gameMode == GameMode::Custom && difficulty >= Difficulty::Hard
+        && !builderOnly() && !isCampaignGameType(currentGame->gameType)
+        && currentGame->getGameInitSettings().getInitialSpiceTilePermille() > 0;
+}
+
+bool QuantBot::palaceWeaponDue() const {
+    const int level = botConfig().force.palaceWaveTiming;
+    if (level == 0 || !palaceExperimentScope()) return true;
+    int hunters = 0, engaged = 0;
+    for (const auto* unit : getUnitList()) {
+        if (unit->getOwner() != getHouse() || unit->getHealth() <= 0 || !unit->isActive()
+            || !unit->isAGroundUnit() || !unit->canAttack() || !unit->isRespondable()
+            || unit->getAttackMode() != HUNT || unit->getItemID() == Unit_Saboteur) continue;
+        ++hunters;
+        const auto* target = unit->getTarget();
+        if (target && target->getOwner() && target->getOwner()->getTeamID() != getHouse()->getTeamID()
+            && blockDistance(unit->getLocation(), target->getLocation()) <= unit->getWeaponRange()+5)
+            ++engaged;
+    }
+    // A bounded, world-derived release window avoids a saved timing cache and never
+    // strands a ready Palace when no viable army can depart.
+    const Uint32 period = MILLI2CYCLES(level == 1 ? 60000 : 120000);
+    return (level == 1 ? hunters >= 3 : engaged >= 3)
+        || getGameCycleCount() % period < Uint32(MILLI2CYCLES(5000));
+}
+
+const ObjectBase* QuantBot::palaceValueTarget() const {
+    const int level = botConfig().force.palaceValueTarget;
+    if (level == 0 || !palaceExperimentScope()) return nullptr;
+    struct Asset { const ObjectBase* object; int value; bool enemy; };
+    std::vector<Asset> assets;
+    const auto append = [&](const ObjectBase* object) {
+        if (!object->getOwner() || object->getOwner()->isNatives() || !object->isActive()
+            || object->getHealth() <= 0 || object->isAFlyingUnit()) return;
+        const auto item = object->getItemID();
+        const bool economy = item == Structure_Refinery || QuantBotInternal::harvesterItem(item)
+            || item == Structure_HeavyFactory || item == Structure_LightFactory
+            || item == Structure_HighTechFactory || item == Structure_ConstructionYard;
+        if (!economy && (level == 1 || !object->isAUnit() || !object->canAttack())) return;
+        const int value = currentGame->objectData.data[item][object->getProductionHouseID()].price;
+        if (value > 0) assets.push_back({object, value, object->getOwner()->getTeamID() != getHouse()->getTeamID()});
+    };
+    for (const auto* structure : getStructureList()) append(structure);
+    for (const auto* unit : getUnitList()) append(unit);
+    const ObjectBase* best = nullptr;
+    int64_t bestScore = 0;
+    for (const auto& candidate : assets) {
+        if (!candidate.enemy) continue;
+        int64_t score = 0;
+        for (const auto& asset : assets) {
+            const int distance = std::max(std::abs(candidate.object->getX()-asset.object->getX()),
+                                          std::abs(candidate.object->getY()-asset.object->getY()));
+            if (distance <= 5) score += int64_t(asset.value)*(6-distance)*(asset.enemy ? 1 : -2);
+        }
+        if (score > bestScore || (score == bestScore && score > 0 && best
+            && candidate.object->getObjectID() < best->getObjectID())) {
+            bestScore = score;
+            best = candidate.object;
+        }
+    }
+    return best;
+}
+
 void QuantBot::firePalaceWeapon(const Palace* pPalace) {
-    if (!pPalace->isSpecialWeaponReady()) return;
+    if (!pPalace->isSpecialWeaponReady() || !palaceWeaponDue()) return;
     const int houseID = getHouse()->getHouseID();
     if (houseID != HOUSE_HARKONNEN && houseID != HOUSE_SARDAUKAR) {
         doSpecialWeapon(pPalace);
         placementCache.clear(); // Palace summons can occupy previously free sites.
+        return;
+    }
+    if (const auto* valued = palaceValueTarget()) {
+        traceDecision("palace_value_aim", AITelemetry::Record().set("target", valued->getObjectID())
+            .set("item", valued->getItemID()).set("x", valued->getX()).set("y", valued->getY())
+            .set("target_level", botConfig().force.palaceValueTarget)
+            .set("timing_level", botConfig().force.palaceWaveTiming));
+        doLaunchDeathhand(pPalace, valued->getX(), valued->getY());
         return;
     }
     int enemyHouseID = -1;

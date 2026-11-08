@@ -31,6 +31,7 @@
 #include <SoundPlayer.h>
 
 #include <players/HumanPlayer.h>
+#include <players/QuantBot.h>
 #include <mod/ModManager.h>
 
 #include <units/InfantryBase.h>
@@ -41,6 +42,28 @@
 #include <GUI/ObjectInterfaces/PalaceInterface.h>
 
 #define PALACE_DEATHHAND_WEAPONDAMAGE       DynastyProjectile::deathHandDamage
+
+namespace {
+bool palaceTimingHeld(const House* house) {
+    for (const auto& player : house->getPlayerList())
+        if (const auto* bot = dynamic_cast<const QuantBot*>(player.get()); bot && !bot->palaceWeaponDue())
+            return true;
+    return false;
+}
+const ObjectBase* palaceControllerTarget(const House* house) {
+    for (const auto& player : house->getPlayerList())
+        if (const auto* bot = dynamic_cast<const QuantBot*>(player.get()))
+            if (const auto* target = bot->palaceValueTarget()) return target;
+    return nullptr;
+}
+void recordPalaceSpawn(const Palace* palace, UnitBase* unit, const ObjectBase* target) {
+    AITelemetry::log().write(currentGame->getGameCycleCount(), palace->getOwner()->getHouseID(), -1,
+        "palace_unit_spawned", AITelemetry::Record().set("palace", palace->getObjectID())
+            .set("unit", unit->getObjectID()).set("item", unit->getItemID())
+            .set("x", unit->getX()).set("y", unit->getY())
+            .set("target", target ? target->getObjectID() : NONE_ID));
+}
+}
 
 Palace::Palace(House* newOwner) : StructureBase(newOwner) {
     Palace::init();
@@ -362,7 +385,7 @@ void Palace::updateStructureSpecificStuff() {
 
     if(getOwner() == pLocalHouse) {
         currentGame->addToNewsTicker(_("Palace is ready"));
-    } else if(getOwner()->isAI() && !usesTargetedSpecialWeapon()) {
+    } else if(getOwner()->isAI() && !usesTargetedSpecialWeapon() && !palaceTimingHeld(getOwner())) {
         doSpecialWeapon();
     }
 }
@@ -395,6 +418,7 @@ bool Palace::callFremen() {
     if(count < 1000) {
 
         int spawned = 0;
+        const auto* valuedTarget = palaceControllerTarget(getOwner());
         for(int numFremen = 0; numFremen < 15; numFremen++) {
             if(currentGame->randomGen.rand(0, 5) == 0) {
                 continue;
@@ -434,6 +458,8 @@ bool Palace::callFremen() {
                     pFremen->setDestination(closestUnit->getLocation());
                 }
             }
+            if (valuedTarget) pFremen->doAttackObject(valuedTarget, false);
+            recordPalaceSpawn(this, pFremen, valuedTarget ? valuedTarget : pFremen->getTarget());
         }
 
         return spawned > 0;
@@ -477,6 +503,9 @@ bool Palace::spawnSaboteur() {
         currentGame->addToNewsTicker(_("@DUNE.ENG|79#Saboteur is approaching"));
         soundPlayer->playVoice(SaboteurApproaching, currentGame->getInterfaceHouseID());
     }
+    const auto* valuedTarget = palaceControllerTarget(getOwner());
+    if (valuedTarget) saboteur->doAttackObject(valuedTarget, false);
+    recordPalaceSpawn(this, saboteur, valuedTarget ? valuedTarget : saboteur->getTarget());
 
     return true;
 }
@@ -510,6 +539,7 @@ bool Palace::callLightVehicles() {
     const int quadCount = currentGame->randomGen.rand(0, 2);
     int spawned = 0;
     bool unitLimitReached = false;
+    const auto* valuedTarget = palaceControllerTarget(getOwner());
 
     const auto spawnVehicle = [&](int itemID) {
         if(getOwner()->isUnitLimitReached(itemID)) {
@@ -537,6 +567,8 @@ bool Palace::callLightVehicles() {
             newUnit->deploy(deployPos);
             newUnit->setGuardPoint(deployPos);
             newUnit->doSetAttackMode(HUNT);
+            if (valuedTarget) newUnit->doAttackObject(valuedTarget, false);
+            recordPalaceSpawn(this, newUnit, valuedTarget ? valuedTarget : newUnit->getTarget());
             spawned++;
             return;
         }
@@ -560,6 +592,7 @@ bool Palace::callLightVehicles() {
 bool Palace::callOrnithopterStrike() {
     int spawned = 0;
     bool unitLimitReached = false;
+    const auto* valuedTarget = palaceControllerTarget(getOwner());
 
     for(int i = 0; i < 3; ++i) {
         if(getOwner()->isUnitLimitReached(Unit_Ornithopter)) {
@@ -582,6 +615,8 @@ bool Palace::callOrnithopterStrike() {
         ornithopter->deploy(deployPos);
         ornithopter->setGuardPoint(deployPos);
         ornithopter->doSetAttackMode(HUNT);
+        if (valuedTarget) ornithopter->doAttackObject(valuedTarget, false);
+        recordPalaceSpawn(this, ornithopter, valuedTarget ? valuedTarget : ornithopter->getTarget());
         ++spawned;
     }
 

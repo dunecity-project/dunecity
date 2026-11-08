@@ -1220,6 +1220,13 @@ void QuantBot::resetLearningForMeasuredScoring() {
 }
 
 void QuantBot::onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) {
+    if (AITelemetry::log().enabled()) {
+        const auto* source = getObject(attacker);
+        traceDecision("special_weapon_reward", AITelemetry::Record().set("attacker", attacker)
+            .set("target", target).set("item", source ? int(source->getItemID()) : -1)
+            .set("damage_milli", reward.damageMilli).set("hp_milli", reward.hpRemovedMilli)
+            .set("kill_bonus_milli", reward.killBonusMilli).set("hits", reward.hits).set("kills", reward.kills));
+    }
     for (auto& raid : harvesterStrikeTraces) for (auto& member : raid.members) if (member.id==attacker) {
         member.reward.damageMilli += reward.damageMilli;
         member.reward.killBonusMilli += reward.killBonusMilli;

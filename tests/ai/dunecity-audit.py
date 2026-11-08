@@ -563,10 +563,14 @@ def sample_schedule(args):
         rng = random.Random(f'{args.sample_seed}/{mod}')
         factors = dict(SAMPLE_FACTORS, spice_level=tuple(SPICE)[int(mod == 'vanilla'):],
                        initial_tech=tuple(range(3 if mod == 'vanilla' else 1, 10)))
+        if args.sample_techs:
+            factors['initial_tech'] = tuple(args.sample_techs)
         draws = {factor: balanced_draw(levels, args.cases, rng) for factor, levels in factors.items()}
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
             seed = rng.getrandbits(32)
+            if args.sample_game_seed_base is not None:
+                seed = args.sample_game_seed_base + index
             fmt, enemy = case['format'], case['difficulty']
             count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
             houses = list(HOUSES[:count])
@@ -1935,6 +1939,10 @@ parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='m
                     help='sample: balanced seeded factor draws, each played from two candidate seats')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--sample-game-seed-base', type=int,
+                    help='sample: consecutive engine seeds beginning here (same range for both mods)')
+parser.add_argument('--sample-techs', nargs='+', type=int, choices=range(1, 10),
+                    help='sample: restrict the balanced initial-tech deck; default schedule unchanged')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)
@@ -1962,6 +1970,8 @@ if not 256 <= args.capture_mib <= 4096:
     parser.error('Use 256-4096 MiB of capture space')
 if args.cases < 1 or not 0 <= args.sample_seed <= 0xffffffff:
     parser.error('Use positive --cases and an unsigned 32-bit --sample-seed')
+if args.sample_game_seed_base is not None and not 0 <= args.sample_game_seed_base <= 0xffffffff-args.cases+1:
+    parser.error('--sample-game-seed-base range must fit unsigned 32-bit seeds')
 if args.mod == 'both' and args.mode != 'sample' or args.mode == 'sample' and args.mod == 'Dune2R':
     parser.error('--mode sample accepts --mod vanilla|dunecity|both; both is sample-only')
 if args.candidate_style and args.mode != 'sample':

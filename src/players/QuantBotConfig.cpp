@@ -368,6 +368,8 @@ QuantBotConfig::QuantBotConfig() {
     force.clearMcvFootprint = true;
     force.smallMapYardCap = false;
     force.deathHandTurrets = false;
+    force.palaceValueTarget = 0;
+    force.palaceWaveTiming = 0;
     force.spreadVsDeathHand = false;
     // On since 1.0.861: no-spice 1v1, 16 seeds, blue wiped out 8/16 -> 0/16; matrix neutral.
     force.defencePrerequisites = true;
@@ -718,6 +720,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
         iniFile.setBoolValue("Force Concentration", "SmallMapYardCap", force.smallMapYardCap);
         iniFile.setBoolValue("Force Concentration", "DeathHandTurrets", force.deathHandTurrets);
+        iniFile.setIntValue("Force Concentration", "PalaceValueTarget", force.palaceValueTarget);
+        iniFile.setIntValue("Force Concentration", "PalaceWaveTiming", force.palaceWaveTiming);
         iniFile.setBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
         iniFile.setBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
         iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
@@ -891,6 +895,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
     force.smallMapYardCap = iniFile.getBoolValue("Force Concentration", "SmallMapYardCap", force.smallMapYardCap);
     force.deathHandTurrets = iniFile.getBoolValue("Force Concentration", "DeathHandTurrets", force.deathHandTurrets);
+    force.palaceValueTarget = std::clamp(iniFile.getIntValue("Force Concentration", "PalaceValueTarget", force.palaceValueTarget), 0, 2);
+    force.palaceWaveTiming = std::clamp(iniFile.getIntValue("Force Concentration", "PalaceWaveTiming", force.palaceWaveTiming), 0, 2);
     force.spreadVsDeathHand = iniFile.getBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
     force.defencePrerequisites = iniFile.getBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
     force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
@@ -1428,6 +1434,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("clearMcvFootprint", force.clearMcvFootprint);
     addNamed("smallMapYardCap", force.smallMapYardCap);
     addNamed("deathHandTurrets", force.deathHandTurrets);
+    addNamed("palaceValueTarget", force.palaceValueTarget);
+    addNamed("palaceWaveTiming", force.palaceWaveTiming);
     addNamed("spreadVsDeathHand", force.spreadVsDeathHand);
     addNamed("defencePrerequisites", force.defencePrerequisites);
     addNamed("hardCityMatch", force.hardCityMatch);

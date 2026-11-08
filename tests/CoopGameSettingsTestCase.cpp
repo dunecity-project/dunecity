@@ -70,6 +70,28 @@ static GameInitSettings makeCoop(bool campaign, bool bot, const std::string& bot
     return init;
 }
 
+TEST_CASE("Initial spice density is derived from immutable saved map tiles", "[city][settings][save]") {
+    GameInitSettings init("density.ini",
+        "[BASIC]\nVersion=2\n[MAP]\nSizeX=10\nSizeY=2\n"
+        "000=~+gGrRlLwW\n001=-^%@OQbBix\n[RANDOMSKIRMISH]\nSpice=0\n",
+        false, SettingsClass::GameOptionsClass{});
+    REQUIRE(init.getInitialSpiceTilePermille() == 500);
+    REQUIRE(init.getInitialSpiceTilePermille() == 500);
+    OMemoryStream saved;
+    saved.open();
+    init.save(saved);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    const GameInitSettings restored(input);
+    REQUIRE(restored.getInitialSpiceTilePermille() == 500);
+    REQUIRE(init.networkSnapshot("not an INI: binary checkpoint").getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[MAP]\nSizeX=10\nSizeY=1\n000=----------\n[RANDOMSKIRMISH]\nSpice=3\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == 0);
+    init.setScenarioData("[MAP]\nSizeX=10\nSizeY=1\n000=~\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[MAP]\nSeed=123\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+}
+
 TEST_CASE("Original damage is a shared rule preserved by setup, saves and campaigns", "[damage][network][save]") {
     SettingsClass::GameOptionsClass balanced;
     balanced.originalUnitDamage = false;
