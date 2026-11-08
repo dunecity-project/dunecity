@@ -26,9 +26,9 @@ from probe_profile import finish_game, probe_binary, require_free_space, scratch
 from simulation_measure import measure_runner
 
 CASES = ('duel128', 'duel160', 'duel192', 'city160', 'vanilla160', 'campaign', 'aaa1', 'aaa2')
-FIELDS = ('id', 'case', 'round', 'host', 'platform', 'cpu_count', 'wall_s', 'cpu_s',
+FIELDS = ('id', 'case', 'round', 'host', 'platform', 'cpu_count', 'started_epoch', 'ended_epoch', 'wall_s', 'cpu_s',
           'probe_wall_s', 'probe_cpu_s', 'runner_cpu_s', 'parse_cpu_s', 'peak_rss_mib', 'steady_rss_mib',
-          'setup_ms', 'loop_ms', 'cycles', 'startup', 'headless_assets', 'signature', 'bench', 'error')
+          'startup_wall_s', 'setup_ms', 'loop_ms', 'cycles', 'startup', 'headless_assets', 'signature', 'bench', 'error')
 
 
 def read(path):
@@ -103,7 +103,7 @@ def fields(line, marker):
 
 
 def play(args, scratch, binary, game):
-    started, python_started = time.monotonic(), time.process_time()
+    started, epoch_started = time.monotonic(), time.time()
     name = 'g' + hashlib.sha256(game['id'].encode()).hexdigest()[:12]
     out = Path(scratch) / name
     results = Path(args.results)
@@ -146,6 +146,7 @@ def play(args, scratch, binary, game):
     error = '' if rc == 0 and native and timing and digests and digests[-1].get('final') == '1' else f'rc={rc};incomplete'
     startup = [line.split('ASSET_STARTUP:', 1)[1].strip() for line in lines if 'ASSET_STARTUP:' in line]
     row = dict(id=game['id'], case=game['case'], round=game['round'], host=platform.node(), platform=sys.platform,
+               started_epoch=epoch_started, ended_epoch=time.time(), startup_wall_s=native.get('startup_wall_s', ''),
                cpu_count=os.cpu_count(), wall_s=round(time.monotonic() - started, 6), cpu_s=cpu,
                probe_wall_s=native.get('wall_s', ''), probe_cpu_s=native.get('cpu_s', ''),
                runner_cpu_s=round(cpu - native.get('cpu_s', 0), 6),

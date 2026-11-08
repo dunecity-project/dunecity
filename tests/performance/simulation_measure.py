@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from contextlib import nullcontext
 
 
 def measure_runner(command, console, *, env, cwd):
@@ -67,7 +68,7 @@ def _windows_counters(process):
     memory.cb = ctypes.sizeof(memory)
     created, ended, system, user = (wintypes.FILETIME() for _ in range(4))
     handle = wintypes.HANDLE(int(process._handle))
-    if not psapi.GetProcessMemoryInfo(handle, ctypes.byref(memory), memory.cb):
+    if not psapi.GetProcessMemoryInfo(handle, ctypes.byref(memory), memory.cb) and process.poll() is None:
         raise ctypes.WinError(ctypes.get_last_error())
     if not kernel.GetProcessTimes(handle, *[ctypes.byref(value) for value in (created, ended, system, user)]):
         raise ctypes.WinError(ctypes.get_last_error())
@@ -76,6 +77,14 @@ def _windows_counters(process):
 
 
 def measure_process(command, *, cwd, env, log, timeout, output, sample_seconds=0):
+    """Accept the runner's log path or an already-open capture stream."""
+    context = Path(log).open('w') if isinstance(log, (str, os.PathLike)) else nullcontext(log)
+    with context as capture:
+        return _measure_process(command, cwd=cwd, env=env, log=capture, timeout=timeout,
+                                output=output, sample_seconds=sample_seconds)
+
+
+def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds):
     """Run one checked probe and persist measurements even if it fails.
 
     DUNECITY_SIM_MEASURE is deliberately opt-in: ordinary tests do no polling or
@@ -117,15 +126,10 @@ def measure_process(command, *, cwd, env, log, timeout, output, sample_seconds=0
                 if 'ASSET_STARTUP: phase=probe_setup' in chunk:
                     startup_wall = now - started
             if sys.platform == 'win32':
+                rss, observed_peak, probe_cpu = _windows_counters(process)
+                peak = max(peak, observed_peak)
                 returncode = process.poll()
                 if returncode is not None:
-                    break
-                try:
-                    rss, peak, probe_cpu = _windows_counters(process)
-                except OSError:
-                    returncode = process.poll()
-                    if returncode is None:
-                        raise
                     break
             else:
                 pid, status, usage = os.wait4(process.pid, os.WNOHANG)
