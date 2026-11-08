@@ -15,7 +15,8 @@
   "portability_repairs": [
     "src/FileClasses/GFXManager.cpp noncopyable INIFile conditional replaced by directly returned prvalues, same UI semantics for MSVC",
     "src/mod/Workshop.cpp saveMod metadata noncopyable INIFile conditional replaced by directly returned prvalues, same inactive Workshop persistence semantics",
-    "src/mod/ModManager.cpp writeModInfo noncopyable INIFile conditional replaced by directly returned prvalues, same inactive metadata persistence semantics"
+    "src/mod/ModManager.cpp writeModInfo noncopyable INIFile conditional replaced by directly returned prvalues, same inactive metadata persistence semantics",
+    "tests/PathWorkerPoolTestCase.cpp uses the current test-only _putenv_s branch on Windows; no gameplay source or native settings changed"
   ],
   "release": "1.0.807",
   "schema_version": 1,
