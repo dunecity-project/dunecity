@@ -26,7 +26,10 @@ inline bool boomScope(bool ffaOnly, int enemies, bool severalEnemyTeams) {
     return !ffaOnly || (enemies >= 3 && severalEnemyTeams);
 }
 
-inline Plan timedPlan(Plan kind, unsigned minute, int greedyStop) {
+inline Plan timedPlan(Plan kind, unsigned minute, int greedyStop, bool refineryGreedy) {
+    // The compound arm keeps the refinery opening, then uses the existing greedy conversion.
+    if (kind == Plan::Refinery && refineryGreedy)
+        return minute < unsigned(greedyStop) ? Plan::Refinery : minute < 20 ? Plan::GreedyArmy : Plan::None;
     if (kind == Plan::Harvester || kind == Plan::Refinery) return minute < 10 ? kind : Plan::None;
     if (kind == Plan::GreedyEconomy)
         return minute < unsigned(greedyStop) ? Plan::GreedyEconomy : minute < 20 ? Plan::GreedyArmy : Plan::None;

@@ -128,6 +128,19 @@ test-only behaviour.
 | `armor` | mass armour | 70% of the mix from tank 65 / siege 20 / launcher 15 |
 | `counter` | counter-composition | 60% of the mix towards counters of the remembered enemy army (light → tanks/siege, armour → launchers/siege, launchers → quads/tanks, air → launchers) |
 
+### Vanilla refinery/greedy compound cells (test-only)
+
+`vanilla-boom-refinery-6-greedy-{6,10,12}` enables the existing `VanillaRefineryBoom` and
+`VanillaGreedyBoom` switches with six refineries, the named greedy stop, and `VanillaBoomFfaOnly=1`.
+Before that stop it uses the refinery plan: two workers per refinery and one heavy factory, subject
+to the existing sustainable-spice cap. At the stop it enters the existing greedy army phase until
+minute 20: four-worker/two-refinery/one-factory recovery targets, optional economy/technology savings
+released, and the existing military, power, defence and prerequisite admission rules. These are
+new-order constraints, not teardown of existing assets or cancellation of accepted orders.
+At minute 20 normal planning resumes. The greedy switch deliberately retains **150% readiness**
+throughout both phases before minute 20; these cells add no formations. All switches remain default
+off, and single-family plans and out-of-scope games retain their existing behavior.
+
 ## 3. Tournament
 
 Hard. Fortress = `formation-duel.py` Random Skirmish 128/160/192, seeds 7101-7606 (one house pair per

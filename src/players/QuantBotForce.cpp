@@ -147,9 +147,10 @@ QuantBotVanillaPolicy::Plan QuantBot::vanillaBoldPlan(QuantBotVanillaPolicy::Obs
     const unsigned minute = getGameCycleCount() / MILLI2CYCLES(60000);
     const Plan kind = force.vanillaHarvesterBoom ? Plan::Harvester : force.vanillaRefineryBoom ? Plan::Refinery
         : force.vanillaGreedyBoom ? Plan::GreedyEconomy : Plan::ReactiveEconomy;
-    receipt.stopMinute = kind == Plan::GreedyEconomy ? force.vanillaGreedyBoomMinutes
+    const bool refineryGreedy = kind == Plan::Refinery && force.vanillaGreedyBoom;
+    receipt.stopMinute = kind == Plan::GreedyEconomy || refineryGreedy ? force.vanillaGreedyBoomMinutes
         : kind == Plan::Harvester || kind == Plan::Refinery ? 10 : 0;
-    receipt.plan = QuantBotVanillaPolicy::timedPlan(kind, minute, force.vanillaGreedyBoomMinutes);
+    receipt.plan = QuantBotVanillaPolicy::timedPlan(kind, minute, force.vanillaGreedyBoomMinutes, refineryGreedy);
     if (kind == Plan::ReactiveEconomy) {
         vanillaReactiveSurvey(receipt);
         receipt.plan = QuantBotVanillaPolicy::reactiveArmy(receipt.ownArmy, receipt.enemyArmy, receipt.nearArmy,

@@ -852,14 +852,14 @@ TEST_CASE("Vanilla boom phases preserve scope and convert greedy spending at the
         REQUIRE(goal.workers == 2 * refineries);
         REQUIRE(goal.refineries == refineries);
     }
-    REQUIRE(timedPlan(Plan::Harvester, 9, 6) == Plan::Harvester);
-    REQUIRE(timedPlan(Plan::Harvester, 10, 6) == Plan::None);
-    REQUIRE(timedPlan(Plan::Refinery, 10, 6) == Plan::None);
+    REQUIRE(timedPlan(Plan::Harvester, 9, 6, false) == Plan::Harvester);
+    REQUIRE(timedPlan(Plan::Harvester, 10, 6, false) == Plan::None);
+    REQUIRE(timedPlan(Plan::Refinery, 10, 6, false) == Plan::None);
     for (const int stop : {6, 10, 12}) {
-        REQUIRE(timedPlan(Plan::GreedyEconomy, stop - 1, stop) == Plan::GreedyEconomy);
-        REQUIRE(timedPlan(Plan::GreedyEconomy, stop, stop) == Plan::GreedyArmy);
-        REQUIRE(timedPlan(Plan::GreedyEconomy, 19, stop) == Plan::GreedyArmy);
-        REQUIRE(timedPlan(Plan::GreedyEconomy, 20, stop) == Plan::None);
+        REQUIRE(timedPlan(Plan::GreedyEconomy, stop - 1, stop, false) == Plan::GreedyEconomy);
+        REQUIRE(timedPlan(Plan::GreedyEconomy, stop, stop, false) == Plan::GreedyArmy);
+        REQUIRE(timedPlan(Plan::GreedyEconomy, 19, stop, false) == Plan::GreedyArmy);
+        REQUIRE(timedPlan(Plan::GreedyEconomy, 20, stop, false) == Plan::None);
     }
     const auto boom = targets(Plan::GreedyEconomy, 8, 4, 8, 50);
     REQUIRE(boom.workers == 16);
@@ -880,6 +880,59 @@ TEST_CASE("Vanilla boom phases preserve scope and convert greedy spending at the
         REQUIRE(reactiveArmy(10000, 10000, 10001, 10000, 10000, ratio, economy));
         REQUIRE(reactiveArmy(10000, 10000, 0, economy, 10000, ratio, economy));
         REQUIRE_FALSE(reactiveArmy(10000, 10000, 0, economy - 1, 10000, ratio, economy));
+    }
+}
+
+TEST_CASE("Refinery greedy compound boundaries reuse refinery targets and greedy army conversion",
+          "[ai][vanilla][strategy]") {
+    using namespace QuantBotVanillaPolicy;
+    struct Boundary { unsigned minute; Plan plan; Targets target; };
+    const std::array<Boundary, 4> boundaries{{
+        {5, Plan::Refinery, {12, 6, 1}},
+        {6, Plan::GreedyArmy, {4, 2, 1}},
+        {19, Plan::GreedyArmy, {4, 2, 1}},
+        {20, Plan::None, {0, 0, 0}},
+    }};
+    for (const auto& boundary : boundaries) {
+        const Plan plan = timedPlan(Plan::Refinery, boundary.minute, 6, true);
+        REQUIRE(plan == boundary.plan);
+        const auto goal = targets(plan, 8, 6, 8, 50);
+        REQUIRE(goal.workers == boundary.target.workers);
+        REQUIRE(goal.refineries == boundary.target.refineries);
+        REQUIRE(goal.factories == boundary.target.factories);
+        REQUIRE(armyPhase(plan) == (boundary.plan == Plan::GreedyArmy));
+        if (plan != Plan::None)
+            REQUIRE(deferTech(plan, goal.workers, goal.refineries, goal.factories, goal) == armyPhase(plan));
+    }
+    const auto limited = targets(timedPlan(Plan::Refinery, 5, 6, true), 8, 6, 8, 3);
+    REQUIRE(limited.workers == 3);
+    REQUIRE(limited.refineries == 2);
+    REQUIRE(readiness(Plan::GreedyEconomy) == 150);
+    REQUIRE(readiness(Plan::GreedyArmy) == 150);
+}
+
+TEST_CASE("Compound stops use existing levels without changing single or higher priority plans",
+          "[ai][vanilla][strategy]") {
+    using namespace QuantBotVanillaPolicy;
+    for (const int stop : {6, 10, 12}) {
+        REQUIRE(timedPlan(Plan::Refinery, stop - 1, stop, true) == Plan::Refinery);
+        REQUIRE(timedPlan(Plan::Refinery, stop, stop, true) == Plan::GreedyArmy);
+        REQUIRE(timedPlan(Plan::Refinery, 19, stop, true) == Plan::GreedyArmy);
+        REQUIRE(timedPlan(Plan::Refinery, 20, stop, true) == Plan::None);
+        for (const unsigned minute : {5u, 6u, 9u, 10u, 11u, 12u, 19u, 20u}) {
+            const Plan opening = minute < 10 ? Plan::Harvester : Plan::None;
+            REQUIRE(timedPlan(Plan::Harvester, minute, stop, false) == opening);
+            REQUIRE(timedPlan(Plan::Harvester, minute, stop, true) == opening);
+            REQUIRE(timedPlan(Plan::Refinery, minute, stop, false) == (minute < 10 ? Plan::Refinery : Plan::None));
+            const Plan greedy = minute < unsigned(stop) ? Plan::GreedyEconomy
+                : minute < 20 ? Plan::GreedyArmy : Plan::None;
+            REQUIRE(timedPlan(Plan::GreedyEconomy, minute, stop, false) == greedy);
+            REQUIRE(timedPlan(Plan::GreedyEconomy, minute, stop, true) == greedy);
+            for (const Plan unchanged : {Plan::None, Plan::ReactiveEconomy, Plan::ReactiveArmy}) {
+                REQUIRE(timedPlan(unchanged, minute, stop, false) == unchanged);
+                REQUIRE(timedPlan(unchanged, minute, stop, true) == unchanged);
+            }
+        }
     }
 }
 
