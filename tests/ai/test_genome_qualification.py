@@ -262,9 +262,12 @@ class CandidateQualificationTests(unittest.TestCase):
             root = Path(temp)
             subprocess.run(['git', 'init', '--quiet', str(root)], check=True)
             (root / 'source.cpp').write_bytes(b'int source = 1;\n')
+            (root / 'nested').mkdir()
+            for index in range(24):
+                (root / 'nested' / f'{index}.bin').write_bytes(bytes(range(256)) * (index + 1))
             subprocess.run(['git', 'config', 'core.symlinks', 'false'], cwd=root, check=True)
             (root / 'logical-link').write_bytes(b'source.cpp')
-            subprocess.run(['git', 'add', 'source.cpp'], cwd=root, check=True)
+            subprocess.run(['git', 'add', 'source.cpp', 'nested'], cwd=root, check=True)
             link_oid = subprocess.check_output(['git', 'hash-object', '-w', 'logical-link'], cwd=root, text=True).strip()
             subprocess.run(['git', 'update-index', '--add', '--cacheinfo',
                             '120000,' + link_oid + ',logical-link'], cwd=root, check=True)
@@ -272,6 +275,23 @@ class CandidateQualificationTests(unittest.TestCase):
                             'commit', '--quiet', '-m', 'Source fixture'], cwd=root, check=True)
             source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
             certified = pinned_source_fingerprint(root, source)
+            resolved = []
+            resolve = Path.resolve
+            def counted_resolve(path, *args, **kwargs):
+                resolved.append(path)
+                return resolve(path, *args, **kwargs)
+            with patch.object(Path, 'resolve', counted_resolve):
+                self.assertEqual(source_fingerprint(root, root / 'build', root / 'out'), certified)
+            self.assertEqual(resolved.count(root / 'nested'), 1)
+            # Excluded generated inputs stay excluded even when removed after
+            # being listed in the index. They must not turn into source errors.
+            for name in ('build', 'out'):
+                directory = root / name
+                directory.mkdir()
+                generated = directory / 'gone.txt'
+                generated.write_text('excluded')
+                subprocess.run(['git', 'add', str(generated.relative_to(root))], cwd=root, check=True)
+                generated.unlink()
             self.assertEqual(source_fingerprint(root, root / 'build', root / 'out'), certified)
             (root / 'source.cpp').write_bytes(b'int source = 2;\n')
             self.assertNotEqual(source_fingerprint(root, root / 'build', root / 'out'), certified)

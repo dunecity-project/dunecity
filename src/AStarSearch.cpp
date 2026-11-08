@@ -166,7 +166,7 @@ void AStarSearch::prepare(Map* pMap, UnitBase* pUnit, Coord searchStart, Coord s
 
     //if the unit is not directly next to its destination or it is and the destination is unblocked
     if ((heuristic > 1.5_fix) || (pUnit->canPass(destination.x, destination.y) == true)) {
-        putOnOpenListIfBetter(start, Coord::Invalid(), 0 , heuristic);
+        putOnOpenListIfBetter(getMapData(start), start, Coord::Invalid(), 0, heuristic);
         depthCheckCount.assign(std::min(sizeX, sizeY), 0);
         completed = false;
     } else {
@@ -208,9 +208,10 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
             ++iterations;
 
             Coord currentCoord = extractMin();
+            auto& current = getInitializedMapData(currentCoord);
 
-            if (getMapData(currentCoord).h < smallestHeuristic) {
-                smallestHeuristic = getMapData(currentCoord).h;
+            if (current.h < smallestHeuristic) {
+                smallestHeuristic = current.h;
                 bestCoord = currentCoord;
             }
 
@@ -219,9 +220,9 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
             // exact route. Nodes were passable when opened; movement checks each
             // step again because occupants can change between search slices.
             if(currentCoord == destination
-               || (getMapData(currentCoord).h <= 1.5_fix && !pUnit->canPass(destination.x, destination.y))) {
+               || (current.h <= 1.5_fix && !pUnit->canPass(destination.x, destination.y))) {
                 // Goal or adjacent approach found.
-                smallestHeuristic = getMapData(currentCoord).h;
+                smallestHeuristic = current.h;
                 bestCoord = currentCoord;
                 break;
             }
@@ -230,7 +231,6 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
                 // Parent direction, the cost so far and the unit's kind are the same for all
                 // eight neighbours (the current node is off the heap, so nothing below
                 // changes its entry).
-                const auto& current = getMapData(currentCoord);
                 const bool hasParent = current.parentCoord.isValid();
                 const int parentAngle = hasParent
                     ? currentGameMap->getPosAngle(current.parentCoord, currentCoord) : 0;
@@ -272,13 +272,13 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
 
                         FixPoint h = blockDistance(nextCoord, destination);
 
-                        putOnOpenListIfBetter(nextCoord, currentCoord, g, h);
+                        putOnOpenListIfBetter(next, nextCoord, currentCoord, g, h);
                     }
 
                 }
             }
 
-            if (getMapData(currentCoord).bClosed == false) {
+            if (current.bClosed == false) {
 
                 int depth = std::max(abs(currentCoord.x - destination.x), abs(currentCoord.y - destination.y));
 
@@ -327,7 +327,7 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
                     }
                 }
 
-                getMapData(currentCoord).bClosed = true;
+                current.bClosed = true;
                 numNodesChecked++;
                 ++nodesClosedLastStep;
             }
@@ -511,16 +511,16 @@ std::unique_ptr<AStarSearch> AStarSearch::load(InputStream& stream) {
             // The heap and the entries index each other; a lie here would let
             // trickleUp/extractMin write through openListIndex out of bounds.
             if(entry.openListIndex >= openCount) {
-                THROW(std::runtime_error, "Suspended search heap index %zu outside the frontier", entry.openListIndex);
+                THROW(std::runtime_error, "Invalid suspended search heap index %u outside the frontier", entry.openListIndex);
             }
             const size_t flatIndex = static_cast<size_t>(search->openList[entry.openListIndex].coord.y) * static_cast<size_t>(mapSizeX)
                                    + static_cast<size_t>(search->openList[entry.openListIndex].coord.x);
             if(flatIndex != index) {
-                THROW(std::runtime_error, "Suspended search heap entry %zu does not point back at its tile", entry.openListIndex);
+                THROW(std::runtime_error, "Suspended search heap entry %u does not point back at its tile", entry.openListIndex);
             }
             ++openListEntries;
         } else if(entry.openListIndex != 0 && entry.openListIndex >= openCount) {
-            THROW(std::runtime_error, "Suspended search stale heap index %zu is out of range", entry.openListIndex);
+            THROW(std::runtime_error, "Suspended search stale heap index %u is out of range", entry.openListIndex);
         }
         // Restored passability is deliberately stale: the next slice's epoch
         // differs, so every touched entry is re-evaluated against the world the
