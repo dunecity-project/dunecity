@@ -651,14 +651,43 @@ int runCampaignBalanceProbe() {
         level, game->getGameInitSettings().getRandomSeed(), percent, partner.c_str(), enemy.c_str(), game->getGameCycleCount(),
         outcome.c_str());
     if (outcome == "time_limit") {
-        // Policy predicates may resolve lazy ObjectPointers. Endgame diagnostics
-        // report stored facts only; role/funding counterfactuals are unmeasured.
+        // The simulation has stopped: ScenarioMatch::run has logged SCENARIO_RESULT,
+        // and ProbeDigest::atEnd above has logged the final digest/fingerprint.
+        // Keep role/funding queries strictly after all digest output: they may
+        // resolve lazy ObjectPointers. No simulation or digest runs after this audit.
+        // Periodic in-game sampling must continue to use read-only stored facts.
         for (int h = 0; h < NUM_HOUSES; ++h) if (const auto* house = game->getHouse(h))
             for (const auto& player : house->getPlayerList())
-                if (const auto* bot = dynamic_cast<const QuantBot*>(player.get()))
-                    SDL_Log("CAMPAIGN_ENDGAME_AUDIT: house=%d credits_raw=%lld spice=%d policy_measured=0",
-                        h, static_cast<long long>((house->getStartingCredits()+house->getEarnedCredits()).getRawValue()),
-                        bot->lastCalculatedSpice);
+                if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
+                    int idleReady = 0, heldRepairs = 0;
+                    for (const auto* unit : unitList) {
+                        if (!bot->campaignCombatUnit(unit)) continue;
+                        const auto* target = game->getObjectManager().getObject(unit->target.getObjectID());
+                        if (unit->isActive() && bot->declinesUnfundedRepair(unit) && target
+                            && target->getOwner() == house && target->getItemID() == Structure_RepairYard)
+                            ++heldRepairs;
+                        // Damaged aircraft are not raid-ready under the existing air policy.
+                        // Ground troops, including damaged ones released by exhaustion, are.
+                        if (unit->isActive() && (!unit->isAFlyingUnit() || !unit->isBadlyDamaged())
+                            && !unit->isMoving() && !target
+                            && bot->unitRole(unit,{QuantBot::UnitRole::Human,QuantBot::UnitRole::Repair,
+                                QuantBot::UnitRole::BaseDefence,QuantBot::UnitRole::LiveDefence,
+                                QuantBot::UnitRole::Defence,QuantBot::UnitRole::Wave,
+                                QuantBot::UnitRole::Escort,QuantBot::UnitRole::ColonyGuard})
+                                == QuantBot::UnitRole::Free) ++idleReady;
+                    }
+                    for (const auto* building : structureList)
+                        if (building->getOwner() == house) {
+                            const auto* yard = dynamic_cast<const RepairYard*>(building);
+                            const auto* occupant = yard && yard->repairingAUnit
+                                ? reinterpret_cast<const UnitBase*>(game->getObjectManager().getObject(yard->repairUnit.getObjectID())) : nullptr;
+                            if (occupant && bot->declinesUnfundedRepair(occupant)) ++heldRepairs;
+                        }
+                    SDL_Log("CAMPAIGN_ENDGAME_AUDIT: house=%d exhausted=%d credits_raw=%lld spice=%d idle_ready=%d held_repairs=%d",
+                        h, bot->exhaustedArmyEconomy(),
+                        static_cast<long long>((house->getStartingCredits()+house->getEarnedCredits()).getRawValue()),
+                        bot->lastCalculatedSpice, idleReady, heldRepairs);
+                }
         for (const auto* unit:unitList) {
             const auto* target=game->getObjectManager().getObject(unit->target.getObjectID());
             SDL_Log("CAMPAIGN_REPAIR_AUDIT: id=%u cargo_raw=%lld policy_measured=0",
