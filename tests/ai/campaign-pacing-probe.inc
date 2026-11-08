@@ -106,7 +106,25 @@ void runCampaignPacingProbe(Game& game) {
     require(bot->campaignRequiredArmy(16000)==0,"Exhausted enemy still demands an unaffordable army");
     require(partner->campaignRequiredArmy(16000)==0,"Exhausted partner still waits for 16000 army value");
     partner->lastCalculatedSpice=1000;
+    // At minute 16 the existing partner policy sizes readiness against the
+    // strongest enemy, capped at 75% of its military limit. Give this live-spice
+    // negative control a real 6,400-value threat and an 8,000 readiness cap;
+    // the earlier eight-tank fixture alone correctly asks for a smaller wave.
+    const int savedPartnerLimit=partner->militaryValueLimit;
+    partner->militaryValueLimit=10667;
+    const int tankPrice=game.objectData.data[Unit_Tank][owner->getHouseID()].price;
+    require(tankPrice>0,"Readiness fixture tank has no military value");
+    int threatValue=0;
+    for(int y=1;y<currentGameMap->getSizeY()-1 && threatValue<6400;++y)
+        for(int x=1;x<currentGameMap->getSizeX()-1 && threatValue<6400;++x)
+            if(!currentGameMap->getTile(x,y)->hasAGroundObject() && !currentGameMap->getTile(x,y)->isMountain()) {
+                auto* unit=owner->createUnit(Unit_Tank);require(unit,"Readiness threat tank creation failed");
+                unit->deploy(Coord(x,y));bot->doSetAttackMode(unit,AREAGUARD);
+                savedUnits.push_back(unit);threatValue+=tankPrice;
+            }
+    require(threatValue>=6400,"Readiness fixture lacks the required real enemy force");
     require(partner->campaignRequiredArmy(8000)==8000,"Live economy lost its normal readiness goal");
+    partner->militaryValueLimit=savedPartnerLimit;
     bot->campaignWave={};bot->campaignWave.initialized=true;
     require(!owner->hasRepairYard(),"Fixture must lack a repair yard");
     bot->attackTimer=0;bot->attack(2400);
