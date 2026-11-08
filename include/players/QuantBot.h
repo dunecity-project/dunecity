@@ -1736,6 +1736,7 @@ private:
     bool researchLabPolicyActive() const;
     /// Break ordinary fleet/crime research vetoes; Civ Wars always retains progression.
     bool researchRequired(const BuildPass& pass) const;
+    void planCityResearchOrder(BuildPass& pass);
     bool techInvestmentReady(BuildPass& pass);
     bool economyReadyForCapital(BuildPass& pass);
     bool canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier);

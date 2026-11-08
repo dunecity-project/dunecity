@@ -385,6 +385,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityZoneDefence = false;
     force.cityAdvancedTech = false;
     force.cityContinuousResearch = false;
+    force.cityResearchOrder = 0;
     force.citySpiceTransition = false;
     force.citySpiceCapacityRunway = false;
     force.citySingleYardGrowth = false;
@@ -733,6 +734,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CityZoneDefence", force.cityZoneDefence);
         iniFile.setBoolValue("Force Concentration", "CityAdvancedTech", force.cityAdvancedTech);
         iniFile.setBoolValue("Force Concentration", "CityContinuousResearch", force.cityContinuousResearch);
+        iniFile.setIntValue("Force Concentration", "CityResearchOrder", force.cityResearchOrder);
         iniFile.setBoolValue("Force Concentration", "CitySpiceTransition", force.citySpiceTransition);
         iniFile.setBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
         iniFile.setBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
@@ -907,6 +909,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityZoneDefence = iniFile.getBoolValue("Force Concentration", "CityZoneDefence", force.cityZoneDefence);
     force.cityAdvancedTech = iniFile.getBoolValue("Force Concentration", "CityAdvancedTech", force.cityAdvancedTech);
     force.cityContinuousResearch = iniFile.getBoolValue("Force Concentration", "CityContinuousResearch", force.cityContinuousResearch);
+    force.cityResearchOrder = std::clamp(iniFile.getIntValue("Force Concentration", "CityResearchOrder", force.cityResearchOrder), 0, 2);
     force.citySpiceTransition = iniFile.getBoolValue("Force Concentration", "CitySpiceTransition", force.citySpiceTransition);
     force.citySpiceCapacityRunway = iniFile.getBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
     force.citySingleYardGrowth = iniFile.getBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
@@ -1443,6 +1446,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("cityZoneDefence", force.cityZoneDefence);
     addNamed("cityAdvancedTech", force.cityAdvancedTech);
     addNamed("cityContinuousResearch", force.cityContinuousResearch);
+    addNamed("cityResearchOrder", force.cityResearchOrder);
     addNamed("citySpiceTransition", force.citySpiceTransition);
     addNamed("citySpiceCapacityRunway", force.citySpiceCapacityRunway);
     addNamed("citySingleYardGrowth", force.citySingleYardGrowth);

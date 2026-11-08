@@ -250,6 +250,12 @@ inline bool canFundTechInvestment(const TechInvestment& state) {
         && state.projectedCash - state.orderedCost - state.cost >= state.reserve;
 }
 
+// This gates new commitments, never cancels an already paid/active study.
+inline bool cityResearchOrderAdmits(int level, int tech, int planTech, int netIncome, int productionBurn) {
+    return level == 0 || (tech < planTech
+        && (level < 2 || netIncome >= std::max(1000, productionBurn + 500)));
+}
+
 // A tech-1 lane start cannot field factory workers yet. Two Refinery gifts
 // fund research; growing the whole map-share fleet first delays technology
 // behind dozens of bays. Expand again after heavy production and the first wave.
