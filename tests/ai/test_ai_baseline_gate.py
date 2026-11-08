@@ -525,19 +525,48 @@ class InferenceTests(unittest.TestCase):
         self.assertEqual('INCONCLUSIVE', report['verdict'])
         self.assertIn('MISMATCH_APPLICABILITY', primary(comparisons, 'population')['coverage_errors'])
 
-    def test_undefined_zero_army_share_remains_inconclusive_not_conditional_survivor_pass(self):
-        rows = fixtures()
-        for row in rows:
-            if row['metric'] == 'sonic_tank_live_value_share' and row['seed'] == '0':
+    def test_final_zero_army_shares_are_na_without_dropping_defeated_house_outcomes(self):
+        cohorts = [historical(seeds=range(9)), fixtures(arm='off', seeds=range(9)),
+                   fixtures(seeds=range(9))]
+        for row in cohorts[2]:
+            if row['metric'] in gate.FINAL_ARMY_SHARE_METRICS and row['seed'] == '0':
                 row.update(value='', status='not_applicable', reason='no_live_army_denominator')
-        report, metrics, _, comparisons = analyze(candidate=rows)
-        self.assertEqual('INCONCLUSIVE', report['verdict'])
-        comparison = primary(comparisons, 'sonic_tank_live_value_share')
-        self.assertTrue(comparison['applicable'])
-        self.assertIn('UNMEASURED_CORE_OR_OBJECTIVE', comparison['coverage_errors'])
-        self.assertEqual(0, comparison['paired_seed_count'])
-        self.assertTrue(any(row['role'] == 'candidate' and row['metric'] == 'sonic_tank_live_value_share'
-                            and row['not_applicable'] and row['independent_seeds'] == 7 for row in metrics))
+        report, metrics, _, comparisons = analyze(
+            history=cohorts[0], control=cohorts[1], candidate=cohorts[2])
+        self.assertEqual('DEFAULT_ON_ALLOWED', report['verdict'])
+        for metric in gate.FINAL_ARMY_SHARE_METRICS:
+            for kind in ('current_off', 'historical'):
+                comparison = primary(comparisons, metric, kind=kind)
+                self.assertFalse(comparison['coverage_errors'])
+                self.assertEqual(8, comparison['paired_seed_count'])
+                self.assertEqual('NONINFERIOR', comparison['status'])
+            self.assertTrue(any(row['role'] == 'candidate' and row['metric'] == metric
+                                and row['not_applicable'] and row['independent_seeds'] == 8
+                                for row in metrics))
+        self.assertEqual(9, primary(comparisons, 'win_score')['paired_seed_count'])
+
+    def test_missing_final_army_share_remains_unmeasured_not_a_zero_army_exemption(self):
+        for metric in gate.FINAL_ARMY_SHARE_METRICS:
+            for status in ('unavailable', 'not_applicable'):
+                rows = fixtures()
+                for row in rows:
+                    if row['metric'] == metric and row['seed'] == '0':
+                        row.update(value='', status=status, reason='missing_native_army_denominator')
+                with self.subTest(metric=metric, status=status):
+                    report, _, _, comparisons = analyze(candidate=rows)
+                    self.assertEqual('INCONCLUSIVE', report['verdict'])
+                    self.assertIn('UNMEASURED_CORE_OR_OBJECTIVE',
+                                  primary(comparisons, metric)['coverage_errors'])
+
+    def test_zero_army_na_is_limited_to_the_three_final_special_shares(self):
+        for metric, minute, status in (
+                ('win_score', -1, 'not_applicable'),
+                ('sonic_tank_live_value_share', 5, 'not_applicable'),
+                ('sonic_tank_live_value_share', -1, 'unavailable')):
+            with self.subTest(metric=metric, minute=minute, status=status):
+                self.assertFalse(gate._valid_not_applicable(dict(
+                    metric=metric, minute=minute, research='off', status=status,
+                    reason='no_live_army_denominator')))
 
     def test_city_checkpoint_is_diagnostic_not_an_extra_independent_core_sample(self):
         rows = fixtures()

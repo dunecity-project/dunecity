@@ -171,6 +171,19 @@ metadata. The gate compares the exact reason base separately from that metadata;
 unknown reasons, malformed metadata and unavailable active-city observations do
 not gain an applicability exemption.
 
+Final (`minute=-1`) Devastator, Deviator and Sonic Tank live-value shares also
+accept the explicit native `no_live_army_denominator` not-applicable reason.
+Their denominator is the house's live army value: when it is zero, the share
+is undefined, not zero and not a missing observation. Elimination is already
+judged by win/loss, survival and base-loss metrics; failing a share for the same
+defeated house would count that outcome again as missing composition evidence.
+The rule applies identically to historical releases, current OFF and current
+ON. These three conditional shares use only paired seeds on which both armies
+have a defined share; NA counts remain in the report, and the eight-paired-seed
+minimum and all other precision requirements still apply. The house and seed
+remain in every outcome/survival objective. An unavailable denominator, unknown
+reason, checkpoint share or other metric receives no such exemption.
+
 | Family | Measurement and interpretation |
 |---|---|
 | Strength | Native wins and team placement versus other AI houses, kill value, survival/base losses. A timeout is not a material win. |
