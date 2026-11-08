@@ -524,16 +524,16 @@ TEST_CASE("City first-factory saving is opt-in and independently loaded saved an
     std::filesystem::remove(path);
 }
 
-TEST_CASE("City research order is opt-in hashed and preserves working income", "[ai][city][research]") {
-    const QuantBotConfig native;
-    REQUIRE(native.force.cityResearchOrder == 0);
+TEST_CASE("City research order defaults to deferring new research with a hashed OFF control", "[ai][city][research]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.cityResearchOrder == 2);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-research-order-test.ini";
     for (int level = 0; level <= 2; ++level) {
         { std::ofstream ini(path); ini << "[Force Concentration]\nCityResearchOrder=" << level << '\n'; }
         QuantBotConfig config;
         REQUIRE(config.applyOverrides(path.string()));
         REQUIRE(config.force.cityResearchOrder == level);
-        REQUIRE((config.getConfigHash() == native.getConfigHash()) == (level == 0));
+        REQUIRE((config.getConfigHash() == defaults.getConfigHash()) == (level == 2));
         REQUIRE(config.save(path.string()));
         QuantBotConfig restored;
         REQUIRE(restored.applyOverrides(path.string()));

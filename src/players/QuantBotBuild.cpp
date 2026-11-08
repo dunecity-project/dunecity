@@ -318,7 +318,10 @@ void QuantBot::planCityResearchOrder(BuildPass& pass) {
         || !ModManager::instance().isDuneCityContentActive()
         || (currentGame->getGameInitSettings().getGameType() != GameType::CustomGame
             && currentGame->getGameInitSettings().getGameType() != GameType::CustomMultiplayer)
-        || currentGame->getGameInitSettings().getInitialSpiceTilePermille() <= 0) return;
+        || currentGame->getGameInitSettings().getInitialSpiceTilePermille() <= 0
+        // Civilization Wars keeps its required research: the order was never measured there.
+        || currentGame->getGameInitSettings().isCivilizationWars()
+        || currentGame->getGameInitSettings().getModName() == "CivWars") return;
 
     // Use the future strategic mix, not the tech-filtered current mix, which
     // would deadlock a tech-1 opening before its first combat supplier.

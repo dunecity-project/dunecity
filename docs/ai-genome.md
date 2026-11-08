@@ -312,10 +312,10 @@ defaults while collecting the second block.
 
 ## Historical reference and promotion
 
-Reuse the historical league's long-form observations and `ai-baseline-gate.py`.
+The 1.0.807 promotion check (docs/ai-baseline-gate.md) plays 1.0.807's own deck.
 Historical releases (including native 1.0.807 through its test-only bridge), every
 accepted prior default and future champions form the Hall of Fame. Historical
-**whole-engine** scorecards are a separate track: running a current config is not
+**whole-engine** results are a separate track: running a current config is not
 running an old AI binary. Exact map/requested options and supported content/rules
 must be comparable; absent old telemetry is unavailable, never zero.
 
@@ -354,9 +354,8 @@ A default recommendation requires all of:
 2. Same-source paired held-out strength is better than the current default:
    simultaneous 95% lower bound above zero overall, with no meaningful context
    regression (placement tolerance 0.02, not an inferred equivalence from low N).
-3. The independent historical gate passes all supported core objectives against
-   same-source OFF and the historical references, retaining selection-adjusted
-   seed-block intervals and per-metric best historical observations.
+3. The 1.0.807 promotion check passes: on 1.0.807's own deck the candidate wins
+   at least as many games as same-source OFF (docs/ai-baseline-gate.md).
 4. Report Pareto trade-offs, weakest opponents, niche/context gaps, exact pins,
    traces for harmful effects and the actual recommended chromosome. The
    integrator, not the search runner, changes shipped defaults.

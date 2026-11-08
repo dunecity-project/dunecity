@@ -37,7 +37,7 @@ objectives include city development, supported research and each named special's
 built count/share separately; checkpoint rows remain diagnostic. Nonempty-army
 minutes, episodes and snapshot counts disclose the conditional share exposure.
 Only one house/game/metric/checkpoint row is emitted. Seed blocking belongs to
-the gate; snapshots, army episodes and houses are not independent replicates.
+the consumer; snapshots, army episodes and houses are not independent replicates.
 """
 import argparse
 import base64

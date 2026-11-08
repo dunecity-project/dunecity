@@ -480,8 +480,8 @@ CityZoneDefence=0
 CityAdvancedTech=0
 # Experimental: keep city research funded after the opening fleet reaches its target.
 CityContinuousResearch=0
-# Experimental: 0 native; 1 intended-unit technology ceiling; 2 also protect income.
-CityResearchOrder=0
+# Research order: 0 native; 1 intended-unit technology ceiling; 2 (default) also defer new research until income covers it.
+CityResearchOrder=2
 # Experimental: stop extra spice capacity when the existing fleet can deplete its share.
 CitySpiceTransition=0
 # Experimental: local spice/refinery threshold for a guarded field outpost (0, 4000, 8000).

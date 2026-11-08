@@ -421,7 +421,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityZoneDefence = false;
     force.cityAdvancedTech = false;
     force.cityContinuousResearch = false;
-    force.cityResearchOrder = 0;
+    force.cityResearchOrder = 2;
     force.citySpiceTransition = false;
     force.spiceFieldExpansion = 0;
     force.citySpiceCapacityRunway = false;

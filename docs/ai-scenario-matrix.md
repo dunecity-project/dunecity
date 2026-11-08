@@ -748,11 +748,11 @@ plays 20 houses, interval -0.13..+0.48).
 
 ### Pre-ladder Medium (`MediumClassic`, diagnostic, default 0)
 
-The 1.0.807 baseline gate (docs/ai-baseline-gate.md) flags vanilla Custom Medium 1v1 on its frozen maps:
+On the 1.0.807 deck's frozen maps (docs/ai-baseline-gate.md), vanilla Custom Medium 1v1 measures:
 attack dispatches per house 14.6 / 15.8 (807) -> 4.6 / 3.1, Palace adoption 1.0 / 1.0 -> 0.63 / 0.13, first
 heavy factory at ~14 -> ~7.6-8 game minutes. Exact-map release bisection puts the whole step at the
 `fix/ai-late-game-2` merge `fbbeecff` (848 trial `748f9288` unchanged), i.e. at this branch's Medium changes:
-the gate counts dispatches, and one whole-army wave replaces several 40% raid shares by design.
+the retired statistical gate counted dispatches, and one whole-army wave replaces several 40% raid shares by design.
 `[Force Concentration] MediumClassic` restores the pre-ladder Custom Medium for measurement (Easy, Hard,
 Brutal and campaigns unchanged; style overlays `medium-classic-off`, `-economy`, `-army`):
 
@@ -1064,7 +1064,7 @@ technology, exactly one prerequisite Starport, pending-order deduplication
 and resumed IX/Palace construction. Earlier campaign import and MCV-recovery
 checks keep their original population and assertions.
 
-## Planned research experiment (default OFF)
+## Research order (default 2: defer new research)
 
 `[Force Concentration] CityResearchOrder=0|1|2` affects only research-enabled
 Custom DuneCity matches whose original explicit map contains spice. Level 1
@@ -1077,10 +1077,15 @@ Already-funded studies are not cancelled. Both levels limit new studies only:
 the Research Lab building keeps its ordinary optional-capital admission, so a
 deferred study (always at tech 9) never stops the lab being built (Batch2 fix;
 `quantbot_research_order_lab_capital`). Native power, capital and cash-reserve
-gates still apply. Vanilla, campaigns, initially no-spice maps, research-off and
-unknown/seed-only map data retain native behavior.
+gates still apply. Vanilla, campaigns, Civilization Wars (generated matches and
+the CivWars mod keep their required research), initially no-spice maps,
+research-off and unknown/seed-only map data retain native behavior.
 
-Styles: `research-order-off`, `research-order-plan`, `research-order-income`.
+Default 2 since protocol 116 (2026-11-09): paired96 wins against native 45 -> 69
+(lane pin `f4f977cb`) and 48 -> 65 (B2), controls26/campaign66/AAA2/no-spice/tech9 unchanged, and
+the 1.0.807 promotion check PASS (candidate 53 / OFF 53 / 807 22). Civilization
+Wars was never measured with it and is excluded. Styles: `research-order-off`
+(the explicit OFF control), `research-order-plan`, `research-order-income`.
 Research is an optional engine rule, not inherently exclusive to DuneCity.
 
 For a preassigned actual seed range, `dunecity-audit.py --mode sample

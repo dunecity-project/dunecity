@@ -911,6 +911,9 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         add_test(NAME quantbot_power_continuation_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_power_continuation.py)
         set_tests_properties(quantbot_power_continuation_parser PROPERTIES TIMEOUT 60)
+        add_test(NAME quantbot_baseline_807_check COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_ai_baseline_gate.py)
+        set_tests_properties(quantbot_baseline_807_check PROPERTIES TIMEOUT 60)
         # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
         # and saved partner state through the live Harkonnen level-9 fixture.
         foreach(pressure_mod IN ITEMS vanilla dunecity)

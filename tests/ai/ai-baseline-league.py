@@ -4,7 +4,7 @@
 Only a private diagnostic main is recompiled. Unchanged engine/AI/content native
 objects execute all games. Fixture IDs, roster, maps and requested options are
 immutable. Missing historical research options are disclosed, never emulated.
-See docs/ai-baseline-gate.md for the independent-objective gate and provenance.
+See docs/ai-baseline-gate.md for the 1.0.807 promotion check that plays this deck.
 """
 import argparse
 import base64

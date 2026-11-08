@@ -355,7 +355,10 @@
 // 115: Campaign AI-support QuantBot defaults ON: MilitaryOpening, AdaptiveReadiness,
 //      ThreatProduction, FundedLightOpening, LightWorkingCash, LightIncomeSeed and
 //      IdleCashFactory (2000 credits). Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            115
+// 116: QuantBot CityResearchOrder defaults to 2: research-enabled Custom DuneCity matches on
+//      spice maps defer new research until income covers it (Civilization Wars excluded),
+//      so a 115 peer researches differently and would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            116
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
