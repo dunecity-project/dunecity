@@ -1032,6 +1032,12 @@ if args.strategy_probe:
 elif args.controls_probe:
     run_controls_process([str(binary), '--window', '--showlog', '--non-interactive'],
                          out, env, out/'run.log', args.wall_timeout)
+elif env.get('DUNECITY_SIM_MEASURE'):
+    from simulation_measure import measure_process
+    measure_process([str(binary), '--window', '--showlog', '--non-interactive'], cwd=out, env=env,
+                    log=out/'run.log', timeout=args.wall_timeout,
+                    output=Path(env['DUNECITY_SIM_MEASURE']),
+                    sample_seconds=float(env.get('DUNECITY_SIM_SAMPLE_SECONDS', '0')))
 else:
     with (out/'run.log').open('w') as log:
         subprocess.run([str(binary),'--window','--showlog','--non-interactive'],cwd=out,env=env,
