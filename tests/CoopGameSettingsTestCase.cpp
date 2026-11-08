@@ -80,7 +80,7 @@ TEST_CASE("Initial spice density is derived from immutable saved map tiles", "[c
     OMemoryStream saved;
     saved.open();
     init.save(saved);
-    IMemoryStream input(saved.getData(), saved.getLength());
+    IMemoryStream input(saved.getData(), saved.getDataLength());
     const GameInitSettings restored(input);
     REQUIRE(restored.getInitialSpiceTilePermille() == 500);
     REQUIRE(init.networkSnapshot("not an INI: binary checkpoint").getInitialSpiceTilePermille() == -1);
