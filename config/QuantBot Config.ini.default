@@ -363,6 +363,9 @@ VanillaFfaSingleFront=0
 VanillaFfaLightWorkingCash=0
 # Optional IX/Palace deferral is scoped to vanilla FFA with at least five original players.
 VanillaFfaFundedTech=0
+# Vanilla/DuneCity FFA4/FFA6 vulture: 0 native, 1 rival <60%, 2 rival <90% of strike force.
+# Mutual current ground-unit combat replaces rolling history; no save-format change.
+FfaVultureLevel=0
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0

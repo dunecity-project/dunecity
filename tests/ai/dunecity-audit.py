@@ -563,10 +563,14 @@ def sample_schedule(args):
         rng = random.Random(f'{args.sample_seed}/{mod}')
         factors = dict(SAMPLE_FACTORS, spice_level=tuple(SPICE)[int(mod == 'vanilla'):],
                        initial_tech=tuple(range(3 if mod == 'vanilla' else 1, 10)))
+        if getattr(args, 'sample_ffa', False):
+            factors.update(format=('ffa4', 'ffa6'), difficulty=('hard', 'brutal'),
+                           spice_level=('low', 'medium', 'high'), initial_tech=(3, 6, 9))
         draws = {factor: balanced_draw(levels, args.cases, rng) for factor, levels in factors.items()}
         for index in range(args.cases):
             case = {factor: draw[index] for factor, draw in draws.items()}
-            seed = rng.getrandbits(32)
+            seed = (args.sample_seed + index + (args.cases if mod == 'dunecity' and args.mod == 'both' else 0)
+                    if getattr(args, 'sample_ffa', False) else rng.getrandbits(32))
             fmt, enemy = case['format'], case['difficulty']
             count = 2 if fmt == '1v1' else 6 if fmt == 'ffa6' else 4
             houses = list(HOUSES[:count])
@@ -1935,6 +1939,9 @@ parser.add_argument('--mode', choices=('matrix', 'ladder', 'sample'), default='m
                     help='sample: balanced seeded factor draws, each played from two candidate seats')
 parser.add_argument('--cases', type=int, default=48, help='sample: cases per mod before the two seat assignments')
 parser.add_argument('--sample-seed', type=int, default=9101, help='sample: reproducible factor draws and 32-bit game seeds')
+parser.add_argument('--sample-ffa', action='store_true',
+                    help='sample: FFA4/FFA6, Hard/Brutal rivals, L/M/H spice, tech 3/6/9; '
+                         'sequential map seeds starting at --sample-seed (Vanilla then DuneCity)')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--variant', default='baseline')
 parser.add_argument('--game-options', type=Path)

@@ -1163,6 +1163,10 @@ private:
     /// Health-weighted value of our team's mobile ground fighters (ours and our allies'; ours
     /// alone in a free-for-all or a 1v1).
     int64_t teamGroundArmyValue() const;
+    /// Stateless experiment: -1 native dispatch, -2 hold for mutual rivals' combat,
+    /// otherwise the weakened rival team to finish (true health-weighted armies).
+    int vultureOpportunity(const std::vector<Uint32>& strikeUnits);
+    const ObjectBase* vultureObjective(const UnitBase* lead, int team) const;
     /// JoinAllyWaves (Custom Hard/Brutal team play): the objective of an allied QuantBot's
     /// whole-army wave launched within the last kAllyWaveJoinMs, or nullptr.
     const ObjectBase* allyWaveObjective() const;

@@ -948,7 +948,7 @@ void QuantBot::launchGroundHunt() {
         && vanillaMultiEnemyGame();
     const bool ffaSingleFront = botConfig().force.vanillaFfaSingleFront && recoveryActive()
         && vanillaMultiEnemyGame() && lastCalculatedSpice > 0;
-    const bool ffaDirected = ffaTargeting || ffaSingleFront;
+    bool ffaDirected = ffaTargeting || ffaSingleFront;
     // JoinAllyWaves: the objective of an allied wave that has just left; ours joins it.
     const ObjectBase* allyFront=wholeArmy ? allyWaveObjective() : nullptr;
     std::vector<Uint32> existingHunters;
@@ -1264,6 +1264,14 @@ void QuantBot::launchGroundHunt() {
     bool continuedFront = false;
     if (trackedCustomWave) {
         if (recoveryActive() && ArmyPosturePolicy::suppressesOffensiveDispatch(armyPosture)) return;
+        // Judge the wave that can actually leave, not hunters already committed
+        // elsewhere or units retained by native repair/defence/escort ownership.
+        const int vultureTeam = wholeArmy ? vultureOpportunity(selected) : -1;
+        if (vultureTeam == -2) {
+            attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(15000)));
+            return;
+        }
+        ffaDirected = ffaDirected || vultureTeam >= 0;
         // The objective is used as an OBSERVATION anchor for the front strength
         // comparison below, and is recorded for telemetry and the same anchor
         // after a load. Idle committed launchers may rejoin this front after
@@ -1272,6 +1280,11 @@ void QuantBot::launchGroundHunt() {
         for (const auto id : selected) {
             const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
             if (unit && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
+        }
+        if (vultureTeam >= 0) {
+            observedFront = vultureObjective(lead, vultureTeam);
+            // Do not silently send the patient army to an unrelated rival.
+            if (!observedFront) return;
         }
         if (ffaSingleFront && !allyFront) {
             const auto* previous = dynamic_cast<const StructureBase*>(getObject(customWave.front));
