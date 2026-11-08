@@ -540,13 +540,13 @@ void QuantBot::releaseExhaustedArmyRepairs() {
 
 int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
     int required = std::max(0, configuredThreshold);
-    // Reuse the campaign partner's established opposing-house army measure.
-    // The candidate applies it from the opening instead of waiting fifteen
-    // minutes, but cannot raise the configured threshold.
+    // The opening must size against a whole opposing alliance, not one of
+    // its houses. OFF retains the established post-opening per-house rule.
     const bool adaptive = botConfig().force.campaignAdaptiveReadiness;
     if (isAlliedWithHuman() && !isCampaignEnemy()
         && (adaptive || getGameCycleCount() >= MILLI2CYCLES(15 * 60000))) {
         int strongest = 0;
+        std::array<int, NUM_HOUSES> teamValues{};
         for (int h=0; h<NUM_HOUSES; ++h) {
             const House* house = getHouse(h);
             // The Natives are always "alive" but are no opposing house.
@@ -556,7 +556,16 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
                 if (QuantBotBuildPolicy::militaryItem(item) && item != Unit_Frigate
                     && !isAmbientUnit(item))
                     value += house->getNumItems(item) * currentGame->objectData.data[item][h].price;
-            strongest = std::max(strongest, value);
+            int slot = h;
+            if (adaptive) {
+                for (int ally = 0; ally < h; ++ally)
+                    if (const House* allied = getHouse(ally); allied && allied->getTeamID() == house->getTeamID()) {
+                        slot = ally;
+                        break;
+                    }
+            }
+            teamValues[slot] += value;
+            strongest = std::max(strongest, teamValues[slot]);
         }
         const int opponentThreshold = std::min(std::max(2000, strongest * 5 / 4), militaryValueLimit * 3 / 4);
         required = adaptive ? std::min(required, opponentThreshold) : opponentThreshold;

@@ -197,9 +197,10 @@ The first establishes one available combat producer after the first refinery,
 before repeat refinery/storage/Starport expansion, preserving power and live
 air-defence priority. It walks the actual prerequisite tree and saves for the
 producer rather than spending its price on another refinery. The second applies
-the existing partner readiness measure (1.25x the strongest opposing house's
-army, floor 2,000 and ceiling 75% of its military limit) from the first wave,
-capped by the configured threshold, instead of waiting fifteen minutes.
+the partner readiness scale (1.25x the strongest opposing **team's** army,
+floor 2,000 and ceiling 75% of its military limit) from the first wave, capped
+by the configured threshold. It does not mistake one house of an enemy alliance
+for the entire hostile army; OFF keeps the old post-fifteen-minute per-house rule.
 Authored campaign opponents and noncampaign skirmishes are unchanged.
 Use `campaign-opening-off` / `campaign-opening-on` for the paired combination;
 `campaign-military-opening-on` and `campaign-adaptive-readiness-on` isolate each
