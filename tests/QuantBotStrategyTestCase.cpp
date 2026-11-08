@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <set>
 
 // QuantBot strategies (docs/ai-play-styles.md, "Strategies"): the pick is a pure function of the
 // game seed, the house and the config, so every peer, replay and reload plays the same strategy;
@@ -446,6 +447,31 @@ TEST_CASE("City building economy candidates are opt-in and independently loaded 
         REQUIRE(restored.force.citySingleYardGrowth == growth);
         REQUIRE(restored.force.cityPowerGrowthHorizon == power);
         REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Bold city strategy packages are opt-in and independently round-trip their hash", "[ai][city][config][bold]") {
+    using Force = QuantBotConfig::ForceSettings;
+    const std::array<bool Force::*, 6> fields{{
+        &Force::cityBoldSpiceBoom, &Force::cityBoldTwinYard, &Force::cityBoldTaxTakeoff,
+        &Force::cityBoldNeighbourRush, &Force::cityBoldTechLance, &Force::cityBoldAdaptive}};
+    const QuantBotConfig defaults;
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-bold-test.ini";
+    for (const auto field : fields) REQUIRE_FALSE(defaults.force.*field);
+    std::set<std::string> hashes;
+    for (unsigned mask = 0; mask < 64; ++mask) {
+        QuantBotConfig expected;
+        for (size_t i = 0; i < fields.size(); ++i) expected.force.*fields[i] = (mask & (1u << i)) != 0;
+        REQUIRE(hashes.insert(expected.getConfigHash()).second);
+        REQUIRE(expected.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        for (const auto field : fields) REQUIRE(restored.force.*field == expected.force.*field);
+        REQUIRE(restored.getConfigHash() == expected.getConfigHash());
+        REQUIRE(defaults.save(path.string()));
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.getConfigHash() == defaults.getConfigHash());
     }
     std::filesystem::remove(path);
 }

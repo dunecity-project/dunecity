@@ -101,6 +101,7 @@ struct QuantBot::BuildPass {
     bool surplusArmy{};
     int lightBudget{};
     bool citySimEnabled{};
+    CityBoldPlan boldPlan{CityBoldPlan::Native};
     int spiceCompetitors{};
     int citySpiceWorkerTarget{};
     bool starportMarketAvailable{};

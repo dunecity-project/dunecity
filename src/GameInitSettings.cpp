@@ -598,6 +598,34 @@ bool GameInitSettings::isTornieFamilyMatch() const {
     return tornieFamilyMatch;
 }
 
+int GameInitSettings::getInitialSpiceTilePermille() const {
+    if(gameType != GameType::CustomGame && gameType != GameType::CustomMultiplayer) return -1;
+    if(initialSpiceTilePermille != -2) return initialSpiceTilePermille;
+    initialSpiceTilePermille = -1;
+    if(filedata.empty()) return initialSpiceTilePermille;
+    auto source = sdl2::RWops_ptr{SDL_RWFromConstMem(filedata.data(), static_cast<int>(filedata.size()))};
+    INIFile map(source.get());
+    const int width = map.getIntValue("MAP", "SizeX", 0);
+    const int height = map.getIntValue("MAP", "SizeY", 0);
+    if(width <= 0 || height <= 0 || map.hasKey("MAP", "Seed")) return initialSpiceTilePermille;
+    int64_t fields = 0;
+    for(int y = 0; y < height; ++y) {
+        auto key = std::to_string(y);
+        if(key.size() < 3) key.insert(0, 3-key.size(), '0');
+        const auto row = map.getStringValue("MAP", key);
+        if(row.size() != static_cast<size_t>(width)) return initialSpiceTilePermille;
+        for(char tile : row) {
+            switch(tile) {
+                case '~': case '+': case 'g': case 'G': case 'r': case 'R':
+                case 'l': case 'L': case 'w': case 'W': ++fields; break;
+                default: break;
+            }
+        }
+    }
+    initialSpiceTilePermille = int(fields*1000/(int64_t(width)*height));
+    return initialSpiceTilePermille;
+}
+
 bool GameInitSettings::isCivilizationWars() const {
     // LoadMultiplayer.filedata holds a binary checkpoint until its saved map settings
     // replace it. Never scan those bytes, a filename or a mod name for a marker.
