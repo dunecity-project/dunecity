@@ -1,0 +1,390 @@
+{
+  "schema_version": 1,
+  "sample_seed": 1220300,
+  "cases": [
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220300
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220301
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220302
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220303
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220304
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220305
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220306
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220307
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220308
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220309
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220310
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220311
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220312
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220313
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220314
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220315
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220316
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220317
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220318
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220319
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "high",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220320
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220321
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220322
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220323
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220324
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220325
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220326
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220327
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "medium",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220328
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220329
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220330
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220331
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220332
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220333
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220334
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220335
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220336
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "low",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220337
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "low",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220338
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "low",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220339
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220340
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "medium",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220341
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "medium",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220342
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "medium",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220343
+    },
+    {
+      "format": "1v1",
+      "size": 64,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220344
+    },
+    {
+      "format": "1v1",
+      "size": 96,
+      "spice_level": "high",
+      "initial_tech": 3,
+      "difficulty": "brutal",
+      "seed": 1220345
+    },
+    {
+      "format": "1v1",
+      "size": 128,
+      "spice_level": "high",
+      "initial_tech": 6,
+      "difficulty": "brutal",
+      "seed": 1220346
+    },
+    {
+      "format": "1v1",
+      "size": 160,
+      "spice_level": "high",
+      "initial_tech": 9,
+      "difficulty": "brutal",
+      "seed": 1220347
+    }
+  ]
+}

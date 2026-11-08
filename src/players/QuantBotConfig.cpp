@@ -351,6 +351,7 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaGreedyBoom = false;
     force.vanillaReactiveBoom = false;
     force.vanillaBoomFfaOnly = false;
+    force.duelOpeningPlan = 0;
     force.vanillaHarvesterBoomWorkers = 8;
     force.vanillaRefineryBoomRefineries = 4;
     force.vanillaGreedyBoomMinutes = 6;
@@ -713,6 +714,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "VanillaGreedyBoom", force.vanillaGreedyBoom);
         iniFile.setBoolValue("Force Concentration", "VanillaReactiveBoom", force.vanillaReactiveBoom);
         iniFile.setBoolValue("Force Concentration", "VanillaBoomFfaOnly", force.vanillaBoomFfaOnly);
+        iniFile.setIntValue("Force Concentration", "DuelOpeningPlan", force.duelOpeningPlan);
         iniFile.setIntValue("Force Concentration", "VanillaHarvesterBoomWorkers", force.vanillaHarvesterBoomWorkers);
         iniFile.setIntValue("Force Concentration", "VanillaRefineryBoomRefineries", force.vanillaRefineryBoomRefineries);
         iniFile.setIntValue("Force Concentration", "VanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);
@@ -895,6 +897,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.vanillaGreedyBoom = iniFile.getBoolValue("Force Concentration", "VanillaGreedyBoom", force.vanillaGreedyBoom);
     force.vanillaReactiveBoom = iniFile.getBoolValue("Force Concentration", "VanillaReactiveBoom", force.vanillaReactiveBoom);
     force.vanillaBoomFfaOnly = iniFile.getBoolValue("Force Concentration", "VanillaBoomFfaOnly", force.vanillaBoomFfaOnly);
+    force.duelOpeningPlan = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "DuelOpeningPlan", force.duelOpeningPlan), 0, 3);
     force.vanillaHarvesterBoomWorkers = std::clamp(iniFile.getIntValue(
         "Force Concentration", "VanillaHarvesterBoomWorkers", force.vanillaHarvesterBoomWorkers), 8, 12);
     force.vanillaRefineryBoomRefineries = std::clamp(iniFile.getIntValue(
@@ -1448,6 +1452,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("vanillaGreedyBoom", force.vanillaGreedyBoom);
     addNamed("vanillaReactiveBoom", force.vanillaReactiveBoom);
     addNamed("vanillaBoomFfaOnly", force.vanillaBoomFfaOnly);
+    if (force.duelOpeningPlan != 0) addNamed("duelOpeningPlan", force.duelOpeningPlan);
     addNamed("vanillaHarvesterBoomWorkers", force.vanillaHarvesterBoomWorkers);
     addNamed("vanillaRefineryBoomRefineries", force.vanillaRefineryBoomRefineries);
     addNamed("vanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);

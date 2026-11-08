@@ -241,6 +241,7 @@ struct QuantBotConfig {
         bool vanillaReactiveBoom;
         /// At least three original occupied hostile controllers and multiple hostile teams.
         bool vanillaBoomFfaOnly;
+        int duelOpeningPlan;                  ///< 0 native, 1 spice-funded second refinery, 2 light raid, 3 first heavy.
         int vanillaHarvesterBoomWorkers;       ///< 8 or 12, with two refineries.
         int vanillaRefineryBoomRefineries;     ///< 4 or 6, with two workers per refinery.
         int vanillaGreedyBoomMinutes;          ///< Stop at 6, 10 or 12 minutes; fund army until minute 20.
