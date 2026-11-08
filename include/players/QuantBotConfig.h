@@ -292,6 +292,18 @@ struct QuantBotConfig {
         /// may save below its first heavy factory's quote when forecast net
         /// income covers the founded quote plus all queued production debt.
         bool cityFirstFactorySaving;
+        /// Experimental/default off: a spice-backed Custom city under direct
+        /// attack keeps military capital ahead of the ordinary growth interleave.
+        bool cityThreatBudget;
+        /// Experimental/default off: reactive ground cover also protects city
+        /// zones in spice-backed Custom city games, within the existing turret cap.
+        bool cityZoneDefence;
+        /// Experimental/default off: at tech 9, fund the first IX/prerequisite
+        /// before repeatable city/military capacity in a solvent spice-backed city.
+        bool cityAdvancedTech;
+        /// Experimental/default off: continue funding city research after the
+        /// opening fleet, retaining power, income, bootstrap and live-threat gates.
+        bool cityContinuousResearch;
         /// Buy bounded, locally sited rocket cover against visible ground raids,
         /// without waiting for the peaceful production-core/refinery gates.
         bool threatTurrets;

@@ -155,7 +155,10 @@ bool QuantBot::researchLabPolicyActive() const {
 bool QuantBot::researchRequired(const BuildPass& pass) const {
     return researchLabPolicyActive() && (currentGame->getGameInitSettings().isCivilizationWars()
         || (botConfig().force.researchLabProgression && getHouse()->getTechLevel() < 9
-            && (openingFleetIncomplete(pass) || pass.dangerousCrimeProperties > 0)));
+            && (openingFleetIncomplete(pass) || pass.dangerousCrimeProperties > 0))
+        || (botConfig().force.cityContinuousResearch && pass.citySimEnabled
+            && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+            && lastCalculatedSpice > 0 && getHouse()->getTechLevel() < 9));
 }
 
 bool QuantBot::economyReadyForCapital(BuildPass& pass) {
@@ -2673,10 +2676,13 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
         && pass.itemCount[Structure_RocketTurret]<RocketTurretPolicy::threatTurretTotalCap) {
         const int range=std::max(1,data[Structure_RocketTurret][houseID].weaponrange-1);
         int bestMissing=0;
+        const bool protectCityZones = botConfig().force.cityZoneDefence && pass.citySimEnabled
+            && !isCampaignGameType(currentGame->gameType) && lastCalculatedSpice > 0;
         for (const auto* asset:getStructureList()) {
             if (asset->getOwner()!=getHouse() || asset->getHealth()<=0
                 || (!RocketTurretPolicy::coreAsset(asset->getItemID())
-                    && asset->getItemID()!=Structure_Radar && asset->getItemID()!=Structure_WindTrap)) continue;
+                    && asset->getItemID()!=Structure_Radar && asset->getItemID()!=Structure_WindTrap
+                    && !(protectCityZones && DuneCity::isCityZoneStructure(asset->getItemID())))) continue;
             int value=0;
             int64_t x=0,y=0;
             for (const auto& contact:visibleGroundTurretThreats) {
@@ -3309,6 +3315,39 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     }
                 }
             }
+            if (botConfig().force.cityAdvancedTech && pass.citySimEnabled
+                && !isCampaignGameType(currentGame->gameType) && lastCalculatedSpice > 0
+                && getHouse()->getTechLevel() == 9 && pass.itemCount[Structure_IX] == 0
+                && pass.itemCount[Structure_HeavyFactory] > 0 && pass.itemCount[Structure_RepairYard] > 0
+                && !openingFleetIncomplete(pass) && !pass.defendingEconomy && !pass.airEngaged
+                && getHouse()->hasPower() && pass.forecastNetIncome > 0) {
+                Uint32 step = Structure_IX;
+                for (int depth = 0; depth < Structure_LastID; ++depth) {
+                    Uint32 missing = NONE_ID;
+                    for (Uint32 prerequisite = Structure_FirstID; prerequisite <= Structure_LastID; ++prerequisite)
+                        if (data[step][houseID].prerequisiteStructuresSet[prerequisite]
+                            && pass.itemCount[prerequisite] == 0) { missing = prerequisite; break; }
+                    if (missing == NONE_ID) break;
+                    step = missing;
+                }
+                if (campaignAvailableToBuild(builder, step) && getHouse()->getProducedPower()
+                    >= getHouse()->getPowerRequirement() + pass.committedPowerDemand
+                        + std::max(0, data[step][houseID].power) + 24) {
+                    CapitalCandidate technology;
+                    technology.builder = builder->getObjectID(); technology.item = step;
+                    technology.kind = "city_advanced_tech"; technology.reason = "complete_high_tech";
+                    technology.price = purchasePrice(builder, step);
+                    technology.cost = buildingCapitalCost(pass, step);
+                    technology.foundationCost = getGameInitSettings().getGameOptions().concreteRequired
+                        ? getStructureSize(step).x * getStructureSize(step).y * data[Structure_Slab1][houseID].price : 0;
+                    technology.site = findPlaceLocation(step);
+                    if (technology.site.isValid()
+                        && pass.forecastFunding >= technology.cost + pass.cashBuffer) {
+                        technology.score = 4200;
+                        pass.capitalCandidates.push_back(technology);
+                    }
+                }
+            }
             CapitalCandidate economy;
             economy.builder=builder->getObjectID();
             if (pass.citySimEnabled) {
@@ -3899,6 +3938,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             boundedClaim |= std::string_view(candidate.reason)=="ground_threat"
                 || std::string_view(candidate.reason)=="early_rocket"
                 || std::string_view(candidate.kind)=="city_supply"
+                || std::string_view(candidate.kind)=="city_advanced_tech"
                 || std::string_view(candidate.kind)=="city_construction";
             if (protectedChoice<0 || candidate.score>pass.capitalCandidates[protectedChoice].score)
                 protectedChoice=int(i);
@@ -3927,6 +3967,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             || std::string_view(pass.capitalCandidates[pass.capitalChoice].reason)=="early_rocket"
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("city_supply")
             || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "city_construction"
+            || std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "city_advanced_tech"
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_upgrade")
             || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_prerequisite"));
     // Existing emergency/supplier savings keep priority. First cover for a
@@ -3965,7 +4006,11 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     // Crime protection keeps the winning allocation; growth resumes after its
     // order is accepted. A lone opening yard retains its tech path.
     Uint32 dedicatedCityYard=NONE_ID;
-    if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1 && !pass.protectionCapital) {
+    const bool threatBudget = botConfig().force.cityThreatBudget && pass.citySimEnabled
+        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && lastCalculatedSpice > 0 && pass.defendingEconomy;
+    if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1 && !pass.protectionCapital
+        && !threatBudget) {
         for (const auto* builder:pass.capitalBuilders) {
             if (builder->getItemID()!=Structure_ConstructionYard || builder->isUpgrading()
                 || builder->isOnHold()) continue;
@@ -3991,7 +4036,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
         }
         planningBuilder=NONE_ID;clearPlacementCache(false,true);
     }
-    if (!pass.cityGrowthProtected && pass.citySimEnabled
+    if (!pass.cityGrowthProtected && pass.citySimEnabled && !threatBudget
         && (getHouse()->getProducedPower()-getHouse()->getPowerRequirement()>=24
             || botConfig().force.cityGrowthPower)
         && pass.capitalChoice>=0 && pass.capitalCandidates[pass.capitalChoice].kind==std::string("military")) {

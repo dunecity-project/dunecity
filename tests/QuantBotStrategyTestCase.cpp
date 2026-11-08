@@ -364,6 +364,49 @@ TEST_CASE("City first-factory saving is opt-in and independently loaded saved an
     std::filesystem::remove(path);
 }
 
+TEST_CASE("City tuning candidates are opt-in and independently loaded saved and hashed", "[ai][city][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.cityThreatBudget);
+    REQUIRE_FALSE(defaults.force.cityZoneDefence);
+    REQUIRE_FALSE(defaults.force.cityAdvancedTech);
+    REQUIRE_FALSE(defaults.force.cityContinuousResearch);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-city-tuning-test.ini";
+    for (int mask = 0; mask < 16; ++mask) {
+        const bool threat = (mask & 1) != 0;
+        const bool zones = (mask & 2) != 0;
+        const bool tech = (mask & 4) != 0;
+        const bool research = (mask & 8) != 0;
+        QuantBotConfig expected = defaults;
+        expected.force.cityThreatBudget = threat;
+        expected.force.cityZoneDefence = zones;
+        expected.force.cityAdvancedTech = tech;
+        expected.force.cityContinuousResearch = research;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCityThreatBudget=" << threat
+                << "\nCityZoneDefence=" << zones << "\nCityAdvancedTech=" << tech
+                << "\nCityContinuousResearch=" << research << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.cityThreatBudget == threat);
+        REQUIRE(loaded.force.cityZoneDefence == zones);
+        REQUIRE(loaded.force.cityAdvancedTech == tech);
+        REQUIRE(loaded.force.cityContinuousResearch == research);
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (mask == 0));
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.cityThreatBudget == threat);
+        REQUIRE(restored.force.cityZoneDefence == zones);
+        REQUIRE(restored.force.cityAdvancedTech == tech);
+        REQUIRE(restored.force.cityContinuousResearch == research);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Storage capacity defaults on and is loaded saved and hashed", "[ai][city][config][storage]") {
     QuantBotConfig config;
     REQUIRE(config.force.storageCapacity);

@@ -386,6 +386,14 @@ CityProductionPrerequisites=1
 # Requires forecast net income covering the founded quote plus queued debt.
 # Default off: the combined geometry/saving trial failed combat and ladder gates.
 CityFirstFactorySaving=0
+# Experimental: direct base attacks keep military capital ahead of ordinary city growth.
+CityThreatBudget=0
+# Experimental: extend bounded reactive ground cover to city zones, not just the core.
+CityZoneDefence=0
+# Experimental: fund the first high-tech IX/prerequisite before repeatable capacity.
+CityAdvancedTech=0
+# Experimental: keep city research funded after the opening fleet reaches its target.
+CityContinuousResearch=0
 # Bounded rocket cover against observed ground raids, ahead of routine growth.
 ThreatTurrets=1
 # Experimental 3-rocket baseline (4 for Hard+ at 16 structures), with a full income budget.
