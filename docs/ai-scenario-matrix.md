@@ -123,10 +123,17 @@ python3 tests/ai/compare-control-maps.py --baseline "$BASELINE" --results "$RESU
   --in-scope 1 2 3
 ```
 
-Use a fresh results directory per source/style. Omit `--style` for native. The existing
-style convention applies the explicit style to every QuantBot; opponents' difficulty
-and teams do not change. Do not enable economy/tech-savings audit or observer overlays.
-Comparison exits nonzero for missing/failed/duplicate games, changed match settings,
+Use a fresh results directory per source/style. Omit `--style` for native. In this tier
+`--style` is **candidate-only**: it overlays just the Brutal seat (slot 0; in Tuono-Blake not
+its QH ally) through the per-house genome-phase transport of `dunecity-audit.py
+--candidate-style`. Every other seat stays native, unlike the other tiers' all-QuantBot
+`--style`. The style must be a config overlay (no `[Play Style]` section); `--genome`,
+`--game-options`, economy/tech-savings audits and observer overlays are refused.
+Each `games.csv` row records `style_seats` from the probe log (`none`, or
+`<house>=candidate-<style>`; a seat whose QuantBot config differs from native without
+that genome is listed as `<house>=config`); a mismatch fails the game.
+Comparison exits nonzero for missing/failed/duplicate games, a missing receipt or a style
+on any non-candidate seat, changed match settings,
 any lost native QB/team-1 win, or a changed digest outside `--in-scope`. That option
 lists only the map numbers the switch can affect (default 1–12); #13 must **always**
 be digest-identical. Winner, minutes and digest equality are printed per map/seed.
