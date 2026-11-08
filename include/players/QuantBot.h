@@ -187,6 +187,12 @@ public:
     bool civWarsRules() const;
     /// Lane geometry is authorised only by the generated map's canonical marker.
     bool isCivWarsMatch() const;
+    enum class CityBoldPlan { Native, SpiceBoom, TwinYard, TaxTakeoff, NeighbourRush, TechLance };
+    /// Opt-in spice-backed Custom DuneCity FFA plan; occupied controllers define scope.
+    /// Adaptive recomputes from current visible strength/resources, without unsaved decisions.
+    CityBoldPlan boldCityPlan() const;
+    mutable Uint32 boldAdaptiveCycle = std::numeric_limits<Uint32>::max();
+    mutable CityBoldPlan boldAdaptivePlan = CityBoldPlan::Native;
     AIRole getRole() const { return role; }
     /// The Builder role (formerly "AI Support"): builds and runs the economy, never commands the army.
     bool builderOnly() const { return role == AIRole::Builder; }

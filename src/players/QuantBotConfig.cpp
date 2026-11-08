@@ -389,6 +389,12 @@ QuantBotConfig::QuantBotConfig() {
     force.citySpiceCapacityRunway = false;
     force.citySingleYardGrowth = false;
     force.cityPowerGrowthHorizon = false;
+    force.cityBoldSpiceBoom = false;
+    force.cityBoldTwinYard = false;
+    force.cityBoldTaxTakeoff = false;
+    force.cityBoldNeighbourRush = false;
+    force.cityBoldTechLance = false;
+    force.cityBoldAdaptive = false;
     force.threatTurrets = true;
     force.moreRocketTurrets = false; // Opt-in: the final paired count-gain gate was not met.
     force.cityStarportSupply = true;
@@ -737,6 +743,12 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
         iniFile.setBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
         iniFile.setBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
+        iniFile.setBoolValue("Force Concentration", "CityBoldSpiceBoom", force.cityBoldSpiceBoom);
+        iniFile.setBoolValue("Force Concentration", "CityBoldTwinYard", force.cityBoldTwinYard);
+        iniFile.setBoolValue("Force Concentration", "CityBoldTaxTakeoff", force.cityBoldTaxTakeoff);
+        iniFile.setBoolValue("Force Concentration", "CityBoldNeighbourRush", force.cityBoldNeighbourRush);
+        iniFile.setBoolValue("Force Concentration", "CityBoldTechLance", force.cityBoldTechLance);
+        iniFile.setBoolValue("Force Concentration", "CityBoldAdaptive", force.cityBoldAdaptive);
         iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
         iniFile.setBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
         iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
@@ -911,6 +923,12 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.citySpiceCapacityRunway = iniFile.getBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
     force.citySingleYardGrowth = iniFile.getBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
     force.cityPowerGrowthHorizon = iniFile.getBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
+    force.cityBoldSpiceBoom = iniFile.getBoolValue("Force Concentration", "CityBoldSpiceBoom", force.cityBoldSpiceBoom);
+    force.cityBoldTwinYard = iniFile.getBoolValue("Force Concentration", "CityBoldTwinYard", force.cityBoldTwinYard);
+    force.cityBoldTaxTakeoff = iniFile.getBoolValue("Force Concentration", "CityBoldTaxTakeoff", force.cityBoldTaxTakeoff);
+    force.cityBoldNeighbourRush = iniFile.getBoolValue("Force Concentration", "CityBoldNeighbourRush", force.cityBoldNeighbourRush);
+    force.cityBoldTechLance = iniFile.getBoolValue("Force Concentration", "CityBoldTechLance", force.cityBoldTechLance);
+    force.cityBoldAdaptive = iniFile.getBoolValue("Force Concentration", "CityBoldAdaptive", force.cityBoldAdaptive);
     force.threatTurrets = iniFile.getBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
     force.moreRocketTurrets = iniFile.getBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
     force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
@@ -1447,6 +1465,12 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("citySpiceCapacityRunway", force.citySpiceCapacityRunway);
     addNamed("citySingleYardGrowth", force.citySingleYardGrowth);
     addNamed("cityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
+    addNamed("cityBoldSpiceBoom", force.cityBoldSpiceBoom);
+    addNamed("cityBoldTwinYard", force.cityBoldTwinYard);
+    addNamed("cityBoldTaxTakeoff", force.cityBoldTaxTakeoff);
+    addNamed("cityBoldNeighbourRush", force.cityBoldNeighbourRush);
+    addNamed("cityBoldTechLance", force.cityBoldTechLance);
+    addNamed("cityBoldAdaptive", force.cityBoldAdaptive);
     addNamed("threatTurrets", force.threatTurrets);
     addNamed("moreRocketTurrets", force.moreRocketTurrets);
     addNamed("cityStarportSupply", force.cityStarportSupply);

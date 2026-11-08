@@ -203,8 +203,12 @@ public:
         coopContextCached = false;
         coopHarvestCached = false;
         civilizationWarsCached = false;
+        initialSpiceTilePermille = -2;
     }
     void setMapData(const std::string& data) { setScenarioData(data); }
+    /// Original explicit-grid spice density; unavailable grids return -1.
+    /// Derived from saved scenario bytes and cached, never serialized state.
+    int getInitialSpiceTilePermille() const;
     const std::optional<coop::Context>& getCoopCampaignContext() const;
     struct CoopHarvestObjective {
         int quota = 0;
@@ -341,6 +345,7 @@ private:
     mutable CoopHarvestObjective coopHarvestObjective;
     mutable bool    civilizationWarsCached = false;
     mutable bool    civilizationWars = false;
+    mutable int     initialSpiceTilePermille = -2;
 
     /// Local-only; see isLocalSpectator(). Never serialized, never transmitted.
     bool            localSpectator = false;

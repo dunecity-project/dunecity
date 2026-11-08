@@ -53,7 +53,8 @@ int QuantBot::campaignRefineryReplacementCost(BuildPass& pass) {
 }
 
 bool QuantBot::simpleTechPolicyActive() const {
-    return currentGame && botConfig().force.simpleTechSavings && gameMode == GameMode::Custom
+    return currentGame && (botConfig().force.simpleTechSavings || boldCityPlan() == CityBoldPlan::TechLance)
+        && gameMode == GameMode::Custom
         && !isCampaignGameType(currentGame->gameType) && !builderOnly()
         && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal);
 }
@@ -175,8 +176,8 @@ bool QuantBot::researchRequired(const BuildPass& pass) const {
     return researchLabPolicyActive() && (currentGame->getGameInitSettings().isCivilizationWars()
         || (botConfig().force.researchLabProgression && getHouse()->getTechLevel() < 9
             && (openingFleetIncomplete(pass) || pass.dangerousCrimeProperties > 0))
-        || (botConfig().force.cityContinuousResearch && pass.citySimEnabled
-            && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        || ((botConfig().force.cityContinuousResearch || pass.boldPlan == CityBoldPlan::TechLance)
+            && pass.citySimEnabled && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
             && lastCalculatedSpice > 0 && getHouse()->getTechLevel() < 9));
 }
 
@@ -529,6 +530,11 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     pass.lightBudget = pass.surplusArmy ? militaryValueLimit : pass.militaryBudget;
     if (pass.surplusArmy) forceStats.surplusPeak = std::max(forceStats.surplusPeak, pass.militaryValue - militaryValueLimit);
     pass.citySimEnabled = currentGame && currentGame->isCitySimEnabled();
+    pass.boldPlan = boldCityPlan();
+    if ((pass.boldPlan == CityBoldPlan::SpiceBoom && getGameCycleCount() < MILLI2CYCLES(12 * 60000))
+        || (pass.boldPlan == CityBoldPlan::TaxTakeoff && getGameCycleCount() < MILLI2CYCLES(15 * 60000)))
+        pass.militaryBudget = std::min(pass.militaryBudget, 4000);
+    pass.lightBudget = std::min(pass.lightBudget, pass.militaryBudget);
     // One reading of the remaining field, shared by the space decision here and
     // by the cash decisions further down. A tiny field that supports no worker
     // must not count as viable for one and not the other: "any spice at all"
@@ -864,6 +870,14 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
     pass.fundedHarvesterTarget = pass.citySimEnabled
         ? CityEconomyInvestmentPolicy::factoryHarvesterTarget(pass.spiceHarvesterTarget,harvesterLimit)
         : QuantBotBuildPolicy::fundedSpiceHarvesters(pass.mapSpiceHarvesterTarget,getAIRefineryBays());
+    if (pass.boldPlan == CityBoldPlan::SpiceBoom) {
+        pass.spiceHarvesterTarget = std::min(harvesterLimit, 2 * pass.spiceHarvesterTarget);
+        pass.fundedHarvesterTarget = pass.spiceHarvesterTarget;
+    } else if (pass.boldPlan == CityBoldPlan::TaxTakeoff || pass.boldPlan == CityBoldPlan::NeighbourRush
+        || (pass.boldPlan == CityBoldPlan::TechLance && pass.itemCount[Structure_IX] == 0)) {
+        pass.spiceHarvesterTarget = std::min(pass.spiceHarvesterTarget, 4);
+        pass.fundedHarvesterTarget = std::min(pass.fundedHarvesterTarget, 4);
+    }
     pass.citySpiceCapacityRunway = botConfig().force.citySpiceCapacityRunway && pass.citySimEnabled
         && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
         && lastCalculatedSpice > 0
@@ -966,6 +980,9 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
 }
 
 bool QuantBot::openingFleetIncomplete(const BuildPass& pass) const {
+    if (pass.boldPlan == CityBoldPlan::SpiceBoom && getGameCycleCount() < MILLI2CYCLES(12 * 60000))
+        return pass.itemCount[Unit_Harvester] < std::min(20, pass.fundedHarvesterTarget)
+            && !getHouse()->isGroundUnitLimitReached();
     return pass.openingWorkerFloor
         && !getHouse()->isGroundUnitLimitReached()
         && CityEconomyInvestmentPolicy::openingWorkersNeeded(pass.itemCount[Unit_Harvester],pass.fundedHarvesterTarget,pass.brutalEconomy);
@@ -1049,11 +1066,11 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
         pass.committedPowerDemand += std::max(0,pass.itemCount[Structure_ResearchLab]
             - getHouse()->getNumItems(Structure_ResearchLab)) * std::max(0,data[Structure_ResearchLab][houseID].power);
     int matureZonePower = pass.matureZonePower;
-    if (botConfig().force.cityPowerGrowthHorizon && pass.citySimEnabled
-        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+    if ((botConfig().force.cityPowerGrowthHorizon || pass.boldPlan == CityBoldPlan::TaxTakeoff)
+        && pass.citySimEnabled && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
         && lastCalculatedSpice > 0
-        && pass.money < int64_t(buildingCapitalCost(pass,Structure_WindTrap))
-            + std::max(1000,pass.cityWorkingReserve)) {
+        && (pass.boldPlan == CityBoldPlan::TaxTakeoff || pass.money < int64_t(buildingCapitalCost(pass,Structure_WindTrap))
+            + std::max(1000,pass.cityWorkingReserve))) {
         const int zonePower = std::max({DuneCity::getZonePower(Structure_ZoneResidential,3),
             DuneCity::getZonePower(Structure_ZoneCommercial,3),DuneCity::getZonePower(Structure_ZoneIndustrial,3)});
         matureZonePower = CityEconomyInvestmentPolicy::boundedMatureZonePower(pass.currentZonePower,
@@ -1115,6 +1132,8 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
         && std::max(currentGameMap->getSizeX(),currentGameMap->getSizeY())<=96)
         pass.cityYardTarget=std::min(pass.cityYardTarget,2);
     if(pass.rockExpansionNeeded)pass.cityYardTarget=std::max(pass.cityYardTarget,getHouse()->getNumItems(Structure_ConstructionYard)+1);
+    if (pass.boldPlan == CityBoldPlan::TwinYard && getGameCycleCount() >= MILLI2CYCLES(4 * 60000))
+        pass.cityYardTarget = std::max(pass.cityYardTarget, 3);
     pass.yardLimit = getGameInitSettings().getGameOptions().maximumNumberOfConstructionYardsOverride;
     if(pass.yardLimit > 0) pass.cityYardTarget = std::min(pass.cityYardTarget, pass.yardLimit);
     pass.cityConstructionCapacity = pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV];
@@ -1126,7 +1145,8 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
     pass.colonisationNeeded = colonisationMcvDue(pass.itemCount[Unit_MCV],pass.yardLimit);
     // Optional construction capacity must not occupy the first heavy factory while a small start
     // is funding its first combat wave. A lost yard or exhausted home rock can still buy an MCV.
-    pass.postponeCapacityMcv = (openingCombatBudgetActive() || campaignCombatBudgetActive())
+    pass.postponeCapacityMcv = pass.boldPlan != CityBoldPlan::TwinYard
+        && (openingCombatBudgetActive() || campaignCombatBudgetActive())
         && pass.itemCount[Structure_ConstructionYard] > 0 && !pass.rockExpansionNeeded && !pass.colonisationNeeded;
     if (pass.postponeCapacityMcv) pass.cityYardTarget = std::min(pass.cityYardTarget, pass.cityConstructionCapacity);
 }
@@ -1267,6 +1287,7 @@ AITelemetry::Record QuantBot::decisionState(BuildPass& pass) {
     return AITelemetry::Record().set("credits", getHouse()->getCredits()).set("spendable", pass.money)
         .set("military", pass.militaryValue).set("military_limit", militaryValueLimit)
         .set("military_budget", pass.militaryBudget)
+        .set("bold_city_plan", static_cast<int>(pass.boldPlan))
         .set("infantry_value", pass.infantryValue).set("infantry_target_percent", pass.infantryPercent)
         .set("light_vehicle_value", pass.lightVehicleValue).set("vehicle_plan_value", pass.vehiclePlanValue)
         .set("military_budget_source", pass.militaryBudgetOverridden ? "override_rolling_headroom" : "configured")
@@ -1524,6 +1545,8 @@ bool QuantBot::factoryPrefersHarvester(BuildPass& pass, const BuilderBase* facto
     if ((pass.campaignThreatProduction || pass.vanillaFfaThreatProduction)
         && canBuildMilitaryVehicle(pass, factory)) return false;
     if (harvesterInvestmentReserve(pass) > 0) return true;
+    if (pass.boldPlan == CityBoldPlan::SpiceBoom && openingFleetIncomplete(pass)
+        && pass.spiceShare > 10000) return true;
     const int workers=pass.itemCount[Unit_Harvester],refs=pass.itemCount[Structure_Refinery];
     if (QuantBotSpendingPolicy::marginalSpice(pass.spiceShare,
         std::min(workers*workerAnnualIncome(pass),refs*pass.bayAnnualIncome),
@@ -1656,6 +1679,12 @@ Uint32 QuantBot::chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, 
     // Positive demand and marginal return decide growth, independently of
     // the current tax/spice ratio. Only the very first housing seed is special.
     Uint32 selected = preferRefinery(refinery,residential,refineryUseful,hedge,capacityNeeded) ? Structure_Refinery : zone;
+    if (pass.boldPlan == CityBoldPlan::SpiceBoom && refinerySite.isValid()
+        && refs < 8 && workers < pass.spiceHarvesterTarget && pass.spiceShare > 10000)
+        selected = Structure_Refinery;
+    else if (pass.boldPlan == CityBoldPlan::TaxTakeoff && refs >= 2
+        && !pass.unloadingBacklog && zone != NONE_ID)
+        selected = zone;
     pass.cityRefineryCatchup = selected == Structure_Refinery && capacityNeeded;
     pass.cityRefineryOpening = selected == Structure_Refinery && openingRefinery;
     if (selected == zone && zone!=NONE_ID && residential.confidence==0) selected=NONE_ID;
@@ -2521,6 +2550,8 @@ bool QuantBot::repairPolicyMaintains(BuildPass& pass, const StructureBase* struc
 }
 
 bool QuantBot::canFundCapacityMcv(BuildPass& pass, int price, Uint32 supplier) {
+    if (pass.boldPlan == CityBoldPlan::TwinYard && pass.itemCount[Structure_ConstructionYard] < 3)
+        return pass.money >= price + 500;
     if (pass.itemCount[Structure_ConstructionYard]>0 && !pass.rockExpansionNeeded && !pass.colonisationNeeded
         && !cityOpeningCapitalFunded(pass,price,supplier)) return false;
     return !pass.capacityMcvRunway || int64_t(pass.cashFlow.projectedCash)-pass.capacityMcvOrderedCost
@@ -3576,6 +3607,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // repeated plots and the unprotected first-heavy saving consume its
             // price first. One useful, income-funded supplier is a finite project.
             if (botConfig().force.cityStarportSupply && pass.citySimEnabled
+                && (pass.boldPlan != CityBoldPlan::TaxTakeoff || pass.ownTotalPop * DuneCity::CitySimulation::kPopDisplayMultiplier >= 15000)
                 && !cityBootstrapNeeded(pass) && pass.cityZonesIncludingQueued>=4
                 && pass.itemCount[Structure_StarPort]==0 && pass.starportMarketAvailable
                 && pass.forecastTax>pass.forecastUpkeep
@@ -4212,6 +4244,27 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
                 && pass.capitalCandidates[i].score>0
                 && (growth<0 || pass.capitalCandidates[i].score>pass.capitalCandidates[growth].score)) growth=int(i);
         if (growth>=0) {pass.capitalChoice=growth;pass.cityGrowthProtected=true;}
+    }
+    // Coherent strategies own the cross-queue allocation, not just an absorbed target.
+    // Real safety/supplier commitments above keep their existing priority.
+    if (pass.boldPlan != CityBoldPlan::Native && !pass.protectionCapital) {
+        int preferred = -1;
+        for (size_t i = 0; i < pass.capitalCandidates.size(); ++i) {
+            const auto& c = pass.capitalCandidates[i];
+            if (c.score <= 0) continue;
+            const auto kind = std::string_view(c.kind);
+            const bool wanted = pass.boldPlan == CityBoldPlan::NeighbourRush ? kind == "military"
+                : pass.boldPlan == CityBoldPlan::SpiceBoom
+                    ? (c.item == Unit_Harvester || (c.item == Structure_Refinery && pass.itemCount[Structure_Refinery] < 8))
+                : pass.boldPlan == CityBoldPlan::TwinYard ? c.item == Unit_MCV
+                : pass.boldPlan == CityBoldPlan::TaxTakeoff
+                    ? (DuneCity::isCityZoneStructure(c.item) || kind == "city_growth_power") : false;
+            if (wanted && (preferred < 0 || c.score > pass.capitalCandidates[preferred].score)) preferred = int(i);
+        }
+        if (preferred >= 0) {
+            pass.capitalChoice = preferred;
+            pass.cityGrowthProtected = pass.boldPlan == CityBoldPlan::TaxTakeoff;
+        }
     }
     pass.capitalConsumed = false;
     pass.capitalOrderedCost = 0;
