@@ -138,7 +138,8 @@ struct QuantBotConfig {
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
-    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
+    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CampaignPlayerHouse,
+    /// CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, ResearchLabProgression,
     /// CityGrowthPower, CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
@@ -218,6 +219,15 @@ struct QuantBotConfig {
         /// The equivalent four-worker first-wave budget for a Hard/Brutal campaign partner of a
         /// human that started without a heavy factory. Enemy controllers and Easy/Medium stay as-is.
         bool campaignCombatBudget;
+        /// The campaign's selected player house uses normal player-side economy and attacks,
+        /// even when its QuantBot is the sole controller. Authored enemy houses are unchanged.
+        bool campaignPlayerHouse;
+        /// Campaign player-side openings establish a combat producer before repeat refineries.
+        /// Independent, hashed candidate; OFF retains the existing economy-first opening.
+        bool campaignMilitaryOpening;
+        /// Campaign player-side readiness scales to enemy strength from the first wave.
+        /// Independent, hashed candidate; OFF retains the fifteen-minute fixed opening floor.
+        bool campaignAdaptiveReadiness;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

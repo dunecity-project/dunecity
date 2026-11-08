@@ -136,5 +136,36 @@ void runCampaignPacingProbe(Game& game) {
     partner->doSetAttackMode(scout,HUNT);partner->onHumanUnitOrder(scout->getObjectID());
     require(!partner->campaignControlsUnit(scout),"Scouting replaced a manual unit order");
     SDL_Log("CAMPAIGN_SCOUT_PASS: dispatched helper explores; home defender and human orders preserved");
+    {
+        // This house has no human on its team. Selecting it as the campaign
+        // player reproduces the sole-controller role without inventing a human.
+        const auto selectedHouse=game.gameInitSettings.getHouseID();
+        const auto savedConfig=bot->configOverride;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        bot->configOverride=config;
+        config->force.campaignPlayerHouse=true;
+        require(bot->isCampaignEnemy(),"Player-house switch changed an authored opponent's role");
+        require(partner->isAlliedWithHuman() && !partner->isCampaignEnemy(),"Player-house switch changed a human partner's role");
+        game.gameInitSettings.setHouseID(static_cast<HOUSETYPE>(bot->getHouse()->getHouseID()));
+        config->force.campaignPlayerHouse=false;
+        require(!bot->isAlliedWithHuman() && bot->isCampaignEnemy(),"OFF did not retain the legacy sole-controller role");
+        bot->gameMode=QuantBot::GameMode::Campaign;
+        bot->campaignWave={};
+        bot->campaignWave.initialized=true;
+        bot->campaignWave.opening=std::numeric_limits<Uint32>::max();
+        bot->attackTimer=std::numeric_limits<Sint32>::max();
+        config->force.campaignPlayerHouse=true;
+        bot->update();
+        require(bot->isAlliedWithHuman() && !bot->isCampaignEnemy(),"Selected campaign house still treated as an enemy without a human");
+        require(bot->gameMode==QuantBot::GameMode::Custom,"Selected campaign house retained campaign enemy economic planning");
+        require(bot->harvesterCountCeiling()==0,"Selected campaign house retained the enemy worker cap");
+        require(bot->attackTimer==0 && bot->campaignCanLaunch(),"Selected campaign house retained the missing-trigger opening hold");
+        bot->updateCampaignWave();
+        require(bot->campaignCanLaunch(),"Enemy wave update re-gated the player house");
+        game.gameInitSettings.setHouseID(selectedHouse);
+        require(bot->isCampaignEnemy(),"Unselected enemy house lost its campaign role");
+        bot->configOverride=savedConfig;
+        SDL_Log("CAMPAIGN_PLAYER_HOUSE_PASS: OFF legacy role; ON selected sole controller uses Custom planning and attacks; enemy/partner unchanged");
+    }
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=pacing outcome=passed");
 }

@@ -171,6 +171,16 @@ opponents. Merge shard directories with the existing `--report DIR1 DIR2 ...`.
 The default 80-minute cap is not a victory condition: unfinished quotas and other
 unfinished missions fail. Historical smoke expectations are unchanged.
 
+`[Force Concentration] CampaignPlayerHouse` (default off) identifies the selected
+campaign house from `GameInitSettings`, independently of registered human seats.
+ON gives its sole QuantBot the same Custom economic planning, player-side
+readiness and attacks as an existing human partner; authored enemy-house roles
+and human-partner behaviour are unchanged. OFF retains the old human-presence
+role test, including its AI-only campaign opening stall. Compare the same 66
+missions with `--style campaign-player-house-off` / `campaign-player-house-on`;
+repeat with `--campaign-human-partner` for the partner arm and run the two-seed
+vanilla All against Atreides gate separately.
+
 For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
 seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;
 see [sampler factors and research verification](quantbot-dunecity-audit.md#balanced-recovery-skirmish-sampler).
@@ -626,51 +636,4 @@ and restore the required population before checking locked/disabled/unrelated
 technology, exactly one prerequisite Starport, pending-order deduplication
 and resumed IX/Palace construction. Earlier campaign import and MCV-recovery
 checks keep their original population and assertions.
-
-## Compact city generation (candidate, 2026-11-06)
-
-`[Force Concentration] CityCompactPower` is independently hashed and **off by
-default**. When the ordinary city planner wants generation, it prefers a legal,
-funded Nuclear Plant if its complete power output costs no more per credit and
-uses no more ground per unit of power than wind, with at least one strict
-improvement. This compares whole generator capacity rather than charging all
-reactor capacity to today's small top-up. It does not alter human technology,
-prerequisites, construction payment, placement/blast safety or existing queues.
-The first prerequisite Windtrap and an unaffordable/unplaceable reactor's wind
-fallback remain. Funding remains a separate planner concern.
-
-The two private Air saves use save format **9883**, package **DuneCity1.0.864**
-and immutable Workshop revision `27a8c8d9…51fb0f4`. Both `65d227c7` and
-`3710464d` have that package version, so their headers cannot identify a unique
-source commit. The actual saved content offers Windtrap (300 credits, 100 power,
-2×2) and Nuclear (2,000 credits, 2,000 power, 3×3, technology 6, Windtrap
-prerequisite); the advanced windtraps are disabled.
-
-The committed synthetic `quantbot_compact_power_{easy,medium,hard,brutal}` probes
-start a physical 100-output/90-demand city on 2,600 credits. OFF/ON use the full
-bot, ordinary paid queues and normal placement. Separate controls cover a
-below-quote budget, technology 5, a legal 2×2-only plot and pending generation.
-Pure policy/config tests cover power-per-credit/ground comparisons, default OFF,
-loading, saving and hashing.
-
-Exact saves stay outside Git. `tests/ai/power-continuation.py` accepts a frozen
-`--game-options` INI containing `[Research Lab Save] SHA256/GzipBase64`; optional
-`[Power Config] GzipBase64` applies a candidate QuantBot INI after load. Existing
-cluster input transport freezes both. Use source-pinned `dunecity-queue submit`
-and `--style-prefix city-compact-power --arms audit-off audit-on off on`.
-The default `--technology-installments saved` clears ambient overrides and keeps
-the original save's payment rules. Explicit `off`/`on` uses the shared validated
-post-load probe hook and must have a separate result directory/tag; native setup
-records the effective rule. It does not rewrite the private input save.
-For an unarchived private mod, optional `[Genome Revisions] SHA256/GzipBase64`
-uses the behavior harness's exact revision transport. It restores the original
-manifest and missing configuration bytes before loading; matching source/retired
-artwork is reused only after size/SHA-256 checks. Never substitute a current mod
-or rewrite the private save to get past a missing-revision error.
-`--verify-compact --arms on` requires eligible houses to order reactors, rejects
-funded wind substitutions and requires ordinary paid reactor completion.
-These saves require no concrete, so the recorded reactor price is its founded quote.
-Outputs retain compressed native decisions, per-house minute/end power and
-credits, orders/completions and actual generator-production credit withdrawals
-(`generator_spent`, excluding grid upkeep and foundation orders).
 

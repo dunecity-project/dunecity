@@ -351,6 +351,15 @@ Strategy=false
 # absent. It only acts when the match's Research Lab game option is enabled.
 # Basic income, power, defence and accepted production commitments keep their funding first.
 [Force Concentration]
+# Treat the selected campaign player house as player-side without a registered human.
+# OFF preserves the old human-presence role test; authored enemy houses are unchanged.
+CampaignPlayerHouse=0
+# Establish campaign player-side combat production before repeat refinery expansion.
+# Independent hashed candidate; OFF preserves the economy-first opening.
+CampaignMilitaryOpening=0
+# Size campaign player-side readiness to enemy strength without a fifteen-minute delay.
+# Independent hashed candidate; OFF preserves the old fixed opening threshold.
+CampaignAdaptiveReadiness=0
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.

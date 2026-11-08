@@ -896,6 +896,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             set_tests_properties(quantbot_campaign_pressure_${pressure_mod}
                 PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         endforeach()
+        add_test(NAME quantbot_campaign_pacing COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --pacing-probe --repeatable
+            --house harkonnen --level 4 --mod vanilla --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/campaign-pacing-probe)
+        set_tests_properties(quantbot_campaign_pacing PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # Read-only Stats window, observer house browsing and the sidebar squeeze,
         # on a real renderer at the smallest supported interface height and at
         # native 1080. Both sizes capture screenshots into their output directory.

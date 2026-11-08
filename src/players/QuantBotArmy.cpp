@@ -538,6 +538,36 @@ void QuantBot::releaseExhaustedArmyRepairs() {
     }
 }
 
+int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
+    int required = std::max(0, configuredThreshold);
+    // The human's ally measures its wave against the strongest opposing house's army (unit counts
+    // x prices, as the production allocator values them) after the opening, not against a
+    // skirmish-sized limit a campaign enemy never fields: it held 5,650-7,780 for 20 minutes
+    // against two empty enemy armies (vanilla Harkonnen m21) waiting for 8,000.
+    if (isAlliedWithHuman() && !isCampaignEnemy() && getGameCycleCount() >= MILLI2CYCLES(15 * 60000)) {
+        int strongest = 0;
+        for (int h=0; h<NUM_HOUSES; ++h) {
+            const House* house = getHouse(h);
+            // The Natives are always "alive" but are no opposing house.
+            if (!house || house->isNatives() || !house->isAlive() || house->getTeamID()==getHouse()->getTeamID()) continue;
+            int value = 0;
+            for (Uint32 item = Unit_FirstID; item <= (ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Unit_LastID); ++item)
+                if (QuantBotBuildPolicy::militaryItem(item) && item != Unit_Frigate
+                    && !isAmbientUnit(item))
+                    value += house->getNumItems(item) * currentGame->objectData.data[item][h].price;
+            strongest = std::max(strongest, value);
+        }
+        required = std::min(std::max(2000, strongest * 5 / 4), militaryValueLimit * 3 / 4);
+    }
+    // Once the map is depleted, stop waiting for a larger army. A leftover
+    // cash balance or a few cheap survivors must not keep the game idle.
+    // Dispatch still enforces home reserves, opening and enemy wave limits.
+    // Delay this fallback beyond the initial spice scan and opening phase.
+    if (getGameCycleCount() >= MILLI2CYCLES(15 * 60000) && lastCalculatedSpice == 0)
+        required = 0;
+    return required;
+}
+
 int QuantBot::houseAttackThreshold() const {
     // Campaign mode: the difficulty's threshold; Custom: the global one, except Brutal's own.
     const QuantBotConfig& config = botConfig();

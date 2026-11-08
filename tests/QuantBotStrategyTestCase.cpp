@@ -627,6 +627,34 @@ TEST_CASE("Exhausted army dispatch defaults on and independently round-trips bot
     std::filesystem::remove(savedPath);
 }
 
+TEST_CASE("Campaign player house defaults off and independently round-trips both hashed states",
+          "[ai][campaign][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignPlayerHouse);
+    const auto disabledHash = defaults.getConfigHash();
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-player-house-test.ini";
+    for (const bool enabled : {false, true, false}) {
+        QuantBotConfig config = defaults;
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignPlayerHouse="
+                << (enabled ? "true" : "false") << '\n';
+        }
+        REQUIRE(config.applyOverrides(path.string()));
+        REQUIRE(config.force.campaignPlayerHouse == enabled);
+        REQUIRE((config.getConfigHash() != disabledHash) == enabled);
+        REQUIRE(config.force.campaignCombatBudget == defaults.force.campaignCombatBudget);
+        REQUIRE(config.force.openingCombatBudget == defaults.force.openingCombatBudget);
+        REQUIRE(config.save(path.string()));
+        QuantBotConfig restored;
+        restored.force.campaignPlayerHouse = !enabled;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignPlayerHouse == enabled);
+        REQUIRE(restored.getConfigHash() == config.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("More rocket turrets defaults off and is independent loaded saved and hashed", "[ai][defence][config]") {
     QuantBotConfig config;
     REQUIRE_FALSE(config.force.moreRocketTurrets);
