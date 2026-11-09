@@ -471,7 +471,7 @@ parser.add_argument('--scenario', action='store_true',
                     help='AI scenario matrix game (tests/ai/scenario-matrix.py, scenario-match.inc): a campaign mission '
                          'to its own end, or with --scenario-sides a match on --custom-map/--skirmish until one team is left')
 parser.add_argument('--campaign-ai-only', action='store_true',
-                    help='Campaign scenario: sole QuantBot on the player house, authored CampaignAIPlayer enemies, '
+                    help='Diagnostic campaign scenario: sole QuantBot on the player house, requested enemy family, '
                          'no registered human; retain native mission victory including quotas')
 parser.add_argument('--scenario-sides',
                     help='Scenario match: house:team:class per house (class as PlayerFactory names it, e.g. '
@@ -579,9 +579,8 @@ if args.scenario:
                      'a campaign scenario neither.')
     if args.mission and args.scenario_sides:
         parser.error('--mission is for campaign scenarios.')
-if args.campaign_ai_only and (not args.scenario or args.scenario_sides or args.local_spectator
-                             or args.enemy_ai != 'campaign'):
-    parser.error('--campaign-ai-only needs a campaign --scenario and --enemy-ai campaign, without --local-spectator.')
+if args.campaign_ai_only and (not args.scenario or args.scenario_sides or args.local_spectator):
+    parser.error('--campaign-ai-only needs a campaign --scenario, without --local-spectator or --scenario-sides.')
 
 
 def team_number(brain, default):

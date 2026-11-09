@@ -294,6 +294,46 @@ int runCampaignBalanceProbe() {
         SDL_Log("PROBE_CONFIG: campaign_ai_only=1 house=%d player=%s enemy=%s registered_humans=0 native_victory=1",
             int(humanHouse),partnerClass.c_str(),enemyClass.c_str());
     }
+    if(std::getenv("BALANCE_CAMPAIGN_DIFFICULTY_AUDIT")) {
+        const House* objective=game->getHouse(humanHouse);
+        if(!scenario || !scenarioSides.empty() || customMap || skirmishSpec
+           || !isCampaignGameType(game->gameType) || !objective || game->getOutcomeHouse()!=objective)
+            throw std::runtime_error("Campaign difficulty study lost its native campaign objective");
+        int humans=0;
+        for(int h=0;h<NUM_HOUSES;++h) {
+            const House* house=game->getHouse(h);
+            if(!house || house->getPlayerList().empty()) continue;
+            int houseHumans=0, bots=0;
+            for(const auto& player:house->getPlayerList()) {
+                if(dynamic_cast<const HumanPlayer*>(player.get())) { ++humans; ++houseHumans; }
+                else if(const auto* bot=dynamic_cast<const QuantBot*>(player.get())) {
+                    ++bots;
+                    const std::string& expected=h==humanHouse ? partnerClass : enemyClass;
+                    if(player->getPlayerclass()!=expected || bot->getRole()!=AIRole::Both)
+                        throw std::runtime_error("Campaign difficulty study resolved the wrong QuantBot controller");
+                    SDL_Log("CAMPAIGN_DIFFICULTY_CONTROLLER: house=%d team=%d player=%s role=both difficulty=%d "
+                            "initial_game_mode=%d human_allied=%d campaign_player_house=%d config_hash=%s",
+                        h,house->getTeamID(),player->getPlayerclass().c_str(),int(bot->difficulty),
+                        int(bot->gameMode),int(bot->isAlliedWithHuman()),int(bot->botConfig().force.campaignPlayerHouse),
+                        bot->botConfig().getConfigHash().c_str());
+                } else throw std::runtime_error("Campaign difficulty study registered an unexpected controller");
+            }
+            if(bots!=1 || houseHumans!=int(h==humanHouse && !campaignAiOnly))
+                throw std::runtime_error("Campaign difficulty study registered competing or missing controllers");
+        }
+        if(humans!=int(!campaignAiOnly) || game->isObserving()!=campaignAiOnly
+           || (!campaignAiOnly && (pLocalHouse!=objective || !dynamic_cast<HumanPlayer*>(pLocalPlayer))))
+            throw std::runtime_error("Campaign difficulty study resolved the wrong human/observer ownership");
+        const auto& options=game->getGameInitSettings().getGameOptions();
+        SDL_Log("CAMPAIGN_DIFFICULTY_SETUP: support_mode=%s player=%s enemy=%s objective_house=%d "
+                "registered_humans=%d observing=%d native_victory=1 controller_check=1 "
+                "win_flags=%d lose_flags=%d quota=%d triggers=%zu slow_city_year=%d fog_of_war=%d "
+                "campaign_player_house=%d",
+            campaignAiOnly ? "ai-only" : "human-partner",partnerClass.c_str(),enemyClass.c_str(),
+            int(humanHouse),humans,int(game->isObserving()),game->winFlags,game->loseFlags,objective->getQuota(),
+            game->getTriggerManager().getTriggers().size(),int(options.slowCityYear),int(options.fogOfWar),
+            int(getQuantBotConfig().force.campaignPlayerHouse));
+    }
     // This diagnostic can retain a full hour of every house's decisions.
     // The normal game capture limit is deliberately unchanged.
     if(std::getenv("BALANCE_CAPTURE_MIB"))
