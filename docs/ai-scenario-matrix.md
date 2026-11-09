@@ -238,7 +238,17 @@ qualified improvement.
 
 ### Genuine exhaustion regression
 
-The mixed-difficulty vanilla FFA keeps seed **90866** as an explicit exhaustion
+**Since protocol 119** (counters50-S5: `VanillaArmyCounters=1`,
+`VanillaArmyCounterMapScope=5`, blend 50%) QB (team 1) wins seed 90866 at 41.26
+minutes, so the smoke expects that win (`('wins', 1)`; round 119 ctest
+`20261109T163152-r119counters-ctest-4f0850`; digest `48cc8b1ed60fab21` on both
+mini and aws). Only the Brutal QB is in the counters' scope; its build mix first
+diverges at minute 8. The explicit-OFF style `round-119-off` still
+plays the protocol 118 game: a 60-minute audited exhaustion with QB and QM
+alive, digest `9a39d8e612300c36`, identical to `a1d85ffa`. The exhaustion check
+below covers protocols 81-118 and stays available as the `exhausted` expectation.
+
+Through protocol 118 the mixed-difficulty vanilla FFA kept seed **90866** as an explicit exhaustion
 check, not a winner check. At runtime `cf05f6b7` it still had two surviving houses
 after **120 natural game minutes** (receipt
 `20261105T010832-suite-90866-natural-120-1acf45`, digest `32f5b20f27feaa01`).
@@ -247,7 +257,7 @@ a 46.96-minute win, while deviated-harvester early-return OFF gave QB a
 35.94-minute win. These are different accepted trajectories, not evidence for
 disabling either default.
 
-The case passes only with a complete per-house engine audit: the production
+The `exhausted` expectation passes only with a complete per-house engine audit: the production
 `exhaustedArmyEconomy()` predicate must prove cash below the cheapest enabled
 unit, no reachable harvestable spice, no pending cargo or possible tax income;
 there must be no idle raid-ready combat units and no unaffordable offensive
