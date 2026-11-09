@@ -339,6 +339,10 @@ struct QuantBotConfig {
         /// with enough health-weighted ground strength: 0=OFF, 1=100%, 2=150%.
         /// True worker attacks only; building defence and human/repair ownership stay unchanged.
         int campaignSizedWorkerRescue;
+        /// DuneCity city-sim campaign ENEMY worker ceiling (QuantBotCityCampaignPolicy::ratioRestored):
+        /// 0 = accepted matrix, 1 = Hard uses its original refinery-ratio allowance, 2 = Hard and Brutal.
+        /// Easy, Medium, Vanilla and human-allied houses never change. Hashed, default 0.
+        int campaignEnemyHarvesterRatio;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

@@ -449,6 +449,9 @@ CampaignHomeFields=2
 # Campaign support, positive initial spice, actual ground attack on a live worker only.
 # Reuse sized rescue: 0=OFF, 1=require 100% threat coverage, 2=require 150%; buildings unchanged.
 CampaignSizedWorkerRescue=0
+# DuneCity campaign enemies only: worker ceiling from the original refinery-ratio allowance
+# instead of the matrix row. 0=OFF, 1=Hard, 2=Hard and Brutal; Easy/Medium never change.
+CampaignEnemyHarvesterRatio=0
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.

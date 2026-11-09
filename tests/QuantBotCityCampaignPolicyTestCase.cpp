@@ -306,3 +306,55 @@ TEST_CASE("Spice exhaustion is confirmed only after a held zero window", "[quant
 
     REQUIRE(kPostSpiceConfirmSeconds == 30);
 }
+
+TEST_CASE("CampaignEnemyHarvesterRatio restores the refinery-ratio allowance for selected tiers only",
+          "[ai][campaign][city][policy]") {
+    // Level 0 is the accepted matrix in every cell.
+    for (const auto& cell : kAcceptedMatrix) {
+        const Limits off = limits(cell.difficulty, cell.level, funded(kUncappedAllowance), false, 0, 0);
+        REQUIRE(off.harvesters == cell.harvesters);
+        REQUIRE(off.sharedZoneCap == cell.sharedZoneCap);
+    }
+    // H017: Hard level 7 with two refineries, allowance 2 x 2 = 4.
+    const Baseline h017 = funded(4);
+    REQUIRE(limits(Hard, 7, h017, false, 0, 0).harvesters == 1);
+    REQUIRE(limits(Hard, 7, h017, false, 0, 1).harvesters == 4);
+    REQUIRE(limits(Hard, 7, h017, false, 0, 2).harvesters == 4);
+    // Brutal changes only at level 2; Easy and Medium never change.
+    const Baseline brutal = funded(7);
+    REQUIRE(limits(Brutal, 7, brutal, false, 0, 1).harvesters == 3);
+    REQUIRE(limits(Brutal, 7, brutal, false, 0, 2).harvesters == 7);
+    for (const int difficulty : {int(Easy), int(Medium)})
+        for (int level = 1; level <= 9; ++level)
+            for (const int ratio : {1, 2}) {
+                const Limits on = limits(difficulty, level, h017, false, 0, ratio);
+                const Limits off = limits(difficulty, level, h017, false, 0, 0);
+                REQUIRE(on.harvesters == off.harvesters);
+                REQUIRE(on.sharedZoneCap == off.sharedZoneCap);
+            }
+    // Zones are unchanged; level 1, scripted houses, post-spice and options ceilings still win.
+    REQUIRE(limits(Hard, 7, h017, false, 0, 1).sharedZoneCap == 20);
+    REQUIRE(limits(Hard, 1, h017, false, 0, 2).harvesters == 0);
+    REQUIRE(limits(Hard, 7, Baseline{0, 4}, false, 0, 2).harvesters == 0);
+    REQUIRE(limits(Hard, 7, h017, true, 0, 2).harvesters == 0);
+    REQUIRE(limits(Hard, 7, h017, true, 0, 2).sharedZoneCap == kPostSpiceHardZoneCap);
+    REQUIRE(limits(Hard, 7, h017, false, 3, 1).harvesters == 3);
+    REQUIRE_FALSE(ratioRestored(Hard, 0));
+    REQUIRE(ratioRestored(Hard, 1));
+    REQUIRE_FALSE(ratioRestored(Brutal, 1));
+    REQUIRE(ratioRestored(Brutal, 2));
+    REQUIRE_FALSE(ratioRestored(Medium, 2));
+    REQUIRE_FALSE(ratioRestored(Easy, 2));
+}
+
+TEST_CASE("Restored workers raise the income goal by their reference harvest",
+          "[ai][campaign][city][policy]") {
+    const Baseline h017 = funded(4);
+    REQUIRE(incomeGoalPerMinute(h017, 1, 1) == totalIncomeGoalPerMinute(h017));
+    REQUIRE(incomeGoalPerMinute(h017, 1, 4) == totalIncomeGoalPerMinute(h017) + 3 * kReferenceIncomePerHarvester);
+    // The tax share of the goal is the matrix's: unchanged by the extra workers.
+    REQUIRE(incomeGoalPerMinute(h017, 1, 4) - kReferenceIncomePerHarvester * 4
+            == netTaxGoalPerMinute(h017, 1));
+    REQUIRE(incomeGoalPerMinute(h017, 0, 0) == totalIncomeGoalPerMinute(h017));
+    REQUIRE(incomeGoalPerMinute(Baseline{0, 4}, 1, 4) == 0);
+}

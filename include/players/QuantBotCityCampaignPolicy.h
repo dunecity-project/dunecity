@@ -90,17 +90,26 @@ inline Limits smallBudgetLimits(int difficulty, int level, int allowance) {
     return limits;
 }
 
+/// CampaignEnemyHarvesterRatio (hashed, default 0): which tiers use their original
+/// refinery-ratio allowance as the worker ceiling instead of the matrix row.
+/// 0 = none (accepted matrix), 1 = Hard, 2 = Hard and Brutal. Easy and Medium never change.
+inline bool ratioRestored(int difficulty, int ratioLevel) {
+    return (ratioLevel >= 1 && difficulty == Hard) || (ratioLevel >= 2 && difficulty == Brutal);
+}
+
 /// Full ceiling for one campaign enemy house.
 ///
 /// @param postSpice   map-wide spice confirmed exhausted (see kPostSpiceConfirmSeconds)
 /// @param optionsHarvesterLimit  Game Options / engine worker ceiling, <=0 when unset
+/// @param ratioLevel  CampaignEnemyHarvesterRatio level, 0 = accepted matrix
 inline Limits limits(int difficulty, int level, const Baseline& baseline,
-                     bool postSpice, int optionsHarvesterLimit = 0) {
+                     bool postSpice, int optionsHarvesterLimit = 0, int ratioLevel = 0) {
     // Scripted houses with no original economic base stay at zero: no workers,
     // no zones, no free buildings. Level 1 has no working enemy economy at all.
     if (baseline.refineries <= 0 || baseline.allowance <= 0 || level <= 1) return Limits{0, 0};
 
     Limits result = smallBudgetLimits(difficulty, level, baseline.allowance);
+    if (ratioRestored(difficulty, ratioLevel)) result.harvesters = baseline.allowance;
 
     // A target may never exceed what the original mission already allowed, nor
     // the resource/options ceilings the engine applies.
@@ -124,6 +133,14 @@ inline int baselineIncomePerMinute(const Baseline& baseline) {
 
 inline int totalIncomeGoalPerMinute(const Baseline& baseline) {
     return baseline.refineries <= 0 ? 0 : kGoalIncomePerOriginalHarvester * std::max(0, baseline.allowance);
+}
+
+/// Goal with restored workers: each worker above the matrix row adds its
+/// reference harvest, so the zone/tax plan keeps the matrix's tax share and the
+/// extra harvest is additive. Equals totalIncomeGoalPerMinute() at level 0.
+inline int incomeGoalPerMinute(const Baseline& baseline, int matrixHarvesters, int restoredHarvesters) {
+    const int goal = totalIncomeGoalPerMinute(baseline);
+    return goal <= 0 ? 0 : goal + kReferenceIncomePerHarvester * std::max(0, restoredHarvesters - matrixHarvesters);
 }
 
 /// Tax share of the goal: the whole goal minus the planned harvest share.

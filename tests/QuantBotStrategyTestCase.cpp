@@ -2962,3 +2962,30 @@ TEST_CASE("Combat priority levels and strict focus use stable HP and id order", 
     REQUIRE(F::tunedShouldSwitch(true, current, tiedLowerId, 2));
     REQUIRE_FALSE(F::tunedShouldSwitch(true, current, current, 2));
 }
+
+TEST_CASE("Campaign enemy harvester ratio has two independently hashed persistent levels",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignEnemyHarvesterRatio == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-enemy-harvester-ratio-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int level : {0, 1, 2}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignEnemyHarvesterRatio=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignEnemyHarvesterRatio == level);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignEnemyHarvesterRatio = level;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), level).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignEnemyHarvesterRatio == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}

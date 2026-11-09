@@ -1951,7 +1951,7 @@ AITelemetry::Record QuantBot::decisionState(BuildPass& pass) {
         .set("harvester_ai_limit", harvesterLimit).set("campaign_economy_push",pass.campaignEconomyPush)
         .set("campaign_city_policy",campaignCityEconomy()).set("campaign_city_baseline",campaignBaseline.allowance)
         .set("campaign_city_zone_cap",campaignCityLimits().sharedZoneCap).set("campaign_city_post_spice",campaignPostSpice())
-        .set("campaign_city_income_goal",QuantBotCityCampaignPolicy::totalIncomeGoalPerMinute(campaignBaseline))
+        .set("campaign_city_income_goal",campaignIncomeGoalPerMinute())
         .set("campaign_city_income_forecast",campaignIncomeForecastPerMinute())
         .set("city_population_limit",pass.cityGrowthLimits.displayPopulationLimit)
         .set("city_population_display",pass.cityDisplayPopulation)

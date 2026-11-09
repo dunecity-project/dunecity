@@ -132,11 +132,22 @@ bool QuantBot::campaignPostSpice() const {
         getGameCycleCount(),MILLI2CYCLES(30000));
 }
 
-QuantBotCityCampaignPolicy::Limits QuantBot::campaignCityLimits() const {
+QuantBotCityCampaignPolicy::Limits QuantBot::campaignCityLimits(int ratioLevel) const {
     if (!campaignCityEconomy()) return {};
     return QuantBotCityCampaignPolicy::limits(int(difficulty),
         QuantBotCityCampaignPolicy::displayLevel(currentGame->techLevel),campaignBaseline,
-        campaignPostSpice(),getHouse()->getMaxHarvesters());
+        campaignPostSpice(),getHouse()->getMaxHarvesters(),ratioLevel);
+}
+
+QuantBotCityCampaignPolicy::Limits QuantBot::campaignCityLimits() const {
+    return campaignCityLimits(botConfig().force.campaignEnemyHarvesterRatio);
+}
+
+int QuantBot::campaignIncomeGoalPerMinute() const {
+    const int ratioLevel=botConfig().force.campaignEnemyHarvesterRatio;
+    return QuantBotCityCampaignPolicy::incomeGoalPerMinute(campaignBaseline,
+        ratioLevel>0 ? campaignCityLimits(0).harvesters : 0,
+        ratioLevel>0 ? campaignCityLimits(ratioLevel).harvesters : 0);
 }
 
 int QuantBot::campaignHarvesterTarget() const {
@@ -194,7 +205,7 @@ int QuantBot::campaignIncomeForecastPerMinute() const {
 bool QuantBot::campaignAllowsZone(int zonesIncludingQueued) const {
     return !campaignCityEconomy() || QuantBotCityCampaignPolicy::allowsDiscretionaryExpansion(
         zonesIncludingQueued,campaignCityLimits().sharedZoneCap,campaignIncomeForecastPerMinute(),
-        QuantBotCityCampaignPolicy::totalIncomeGoalPerMinute(campaignBaseline));
+        campaignIncomeGoalPerMinute());
 }
 
 bool QuantBot::campaignAvailableToBuild(const BuilderBase* builder, Uint32 item) const {

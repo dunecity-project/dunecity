@@ -217,6 +217,8 @@ public:
 
     // Only opposing QuantBots in Dune City campaigns use this policy.
     QuantBotCityCampaignPolicy::Limits campaignCityLimits() const;
+    QuantBotCityCampaignPolicy::Limits campaignCityLimits(int ratioLevel) const;
+    int campaignIncomeGoalPerMinute() const;
     bool campaignCityEconomy() const;
     bool campaignPermitsStructure(Uint32 itemID) const;
     bool campaignAllowsZone(int zonesIncludingQueued) const;

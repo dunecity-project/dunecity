@@ -138,6 +138,8 @@ def command(args, binary, game, out):
     cmd += headless_asset_arguments()
     if game['ai_only']:
         cmd += ['--campaign-ai-only']
+    if args.scenario_style:
+        cmd += ['--scenario-style', args.scenario_style]
     return cmd
 
 
@@ -301,6 +303,9 @@ parser.add_argument('--minutes', type=int, choices=range(1, 121), default=120)
 parser.add_argument('--wall-timeout', type=int, default=3600)
 parser.add_argument('--jobs', type=int, default=1)
 parser.add_argument('--cases', help='Explicit diagnostic ID filter; never changes the default full study')
+parser.add_argument('--scenario-style',
+                    help='Candidate arm: tests/ai/play-styles/<style>.ini applied to every QuantBot '
+                         '(enemy-only switches leave the player proxy unchanged); omit for native')
 parser.add_argument('--list-json', action='store_true')
 args = parser.parse_args()
 if args.list_json:
