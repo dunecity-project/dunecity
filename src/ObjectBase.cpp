@@ -659,6 +659,9 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
 
     const auto* rocketHunt = managedRocketHunt(seeker);
     const auto* autonomousAircraft = managedAutonomousAircraft(seeker);
+    // A clear bit in the map's object-tile set means hasAnObject() is false on that tile:
+    // such tiles return below without reading the tile.
+    const Uint64* occupied = currentGameMap->objectTileBits();
     const int maxRadiusX = std::max(seekerLocation.x, currentGameMap->getSizeX() - 1 - seekerLocation.x);
     const int maxRadiusY = std::max(seekerLocation.y, currentGameMap->getSizeY() - 1 - seekerLocation.y);
     const int maxRadius = std::max(maxRadiusX, maxRadiusY);
@@ -672,6 +675,9 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
             const Coord checkCoord(seekerLocation.x + dx, seekerLocation.y + dy);
             ++ObjectBase::targetSearchStats.cellsVisited;
             if(!currentGameMap->tileExists(checkCoord)) {
+                return;
+            }
+            if(occupied && !Map::tileBit(occupied, currentGameMap->tileIndex(checkCoord.x, checkCoord.y))) {
                 return;
             }
 
@@ -726,6 +732,9 @@ const ObjectBase* findTargetLegacy(const ObjectBase& seeker, int checkRange) {
     }
 
     const auto* autonomousAircraft = managedAutonomousAircraft(seeker);
+    // As in findClosestTargetLegacy(): tiles the object-tile set marks empty hold no object
+    // and would return at the hasAnObject() test (or earlier), so they return first.
+    const Uint64* occupied = currentGameMap->objectTileBits();
     ObjectBase* closestTarget = nullptr;
     auto closestDistance = FixPt_MAX;
 
@@ -734,6 +743,9 @@ const ObjectBase* findTargetLegacy(const ObjectBase& seeker, int checkRange) {
             const Coord checkCoord(seekerLocation.x + dx, seekerLocation.y + dy);
             ++ObjectBase::targetSearchStats.cellsVisited;
             if(!currentGameMap->tileExists(checkCoord)) {
+                return;
+            }
+            if(occupied && !Map::tileBit(occupied, currentGameMap->tileIndex(checkCoord.x, checkCoord.y))) {
                 return;
             }
 
