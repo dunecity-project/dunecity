@@ -21,6 +21,8 @@
 #include "QuantBotInternal.h"
 #include <players/RocketTurretPolicy.h>
 
+#include <array>
+
 using QuantBotInternal::rocketCoverageTier;
 using QuantBotInternal::cityRoadImpact;
 using QuantBotInternal::wouldLandlockNeighbouringZone;
@@ -749,14 +751,15 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 
 	// Pre-collect spice tile positions for refinery placement (avoids O(N^2) inner loop)
 	std::vector<Coord> spiceTiles;
+    int spStartX = 0, spStartY = 0, spEndX = -1, spEndY = -1;
     if (!cityRefineryLogistics && (itemID == Structure_Refinery
         || (itemID == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive()))) {
 		// Only scan spice in a wider area around the base (no need for full map)
 		int spiceRadius = searchRadius + 30;
-		int spStartX = std::max(0, baseCenter.x - spiceRadius);
-		int spStartY = std::max(0, baseCenter.y - spiceRadius);
-		int spEndX = std::min(mapW - 1, baseCenter.x + spiceRadius);
-		int spEndY = std::min(mapH - 1, baseCenter.y + spiceRadius);
+		spStartX = std::max(0, baseCenter.x - spiceRadius);
+		spStartY = std::max(0, baseCenter.y - spiceRadius);
+		spEndX = std::min(mapW - 1, baseCenter.x + spiceRadius);
+		spEndY = std::min(mapH - 1, baseCenter.y + spiceRadius);
 		for (int sx = spStartX; sx <= spEndX; sx++) {
 			for (int sy = spStartY; sy <= spEndY; sy++) {
 				if (getMap().tileExists(sx, sy) && getMap().getTile(sx, sy)->hasSpice()) {
@@ -765,6 +768,34 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 			}
 		}
 	}
+    // The refinery score below wants min over spiceTiles of lround(blockDistance(origin, spice)),
+    // which is lround of the smallest blockDistance (lround is monotone). octilePasses() yields
+    // that smallest blockDistance exactly, in raw FixPoint units, for every cell of a box that
+    // holds the sources and the origin: one transform per search instead of a walk over every
+    // spice tile per candidate. The spice box holds every origin of the first search pass; an
+    // origin outside it (the whole-map pass) rebuilds the field over the map. Built on first use.
+    const int64_t octileOrth = FixPoint(1).getRawValue();
+    const int64_t octileDiag = octileOrth + (FixPt_SQRT2 - 1).getRawValue();
+    std::vector<int64_t> nearestSpice;
+    int nearestSpiceX = 0, nearestSpiceY = 0, nearestSpiceW = 0, nearestSpiceH = 0;
+    auto nearestSpiceRaw = [&](int x, int y) {
+        if (nearestSpiceW == 0 || x < nearestSpiceX || y < nearestSpiceY
+            || x >= nearestSpiceX + nearestSpiceW || y >= nearestSpiceY + nearestSpiceH) {
+            const bool inSpiceBox = x >= spStartX && x <= spEndX && y >= spStartY && y <= spEndY;
+            nearestSpiceX = inSpiceBox ? spStartX : 0;
+            nearestSpiceY = inSpiceBox ? spStartY : 0;
+            nearestSpiceW = inSpiceBox ? spEndX - spStartX + 1 : mapW;
+            nearestSpiceH = inSpiceBox ? spEndY - spStartY + 1 : mapH;
+            nearestSpice.assign(static_cast<size_t>(nearestSpiceW) * static_cast<size_t>(nearestSpiceH),
+                DuneCity::kOctileFar);
+            for (const Coord& spice : spiceTiles)
+                nearestSpice[static_cast<size_t>(spice.y - nearestSpiceY) * nearestSpiceW
+                    + static_cast<size_t>(spice.x - nearestSpiceX)] = 0;
+            DuneCity::octilePasses(nearestSpice, nearestSpiceW, nearestSpiceH, octileOrth, octileDiag);
+        }
+        return nearestSpice[static_cast<size_t>(y - nearestSpiceY) * nearestSpiceW
+            + static_cast<size_t>(x - nearestSpiceX)];
+    };
 
     // A cramped city keeps legal ground that no longer suits the road grid.
     // Roads are a layout preference; production capacity is not. Factories,
@@ -1079,14 +1110,12 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                     placeLocationX, placeLocationY, newSizeX, newSizeY);
                 if (distance != CityDistanceField::missing) locationScore -= distance * 2;
             } else {
-                // Refineries prefer being close to spice deposits
+                // Refineries prefer being close to spice deposits: the nearest spiceTiles entry
+                // by blockDistance, rounded (see nearestSpiceRaw above).
                 int closestSpiceDistance = 10000;
-                for (const auto& spiceCoord : spiceTiles) {
-                    int spiceDistance = lround(blockDistance(Coord(placeLocationX, placeLocationY), spiceCoord));
-                    if (spiceDistance < closestSpiceDistance) {
-                        closestSpiceDistance = spiceDistance;
-                    }
-                }
+                if (!spiceTiles.empty())
+                    closestSpiceDistance = std::min(closestSpiceDistance,
+                        lround(FixPoint::FromRawValue(nearestSpiceRaw(placeLocationX, placeLocationY))));
                 if (closestSpiceDistance < 10000) {
                     locationScore += 50 - closestSpiceDistance * 2; // Strong bonus for being closer to spice
                 }
@@ -1449,17 +1478,73 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 }
 
 Coord QuantBot::findSlabPlaceLocation(Uint32 itemID) {
-	int slabSizeX = getStructureSize(itemID).x;
-	int slabSizeY = getStructureSize(itemID).y;
+	const int slabSizeX = getStructureSize(itemID).x;
+	const int slabSizeY = getStructureSize(itemID).y;
+    const Map& map = getMap();
+    const int mapW = map.getSizeX(), mapH = map.getSizeY();
+    const House* house = getHouse();
 
 	int bestLocationScore = -10000;
 	Coord bestLocation = Coord::Invalid();
 
+    // Map::okayToPlaceStructure(x,y,w,h,false,house) is, for every footprint tile, "no city
+    // zone, rock, not blocked", and over the footprint an OR of Map::isWithinBuildRange(): an
+    // anchor tile (one this house owns, or allied land canBuildOnAlliedLand() opens to it)
+    // within BUILDRANGE, +2 with Base Expansion, off-map probes skipped. Every part is a pure
+    // test of tile state, and the union of those squares around a footprint is the footprint
+    // grown by the range, so the tile test below plus one clipped box query on an anchor field
+    // accept exactly the origins the engine check accepts. The field is anchorField() (rebuilt
+    // only when this house's tile ownership changes) unless allied land counts too; then it is
+    // marked here from the same tile owners. The scan order, the scoring and the tie rule
+    // (first strictly better origin, x-major) are unchanged.
+    const int range = BUILDRANGE + (house->hasRadarResearch(radar::BaseExpansion) ? 2 : 0);
+    std::array<bool, NUM_HOUSES> alliedLand{};
+    bool anyAlliedLand = false;
+    for (int landHouse = 0; landHouse < NUM_HOUSES; ++landHouse) {
+        alliedLand[landHouse] = currentGame->canBuildOnAlliedLand(house, landHouse);
+        anyAlliedLand = anyAlliedLand || alliedLand[landHouse];
+    }
+    DuneCity::BoxAnyField alliedAnchors;
+    if (anyAlliedLand) {
+        const int houseID = house->getHouseID();
+        std::vector<uint8_t> anchor(static_cast<size_t>(mapW)*mapH, 0);
+        for (int x = 0; x < mapW; ++x)
+            for (int y = 0; y < mapH; ++y) {
+                const int owner = map.getTile(x,y)->getOwner();
+                anchor[static_cast<size_t>(y)*mapW+x] = DuneCity::isConstructionAnchor(owner,houseID)
+                    || (owner >= 0 && owner < NUM_HOUSES && alliedLand[owner]);
+            }
+        alliedAnchors.build(mapW,mapH,[&](int x,int y) { return anchor[static_cast<size_t>(y)*mapW+x] != 0; });
+    }
+    const DuneCity::BoxAnyField& anchors = anyAlliedLand ? alliedAnchors : anchorField();
+
 	// Check all map tiles for valid slab placement
-	for (int x = 0; x <= getMap().getSizeX() - slabSizeX; x++) {
-		for (int y = 0; y <= getMap().getSizeY() - slabSizeY; y++) {
+	for (int x = 0; x <= mapW - slabSizeX; x++) {
+        // Origins are first tested in blocks along the column: when no anchor lies near the
+        // union of a block's footprints, no origin of the block is within build range.
+        constexpr int kGateBlock = 32;
+        int gateBlockEnd = -1;
+		for (int y = 0; y <= mapH - slabSizeY; y++) {
+            if (y > gateBlockEnd) {
+                const int blockEnd = std::min(mapH - slabSizeY, y + kGateBlock - 1);
+                if (!anchors.anyNearFootprint(x, y, slabSizeX, blockEnd - y + slabSizeY, range)) {
+                    y = blockEnd;
+                    continue;
+                }
+                gateBlockEnd = blockEnd;
+            }
 			// Check if this location is valid for slab placement
-			if (getMap().okayToPlaceStructure(x, y, slabSizeX, slabSizeY, false, getHouse())) {
+            if (!anchors.anyNearFootprint(x, y, slabSizeX, slabSizeY, range)) continue;
+            bool placeable = true;
+            for (int i = x; i < x + slabSizeX && placeable; i++)
+                for (int j = y; j < y + slabSizeY; j++) {
+                    const Tile* tile = map.getTile(i, j);
+                    if (tile->hasCityZone() || !tile->isRock() || tile->isBlocked()) {
+                        placeable = false;
+                        break;
+                    }
+                }
+			if (placeable) {
 
 				int locationScore = 0;
 				bool hasExistingSlab = false;

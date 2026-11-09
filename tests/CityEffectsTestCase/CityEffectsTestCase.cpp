@@ -18,6 +18,7 @@
 #include <data.h>
 
 #include <dunecity/SpatialFields.h>
+#include <mmath.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -1859,6 +1860,47 @@ TEST_CASE("BoxAnyField equals the build-range probe it replaces", "[spatial-fiel
                         for (int x = -1; x <= w; ++x)
                             REQUIRE(field.anyNearFootprint(x,y,fw,fh,radius)
                                     == bruteAnyNearFootprint(marked,x,y,fw,fh,radius));
+        }
+    }
+}
+
+TEST_CASE("octilePasses equals the nearest-spice blockDistance walk it replaces", "[spatial-fields][refinery]") {
+    // QuantBot::findPlaceLocation's refinery score: lround of the smallest blockDistance from the
+    // origin to any spice tile. The transform must give that smallest raw FixPoint value exactly.
+    const int64_t orth = FixPoint(1).getRawValue();
+    const int64_t diag = orth + (FixPt_SQRT2 - 1).getRawValue();
+
+    SECTION("blockDistance is max*orth + min*(diag-orth) in raw units") {
+        for (int big = 0; big <= 600; ++big)
+            for (int small = 0; small <= big; ++small) {
+                const int64_t expected = big*orth + small*(diag - orth);
+                REQUIRE(blockDistance(Coord(0,0), Coord(big,small)).getRawValue() == expected);
+                REQUIRE(blockDistance(Coord(small,big), Coord(0,0)).getRawValue() == expected);
+            }
+    }
+
+    SECTION("random boxes and source sets agree cell for cell") {
+        uint32_t seed = 0x0c7a11eu;
+        auto next = [&](int lo, int hi) {
+            seed = seed*1664525u + 1013904223u;
+            return lo + static_cast<int>((seed >> 16) % static_cast<uint32_t>(hi - lo + 1));
+        };
+        for (int trial = 0; trial < 400; ++trial) {
+            const int w = next(1,37), h = next(1,29);   // includes non-square and 1xN
+            std::vector<Coord> sources;
+            for (int i = 0, n = next(1, trial % 5 == 0 ? 40 : 5); i < n; ++i)
+                sources.emplace_back(next(0,w-1), next(0,h-1));
+            std::vector<int64_t> field(static_cast<size_t>(w)*h, DuneCity::kOctileFar);
+            for (const Coord& source : sources) field[static_cast<size_t>(source.y)*w + source.x] = 0;
+            DuneCity::octilePasses(field, w, h, orth, diag);
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < w; ++x) {
+                    FixPoint nearest = FixPt_MAX;
+                    for (const Coord& source : sources)
+                        nearest = std::min(nearest, blockDistance(Coord(x,y), source));
+                    REQUIRE(field[static_cast<size_t>(y)*w + x] == nearest.getRawValue());
+                    REQUIRE(lround(FixPoint::FromRawValue(field[static_cast<size_t>(y)*w + x])) == lround(nearest));
+                }
         }
     }
 }
