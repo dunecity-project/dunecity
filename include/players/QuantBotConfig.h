@@ -499,8 +499,8 @@ struct QuantBotConfig {
         /// original roster: native against at least 3 (3) / 5 (4) opposing sides at game start;
         /// level 5 is level 3 or level 1.
         int focusFireMapScope;
-        /// SpiceBloomHarvest (docs/ai-scenario-matrix.md, "Spice bloom harvest"): 0 = OFF
-        /// (default), 1/2 = hashed levels. A cheap idle ranged unit fires at an explored spice
+        /// SpiceBloomHarvest (docs/ai-scenario-matrix.md, "Spice bloom harvest"): 0 = OFF,
+        /// 1 = strict (default), 2 = low-spice threshold. Hashed levels. A cheap idle ranged unit fires at an explored spice
         /// bloom on our side of the map, near our refineries, so it bursts into a field our
         /// harvesters can use. Skipped as wasteful while the known spice within the spill radius
         /// plus a margin exceeds none (1) or 2,000 (2). Autonomous Custom Medium/Hard/Brutal

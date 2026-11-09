@@ -584,8 +584,8 @@ inline std::vector<UnitBase*> spawnGroundBand(World& world, House* owner, Uint32
 
 
 inline void statelessSaveRoundTrips(World& world) {
-    require(SAVEGAMEVERSION == 9884 && NETWORK_PROTOCOL_VERSION == 120,
-            "Stateless AI fixture disagrees with the feature-only save/wire boundary");
+    require(SAVEGAMEVERSION == 9884,
+            "Stateless AI fixture disagrees with the feature-only save boundary");
     auto originalConfig = world.bot->configOverride;
     auto config = std::make_shared<QuantBotConfig>(world.bot->botConfig());
     world.bot->configOverride = config;

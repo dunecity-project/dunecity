@@ -159,8 +159,8 @@ and `B3m-FocusFireMapScope` (`ledger.md`).
 
 ## Spice bloom harvest
 
-`[Force Concentration] SpiceBloomHarvest` (hashed integer 0-2, default 0 = OFF; absent from
-the config hash while OFF) lets QuantBot shoot spice blooms so that they burst into fields for
+`[Force Concentration] SpiceBloomHarvest` (hashed integer 0-2, default 1 = strict; absent from
+the config hash while explicitly OFF) lets QuantBot shoot spice blooms so that they burst into fields for
 its own harvesters. Any weapon impact except Sonic waves and the sandworm sets a bloom off
 (`Map::damage`): the bloom tile and every plain sand tile within 5 tiles become thin spice
 (up to 81 tiles, about 9,000 credits), and nothing is damaged. A ground unit that stops on a
@@ -199,6 +199,13 @@ unit tests `[spice-bloom]` in `tests/QuantBotStrategyTestCase.cpp`, real-engine 
 `tests/ai/spice-bloom-probe.inc` (CTest `quantbot_spice_bloom_vanilla` /
 `quantbot_spice_bloom_dunecity`). Candidate-only overlays `spice-bloom-harvest-1/2`;
 preregistration and results in `outputs/ai-tuning-20261108/SpiceBloom/ledger.md`.
+
+Protocol 121 enables strict level 1 at Stefan's request: do not shoot while any known spice
+lies within 7 tiles. This is a requested behaviour choice, not a performance promotion:
+the exploratory screen lost two positive-spice wins (46→44/84), despite producing more spice.
+The scope and safety checks above are unchanged. `round-121-off` sets `SpiceBloomHarvest=0`
+and restores round-120 AI decisions; save format 9884 is unchanged. Older explicit round-OFF
+styles also disable blooms so their historical controls remain reproducible.
 
 
 ## How a game is played

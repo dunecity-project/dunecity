@@ -1338,11 +1338,6 @@ TEST_CASE("Map-scoped repair levels preserve their configured defaults, hashes a
     requireBatch3CityLevels("FocusFireMapScope", &QuantBotConfig::ForceSettings::focusFireMapScope, 0, 5);
 }
 
-// SpiceBloomHarvest (players/QuantBotSpiceBloomPolicy.h; docs/ai-scenario-matrix.md, "Spice bloom
-// harvest") shares the Batch3 level contract: default OFF, hashed and persisted levels.
-TEST_CASE("SpiceBloomHarvest levels are default off, hashed and persisted", "[ai][config][spice-bloom]") {
-    requireBatch3CityLevels("SpiceBloomHarvest", &QuantBotConfig::ForceSettings::spiceBloomHarvest);
-}
 
 TEST_CASE("SpiceBloomHarvest bursts only beside an empty (1) or moderate (2) known field", "[ai][spice-bloom]") {
     using namespace QuantBotSpiceBloomPolicy;

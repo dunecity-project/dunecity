@@ -370,7 +370,10 @@
 // 120: QuantBot CityCapitalPacing defaults to 2 (research-enabled Custom DuneCity spice skirmish
 //      buys optional producer technology only once income per minute reaches twice its cost),
 //      so a 119 peer would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            120
+// 121: QuantBot SpiceBloomHarvest defaults to strict level 1: eligible Custom houses shoot
+//      explored blooms only when no known spice lies nearby. Older peers issue different AI
+//      attack orders and would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            121
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

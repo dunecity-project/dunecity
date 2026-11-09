@@ -458,7 +458,7 @@ QuantBotConfig::QuantBotConfig() {
     force.closingMountainScope = 0;
     force.vanillaArmyCounterMapScope = 5;
     force.focusFireMapScope = 0;
-    force.spiceBloomHarvest = 0;
+    force.spiceBloomHarvest = 1;
     force.retreatPreserve = false;
     force.retreatPreserveLevel = 1;
     force.harvesterRaid = false;
