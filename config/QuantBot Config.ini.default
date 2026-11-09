@@ -530,8 +530,8 @@ CityGrowthStageTax=0
 CityGrowthTaxPopulation=3000
 # Batch3 City economy experiments (0 = OFF; 1/2 = levels). DuneCity Custom skirmish on a map
 # that starts with spice only: Vanilla, campaigns, Civilization Wars, no-spice maps inert.
-# Income-paced producer technology (research-enabled only), 1x/2x income per minute (default 1):
-CityCapitalPacing=1
+# Income-paced producer technology (research-enabled only), 1x/2x income per minute (default 2):
+CityCapitalPacing=2
 # Fleet ratio targets (Hard/Brutal): 1 = 3 workers/bay, 1 carryall/4 workers, 1 repair yard; 2 = 4 workers/bay.
 CityFleetRatios=0
 # Optional producer technology waits for 3/5 refinery bays (never above the spice plan).

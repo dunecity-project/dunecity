@@ -1281,8 +1281,8 @@ void requireBatch3CityLevels(const char* key, int QuantBotConfig::ForceSettings:
 
 } // namespace
 
-TEST_CASE("CityCapitalPacing defaults to level 1, hashed levels use the income gate", "[ai][city][config]") {
-    requireBatch3CityLevels("CityCapitalPacing", &QuantBotConfig::ForceSettings::cityCapitalPacing, 1);
+TEST_CASE("CityCapitalPacing defaults to level 2, hashed levels use the income gate", "[ai][city][config]") {
+    requireBatch3CityLevels("CityCapitalPacing", &QuantBotConfig::ForceSettings::cityCapitalPacing, 2);
     using QuantBotBuildPolicy::incomeTechnologyAdmitted;
     REQUIRE(incomeTechnologyAdmitted(1, 1000, 1000));
     REQUIRE_FALSE(incomeTechnologyAdmitted(2, 1999, 1000));

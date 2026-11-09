@@ -367,7 +367,10 @@
 // 119: QuantBot VanillaArmyCounters defaults on at 50% blend with VanillaArmyCounterMapScope=5
 //      (native against at least 5 opposing sides or below 20% thick spice). A 118 peer would
 //      desync; save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            119
+// 120: QuantBot CityCapitalPacing defaults to 2 (research-enabled Custom DuneCity spice skirmish
+//      buys optional producer technology only once income per minute reaches twice its cost),
+//      so a 119 peer would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            120
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

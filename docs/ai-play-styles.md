@@ -1502,6 +1502,19 @@ Receipts: `outputs/ai-tuning-20261108/B3m-CombatSidesScope` and
 its historical protocol-117 control. `VanillaBoomFfaOnly` stays 0: the evidence
 overlay's 1 is inert while all four boom switches are off, and is not promoted.
 
+Round 120 (protocol 120, save 9884 unchanged) raises `CityCapitalPacing` from level 1 to
+**level 2**. Research-enabled Custom DuneCity spice skirmish then buys optional producer
+technology only once income per minute reaches twice the item's cost; level 1 needs
+the cost once. Against the shipped level 1 on the release line `a1d85ffa`, two fresh
+paired96 blocks pooled to 192 games and 77 -> 90 wins (+17/-4, CI [+0.021, +0.120]),
+with no format or spice collapse. The old and the 60-minute Outpost control decks were
+digest-identical, and the 1.0.807 deck (research off, inert) scored 56 / 56. The recheck
+on the round-119 base `7ebe1906`, with controls on the 120-minute Outpost schedule, is in
+`SimpleGate/round120`. `round-120-off` (`CityCapitalPacing=1`) is the
+explicit OFF control and plays exactly as `7ebe1906`. `round-119-off` now also sets
+`CityCapitalPacing=1`, so it still restores protocol 118, and `round-118-off` keeps level 0
+for its protocol-117 control. Receipts: `outputs/ai-tuning-20261108/B3-CityCapitalPacing`.
+
 ## Duel openings (default 2: DuneCity light raid)
 
 `[Force Concentration] DuelOpeningPlan` is a hashed integer: `0` native,

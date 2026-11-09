@@ -473,7 +473,7 @@ struct QuantBotConfig {
         /// (QuantBot::cityEconomyExperimentScope); Vanilla, campaigns, Civilization Wars and
         /// no-spice maps are inert.
         /// TechIncomeTiming's 1x/2x income gate for producer technology, research-enabled only;
-        /// default 1 since protocol 118.
+        /// default 2 since protocol 120 (1 in protocols 118-119).
         int cityCapitalPacing;
         /// EconomicFleetRatios targets, Hard/Brutal: 1 = h3-cq1-r1, 2 = h4-cq1-r1.
         int cityFleetRatios;

@@ -105,3 +105,4 @@ same games.
 | 2026-11-09 | CampaignLeftovers margin (`CampaignHomeFields=2`) | B2 `f9fd39b0` | PASS, candidate 53 / OFF 53 / 807 22 |
 | 2026-11-09 | City capital pacing L1 (`CityCapitalPacing=1`) | B3m `7e188318` | PASS, candidate 56 / OFF 56 / 807 22 |
 | 2026-11-09 | counters50-S5 (`VanillaArmyCounters=1`, blend 5000, `VanillaArmyCounterMapScope=5`) | release-line `8617247d` | PASS, candidate 56 / OFF 56 / 807 22; 192/192 outcomes equal |
+| 2026-11-09 | City capital pacing L2 (`CityCapitalPacing=2`, round 120 default) | release-line `a1d85ffa` | PASS, candidate 56 / OFF (default L1) 56 / 807 22; research-off deck, inert |
