@@ -1163,6 +1163,20 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/force-concentration-probe)
         set_tests_properties(quantbot_force_concentration PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # SpiceBloomHarvest (docs/ai-scenario-matrix.md, "Spice bloom harvest"; default OFF), in both
+        # skirmish mods: the Atreides QuantBot's cheapest idle ranged unit bursts an open-sand bloom
+        # into 81 spice tiles without standing on it, at levels 1 and 2; a bloom inside a field is
+        # skipped as wasteful; 500 credits of nearby spice stop level 1 but not level 2; OFF,
+        # campaign and Easy are inert, the hook keeps its cadence, and only an explored nearer
+        # enemy building puts a bloom on the enemy side.
+        foreach(bloom_mod IN ITEMS vanilla dunecity)
+            add_test(NAME quantbot_spice_bloom_${bloom_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --spice-bloom-probe --repeatable
+                --level 9 --mod ${bloom_mod}
+                --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+                --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spice-bloom-${bloom_mod}-probe)
+            set_tests_properties(quantbot_spice_bloom_${bloom_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
         # QuantBot strategies (docs/ai-play-styles.md, "Strategies"), tests/ai/strategy-probe.inc:
         # two peers of the same four-house vanilla game pick the same seeded strategies and stay
         # in lockstep; the pick survives save/load (byte-identical blocks, a 9864 block re-picks

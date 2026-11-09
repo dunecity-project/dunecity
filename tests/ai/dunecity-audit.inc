@@ -13,6 +13,7 @@
 #include <map>
 #include <vector>
 #include "field-expansion-audit.inc"
+#include "spice-bloom-audit.inc"
 
 namespace DuneCityAudit {
 
@@ -722,6 +723,7 @@ inline void observe(Game& game) {
     const Uint32 cycle = game.getGameCycleCount();
     observeFleet(game);
     FieldExpansionAudit::observe(game);
+    SpiceBloomAudit::observe(game);
     for (int h=0; h<NUM_HOUSES; ++h) {
         const House* house = game.getHouse(h);
         if (!house || !FfaArmy::quantBotOf(house)) continue;
@@ -767,6 +769,7 @@ inline void sample(Game& game) {
     sampleMapFeatures(game);
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
     FieldExpansionAudit::sample(game,minute);
+    SpiceBloomAudit::sample(game,minute);
     for (const House* house : EliminationMatch::playingHouses(game)) {
         const QuantBot* bot = FfaArmy::quantBotOf(house);
         if (!bot) continue;

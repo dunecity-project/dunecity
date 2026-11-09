@@ -13,6 +13,7 @@
 #include <players/StarportBuyingPolicy.h>
 #include <players/TacticalSafetyPolicy.h>
 #include <players/QuantBotMapScopePolicy.h>
+#include <players/QuantBotSpiceBloomPolicy.h>
 
 #include <array>
 #include <cstdio>
@@ -1335,6 +1336,59 @@ TEST_CASE("Map-scoped repair levels preserve their configured defaults, hashes a
     requireBatch3CityLevels("ClosingMountainScope", &QuantBotConfig::ForceSettings::closingMountainScope);
     requireBatch3CityLevels("VanillaArmyCounterMapScope", &QuantBotConfig::ForceSettings::vanillaArmyCounterMapScope, 5, 5);
     requireBatch3CityLevels("FocusFireMapScope", &QuantBotConfig::ForceSettings::focusFireMapScope, 0, 5);
+}
+
+// SpiceBloomHarvest (players/QuantBotSpiceBloomPolicy.h; docs/ai-scenario-matrix.md, "Spice bloom
+// harvest") shares the Batch3 level contract: default OFF, hashed and persisted levels.
+TEST_CASE("SpiceBloomHarvest levels are default off, hashed and persisted", "[ai][config][spice-bloom]") {
+    requireBatch3CityLevels("SpiceBloomHarvest", &QuantBotConfig::ForceSettings::spiceBloomHarvest);
+}
+
+TEST_CASE("SpiceBloomHarvest bursts only beside an empty (1) or moderate (2) known field", "[ai][spice-bloom]") {
+    using namespace QuantBotSpiceBloomPolicy;
+    // The engine spills over plain sand within 5 tiles; the waste test adds a 2-tile margin.
+    REQUIRE(kSpillRadius == 5);
+    REQUIRE(kMeasureRadius == 7);
+    // Level 1: any known spice there wastes the bloom.
+    REQUIRE_FALSE(wasteful(1, 0));
+    REQUIRE(wasteful(1, 1));
+    // Level 2: up to 2,000 credits of known spice.
+    REQUIRE_FALSE(wasteful(2, 0));
+    REQUIRE_FALSE(wasteful(2, 2000));
+    REQUIRE(wasteful(2, 2001));
+    // OFF, and any other value, never bursts.
+    REQUIRE(wasteful(0, 0));
+    REQUIRE(wasteful(3, 0));
+    // Half of the measured disc (149 tiles inside the map) must be explored.
+    REQUIRE(enoughKnown(75, 149));
+    REQUIRE_FALSE(enoughKnown(74, 149));
+    REQUIRE_FALSE(enoughKnown(0, 0));
+}
+
+TEST_CASE("SpiceBloomHarvest keeps to our side, a fixed cadence and cheap idle shooters", "[ai][spice-bloom]") {
+    using namespace QuantBotSpiceBloomPolicy;
+    REQUIRE(ownSide(10, 10));
+    REQUIRE(ownSide(10, -1));         // no enemy building known
+    REQUIRE_FALSE(ownSide(11, 10));
+    REQUIRE_FALSE(ownSide(-1, -1));   // no building of our own
+    // Exactly one in four unit passes, whatever the house's offset within the 50-cycle interval.
+    for (uint32_t offset = 0; offset < 50; ++offset) {
+        int due = 0;
+        for (uint32_t pass = 0; pass < 40; ++pass) due += evaluationDue(offset + 50 * pass);
+        REQUIRE(due == 10);
+    }
+    // Projectiles that set a bloom off where they land and leave nothing behind.
+    for (const int bullet : {Bullet_ShellSmall, Bullet_ShellMedium, Bullet_ShellLarge, Bullet_SmallRocket, Bullet_Rocket})
+        REQUIRE(burstingBullet(bullet));
+    for (const int bullet : {Bullet_Sonic, Bullet_SonicTrike, Bullet_DRocket, Bullet_Heal, Bullet_Slow, Bullet_Flame,
+                             Bullet_Napalm, Bullet_Sandworm})
+        REQUIRE_FALSE(burstingBullet(bullet));
+    // Cheaper first, then idle before moving, then nearer, then the lower object id.
+    REQUIRE(betterShooter({60, true, 30, 9}, {150, false, 2, 1}));
+    REQUIRE(betterShooter({150, false, 30, 9}, {150, true, 2, 1}));
+    REQUIRE(betterShooter({150, false, 2, 9}, {150, false, 3, 1}));
+    REQUIRE(betterShooter({150, false, 2, 1}, {150, false, 2, 9}));
+    REQUIRE_FALSE(betterShooter({150, false, 2, 1}, {150, false, 2, 1}));
 }
 
 namespace {

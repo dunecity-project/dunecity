@@ -551,6 +551,12 @@ public:
 
     inline const Coord& getGuardPoint() const { return guardPoint; }
 
+    /// The ground position this unit was ordered to fire at (doAttackPos); invalid when none.
+    inline const Coord& getAttackPos() const { return attackPos; }
+
+    /// The projectile type of this unit's primary weapon.
+    inline int getBulletType() const { return bulletType; }
+
     virtual void playAttackSound();
 
     /// Does this unit fire Dynasty's launcher rocket pair instead of the legacy follow-up shot?

@@ -28,6 +28,7 @@
 #include <dunecity/CitySpritePolicy.h>
 #include <Map.h>
 #include <House.h>
+#include <players/AIDecisionLog.h>
 #include <SoundPlayer.h>
 #include <ScreenBorder.h>
 #include <Explosion.h>
@@ -1190,6 +1191,9 @@ ObjectBase* Tile::getObjectWithID(Uint32 objectID) const {
 void Tile::triggerSpiceBloom(House* pTrigger) {
     if (!isSpiceBloom()) return;
     AchievementEvents::bloom(pTrigger);
+    // Diagnostic only: which house set the bloom off (docs/ai-scenario-matrix.md,
+    // "Spice bloom harvest"). A no-op unless decision telemetry is enabled.
+    AITelemetry::log().account(pTrigger->getHouseID(), "spice_bloom_burst", int64_t{1} << 32);
 
     const int bloomType = type;
     std::pair<int, int> generatedSpiceTerrain;

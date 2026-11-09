@@ -684,6 +684,29 @@ private:
         bool ready() const { return target && count == required; }
     };
     HarvesterRaidPlan planHarvesterRaid() const;
+    /// SpiceBloomHarvest (docs/ai-scenario-matrix.md, "Spice bloom harvest"; default OFF): an
+    /// autonomous Custom Medium/Hard/Brutal house outside Civilization Wars and human alliances,
+    /// in Vanilla and DuneCity alike.
+    bool spiceBloomHarvestScope() const;
+    /// The unit pass hook: on every fourth pass, at most one cheap idle ranged unit is sent to
+    /// fire at a useful, unwasteful bloom on our side (players/QuantBotSpiceBloomPolicy.h).
+    void updateSpiceBloomHarvest(const HarvesterRaidPlan& raid);
+    /// One evaluation without the cadence; true when a shooter was ordered.
+    bool orderSpiceBloomShot(const HarvesterRaidPlan& raid);
+    /// An idle, freely available ranged ground unit whose projectile bursts a bloom.
+    bool spiceBloomShooter(const UnitBase* unit, const HarvesterRaidPlan& raid) const;
+    /// A held-home posture, a core building under attack or a live defence response.
+    bool spiceBloomEmergency() const;
+    /// Every bloom on the map, special ones as hazards only (fire never sets them off). Derived
+    /// from the map on first use - blooms are only ever placed by the map, so a reloaded game
+    /// rebuilds the same list - and pruned as they burst; never serialised.
+    struct SpiceBloomSite { Coord at; bool special = false; bool wasteNoted = false; };
+    std::vector<SpiceBloomSite> spiceBloomSites;
+    bool spiceBloomSitesScanned = false;
+    /// Runtime telemetry only: never consulted by a decision, never saved. Orders sent, and
+    /// blooms held back by the waste rule (each counted once).
+    struct SpiceBloomStats { Uint32 orders = 0, wasteful = 0; };
+    SpiceBloomStats spiceBloomStats;
     double getProductionBuildingMultiplier(int itemID) const;
     // Runtime-only observations. Never consulted by tactical/production decisions.
     struct HarvesterStrikeMemberTrace { Uint32 id, item; int price; CombatReward::Totals reward; };

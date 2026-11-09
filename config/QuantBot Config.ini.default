@@ -550,6 +550,11 @@ VanillaArmyCounterMapScope=5
 # Native FocusFireLevel on maps of at least 192x192 (1), or also below 1000 tiles per player (2);
 # by the original roster instead: native against at least 3 (3) / 5 (4) opposing sides; 5 = 3 or 1:
 FocusFireMapScope=0
+# Spice bloom harvest (OFF; 1/2 = levels): a cheap idle ranged unit fires at an explored bloom
+# near our refineries and on our side, never wasting one while the known spice within 7 tiles
+# exceeds none (1) / 2000 (2). Custom skirmish only; campaigns, Civilization Wars and
+# human-allied houses stay unchanged.
+SpiceBloomHarvest=0
 # Experimental: true-force retreat, early vehicle repair and threatened-field evacuation.
 # Vanilla/DuneCity skirmish only; campaigns and human-allied helpers stay unchanged.
 RetreatPreserve=0

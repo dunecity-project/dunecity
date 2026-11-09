@@ -458,6 +458,7 @@ QuantBotConfig::QuantBotConfig() {
     force.closingMountainScope = 0;
     force.vanillaArmyCounterMapScope = 5;
     force.focusFireMapScope = 0;
+    force.spiceBloomHarvest = 0;
     force.retreatPreserve = false;
     force.retreatPreserveLevel = 1;
     force.harvesterRaid = false;
@@ -880,6 +881,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "ClosingMountainScope", force.closingMountainScope);
         iniFile.setIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope);
         iniFile.setIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope);
+        iniFile.setIntValue("Force Concentration", "SpiceBloomHarvest", force.spiceBloomHarvest);
         iniFile.setBoolValue("Force Concentration", "RetreatPreserve", force.retreatPreserve);
         iniFile.setIntValue("Force Concentration", "RetreatPreserveLevel", force.retreatPreserveLevel);
         iniFile.setBoolValue("Force Concentration", "HarvesterRaid", force.harvesterRaid);
@@ -1146,6 +1148,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.closingMountainScope = std::clamp(iniFile.getIntValue("Force Concentration", "ClosingMountainScope", force.closingMountainScope), 0, 2);
     force.vanillaArmyCounterMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope), 0, 5);
     force.focusFireMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope), 0, 5);
+    force.spiceBloomHarvest = std::clamp(iniFile.getIntValue("Force Concentration", "SpiceBloomHarvest", force.spiceBloomHarvest), 0, 2);
     force.retreatPreserve = iniFile.getBoolValue("Force Concentration", "RetreatPreserve", force.retreatPreserve);
     force.retreatPreserveLevel = std::clamp(iniFile.getIntValue("Force Concentration", "RetreatPreserveLevel", force.retreatPreserveLevel), 1, 2);
     force.harvesterRaid = iniFile.getBoolValue("Force Concentration", "HarvesterRaid", force.harvesterRaid);
@@ -1762,6 +1765,8 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.closingMountainScope != 0) addNamed("closingMountainScope", force.closingMountainScope);
     if (force.vanillaArmyCounterMapScope != 0) addNamed("vanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope);
     if (force.focusFireMapScope != 0) addNamed("focusFireMapScope", force.focusFireMapScope);
+    // SpiceBloomHarvest levels: absent (OFF) keeps the native multiplayer hash.
+    if (force.spiceBloomHarvest != 0) addNamed("spiceBloomHarvest", force.spiceBloomHarvest);
     addNamed("retreatPreserve", force.retreatPreserve);
     addNamed("retreatPreserveLevel", force.retreatPreserveLevel);
     addNamed("harvesterRaid", force.harvesterRaid);

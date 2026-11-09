@@ -61,6 +61,7 @@
 #include "wave-formation-probe.inc"
 #include "blob-wave-probe.inc"
 #include "force-concentration-probe.inc"
+#include "spice-bloom-probe.inc"
 #include "formation-duel.inc"
 #include "probe-digest.inc"
 #include "elimination-match.inc"
@@ -437,6 +438,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_FORCE_PROBE")) {
         runForceConcentrationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_SPICE_BLOOM_PROBE")) {
+        runSpiceBloomProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_LAUNCHER_KITING_PROBE")) {

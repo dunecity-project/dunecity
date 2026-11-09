@@ -157,6 +157,49 @@ Preregistrations and results are in
 `outputs/ai-tuning-20261108/B3m-ClosingMountainScope`, `B3m-VanillaArmyCounterMapScope`
 and `B3m-FocusFireMapScope` (`ledger.md`).
 
+## Spice bloom harvest
+
+`[Force Concentration] SpiceBloomHarvest` (hashed integer 0-2, default 0 = OFF; absent from
+the config hash while OFF) lets QuantBot shoot spice blooms so that they burst into fields for
+its own harvesters. Any weapon impact except Sonic waves and the sandworm sets a bloom off
+(`Map::damage`): the bloom tile and every plain sand tile within 5 tiles become thin spice
+(up to 81 tiles, about 9,000 credits), and nothing is damaged. A ground unit that stops on a
+bloom also sets it off, and dies. Blooms are only placed by the map, never during a game.
+
+- Scope: autonomous Custom Medium/Hard/Brutal houses (`autonomousCustomArmy`) in Vanilla and
+  DuneCity, never a campaign, Civilization Wars, a fighter-only helper or a house allied with
+  a human. Maps without blooms are inert.
+- Cadence: from the cycle alone, on every fourth unit pass (`cycle % 200 < 50`), at most one
+  order per evaluation and none while a unit we ordered has yet to fire. A walk the engine
+  gave up on (the order no longer forced) is released back to the other controllers.
+- A bloom is a candidate when our team has explored it and at least half of the 7-tile disc
+  around it, it lies within 20 tiles of one of our dropoffs on the same ground, it is no
+  closer to an explored enemy building than to ours, no observed danger covers the 11x11
+  spill and no ground unit stands beside it. Special blooms are never shot (fire does not set
+  them off); they only count as hazards.
+- Waste rule: the known spice within 7 tiles (the 5-tile spill plus a 2-tile margin) must be
+  0 at level 1 and at most 2,000 credits at level 2. Otherwise the bloom is skipped and counted
+  once as wasteful.
+- Shooter: the cheapest idle ranged ground unit of our own (guarding, no target, no order, not
+  in a formation, a hunt party, a raid or any defence/escort role; not a Deviator or Sonic
+  Tank; shells, small rockets or rockets; range at least 2), within 32 tiles on the same ground
+  and on a danger-free tile, whose weapon range is shorter than the distance from the bloom to
+  any other bloom, so it never stops on one. Ties go to the idle unit, then the nearer, then the
+  lower object id. The order is a forced `doAttackPos` on the bloom; the engine ends it after
+  one shot.
+- Telemetry only: the engine ledger `spice_bloom_burst` per triggering house (decision
+  telemetry), QuantBot's `spiceBloomStats` and traces `spice_bloom_order` /
+  `spice_bloom_wasteful`. The probe sidecar `tests/ai/spice-bloom-audit.inc` writes
+  `SPICE_BLOOM_AUDIT:` lines per house per minute, which `dunecity-audit.py` collects into
+  the additive `spice-blooms.csv` (blooms initial/burst, bloom-made spice tiles, blooms the
+  house set off, orders, wasteful skips, and cargo loaded on bloom-made tiles).
+
+Policy `players/QuantBotSpiceBloomPolicy.h`, decisions `src/players/QuantBotSpiceBloom.cpp`,
+unit tests `[spice-bloom]` in `tests/QuantBotStrategyTestCase.cpp`, real-engine probe
+`tests/ai/spice-bloom-probe.inc` (CTest `quantbot_spice_bloom_vanilla` /
+`quantbot_spice_bloom_dunecity`). Candidate-only overlays `spice-bloom-harvest-1/2`;
+preregistration and results in `outputs/ai-tuning-20261108/SpiceBloom/ledger.md`.
+
 
 ## How a game is played
 

@@ -4359,6 +4359,9 @@ void QuantBot::retreatAllUnits() {
         const bool preserving = retreatPreserveActive();
         int preserveOrdersRemaining = preserving ? std::max(0, config.recovery.recallOrdersPerPass) : 0;
         const HarvesterRaidPlan harvesterRaid = planHarvesterRaid();
+        // SpiceBloomHarvest (default OFF; docs/ai-scenario-matrix.md, "Spice bloom harvest"): at
+        // most one idle ranged unit sent to burst a useful bloom, before the rally claims it.
+        updateSpiceBloomHarvest(harvesterRaid);
         int rallyOrdersRemaining=4;
         int combatCount=0;
         for (const auto* unit:getUnitList()) if (unit->getOwner()==getHouse() && unit->isActive()

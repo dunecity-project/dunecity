@@ -122,6 +122,10 @@ LOGISTICS_FIELDS = ('harvesters_total', 'harvesters_active', 'harvesters_harvest
                     'refinery_bays', 'refinery_bays_busy', 'harvesters_lost', 'tax_per_min', 'tax_rate')
 SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required') + BOOM_FIELDS + LOGISTICS_FIELDS
 FIELD_FIELDS = META + ('mod', 'minute', 'cycle', 'field', 'initial', 'remaining')
+# Spice blooms (docs/ai-scenario-matrix.md, "Spice bloom harvest"): per house per minute.
+BLOOM_FIELDS = META + ('mod', 'minute', 'cycle', 'house', 'ledger_enabled', 'blooms_initial', 'blooms_burst',
+                       'bloom_field_tiles', 'blooms_triggered', 'bloom_orders', 'blooms_skipped_wasteful',
+                       'bloom_field_harvested')
 ATTACK_FIELDS = META + ('house', 'cycle', 'members', 'value')
 TEAM_EVENT_FIELDS = META + ('house', 'cycle', 'event', 'data', 'capture_status', 'capture_reasons')
 AIR_KILL_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'attacker', 'victim_house', 'object', 'item',
@@ -1314,6 +1318,9 @@ def play(args, scratch, binary, game):
         append(results / 'spice-fields.csv', FIELD_FIELDS,
                [dict(metadata(game), mod=game.get('mod', 'dunecity'), **parse(line, 'SPICE_FIELD_AUDIT:'))
                 for line in lines if 'SPICE_FIELD_AUDIT:' in line])
+        append(results / 'spice-blooms.csv', BLOOM_FIELDS,
+               [dict(metadata(game), mod=game.get('mod', 'dunecity'), **parse(line, 'SPICE_BLOOM_AUDIT:'))
+                for line in lines if 'SPICE_BLOOM_AUDIT:' in line])
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
         if telemetry:
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
