@@ -171,6 +171,49 @@ Workshop pump, Discord, analytics; metaserver at a closed local port) and budget
 time outside the measured components: mini headless 143 fps, 489 cycles/s, other 0.23 ms/frame =
 0.032 x calibration (budget 0.3).
 
+## Stress scenario (unit/combat CPU, `simulation-throughput.py --cases stress256`)
+
+The CPU check for unit and combat AI candidates (docs/ai-baseline-gate.md, Stefan 2026-11-09):
+Vanilla six-house free-for-all on "6P - 256x256 - Alkozeltser 4" (the only six-player 256x256
+map; rich spice), every house QuantBot Brutal, local spectator, no unit cap
+(`tests/ai/game-options/stress-no-unit-cap.ini`), 50 game minutes, seeds 1101 2202 3303 4404 5505
+6606, `--style` applied to every house. Each game runs the game-perf stepped loop (BALANCE_PERF,
+10-cycle frames, unit phase timing on as in perf_regression; AI telemetry off, because decision
+records are built inside QuantBot updates) and every QuantBot is a subclass that adds its update's
+thread CPU (`tests/performance/quantbot-cpu.inc`). The `perf` column holds simulation CPU per tick
+and per frame, QuantBot CPU per tick (whole AI and per house), unit phase totals (targeting,
+navigate, move, turn, visibility), path searches and nodes, turret scans, the largest unit count
+and the calibration loop; peak RSS comes from the native measurement. `--report` prints the
+table, `--perf-gate NATIVE CANDIDATE` the promotion line. On a Mac, `--sample-seconds N
+--sample-cycle C` also keeps a `sample` summary (self and inclusive samples per symbol) in the
+`profile` column; `--ai-telemetry` adds the AI's scope totals at the cost of timing the logging.
+
+House timings are thread CPU, not the engine's wall clock: on a loaded host (aws-mel2, load 88 on
+96 cores) one tick's AI wall time was 417 ms while its QuantBot thread CPU was 7.5 ms.
+
+Measured 2026-11-09 on pin `4bdaf108` (aws-mel2, every game of the comparison on that host, 6 seeds;
+thread CPU in ms, geometric mean over the seeds; peak RSS the largest game; wall the mean game):
+
+| arm | QuantBot p95/tick | QuantBot mean | sim p95/tick | sim mean | sim p99 | frame p99 | worst house update | units at peak | peak RSS MiB | wall s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| native | 2.70 | 0.389 | 4.54 | 1.24 | 7.93 | 40.4 | 15.8 | 1056 | 759 | 416 |
+| genome w004-3ae12812 | 2.54 | 0.360 | 4.24 | 1.16 | 7.40 | 37.6 | 17.7 | 1006 | 759 | 372 |
+| genome w007-981f7c19 | 2.75 | 0.386 | 4.38 | 1.20 | 7.63 | 37.4 | 16.7 | 1055 | 762 | 379 |
+| focus-fire-2 | 2.82 | 0.402 | 4.58 | 1.25 | 7.86 | 39.2 | 18.9 | 1081 | 761 | 402 |
+| vanilla-army-counters-100 | 2.81 | 0.391 | 4.69 | 1.30 | 7.72 | 41.1 | 15.8 | 1145 | 761 | 412 |
+| focus-fire-2-sides-4 (native in FFA6) | 2.69 | 0.388 | 4.51 | 1.23 | 7.87 | 40.1 | 15.5 | 1056 | 761 | 382 |
+
+The sides-4 arm played the same games as native (6/6 digest-identical), so about 1% is the noise.
+Where the time goes (native seed 1101; `sample` on the mini for 60 s from cycle 140,250, share of
+the main thread; AI scope totals from an `--ai-telemetry` run): QuantBot 37% (build pass 16%, of it
+building placement `findSlabPlaceLocation`/`Map::okayToPlaceStructure` 9-10%; unit pass 14%, of it
+harvester safety `manageHarvesterSafety` 6.4% - half of the unit pass's scope time - army posture
+1.6-1.9% and focus fire 1.2% self, `ai.concentrateForces` 4% of the AI scope time), unit updates 28%
+(engine targeting `findTarget` 7%), path requests 17% (A*: 323k searches, 151M nodes per game).
+Focus fire is not a hot spot (focus-fire-2 raises it to 1.5% and QuantBot p95 by 4.7%), so the
+per-cell enemy index prepared for it was not pinned. The candidates leave the build placement
+search, harvester safety and A* as they are; those are the native costs to cut next.
+
 ## Not done
 
 - Rendering (5-10 ms per frame at 560 units) and the city simulation's 16-phase spikes were not

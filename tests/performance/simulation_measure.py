@@ -27,6 +27,46 @@ def loop_steady_rss(samples, startup_wall_s, loop_ms):
     return round(statistics.median(values), 3) if values else None
 
 
+SAMPLE_NODE = re.compile(r'^([ +!:|]*?)(\d+) (.+)$')
+SAMPLE_SELF = re.compile(r'^\s+(.+?)\s+\(in [^)]+\).*?\s(\d+)\s*$')
+
+
+def _symbol(text):
+    return text.split('  (in ', 1)[0].split('  [0x', 1)[0].strip()[:160]
+
+
+def sample_summary(path, top=60):
+    """A macOS sample report as sample counts per symbol, biggest first: self time ("Sort by top
+    of stack") and inclusive time (the call graph, a recursive symbol counted once per stack), so
+    a cluster game's profile survives in its result row (raw reports are not retained)."""
+    graph, own, stack = {}, {}, []
+    total, root_depth, section = 0, None, None
+    for line in Path(path).read_text(errors='replace').splitlines():
+        if line.startswith('Call graph:'):
+            section = 'graph'
+        elif line.startswith('Sort by top of stack'):
+            section = 'self'
+        elif line and not line[0].isspace():
+            section = None
+        elif section == 'graph' and (match := SAMPLE_NODE.match(line)):
+            depth, count, symbol = len(match[1]), int(match[2]), _symbol(match[3])
+            if root_depth is None or depth < root_depth:
+                root_depth, total = depth, 0
+            if depth == root_depth:
+                total += count
+            while stack and stack[-1][0] >= depth:
+                stack.pop()
+            if all(symbol != name for _, name in stack):
+                graph[symbol] = graph.get(symbol, 0) + count
+            stack.append((depth, symbol))
+        elif section == 'self' and (match := SAMPLE_SELF.match(line)):
+            symbol = _symbol(match[1])
+            own[symbol] = own.get(symbol, 0) + int(match[2])
+    biggest = lambda counts: sorted(([name, count] for name, count in counts.items()), key=lambda item: -item[1])[:top]
+    return dict(samples=total, self=biggest(own), inclusive=biggest(graph))
+
+
+
 def measure_runner(command, console, *, env, cwd):
     """Account the Python launcher and its descendants, matching headless-bench."""
     with Path(console).open('w') as handle:
@@ -100,7 +140,8 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
     """Run one checked probe and persist measurements even if it fails.
 
     DUNECITY_SIM_MEASURE is deliberately opt-in: ordinary tests do no polling or
-    profiler work. macOS sample runs once, after process start-up, when requested.
+    profiler work. macOS sample runs once, after process start-up, when requested
+    (with DUNECITY_SIM_SAMPLE_CYCLE: once a PROBE_DIGEST line reaches that game cycle).
     """
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -108,6 +149,7 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
     env = dict(env)
     if sys.platform == 'darwin' and env.get('DUNECITY_SIM_MALLOC_STACKS'):
         env['MallocStackLogging'] = env.pop('DUNECITY_SIM_MALLOC_STACKS')
+    sample_cycle = int(env.get('DUNECITY_SIM_SAMPLE_CYCLE') or 0)
     process = subprocess.Popen(command, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT)
     samples, tools, errors = [], [], []
     probe_cpu, peak, returncode = 0.0, 0.0, None
@@ -115,6 +157,7 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
     timed_out = False
     startup_wall = None
     log_position = 0
+    game_cycle = 0
 
     def profile():
         destination = output.with_suffix('.sample.txt')
@@ -134,13 +177,14 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
             if now - started >= timeout:
                 timed_out = True
                 process.kill()
-            if startup_wall is None:
+            if startup_wall is None or (sample_seconds and sample_cycle > game_cycle):
                 with Path(log.name).open(errors='replace') as capture:
                     capture.seek(log_position)
                     chunk = capture.read()
                     log_position = capture.tell()
-                if 'ASSET_STARTUP: phase=probe_setup' in chunk:
+                if 'ASSET_STARTUP: phase=probe_setup' in chunk and startup_wall is None:
                     startup_wall = now - started
+                game_cycle = max([game_cycle] + [int(cycle) for cycle in re.findall(r'PROBE_DIGEST: cycle=(\d+)', chunk)])
             if sys.platform == 'win32':
                 rss, observed_peak, probe_cpu = _windows_counters(process)
                 peak = max(peak, observed_peak)
@@ -159,7 +203,8 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
                                           capture_output=True, text=True, check=False)
                 rss = float(observed.stdout.strip() or 0) / 1024
             samples.append([round(now - started, 3), round(rss, 3)])
-            if sample_seconds and sys.platform == 'darwin' and sample_thread is None and startup_wall is not None:
+            if (sample_seconds and sys.platform == 'darwin' and sample_thread is None and startup_wall is not None
+                    and game_cycle >= sample_cycle):
                 sample_thread = threading.Thread(target=profile, name='probe-sample', daemon=True)
                 sample_thread.start()
             if returncode is None:
@@ -181,6 +226,7 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
         log_text = Path(log.name).read_text(errors='replace')
         timing = re.search(r'PROBE_TIMING: [^\n]*\bloop_ms=(\d+)', log_text)
         loop_ms = int(timing[1]) if timing else None
+        report = output.with_suffix('.sample.txt')
         row = dict(schema=1, host=platform.node(), platform=sys.platform, cpu_count=os.cpu_count(),
                    command=[str(value) for value in command], wall_s=round(elapsed, 6),
                    cpu_s=round(probe_cpu, 6), peak_rss_mib=round(peak, 3),
@@ -189,6 +235,8 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
                    loop_ms=loop_ms, steady_rss_mib=loop_steady_rss(samples, startup_wall, loop_ms),
                    rss_samples=samples, monitor_cpu_s=round(time.process_time() - monitor_started, 6),
                    profile_tools=tools, errors=errors, returncode=returncode, timed_out=timed_out)
+        if sample_thread and report.is_file():
+            row['profile'] = dict(sample_summary(report), from_cycle=game_cycle, seconds=sample_seconds)
         output.write_text(json.dumps(row, indent=2) + '\n')
     if timed_out:
         raise subprocess.TimeoutExpired(command, timeout)

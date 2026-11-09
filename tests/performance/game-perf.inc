@@ -17,6 +17,7 @@
 #include <units/GroundUnit.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -24,6 +25,7 @@
 #include <ctime>
 #include <fstream>
 #include <functional>
+#include <map>
 #include <type_traits>
 #include <string>
 #include <vector>
@@ -90,9 +92,39 @@ inline long long telemetrySum(const std::string& scope, int house) {
     return found == metrics.end() ? 0 : static_cast<long long>(found->second.sum);
 }
 
+/// Thread CPU ms of every QuantBot::update() so far, per house. Only the measured QuantBots a
+/// perf run of this tree's balance probe installs (tests/performance/quantbot-cpu.inc) add to it;
+/// elsewhere (an older release measured through game-perf.py --source) it stays zero and the
+/// result reports "ai_cpu_measured":false.
+inline double quantBotCpuMs[NUM_HOUSES] = {};
+inline bool quantBotCpuMeasured = false;
+
+/// The decision log keeps at most 512 metric keys per performance window and the stepped loop
+/// never closes a window, so a long many-house run would drop every scope first seen after the
+/// cap. The loop moves the metrics into this unbounded total before the cap (between cycles,
+/// never inside one) and once more at the end; the scope totals are read from here.
+struct MetricTotal { long long sum = 0; unsigned long long count = 0; long long maximum = 0; };
+inline auto& metricTotals() {
+    using Key = std::decay_t<decltype(AITelemetry::log().performanceMetrics)>::key_type;
+    static std::map<Key, MetricTotal> totals;
+    return totals;
+}
+inline void drainMetrics() {
+    auto& metrics = AITelemetry::log().performanceMetrics;   // test-only: -fno-access-control
+    for (const auto& [key, metric] : metrics) {
+        MetricTotal& total = metricTotals()[key];
+        total.sum += static_cast<long long>(metric.sum);
+        total.count += static_cast<unsigned long long>(metric.count);
+        total.maximum = std::max(total.maximum, static_cast<long long>(metric.maximum));
+    }
+    metrics.clear();
+}
+
 struct Cycle {
     float sim = 0, cpu = 0, ai = 0, city = 0, units = 0, structures = 0, path = 0, render = -1;
     float house[NUM_HOUSES] = {};
+    float aiCpu = 0;                    // thread CPU of every QuantBot update this cycle
+    float houseCpu[NUM_HOUSES] = {};
     int unitCount = 0;
 };
 
@@ -259,13 +291,27 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
     std::vector<Cycle> samples;
     samples.reserve(cycles);
     long long before[NUM_HOUSES] = {};
+    double cpuBefore[NUM_HOUSES] = {};
     auto& timing = game.frameTiming;
+    // Per-subsystem totals from the engine's own cumulative counters, summed as per-cycle deltas
+    // (a counter some report resets loses only that cycle): unit phases (they need
+    // BALANCE_UNIT_PHASE_TIMING=1), path searches/failures/nodes, turret target scans.
+    const auto counters = [&timing]() {
+        return std::array<double, 10>{timing.unitTargetingMs, timing.unitNavigateMs, timing.unitMoveMs,
+            timing.unitTurnMs, timing.unitVisibilityMs, double(timing.totalPathsProcessed),
+            double(timing.totalPathsFailed), double(timing.totalPathTokens), double(timing.turretScansThisFrame),
+            timing.turretScanMsThisFrame};
+    };
+    std::array<double, 10> counterTotals{}, counterLast = counters();
+    int unitsMax = 0;
     const Uint32 first = game.getGameCycleCount();
     const auto loopStart = Clock::now();
     while (!game.finished && game.getGameCycleCount() - first < cycles) {
         if (perCycle) perCycle();
         motionTrace.record(game);
+        if (AITelemetry::log().performanceMetrics.size() >= 384) drainMetrics();
         for (int h : houses) before[h] = telemetrySum("house.update", h);
+        for (int h : houses) cpuBefore[h] = quantBotCpuMs[h];
         timing.aiMsThisFrame = timing.citySimMsThisFrame = timing.unitsMsThisFrame = 0.0;
         timing.structuresMsThisFrame = timing.pathfindingMsThisFrame = timing.renderingMsThisFrame = 0.0;
         const auto start = Clock::now();
@@ -280,7 +326,17 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
         sample.structures = static_cast<float>(timing.structuresMsThisFrame);
         sample.path = static_cast<float>(timing.pathfindingMsThisFrame);
         for (int h : houses) sample.house[h] = static_cast<float>((telemetrySum("house.update", h) - before[h]) / 1000.0);
+        for (int h : houses) {
+            sample.houseCpu[h] = static_cast<float>(quantBotCpuMs[h] - cpuBefore[h]);
+            sample.aiCpu += sample.houseCpu[h];
+        }
         sample.unitCount = static_cast<int>(unitList.size());
+        unitsMax = std::max(unitsMax, sample.unitCount);
+        const auto now = counters();
+        for (size_t k = 0; k < now.size(); ++k) {
+            counterTotals[k] += now[k] >= counterLast[k] ? now[k] - counterLast[k] : now[k];
+            counterLast[k] = now[k];
+        }
         if (renderEvery > 0 && (game.getGameCycleCount() - first) % renderEvery == 0) {
             const auto renderStart = Clock::now();
             game.renderFrame();
@@ -288,6 +344,7 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
         }
         samples.push_back(sample);
     }
+    drainMetrics();
     const double loopMs = msSince(loopStart);
     const double calibration = calibrationMs();
 
@@ -328,7 +385,7 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
     }
     // Inclusive AI scope totals (ms over the whole run), biggest first: where the AI time went.
     std::vector<std::pair<long long, std::string>> scopes;
-    for (const auto& entry : AITelemetry::log().performanceMetrics) {
+    for (const auto& entry : metricTotals()) {
         const auto& [scope, house, item, duration] = entry.first;
         if (!duration || item != -1 || house < 0 || scope.rfind("ai.", 0) != 0) continue;
         scopes.emplace_back(entry.second.sum, scope + "/h" + std::to_string(house));
@@ -342,7 +399,7 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
     // "scope": [ms, calls, worst call ms].
     struct Total { long long sum = 0; unsigned long long count = 0; long long maximum = 0; };
     std::map<std::string, Total> totalsByScope;
-    for (const auto& entry : AITelemetry::log().performanceMetrics) {
+    for (const auto& entry : metricTotals()) {
         const auto& [scope, house, item, duration] = entry.first;
         if (!duration || !((house >= 0 && scope.rfind("ai.", 0) == 0) || scope.rfind("city.", 0) == 0)) continue;
         for (const std::string& key : {scope, item >= 0 ? scope + "#" + std::to_string(item) : std::string()}) {
@@ -363,29 +420,52 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
             + std::to_string(total.sum / 1000) + "," + std::to_string(total.count) + ","
             + std::to_string(total.maximum / 1000) + "]";
     }
+    // QuantBot thread CPU per cycle, all houses together and per house (measured QuantBots), and
+    // the per-subsystem totals counted in the loop.
+    std::vector<double> aiCpu;
+    aiCpu.reserve(samples.size());
+    for (const Cycle& s : samples) aiCpu.push_back(s.aiCpu);
+    std::string houseCpuJson;
+    for (int h : houses) {
+        std::vector<double> values;
+        values.reserve(samples.size());
+        for (const Cycle& s : samples) values.push_back(s.houseCpu[h]);
+        houseCpuJson += (houseCpuJson.empty() ? "" : ",") + std::string("\"") + std::to_string(h) + "\":" + stats(values);
+    }
+    char subsystems[512];
+    std::snprintf(subsystems, sizeof(subsystems),
+                  "\"unit_phases_ms\":{\"targeting\":%.1f,\"navigate\":%.1f,\"move\":%.1f,\"turn\":%.1f,\"visibility\":%.1f},"
+                  "\"path_searches\":%.0f,\"path_failed\":%.0f,\"path_nodes\":%.0f,\"turret_scans\":%.0f,"
+                  "\"turret_scan_ms\":%.1f,\"units_max\":%d,\"metric_keys\":%zu",
+                  counterTotals[0], counterTotals[1], counterTotals[2], counterTotals[3], counterTotals[4],
+                  counterTotals[5], counterTotals[6], counterTotals[7], counterTotals[8], counterTotals[9], unitsMax,
+                  metricTotals().size());
+    const std::string extraJson = std::string(",\"ai_cpu_measured\":") + (quantBotCpuMeasured ? "true" : "false")
+        + ",\"ai_cpu\":" + stats(aiCpu) + ",\"house_cpu\":{" + houseCpuJson + "}," + subsystems;
     int unitsEnd = samples.empty() ? 0 : samples.back().unitCount;
     std::printf("GAME_PERF_RESULT: {\"first_cycle\":%u,\"cycles\":%zu,\"loop_ms\":%.0f,\"units_end\":%d,"
                 "\"frame_cycles\":%d,\"sim\":%s,\"cpu\":%s,\"cpu_total_ms\":%.0f,\"calibration_ms\":%.3f,"
                 "\"ai\":%s,\"city\":%s,\"units\":%s,\"structures\":%s,\"path\":%s,"
                 "\"render\":%s,\"frame\":%s,\"frame_cpu\":%s,\"frames_over_33ms\":%d,\"frames_over_50ms\":%d,\"frames_over_100ms\":%d,"
-                "\"frames\":%zu,\"est_fps\":%.2f,\"house\":{%s},\"ai_scopes_ms\":{%s},\"ai_scope_totals_ms\":{%s}}\n",
+                "\"frames\":%zu,\"est_fps\":%.2f,\"house\":{%s},\"ai_scopes_ms\":{%s},\"ai_scope_totals_ms\":{%s}%s}\n",
                 first, samples.size(), loopMs, unitsEnd, frameCycles, stats(sim).c_str(), stats(cpu).c_str(), cpuTotal,
                 calibration, stats(ai).c_str(),
                 stats(city).c_str(), stats(units).c_str(), stats(structures).c_str(), stats(path).c_str(),
                 stats(render).c_str(), stats(frames).c_str(), stats(frameCpu).c_str(), over33, over50, over100, frames.size(),
-                frameMean > 0 ? 1000.0 / frameMean : 0.0, houseJson.c_str(), scopeJson.c_str(), totalJson.c_str());
+                frameMean > 0 ? 1000.0 / frameMean : 0.0, houseJson.c_str(), scopeJson.c_str(), totalJson.c_str(),
+                extraJson.c_str());
     std::fflush(stdout);
     if (csvPath != nullptr && csvPath[0] != '\0') {
         std::ofstream csv(csvPath);
         csv << "cycle,sim,ai,city,units,structures,path,render,unit_count";
         for (int h : houses) csv << ",house" << h;
-        csv << ",cpu\n";
+        csv << ",cpu,ai_cpu\n";
         for (size_t i = 0; i < samples.size(); ++i) {
             const Cycle& s = samples[i];
             csv << first + i << ',' << s.sim << ',' << s.ai << ',' << s.city << ',' << s.units << ','
                 << s.structures << ',' << s.path << ',' << s.render << ',' << s.unitCount;
             for (int h : houses) csv << ',' << s.house[h];
-            csv << ',' << s.cpu << '\n';
+            csv << ',' << s.cpu << ',' << s.aiCpu << '\n';
         }
     }
 }

@@ -66,6 +66,7 @@
 #include "elimination-match.inc"
 #include "vanilla-match.inc"
 #include "../performance/game-perf.inc"
+#include "../performance/quantbot-cpu.inc"
 #include "scenario-match.inc"
 #include "civ-wars-match.inc"
 #include <FileClasses/INIFile.h>
@@ -271,6 +272,8 @@ int runCampaignBalanceProbe() {
     game->bReplay = true;
     {
         CivWarsMatch::MeasuredFactories measuredFactories(civWars);
+        // A frame-cost run (BALANCE_PERF) times every QuantBot update in thread CPU.
+        GamePerf::MeasuredQuantBots measuredQuantBots(!civWars && std::getenv("BALANCE_PERF") != nullptr);
         game->initGame(init);
     }
     if(localSpectator && (!game->isObserving() || !game->getGameInitSettings().isLocalSpectator()))

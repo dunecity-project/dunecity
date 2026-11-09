@@ -45,6 +45,48 @@ deck (game ids, maps, options, seeds), failed games, candidate and OFF from two
 source commits, or a reference that is not native 1.0.807 are invalid input
 (`INVALID: ...`, exit 2), never a pass.
 
+## CPU cost of unit and combat candidates
+
+A candidate that changes how units fight or move (targeting, focus fire,
+counters, combat genes, raids) also needs a CPU check before it is turned on
+(Stefan, 2026-11-09): **on the stress game, the candidate must not raise the
+p95 QuantBot or simulation CPU per tick by more than 10% over native, and no
+tick, frame or house update may exceed a perf_regression budget that native
+keeps.** The stress game is `tests/ai/simulation-throughput.py --cases stress256`
+(docs/game-performance.md "Stress scenario"): Vanilla six-house FFA on
+"6P - 256x256 - Alkozeltser 4", every house QuantBot Brutal playing the style,
+no unit cap, 50 game minutes, seeds 1101-6606. Play both arms on one pin and
+compare:
+
+```sh
+dunecity-queue submit --cwd "$STAGING" --rev "$COMMIT" --tag stress-native --machines aws-mel2 -- \
+  python3 tests/ai/simulation-throughput.py --cases stress256 --results /abs/results/native
+dunecity-queue submit --cwd "$STAGING" --rev "$COMMIT" --tag stress-NAME --machines aws-mel2 -- \
+  python3 tests/ai/simulation-throughput.py --cases stress256 --style NAME-on --results /abs/results/candidate
+python3 tests/ai/simulation-throughput.py --perf-gate /abs/results/native /abs/results/candidate
+```
+
+Both arms run on one machine (aws-mel2 has 96 slots; a game takes about 7
+minutes there), so thread CPU in ms compares directly: a seed's ratio is
+candidate over native and the check takes the geometric mean of the six. The
+budgets are multiples of the median calibration loop of all twelve games (one
+game's start-up calibration read twice its usual time on a loaded host), on the
+seeds' geometric mean; where native already exceeds a budget (frame p99 is at
+5.4-5.5 on this game) the candidate may not exceed native by more than 10%. It
+prints one line, `PASS, QuantBot CPU p95/tick x1.02, sim CPU p95/tick x1.01
+(...)` (exit 0) or `FAIL, ...` (exit 1); arms from two source commits or
+hosts, other seeds or settings, or failed games are `INVALID: ...` (exit 2),
+never a pass. A switch that is native in six-house games (a sides scope) is
+checked with its unscoped level, which runs the same code in more fights.
+
+| Date | Candidate (style) | Source | Verdict |
+|---|---|---|---|
+| 2026-11-09 | SweepLane genome w004-3ae12812 (`genome-w004-3ae12812`) | `4bdaf108` | PASS, QuantBot x0.942, sim x0.935 |
+| 2026-11-09 | SweepLane genome w007-981f7c19 (`genome-w007-981f7c19`) | `4bdaf108` | PASS, QuantBot x1.018, sim x0.965 |
+| 2026-11-09 | Focus fire level 2 (`focus-fire-2`) | `4bdaf108` | PASS, QuantBot x1.047, sim x1.010 |
+| 2026-11-09 | Vanilla army counters (`vanilla-army-counters-100`) | `4bdaf108` | PASS, QuantBot x1.042, sim x1.035 |
+| 2026-11-09 | Null arm, native in FFA6 (`focus-fire-2-sides-4`) | `4bdaf108` | PASS, x0.996 / x0.993; 6/6 games digest-identical to native (noise floor) |
+
 ## Reference and results
 
 1.0.807 is native source `abdf71e7` built through the test-only bridge
