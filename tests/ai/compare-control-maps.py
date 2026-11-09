@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Record a complete native controls receipt, or check a candidate against it.
 
-Controls rule (Stefan 2026-11-09): the candidate keeps at least --min-kept-ratio (default 75%) of
-the native QB/team-1 wins on maps 1-12, map 13 (Silicon Valley, no spice) stays digest-identical,
-and maps outside --in-scope stay digest-identical. --min-kept-ratio 1 is the former strict veto."""
+Controls rule (Stefan 2026-11-09): keep at least --min-kept-ratio (default 75%) of the
+native QB/team-1 wins across all 13 controls, including The Sardaukar Outpost.
+Only maps explicitly outside --in-scope must stay digest-identical."""
 import argparse
 import csv
 import datetime
@@ -20,13 +20,16 @@ IDENTITY = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'limit')
 HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
 
 
-def expected_ids():
+def expected_games():
     output = subprocess.check_output(
-        [sys.executable, str(ROOT / 'tests/ai/scenario-matrix.py'), '--tier', 'controls', '--list'], text=True)
-    ids = {line.split()[0] for line in output.splitlines() if line.startswith('controls/')}
-    if len(ids) != 26:
-        raise ValueError(f'Control schedule has {len(ids)} games, expected 26')
-    return ids
+        [sys.executable, str(ROOT / 'tests/ai/scenario-matrix.py'), '--tier', 'controls', '--list-json'], text=True)
+    games = json.loads(output)
+    if len(games) != 26:
+        raise ValueError(f'Control schedule has {len(games)} games, expected 26')
+    return {game['id']: dict(id=game['id'], category=game['category'], cell=game['cell'],
+                             seed=str(game['seed']), mod=game['mod'], map=game['map'],
+                             sides=' '.join(f'{h}:{t}:{c}' for h, t, c in game['sides']),
+                             limit=str(game['minutes'])) for game in games}
 
 
 def validate(rows):
@@ -46,12 +49,14 @@ def validate(rows):
         if not re.fullmatch(r'[0-9a-f]{40}', row.get('source_commit', '')):
             raise ValueError(f'Missing pinned source provenance: {gid}')
         by_id[gid] = row
-    wanted = expected_ids()
-    if set(by_id) != wanted:
-        raise ValueError(f'Incomplete/wrong controls: missing={sorted(wanted - set(by_id))}; '
-                         f'extra={sorted(set(by_id) - wanted)}')
-    if len({r['source_commit'] for r in rows}) != 1:
-        raise ValueError('Mixed source pins in controls receipt')
+    wanted = expected_games()
+    if set(by_id) != set(wanted):
+        raise ValueError(f'Incomplete/wrong controls: missing={sorted(set(wanted) - set(by_id))}; '
+                         f'extra={sorted(set(by_id) - set(wanted))}')
+    for gid, setup in wanted.items():
+        for field in IDENTITY:
+            if str(by_id[gid][field]) != setup[field]:
+                raise ValueError(f'{gid}: wrong scheduled {field}: {by_id[gid][field]!r} != {setup[field]!r}')
     return by_id
 
 
@@ -95,13 +100,15 @@ def winner(row):
 def record(args):
     rows = csv_rows(args.results)
     validate(rows)
-    if check_style_seats(rows, required=True):
-        raise ValueError('A baseline must be native (style_seats none on every game)')
-    if any(row['source_commit'] != args.pin for row in rows):
-        raise ValueError('Recorded source does not match --pin')
-    if args.base != BASE:
-        raise ValueError(f'This baseline must use native base {BASE}')
-    document = {'schema': 1, 'base': args.base, 'pin': args.pin, 'style': 'native', 'job': args.job,
+    if check_style_seats(rows, required=True) != args.native_style:
+        raise ValueError('The baseline style-seat receipt does not match --native-style')
+    pins = set(args.pin)
+    if {row['source_commit'] for row in rows} != pins:
+        raise ValueError('Recorded sources do not match --pin')
+    if not re.fullmatch(r'[0-9a-f]{40}', args.base):
+        raise ValueError('Native engine base must be a full source SHA')
+    document = {'schema': 1, 'base': args.base, 'pins': sorted(pins), 'style': 'native',
+                'native_style': args.native_style, 'job': args.job,
                 'recorded_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 'game_count': len(rows), 'games': sorted(rows, key=lambda row: row['id'])}
     Path(args.record).write_text(json.dumps(document, indent=2) + '\n')
@@ -113,17 +120,18 @@ def record(args):
 
 def compare(args):
     baseline = json.loads(Path(args.baseline).read_text())
-    if baseline.get('schema') != 1 or baseline.get('base') != BASE or baseline.get('style') != 'native':
-        raise ValueError('Not a native controls baseline for the required base')
+    if (baseline.get('schema') != 1 or baseline.get('style') != 'native'
+            or not re.fullmatch(r'[0-9a-f]{40}', baseline.get('base', ''))):
+        raise ValueError('Not a pinned native controls baseline')
     native = validate(baseline['games'])
-    if check_style_seats(baseline['games'], required=False):
-        raise ValueError('The baseline is not native')
+    if check_style_seats(baseline['games'], required=False) != baseline.get('native_style', ''):
+        raise ValueError('The baseline style-seat receipt does not match its native style')
     rows = csv_rows(args.results)
     candidate = validate(rows)
     style = check_style_seats(rows, required=True)
-    print(f'Candidate: {style or "native"} (candidate seat only)')
+    print(f'Candidate: {style or "default (no overlay)"} (candidate seat only)')
     problems, lost_wins = [], []
-    native_wins = silicon_games = silicon_equal = 0
+    native_wins = 0
     print('| Map | Seed | Native winner/min | Candidate winner/min | Digest equal | Native win lost |')
     print('|---|---:|---|---|---|---|')
     for gid in sorted(native):
@@ -131,13 +139,12 @@ def compare(args):
         for field in IDENTITY:
             if old[field] != new[field]:
                 problems.append(f'{gid}: changed {field}: {old[field]!r} != {new[field]!r}')
+        if old['source_commit'] != new['source_commit']:
+            problems.append(f'{gid}: different native/candidate source pins')
         number = int(gid.split('/')[1].split('-')[0])
         equal = old['digest'] == new['digest']
         lost = old['winner_team'] == '1' and new['winner_team'] != '1'
-        if number == 13:
-            silicon_games += 1
-            silicon_equal += equal
-        elif old['winner_team'] == '1':
+        if old['winner_team'] == '1':
             native_wins += 1
             if lost:
                 lost_wins.append(gid)
@@ -151,10 +158,8 @@ def compare(args):
     kept_enough = kept >= args.min_kept_ratio * native_wins
     rule = f'{float(args.min_kept_ratio):.0%}'
     ratio = f'{kept / native_wins:.3f}' if native_wins else 'n/a'
-    print(f'Native QB/team-1 wins on maps 1-12: {native_wins}; kept {kept}; ratio {ratio} (rule >= {rule}): '
+    print(f'Native QB/team-1 wins on maps 1-13: {native_wins}; kept {kept}; ratio {ratio} (rule >= {rule}): '
           f'{"PASS" if kept_enough else "FAIL"}')
-    print(f'Silicon Valley (map 13) digests identical: {silicon_equal}/{silicon_games}: '
-          f'{"PASS" if silicon_equal == silicon_games else "FAIL"}')
     if not kept_enough:
         problems.append(f'native wins kept {kept}/{native_wins} below {rule}')
     for problem in problems:
@@ -171,12 +176,13 @@ def main():
     mode.add_argument('--baseline', help='Compare with this baseline JSON')
     mode.add_argument('--record', help='Write native baseline JSON from complete results')
     parser.add_argument('--base', default=BASE)
-    parser.add_argument('--pin', help='Exact harness-only source pin used for native games')
+    parser.add_argument('--pin', nargs='+', help='Exact source pin(s); mixed harness-only receipts keep each row pin')
     parser.add_argument('--job', help='Native cluster job ID')
-    parser.add_argument('--in-scope', nargs='*', type=int, choices=range(1, 13), default=list(range(1, 13)),
-                        help='Map numbers allowed to change digests (default 1-12; empty means none)')
+    parser.add_argument('--native-style', default='', help='Explicit OFF overlay used as native, if any')
+    parser.add_argument('--in-scope', nargs='*', type=int, choices=range(1, 14), default=list(range(1, 14)),
+                        help='Map numbers allowed to change digests (default all 13; empty means none)')
     parser.add_argument('--min-kept-ratio', type=Fraction, default=Fraction(3, 4),
-                        help='Share of native QB/team-1 wins on maps 1-12 the candidate must keep '
+                        help='Share of native QB/team-1 wins across all 13 maps the candidate must keep '
                              '(default 0.75; 1 = no native win may be lost)')
     args = parser.parse_args()
     if args.record and (not args.pin or not args.job):

@@ -66,7 +66,7 @@ def run_compare(native_rows, candidate_rows, **options):
             writer = csv.DictWriter(handle, fieldnames=list(candidate_rows[0]))
             writer.writeheader()
             writer.writerows(candidate_rows)
-        args = argparse.Namespace(baseline=str(baseline), results=str(results), in_scope=list(range(1, 13)),
+        args = argparse.Namespace(baseline=str(baseline), results=str(results), in_scope=list(range(1, 14)),
                                   min_kept_ratio=Fraction(3, 4))
         vars(args).update(options)
         output = io.StringIO()
@@ -87,6 +87,11 @@ class ControlMapTests(unittest.TestCase):
             self.assertEqual(game['sides'][0][1:], (1, 'QB'))
         blake = next(game for game in games if game['cell'].startswith('04-'))
         self.assertEqual([(team, code) for _, team, code in blake['sides']], [(1, 'QB'), (1, 'QH'), (2, 'QM'), (2, 'QM')])
+        outpost = [game for game in games if game['cell'].startswith('13-')]
+        self.assertTrue(all(game['map'] == '4P - 128x128 - The Sardaukar Outpost' for game in outpost))
+        self.assertEqual([house for house, _, _ in outpost[0]['sides']],
+                         ['harkonnen', 'mercenary', 'atreides', 'ordos'])
+        self.assertEqual(outpost[1]['sides'][0][0], 'mercenary')
 
     def test_native_command_has_no_overlay(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -195,35 +200,63 @@ class ControlMapTests(unittest.TestCase):
         self.assertEqual(check([{k: v for k, v in receipt(games[0], 'none').items() if k != 'style_seats'}],
                                required=False), '')
 
-    def test_comparator_requires_three_quarters_of_native_wins_and_silicon_identity(self):
+    def test_comparator_requires_three_quarters_of_all_native_wins(self):
         games = [game['id'] for game in matrix['schedule'](controls())]
-        wins = [gid for gid in games if gid.split('/')[1][:2] in ('01', '02', '03', '04')]
-        silicon = [gid for gid in games if gid.startswith('controls/13-')]
-        native = gate_rows('', winners=wins + silicon[:1])
+        wins = [gid for gid in games if gid.split('/')[1][:2] in ('01', '02', '03', '13')]
+        native = gate_rows('', winners=wins)
         self.assertEqual(len(wins), 8)
-
-        code, text = run_compare(native, gate_rows(STYLE, winners=wins[2:] + silicon[:1], changed=wins[:2]))
+        code, text = run_compare(native, gate_rows(STYLE, winners=wins[2:], changed=wins[:2]))
         self.assertEqual(code, 0, text)
-        self.assertIn('Native QB/team-1 wins on maps 1-12: 8; kept 6; ratio 0.750 (rule >= 75%): PASS', text)
-        self.assertIn('Silicon Valley (map 13) digests identical: 2/2: PASS', text)
+        self.assertIn('Native QB/team-1 wins on maps 1-13: 8; kept 6; ratio 0.750 (rule >= 75%): PASS', text)
         self.assertEqual(text.count('LOST: '), 2)
         self.assertIn('Controls: PASS (26 games; 0 violations; native wins kept 6/8)', text)
-
-        code, text = run_compare(native, gate_rows(STYLE, winners=wins[3:] + silicon[:1], changed=wins[:3]))
+        code, text = run_compare(native, gate_rows(STYLE, winners=wins[3:], changed=wins[:3]))
         self.assertEqual(code, 1)
         self.assertIn('FAIL: native wins kept 5/8 below 75%', text)
-
-        code, text = run_compare(native, gate_rows(STYLE, winners=wins[1:] + silicon[:1], changed=wins[:1]),
+        code, text = run_compare(native, gate_rows(STYLE, winners=wins[1:], changed=wins[:1]),
                                  min_kept_ratio=Fraction(1))
         self.assertEqual(code, 1)
         self.assertIn('FAIL: native wins kept 7/8 below 100%', text)
 
-        # A lost Silicon Valley win is not counted, but any Silicon Valley digest change fails.
-        code, text = run_compare(native, gate_rows(STYLE, winners=wins, changed=silicon[:1]))
+    def test_outpost_digest_changes_are_not_a_promotion_veto(self):
+        outpost = [game['id'] for game in matrix['schedule'](controls()) if game['cell'].startswith('13-')]
+        code, text = run_compare(gate_rows('', winners=outpost),
+                                 gate_rows(STYLE, winners=outpost, changed=outpost))
+        self.assertEqual(code, 0, text)
+        self.assertIn('native wins kept 2/2', text)
+
+    def test_outpost_native_win_loss_counts_normally(self):
+        games = [game['id'] for game in matrix['schedule'](controls())]
+        outpost = [gid for gid in games if gid.startswith('controls/13-')]
+        wins = games[:2] + outpost
+        code, text = run_compare(gate_rows('', winners=wins), gate_rows(STYLE, winners=wins[:-1], changed=outpost))
+        self.assertEqual(code, 0, text)
+        self.assertIn('native wins kept 3/4', text)
+        self.assertIn(f'LOST: {outpost[-1]}:', text)
+        code, text = run_compare(gate_rows('', winners=wins), gate_rows(STYLE, winners=wins[:-2], changed=outpost))
         self.assertEqual(code, 1)
-        self.assertIn('kept 8; ratio 1.000 (rule >= 75%): PASS', text)
-        self.assertIn('Silicon Valley (map 13) digests identical: 1/2: FAIL', text)
-        self.assertIn(f'FAIL: {silicon[0]}: out-of-scope digest changed', text)
+        self.assertIn('native wins kept 2/4 below 75%', text)
+
+    def test_old_silicon_receipts_cannot_qualify_as_outpost(self):
+        rows = gate_rows('')
+        for row in rows:
+            if row['id'].startswith('controls/13-'):
+                row.update(map='4P - 64x64 - Silicon Valley',
+                           id=row['id'].replace('the-sardaukar-outpost', 'silicon-valley'))
+        with self.assertRaisesRegex(ValueError, 'Incomplete/wrong controls'):
+            compare.validate(rows)
+        # Relabelling only the id must not bypass the authored map/setup identity.
+        for row in rows:
+            row['id'] = row['id'].replace('silicon-valley', 'the-sardaukar-outpost')
+        with self.assertRaisesRegex(ValueError, 'wrong scheduled map'):
+            compare.validate(rows)
+
+    def test_pairing_requires_the_same_source_on_each_map_seed(self):
+        native, candidate = gate_rows(''), gate_rows(STYLE)
+        candidate[-1]['source_commit'] = 'b' * 40
+        code, text = run_compare(native, candidate)
+        self.assertEqual(code, 1)
+        self.assertIn('different native/candidate source pins', text)
 
 
 if __name__ == '__main__':

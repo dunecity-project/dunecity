@@ -1474,8 +1474,8 @@ plus three default-OFF map-scoped repairs (`docs/ai-scenario-matrix.md`,
 to 0, including those two promoted defaults, so on B3m it reproduces the Batch3
 pin rather than B3m's native defaults; B3m's own all-new-OFF state is native.
 
-Round 118 (protocol 118, 2026-11-09) is B3m with `CityCapitalPacing=1` under the promotion rule
-(positive paired96, controls keep at least 75% of the native wins on maps 1-12 with Silicon Valley
+Round 118 (protocol 118, 2026-11-09) is B3m with `CityCapitalPacing=1` under the then-current rule
+(positive paired96, controls kept at least 75% of the native wins on maps 1-12 with Silicon Valley
 identical, 1.0.807 deck wins at least the same-source OFF build's); evidence in
 `docs/ai-scenario-matrix.md` and `docs/ai-baseline-gate.md`. Every other Batch3 and map-scoped
 switch stays default OFF. `round-118-off` is the explicit OFF control (`CityCapitalPacing=0`),
@@ -1488,10 +1488,14 @@ sides, and the original explicit map excludes thick-spice shares below 20%; the
 initial-spice and Brutal Vanilla FFA scope still apply. Duels, teams, FFA6, campaigns,
 DuneCity and initially spiceless games stay native. Evidence pin `8617247d` carries
 the `fa4052d2` sides-scope code on `a1d85ffa`: three FFA4 blocks total 576 paired
-games, 192 -> 216 wins (+4, +4, +16); controls keep 14/14 native wins and Silicon
-Valley 2/2 identical; the 1.0.807 deck is 56 / OFF 56 and CPU stress is
+games, 192 -> 216 wins (+4, +4, +16); the old control deck kept 14/14 native wins.
+The 1.0.807 deck is 56 / OFF 56 and CPU stress is
 x0.999 QuantBot / x0.994 simulation. Stress is FFA6, so this measures no-leak
 cost; the unscoped counters100 stress check above covers the counter code.
+The current promotion control deck replaces Silicon Valley with **The Sardaukar
+Outpost** (ordinary map 13): keep at least 75% of native wins across all 13 maps;
+there is no special digest-identical veto. Round-119 replacement-map receipts are
+recorded separately from the historical control deck and must actually play Outpost.
 Receipts: `outputs/ai-tuning-20261108/B3m-CombatSidesScope` and
 `SimpleGate/round119-counters`. `round-119-off` explicitly restores the protocol
 118 values of both changed keys; `round-118-off` also disables them to retain

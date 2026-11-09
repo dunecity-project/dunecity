@@ -159,7 +159,7 @@ def control_cells():
         '6P - 128x128 - Enclaves',
         '6P - 256x256 - Alkozeltser 4',
         '4P - 192x192 - DuneCity',
-        '4P - 64x64 - Silicon Valley',
+        '4P - 128x128 - The Sardaukar Outpost',
     )
     cells = []
     for number, name in enumerate(maps, 1):
@@ -169,6 +169,9 @@ def control_cells():
             # Standard stronger-v-weaker team cell, with one Brutal candidate.
             slots = team_slots(['QB', 'QH'], ['QM', 'QM'])
         named = ['harkonnen', 'atreides', 'ordos', 'fremen', 'sardaukar', 'mercenary'] if players == 6 else None
+        if number == 13:
+            # These are the map's four playable starts, not its unoccupied Sardaukar outpost.
+            named = ['harkonnen', 'mercenary', 'atreides', 'ordos']
         short = name.rsplit(' - ', 1)[-1].lower().replace(' ', '-')
         cells.append(match('controls', f'{number:02d}-{short}', 'dunecity' if number == 12 else 'vanilla',
                            slots, path=mp_map(name), houses=named, full=2,
@@ -1212,6 +1215,7 @@ parser.add_argument('--attack-events', action='store_true',
 parser.add_argument('--keep-telemetry', action='store_true',
                     help='Retain the complete AI events.jsonl alongside --attack-events diagnostics')
 parser.add_argument('--list', action='store_true', help='Print the scheduled games and exit')
+parser.add_argument('--list-json', action='store_true', help='Print the exact scheduled setup as JSON and exit')
 parser.add_argument('--report', dest='report_dirs', nargs='+', metavar='RESULTS',
                     help='Print the summary table of these results directories')
 parser.add_argument('--draw-score', type=match_score.check_draw_score, default=match_score.DRAW_SCORE)
@@ -1232,6 +1236,8 @@ if args.compare_dirs:
     compare(args)
 elif args.report_dirs:
     report(args)
+elif args.list_json:
+    print(json.dumps(schedule(args), default=str))
 elif args.list:
     plan = schedule(args)
     for g in plan:

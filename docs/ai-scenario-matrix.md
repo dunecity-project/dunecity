@@ -98,8 +98,8 @@ initial spice density (rock is `%`, mountain `@`, spice and thick spice the
 initial-spice tiles and their thick variants; rock contiguity is 3x3 all-rock
 windows per rock tile). Seeded original maps, generator-seeded custom maps and
 missing or malformed scenarios are unknown, and unknown or initially spiceless
-maps are never scoped: Silicon Valley (map 13) keeps measuring the unscoped
-candidate. No map name, mission or seed is read
+maps are never scoped. Initially spiceless maps remain functional policy cases,
+but are not a special promotion-control veto. No map name, mission or seed is read
 (`players/QuantBotMapScopePolicy.h`).
 
 - `ClosingMountainScope`: PressOn, FinishWhenLeading and JoinAllyWaves play
@@ -124,11 +124,14 @@ candidate. No map name, mission or seed is read
   Overlays `focus-fire-2-sides-5`, `counters100-sides-5` and `counters50-sides-5`.
   Since protocol 119 the last is the default treatment: `VanillaArmyCounters=1`,
   blend 5000, `VanillaArmyCounterMapScope=5`. The release-line evidence on
-  `8617247d` is FFA4 576 paired games 192 -> 216 wins, controls 14/14 native wins
-  kept with Silicon Valley 2/2 identical, deck 56 / OFF 56, and CPU
+  `8617247d` is FFA4 576 paired games 192 -> 216 wins, old-deck controls 14/14
+  native wins kept, deck 56 / OFF 56, and CPU
   x0.999/x0.994 (FFA6 no-leak check). `round-119-off` restores both switched
   keys to 0; full receipts live in `B3m-CombatSidesScope` and
   `SimpleGate/round119-counters` under `outputs/ai-tuning-20261108`.
+  The current control deck replaces Silicon Valley with The Sardaukar Outpost:
+  all 13 maps use the ordinary 75% native-win retention rule, with no special
+  digest-identical veto. Historical Silicon Valley receipts cannot qualify the replacement.
 
 Generated sample maps are 96-160 tiles square with at least 1,536 tiles per
 controller; the SweepLane screen/fresh/confirm maps measured 5% mountain and the
@@ -320,9 +323,13 @@ The candidate is Brutal QuantBot, with the mixed skirmish opponents QH/QM/QE/AH/
 (truncated to the player count); Tuono-Blake is QB+QH versus QM+QM.
 Six-player maps use the existing multiplayer house order. Map 12 uses `dunecity`;
 all others use `vanilla`. Limits are 60 game minutes, or 80 on 192/256-square maps;
-the ordinary 1,800-second per-game wall cap applies. Silicon Valley (#13, no spice)
-is **only an inertness check**, never a target for AI improvements. Time-limit
-draws are recorded, not converted into wins or generic smoke failures.
+the ordinary 1,800-second per-game wall cap applies. Map 13 is now **4P - 128x128 -
+The Sardaukar Outpost**, replacing Silicon Valley by Stefan's 2026-11-09 decision.
+It is an ordinary win-retention control, not a digest-inertness test. Its authored
+playable starts are Harkonnen, Mercenary, Atreides and Ordos (1,500 credits each);
+the harness rotates those four houses, with QB/QH/QM/QE on separate teams, rather
+than assigning a player to the preplaced, unoccupied Sardaukar outpost. Existing
+authored units, structures and terrain are unchanged. Time-limit draws are recorded.
 
 Submit one pinned cluster command (never local games):
 
@@ -347,16 +354,23 @@ Each `games.csv` row records `style_seats` from the probe log (`none`, or
 `<house>=candidate-<style>`; a seat whose QuantBot config differs from native without
 that genome is listed as `<house>=config`); a mismatch fails the game.
 Comparison exits nonzero for missing/failed/duplicate games, a missing receipt or a style
-on any non-candidate seat, changed match settings,
-any lost native QB/team-1 win, or a changed digest outside `--in-scope`. That option
-lists only the map numbers the switch can affect (default 1–12); #13 must **always**
-be digest-identical. Winner, minutes and digest equality are printed per map/seed.
-Baselines use native base `98ca530ab89e47dccbc75f1703ed9e70587a97b8`, with a
-harness-only pin recorded separately:
+on any non-candidate seat, changed scheduled map/mod/seed/roster/limit, unmatched source
+pins on a native/candidate pair, keeping fewer than **75% of native QB/team-1 wins
+across all 13 maps**, or a changed digest outside an explicitly declared `--in-scope`.
+The default scope allows all 13 maps; Outpost has no special digest rule. Winner,
+minutes, digest equality and every lost native win are printed per map/seed.
+Old Silicon Valley rows cannot satisfy an Outpost receipt, even if only their IDs
+are relabelled. Historical receipts and verdicts remain evidence of the old deck.
+Record the actual engine base with `--base "$ENGINE_SHA"`. Reuse unchanged maps
+1–12 only with their original per-row source pins and compatible native rows; new
+Outpost pairs must actually run on the same harness-only child of the candidate engine.
+Mixed parent/child receipts retain every row's real pin (`--pin PARENT CHILD`);
+the harness-only child manifest records its unchanged engine parent. A default-ON
+candidate can record an explicit OFF native overlay with `--native-style STYLE`.
 
 ```sh
 python3 tests/ai/compare-control-maps.py --results "$NATIVE_RESULTS" \
-  --record "$BASELINE" --pin "$SHA" --job "$JOB"
+  --record "$BASELINE" --base "$ENGINE_SHA" --pin "$SHA" --job "$JOB"
 ```
 
 For a **separate observed handmade-map study**, use `--tier controls
