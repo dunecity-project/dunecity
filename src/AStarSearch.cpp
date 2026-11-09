@@ -28,6 +28,7 @@
 #include <misc/exceptions.h>
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <stdlib.h>
 #include <cstring>
@@ -200,6 +201,19 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
 
     size_t iterations = 0;
 
+    // Entering a tile costs terrainCost straight or SQRT2 * terrainCost diagonally, and
+    // terrainCost depends only on the tile's terrain type and road flag for this unit
+    // (getTerrainDifficulty() is a switch on the type): each pair's two step costs are
+    // worked out on first use in this slice, by the same expressions, instead of for
+    // every neighbour. Turning costs angleDiff() * rotationSpeed, angleDiff() in 0..4.
+    struct StepCost { FixPoint straight, diagonal; };
+    constexpr int terrainTypes = Terrain_WhiteSpiceBloom + 1;
+    std::array<StepCost, 2*terrainTypes> stepCosts;
+    Uint64 stepCostsReady = 0;
+    static_assert(2*terrainTypes <= 64, "one ready bit per step cost entry");
+    std::array<FixPoint, NUM_ANGLES/2 + 1> turnCosts;
+    for (int turn = 0; turn <= NUM_ANGLES/2; ++turn) turnCosts[turn] = turn * rotationSpeed;
+
     {
         while(openList.empty() == false) {
             if(nodesClosedLastStep >= nodeQuota || iterations >= iterationLimit) {
@@ -253,21 +267,34 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
                         FixPoint g = currentG;
 
                         {
-                            FixPoint terrainCost = flying ? 1.0_fix : pUnit->getTerrainDifficulty((TERRAINTYPE) nextTile.getType());
-                            // Road tiles are faster for ground units; reduce path cost to match.
-                            if(!flying && nextTile.isRoad()) {
-                                terrainCost /= ROADSPEEDMULTIPLIER;
-                            }
-                            if((nextCoord.x != currentCoord.x) && (nextCoord.y != currentCoord.y)) {
-                                g += FixPt_SQRT2 * terrainCost;
+                            const int terrain = nextTile.getType();
+                            const bool road = !flying && nextTile.isRoad();
+                            const bool diagonal = (nextCoord.x != currentCoord.x) && (nextCoord.y != currentCoord.y);
+                            auto terrainCostOf = [&]() {
+                                FixPoint terrainCost = flying ? 1.0_fix : pUnit->getTerrainDifficulty((TERRAINTYPE) terrain);
+                                // Road tiles are faster for ground units; reduce path cost to match.
+                                if(road) {
+                                    terrainCost /= ROADSPEEDMULTIPLIER;
+                                }
+                                return terrainCost;
+                            };
+                            if(terrain >= 0 && terrain < terrainTypes) {
+                                const int entry = 2*terrain + (road ? 1 : 0);
+                                if(((stepCostsReady >> entry) & 1) == 0) {
+                                    const FixPoint terrainCost = terrainCostOf();
+                                    stepCosts[entry] = StepCost{terrainCost, FixPt_SQRT2 * terrainCost};
+                                    stepCostsReady |= Uint64(1) << entry;
+                                }
+                                g += diagonal ? stepCosts[entry].diagonal : stepCosts[entry].straight;
                             } else {
-                                g += terrainCost;
+                                const FixPoint terrainCost = terrainCostOf();
+                                g += diagonal ? FixPt_SQRT2 * terrainCost : terrainCost;
                             }
                         }
 
                         if(hasParent)  {
                             //add cost of turning time
-                            g += angleDiff(angle,parentAngle) * rotationSpeed;
+                            g += turnCosts[angleDiff(angle,parentAngle)];
                         }
 
                         FixPoint h = blockDistance(nextCoord, destination);
