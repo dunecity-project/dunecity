@@ -332,14 +332,20 @@ each with fixed seeds **10801, 11810** and the ordinary per-seed house/start rot
 The candidate is Brutal QuantBot, with the mixed skirmish opponents QH/QM/QE/AH/AM
 (truncated to the player count); Tuono-Blake is QB+QH versus QM+QM.
 Six-player maps use the existing multiplayer house order. Map 12 uses `dunecity`;
-all others use `vanilla`. Limits are 60 game minutes, or 80 on 192/256-square maps;
-the ordinary 1,800-second per-game wall cap applies. Map 13 is now **4P - 128x128 -
-The Sardaukar Outpost**, replacing Silicon Valley by Stefan's 2026-11-09 decision.
+all others use `vanilla`. Limits are 60 game minutes, or 80 on 192/256-square maps,
+except The Sardaukar Outpost's 120; the ordinary 1,800-second per-game wall cap applies.
+Map 13 is now **4P - 128x128 - The Sardaukar Outpost**, replacing Silicon Valley by
+Stefan's 2026-11-09 decision.
 It is an ordinary win-retention control, not a digest-inertness test. Its authored
 playable starts are Harkonnen, Mercenary, Atreides and Ordos (1,500 credits each);
 the harness rotates those four houses, with QB/QH/QM/QE on separate teams, rather
 than assigning a player to the preplaced, unoccupied Sardaukar outpost. Existing
 authored units, structures and terrain are unchanged. Time-limit draws are recorded.
+Its limit rose from 60 to 120 minutes on 2026-11-09: every 60-minute Outpost game had
+been a draw, while native 7ebe1906 at 120 minutes decides seed 11810 (QH, 65.52 min;
+10801 is still a two-house draw). Its 60-minute receipts fail the 120-minute schedule,
+and the comparator rejects any draw that ends before its row's limit, so an old draw
+cannot be relabelled as a 120-minute game.
 
 Submit one pinned cluster command (never local games):
 

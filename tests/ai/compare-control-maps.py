@@ -2,8 +2,9 @@
 """Record a complete native controls receipt, or check a candidate against it.
 
 Controls rule (Stefan 2026-11-09): keep at least --min-kept-ratio (default 75%) of the
-native QB/team-1 wins across all 13 controls, including The Sardaukar Outpost.
-Only maps explicitly outside --in-scope must stay digest-identical."""
+native QB/team-1 wins across all 13 controls, including The Sardaukar Outpost (120-minute
+limit; its 60-minute receipts cannot qualify). Only maps explicitly outside --in-scope must
+stay digest-identical."""
 import argparse
 import csv
 import datetime
@@ -46,6 +47,8 @@ def validate(rows):
             raise ValueError(f'Invalid winning team: {gid}')
         if not 0 < float(row['minutes']) <= float(row['limit']) + 0.1:
             raise ValueError(f'Invalid game duration: {gid}')
+        if row['winner_team'] == '0' and abs(float(row['minutes']) - float(row['limit'])) > 0.1:
+            raise ValueError(f'Draw ended before its {row["limit"]}-minute limit (relabelled limit?): {gid}')
         if not re.fullmatch(r'[0-9a-f]{40}', row.get('source_commit', '')):
             raise ValueError(f'Missing pinned source provenance: {gid}')
         by_id[gid] = row

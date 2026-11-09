@@ -92,6 +92,11 @@ class ControlMapTests(unittest.TestCase):
         self.assertEqual([house for house, _, _ in outpost[0]['sides']],
                          ['harkonnen', 'mercenary', 'atreides', 'ordos'])
         self.assertEqual(outpost[1]['sides'][0][0], 'mercenary')
+        self.assertEqual({game['minutes'] for game in outpost}, {120})
+        for game in games:
+            if not game['cell'].startswith('13-'):
+                large = '192x192' in game['map'] or '256x256' in game['map']
+                self.assertEqual(game['minutes'], 80 if large else 60, game['id'])
 
     def test_native_command_has_no_overlay(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -250,6 +255,22 @@ class ControlMapTests(unittest.TestCase):
             row['id'] = row['id'].replace('silicon-valley', 'the-sardaukar-outpost')
         with self.assertRaisesRegex(ValueError, 'wrong scheduled map'):
             compare.validate(rows)
+
+    def test_sixty_minute_outpost_rows_cannot_satisfy_the_120_minute_schedule(self):
+        rows = gate_rows('')
+        outpost = [row for row in rows if row['id'].startswith('controls/13-')]
+        for row in outpost:
+            row.update(limit='60', minutes='60.00', winner_team='0', winner='')
+        with self.assertRaisesRegex(ValueError, "wrong scheduled limit: '60' != '120'"):
+            compare.validate(rows)
+        # Relabelling the old draws' limit must not pass them off as 120-minute games.
+        for row in outpost:
+            row['limit'] = '120'
+        with self.assertRaisesRegex(ValueError, 'Draw ended before its 120-minute limit'):
+            compare.validate(rows)
+        for row in outpost:
+            row['minutes'] = '120.00'
+        self.assertEqual(len(compare.validate(rows)), 26)
 
     def test_pairing_requires_the_same_source_on_each_map_seed(self):
         native, candidate = gate_rows(''), gate_rows(STYLE)

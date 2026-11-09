@@ -169,13 +169,16 @@ def control_cells():
             # Standard stronger-v-weaker team cell, with one Brutal candidate.
             slots = team_slots(['QB', 'QH'], ['QM', 'QM'])
         named = ['harkonnen', 'atreides', 'ordos', 'fremen', 'sardaukar', 'mercenary'] if players == 6 else None
+        minutes = 80 if '192x192' in name or '256x256' in name else 60
         if number == 13:
             # These are the map's four playable starts, not its unoccupied Sardaukar outpost.
             named = ['harkonnen', 'mercenary', 'atreides', 'ordos']
+            # Stefan 2026-11-09: every 60-minute Outpost game was a four-house draw; at 120 minutes
+            # native 7ebe1906 decides seed 11810 (QH at 65.52 min).
+            minutes = 120
         short = name.rsplit(' - ', 1)[-1].lower().replace(' ', '-')
         cells.append(match('controls', f'{number:02d}-{short}', 'dunecity' if number == 12 else 'vanilla',
-                           slots, path=mp_map(name), houses=named, full=2,
-                           minutes=80 if '192x192' in name or '256x256' in name else 60))
+                           slots, path=mp_map(name), houses=named, full=2, minutes=minutes))
     return cells
 
 
