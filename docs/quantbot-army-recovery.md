@@ -564,6 +564,16 @@ ordinary save and scoped observer AI continuation, legal battery sites, and actu
 movement of a large recalled army. Changes to saved state and multiplayer
 behaviour require explicit format/protocol gates.
 
+`quantbot_carryall_repair` covers the complete funded repair trip in Vanilla and DuneCity:
+the human Repair command, engine automatic repair, a human house's QuantBot partner and an
+autonomous QuantBot's damage response must book a free owned carryall, collect the vehicle
+before it drives away, deliver it into the yard, and release it at full health without stale
+bookings. The yard is over twenty tiles from the damaged unit, following the reported campaign
+layout. With no carryall, both the human order and the partner's damage response must drive;
+with the only carryall busy, the unit drives until transport becomes available. Each seeded case
+runs twice with one path worker and must reproduce the same event cycles. These are bounded
+progress checks on open rock with a funded yard, not a promise of transport when none exists.
+
 `quantbot_custom_attack` contains same-runtime OFF/ON/OFF exhausted-economy
 coverage through the actual `exhaustedArmyEconomy()` predicate,
 `declinesUnfundedRepair()`/repair reservation owner, `launchGroundHunt()` and

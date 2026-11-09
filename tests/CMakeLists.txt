@@ -718,6 +718,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
         set_tests_properties(carryall_flight_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Real human/QuantBot repair decisions must book a free carryall, pick up, deliver to the
+        # bay and release fully repaired. No carryall (or a busy one) keeps the driving fallback.
+        # The QuantBot prefix deliberately includes this test in the AI/unit round gates.
+        add_test(NAME quantbot_carryall_repair COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-repair-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-repair-probe)
+        set_tests_properties(quantbot_carryall_repair PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # A ground unit walled in on a real map really does stop moving, so the thirty-second
         # long-stall rescue can be measured against the engine instead of being simulated:
         # the clock survives a queued path request and a route cleared every cycle, and the
