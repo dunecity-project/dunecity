@@ -49,6 +49,7 @@ Map::Map(int xSize, int ySize)
 
     init_tile_location();
     rebuildObjectTiles();
+    rebuildSpiceTiles();
 }
 
 
@@ -68,11 +69,14 @@ void Map::load(InputStream& stream) {
     init_tile_location();
     rebuildActiveDeadUnitTiles();
     rebuildObjectTiles();
+    rebuildSpiceTiles();
 }
 
 namespace {
 // Object assignments to a tile that belongs to no current map (see Map::noteObjectAssigned).
 Uint64 untrackedObjectAssignments = 0;
+// Spice changes on a tile that belongs to no current map (see Map::noteSpiceChanged).
+Uint64 untrackedSpiceChanges = 0;
 }
 
 size_t Map::tileIndexOf(const Tile& tile) const noexcept {
@@ -102,6 +106,37 @@ void Map::rebuildObjectTiles() {
     for (size_t index = 0; index < tiles.size(); ++index)
         if (tiles[index].hasAnObject()) objectTiles[index >> 6] |= Uint64(1) << (index & 63);
     objectTilesUntrackedMark = untrackedObjectAssignments;
+}
+
+const Uint64* Map::objectTileBits() const noexcept {
+    if (this != currentGameMap || objectTilesUntrackedMark != untrackedObjectAssignments
+        || objectTiles.size() != (tiles.size() + 63) / 64) return nullptr;
+    return objectTiles.data();
+}
+
+void Map::noteSpiceChanged(const Tile& tile) {
+    const size_t index = currentGameMap ? currentGameMap->tileIndexOf(tile) : static_cast<size_t>(-1);
+    if (index == static_cast<size_t>(-1) || (index >> 6) >= currentGameMap->spiceTiles.size()) {
+        ++untrackedSpiceChanges;
+        return;
+    }
+    Uint64& word = currentGameMap->spiceTiles[index >> 6];
+    const Uint64 bit = Uint64(1) << (index & 63);
+    word = tile.hasSpice() ? (word | bit) : (word & ~bit);
+}
+
+void Map::rebuildSpiceTiles() {
+    spiceTiles.assign((tiles.size() + 63) / 64, 0);
+    for (size_t index = 0; index < tiles.size(); ++index)
+        if (tiles[index].hasSpice()) spiceTiles[index >> 6] |= Uint64(1) << (index & 63);
+    spiceTilesUntrackedMark = untrackedSpiceChanges;
+}
+
+const Uint64* Map::spiceTileBits() {
+    if (this != currentGameMap) return nullptr;
+    if (spiceTilesUntrackedMark != untrackedSpiceChanges || spiceTiles.size() != (tiles.size() + 63) / 64)
+        rebuildSpiceTiles();
+    return spiceTiles.data();
 }
 
 void Map::registerDeadUnitTile(Tile& tile) {

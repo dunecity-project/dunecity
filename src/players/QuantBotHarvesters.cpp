@@ -311,21 +311,52 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
             getGameCycleCount(), getHouse()->getHouseID());
         spice.tiles.clear();
         spice.plain.clear();
-        // Tiles are stored column by column: read them in that order, then list
-        // the spice tiles in the scan's y-then-x order. 1 = spice on a plain tile
-        // (no mountain, no ground object: canPass() is true for every unit there),
-        // 2 = spice on any other tile, whose canPass() stays a live per-harvester call.
-        std::vector<uint8_t> spiceAt(static_cast<size_t>(mapW)*mapH, 0);
-        for (int x = 0; x < mapW; ++x) for (int y = 0; y < mapH; ++y) {
-            const Tile* tile = getMap().getTile(x,y);
-            if (tile->hasSpice())
-                spiceAt[static_cast<size_t>(y)*mapW+x] = !tile->isMountain() && !tile->hasAGroundObject() ? 1 : 2;
-        }
-        for (int y = 0; y < mapH; ++y) for (int x = 0; x < mapW; ++x)
-            if (const uint8_t at = spiceAt[static_cast<size_t>(y)*mapW+x]) {
-                spice.tiles.emplace_back(x,y);
-                spice.plain.push_back(at == 1);
+        // 1 = spice on a plain tile (no mountain, no ground object: canPass() is true for
+        // every unit there), 2 = spice on any other tile, whose canPass() stays a live
+        // per-harvester call.
+        auto spiceKind = [](const Tile* tile) -> uint8_t {
+            return !tile->hasSpice() ? 0 : !tile->isMountain() && !tile->hasAGroundObject() ? 1 : 2;
+        };
+        if (const Uint64* spiceBits = &getMap() == currentGameMap ? currentGameMap->spiceTileBits() : nullptr) {
+            // Map::spiceTileBits() marks exactly the tiles whose hasSpice() holds, by tile
+            // index (column by column), so only those tiles are read, in storage order. A
+            // counting sort by row then lists them in the scan's y-then-x order.
+            struct SpiceAt { Coord at; uint8_t kind; };
+            std::vector<SpiceAt> columnOrder;
+            std::vector<int> rowStart(static_cast<size_t>(mapH) + 1, 0);
+            const size_t words = (static_cast<size_t>(mapW) * mapH + 63) / 64;
+            for (size_t word = 0; word < words; ++word) {
+                Uint64 bits = spiceBits[word];
+                for (size_t bit = 0; bits != 0; ++bit, bits >>= 1) {
+                    if (!(bits & 1)) continue;
+                    const size_t index = word * 64 + bit;
+                    const Coord at(static_cast<int>(index / mapH), static_cast<int>(index % mapH));
+                    if (const uint8_t kind = spiceKind(getMap().getTile(at.x, at.y))) {
+                        columnOrder.push_back({at, kind});
+                        ++rowStart[static_cast<size_t>(at.y) + 1];
+                    }
+                }
             }
+            for (int y = 0; y < mapH; ++y) rowStart[static_cast<size_t>(y) + 1] += rowStart[static_cast<size_t>(y)];
+            spice.tiles.resize(columnOrder.size());
+            spice.plain.resize(columnOrder.size());
+            for (const SpiceAt& entry : columnOrder) {
+                const int slot = rowStart[static_cast<size_t>(entry.at.y)]++;
+                spice.tiles[static_cast<size_t>(slot)] = entry.at;
+                spice.plain[static_cast<size_t>(slot)] = entry.kind == 1;
+            }
+        } else {
+            // Tiles are stored column by column: read them in that order, then list
+            // the spice tiles in the scan's y-then-x order.
+            std::vector<uint8_t> spiceAt(static_cast<size_t>(mapW)*mapH, 0);
+            for (int x = 0; x < mapW; ++x) for (int y = 0; y < mapH; ++y)
+                spiceAt[static_cast<size_t>(y)*mapW+x] = spiceKind(getMap().getTile(x,y));
+            for (int y = 0; y < mapH; ++y) for (int x = 0; x < mapW; ++x)
+                if (const uint8_t at = spiceAt[static_cast<size_t>(y)*mapW+x]) {
+                    spice.tiles.emplace_back(x,y);
+                    spice.plain.push_back(at == 1);
+                }
+        }
         spice.valid = true;
         ++spice.builds;
     } else {
@@ -336,11 +367,13 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     // memoryPenalty(p) > 0 exactly when some field that is still cooling down
     // with a positive penalty lies within 6 tiles: stamp those once instead of
     // walking every remembered field for every spice tile. unsafeFields does not
-    // change during the sweep.
-    std::vector<uint8_t> remembered(static_cast<size_t>(mapW)*mapH, 0);
+    // change during the sweep. Without such a field nothing is stamped and the
+    // map-sized marks are never allocated: every cell reads as unmarked.
+    std::vector<uint8_t> remembered;
     for (const auto& field : unsafeFields) {
         if (now-field.cycle >= MILLI2CYCLES(120000)
             || 12-static_cast<int>((now-field.cycle)/MILLI2CYCLES(10000)) <= 0) continue;
+        if (remembered.empty()) remembered.assign(static_cast<size_t>(mapW)*mapH, 0);
         const Coord at = field.location;
         for (int y = std::max(0,at.y-6); y <= std::min(mapH-1,at.y+6); ++y)
             for (int x = std::max(0,at.x-6); x <= std::min(mapW-1,at.x+6); ++x)
@@ -364,7 +397,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
         const Coord candidate = spice.tiles[i];
         const size_t cell = static_cast<size_t>(candidate.y)*mapW+candidate.x;
         if (share && (share->owner[cell]!=1 && share->owner[cell]!=2)) continue;
-        if ((dangerCells && dangerCells[cell]>0) || remembered[cell]
+        if ((dangerCells && dangerCells[cell]>0) || (!remembered.empty() && remembered[cell])
             || (!spice.plain[i] && !harvester->canPass(candidate.x,candidate.y))) continue;
         if (!homeField(candidate)) { ++rejectedHomeFields; continue; }
         ++safeFields;

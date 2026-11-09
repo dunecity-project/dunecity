@@ -760,8 +760,12 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 		spStartY = std::max(0, baseCenter.y - spiceRadius);
 		spEndX = std::min(mapW - 1, baseCenter.x + spiceRadius);
 		spEndY = std::min(mapH - 1, baseCenter.y + spiceRadius);
+        // Map::spiceTileBits() is clear exactly where hasSpice() is false, so a clear bit
+        // skips the tile without reading it; the same tiles in the same order.
+        const Uint64* spiceBits = &getMap() == currentGameMap ? currentGameMap->spiceTileBits() : nullptr;
 		for (int sx = spStartX; sx <= spEndX; sx++) {
 			for (int sy = spStartY; sy <= spEndY; sy++) {
+                if (spiceBits && getMap().tileExists(sx, sy) && !Map::tileBit(spiceBits, getMap().tileIndex(sx, sy))) continue;
 				if (getMap().tileExists(sx, sy) && getMap().getTile(sx, sy)->hasSpice()) {
 					spiceTiles.emplace_back(sx, sy);
 				}

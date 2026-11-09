@@ -261,6 +261,7 @@ void Tile::load(InputStream& stream) {
     sandRegion = stream.readUint32();
 
     spice = stream.readFixPoint();
+    Map::noteSpiceChanged(*this);
 
     bool bHasDamage, bHasDeadUnits, bHasAirUnits, bHasInfantry, bHasUndergroundUnits, bHasNonInfantryGroundObjects;
     stream.readBools(&bHasDamage, &bHasDeadUnits, &bHasAirUnits, &bHasInfantry, &bHasUndergroundUnits, &bHasNonInfantryGroundObjects);
@@ -1001,6 +1002,7 @@ void Tile::setType(int newType) {
             }
         }
     }
+    Map::noteSpiceChanged(*this);
 
     currentGameMap->for_each(location.x, location.y, location.x + 4, location.y + 4, [](Tile &t) { t.clearTerrain(); });
 }
@@ -1040,6 +1042,7 @@ FixPoint Tile::harvestSpice() {
     else {
         spice = 0;
     }
+    Map::noteSpiceChanged(*this);
 
     if (oldSpice >= RANDOMTHICKSPICEMIN && spice < RANDOMTHICKSPICEMIN) {
         setType(getThinSpiceTerrain(type));
@@ -1064,6 +1067,7 @@ void Tile::setSpice(FixPoint newSpice) {
         type = getThinSpiceTerrain(type);
     }
     spice = newSpice;
+    Map::noteSpiceChanged(*this);
 }
 
 

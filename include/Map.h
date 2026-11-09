@@ -78,6 +78,26 @@ public:
     static void noteObjectAssigned(const Tile& tile);
     static void noteObjectReleased(const Tile& tile);
     void rebuildObjectTiles();
+    /// objectTiles when it is complete for this map, else nullptr (an assignment went
+    /// untracked, or this is not currentGameMap). A clear bit at tileIndex(x,y) means
+    /// getTile(x,y)->hasAnObject() is false; a set bit says nothing.
+    const Uint64* objectTileBits() const noexcept;
+
+    /// Tiles that hold spice (Tile::hasSpice()), one bit per tile index. Tile reports
+    /// every change of its spice amount; a change on a tile of no current map is counted,
+    /// and the next spiceTileBits() then rebuilds the set from the tiles. Derived state,
+    /// never serialised.
+    static void noteSpiceChanged(const Tile& tile);
+    /// The complete spice set, rebuilt first when a change went untracked; nullptr for a
+    /// map that is not currentGameMap. A bit is set exactly when that tile hasSpice().
+    const Uint64* spiceTileBits();
+
+    size_t tileIndex(int xPos, int yPos) const noexcept {
+        return static_cast<size_t>(xPos) * static_cast<size_t>(sizeY) + static_cast<size_t>(yPos);
+    }
+    static bool tileBit(const Uint64* bits, size_t index) noexcept {
+        return ((bits[index >> 6] >> (index & 63)) & 1) != 0;
+    }
     void spiceRemoved(const Coord& coord);
     void selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int realX, int realY, bool objectARGMode);
 
@@ -233,6 +253,9 @@ private:
     std::vector<Uint32> activeDeadUnitTiles;        // Tile indices with running dead-unit timers. Derived; never serialized.
     std::vector<Uint64> objectTiles;                // Bit per tile index; see noteObjectAssigned(). Derived; never serialized.
     Uint64 objectTilesUntrackedMark = 0;            // untracked assignments counted when objectTiles was last complete
+    std::vector<Uint64> spiceTiles;                 // Bit per tile index; see noteSpiceChanged(). Derived; never serialized.
+    Uint64 spiceTilesUntrackedMark = 0;             // untracked spice changes counted when spiceTiles was last complete
+    void rebuildSpiceTiles();
     size_t tileIndexOf(const Tile& tile) const noexcept;
     void ensureTerrainConnectivity() const;
 
