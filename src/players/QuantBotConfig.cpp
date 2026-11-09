@@ -1089,7 +1089,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignSizedWorkerRescue = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignSizedWorkerRescue", force.campaignSizedWorkerRescue), 0, 2);
     force.campaignEnemyHarvesterRatio = std::clamp(
-        iniFile.getIntValue("Force Concentration", "CampaignEnemyHarvesterRatio", force.campaignEnemyHarvesterRatio), 0, 2);
+        iniFile.getIntValue("Force Concentration", "CampaignEnemyHarvesterRatio", force.campaignEnemyHarvesterRatio), 0, 3);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
     force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);

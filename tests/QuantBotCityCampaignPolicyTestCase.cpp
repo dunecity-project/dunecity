@@ -347,6 +347,47 @@ TEST_CASE("CampaignEnemyHarvesterRatio restores the refinery-ratio allowance for
     REQUIRE_FALSE(ratioRestored(Easy, 2));
 }
 
+TEST_CASE("CampaignEnemyHarvesterRatio level 3 floors Hard workers at the Medium row only",
+          "[ai][campaign][city][policy]") {
+    // H017: Hard level 7, allowance 4: matrix 1, Medium row 2, restored allowance 4.
+    const Baseline h017 = funded(4);
+    REQUIRE(limits(Hard, 7, h017, false, 0, 3).harvesters == 2);
+    REQUIRE(limits(Hard, 7, h017, false, 0, 3).sharedZoneCap == 20);
+    // A small original budget keeps Medium's small row, so Hard stays at 1.
+    REQUIRE(limits(Hard, 7, funded(2), false, 0, 3).harvesters == 1);
+    // Levels 2-4 already give Hard at least Medium's workers: unchanged.
+    for (int level = 1; level <= 4; ++level) {
+        const Limits on = limits(Hard, level, funded(kUncappedAllowance), false, 0, 3);
+        const Limits off = limits(Hard, level, funded(kUncappedAllowance), false, 0, 0);
+        REQUIRE(on.harvesters == off.harvesters);
+        REQUIRE(on.sharedZoneCap == off.sharedZoneCap);
+    }
+    // Hard is never below Medium, never above its own allowance; Easy, Medium and Brutal never change.
+    for (int allowance = 1; allowance <= 8; ++allowance)
+        for (int level = 1; level <= 9; ++level) {
+            const Baseline baseline = funded(allowance);
+            const Limits hard = limits(Hard, level, baseline, false, 0, 3);
+            REQUIRE(hard.harvesters >= limits(Medium, level, baseline, false, 0, 0).harvesters);
+            REQUIRE(hard.harvesters <= allowance);
+            REQUIRE(hard.sharedZoneCap == limits(Hard, level, baseline, false, 0, 0).sharedZoneCap);
+            for (const int difficulty : {int(Easy), int(Medium), int(Brutal)}) {
+                const Limits on = limits(difficulty, level, baseline, false, 0, 3);
+                const Limits off = limits(difficulty, level, baseline, false, 0, 0);
+                REQUIRE(on.harvesters == off.harvesters);
+                REQUIRE(on.sharedZoneCap == off.sharedZoneCap);
+            }
+        }
+    // Options ceiling and post-spice still win.
+    REQUIRE(limits(Hard, 7, h017, false, 1, 3).harvesters == 1);
+    REQUIRE(limits(Hard, 7, h017, true, 0, 3).harvesters == 0);
+    REQUIRE_FALSE(ratioRestored(Hard, 3));
+    REQUIRE_FALSE(ratioRestored(Brutal, 3));
+    REQUIRE(mediumFloor(Hard, 3));
+    REQUIRE_FALSE(mediumFloor(Hard, 1));
+    REQUIRE_FALSE(mediumFloor(Brutal, 3));
+    REQUIRE_FALSE(mediumFloor(Medium, 3));
+}
+
 TEST_CASE("Restored workers raise the income goal by their reference harvest",
           "[ai][campaign][city][policy]") {
     const Baseline h017 = funded(4);

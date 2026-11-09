@@ -92,9 +92,17 @@ inline Limits smallBudgetLimits(int difficulty, int level, int allowance) {
 
 /// CampaignEnemyHarvesterRatio (hashed, default 0): which tiers use their original
 /// refinery-ratio allowance as the worker ceiling instead of the matrix row.
-/// 0 = none (accepted matrix), 1 = Hard, 2 = Hard and Brutal. Easy and Medium never change.
+/// 0 = none (accepted matrix), 1 = Hard, 2 = Hard and Brutal, 3 = see mediumFloor().
+/// Easy and Medium never change.
 inline bool ratioRestored(int difficulty, int ratioLevel) {
-    return (ratioLevel >= 1 && difficulty == Hard) || (ratioLevel >= 2 && difficulty == Brutal);
+    return ((ratioLevel == 1 || ratioLevel == 2) && difficulty == Hard) || (ratioLevel == 2 && difficulty == Brutal);
+}
+
+/// Level 3: Hard keeps its matrix row but never plans fewer workers than the Medium
+/// row at the same level and allowance (the accepted matrix gives Hard 1 and Medium 2
+/// at levels 5-9). Brutal, Easy and Medium never change.
+inline bool mediumFloor(int difficulty, int ratioLevel) {
+    return ratioLevel == 3 && difficulty == Hard;
 }
 
 /// Full ceiling for one campaign enemy house.
@@ -110,6 +118,8 @@ inline Limits limits(int difficulty, int level, const Baseline& baseline,
 
     Limits result = smallBudgetLimits(difficulty, level, baseline.allowance);
     if (ratioRestored(difficulty, ratioLevel)) result.harvesters = baseline.allowance;
+    else if (mediumFloor(difficulty, ratioLevel))
+        result.harvesters = std::max(result.harvesters, smallBudgetLimits(Medium, level, baseline.allowance).harvesters);
 
     // A target may never exceed what the original mission already allowed, nor
     // the resource/options ceilings the engine applies.

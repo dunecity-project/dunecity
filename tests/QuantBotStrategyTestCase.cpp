@@ -2963,13 +2963,13 @@ TEST_CASE("Combat priority levels and strict focus use stable HP and id order", 
     REQUIRE_FALSE(F::tunedShouldSwitch(true, current, current, 2));
 }
 
-TEST_CASE("Campaign enemy harvester ratio has two independently hashed persistent levels",
+TEST_CASE("Campaign enemy harvester ratio has three independently hashed persistent levels",
           "[ai][campaign][economy][config]") {
     const QuantBotConfig defaults;
     REQUIRE(defaults.force.campaignEnemyHarvesterRatio == 0);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-enemy-harvester-ratio-test.ini";
     std::map<std::string, int> hashes;
-    for (const int level : {0, 1, 2}) {
+    for (const int level : {0, 1, 2, 3}) {
         {
             std::ofstream ini(path);
             ini << "[Force Concentration]\nCampaignEnemyHarvesterRatio=" << level << '\n';
