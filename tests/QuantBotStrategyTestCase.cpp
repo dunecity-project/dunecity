@@ -1253,11 +1253,11 @@ TEST_CASE("Duel opening plan defaults to the City raid and round trips independe
 namespace {
 
 // Batch3 City economy switches (docs/ai-scenario-matrix.md, "Batch3 City economy
-// experiments"): default 0; levels 1/2 load, save and hash distinctly; level 0
-// keeps the default hash; larger values clamp to level 2.
-void requireBatch3CityLevels(const char* key, int QuantBotConfig::ForceSettings::*member) {
+// experiments"): default 0 unless promoted; levels 0/1/2 load, save and hash distinctly;
+// the default level keeps the default hash; larger values clamp to level 2.
+void requireBatch3CityLevels(const char* key, int QuantBotConfig::ForceSettings::*member, int defaultLevel = 0) {
     const QuantBotConfig defaults;
-    REQUIRE(defaults.force.*member == 0);
+    REQUIRE(defaults.force.*member == defaultLevel);
     const auto path = std::filesystem::temp_directory_path() / (std::string("quantbot-batch3-") + key + ".ini");
     std::set<std::string> hashes;
     for (int level = 0; level <= 3; ++level) {
@@ -1268,7 +1268,7 @@ void requireBatch3CityLevels(const char* key, int QuantBotConfig::ForceSettings:
         QuantBotConfig loaded;
         REQUIRE(loaded.applyOverrides(path.string()));
         REQUIRE(loaded.force.*member == std::min(level, 2));
-        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (level == 0));
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (std::min(level, 2) == defaultLevel));
         REQUIRE(hashes.insert(loaded.getConfigHash()).second == (level <= 2));
         REQUIRE(loaded.save(path.string()));
         QuantBotConfig restored;
@@ -1281,8 +1281,8 @@ void requireBatch3CityLevels(const char* key, int QuantBotConfig::ForceSettings:
 
 } // namespace
 
-TEST_CASE("CityCapitalPacing levels are default off, hashed and use the income gate", "[ai][city][config]") {
-    requireBatch3CityLevels("CityCapitalPacing", &QuantBotConfig::ForceSettings::cityCapitalPacing);
+TEST_CASE("CityCapitalPacing defaults to level 1, hashed levels use the income gate", "[ai][city][config]") {
+    requireBatch3CityLevels("CityCapitalPacing", &QuantBotConfig::ForceSettings::cityCapitalPacing, 1);
     using QuantBotBuildPolicy::incomeTechnologyAdmitted;
     REQUIRE(incomeTechnologyAdmitted(1, 1000, 1000));
     REQUIRE_FALSE(incomeTechnologyAdmitted(2, 1999, 1000));

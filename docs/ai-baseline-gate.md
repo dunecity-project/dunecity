@@ -60,3 +60,4 @@ same games.
 | 2026-11-09 | ResearchOrder L2 (`CityResearchOrder=2`) | B2 `f9fd39b0` | PASS, candidate 53 / OFF 53 / 807 22 |
 | 2026-11-09 | DuelOpening City raid (`DuelOpeningPlan=2`) | B2 `f9fd39b0` | PASS, candidate 56 / OFF 53 / 807 22 |
 | 2026-11-09 | CampaignLeftovers margin (`CampaignHomeFields=2`) | B2 `f9fd39b0` | PASS, candidate 53 / OFF 53 / 807 22 |
+| 2026-11-09 | City capital pacing L1 (`CityCapitalPacing=1`) | B3m `7e188318` | PASS, candidate 56 / OFF 56 / 807 22 |

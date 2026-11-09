@@ -361,7 +361,10 @@
 // 117: QuantBot DuelOpeningPlan and CampaignHomeFields default to 2: Custom DuneCity 1v1 spice
 //      duels open with the light harvester raid and low-tech campaign AI support keeps its
 //      workers four tiles inside its own frontier, so a 116 peer would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            117
+// 118: QuantBot CityCapitalPacing defaults to 1 (research-enabled Custom DuneCity spice skirmish
+//      paces optional producer technology by income), so a 117 peer would desync. Save format
+//      unchanged.
+#define NETWORK_PROTOCOL_VERSION            118
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

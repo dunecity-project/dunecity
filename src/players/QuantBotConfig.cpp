@@ -450,7 +450,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityLandValueFundingPercent = 60;
     force.cityGrowthStageTax = false;
     force.cityGrowthTaxPopulation = 3000;
-    force.cityCapitalPacing = 0;
+    force.cityCapitalPacing = 1;  // default since protocol 118
     force.cityFleetRatios = 0;
     force.cityTechRefineries = 0;
     force.cityYardRefineries = 0;

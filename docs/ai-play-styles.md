@@ -1473,6 +1473,13 @@ plus three default-OFF map-scoped repairs (`docs/ai-scenario-matrix.md`,
 to 0, including those two promoted defaults, so on B3m it reproduces the Batch3
 pin rather than B3m's native defaults; B3m's own all-new-OFF state is native.
 
+Round 118 (protocol 118, 2026-11-09) is B3m with `CityCapitalPacing=1` under the promotion rule
+(positive paired96, controls keep at least 75% of the native wins on maps 1-12 with Silicon Valley
+identical, 1.0.807 deck wins at least the same-source OFF build's); evidence in
+`docs/ai-scenario-matrix.md` and `docs/ai-baseline-gate.md`. Every other Batch3 and map-scoped
+switch stays default OFF. `round-118-off` is the explicit OFF control (`CityCapitalPacing=0`),
+which plays exactly as `e7be8d53`.
+
 ## Duel openings (default 2: DuneCity light raid)
 
 `[Force Concentration] DuelOpeningPlan` is a hashed integer: `0` native,

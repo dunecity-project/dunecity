@@ -31,7 +31,7 @@ static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
 static constexpr int kWireCoopCampaignControl = 25;
 static constexpr int kWireCoopSetupTransfer = 26;
-static constexpr int kWireProtocolVersion = 117;
+static constexpr int kWireProtocolVersion = 118;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -134,7 +134,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 115 enables the campaign AI-support QuantBot defaults (save format unchanged).
     // 116 defaults QuantBot's CityResearchOrder to 2 (save format unchanged).
     // 117 defaults QuantBot's DuelOpeningPlan and CampaignHomeFields to 2 (save format unchanged).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 117);
+    // 118 defaults QuantBot's CityCapitalPacing to 1 (save format unchanged).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 118);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

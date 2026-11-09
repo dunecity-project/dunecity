@@ -46,8 +46,9 @@ set `DUNECITY_TECH_SAVINGS_AUDIT`; use equal observer modes in paired arms.
 
 ## Batch3 City economy experiments
 
-Five hashed, default-OFF `[Force Concentration]` integers (`0` OFF, `1`/`2`
-levels) re-test economy-freeing ideas only where earlier unscoped arms gained:
+Five hashed `[Force Concentration]` integers (`0` OFF, `1`/`2` levels; default
+OFF except `CityCapitalPacing`, level 1 since protocol 118) re-test
+economy-freeing ideas only where earlier unscoped arms gained:
 `QuantBot::cityEconomyExperimentScope()`, an autonomous Custom
 Medium/Hard/Brutal QuantBot in a DuneCity-mod city game
 (`CustomGame`/`CustomMultiplayer`) whose map starts with spice
@@ -57,7 +58,11 @@ controls only map 12 exercises them. No map, mission or seed predicate is used.
 
 - `CityCapitalPacing`: TechIncomeTiming's 1x/2x income gate and its safe-rival
   early technology, in research-enabled scope games with remaining spice. An
-  explicit `TechIncomeTiming` keeps precedence.
+  explicit `TechIncomeTiming` keeps precedence. Level 1 is the default since
+  protocol 118 (2026-11-09): on B3m `7e188318` paired96 45 -> 58 of 96 (13
+  gained, none lost, CI [+0.062, +0.219]), fresh48 19 -> 26 and screen24 11 -> 13
+  without a lost game, controls26 26/26 digest-identical, and the 1.0.807 check
+  PASS (candidate 56 / OFF 56 / 807 22; the research-off deck is outside its scope).
 - `CityFleetRatios`: EconomicFleetRatios on Hard/Brutal with remaining spice;
   level 1 is `h3-cq1-r1`, level 2 `h4-cq1-r1`. An explicit
   `EconomicFleetRatios` keeps its configured values.
@@ -74,7 +79,8 @@ controls only map 12 exercises them. No map, mission or seed predicate is used.
 Candidate-only overlays are `city-capital-pacing-1/2`, `city-fleet-ratios-1/2`,
 `city-tech-refineries-1/2`, `city-yard-refineries-1/2` and
 `city-worker-replacement-1/2`; `experiment-batch-3-off` is the OFF proof
-overlay. `income_tech_hold` records the refinery gate as `refinery_bays`.
+overlay and `round-118-off` returns the protocol 118 defaults to their protocol
+117 values. `income_tech_hold` records the refinery gate as `refinery_bays`.
 The screen24 cells (`tests/ai/screen-designs/b3-city-screen24-cases.json`, fresh
 seeds 1300000-1300011) keep the TechTiming screen's format/size/spice/tech/tier
 layout. Preregistrations and results are in
