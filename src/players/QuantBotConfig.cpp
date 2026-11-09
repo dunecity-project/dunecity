@@ -1144,8 +1144,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityYardRefineries = std::clamp(iniFile.getIntValue("Force Concentration", "CityYardRefineries", force.cityYardRefineries), 0, 2);
     force.cityWorkerReplacement = std::clamp(iniFile.getIntValue("Force Concentration", "CityWorkerReplacement", force.cityWorkerReplacement), 0, 2);
     force.closingMountainScope = std::clamp(iniFile.getIntValue("Force Concentration", "ClosingMountainScope", force.closingMountainScope), 0, 2);
-    force.vanillaArmyCounterMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope), 0, 2);
-    force.focusFireMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope), 0, 2);
+    force.vanillaArmyCounterMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope), 0, 5);
+    force.focusFireMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope), 0, 5);
     force.retreatPreserve = iniFile.getBoolValue("Force Concentration", "RetreatPreserve", force.retreatPreserve);
     force.retreatPreserveLevel = std::clamp(iniFile.getIntValue("Force Concentration", "RetreatPreserveLevel", force.retreatPreserveLevel), 1, 2);
     force.harvesterRaid = iniFile.getBoolValue("Force Concentration", "HarvesterRaid", force.harvesterRaid);

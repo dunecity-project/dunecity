@@ -1253,23 +1253,23 @@ TEST_CASE("Duel opening plan defaults to the City raid and round trips independe
 namespace {
 
 // Batch3 City economy switches (docs/ai-scenario-matrix.md, "Batch3 City economy
-// experiments"): default 0 unless promoted; levels 0/1/2 load, save and hash distinctly;
-// the default level keeps the default hash; larger values clamp to level 2.
-void requireBatch3CityLevels(const char* key, int QuantBotConfig::ForceSettings::*member, int defaultLevel = 0) {
+// experiments"): default 0 unless promoted; levels 0..maxLevel load, save and hash distinctly;
+// the default level keeps the default hash; larger values clamp to maxLevel.
+void requireBatch3CityLevels(const char* key, int QuantBotConfig::ForceSettings::*member, int defaultLevel = 0, int maxLevel = 2) {
     const QuantBotConfig defaults;
     REQUIRE(defaults.force.*member == defaultLevel);
     const auto path = std::filesystem::temp_directory_path() / (std::string("quantbot-batch3-") + key + ".ini");
     std::set<std::string> hashes;
-    for (int level = 0; level <= 3; ++level) {
+    for (int level = 0; level <= maxLevel + 1; ++level) {
         {
             std::ofstream ini(path);
             ini << "[Force Concentration]\n" << key << '=' << level << '\n';
         }
         QuantBotConfig loaded;
         REQUIRE(loaded.applyOverrides(path.string()));
-        REQUIRE(loaded.force.*member == std::min(level, 2));
-        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (std::min(level, 2) == defaultLevel));
-        REQUIRE(hashes.insert(loaded.getConfigHash()).second == (level <= 2));
+        REQUIRE(loaded.force.*member == std::min(level, maxLevel));
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (std::min(level, maxLevel) == defaultLevel));
+        REQUIRE(hashes.insert(loaded.getConfigHash()).second == (level <= maxLevel));
         REQUIRE(loaded.save(path.string()));
         QuantBotConfig restored;
         REQUIRE(restored.applyOverrides(path.string()));
@@ -1329,11 +1329,12 @@ TEST_CASE("CityWorkerReplacement levels are default off, hashed and set the payb
 }
 
 // Map-scoped repairs (players/QuantBotMapScopePolicy.h; docs/ai-scenario-matrix.md, "Map-scoped
-// repairs") share the Batch3 level contract: default 0, levels 1/2 hashed, level 0 the default hash.
+// repairs") share the Batch3 level contract: default 0, hashed levels, level 0 the default hash.
+// VanillaArmyCounterMapScope and FocusFireMapScope add the roster levels 3/4 and the combined level 5.
 TEST_CASE("Map-scoped repair levels are default off, hashed and persisted", "[ai][config][map-scope]") {
     requireBatch3CityLevels("ClosingMountainScope", &QuantBotConfig::ForceSettings::closingMountainScope);
-    requireBatch3CityLevels("VanillaArmyCounterMapScope", &QuantBotConfig::ForceSettings::vanillaArmyCounterMapScope);
-    requireBatch3CityLevels("FocusFireMapScope", &QuantBotConfig::ForceSettings::focusFireMapScope);
+    requireBatch3CityLevels("VanillaArmyCounterMapScope", &QuantBotConfig::ForceSettings::vanillaArmyCounterMapScope, 0, 5);
+    requireBatch3CityLevels("FocusFireMapScope", &QuantBotConfig::ForceSettings::focusFireMapScope, 0, 5);
 }
 
 namespace {
@@ -1410,6 +1411,51 @@ TEST_CASE("FocusFireMapScope applies from 192x192 tiles or below 1000 tiles per 
     REQUIRE_FALSE(hugeOrCrowded(2, measuredTerrain(4096, 500, 100, 0, 1000, 500), 0));
     REQUIRE_FALSE(hugeOrCrowded(0, measuredTerrain(256 * 256, 500, 100, 0, 1000, 500), 6));
     REQUIRE_FALSE(hugeOrCrowded(2, measuredTerrain(256 * 256, 0, 0, 0, 1000, 500), 6)); // no spice
+}
+
+TEST_CASE("Combat scope levels 3/4 count opposing sides at game start", "[ai][force][map-scope]") {
+    using QuantBotMapScopePolicy::manySides;
+    using QuantBotMapScopePolicy::opposingSides;
+    struct Row {
+        int team;
+        std::vector<int> playerInfoList;
+    };
+    const auto sides = [](std::initializer_list<int> teams) {
+        std::vector<Row> rows;
+        for (const int team : teams) rows.push_back({team, {1}});
+        return opposingSides(rows, 1);
+    };
+    REQUIRE(sides({1, 2}) == 1);             // 1v1
+    REQUIRE(sides({1, 1, 2, 2}) == 1);       // 2v2
+    REQUIRE(sides({1, 2, 3, 4}) == 3);       // FFA4
+    REQUIRE(sides({1, 2, 3, 4, 5, 6}) == 5); // FFA6
+    // Unoccupied rows and the own team never count; a repeated hostile team counts once.
+    REQUIRE(opposingSides(std::vector<Row>{{1, {1}}, {2, {1}}, {3, {}}, {1, {1}}, {2, {1}}}, 1) == 1);
+    REQUIRE(manySides(3, 3));
+    REQUIRE_FALSE(manySides(3, 2));
+    REQUIRE(manySides(4, 5));
+    REQUIRE_FALSE(manySides(4, 4));
+    REQUIRE_FALSE(manySides(4, 3));
+    for (const int level : {0, 1, 2}) REQUIRE_FALSE(manySides(level, 5)); // map levels never read the roster
+}
+
+TEST_CASE("Combat scope level 5 adds map level 1 to a roster level", "[ai][force][map-scope]") {
+    using QuantBotMapScopePolicy::armyCountersLevel5;
+    using QuantBotMapScopePolicy::focusFireLevel5;
+    // FocusFireMapScope=5: level 3 (at least 3 opposing sides) or level 1 (at least 192x192 tiles).
+    const auto huge = measuredTerrain(192 * 192, 1000, 500, 0, 1000, 500);
+    const auto large = measuredTerrain(192 * 192 - 1, 1000, 500, 0, 1000, 500);
+    REQUIRE(focusFireLevel5(large, 3));
+    REQUIRE_FALSE(focusFireLevel5(large, 2));
+    REQUIRE(focusFireLevel5(huge, 1));
+    REQUIRE_FALSE(focusFireLevel5(measuredTerrain(256 * 256, 0, 0, 0, 1000, 500), 1)); // no spice
+    // VanillaArmyCounterMapScope=5: level 4 (at least 5 opposing sides) or level 1 (thick below 20%).
+    const auto thick = measuredTerrain(10000, 1000, 200, 0, 1000, 0);
+    const auto thin = measuredTerrain(10000, 1000, 199, 0, 1000, 0);
+    REQUIRE(armyCountersLevel5(thick, 5));
+    REQUIRE_FALSE(armyCountersLevel5(thick, 4));
+    REQUIRE(armyCountersLevel5(thin, 1));
+    REQUIRE_FALSE(armyCountersLevel5(measuredTerrain(10000, 0, 0, 0, 1000, 0), 3)); // no spice
 }
 
 TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai][vanilla][strategy][config]") {

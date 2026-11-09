@@ -544,9 +544,11 @@ CityWorkerReplacement=0
 # and initially spiceless maps are never scoped. Native PressOn, FinishWhenLeading and
 # JoinAllyWaves where mountain is at least 8%/6% of the tiles:
 ClosingMountainScope=0
-# VanillaArmyCounters inert below 20% thick spice (1), or also below 0.45 rock contiguity (2):
+# VanillaArmyCounters inert below 20% thick spice (1), or also below 0.45 rock contiguity (2);
+# by the original roster instead: inert against at least 3 (3) / 5 (4) opposing sides; 5 = 4 or 1:
 VanillaArmyCounterMapScope=0
-# Native FocusFireLevel on maps of at least 192x192 (1), or also below 1000 tiles per player (2):
+# Native FocusFireLevel on maps of at least 192x192 (1), or also below 1000 tiles per player (2);
+# by the original roster instead: native against at least 3 (3) / 5 (4) opposing sides; 5 = 3 or 1:
 FocusFireMapScope=0
 # Experimental: true-force retreat, early vehicle repair and threatened-field evacuation.
 # Vanilla/DuneCity skirmish only; campaigns and human-allied helpers stay unchanged.

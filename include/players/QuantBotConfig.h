@@ -490,10 +490,14 @@ struct QuantBotConfig {
         /// JoinAllyWaves where mountain is at least 8% (1) / 6% (2) of the tiles.
         int closingMountainScope;
         /// VanillaArmyCounters stays inert where thick spice is below 20% of the spice tiles (1),
-        /// or also where rock contiguity is below 0.45 (2).
+        /// or also where rock contiguity is below 0.45 (2); levels 3/4 instead scope by the
+        /// original roster: inert against at least 3 (3) / 5 (4) opposing sides at game start;
+        /// level 5 is level 4 or level 1.
         int vanillaArmyCounterMapScope;
         /// FocusFireLevel plays native (0) on maps of at least 192x192 tiles (1), or also below
-        /// 1,000 tiles per original occupied controller (2).
+        /// 1,000 tiles per original occupied controller (2); levels 3/4 instead scope by the
+        /// original roster: native against at least 3 (3) / 5 (4) opposing sides at game start;
+        /// level 5 is level 3 or level 1.
         int focusFireMapScope;
         /// Experimental/default OFF: true local-force withdrawal, early vehicle
         /// repair and full-knowledge field safety in Vanilla/DuneCity skirmishes.

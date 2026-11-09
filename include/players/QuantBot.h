@@ -1208,9 +1208,9 @@ private:
     /// original map, else the configured ones. Read only PressOn, FinishWhenLeading and
     /// JoinAllyWaves through it.
     const QuantBotConfig::ForceSettings& closingForce() const;
-    /// FocusFireLevel in effect: native (0) where FocusFireMapScope applies.
+    /// FocusFireLevel in effect: native (0) where FocusFireMapScope applies (map or roster).
     int effectiveFocusFireLevel() const;
-    /// VanillaArmyCounterMapScope: VanillaArmyCounters stays inert on this original map.
+    /// VanillaArmyCounterMapScope: VanillaArmyCounters stays inert on this original map or roster.
     bool armyCountersMapExcluded() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }
     /// Vanilla Custom games whose original roster has at least two hostile teams.

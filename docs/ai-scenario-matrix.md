@@ -110,12 +110,24 @@ candidate. No map name, mission or seed is read
 - `FocusFireMapScope`: FocusFireLevel plays native (0) on maps of at least
   192x192 tiles (level 1), or also below 1,000 tiles per original occupied
   controller (level 2).
+- Levels 3 and 4 of `VanillaArmyCounterMapScope` and `FocusFireMapScope` scope
+  by the original roster instead of the map: the combat change plays native when
+  the house faces at least 3 (level 3: FFA4 and larger) or 5 (level 4: FFA6)
+  opposing sides, i.e. distinct teams other than its own among the occupied
+  controller rows at game start (1v1 and 2v2 have one). Overlays
+  `focus-fire-2-sides-3/4` and `counters100-sides-3/4`; ledger
+  `outputs/ai-tuning-20261108/B3m-CombatSidesScope`.
+- Level 5 of each switch adds its map level 1 to a roster level (control-map
+  repairs, ideas 23d/22c): `FocusFireMapScope=5` is level 3 or at least 192x192
+  tiles, `VanillaArmyCounterMapScope=5` is level 4 or thick spice below 20%.
+  Overlays `focus-fire-2-sides-5` and `counters100-sides-5`.
 
 Generated sample maps are 96-160 tiles square with at least 1,536 tiles per
 controller; the SweepLane screen/fresh/confirm maps measured 5% mountain and the
-counters paired96 maps thick share 0.24-0.53 and rock contiguity 0.61-0.84. All
-three scopes are therefore inert on those decks, and only fixed and bundled maps
-exercise them. Candidate-only overlays are
+counters paired96 maps thick share 0.24-0.53 and rock contiguity 0.61-0.84. The
+map levels are therefore inert on those decks (the roster levels act there, and
+level 5 plays as level 3/4), and only fixed and bundled maps exercise them.
+Candidate-only overlays are
 `closing-mountain-1-<sweep genome>` (a SweepLane genome plus level 1),
 `vanilla-army-counters-100-map-scope-1/2` and `focus-fire-2-map-scope-1/2`.
 Preregistrations and results are in

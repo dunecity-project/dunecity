@@ -1139,6 +1139,13 @@ int QuantBot::effectiveFocusFireLevel() const {
     const auto& force = botConfig().force;
     if (!force.focusFireLevel || !force.focusFireMapScope || !currentGame) return force.focusFireLevel;
     const auto& init = currentGame->getGameInitSettings();
+    if (force.focusFireMapScope >= 3) { // Levels 3-5: the original roster (5: or map level 1).
+        const int sides = QuantBotMapScopePolicy::opposingSides(init.getHouseInfoList(), getHouse()->getTeamID());
+        const bool native = force.focusFireMapScope == 5
+            ? QuantBotMapScopePolicy::focusFireLevel5(init.getInitialTerrain(), sides)
+            : QuantBotMapScopePolicy::manySides(force.focusFireMapScope, sides);
+        return native ? 0 : force.focusFireLevel;
+    }
     // Original occupied controller rows, not surviving Houses.
     int controllers = 0;
     for (const auto& house : init.getHouseInfoList())
@@ -1149,8 +1156,14 @@ int QuantBot::effectiveFocusFireLevel() const {
 
 bool QuantBot::armyCountersMapExcluded() const {
     const int level = botConfig().force.vanillaArmyCounterMapScope;
-    return level && currentGame
-        && QuantBotMapScopePolicy::thinOrFragmented(level, currentGame->getGameInitSettings().getInitialTerrain());
+    if (!level || !currentGame) return false;
+    const auto& init = currentGame->getGameInitSettings();
+    if (level >= 3) { // Levels 3-5: the original roster (5: or map level 1).
+        const int sides = QuantBotMapScopePolicy::opposingSides(init.getHouseInfoList(), getHouse()->getTeamID());
+        return level == 5 ? QuantBotMapScopePolicy::armyCountersLevel5(init.getInitialTerrain(), sides)
+                          : QuantBotMapScopePolicy::manySides(level, sides);
+    }
+    return QuantBotMapScopePolicy::thinOrFragmented(level, init.getInitialTerrain());
 }
 
 bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies) {
