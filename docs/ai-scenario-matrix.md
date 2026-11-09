@@ -90,8 +90,9 @@ layout. Preregistrations and results are in
 
 The control-map rule's repair step (a passer that lost native wins tests a
 variant scoped by the lost maps' observable features) gets three hashed,
-default-OFF `[Force Concentration]` integers (`0` OFF, `1`/`2` levels). Each
-reads fixed thresholds from `GameInitSettings::getInitialTerrain()`: counts of
+`[Force Concentration]` integers (`0` OFF; levels below). They originally defaulted OFF;
+since protocol 119 `VanillaArmyCounterMapScope` defaults to 5. The map predicates read
+fixed thresholds from `GameInitSettings::getInitialTerrain()`: counts of
 the original explicit `[MAP]` grid of the saved scenario, the same source as the
 initial spice density (rock is `%`, mountain `@`, spice and thick spice the
 initial-spice tiles and their thick variants; rock contiguity is 3x3 all-rock
@@ -120,7 +121,14 @@ candidate. No map name, mission or seed is read
 - Level 5 of each switch adds its map level 1 to a roster level (control-map
   repairs, ideas 23d/22c): `FocusFireMapScope=5` is level 3 or at least 192x192
   tiles, `VanillaArmyCounterMapScope=5` is level 4 or thick spice below 20%.
-  Overlays `focus-fire-2-sides-5` and `counters100-sides-5`.
+  Overlays `focus-fire-2-sides-5`, `counters100-sides-5` and `counters50-sides-5`.
+  Since protocol 119 the last is the default treatment: `VanillaArmyCounters=1`,
+  blend 5000, `VanillaArmyCounterMapScope=5`. The release-line evidence on
+  `8617247d` is FFA4 576 paired games 192 -> 216 wins, controls 14/14 native wins
+  kept with Silicon Valley 2/2 identical, deck 56 / OFF 56, and CPU
+  x0.999/x0.994 (FFA6 no-leak check). `round-119-off` restores both switched
+  keys to 0; full receipts live in `B3m-CombatSidesScope` and
+  `SimpleGate/round119-counters` under `outputs/ai-tuning-20261108`.
 
 Generated sample maps are 96-160 tiles square with at least 1,536 tiles per
 controller; the SweepLane screen/fresh/confirm maps measured 5% mountain and the

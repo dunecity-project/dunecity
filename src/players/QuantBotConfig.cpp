@@ -368,7 +368,7 @@ QuantBotConfig::QuantBotConfig() {
     force.vanillaReactiveEconomyRatioBps = 12000;
     force.vanillaCoreDefence = false;
     force.vanillaCoreDefenceThreatBps = 5000;
-    force.vanillaArmyCounters = false;
+    force.vanillaArmyCounters = true;  // counters50-S5, default since protocol 119
     force.vanillaArmyCounterBlendBps = 5000;
     force.economicFleetRatios = false;
     force.fleetHarvestersPerBay = 3;
@@ -456,7 +456,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityYardRefineries = 0;
     force.cityWorkerReplacement = 0;
     force.closingMountainScope = 0;
-    force.vanillaArmyCounterMapScope = 0;
+    force.vanillaArmyCounterMapScope = 5;
     force.focusFireMapScope = 0;
     force.retreatPreserve = false;
     force.retreatPreserveLevel = 1;

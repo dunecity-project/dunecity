@@ -265,7 +265,7 @@ struct QuantBotConfig {
         /// "Vanilla FFA core defence and army counters"); neither enables boom.
         bool vanillaCoreDefence;               ///< Guards and turrets for threatened refineries/combat factories.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
-        bool vanillaArmyCounters;              ///< Unit mix blended toward counters of the strongest reachable team.
+        bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.
         /// Default-OFF, shared-reachable-spice bounded fleet-ratio experiment.
         bool economicFleetRatios;
@@ -492,7 +492,7 @@ struct QuantBotConfig {
         /// VanillaArmyCounters stays inert where thick spice is below 20% of the spice tiles (1),
         /// or also where rock contiguity is below 0.45 (2); levels 3/4 instead scope by the
         /// original roster: inert against at least 3 (3) / 5 (4) opposing sides at game start;
-        /// level 5 is level 4 or level 1.
+        /// level 5 is level 4 or level 1 (default since protocol 119).
         int vanillaArmyCounterMapScope;
         /// FocusFireLevel plays native (0) on maps of at least 192x192 tiles (1), or also below
         /// 1,000 tiles per original occupied controller (2); levels 3/4 instead scope by the

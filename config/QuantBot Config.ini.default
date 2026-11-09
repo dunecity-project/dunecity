@@ -403,7 +403,7 @@ VanillaReactiveEconomyRatioBps=12000
 # Threat and blend have only two fixed levels: 5000 (50%) or 10000 (100%). Neither enables boom.
 VanillaCoreDefence=0
 VanillaCoreDefenceThreatBps=5000
-VanillaArmyCounters=0
+VanillaArmyCounters=1
 VanillaArmyCounterBlendBps=5000
 # Vanilla/DuneCity FFA4/FFA6 vulture: 0 native, 1 rival <60%, 2 rival <90% of strike force.
 # Mutual current ground-unit combat replaces rolling history; no save-format change.
@@ -546,7 +546,7 @@ CityWorkerReplacement=0
 ClosingMountainScope=0
 # VanillaArmyCounters inert below 20% thick spice (1), or also below 0.45 rock contiguity (2);
 # by the original roster instead: inert against at least 3 (3) / 5 (4) opposing sides; 5 = 4 or 1:
-VanillaArmyCounterMapScope=0
+VanillaArmyCounterMapScope=5
 # Native FocusFireLevel on maps of at least 192x192 (1), or also below 1000 tiles per player (2);
 # by the original roster instead: native against at least 3 (3) / 5 (4) opposing sides; 5 = 3 or 1:
 FocusFireMapScope=0

@@ -86,6 +86,7 @@ checked with its unscoped level, which runs the same code in more fights.
 | 2026-11-09 | Focus fire level 2 (`focus-fire-2`) | `4bdaf108` | PASS, QuantBot x1.047, sim x1.010 |
 | 2026-11-09 | Vanilla army counters (`vanilla-army-counters-100`) | `4bdaf108` | PASS, QuantBot x1.042, sim x1.035 |
 | 2026-11-09 | Null arm, native in FFA6 (`focus-fire-2-sides-4`) | `4bdaf108` | PASS, x0.996 / x0.993; 6/6 games digest-identical to native (noise floor) |
+| 2026-11-09 | counters50-S5 (`counters50-sides-5`, round 119 default) | `8617247d` | PASS, QuantBot x0.999, sim x0.994; FFA6 no-leak check, 6/6 signatures native |
 
 ## Reference and results
 
@@ -103,3 +104,4 @@ same games.
 | 2026-11-09 | DuelOpening City raid (`DuelOpeningPlan=2`) | B2 `f9fd39b0` | PASS, candidate 56 / OFF 53 / 807 22 |
 | 2026-11-09 | CampaignLeftovers margin (`CampaignHomeFields=2`) | B2 `f9fd39b0` | PASS, candidate 53 / OFF 53 / 807 22 |
 | 2026-11-09 | City capital pacing L1 (`CityCapitalPacing=1`) | B3m `7e188318` | PASS, candidate 56 / OFF 56 / 807 22 |
+| 2026-11-09 | counters50-S5 (`VanillaArmyCounters=1`, blend 5000, `VanillaArmyCounterMapScope=5`) | release-line `8617247d` | PASS, candidate 56 / OFF 56 / 807 22; 192/192 outcomes equal |

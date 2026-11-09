@@ -2696,7 +2696,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
                                                   totalLostValue, priorArmyValue);
     // Test-only play styles (docs/ai-play-styles.md): inert in every real game.
     pass.unitMix = styledUnitMix(pass.unitMix, available);
-    // VanillaArmyCounters (default off): re-weight the buildable part of the mix toward the
+    // VanillaArmyCounters: re-weight the buildable part of the mix toward the
     // live army of the strongest reachable hostile team. The anti-air floor below still
     // protects its minimum share afterwards. Initial map spice (not current spice) keeps
     // an initially spiceless map inert, and VanillaArmyCounterMapScope thin-spice maps.

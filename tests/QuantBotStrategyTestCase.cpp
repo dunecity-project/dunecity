@@ -1329,11 +1329,11 @@ TEST_CASE("CityWorkerReplacement levels are default off, hashed and set the payb
 }
 
 // Map-scoped repairs (players/QuantBotMapScopePolicy.h; docs/ai-scenario-matrix.md, "Map-scoped
-// repairs") share the Batch3 level contract: default 0, hashed levels, level 0 the default hash.
+// repairs") share the Batch3 level contract: hashed levels, persisted overrides and default hash.
 // VanillaArmyCounterMapScope and FocusFireMapScope add the roster levels 3/4 and the combined level 5.
-TEST_CASE("Map-scoped repair levels are default off, hashed and persisted", "[ai][config][map-scope]") {
+TEST_CASE("Map-scoped repair levels preserve their configured defaults, hashes and persistence", "[ai][config][map-scope]") {
     requireBatch3CityLevels("ClosingMountainScope", &QuantBotConfig::ForceSettings::closingMountainScope);
-    requireBatch3CityLevels("VanillaArmyCounterMapScope", &QuantBotConfig::ForceSettings::vanillaArmyCounterMapScope, 0, 5);
+    requireBatch3CityLevels("VanillaArmyCounterMapScope", &QuantBotConfig::ForceSettings::vanillaArmyCounterMapScope, 5, 5);
     requireBatch3CityLevels("FocusFireMapScope", &QuantBotConfig::ForceSettings::focusFireMapScope, 0, 5);
 }
 
@@ -1494,11 +1494,11 @@ TEST_CASE("Vanilla boom levels are independently hashed loaded and saved", "[ai]
     std::filesystem::remove(path);
 }
 
-TEST_CASE("Vanilla core defence and army counters default off and persist every hashed level combination",
+TEST_CASE("Vanilla core defence defaults off and counters on, preserving every hashed level combination",
           "[ai][vanilla][strategy][config]") {
     const QuantBotConfig defaults;
     REQUIRE_FALSE(defaults.force.vanillaCoreDefence);
-    REQUIRE_FALSE(defaults.force.vanillaArmyCounters);
+    REQUIRE(defaults.force.vanillaArmyCounters);
     REQUIRE(defaults.force.vanillaCoreDefenceThreatBps == 5000);
     REQUIRE(defaults.force.vanillaArmyCounterBlendBps == 5000);
     const std::array<bool QuantBotConfig::ForceSettings::*, 2> switches{

@@ -184,12 +184,13 @@ At minute 20 normal planning resumes. The greedy switch deliberately retains **1
 throughout both phases before minute 20; these cells add no formations. All switches remain default
 off, and single-family plans and out-of-scope games retain their existing behavior.
 
-### Vanilla FFA core defence and army counters (test-only cells)
+### Vanilla FFA core defence and army counters
 
 Two independent switches, `VanillaCoreDefence` and `VanillaArmyCounters`, each with exactly two
 preregistered levels (`VanillaCoreDefenceThreatBps`, `VanillaArmyCounterBlendBps`: 5000 or 10000; any
-other value loads as 5000). All four keys are saved and hashed; both switches are default off, are never
-promoted here, and neither enables or combines with a boom family. The pure arithmetic is
+other value loads as 5000). All four keys are saved and hashed; core defence stays default off.
+Since protocol 119 army counters default on at 5000 with `VanillaArmyCounterMapScope=5`
+(see "Shared experiment batch 3" below). Neither enables a boom family. The pure arithmetic is
 `include/players/QuantBotCoreDefencePolicy.h`.
 
 **Scope (both).** `QuantBot::vanillaFfaTuningGame()`: an autonomous Custom army at Brutal, city
@@ -1479,6 +1480,23 @@ identical, 1.0.807 deck wins at least the same-source OFF build's); evidence in
 `docs/ai-scenario-matrix.md` and `docs/ai-baseline-gate.md`. Every other Batch3 and map-scoped
 switch stays default OFF. `round-118-off` is the explicit OFF control (`CityCapitalPacing=0`),
 which plays exactly as `e7be8d53`.
+
+Round 119 (protocol 119, save 9884 unchanged) enables **counters50-S5**:
+`VanillaArmyCounters=1`, `VanillaArmyCounterMapScope=5`, and the existing
+`VanillaArmyCounterBlendBps=5000`. The original roster excludes at least five opposing
+sides, and the original explicit map excludes thick-spice shares below 20%; the
+initial-spice and Brutal Vanilla FFA scope still apply. Duels, teams, FFA6, campaigns,
+DuneCity and initially spiceless games stay native. Evidence pin `8617247d` carries
+the `fa4052d2` sides-scope code on `a1d85ffa`: three FFA4 blocks total 576 paired
+games, 192 -> 216 wins (+4, +4, +16); controls keep 14/14 native wins and Silicon
+Valley 2/2 identical; the 1.0.807 deck is 56 / OFF 56 and CPU stress is
+x0.999 QuantBot / x0.994 simulation. Stress is FFA6, so this measures no-leak
+cost; the unscoped counters100 stress check above covers the counter code.
+Receipts: `outputs/ai-tuning-20261108/B3m-CombatSidesScope` and
+`SimpleGate/round119-counters`. `round-119-off` explicitly restores the protocol
+118 values of both changed keys; `round-118-off` also disables them to retain
+its historical protocol-117 control. `VanillaBoomFfaOnly` stays 0: the evidence
+overlay's 1 is inert while all four boom switches are off, and is not promoted.
 
 ## Duel openings (default 2: DuneCity light raid)
 
