@@ -456,6 +456,8 @@ QuantBotConfig::QuantBotConfig() {
     force.cityYardRefineries = 0;
     force.cityWorkerReplacement = 0;
     force.closingMountainScope = 0;
+    force.convergeChokepointScope = 0;
+    force.openingOpenMapScope = 0;
     force.vanillaArmyCounterMapScope = 5;
     force.focusFireMapScope = 0;
     force.spiceBloomHarvest = 1;
@@ -879,6 +881,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CityYardRefineries", force.cityYardRefineries);
         iniFile.setIntValue("Force Concentration", "CityWorkerReplacement", force.cityWorkerReplacement);
         iniFile.setIntValue("Force Concentration", "ClosingMountainScope", force.closingMountainScope);
+        iniFile.setIntValue("Force Concentration", "ConvergeChokepointScope", force.convergeChokepointScope);
+        iniFile.setIntValue("Force Concentration", "OpeningOpenMapScope", force.openingOpenMapScope);
         iniFile.setIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope);
         iniFile.setIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope);
         iniFile.setIntValue("Force Concentration", "SpiceBloomHarvest", force.spiceBloomHarvest);
@@ -1146,6 +1150,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityYardRefineries = std::clamp(iniFile.getIntValue("Force Concentration", "CityYardRefineries", force.cityYardRefineries), 0, 2);
     force.cityWorkerReplacement = std::clamp(iniFile.getIntValue("Force Concentration", "CityWorkerReplacement", force.cityWorkerReplacement), 0, 2);
     force.closingMountainScope = std::clamp(iniFile.getIntValue("Force Concentration", "ClosingMountainScope", force.closingMountainScope), 0, 2);
+    force.convergeChokepointScope = std::clamp(iniFile.getIntValue("Force Concentration", "ConvergeChokepointScope", force.convergeChokepointScope), 0, 1);
+    force.openingOpenMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "OpeningOpenMapScope", force.openingOpenMapScope), 0, 1);
     force.vanillaArmyCounterMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope), 0, 5);
     force.focusFireMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope), 0, 5);
     force.spiceBloomHarvest = std::clamp(iniFile.getIntValue("Force Concentration", "SpiceBloomHarvest", force.spiceBloomHarvest), 0, 2);
@@ -1763,6 +1769,8 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.cityWorkerReplacement != 0) addNamed("cityWorkerReplacement", force.cityWorkerReplacement);
     // Map-scoped repair levels: absent (OFF) keeps the native multiplayer hash.
     if (force.closingMountainScope != 0) addNamed("closingMountainScope", force.closingMountainScope);
+    if (force.convergeChokepointScope != 0) addNamed("convergeChokepointScope", force.convergeChokepointScope);
+    if (force.openingOpenMapScope != 0) addNamed("openingOpenMapScope", force.openingOpenMapScope);
     if (force.vanillaArmyCounterMapScope != 0) addNamed("vanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope);
     if (force.focusFireMapScope != 0) addNamed("focusFireMapScope", force.focusFireMapScope);
     // SpiceBloomHarvest levels: absent (OFF) keeps the native multiplayer hash.

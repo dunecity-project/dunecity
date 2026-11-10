@@ -101,7 +101,7 @@ layout. Preregistrations and results are in
 ## Map-scoped repairs
 
 The control-map rule's repair step (a passer that lost native wins tests a
-variant scoped by the lost maps' observable features) gets three hashed,
+variant scoped by the lost maps' observable features) gets five hashed,
 `[Force Concentration]` integers (`0` OFF; levels below). They originally defaulted OFF;
 since protocol 119 `VanillaArmyCounterMapScope` defaults to 5. The map predicates read
 fixed thresholds from `GameInitSettings::getInitialTerrain()`: counts of
@@ -117,6 +117,22 @@ but are not a special promotion-control veto. No map name, mission or seed is re
 - `ClosingMountainScope`: PressOn, FinishWhenLeading and JoinAllyWaves play
   their compiled native values when mountain is at least 8% (level 1) or 6%
   (level 2) of the tiles. It acts only on candidates that change those genes.
+- `ConvergeChokepointScope` (idea 38, default OFF; level 1): Converge plays
+  native (true) with exactly two original occupied controller rows, at most
+  64x64 initial tiles, and at least 8% mountain (`smallMountainDuel`).
+  On round 121, w151-17cac63b retained 11/14 native control wins; restoring
+  converge recovered its small mountainous duel loss, but a global revert
+  drew two mountainous 128x128 six-player wins. This scope isolates the repair.
+- `OpeningOpenMapScope` (idea 31, default OFF; level 1): OpeningReadiness plays
+  native (true) with at least four original occupied controller rows, mountain
+  strictly below 1.1%, and `thinOrFragmented(2, terrain)` (`openFlatCrowd`).
+  Restoring opening_readiness recovered both seeds of w151's open thin
+  128x128 four-player FFA loss (rock contiguity 0.36). Both scopes require
+  measured, initially spice-bearing terrain; neither reads names or seeds.
+  Ablation receipts are in
+  `outputs/ai-tuning-20261108/SweepLane/nominations-807/release-c1d9d0cc-ablation-driver1119`;
+  the scoped pin's preregistration and receipts are in the adjacent
+  `release-c1d9d0cc-repairs-driver1219`.
 - `VanillaArmyCounterMapScope`: VanillaArmyCounters stays inert when thick
   spice is below 20% of the spice tiles (level 1), or also when rock contiguity
   is below 0.45 (level 2).

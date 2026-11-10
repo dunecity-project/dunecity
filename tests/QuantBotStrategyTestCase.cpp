@@ -1334,6 +1334,8 @@ TEST_CASE("CityWorkerReplacement levels are default off, hashed and set the payb
 // VanillaArmyCounterMapScope and FocusFireMapScope add the roster levels 3/4 and the combined level 5.
 TEST_CASE("Map-scoped repair levels preserve their configured defaults, hashes and persistence", "[ai][config][map-scope]") {
     requireBatch3CityLevels("ClosingMountainScope", &QuantBotConfig::ForceSettings::closingMountainScope);
+    requireBatch3CityLevels("ConvergeChokepointScope", &QuantBotConfig::ForceSettings::convergeChokepointScope, 0, 1);
+    requireBatch3CityLevels("OpeningOpenMapScope", &QuantBotConfig::ForceSettings::openingOpenMapScope, 0, 1);
     requireBatch3CityLevels("VanillaArmyCounterMapScope", &QuantBotConfig::ForceSettings::vanillaArmyCounterMapScope, 5, 5);
     requireBatch3CityLevels("FocusFireMapScope", &QuantBotConfig::ForceSettings::focusFireMapScope, 0, 5);
 }
@@ -1427,6 +1429,43 @@ TEST_CASE("ClosingMountainScope applies from 8% (level 1) or 6% (level 2) mounta
     auto unknown = rich;
     unknown.known = false;
     REQUIRE_FALSE(mountainRich(2, unknown));
+}
+
+TEST_CASE("ConvergeChokepointScope and OpeningOpenMapScope thresholds", "[ai][force][map-scope]") {
+    using QuantBotMapScopePolicy::smallMountainDuel;
+    using QuantBotMapScopePolicy::openFlatCrowd;
+    const QuantBotConfig native;
+    REQUIRE(native.force.converge);
+    REQUIRE(native.force.openingReadiness);
+    const auto duel = measuredTerrain(64 * 64, 500, 100, 328, 1000, 500);
+    REQUIRE(smallMountainDuel(duel, 2));
+    REQUIRE_FALSE(smallMountainDuel(duel, 1));
+    REQUIRE_FALSE(smallMountainDuel(duel, 3));
+    REQUIRE_FALSE(smallMountainDuel(duel, 4));
+    REQUIRE_FALSE(smallMountainDuel(measuredTerrain(64 * 65, 500, 100, 400, 1000, 500), 2));
+    REQUIRE_FALSE(smallMountainDuel(measuredTerrain(64 * 64, 500, 100, 327, 1000, 500), 2));
+    REQUIRE(smallMountainDuel(measuredTerrain(4000, 500, 100, 320, 1000, 500), 2)); // exactly 8%
+    REQUIRE_FALSE(smallMountainDuel(measuredTerrain(4000, 500, 100, 319, 1000, 500), 2));
+    const auto open = measuredTerrain(10000, 1000, 199, 109, 3000, 1500);
+    REQUIRE(openFlatCrowd(open, 4));
+    REQUIRE(openFlatCrowd(open, 6));
+    REQUIRE_FALSE(openFlatCrowd(open, 2));
+    REQUIRE_FALSE(openFlatCrowd(open, 3));
+    REQUIRE_FALSE(openFlatCrowd(measuredTerrain(10000, 1000, 199, 110, 3000, 1500), 4)); // exactly 1.1%
+    REQUIRE_FALSE(openFlatCrowd(measuredTerrain(10000, 1000, 199, 111, 3000, 1500), 4));
+    REQUIRE_FALSE(openFlatCrowd(measuredTerrain(10000, 1000, 200, 109, 1000, 450), 4));
+    REQUIRE(openFlatCrowd(measuredTerrain(10000, 1000, 200, 109, 1000, 449), 4)); // fragmented, not thin
+    for (auto terrain : {duel, open}) {
+        terrain.known = false;
+        REQUIRE_FALSE(smallMountainDuel(terrain, 2));
+        REQUIRE_FALSE(openFlatCrowd(terrain, 4));
+        terrain.known = true;
+        terrain.spice = 0;
+        REQUIRE_FALSE(smallMountainDuel(terrain, 2));
+        REQUIRE_FALSE(openFlatCrowd(terrain, 4));
+    }
+    REQUIRE_FALSE(smallMountainDuel(measuredTerrain(0, 500, 100, 0, 0, 0), 2));
+    REQUIRE_FALSE(openFlatCrowd(measuredTerrain(0, 500, 100, 0, 0, 0), 4));
 }
 
 TEST_CASE("VanillaArmyCounterMapScope applies below 20% thick spice or 0.45 rock contiguity",

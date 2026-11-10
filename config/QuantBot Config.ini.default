@@ -544,6 +544,12 @@ CityWorkerReplacement=0
 # and initially spiceless maps are never scoped. Native PressOn, FinishWhenLeading and
 # JoinAllyWaves where mountain is at least 8%/6% of the tiles:
 ClosingMountainScope=0
+# Native Converge on measured, spice-bearing maps with exactly 2 original occupied controllers,
+# at most 64x64 tiles and at least 8% mountain (OFF; 1 = scope):
+ConvergeChokepointScope=0
+# Native OpeningReadiness with at least 4 original occupied controllers, below 1.1% mountain,
+# and below 20% thick spice or 0.45 rock contiguity; measured, spice-bearing only (OFF; 1 = scope):
+OpeningOpenMapScope=0
 # VanillaArmyCounters inert below 20% thick spice (1), or also below 0.45 rock contiguity (2);
 # by the original roster instead: inert against at least 3 (3) / 5 (4) opposing sides; 5 = 4 or 1:
 VanillaArmyCounterMapScope=5

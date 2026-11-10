@@ -1231,6 +1231,10 @@ private:
     /// original map, else the configured ones. Read only PressOn, FinishWhenLeading and
     /// JoinAllyWaves through it.
     const QuantBotConfig::ForceSettings& closingForce() const;
+    /// ConvergeChokepointScope restores native Converge on a small mountainous original duel map.
+    bool convergeChokepointNative() const;
+    /// OpeningOpenMapScope restores native OpeningReadiness on an open flat original crowded map.
+    bool openingOpenMapNative() const;
     /// FocusFireLevel in effect: native (0) where FocusFireMapScope applies (map or roster).
     int effectiveFocusFireLevel() const;
     /// VanillaArmyCounterMapScope: VanillaArmyCounters stays inert on this original map or roster.
