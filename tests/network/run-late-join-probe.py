@@ -9,11 +9,16 @@ two independent processes complete admission, network settings and the start bar
 then execute both humans' orders for 3,600 cycles with 13 matching state checkpoints.
 Vanilla campaign uses the authored shared-house CampaignCoop path; skirmish really
 generates a mirrored 64x64 multiplayer map (seed 20261015); custom uses Habbanya-Autumn.
-This checks native loopback gameplay, not public-1.0.864/browser interoperability.
+The new peer cases bind real libdatachannel UDP sockets to 127.0.0.1 in a private
+backend object; default ICE excludes loopback and otherwise depends on the host NIC.
+Selected numeric loopback routes must be observed at channel-open on both peers.
+This checks native loopback gameplay, not production NIC selection, public routing
+or public-1.0.864/browser interoperability. Production source/objects stay unchanged.
 --tornie-case custom|campaign retains the original separate-faction Tornie cases.
 """
 import argparse
 from contextlib import ExitStack
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -147,6 +152,55 @@ link = link[link.index('&&')+1:]
 link = link[:link.index('&&')]
 link[link.index('-o')+1] = str(binary)
 link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
+rtc_cc = None
+if args.peer_cases:
+    # The service being on loopback does not put ICE there: libjuice's default
+    # interface scan excludes IFF_LOOPBACK. This same-host acceptance must not
+    # depend on LAN/VPN interfaces, external STUN, or local-network permissions.
+    # Recompile only a private production-backend copy with its standard bind
+    # setting; never rewrite candidate payloads or replace the real RTC transport.
+    rtc_base = root / 'src/Network/DirectPeerConnectionLibdatachannel.cpp'
+    rtc_original = rtc_base.read_bytes()
+    rtc_source = rtc_original.decode('utf-8')
+    marker = '        rtc::Configuration configuration;'
+    if rtc_source.count(marker) != 1:
+        raise RuntimeError('Native RTC configuration injection point changed')
+    rtc_source = rtc_source.replace(marker, marker + '\n'
+        '        configuration.bindAddress = "127.0.0.1";\n'
+        '        std::fprintf(stderr, "NATIVE_PEER_ICE_BIND: address=127.0.0.1 port=ephemeral\\n");')
+    marker = '            selectedRemote_ = remote.type();'
+    if rtc_source.count(marker) != 1:
+        raise RuntimeError('Selected ICE route observation point changed')
+    rtc_source = rtc_source.replace(marker, marker + '''
+            local.resolve(rtc::Candidate::ResolveMode::Simple);
+            remote.resolve(rtc::Candidate::ResolveMode::Simple);
+            std::fprintf(stderr,
+                "NATIVE_PEER_ICE_ROUTE: phase=%s local=%s:%u remote=%s:%u local_type=%s remote_type=%s\\n",
+                phase, local.address().value_or("none").c_str(), unsigned(local.port().value_or(0)),
+                remote.address().value_or("none").c_str(), unsigned(remote.port().value_or(0)),
+                candidateTypeName(local.type()), candidateTypeName(remote.type()));''')
+    rtc_path, rtc_obj = out / 'late-join-probe-rtc.cpp', out / 'late-join-probe-rtc.o'
+    rtc_path.write_text(rtc_source)
+    rtc_cc = shlex.split(next(line for line in lines if ' -c ' in line and '/src/Network/DirectPeerConnectionLibdatachannel.cpp' in line))
+    for option in ('-include', '-MT', '-MF'):
+        if option in rtc_cc:
+            i = rtc_cc.index(option); del rtc_cc[i:i+2]
+    rtc_cc = [arg for arg in rtc_cc if arg not in ('-MD', '-MMD')]
+    rtc_cc[rtc_cc.index('-o')+1] = str(rtc_obj)
+    rtc_cc[rtc_cc.index('-c')+1] = str(rtc_path)
+    if sum(arg.endswith('/DirectPeerConnectionLibdatachannel.cpp.o') for arg in link) != 1:
+        raise RuntimeError('Production RTC link object changed')
+    rtc_original_obj = next(arg for arg in link if arg.endswith('/DirectPeerConnectionLibdatachannel.cpp.o'))
+    link = [str(rtc_obj) if arg == rtc_original_obj else arg for arg in link]
+    (out / 'native-rtc-injection.json').write_text(json.dumps({
+        'base_source': str(rtc_base),
+        'base_source_sha256': hashlib.sha256(rtc_original).hexdigest(),
+        'private_source': str(rtc_path),
+        'private_source_sha256': hashlib.sha256(rtc_source.encode('utf-8')).hexdigest(),
+        'removed_link_object': rtc_original_obj, 'replacement_link_object': str(rtc_obj),
+        'configuration_overrides': {'bindAddress': '127.0.0.1'},
+        'compile_command': rtc_cc,
+    }, indent=2) + '\n')
 game_cc = None
 if args.suspended_paths:
     # Private probe object only: create a suspension immediately before the
@@ -192,6 +246,8 @@ with (out / 'build.log').open('w') as log:
     subprocess.run(cc, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
     if game_cc:
         subprocess.run(game_cc, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+    if rtc_cc:
+        subprocess.run(rtc_cc, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
     subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 
 sys.path.insert(0,str(root/'tools/p2p-signaling/test'))
@@ -221,6 +277,8 @@ def run_probe(out, peer_case=None):
                     'transport': 'DirectP2P', 'backend': 'libdatachannel/P2PKit',
                     'signaling': 'http://127.0.0.1:' + str(service.port),
                     'ice_servers': [], 'turn': False, 'gameplay_relay': False,
+                    'ice_bind_address': '127.0.0.1' if args.peer_cases else 'default',
+                    'private_backend_bind_override': bool(args.peer_cases),
                 }, indent=2) + '\n')
             if args.endpoint:
                 from urllib.parse import urlsplit
@@ -345,12 +403,26 @@ def run_probe(out, peer_case=None):
             for p in processes:
                 if p.wait(timeout=15)!=0: raise RuntimeError('Probe process failed: ' + str(out))
             if peer_probe:
+                selected_routes = {}
                 for role in originals:
                     text = (out / (role + '.log')).read_text(errors='replace')
                     for marker in ('NATIVE_PEER_ADMITTED', 'NATIVE_PEER_STARTED', 'NATIVE_PEER_PROBE_PASS'):
                         expected = f'{marker}: mode={peer_case} mod={peer_mod} role={role}'
                         if text.count(expected) != 1:
                             raise RuntimeError('Missing actual mode/admission/start/gameplay marker: ' + expected)
+                    if args.peer_cases:
+                        routes = [line for line in text.splitlines()
+                                  if line.startswith('NATIVE_PEER_ICE_ROUTE: phase=channel_open ')]
+                        if len(routes) != 1:
+                            raise RuntimeError('Missing unique real channel-open route: ' + role)
+                        route = dict(field.split('=', 1) for field in routes[0].split()[1:])
+                        for endpoint in ('local', 'remote'):
+                            address, _, port = route.get(endpoint, '').rpartition(':')
+                            if address != '127.0.0.1' or not port.isdecimal() or not 0 < int(port) <= 65535:
+                                raise RuntimeError('Native acceptance used a non-loopback/invalid UDP endpoint: ' + str(route))
+                        if route.get('local_type') != 'host' or route.get('remote_type') != 'host':
+                            raise RuntimeError('Native acceptance did not use real loopback host candidates: ' + str(route))
+                        selected_routes[role] = route
                     observed = dict(line.split('=', 1) for line in (out / (role + '-details')).read_text().splitlines() if '=' in line)
                     expected = {'case': peer_case, 'mod': peer_mod, 'role': role, 'guest_joined': 'Partner',
                                 'remote': 'Partner' if role == 'Host' else 'Host', 'start_barrier': 'committed',
@@ -358,6 +430,11 @@ def run_probe(out, peer_case=None):
                                 'ownership': 'shared-house' if peer_case == 'campaign' and peer_mod == 'vanilla' else 'separate-houses'}
                     if any(observed.get(key) != value for key, value in expected.items()):
                         raise RuntimeError('Actual native mode/guest evidence does not match: ' + str(observed))
+                if args.peer_cases:
+                    if (selected_routes['Host']['local'] != selected_routes['Partner']['remote']
+                            or selected_routes['Partner']['local'] != selected_routes['Host']['remote']):
+                        raise RuntimeError('The peers did not report opposite ends of the same real UDP route')
+                    summary['selected_routes'] = selected_routes
                 (out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
                 print(f'NATIVE_JOIN_MODE_PASS: mode={peer_case} mod={peer_mod} guest=Partner '
                       f'cycles=3600 moves=12/12 checkpoints=13; evidence={out}', flush=True)

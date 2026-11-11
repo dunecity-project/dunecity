@@ -276,3 +276,21 @@ deadline expiry must neither resend it nor consume an unrelated pending phase up
 These are deterministic lifecycle regressions for the stale-offer defect, separate from the
 published-client browser evidence above. They do not establish that this ordering caused the
 observed third-party WAN failure, or promise progress while a browser suspends its game loop.
+
+### Native loopback acceptance
+
+`native_multiplayer_join_modes` runs two headless native processes through real PHP
+admission, WebRTC, the committed start barrier and gameplay for Vanilla campaign,
+generated skirmish and custom maps. Each case requires both controllers' movement
+orders and 13 matching state checkpoints through 3,600 cycles.
+
+The fixture privately recompiles the production RTC backend with the SDK's
+`bindAddress=127.0.0.1` configuration; shipping source and objects are unchanged.
+Both selected UDP endpoints must actually be loopback and match the opposite
+peer's reported endpoints. `native-rtc-injection.json` records source hashes,
+the configuration override and replaced link object.
+
+This is deterministic loopback coverage, not a stock desktop UI, default-interface,
+LAN, WAN or browser/native interoperability result. The earlier default-interface,
+host-only ICE failure remains unresolved; this fixture must not be reported as its
+fix. Missing PHP is an explicit skip, not a successful connection check.
