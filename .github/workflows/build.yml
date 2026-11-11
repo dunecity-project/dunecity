@@ -144,7 +144,8 @@ jobs:
           # No unbounded -j: sanitizer translation units can exhaust a hosted
           # runner before it reports a compiler error. Keep all test targets.
           cmake --build build --parallel 2 --target dunelegacy_tests network_wire_harness \
-            relay_wire_harness relay_session_tests relay_http_transport_tests desktop_updater_tests
+            relay_wire_harness relay_session_tests relay_http_transport_tests desktop_updater_tests \
+            renderer_initialization_tests
 
       - name: Check native and browser framing still agree
         run: node tools/p2p-interop/framing-vectors.mjs
@@ -740,16 +741,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             autoconf autoconf-archive automake libtool libltdl-dev \
-            build-essential pkg-config bison flex \
+            build-essential pkg-config bison flex python3-jinja2 \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libx11-dev libxft-dev libxext-dev libwayland-dev libxkbcommon-dev libibus-1.0-dev \
             libsystemd-dev libpulse-dev libpipewire-0.3-dev xvfb xauth
 
       - name: Cache vcpkg binary packages
         uses: actions/cache@v6
         with:
           path: ~/.cache/vcpkg/archives
-          key: vcpkg-linux-x64-${{ hashFiles('vcpkg.json') }}
+          # SDL auto-detects GL/GLX headers. Do not restore older SDL archives
+          # built without the graphics development packages above.
+          key: vcpkg-linux-x64-graphics-v2-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-linux-x64-
+            vcpkg-linux-x64-graphics-v2-
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -790,6 +795,11 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/tests -p 'test_audio_runtime.py'
           python3 scripts/check-audio-runtime.py --binary build/bin/dunecity --require-driver alsa --require-driver pulseaudio --require-driver pipewire
+
+      - name: Verify Linux graphics backends and software recovery
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_video_runtime.py'
+          xvfb-run -a python3 scripts/check-video-runtime.py --binary build/bin/dunecity --require-driver opengl --require-accelerated
 
       - name: Create Linux Packages
         run: |
@@ -843,6 +853,8 @@ jobs:
 
           python3 scripts/check-audio-runtime.py --binary "$TGZ_BIN" --require-driver alsa --require-driver pulseaudio --require-driver pipewire
           APPIMAGE_EXTRACT_AND_RUN=1 python3 scripts/check-audio-runtime.py --binary "$APPIMAGE" --require-driver alsa --require-driver pulseaudio --require-driver pipewire
+          xvfb-run -a python3 scripts/check-video-runtime.py --binary "$TGZ_BIN" --require-driver opengl --require-accelerated
+          APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a python3 scripts/check-video-runtime.py --binary "$APPIMAGE" --require-driver opengl --require-accelerated
 
           echo "TGZ executable: ${TGZ_BIN:-missing}"
           echo "TGZ DUNE.PAK: ${TGZ_DATA:-missing}"
@@ -873,7 +885,7 @@ jobs:
             set +e
             (
               cd "$launch_dir"
-              HOME="$SMOKE_ROOT/home" SDL_AUDIODRIVER=dummy SDL_RENDER_DRIVER=software \
+              env -u SDL_RENDER_DRIVER HOME="$SMOKE_ROOT/home" SDL_AUDIODRIVER=dummy \
                 timeout 12s xvfb-run -a "$executable" "$@" --showlog
             ) >"$SMOKE_ROOT/${label}.log" 2>&1
             local status=$?

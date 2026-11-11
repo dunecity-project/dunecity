@@ -1,3 +1,61 @@
+## 2026-11-07 - Combined 1.0.865 candidate: Linux startup and civic transparency
+
+Unpublished integration branch `release/1.0.865-civic-linux-20261107` preserves
+both sibling commits: Linux candidate `677e075d` and transparency `c932a5f1`.
+Neither is assumed to include the other. All three desktop version files agree
+on 1.0.865 via the official check. Android candidate metadata is 0.2.34 /
+1000554; public Android remains 0.2.33 until its separate acceptance gate.
+
+PRED Windows validation of the actual combined tree: 120,944 assertions in ten
+native C++ cases passed via CTest, including real SDL dummy-driver recovery
+and target-texture rendering. Nine video-runtime checker unit tests and seven
+Android payload tests pass. Freshly compiled terrain-policy SDL rendering
+passes 120 cases (40 shipped frames, eight houses, three zooms). These are not
+physical Linux Mint/NVIDIA, Mac performance, Android phone or iOS tests.
+Fresh combined-branch CI is required; the green #121 run tested only c932a5f1.
+
+Android signing update supersedes the earlier missing-key report: PRED's
+existing standard debug keystore public certificate exactly matches upgrade
+SHA-256 a29825bfecef94665244e1963e3c7dc64eadb387ae52820a793d26e193c21b60.
+No key was exported, replaced or uploaded. Phone install/test and Stefan's
+explicit publication gate remain required. The Mac mini builder is offline,
+claw.local does not resolve from PRED, and the online Pro lacks the builder
+label. Do not reroute signing/labels. iOS remains Stefan's own build/signing
+handoff. No stable tag, website deployment or platform publication is claimed.
+
+## 2026-11-07 - Civic transparency: retain terrain under Police/Nuclear/Stadium/Airport
+
+Source-only fix based on freshly fetched upstream `897249cf`, preserving older
+checkout edits. `Tile::blitGround` culled terrain beneath standalone civic
+structures when the global Dune2R fade was zero, although the independently
+selected DuneCity house skins contain alpha. Transparent corners therefore
+revealed the black render clear. PNG alpha and final texture blending were
+correct; changing atlas copy blending would not fix the missing underlay.
+
+`StructureTerrainPolicy.h` retains the existing transparent Tornie exemptions
+and adds Police Station, Nuclear Plant, Stadium and Airport. Hospital/church
+remain zone overlays, already covered by the zone exception. Opaque vanilla
+buildings keep their culling fast path. No sprites, footprints, simulation,
+protocol, saves or version metadata changed.
+
+Windows/MSVC focused CTest: 120,911 assertions in six CitySpritePolicy cases
+passed. A separate native SDL software-render probe called the compiled
+upstream and fixed policies on 40 shipped civic frames, all eight houses and
+three zooms (120 cases): baseline black reproduced; fixed transparent and
+partial-alpha pixels reveal the backing color, opaque detail stays exact.
+Audited 56 shipped building frames across all six sprite types; authored alpha
+was retained. This is not a full game/platform acceptance run. OMP's read-only
+review agreed with the terrain-culling cause; its default Codex model was
+unavailable and OMP selected its configured fallback. No auth changes.
+
+Not released here. Integrator must follow the every-channel checklist and
+choose/bump the release version. On this date GitHub reports latest v1.0.864;
+designated `dunecity-mac-mini` builder is offline (online Pro lacks its builder
+label). Android's current runbook records the missing upgrade keystore and
+requires Stefan's phone test and explicit publication gate. Do not replace the
+key or repurpose runner labels. Stefan must build/sign iOS from the accepted
+source using his own tools. No releases or website deployment claimed.
+
 ## 2026-11-07 — Private feature-only MBA development install (headless-first validation)
 
 - Source `940c301a84b55d0a4b92c13ff93626e3208bd159` preserves current gameplay,

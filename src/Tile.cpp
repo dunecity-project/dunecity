@@ -26,6 +26,7 @@
 #include <Game.h>
 #include <dunecity/CitySimulation.h>
 #include <dunecity/CitySpritePolicy.h>
+#include <dunecity/StructureTerrainPolicy.h>
 #include <Map.h>
 #include <House.h>
 #include <players/AIDecisionLog.h>
@@ -143,26 +144,6 @@ unsigned int getTerrainObjPic(int terrainType) noexcept {
             return ObjPic_Terrain_WhiteSpice;
         default:
             return ObjPic_Terrain;
-    }
-}
-
-bool shouldDrawTerrainBelowStructure(int itemID) noexcept {
-    switch(itemID) {
-        case Structure_AdvancedWindTrap:
-        case Structure_AdvancedWindTrapMK2:
-        case Structure_AdvancedWindTrapMK3:
-        case Structure_Worfinery:
-        case Structure_TechCenter:
-        case Structure_ResearchLab:
-        case Structure_Scoutpost:
-        case Structure_Flamepost:
-        case Structure_Chemipost:
-        case Structure_LoveFactory:
-        case Structure_ChaosFactory:
-            return true;
-
-        default:
-            return false;
     }
 }
 
@@ -487,12 +468,14 @@ void Tile::blitGround(int xPos, int yPos) {
     // (colored zone tint + dotted border) underneath. Without this
     // exception, fresh-zoned tiles render as solid black. Dune2R's transparent
     // sprites and crossfade also need the terrain beneath their footprints.
+    // Standalone DuneCity civic skins need it even with that crossfade off:
+    // their per-house graphics choice is independent of the Dune2R fade.
     if (hasANonInfantryGroundObject()) {
         const ObjectBase* groundObject = getNonInfantryGroundObject();
         if (groundObject != nullptr && groundObject->isAStructure()
             && !hasCityZone()
             && pGFXManager->getDune2RVisualBlend() == 0
-            && !shouldDrawTerrainBelowStructure(groundObject->getItemID())) {
+            && !DuneCity::shouldDrawTerrainBelowStructure(groundObject->getItemID())) {
             return;
         }
     }

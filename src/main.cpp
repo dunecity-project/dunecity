@@ -53,6 +53,7 @@
 #include <misc/exceptions.h>
 #include <misc/format.h>
 #include <misc/SDL2pp.h>
+#include <misc/RendererInitialization.h>
 #include <misc/md5.h>
 #include <misc/WebRuntime.h>
 #include <misc/MacTrackpad.h>
@@ -262,15 +263,7 @@ void setVideoMode(int displayIndex)
 #endif
 #endif
 
-    // Prefer Direct3D on Windows, let SDL choose best renderer on other platforms
-#ifdef _WIN32
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "direct3d11");
-#else
-    // On non-Windows platforms, let SDL choose the best renderer
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
-#endif
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");  // Use nearest-neighbor scaling for pixel-perfect look
-    SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");       // Enable render batching for performance
+    configureStartupRenderHints();
 
     int windowWidth = settings.video.physicalWidth;
     int windowHeight = settings.video.physicalHeight;
@@ -288,13 +281,15 @@ void setVideoMode(int displayIndex)
         exit(EXIT_FAILURE);
     }
     // Create renderer (VSync set separately for macOS compatibility)
-    Uint32 rendererFlags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE;
-    
-    renderer = SDL_CreateRenderer(window, -1, rendererFlags);
+    renderer = createStartupRenderer(window);
     if (!renderer) {
         fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
         exit(EXIT_FAILURE);
     }
+
+    SDL_RendererInfo rendererInfo{};
+    if(SDL_GetRendererInfo(renderer, &rendererInfo) == 0)
+        SDL_Log("Render driver: %s (flags=0x%x)", rendererInfo.name, rendererInfo.flags);
 
     {
         int windowWidth = 0;
@@ -925,6 +920,52 @@ int main(int argc, char *argv[]) {
             }
             Mix_CloseAudio();
             SDL_Quit();
+            return ready ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+        if(std::strcmp(argv[index], "--check-video-runtime") == 0) {
+            for(int driver = 0; driver < SDL_GetNumVideoDrivers(); ++driver)
+                std::printf("Video backend available: %s\n", SDL_GetVideoDriver(driver));
+            for(int driver = 0; driver < SDL_GetNumRenderDrivers(); ++driver) {
+                SDL_RendererInfo info{};
+                if(SDL_GetRenderDriverInfo(driver, &info) == 0)
+                    std::printf("Render backend available: %s\n", info.name);
+            }
+            if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+                std::fprintf(stderr, "SDL initialization failed: %s\n", SDL_GetError());
+                return EXIT_FAILURE;
+            }
+            std::printf("Video driver: %s\n", SDL_GetCurrentVideoDriver());
+            configureStartupRenderHints();
+            SDL_Window* probeWindow = SDL_CreateWindow("Dune City video check", 0, 0, 64, 64,
+                                                       SDL_WINDOW_HIDDEN);
+            SDL_Renderer* probeRenderer = probeWindow ? createStartupRenderer(probeWindow) : nullptr;
+            SDL_RendererInfo info{};
+            if(probeRenderer && SDL_GetRendererInfo(probeRenderer, &info) == 0) {
+                std::printf("Render driver: %s\n", info.name);
+                std::printf("Render accelerated: %s\n",
+                            (info.flags & SDL_RENDERER_ACCELERATED) ? "yes" : "no");
+            }
+            SDL_Texture* target = probeRenderer ? SDL_CreateTexture(probeRenderer, SCREEN_FORMAT,
+                SDL_TEXTUREACCESS_TARGET, 64, 64) : nullptr;
+            Uint8 pixel[4]{};
+            const SDL_Rect sample{0, 0, 1, 1};
+            bool ready = target && SDL_SetRenderTarget(probeRenderer, target) == 0
+                && SDL_SetRenderDrawColor(probeRenderer, 37, 83, 149, 255) == 0
+                && SDL_RenderClear(probeRenderer) == 0
+                && SDL_SetRenderTarget(probeRenderer, nullptr) == 0
+                && SDL_RenderCopy(probeRenderer, target, nullptr, nullptr) == 0
+                && SDL_RenderReadPixels(probeRenderer, &sample, SDL_PIXELFORMAT_RGBA32, pixel, 4) == 0;
+            if(ready && (pixel[0] != 37 || pixel[1] != 83 || pixel[2] != 149 || pixel[3] != 255)) {
+                SDL_SetError("Target texture round trip returned an unexpected pixel");
+                ready = false;
+            }
+            if(ready) SDL_RenderPresent(probeRenderer);
+            else std::fprintf(stderr, "Video runtime rendering failed: %s\n", SDL_GetError());
+            if(target) SDL_DestroyTexture(target);
+            if(probeRenderer) SDL_DestroyRenderer(probeRenderer);
+            if(probeWindow) SDL_DestroyWindow(probeWindow);
+            SDL_Quit();
+            if(ready) std::puts("Video runtime target rendering passed");
             return ready ? EXIT_SUCCESS : EXIT_FAILURE;
         }
         if(std::strcmp(argv[index], "--check-desktop-runtime") == 0) {

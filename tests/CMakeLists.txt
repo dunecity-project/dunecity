@@ -3,6 +3,14 @@ cmake_minimum_required(VERSION 3.10)
 # Find Catch2 package
 find_package(Catch2 3 REQUIRED)
 
+# Isolate video initialization and hint state from the larger simulation suite.
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+    add_executable(renderer_initialization_tests RendererInitializationTestCase.cpp)
+    target_include_directories(renderer_initialization_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(renderer_initialization_tests PRIVATE Catch2::Catch2WithMain SDL2::SDL2)
+    add_test(NAME renderer_initialization COMMAND renderer_initialization_tests)
+endif()
+
 # Test executable
 add_executable(dunelegacy_tests)
 

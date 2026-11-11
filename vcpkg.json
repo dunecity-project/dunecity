@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "dunecity",
-  "version": "1.0.864",
+  "version": "1.0.865",
   "description": "Dune City - A modern OpenSource Dune 2 engine with city simulation",
   "homepage": "https://dunelegacy.sourceforge.net",
   "dependencies": [
@@ -11,6 +11,7 @@
       "default-features": false,
       "features": [
         "alsa",
+        "dbus",
         "x11",
         "wayland",
         "ibus"

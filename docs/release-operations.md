@@ -313,6 +313,11 @@ Android has its own version line (`android-version.json`, `net.dunecity.dune2r`,
    installed copies could then no longer upgrade.
    **As of 1.0.864 nobody can find this keystore** on the mini, Air, Pro, Windows PC or in
    1Password. Once Stefan finds it, store it in 1Password `Agent-Operator`.
+   **2026-11-07 update:** PRED's existing
+   `%USERPROFILE%\.android\debug.keystore` was inspected read-only and its
+   public certificate exactly matches the required upgrade SHA-256 above.
+   The key was not exported, replaced or uploaded. Use that existing key
+   locally; the phone-test and explicit publication gate below still apply.
 3. Install with `adb install -r` on Stefan's phone, keeping app data. He tests it, and the APK
    is published only after he says "publish".
 4. `gh release create android-vX.Y.Z DuneLegacy.apk SHA256SUMS.txt --target SOURCE_SHA --latest=false`,
