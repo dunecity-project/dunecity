@@ -746,6 +746,41 @@ class AdmissionTests(SignalingTestCase):
         other = self.service.request("POST", "/v1/admission/list", claims(contentHash="b" * 64))
         self.assertNotIn(public.fields["room"], other.body)
 
+    def test_directory_never_offers_an_incompatible_executable_version(self):
+        public, host = self.seat("Loud", visibility="public")
+        for options in ({}, {"allMods": 1}, {"allMods": 1, "details": 1}):
+            listing = self.service.request("POST", "/v1/admission/list",
+                                           claims(appVersion="9.9.9", **options))
+            self.assertEqual(200, listing.status, listing.body)
+            self.assertNotIn(public.fields["room"], listing.body)
+            matching = self.service.request("POST", "/v1/admission/list", claims(**options))
+            self.assertIn(public.fields["room"], matching.body)
+        refused = self.join(public.fields["room"], appVersion="9.9.9", publicOnly="1")
+        self.assertEqual("version_mismatch", refused.fields["code"])
+        self.assertEqual(["Loud"], [peer["name"] for peer in self.room_state(host.fields["session"])["peers"].values()])
+
+    def test_directory_version_comes_from_room_not_an_old_index_cache(self):
+        public, host = self.seat("Loud", visibility="public")
+        index_path = Path(self.service.state) / "index.json"
+        for cached_version in (None, "9.9.9"):
+            index = json.loads(index_path.read_text())
+            cached = index["rooms"][host.fields["session"][:8]]
+            if cached_version is None:
+                cached.pop("appVersion", None)
+            else:
+                cached["appVersion"] = cached_version
+            index_path.write_text(json.dumps(index))
+            for refresh_host in (False, True):
+                if refresh_host:
+                    self.assertEqual(200, self.poll(host.fields["session"]).status)
+                matching = self.service.request("POST", "/v1/admission/list", claims(details=1))
+                self.assertEqual(200, matching.status, matching.body)
+                self.assertIn(public.fields["room"], matching.body)
+                other = self.service.request("POST", "/v1/admission/list",
+                                             claims(appVersion="9.9.9", allMods=1, details=1))
+                self.assertEqual(200, other.status, other.body)
+                self.assertNotIn(public.fields["room"], other.body)
+
     def test_directory_answer_fits_the_legacy_parser(self):
         for index in range(6):
             public = self.host(visibility="public")

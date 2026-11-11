@@ -410,7 +410,7 @@ bool CrossplayMenu::activateGameContent(const std::string& fingerprint, bool run
 
 void CrossplayMenu::joinPublicGame() {
     const int index = publicGameList.getSelectedIndex();
-    if(stage != Stage::Choosing || directoryPending || index < 0
+    if(stage != Stage::Choosing || index < 0
        || static_cast<std::size_t>(index) >= publicGames.size()) return;
     const auto& game=publicGames[index];
     if(!activateGameContent(game.contentHash, game.running)) return;

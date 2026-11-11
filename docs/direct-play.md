@@ -170,6 +170,27 @@ Losing the signaling service after the players are connected is a diagnostic, no
 polling stops and the match continues. A `gone` record for a peer whose channel is open is
 ignored - the channel is the truth, the service only knows who stopped polling it.
 
+### Joining and compatibility
+
+The public directory offers only rooms matching the client's exact executable version and
+game protocol, including **In progress / Spectate** entries. **All mods** permits discovering a
+different mod revision; it does not waive executable compatibility. Invite codes and cached
+listings are checked again by admission, with both versions shown on a mismatch. All players
+must update together; a current browser cannot play with an older desktop or mobile build.
+
+A background list refresh does not disable joining a selected cached room. The join cancels
+that refresh and lets admission decide whether the room is still open.
+
+Player names are unique within a room because they identify controllers in the game protocol.
+If another player uses the same name (including the default **Player**), change **Player name**
+in **Settings**, then rejoin. Rejection does not rename you or grant a second controller.
+
+Finding a room, receiving admission and exchanging connection details do not establish a
+working data channel. A failed direct connection is a separate transport failure, not proof of
+a version mismatch or a blocked NAT. The STUN-only policy above remains unchanged; a directory
+or name-guidance fix does not make every WAN peer pair reachable.
+
+
 ## 8. Building and testing
 
 ```bash

@@ -82,6 +82,21 @@ class LateJoinTests(SignalingTestCase):
         self.assertEqual(['match','0','1'],row[8:])
         self.assertNotIn('game',self.service.request('POST','/v1/admission/list',claims(offset=0,allMods=1)).fields)
         self.assertEqual(409,self.join(a.fields['room']).status)
+    def test_running_directory_never_offers_a_different_executable_version(self):
+        a,h=self.running()
+        page=self.service.request('POST','/v1/admission/list',claims(appVersion='9.9.9',offset=0,allMods=1,details=1))
+        self.assertEqual(200,page.status)
+        self.assertNotIn(a.fields['room'],page.body)
+        refused=self.request(a,appVersion='9.9.9')
+        self.assertEqual('version_mismatch',refused.fields['code'])
+        self.assertNotIn('request',self.manage(h).multi)
+    def test_duplicate_name_is_rejected_without_admitting_a_request(self):
+        a,h=self.running()
+        refused=self.request(a,'Host',spectate=1)
+        self.assertEqual(409,refused.status)
+        self.assertEqual('name_taken',refused.fields['code'])
+        self.assertNotIn('request',self.manage(h).multi)
+        self.assertEqual(200,self.request(a,'Another player',spectate=1).status)
     def test_host_approval_issues_name_bound_grant_and_does_not_reopen_general_admission(self):
         a,h=self.running(); r=self.request(a); self.assertEqual(200,r.status)
         ticket=r.fields['request']; self.assertEqual('pending',self.status(ticket).fields['requestState'])

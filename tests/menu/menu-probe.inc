@@ -2205,12 +2205,16 @@ int runMenuProbe() {
             "Public join accepted an obsolete partial-content fingerprint");
         menu.publicGames[1].contentHash=OnlineModPolicy::fingerprint();
         settings.network.directDevelopmentEndpoint="http://127.0.0.1:1";
+        menu.directoryPending=true;
+        menu.refreshControls();
+        menuRequire(menu.joinPublicButton.isEnabled(),"A background refresh disables cached public joining");
         menu.joinPublicGame();
         menu.processChildWindowOpenCloses();
         menuRequire(menu.pChildWindow==nullptr && menu.stage==CrossplayMenu::Stage::Requesting,
             "Running join should request admission without a mode prompt");
         menuRequire(menu.joiningRunning && menu.joiningAsSpectator,
             "Running join must enter as a passive spectator");
+        menuRequire(!menu.directoryPending,"Public admission did not cancel the background directory refresh");
         menu.admission.cancel();
         menu.stage=CrossplayMenu::Stage::Choosing;
         settings.network.directDevelopmentEndpoint="";

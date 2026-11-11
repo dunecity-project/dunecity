@@ -1,3 +1,11 @@
+# Unreleased — multiplayer joining
+
+- Public rooms, including spectator entries, are offered only to the exact matching game version. Invite and stale-list joins still explain version mismatches without weakening content checks.
+- Joining a cached public room no longer silently ignores the click during a background directory refresh.
+- Duplicate player-name refusals explain how to change **Player name** in **Settings** before retrying. Player identity remains explicit and unique.
+
+These changes require deployment of the signaling PHP service; the cached-join fix also requires rebuilt clients. They do not change the STUN-only direct transport or claim to fix every network's WebRTC reachability.
+
 # Dune City 1.0.820
 
 Watch AI matches with the new offline **Spectate** option in Custom Game. Spectators see the full map and can inspect every faction's buildings and units. All participating houses can be QuantBots; Shared house is optional. Inspection does not grant control of another faction.
