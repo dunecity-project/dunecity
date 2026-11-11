@@ -2,7 +2,7 @@
 """Exercise real menu widgets with no public connection or shared user settings.
 Test access is isolated to this diagnostic binary; production objects are unchanged."""
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import json
 import os
 from pathlib import Path
@@ -44,7 +44,12 @@ elif args.runtime_app:
     parser.error('--runtime-app requires --pointer-mapping')
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
-require_free_space()
+# Native UI diagnostics are not simulation batches. Reuse the coordinator's
+# supported check-first mode, preserving the configured floor without an
+# unnecessary full scratch sweep. Other menu/batch modes keep their default.
+disk = require_free_space(sweep='if-low' if args.pointer_mapping else True)
+if args.pointer_mapping:
+    print('POINTER_PREFLIGHT: '+json.dumps(disk, sort_keys=True), flush=True)
 subprocess.run(['python3',str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
 target = 'bin/dunecity.app/Contents/MacOS/dunecity'
 commands = subprocess.check_output(['ninja','-C',str(build),'-t','commands',target],text=True).splitlines()
@@ -192,14 +197,15 @@ def native_desktop():
         if app: activate(app, sel('activateWithOptions:'), 0)
         if error: raise RuntimeError('Mini pointer restoration failed: '+str(error))
 family_results = []
-with scratch_dir('menu-probe') as scratch:
+with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) as scratch:
     for width, height in ([(640,480)] if args.retina_resolution or args.terrain_mix else sizes):
         profile = scratch / ('profile-' + str(width) + 'x' + str(height))
-        profile.mkdir()
-        video = ('Physical Width = 5120\nPhysical Height = 2880\nWidth = 1066\nHeight = 600\nInterface Height = 600\nFullscreen = true\n'
-                 if args.pointer_mapping else
-                 'Physical Width = '+str(width)+'\nPhysical Height = '+str(height)+'\nWidth = '+str(width)+'\nHeight = '+str(height)+'\nInterface Height = '+str(height)+'\nFullscreen = false\n')
-        (profile/'Dune City.ini').write_text('[Video]\n'+video+'[General]\nPlay Intro = false\nPlayer Name = Menu tester\n')
+        if not args.pointer_sdl_only:
+            profile.mkdir()
+            video = ('Physical Width = 5120\nPhysical Height = 2880\nWidth = 1066\nHeight = 600\nInterface Height = 600\nFullscreen = true\n'
+                     if args.pointer_mapping else
+                     'Physical Width = '+str(width)+'\nPhysical Height = '+str(height)+'\nWidth = '+str(width)+'\nHeight = '+str(height)+'\nInterface Height = '+str(height)+'\nFullscreen = false\n')
+            (profile/'Dune City.ini').write_text('[Video]\n'+video+'[General]\nPlay Intro = false\nPlayer Name = Menu tester\n')
         env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='unavailable-test-driver' if args.audio_failure else 'dummy', MENU_PROBE_OUT=str(out), MENU_PROBE_WIDTH=str(width), MENU_PROBE_HEIGHT=str(height))
         if args.pointer_mapping:
             env.pop('SDL_VIDEODRIVER', None)
@@ -250,7 +256,8 @@ with scratch_dir('menu-probe') as scratch:
         if args.audio_failure:
             if 'Continuing with silent audio' not in text or 'Audio driver: dummy' not in text:
                 raise RuntimeError('Missing silent audio recovery evidence; see '+str(logpath))
-        discard_profile_assets(profile)
-        shutil.copytree(profile, out / ('profile-' + str(width)), dirs_exist_ok=True)
-        shutil.rmtree(profile)
+        if not args.pointer_sdl_only:
+            discard_profile_assets(profile)
+            shutil.copytree(profile, out / ('profile-' + str(width)), dirs_exist_ok=True)
+            shutil.rmtree(profile)
         print(results[0])

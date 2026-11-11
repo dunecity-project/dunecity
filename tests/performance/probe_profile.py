@@ -254,17 +254,18 @@ def finish_game(scratch, out, failed):
     remove_tree(out)
 
 
-def require_free_space(min_gb=None):
-    """Refuse to start a batch on a nearly full disk, after sweeping stale agent scratch.
+def require_free_space(min_gb=None, *, sweep=True):
+    """Refuse to start a batch on a nearly full disk, optionally sweeping stale scratch.
 
     The threshold is the project's min_free_gb on managed hosts (25 GB), overridable
-    with DUNECITY_MIN_FREE_GB or the argument."""
+    with DUNECITY_MIN_FREE_GB or the argument. Native UI checks can use the
+    existing 'if-low' guard mode; simulation batches retain the full sweep."""
     if min_gb is None and os.environ.get('DUNECITY_MIN_FREE_GB'):
         min_gb = float(os.environ['DUNECITY_MIN_FREE_GB'])
     module = _installed('scratch')
     if module is not None and PROJECT in module.Scratch().projects:
         try:
-            return module.Scratch().guard(PROJECT, min_gb)
+            return module.Scratch().guard(PROJECT, min_gb, sweep=sweep)
         except module.LowDisk as e:
             sys.exit('Refusing to start: ' + str(e))
     need = 25.0 if min_gb is None else float(min_gb)

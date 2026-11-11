@@ -365,6 +365,19 @@ A hidden-window initialization pass, center-only coordinate check, or skipped
 opt-in test does not satisfy this gate. Keep production held if this check fails
 or cannot run. Never run graphical or pointer-automation checks on the MacBook Air.
 
+Run the full regression on the mini with `CANDIDATE_APP` pointing to the
+dependency-fixed app bundle and `EVIDENCE_DIR` to a dedicated results directory:
+
+```sh
+DUNECITY_NATIVE_POINTER_TEST=1 python3 tests/menu/run-menu-probe.py \
+  --pointer-mapping --build-dir build-int \
+  --runtime-app "$CANDIDATE_APP" --output-dir "$EVIDENCE_DIR"
+```
+
+`--pointer-sdl-only` is a fast, no-game-startup diagnostic, not a substitute for
+the full menu gate. Stable macOS CI runs the full packaged-library check before
+artifact upload and retains its diagnostics on failure.
+
 ## Windows compile caching
 
 The macOS release job also enables tests and runs `classic_desert_ui_tests`
