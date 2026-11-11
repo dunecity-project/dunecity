@@ -22,7 +22,7 @@ parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--audio-failure', action='store_true', help='Verify startup recovery when the audio driver cannot open')
 parser.add_argument('--size', action='append', metavar='WxH', help='Run at this window size instead of 640x480, 854x480 and 1280x720 (repeatable)')
 parser.add_argument('--retina-resolution', action='store_true', help='Verify HD selection, Apply/reinitialization and fullscreen with Retina display data')
-parser.add_argument('--pointer-mapping', action='store_true', help='Mini-only native Cocoa/SDL/real-menu pointer alignment regression (moves the OS pointer)')
+parser.add_argument('--pointer-mapping', action='store_true', help='Mini-only native Cocoa/SDL/real-menu mapping regression (moves only its own window, not the physical pointer)')
 parser.add_argument('--runtime-app', type=Path, help='Use and verify this packaged app’s SDL libraries in the native pointer regression')
 parser.add_argument('--pointer-sdl-only', action='store_true', help='Run only the small native SDL boundary phase, without game/mod/font initialization')
 parser.add_argument('--tornie-family', action='store_true', help='Run only the six-edition campaign, custom lobby and map editor matrix')
@@ -35,7 +35,7 @@ if args.pointer_mapping:
         print('Native pointer regression requires an authorized Mac desktop, never the MacBook Air.')
         sys.exit(77)
     if os.environ.get('DUNECITY_NATIVE_POINTER_TEST') != '1':
-        print('Set DUNECITY_NATIVE_POINTER_TEST=1 on the Mini to allow native window/pointer input.')
+        print('Set DUNECITY_NATIVE_POINTER_TEST=1 on the Mini to allow own-window native Cocoa input.')
         sys.exit(77)
     def terminate_probe(signum, frame):
         raise SystemExit(128 + signum)
@@ -176,26 +176,21 @@ def native_desktop():
     sel = lambda name: objc.sel_registerName(name.encode())
     workspace = send(objc.objc_getClass(b'NSWorkspace'), sel('sharedWorkspace'))
     previous = pid(send(workspace, sel('frontmostApplication')), sel('processIdentifier'))
-    class Point(c.Structure):
-        _fields_ = [('x', c.c_double), ('y', c.c_double)]
-    cg = c.CDLL(ctypes.util.find_library('CoreGraphics'))
-    cf = c.CDLL(ctypes.util.find_library('CoreFoundation'))
-    cg.CGEventCreate.argtypes, cg.CGEventCreate.restype = [c.c_void_p], c.c_void_p
-    cg.CGEventGetLocation.argtypes, cg.CGEventGetLocation.restype = [c.c_void_p], Point
-    cg.CGWarpMouseCursorPosition.argtypes, cg.CGWarpMouseCursorPosition.restype = [Point], c.c_int
-    cf.CFRelease.argtypes = [c.c_void_p]
-    event = cg.CGEventCreate(None)
-    if not event: raise RuntimeError('Cannot snapshot the Mini desktop pointer')
-    point = cg.CGEventGetLocation(event)
-    cf.CFRelease(event)
-    (out/'desktop-before.json').write_text(json.dumps({'x': point.x, 'y': point.y, 'frontmostPid': previous})+os.linesep)
+    # The diagnostic moves only its own window, never the physical pointer.
+    # The supervisor therefore restores foreground ownership, not CG cursor state.
+    (out/'desktop-before.json').write_text(json.dumps({'frontmostPid': previous, 'pointerMoved': False})+os.linesep)
+    failed = False
     try:
         yield
+    except BaseException:
+        failed = True
+        raise
     finally:
-        error = cg.CGWarpMouseCursorPosition(point)
         app = app_for_pid(objc.objc_getClass(b'NSRunningApplication'), sel('runningApplicationWithProcessIdentifier:'), previous)
-        if app: activate(app, sel('activateWithOptions:'), 0)
-        if error: raise RuntimeError('Mini pointer restoration failed: '+str(error))
+        if app and not activate(app, sel('activateWithOptions:'), 0):
+            message = 'Mini foreground restoration request failed'
+            print(message, file=sys.stderr, flush=True)
+            if not failed: raise RuntimeError(message)
 family_results = []
 with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) as scratch:
     for width, height in ([(640,480)] if args.retina_resolution or args.terrain_mix else sizes):
@@ -231,7 +226,9 @@ with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) 
             # and scans the large community maps at each of three screen sizes.
             runtime_timeout = 90 if args.pointer_mapping else 120 if args.retina_resolution else 420
             with native_desktop():
-                subprocess.run([str(binary), '--fullscreen' if args.pointer_mapping else '--window', '--showlog', '--non-interactive'], cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=runtime_timeout)
+                command = [str(binary), '--showlog', '--non-interactive']
+                if not args.pointer_mapping: command.insert(1, '--window')
+                subprocess.run(command, cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=runtime_timeout)
         text = logpath.read_text(errors="replace")
         results = [line for line in text.splitlines() if 'MENU_PROBE_PASS:' in line]
         if len(results) != 1: raise RuntimeError('Missing menu test result; see '+str(logpath))

@@ -8,6 +8,7 @@
 
 extern "C" void nativePointerProbeBegin(SDL_Window*);
 extern "C" void nativePointerProbeEvent(SDL_Window*, int, int, int);
+extern "C" void nativePointerProbeCurrentPoint(SDL_Window*, int*, int*);
 
 static void require(bool value, const char* message) {
     if(!value) throw std::runtime_error(message);
@@ -23,11 +24,21 @@ static void verify(SDL_Window* window, SDL_Renderer* renderer, const char* phase
     const double vx = (ow - vw) / 2.0, vy = (oh - vh) / 2.0;
     std::printf("POINTER_GEOMETRY: phase=%s window=%dx%d output=%dx%d logical=%dx%d viewport=%.1f,%.1f,%.0f,%.0f\n",
                 phase, ww, wh, ow, oh, lw, lh, vx, vy, vw, vh);
-    const SDL_Point points[] = {{31, 29}, {lw / 2, lh / 2}, {lw - 31, lh - 29}};
-    for(const auto point : points) {
+    const bool fullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+    SDL_Point points[] = {{31, 29}, {lw / 2, lh / 2}, {lw - 31, lh - 29}};
+    int stationaryX = 0, stationaryY = 0;
+    if(fullscreen) {
+        nativePointerProbeCurrentPoint(window, &stationaryX, &stationaryY);
+        points[0] = {int(std::lround((stationaryX * double(ow) / ww - vx) * lw / vw)),
+                     int(std::lround((stationaryY * double(oh) / wh - vy) * lh / vh))};
+    }
+    for(int i = 0; i < (fullscreen ? 1 : 3); ++i) {
+        const auto point = points[i];
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
         SDL_Rect target{point.x - 8, point.y - 8, 17, 17};
+        require(target.x >= 0 && target.y >= 0 && target.x + target.w <= lw && target.y + target.h <= lh,
+                "Stationary fullscreen pointer lies outside the usable logical viewport");
         SDL_SetRenderDrawColor(renderer, 245, 1, 2, 255);
         require(SDL_RenderFillRect(renderer, &target) == 0, "Cannot render pointer target");
         const int px = int(std::lround(vx + point.x * vw / lw));
@@ -39,13 +50,15 @@ static void verify(SDL_Window* window, SDL_Renderer* renderer, const char* phase
         const auto* rgba = reinterpret_cast<const Uint8*>(&pixel);
         require(rgba[0] == 245 && rgba[1] == 1 && rgba[2] == 2, "Rendered target disagrees with window/drawable geometry");
         SDL_RenderPresent(renderer);
-        const int wx = int(std::lround(px * double(ww) / ow));
-        const int wy = int(std::lround(py * double(wh) / oh));
+        const int wx = fullscreen ? stationaryX : int(std::lround(px * double(ww) / ow));
+        const int wy = fullscreen ? stationaryY : int(std::lround(py * double(wh) / oh));
         const double ex = (wx * double(ow) / ww - vx) * lw / vw;
         const double ey = (wy * double(oh) / wh - vy) * lh / vh;
-        nativePointerProbeEvent(window, wx > 20 ? wx - 20 : wx + 20, wy, -1);
-        SDL_PumpEvents();
-        SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+        if(!fullscreen) {
+            nativePointerProbeEvent(window, wx > 20 ? wx - 20 : wx + 20, wy, -1);
+            SDL_PumpEvents();
+            SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+        }
         nativePointerProbeEvent(window, wx, wy, -1);
         nativePointerProbeEvent(window, wx, wy, 1);
         nativePointerProbeEvent(window, wx, wy, 0);
@@ -67,7 +80,9 @@ static void verify(SDL_Window* window, SDL_Renderer* renderer, const char* phase
             else if(event.type == SDL_MOUSEBUTTONDOWN) down = true;
             else up = true;
         }
-        require(motion && down && up, "Native Cocoa motion or button events were not delivered");
+        require(down && up && (motion || fullscreen), "Native Cocoa motion or button events were not delivered");
+        std::printf("POINTER_COVERAGE: phase=%s motion=%d down=%d up=%d stationaryFullscreen=%d\n",
+                    phase, int(motion), int(down), int(up), int(fullscreen));
     }
 }
 
@@ -75,10 +90,13 @@ int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     SDL_SetHint(SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES, "0");
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
-    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) return 1;
+    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+        std::fprintf(stderr, "POINTER_FAIL: SDL initialization: %s\n", SDL_GetError());
+        return 1;
+    }
     std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window{SDL_CreateWindow("DuneCity native pointer phase 0",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 5120, 2880,
-        SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_FULLSCREEN_DESKTOP), SDL_DestroyWindow};
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1000, 740,
+        SDL_WINDOW_ALLOW_HIGHDPI), SDL_DestroyWindow};
     std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer{
         window ? SDL_CreateRenderer(window.get(), -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE) : nullptr,
         SDL_DestroyRenderer};
@@ -87,20 +105,19 @@ int main() {
         require(SDL_RenderSetLogicalSize(renderer.get(), 1066, 600) == 0, "Cannot set logical presentation");
         verifyPointerRuntime(renderer.get());
         nativePointerProbeBegin(window.get());
-        verify(window.get(), renderer.get(), "fullscreen-startup");
-        require(SDL_SetWindowFullscreen(window.get(), 0) == 0, "Cannot enter windowed mode");
-        require(!(SDL_GetWindowFlags(window.get()) & SDL_WINDOW_FULLSCREEN), "Fullscreen exit did not settle");
-        SDL_SetWindowSize(window.get(), 1000, 740);
+        verify(window.get(), renderer.get(), "windowed-letterbox-native-origin");
+        require(SDL_SetWindowFullscreen(window.get(), SDL_WINDOW_FULLSCREEN_DESKTOP) == 0, "Cannot enter fullscreen");
         SDL_PumpEvents();
-        int width = 0, height = 0;
-        SDL_GetWindowSize(window.get(), &width, &height);
-        require(width == 1000 && height == 740, "Requested window resize did not occur");
-        verify(window.get(), renderer.get(), "windowed-letterbox");
+        require(SDL_GetWindowFlags(window.get()) & SDL_WINDOW_FULLSCREEN, "Fullscreen entry did not settle");
+        verify(window.get(), renderer.get(), "fullscreen-stationary-native-buttons");
+        require(SDL_SetWindowFullscreen(window.get(), 0) == 0, "Cannot leave fullscreen");
+        SDL_PumpEvents();
+        require(!(SDL_GetWindowFlags(window.get()) & SDL_WINDOW_FULLSCREEN), "Fullscreen exit did not settle");
         require(SDL_RenderSetLogicalSize(renderer.get(), 960, 600) == 0, "Cannot change logical presentation");
         SDL_SetWindowSize(window.get(), 1440, 900);
         SDL_PumpEvents();
         verify(window.get(), renderer.get(), "windowed-1440x900-960x600");
-        std::puts("MENU_PROBE_PASS: SDL-only native Cocoa motion/buttons agree with independently rendered targets and window/drawable/logical transitions");
+        std::puts("MENU_PROBE_PASS: native Cocoa motion/buttons match rendered targets under own-window origin changes; stationary fullscreen buttons match; no physical pointer movement");
         return 0;
     } catch(const std::exception& error) {
         std::fprintf(stderr, "POINTER_FAIL: %s; SDL=%s\n", error.what(), SDL_GetError());

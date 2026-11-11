@@ -3,11 +3,11 @@
 #include <SDL_syswm.h>
 #include <stdexcept>
 #include <cmath>
-#include <string>
+#include <cstdio>
 
 
-// Move only the OS pointer, not SDL's cached mouse state. A motion event must
-// therefore traverse Cocoa before it can satisfy the SDL event assertions.
+// Leave the physical pointer untouched. Move only the diagnostic's own window
+// beneath it, then exercise the real Cocoa responder and SDL event conversion.
 extern "C" void nativePointerProbeBegin(SDL_Window* window) {
     SDL_SysWMinfo info{};
     SDL_VERSION(&info.version);
@@ -15,6 +15,22 @@ extern "C" void nativePointerProbeBegin(SDL_Window* window) {
         throw std::runtime_error("Pointer regression requires the actual Cocoa backend");
     [NSApp activateIgnoringOtherApps:YES];
     [info.info.cocoa.window makeKeyAndOrderFront:nil];
+}
+
+extern "C" void nativePointerProbeCurrentPoint(SDL_Window* window, int* x, int* y) {
+    SDL_SysWMinfo info{};
+    SDL_VERSION(&info.version);
+    if(!SDL_GetWindowWMInfo(window, &info) || info.subsystem != SDL_SYSWM_COCOA)
+        throw std::runtime_error("Lost the native pointer window");
+    NSWindow* native = info.info.cocoa.window;
+    NSView* view = native.contentView;
+    const NSRect bounds = view.bounds;
+    const NSPoint point = [view convertPoint:[native convertPointFromScreen:NSEvent.mouseLocation] fromView:nil];
+    int width = 0, height = 0;
+    SDL_GetWindowSize(window, &width, &height);
+    *x = static_cast<int>(std::lround((point.x - bounds.origin.x) * width / bounds.size.width));
+    *y = static_cast<int>(std::lround((view.flipped ? point.y - bounds.origin.y
+        : NSMaxY(bounds) - point.y) * height / bounds.size.height));
 }
 
 extern "C" void nativePointerProbeEvent(SDL_Window* window, int x, int y, int buttonState) {
@@ -39,21 +55,26 @@ extern "C" void nativePointerProbeEvent(SDL_Window* window, int x, int y, int bu
             timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:native.windowNumber
             context:nil eventNumber:1 clickCount:1 pressure:buttonState > 0 ? 1.0 : 0.0];
         if(buttonState < 0) {
-            const NSPoint screen = [native convertPointToScreen:location];
-            const CGFloat primaryTop = NSMaxY(NSScreen.screens.firstObject.frame);
-            if(CGError error = CGWarpMouseCursorPosition(CGPointMake(screen.x, primaryTop - screen.y)))
-                throw std::runtime_error("Native pointer warp failed: " + std::to_string(error));
-            bool settled = false;
-            for(int attempt = 0; attempt < 30; ++attempt) {
-                const NSPoint actual = [NSEvent mouseLocation];
-                if(std::abs(actual.x - screen.x) < 1.0 && std::abs(actual.y - screen.y) < 1.0) {
-                    settled = true;
-                    break;
-                }
-                SDL_Delay(1);
+            if(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN)) {
+                const NSPoint screen = [native convertPointToScreen:location];
+                const NSPoint pointer = NSEvent.mouseLocation;
+                NSRect frame = native.frame;
+                frame.origin.x += pointer.x - screen.x;
+                frame.origin.y += pointer.y - screen.y;
+                [native setFrameOrigin:frame.origin];
+                SDL_PumpEvents();
             }
-            if(!settled) throw std::runtime_error("Native pointer did not reach the requested Cocoa point");
-            SDL_PumpEvents();
+            int actualX = 0, actualY = 0;
+            nativePointerProbeCurrentPoint(window, &actualX, &actualY);
+            if(std::abs(actualX - x) > 1 || std::abs(actualY - y) > 1)
+                throw std::runtime_error("Own-window position was clamped or fullscreen pointer point is unavailable");
+            int originX = 0, originY = 0;
+            SDL_GetWindowPosition(window, &originX, &originY);
+            const NSPoint pointer = NSEvent.mouseLocation;
+            std::printf("POINTER_NATIVE: global=%.1f,%.1f windowOrigin=%d,%d requested=%d,%d actual=%d,%d focused=%d\n",
+                        pointer.x, pointer.y, originX, originY, x, y, actualX, actualY,
+                        int((SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0));
+            std::fflush(stdout);
             [view mouseMoved:event];
         } else if(buttonState) {
             [view mouseDown:event];
