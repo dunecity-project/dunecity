@@ -101,9 +101,11 @@ layout. Preregistrations and results are in
 ## Map-scoped repairs
 
 The control-map rule's repair step (a passer that lost native wins tests a
-variant scoped by the lost maps' observable features) gets three hashed,
+variant scoped by the lost maps' observable features) gets five hashed
 `[Force Concentration]` integers (`0` OFF; levels below). They originally defaulted OFF;
-since protocol 119 `VanillaArmyCounterMapScope` defaults to 5. The map predicates read
+`VanillaArmyCounterMapScope` defaults to 5 since protocol 119, and the r3831 release
+candidate enables `ConvergeChokepointScope` and `OpeningOpenMapScope` at level 1.
+The map predicates read
 fixed thresholds from `GameInitSettings::getInitialTerrain()`: counts of
 the original explicit `[MAP]` grid of the saved scenario, the same source as the
 initial spice density (rock is `%`, mountain `@`, spice and thick spice the
@@ -117,6 +119,19 @@ but are not a special promotion-control veto. No map name, mission or seed is re
 - `ClosingMountainScope`: PressOn, FinishWhenLeading and JoinAllyWaves play
   their compiled native values when mountain is at least 8% (level 1) or 6%
   (level 2) of the tiles. It acts only on candidates that change those genes.
+- `ConvergeChokepointScope` (idea 38, default 1): Converge plays native (true)
+  with exactly two original occupied controller rows, initial area at most
+  **4,096 tiles**, and mountain at least 8% (`smallMountainDuel`). This is an
+  area limit, not width and height each at most 64: 128x32 also qualifies.
+- `OpeningOpenMapScope` (idea 31, default 1): OpeningReadiness plays native
+  (true) with at least four original occupied controller rows, mountain
+  strictly below 1.1%, and `thinOrFragmented(2, terrain)` (`openFlatCrowd`):
+  thick spice strictly below 20% of spice, or positive rock with strictly
+  fewer than 45 all-rock 3x3 windows per 100 rock tiles. Both new scopes require
+  measured, initially spice-bearing terrain. Occupied rows are counted from the
+  original roster, not distinct teams or surviving houses. The predicates do
+  not inspect mod names, map names, missions or seeds; existing force-consumer
+  eligibility is unchanged.
 - `VanillaArmyCounterMapScope`: VanillaArmyCounters stays inert when thick
   spice is below 20% of the spice tiles (level 1), or also when rock contiguity
   is below 0.45 (level 2).
@@ -156,6 +171,49 @@ Candidate-only overlays are
 Preregistrations and results are in
 `outputs/ai-tuning-20261108/B3m-ClosingMountainScope`, `B3m-VanillaArmyCounterMapScope`
 and `B3m-FocusFireMapScope` (`ledger.md`).
+
+### r3831-w151 release candidate
+
+The 2026-11-11 integration takes one qualified seven-field treatment from
+`8cee4d03674f061d93cebd61941cbc5b3c2bc48d`, evaluated on the round-121
+`c1d9d0cc` baseline. All seven fields move together:
+
+| Force Concentration key | Round-121 control | r3831 candidate |
+|---|---:|---:|
+| `Converge` | 1 | 0 |
+| `FinishWhenLeading` | 1 | 0 |
+| `OpeningReadiness` | 1 | 0 |
+| `PressOn` | 0 | 1 |
+| `TurretPriority` | 0 | 1 |
+| `ConvergeChokepointScope` | 0 | 1 |
+| `OpeningOpenMapScope` | 0 | 1 |
+
+The unscoped w151 lost three native control wins. The Converge repair recovered
+the small mountainous duel without globally reverting Converge (which drew two
+large mountainous six-player wins); the OpeningReadiness repair recovered both
+seeds of the open thin-spice four-player loss. Ablation and scoped receipts are in
+`outputs/ai-tuning-20261108/SweepLane/nominations-807/release-c1d9d0cc-ablation-driver1119`
+and the adjacent `release-c1d9d0cc-repairs-driver1219`.
+The evaluated scoped source retained **14/14 native QB/team-1 wins** across the
+26 controls (100% retention, not an absolute 14/26 win requirement), with 13 maps
+and two seeds and Outpost at 120 minutes. Paired96 wins were 52 -> 58; the
+1.0.807 deck comparison was same-source control 53 -> candidate 63.
+CPU ratios were x0.903 QuantBot / x0.973 simulation on `7728ee0a`, whose scoped
+engine/config/data/mod sources match the evaluated candidate.
+
+These are source-candidate receipts, **not a pass for the combined multiplayer
+release candidate**. Its final immutable pin still needs same-build controls,
+paired96, 1.0.807 and CPU gates. `CityCapitalPacing=2`, strict
+`SpiceBloomHarvest=1`, existing campaign behavior and save serialization remain
+unchanged. No Medium-player repair or rejected player-economy experiment is included.
+
+Use `release-r3831-control` and `release-r3831-candidate` in the existing
+play-style transport. Both explicitly set all seven fields; the control does
+not rely on the now-promoted constructor defaults. In `--tier controls`,
+`--style` changes only the QB candidate seat; in the 1.0.807 league and CPU
+stress runs it changes every QuantBot. All other seats retain the same configured
+defaults in each paired arm. Always record one common source pin, use fresh result
+directories, and do not reuse old-round-120 genome overlays as this control.
 
 ## Spice bloom harvest
 

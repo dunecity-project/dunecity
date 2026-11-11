@@ -20,12 +20,25 @@ inline bool mountainRich(int level, const InitialTerrain& terrain) {
     return terrain.mountain * 100 >= (level == 1 ? 8 : 6) * terrain.tiles;
 }
 
+/// ConvergeChokepointScope: exactly 2 original occupied controller rows, area at most 4,096 tiles,
+/// and mountain at least 8% of the measured, initially spice-bearing map.
+inline bool smallMountainDuel(const InitialTerrain& terrain, int controllers) {
+    return controllers == 2 && terrain.tiles <= int64_t(64) * 64 && mountainRich(1, terrain);
+}
+
 /// VanillaArmyCounterMapScope: thick spice is below 20% of the spice tiles (level 1), or also rock
 /// contiguity (3x3 all-rock windows per rock tile) is below 0.45 (level 2).
 inline bool thinOrFragmented(int level, const InitialTerrain& terrain) {
     if (level <= 0 || !measured(terrain)) return false;
     if (terrain.thickSpice * 5 < terrain.spice) return true;
     return level >= 2 && terrain.rock > 0 && terrain.rockWindows * 100 < 45 * terrain.rock;
+}
+
+/// OpeningOpenMapScope: at least 4 original occupied controller rows, mountain below 1.1%,
+/// and thin spice or fragmented rock (thinOrFragmented level 2); measured, spice-bearing only.
+inline bool openFlatCrowd(const InitialTerrain& terrain, int controllers) {
+    return controllers >= 4 && terrain.mountain * 1000 < 11 * terrain.tiles
+        && thinOrFragmented(2, terrain);
 }
 
 /// FocusFireMapScope: at least 192x192 tiles (level 1), or also below 1,000 tiles per original

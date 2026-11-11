@@ -310,13 +310,12 @@ QuantBotConfig::QuantBotConfig() {
     recovery.withdrawalsEnabled = false;           // measured: docs/quantbot-all-against-atreides.md
 
     // === FORCE CONCENTRATION (Custom Hard/Brutal) ===
-    // Measured in duels (docs/formations.md, "Concentrating force", rounds 3 and 4): focus
-    // fire + converge + waves at 60% readiness (FCQ) beat the previous defaults; bundling the
-    // idle reserve forward and launching waves from the bundle (BWFCQ) beats FCQ.
+    // Force concentration (docs/formations.md); the r3831-w151 seven-gene treatment and
+    // original-map scope repairs are documented in docs/ai-scenario-matrix.md.
     force.focusFire = true;
     force.focusFireLevel = 0;
     force.targetPriorityLevel = 0;
-    force.converge = true;
+    force.converge = false;
     force.waveReadinessPercent = 60;
     force.bundle = true;
     force.launchFromBundle = true;
@@ -325,22 +324,17 @@ QuantBotConfig::QuantBotConfig() {
     // formations.md "Free-for-all: finishing the game"); an old PerimeterHold key is ignored.
     force.perimeterTurrets = true;
     force.sizedDefence = true;
-    // Construction Yard starts (docs/formations.md, "Scenario tests"): holding the first wave
-    // for full readiness beats BWFCQ (CY 1v1, 360 games, 0.567); inert with a Fortress army.
-    force.openingReadiness = true;
-    // Late game (docs/formations.md, "Free-for-all: finishing the game"): candidates, off.
-    force.turretPriority = false;
-    force.pressOn = false;
+    // r3831-w151 releases the full-readiness opening except in OpeningOpenMapScope.
+    force.openingReadiness = false;
+    force.turretPriority = true;
+    force.pressOn = true;
     force.finishWeakest = false;
     force.fortifiedWaves = false;
     force.sonicClearLane = false;
     force.spendAtCap = false;
     force.siegeStandoff = false;
     force.massAssault = false;
-    // The leader finishes the weakest (docs/formations.md, "Free-for-all: finishing the game,
-    // 1.0.848"): 4P DuneCity self-play time-outs 16 -> 13 of 24, first elimination median 37.6 ->
-    // 31.3 min; level head-to-head, on Fortress, /weak, CY and the difficulty ladder.
-    force.finishWhenLeading = true;
+    force.finishWhenLeading = false;
     force.vanillaFfaWeakestTarget = false;
     force.vanillaFfaNearbyTarget = false;
     force.vanillaFfaReserve = false;
@@ -456,6 +450,8 @@ QuantBotConfig::QuantBotConfig() {
     force.cityYardRefineries = 0;
     force.cityWorkerReplacement = 0;
     force.closingMountainScope = 0;
+    force.convergeChokepointScope = 1;
+    force.openingOpenMapScope = 1;
     force.vanillaArmyCounterMapScope = 5;
     force.focusFireMapScope = 0;
     force.spiceBloomHarvest = 1;
@@ -879,6 +875,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CityYardRefineries", force.cityYardRefineries);
         iniFile.setIntValue("Force Concentration", "CityWorkerReplacement", force.cityWorkerReplacement);
         iniFile.setIntValue("Force Concentration", "ClosingMountainScope", force.closingMountainScope);
+        iniFile.setIntValue("Force Concentration", "ConvergeChokepointScope", force.convergeChokepointScope);
+        iniFile.setIntValue("Force Concentration", "OpeningOpenMapScope", force.openingOpenMapScope);
         iniFile.setIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope);
         iniFile.setIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope);
         iniFile.setIntValue("Force Concentration", "SpiceBloomHarvest", force.spiceBloomHarvest);
@@ -1146,6 +1144,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityYardRefineries = std::clamp(iniFile.getIntValue("Force Concentration", "CityYardRefineries", force.cityYardRefineries), 0, 2);
     force.cityWorkerReplacement = std::clamp(iniFile.getIntValue("Force Concentration", "CityWorkerReplacement", force.cityWorkerReplacement), 0, 2);
     force.closingMountainScope = std::clamp(iniFile.getIntValue("Force Concentration", "ClosingMountainScope", force.closingMountainScope), 0, 2);
+    force.convergeChokepointScope = std::clamp(iniFile.getIntValue("Force Concentration", "ConvergeChokepointScope", force.convergeChokepointScope), 0, 1);
+    force.openingOpenMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "OpeningOpenMapScope", force.openingOpenMapScope), 0, 1);
     force.vanillaArmyCounterMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope), 0, 5);
     force.focusFireMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope), 0, 5);
     force.spiceBloomHarvest = std::clamp(iniFile.getIntValue("Force Concentration", "SpiceBloomHarvest", force.spiceBloomHarvest), 0, 2);
@@ -1763,6 +1763,8 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.cityWorkerReplacement != 0) addNamed("cityWorkerReplacement", force.cityWorkerReplacement);
     // Map-scoped repair levels: absent (OFF) keeps the native multiplayer hash.
     if (force.closingMountainScope != 0) addNamed("closingMountainScope", force.closingMountainScope);
+    if (force.convergeChokepointScope != 0) addNamed("convergeChokepointScope", force.convergeChokepointScope);
+    if (force.openingOpenMapScope != 0) addNamed("openingOpenMapScope", force.openingOpenMapScope);
     if (force.vanillaArmyCounterMapScope != 0) addNamed("vanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope);
     if (force.focusFireMapScope != 0) addNamed("focusFireMapScope", force.focusFireMapScope);
     // SpiceBloomHarvest levels: absent (OFF) keeps the native multiplayer hash.

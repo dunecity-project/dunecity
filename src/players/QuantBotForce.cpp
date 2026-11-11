@@ -94,10 +94,11 @@ int QuantBot::forceBits() const {
     if (forceVariantOverride != kNoForceOverride) return forceVariantOverride;
     const auto& force = botConfig().force;
     const auto& closing = closingForce();
-    return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0)
+    return (force.focusFire ? kForceFocusFire : 0) | ((force.converge || convergeChokepointNative()) ? kForceConverge : 0)
         | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0)
         | (force.perimeterTurrets ? kForceThreatTurrets : 0)
-        | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0)
+        | (force.sizedDefence ? kForceSizedDefence : 0)
+        | ((force.openingReadiness || openingOpenMapNative()) ? kForceOpeningReadiness : 0)
         | (force.turretPriority ? kForceTurretPriority : 0) | (closing.pressOn ? kForcePressOn : 0)
         | ((force.finishWeakest || cityBoomSpiceKind() == CityBoomKind::Reactive) ? kForceFinishWeakest : 0)
         | (force.fortifiedWaves ? kForceFortifiedWaves : 0)
@@ -1133,6 +1134,24 @@ const QuantBotConfig::ForceSettings& QuantBot::closingForce() const {
         return force;
     static const QuantBotConfig native;
     return native.force;
+}
+
+bool QuantBot::convergeChokepointNative() const {
+    if (!botConfig().force.convergeChokepointScope || !currentGame) return false;
+    const auto& init = currentGame->getGameInitSettings();
+    int controllers = 0;
+    for (const auto& house : init.getHouseInfoList())
+        if (!house.playerInfoList.empty()) ++controllers;
+    return QuantBotMapScopePolicy::smallMountainDuel(init.getInitialTerrain(), controllers);
+}
+
+bool QuantBot::openingOpenMapNative() const {
+    if (!botConfig().force.openingOpenMapScope || !currentGame) return false;
+    const auto& init = currentGame->getGameInitSettings();
+    int controllers = 0;
+    for (const auto& house : init.getHouseInfoList())
+        if (!house.playerInfoList.empty()) ++controllers;
+    return QuantBotMapScopePolicy::openFlatCrowd(init.getInitialTerrain(), controllers);
 }
 
 int QuantBot::effectiveFocusFireLevel() const {

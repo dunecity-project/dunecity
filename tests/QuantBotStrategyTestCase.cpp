@@ -24,6 +24,7 @@
 #include <map>
 #include <set>
 #include <string_view>
+#include <utility>
 
 // QuantBot strategies (docs/ai-play-styles.md, "Strategies"): the pick is a pure function of the
 // game seed, the house and the config, so every peer, replay and reload plays the same strategy;
@@ -1338,6 +1339,35 @@ TEST_CASE("Map-scoped repair levels preserve their configured defaults, hashes a
     requireBatch3CityLevels("FocusFireMapScope", &QuantBotConfig::ForceSettings::focusFireMapScope, 0, 5);
 }
 
+TEST_CASE("Duel and crowded-map repair switches have distinct OFF and ON hashes and round trips",
+          "[ai][config][map-scope]") {
+    for (const auto& [key, member] : {
+             std::pair{"ConvergeChokepointScope", &QuantBotConfig::ForceSettings::convergeChokepointScope},
+             std::pair{"OpeningOpenMapScope", &QuantBotConfig::ForceSettings::openingOpenMapScope}}) {
+        QuantBotConfig baseline;
+        baseline.force.*member = 0;
+        const auto path = std::filesystem::temp_directory_path() / (std::string("quantbot-map-scope-") + key + ".ini");
+        for (const int requested : {-1, 0, 1, 2}) {
+            {
+                std::ofstream ini(path);
+                ini << "[Force Concentration]\n" << key << '=' << requested << '\n';
+            }
+            QuantBotConfig config = baseline;
+            REQUIRE(config.applyOverrides(path.string()));
+            const int expected = std::clamp(requested, 0, 1);
+            REQUIRE(config.force.*member == expected);
+            REQUIRE((config.getConfigHash() != baseline.getConfigHash()) == (expected == 1));
+            REQUIRE(config.save(path.string()));
+            QuantBotConfig restored = baseline;
+            restored.force.*member = 1 - expected;
+            REQUIRE(restored.applyOverrides(path.string()));
+            REQUIRE(restored.force.*member == expected);
+            REQUIRE(restored.getConfigHash() == config.getConfigHash());
+        }
+        std::filesystem::remove(path);
+    }
+}
+
 
 TEST_CASE("SpiceBloomHarvest bursts only beside an empty (1) or moderate (2) known field", "[ai][spice-bloom]") {
     using namespace QuantBotSpiceBloomPolicy;
@@ -1427,6 +1457,43 @@ TEST_CASE("ClosingMountainScope applies from 8% (level 1) or 6% (level 2) mounta
     auto unknown = rich;
     unknown.known = false;
     REQUIRE_FALSE(mountainRich(2, unknown));
+}
+
+TEST_CASE("ConvergeChokepointScope and OpeningOpenMapScope thresholds", "[ai][force][map-scope]") {
+    using QuantBotMapScopePolicy::smallMountainDuel;
+    using QuantBotMapScopePolicy::openFlatCrowd;
+    const auto duel = measuredTerrain(64 * 64, 500, 100, 328, 1000, 500);
+    REQUIRE(smallMountainDuel(duel, 2));
+    REQUIRE_FALSE(smallMountainDuel(duel, 1));
+    REQUIRE_FALSE(smallMountainDuel(duel, 3));
+    REQUIRE_FALSE(smallMountainDuel(duel, 4));
+    REQUIRE(smallMountainDuel(measuredTerrain(128 * 32, 500, 100, 328, 1000, 500), 2)); // area, not dimensions
+    REQUIRE_FALSE(smallMountainDuel(measuredTerrain(4097, 500, 100, 400, 1000, 500), 2));
+    REQUIRE_FALSE(smallMountainDuel(measuredTerrain(64 * 64, 500, 100, 327, 1000, 500), 2));
+    REQUIRE(smallMountainDuel(measuredTerrain(4000, 500, 100, 320, 1000, 500), 2)); // exactly 8%
+    REQUIRE_FALSE(smallMountainDuel(measuredTerrain(4000, 500, 100, 319, 1000, 500), 2));
+    const auto open = measuredTerrain(10000, 1000, 199, 109, 3000, 1500);
+    REQUIRE(openFlatCrowd(open, 4));
+    REQUIRE(openFlatCrowd(open, 6));
+    REQUIRE_FALSE(openFlatCrowd(open, 2));
+    REQUIRE_FALSE(openFlatCrowd(open, 3));
+    REQUIRE_FALSE(openFlatCrowd(measuredTerrain(10000, 1000, 199, 110, 3000, 1500), 4)); // exactly 1.1%
+    REQUIRE_FALSE(openFlatCrowd(measuredTerrain(10000, 1000, 199, 111, 3000, 1500), 4));
+    REQUIRE_FALSE(openFlatCrowd(measuredTerrain(10000, 1000, 200, 109, 1000, 450), 4));
+    REQUIRE(openFlatCrowd(measuredTerrain(10000, 1000, 200, 109, 1000, 449), 4)); // fragmented, not thin
+    REQUIRE_FALSE(openFlatCrowd(measuredTerrain(10000, 1000, 200, 109, 0, 0), 4));
+    REQUIRE(openFlatCrowd(measuredTerrain(10000, 1000, 199, 109, 0, 0), 4)); // thin does not require rock
+    for (auto terrain : {duel, open}) {
+        terrain.known = false;
+        REQUIRE_FALSE(smallMountainDuel(terrain, 2));
+        REQUIRE_FALSE(openFlatCrowd(terrain, 4));
+        terrain.known = true;
+        terrain.spice = 0;
+        REQUIRE_FALSE(smallMountainDuel(terrain, 2));
+        REQUIRE_FALSE(openFlatCrowd(terrain, 4));
+    }
+    REQUIRE_FALSE(smallMountainDuel(measuredTerrain(0, 500, 100, 0, 0, 0), 2));
+    REQUIRE_FALSE(openFlatCrowd(measuredTerrain(0, 500, 100, 0, 0, 0), 4));
 }
 
 TEST_CASE("VanillaArmyCounterMapScope applies below 20% thick spice or 0.45 rock contiguity",

@@ -373,7 +373,10 @@
 // 121: QuantBot SpiceBloomHarvest defaults to strict level 1: eligible Custom houses shoot
 //      explored blooms only when no known spice lies nearby. Older peers issue different AI
 //      attack orders and would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            121
+// 122: QuantBot promotes the tested w151 tactical profile with ConvergeChokepointScope
+//      and OpeningOpenMapScope together. Older peers choose different AI attacks and
+//      would desync. Private development identity and save format remain unchanged.
+#define NETWORK_PROTOCOL_VERSION            122
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

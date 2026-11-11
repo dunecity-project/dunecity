@@ -112,6 +112,33 @@ test-only behaviour.
   identical, Windows identical apart from the known ±0.1 s `FORMATION_WAVE`/`end_s` timing fields; 12
   style games replayed on Windows matched the mini's rows and per-minute samples.
 
+#### r3831 release comparison overlays (2026-11-11)
+
+`release-r3831-control` explicitly restores the round-121 values:
+`Converge=1`, `FinishWhenLeading=1`, `OpeningReadiness=1`, `PressOn=0`,
+`TurretPriority=0`, and both `ConvergeChokepointScope` and
+`OpeningOpenMapScope` OFF. `release-r3831-candidate` explicitly sets the
+seven-field evaluated treatment: `0,0,0,1,1,1,1` in that order. All seven are
+one choice; do not combine an old sweep overlay with the newly promoted defaults.
+Neither style contains a `[Play Style]` behavior or changes any other config key.
+
+The candidate restores native Converge only on measured, spice-bearing original
+maps with exactly two occupied controller rows, **area <= 4,096 tiles** and
+mountain >= 8%. Native OpeningReadiness is restored with at least four occupied
+rows, mountain < 1.1%, and thick spice < 20% of spice or positive rock with
+rock-window contiguity < 0.45. These general predicates do not read names or seeds.
+The original controller rows, not surviving teams, determine occupancy.
+
+The evaluated `8cee4d03674f061d93cebd61941cbc5b3c2bc48d` source on round 121
+retained 14/14 native wins across the 26 controls, paired96 improved 52 -> 58,
+and the 1.0.807 deck improved 53 -> 63; the engine-equivalent CPU source measured
+x0.903 QuantBot / x0.973 simulation. Those receipts do not qualify the new combined
+AI/multiplayer pin; its same-build gates remain required. See
+`docs/ai-scenario-matrix.md`, "r3831-w151 release candidate", for scope boundaries,
+receipt locations and limits. Medium-player repair and the rejected player-economy
+proxy are not part of this candidate. Existing campaign policies, level-2 city capital
+pacing, strict spice bloom harvesting, saved fields and format are unchanged.
+
 #### Experimental spice-field outposts (default OFF)
 
 `SpiceFieldExpansion=0/4000/8000` in `[Force Concentration]` compares remaining

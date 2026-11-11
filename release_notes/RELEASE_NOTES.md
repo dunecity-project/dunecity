@@ -1,5 +1,7 @@
-# Unreleased — multiplayer joining
+# Unreleased — AI and multiplayer candidate
 
+- Enables the tested w151 tactical profile together with its mountain-map convergence and open-map opening-readiness safeguards. Unreviewed campaign experiments remain excluded.
+- Private development build remains **1.0.864dev**; multiplayer protocol advances to **122**, so every peer must use the matching candidate. Save format remains **9884**; original profiles and saves are preserved.
 - Public rooms, including spectator entries, are offered only to the exact matching game version. Invite and stale-list joins still explain version mismatches without weakening content checks.
 - Joining a cached public room no longer silently ignores the click during a background directory refresh.
 - Duplicate player-name refusals explain how to change **Player name** in **Settings** before retrying. Player identity remains explicit and unique.

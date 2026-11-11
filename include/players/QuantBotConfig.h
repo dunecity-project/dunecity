@@ -209,7 +209,7 @@ struct QuantBotConfig {
         /// minutes) for 70% of the military limit, then everything hunts towards one objective
         /// of the weakest known house.
         bool massAssault;
-        /// On by default (1.0.848): a house whose team army leads the strongest enemy team's
+        /// When enabled, a house whose team army leads the strongest enemy team's
         /// remembered army sends its ground waves at the weakest known house (FinishWeakest's
         /// choice) instead of the nearest.
         bool finishWhenLeading;
@@ -489,6 +489,12 @@ struct QuantBotConfig {
         /// spiceless maps are never scoped. Native values of PressOn, FinishWhenLeading and
         /// JoinAllyWaves where mountain is at least 8% (1) / 6% (2) of the tiles.
         int closingMountainScope;
+        /// Converge plays native (true) where QuantBotMapScopePolicy::smallMountainDuel applies;
+        /// 0 = OFF, 1 = hashed scope (default).
+        int convergeChokepointScope;
+        /// OpeningReadiness plays native (true) where QuantBotMapScopePolicy::openFlatCrowd applies;
+        /// 0 = OFF, 1 = hashed scope (default).
+        int openingOpenMapScope;
         /// VanillaArmyCounters stays inert where thick spice is below 20% of the spice tiles (1),
         /// or also where rock contiguity is below 0.45 (2); levels 3/4 instead scope by the
         /// original roster: inert against at least 3 (3) / 5 (4) opposing sides at game start;

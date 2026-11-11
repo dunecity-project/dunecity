@@ -351,6 +351,13 @@ Strategy=false
 # absent. It only acts when the match's Research Lab game option is enabled.
 # Basic income, power, defence and accepted production commitments keep their funding first.
 [Force Concentration]
+# r3831-w151 is one seven-gene treatment with the two original-map scopes below.
+# Explicit same-source control/candidate overlays are in tests/ai/play-styles/release-r3831-*.ini.
+Converge=false
+FinishWhenLeading=false
+OpeningReadiness=false
+PressOn=true
+TurretPriority=true
 # Palace trials, Custom Hard/Brutal with immutable initial spice; 0 preserves native.
 # Target: 1 economy clusters; 2 economy or army by true purchase value.
 # Timing: 1 hunting wave; 2 engaged wave. Bounded release every 60/120 seconds.
@@ -544,6 +551,12 @@ CityWorkerReplacement=0
 # and initially spiceless maps are never scoped. Native PressOn, FinishWhenLeading and
 # JoinAllyWaves where mountain is at least 8%/6% of the tiles:
 ClosingMountainScope=0
+# Native Converge on measured, spice-bearing maps with exactly 2 original occupied controller rows,
+# area at most 4,096 tiles (not a per-dimension limit), and at least 8% mountain (default 1; 0 = OFF):
+ConvergeChokepointScope=1
+# Native OpeningReadiness with at least 4 original occupied controller rows, below 1.1% mountain,
+# and below 20% thick spice or positive rock with rock contiguity below 0.45; measured, spice-bearing only:
+OpeningOpenMapScope=1
 # VanillaArmyCounters inert below 20% thick spice (1), or also below 0.45 rock contiguity (2);
 # by the original roster instead: inert against at least 3 (3) / 5 (4) opposing sides; 5 = 4 or 1:
 VanillaArmyCounterMapScope=5
