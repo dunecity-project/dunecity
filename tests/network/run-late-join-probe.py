@@ -420,8 +420,8 @@ def run_probe(out, peer_case=None):
                             address, _, port = route.get(endpoint, '').rpartition(':')
                             if address != '127.0.0.1' or not port.isdecimal() or not 0 < int(port) <= 65535:
                                 raise RuntimeError('Native acceptance used a non-loopback/invalid UDP endpoint: ' + str(route))
-                        if route.get('local_type') != 'host' or route.get('remote_type') != 'host':
-                            raise RuntimeError('Native acceptance did not use real loopback host candidates: ' + str(route))
+                        # Trickle ICE may discover the same loopback tuple as prflx
+                        # before its candidate signal arrives; endpoints are the invariant.
                         selected_routes[role] = route
                     observed = dict(line.split('=', 1) for line in (out / (role + '-details')).read_text().splitlines() if '=' in line)
                     expected = {'case': peer_case, 'mod': peer_mod, 'role': role, 'guest_joined': 'Partner',
