@@ -294,3 +294,21 @@ This is deterministic loopback coverage, not a stock desktop UI, default-interfa
 LAN, WAN or browser/native interoperability result. The earlier default-interface,
 host-only ICE failure remains unresolved; this fixture must not be reported as its
 fix. Missing PHP is an explicit skip, not a successful connection check.
+
+Source `f24dd596c` passed this three-mode native check on the mini in 120.93 seconds:
+job `20261111T192850-multiplayer-native-verified-route-20261111-d0ae7b`.
+Each mode completed all 3,600 cycles, 12 executed moves per human and 13 matching
+checkpoints. The retired-signaling unit gate separately passed at `b22376470`.
+
+The stock macOS 1.0.864 application booted, but browser↔stock-native gameplay remains
+**unrun**: Accessibility authorization was absent and debugger attachment was denied.
+Screen capture worked; release provenance was known. Neither permissions nor the
+signed application were changed. The source-built loopback check is not a substitute.
+The exact observations are in `controlled/native-baseline-observation.json` under
+the multiplayer outputs directory.
+
+The fixes remain **undeployed**. PHP discovery/admission changes need the normal
+service deployment; cached-Join and retired-handshake fixes require rebuilt clients.
+Preserve exact executable/content checks and the STUN-only topology. The final
+cross-check receipts and limitations are recorded in
+`outputs/multiplayer-join-20261111/verification/f24dd596c-multiplayer-final.json`.
