@@ -696,6 +696,18 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         set_tests_properties(spectator_online_end_probe PROPERTIES TIMEOUT 1200
             TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 40
             RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        # Headless native joins, not the single-process mp-lobby wiring probe: Vanilla
+        # CampaignCoop, a genuinely generated random skirmish, and a custom map, each
+        # with real local PHP/libdatachannel admission, named guest, committed start
+        # barrier, both humans' executed moves and 13 matching game-state checkpoints.
+        # Missing PHP is an explicit skip, never evidence that these modes were played.
+        add_test(NAME native_multiplayer_join_modes COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/network/run-late-join-probe.py
+            --peer-cases campaign skirmish custom --mod vanilla
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/native-multiplayer-join-modes)
+        set_tests_properties(native_multiplayer_join_modes PROPERTIES TIMEOUT 900
+            TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 40
+            RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS "headless;network")
         # Stefan: "make any spawned troopers due to crime and make all worms belong to 'natives' house".
         # Worms on bundled maps, a Random Skirmish, a campaign mission and a 9868 save are the
         # Natives'; crime troopers are, and QuantBot's threat estimate ignores them; Natives is in

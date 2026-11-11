@@ -231,3 +231,30 @@ can recover its already committed session, without creating another seat or join
 Normal teardown makes one best-effort bounded leave request (four concurrent requests maximum,
 two-second deadline). The lobby also closes when its host expires. A signaling timeout never
 changes the membership of an established match.
+
+## Joining regression evidence (2026-11-11)
+
+The discovery/name repairs are in `49f6ab537`. They are not a deployment.
+The browser checks below used the **published 1.0.864 executable**, isolated browser
+profiles and the fixed local PHP service. Gameplay remained direct. The selected
+STUN configuration matched production: `stun:stun.l.google.com:19302` and
+`stun:stun1.l.google.com:19302`.
+
+| Guarantee | Enforcement / exercised evidence | Bound or limitation |
+| --- | --- | --- |
+| Different executable versions never gain a seat through discovery | `Rooms::listPublic`, authoritative `Signaling::directorySnapshot`, and the unchanged join/version checks. Real HTTP reproduced the old list-offers/join-refuses inconsistency; regression cases include an old/misleading index cache and running rooms. | Invite codes and stale listings remain subject to authoritative admission and payload compatibility checks. |
+| A selected cached room remains joinable during a list refresh | `CrossplayMenu::joinPublicGame` cancels the directory request when beginning admission; `menu-probe.inc` exercises the enabled button with `directoryPending=true`. | The room can legitimately become full or close before admission. |
+| A duplicate name cannot gain a second controller or pending request | Normal seating and late-join checks retain `name_taken`; a renamed retry can succeed. | The error now explains Settings; it never silently changes identity. |
+| Owned Custom Game reaches lockstep with both humans' orders | Listing → both lobbies → Start → both vehicles moved. **31 shared-cycle byte-identical digests through cycle 6200 (99.2 simulation seconds)**; both direct links remained connected, no refused sends. | Browser↔browser, Vanilla Habbanya-Penny Revised; not a claim about every WAN pair. |
+| A genuinely generated Random Skirmish reaches the same lockstep | 128×128, two mirrored Vanilla starts, Medium bases, 5000-credit armies, tech 9, seed 532178562. Listing → both lobbies → Start → both humans moved a vehicle. **41 matching digests through cycle 8200 (131.2 simulation seconds)**; both links connected, no refused sends. | Browser↔browser; actual generator output, not a fixed-map substitute. |
+
+Sanitized JSON, listing/lobby/start/game screenshots and the encoded matching digests:
+`outputs/multiplayer-join-20261111/controlled/{custom-stun,skirmish-stun}-gameplay.json`
+under the managed project's outputs directory. The JSON identifies the executable and service
+separately; the rebuilt cached-click client was not substituted for the published baseline.
+
+The initial host-only-ICE fixture stalled before gameplay. A bare two-RTCPeerConnection
+control reproduced that limitation without the game, SDK or PHP; production STUN then enabled
+the real matches above. That fixture failure is **not** evidence for a production transport
+patch. A third-party public-room connection also failed during the investigation, but its ICE
+diagnostics were not retained; these successful owned-room checks do not explain or resolve it.
