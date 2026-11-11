@@ -658,6 +658,25 @@ jobs:
           cp "$RUNNER_TEMP/dunecity-mac-signed-${{ github.run_id }}-${{ github.run_attempt }}"/*.dmg build/
           cp "$RUNNER_TEMP/dunecity-mac-signed-${{ github.run_id }}-${{ github.run_attempt }}"/*.zip build/
 
+      - name: Require packaged native pointer-to-menu alignment
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          DUNECITY_NATIVE_POINTER_TEST: '1'
+        run: |
+          python3 tests/menu/run-menu-probe.py \
+            --pointer-mapping --size 1440x900 --build-dir build \
+            --runtime-app "$RUNNER_TEMP/dunecity-mac-install/dunecity.app" \
+            --output-dir "$RUNNER_TEMP/dunecity-pointer-mapping-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+      - name: Retain native pointer regression diagnostics
+        if: always() && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-macOS-pointer-regression
+          path: ${{ runner.temp }}/dunecity-pointer-mapping-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Verify DMG
         run: bash scripts/verify-macos-dmg.sh build/DuneCity-*-macOS.dmg
 

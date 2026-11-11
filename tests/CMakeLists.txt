@@ -638,7 +638,8 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --pointer-mapping --size 1440x900
                 --runtime-app $<TARGET_BUNDLE_DIR:dunecity>
                 --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/native-pointer-mapping-probe)
-            set_tests_properties(native_pointer_mapping_probe PROPERTIES TIMEOUT 240
+            set_tests_properties(native_pointer_mapping_probe PROPERTIES TIMEOUT 300
+                TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20
                 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS "gui;macos;pointer")
         endif()
         add_test(NAME game_command_regressions COMMAND ${Python3_EXECUTABLE}

@@ -1,30 +1,21 @@
 #if defined(__APPLE__) && !defined(DUNECITY_IOS)
+#include <filesystem>
 extern "C" void nativePointerProbeBegin(SDL_Window*);
 extern "C" void nativePointerProbeEvent(SDL_Window*, int, int, int);
-extern "C" void nativePointerProbeEnd();
+#include "pointer-runtime-probe.inc"
 
 namespace PointerMappingProbe {
-void verifyRuntime() {
-    SDL_version version{};
-    SDL_GetVersion(&version);
-    SDL_RendererInfo info{};
-    menuRequire(SDL_GetRendererInfo(renderer, &info) == 0, "Pointer renderer is unavailable");
-    menuRequire(std::string(SDL_GetCurrentVideoDriver()) == "cocoa", "Pointer test must use native Cocoa");
-    SDL_Log("POINTER_RUNTIME: SDL=%d.%d.%d renderer=%s", version.major, version.minor, version.patch, info.name);
-    const char* required = std::getenv("MENU_POINTER_RUNTIME");
-    bool dynamicSDL = false;
-    for(uint32_t i = 0; i < _dyld_image_count(); ++i) {
-        const char* path = _dyld_get_image_name(i);
-        const char* name = path ? std::strrchr(path, '/') : nullptr;
-        name = name ? name + 1 : path;
-        if(!name || (std::strncmp(name, "libSDL", 6) != 0 && std::strncmp(name, "SDL", 3) != 0)) continue;
-        dynamicSDL = true;
-        SDL_Log("POINTER_LIBRARY: %s", path);
-        menuRequire(!required || std::string(path).compare(0, std::strlen(required) + 1,
-                    std::string(required) + "/") == 0, "Pointer test loaded SDL outside the packaged app");
+void settleWindow(int width, int height) {
+    for(int attempt = 0; attempt < 40; ++attempt) {
+        SDL_PumpEvents();
+        int actualWidth = 0, actualHeight = 0;
+        SDL_GetWindowSize(window, &actualWidth, &actualHeight);
+        if(actualWidth == width && actualHeight == height) return;
+        SDL_Delay(5);
     }
-    SDL_Log("POINTER_LINKAGE: %s", dynamicSDL ? "dynamic" : "static");
+    menuRequire(false, "Native window resize did not settle at the requested size");
 }
+
 
 void verifyMenu(const char* phase, bool offscreen = false) {
     int ww = 0, wh = 0, ow = 0, oh = 0, lw = 0, lh = 0;
@@ -85,6 +76,9 @@ void verifyMenu(const char* phase, bool offscreen = false) {
             const bool inside = ex >= bounds.x && ex < bounds.x + bounds.w && ey >= bounds.y && ey < bounds.y + bounds.h;
             clicked = -1;
             bool motion = false, down = false, up = false;
+            nativePointerProbeEvent(window, wx > 20 ? wx - 20 : wx + 20, wy, -1);
+            SDL_PumpEvents();
+            SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
             nativePointerProbeEvent(window, wx, wy, -1);
             nativePointerProbeEvent(window, wx, wy, 1);
             nativePointerProbeEvent(window, wx, wy, 0);
@@ -92,6 +86,8 @@ void verifyMenu(const char* phase, bool offscreen = false) {
             while(SDL_PollEvent(&event)) {
                 if(event.type != SDL_MOUSEMOTION && event.type != SDL_MOUSEBUTTONDOWN && event.type != SDL_MOUSEBUTTONUP) continue;
                 const bool moving = event.type == SDL_MOUSEMOTION;
+                const Uint32 eventWindow = moving ? event.motion.windowID : event.button.windowID;
+                if(eventWindow != SDL_GetWindowID(window)) continue;
                 const int x = moving ? event.motion.x : event.button.x;
                 const int y = moving ? event.motion.y : event.button.y;
                 SDL_Log("POINTER_EVENT: phase=%s type=%u window=%d,%d expected=%.2f,%.2f actual=%d,%d target=%d inside=%d",
@@ -111,21 +107,63 @@ void verifyMenu(const char* phase, bool offscreen = false) {
 }
 }
 
+// Test fixture, not production initialization: only real Vanilla defaults are
+// needed to exercise original PAK artwork, fonts and the real menu input path.
+// Never seed unrelated multi-gigabyte Tornie/Dune2R presentation payloads.
+void initializePointerProbeVanilla() {
+    char path[FILENAME_MAX];
+    menuRequire(fnkdat("mods", path, FILENAME_MAX, FNKDAT_USER | FNKDAT_CREAT) >= 0,
+                "Cannot create the isolated pointer fixture");
+    auto& mods = ModManager::instance();
+    mods.modsBasePath = path;
+    mods.sharedBundledModsPath.clear();
+    std::filesystem::create_directories(path);
+    if(!mods.modExists("vanilla") || mods.vanillaNeedsReseed()) mods.seedVanillaFromDefaults();
+    mods.activeMod = "vanilla";
+    mods.activeContentBase = "vanilla";
+    mods.activeDune2RRemasterPresentation = false;
+    mods.loadActiveContentMetadata(mods.readModIni(mods.getModPath("vanilla")));
+    mods.initialized = true;
+}
+
 int runPointerMappingProbe() {
-    PointerMappingProbe::verifyRuntime();
+    static bool applied = false;
+    verifyPointerRuntime(renderer);
     nativePointerProbeBegin(window);
-    struct RestoreNativePointer { ~RestoreNativePointer() { nativePointerProbeEnd(); } } restore;
-    PointerMappingProbe::verifyMenu("startup");
+    if(applied) {
+        menuRequire(!settings.video.fullscreen && settings.video.physicalWidth == 1440
+                    && settings.video.physicalHeight == 900 && settings.video.width == 960
+                    && settings.video.height == 600, "Video reinitialization did not load the windowed preset");
+        menuRequire(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN),
+                    "Video reinitialization did not actually leave fullscreen");
+        PointerMappingProbe::verifyMenu("settings-apply-reinitialized-window");
+        SDL_Log("MENU_PROBE_PASS: real menu native motion/buttons align at centers and edges across Retina backing pixels, target restoration, fullscreen, letterbox resize and settings reinitialization");
+        return MENU_QUIT_DEFAULT;
+    }
+    menuRequire(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN, "Pointer startup must be fullscreen");
+    PointerMappingProbe::verifyMenu("fullscreen-startup");
     PointerMappingProbe::verifyMenu("render-target-roundtrip", true);
     toogleFullscreen();
-    PointerMappingProbe::verifyMenu("fullscreen-roundtrip-enter");
+    menuRequire(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN), "Fullscreen exit failed");
+    PointerMappingProbe::verifyMenu("fullscreen-exit-windowed");
     toogleFullscreen();
-    PointerMappingProbe::verifyMenu("fullscreen-roundtrip-return");
+    menuRequire(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN, "Fullscreen return failed");
+    PointerMappingProbe::verifyMenu("fullscreen-return");
+    toogleFullscreen();
+    menuRequire(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN), "Resize fixture is not windowed");
     SDL_SetWindowSize(window, 1000, 740);
-    SDL_PumpEvents();
-    PointerMappingProbe::verifyMenu("live-window-resize-letterbox");
-    SDL_Log("MENU_PROBE_PASS: native Cocoa motion/buttons align with real menu targets, edges, Retina backing pixels, render-target and fullscreen/window-resize transitions");
-    return MENU_QUIT_DEFAULT;
+    PointerMappingProbe::settleWindow(1000, 740);
+    PointerMappingProbe::verifyMenu("windowed-1000x740-letterbox");
+    INIFile config(getConfigFilepath());
+    config.setIntValue("Video", "Physical Width", 1440);
+    config.setIntValue("Video", "Physical Height", 900);
+    config.setIntValue("Video", "Width", 960);
+    config.setIntValue("Video", "Height", 600);
+    config.setIntValue("Video", "Interface Height", 600);
+    config.setBoolValue("Video", "Fullscreen", false);
+    config.saveChangesTo(getConfigFilepath());
+    applied = true;
+    return MENU_QUIT_REINITIALIZE;
 }
 #else
 int runPointerMappingProbe() { throw std::runtime_error("Native pointer regression requires macOS desktop"); }

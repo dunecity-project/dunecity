@@ -704,11 +704,15 @@ int runRetinaResolutionProbe() {
             " window preserves aspect and mouse mapping, and fullscreen returns without losing HD");
     return MENU_QUIT_DEFAULT;
 }
+#ifdef DUNECITY_NATIVE_POINTER_PROBE
 #include "pointer-mapping-probe.inc"
+#endif
 
 
 int runMenuProbe() {
+#ifdef DUNECITY_NATIVE_POINTER_PROBE
     if(std::getenv("MENU_POINTER_MAPPING"))return runPointerMappingProbe();
+#endif
     if(std::getenv("MENU_RETINA_RESOLUTION"))return runRetinaResolutionProbe();
     menuRequire(getRendererWidth()==std::atoi(std::getenv("MENU_PROBE_WIDTH"))
                 && getRendererHeight()==std::atoi(std::getenv("MENU_PROBE_HEIGHT")),
