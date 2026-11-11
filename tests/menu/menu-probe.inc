@@ -704,8 +704,11 @@ int runRetinaResolutionProbe() {
             " window preserves aspect and mouse mapping, and fullscreen returns without losing HD");
     return MENU_QUIT_DEFAULT;
 }
+#include "pointer-mapping-probe.inc"
+
 
 int runMenuProbe() {
+    if(std::getenv("MENU_POINTER_MAPPING"))return runPointerMappingProbe();
     if(std::getenv("MENU_RETINA_RESOLUTION"))return runRetinaResolutionProbe();
     menuRequire(getRendererWidth()==std::atoi(std::getenv("MENU_PROBE_WIDTH"))
                 && getRendererHeight()==std::atoi(std::getenv("MENU_PROBE_HEIGHT")),

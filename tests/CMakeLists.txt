@@ -631,6 +631,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)
         set_tests_properties(retina_resolution_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        if(APPLE)
+            # Real Cocoa motion/buttons through linked SDL and the production menu
+            # hit-test path. Explicit Mini GUI opt-in; never admitted on the Air.
+            add_test(NAME native_pointer_mapping_probe COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --pointer-mapping --size 1440x900
+                --runtime-app $<TARGET_BUNDLE_DIR:dunecity>
+                --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/native-pointer-mapping-probe)
+            set_tests_properties(native_pointer_mapping_probe PROPERTIES TIMEOUT 240
+                RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS "gui;macos;pointer")
+        endif()
         add_test(NAME game_command_regressions COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/network/run-command-execution-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/command-probe)

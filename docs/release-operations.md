@@ -351,6 +351,20 @@ pass, including gameplay after signaling outage and SQLite runtime attribution.
 Transport fixtures alone are insufficient. Networks unable to establish direct ICE
 connectivity fail visibly; there is no hidden relay fallback.
 
+## Native pointer alignment release gate
+
+Before the next production release, require the native mouse/menu regression
+with the candidate's bundled SDL libraries on the Mac mini. It must exercise
+native pointer motion and button down/up through SDL and the real menu hit-test
+path, not inject already-logical SDL events or call widget handlers directly.
+Check off-center controls and control edges with Retina drawable/window scaling,
+letterboxing, and fullscreen/windowed resolution transitions. Record the actual
+window, drawable, logical and viewport sizes and loaded SDL identities.
+
+A hidden-window initialization pass, center-only coordinate check, or skipped
+opt-in test does not satisfy this gate. Keep production held if this check fails
+or cannot run. Never run graphical or pointer-automation checks on the MacBook Air.
+
 ## Windows compile caching
 
 The macOS release job also enables tests and runs `classic_desert_ui_tests`
