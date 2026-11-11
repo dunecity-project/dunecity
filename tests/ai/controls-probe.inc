@@ -246,11 +246,19 @@ void runControlsProbe(Game& game) {
     const Coord trackpadCenter=screenborder->getCurrentCenter();
     const Coord trackpadExpected=trackpadCenter+Coord(
         screenborder->screen2worldX(pointer.x+24)-screenborder->screen2worldX(pointer.x),
-        screenborder->screen2worldY(pointer.y-18)-screenborder->screen2worldY(pointer.y));
+        screenborder->screen2worldY(pointer.y+18)-screenborder->screen2worldY(pointer.y));
     queueMacTrackpadMonitorPan(pointer.x,pointer.y,-24,-18);
     game.doInput();
     require(game.zoomStep==5 && screenborder->getCurrentCenter()==trackpadExpected,
             "Two-finger trackpad scroll zoomed or failed to pan expected pixels");
+    const Coord reverseCenter=screenborder->getCurrentCenter();
+    const Coord reverseExpected=reverseCenter+Coord(
+        screenborder->screen2worldX(pointer.x-24)-screenborder->screen2worldX(pointer.x),
+        screenborder->screen2worldY(pointer.y-18)-screenborder->screen2worldY(pointer.y));
+    queueMacTrackpadMonitorPan(pointer.x,pointer.y,24,18);
+    game.doInput();
+    require(game.zoomStep==5 && screenborder->getCurrentCenter()==reverseExpected,
+            "Opposite two-finger scroll did not reverse both pan axes without zoom");
     pinch(0,1); pinch(-.25,4); pinch(0,8);
     require(game.zoomStep==4,"Native trackpad pinch-together failed to zoom out");
     queueMacTrackpadScroll(pointer.x,pointer.y,0,1,false,false);

@@ -213,7 +213,8 @@ Use **Save Game** when you want to continue the complete match.
   per notch, anchored at the pointer. Zoom stops at the available limits.
 - On a **Mac trackpad**, move two fingers together to pan the map without
   holding a button. Spread two fingers to zoom in; pinch them together to zoom
-  out at the pointer. Two-finger scrolling pans — it does **not** zoom.
+  out at the pointer. Two-finger scrolling pans — it does **not** zoom. Both pan
+  axes honor the macOS scroll-direction preference consistently.
   Physical mouse wheels, including unphased high-resolution wheels, still zoom.
 - On **iPhone/iPad**, move two fingers together to pan; spread/pinch them to
   zoom around their midpoint. Start both fingers over the map, not a menu,

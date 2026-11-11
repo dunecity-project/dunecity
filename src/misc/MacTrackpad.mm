@@ -98,10 +98,10 @@ NSEvent* handleNativeEvent(NSEvent* event) {
             panRemainderX = panRemainderY = 0.0;
         }
         if(!(event.phase & NSEventPhaseCancelled)) {
-            // Cocoa deltas already honor natural-scroll preference. Only change
-            // the coordinate system's Y direction, not that preference.
+            // Cocoa deltas already honor natural-scroll preference. Keep both
+            // axes in the same direction before the camera applies the pan.
             panRemainderX += event.scrollingDeltaX * scaleX;
-            panRemainderY -= event.scrollingDeltaY * scaleY;
+            panRemainderY += event.scrollingDeltaY * scaleY;
             const int dx = static_cast<int>(panRemainderX);
             const int dy = static_cast<int>(panRemainderY);
             panRemainderX -= dx;
