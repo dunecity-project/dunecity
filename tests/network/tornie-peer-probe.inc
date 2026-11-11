@@ -7,6 +7,7 @@
 #include <Menu/RandomSkirmishMenu.h>
 #include <FileClasses/FileManager.h>
 #include <FileClasses/INIFile.h>
+#include <sand.h>
 #include <algorithm>
 #include <array>
 

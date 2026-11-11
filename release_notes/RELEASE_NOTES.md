@@ -3,8 +3,9 @@
 - Public rooms, including spectator entries, are offered only to the exact matching game version. Invite and stale-list joins still explain version mismatches without weakening content checks.
 - Joining a cached public room no longer silently ignores the click during a background directory refresh.
 - Duplicate player-name refusals explain how to change **Player name** in **Settings** before retrying. Player identity remains explicit and unique.
+- Retiring a failed direct connection now discards its unsent handshake messages. Late HTTP completions and timeouts cannot advertise or retry that dead connection, while other peers keep their ordered signaling.
 
-These changes require deployment of the signaling PHP service; the cached-join fix also requires rebuilt clients. They do not change the STUN-only direct transport or claim to fix every network's WebRTC reachability.
+These changes require deployment of the signaling PHP service; the cached-join and retired-handshake fixes also require rebuilt clients. They do not change the STUN-only direct transport or claim to fix every network's WebRTC reachability.
 
 # Dune City 1.0.820
 

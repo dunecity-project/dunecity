@@ -230,6 +230,7 @@ target_compile_options(dunelegacy_tests
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests "~[skirmish]~[civwars]")
 add_test(NAME pak_concurrent_read_tests COMMAND dunelegacy_tests "[pak][threading]")
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
+add_test(NAME direct_transport_tests COMMAND dunelegacy_tests "[direct]")
 # Local revision store: snapshots, pinning, verified imports and retired sharing-queue cleanup.
 add_test(NAME workshop_store_tests COMMAND dunelegacy_tests "[workshop]")
 add_test(NAME soundtrack_pack_tests COMMAND dunelegacy_tests "[music][soundtrack]")

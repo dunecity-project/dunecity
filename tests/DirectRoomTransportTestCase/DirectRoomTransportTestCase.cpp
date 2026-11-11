@@ -86,6 +86,7 @@ public:
 
     std::vector<Exchange> requests;
     std::deque<Result>    answers;
+    std::deque<Result>    signalAnswers;
     /// When set, every further request simply never answers, as if the service had gone away.
     bool silent = false;
     std::string phaseAnswer;
@@ -136,6 +137,9 @@ public:
             auto roster=pos==std::string::npos ? "" : body.substr(pos+8);
             for(auto p=roster.find("%2C");p!=std::string::npos;p=roster.find("%2C")) roster.replace(p,3,",");
             out=ok(phaseAnswer.empty() ? "status=ok\nphase=match\nstartId="+std::string(32,'a')+"\nroster="+roster+"\n" : phaseAnswer);
+        } else if(pendingUrl_.find("/v1/p2p/signal") != std::string::npos && !signalAnswers.empty()) {
+            out = signalAnswers.front();
+            signalAnswers.pop_front();
         } else {
             out = ok("status=ok\n");
         }
@@ -649,6 +653,120 @@ TEST_CASE("Local offers and candidates are published, relayed ones are not",
     REQUIRE(posted.find("kind=offer") != std::string::npos);
     REQUIRE(posted.find("kind=candidate") != std::string::npos);
     REQUIRE(posted.find(hexOf("typ relay")) == std::string::npos);
+}
+
+TEST_CASE("Retiring a link discards its queued handshake but preserves other peers",
+          "[direct][lifetime][regression]") {
+    Harness h;
+    h.join();
+    h.deliverPoll("status=ok\nphase=lobby\n" + peerRecord(2, "client", "Ada", "browser")
+        + peerRecord(3, "client", "Bo", "native") + fingerprintRecord(2, kFingerprintA)
+        + fingerprintRecord(3, kFingerprintB) + "cursor=0\n");
+    REQUIRE(h.channels.size() == 2);
+
+    // Hold a real poll in the transport's serial HTTP slot while both backends produce details.
+    h.service->silent = true;
+    h.pump(1, 250);
+    REQUIRE(h.service->busy());
+    REQUIRE(h.service->requests.back().url.find("/v1/p2p/poll") != std::string::npos);
+    const auto heldRequestCount = h.service->requests.size();
+    for(auto& channel : h.channels) {
+        channel->localSignals.push_back({P2PSignal::SignalKind::Offer, sdpWith(kFingerprintA)});
+        channel->localSignals.push_back({P2PSignal::SignalKind::Candidate,
+            "0|candidate:2 1 udp 2122260223 192.0.2.1 50000 typ host"});
+    }
+    h.pump();
+    REQUIRE(h.service->requests.size() == heldRequestCount);
+    h.channels[0]->current = DirectPeerConnection::State::Failed;
+    h.channels[1]->current = DirectPeerConnection::State::Connected;
+    h.pump();
+    REQUIRE(h.channels[0]->current == DirectPeerConnection::State::Closed);
+    REQUIRE(h.transport->peers().size() == 1);
+    REQUIRE(h.transport->peers()[0].id == 3);
+
+    h.service->silent = false;
+    h.pump(8, 1);
+    std::vector<std::string> liveSignals;
+    for(const auto& request : h.service->requests) {
+        if(request.url.find("/v1/p2p/signal") == std::string::npos) continue;
+        REQUIRE(request.body.find("to=2&") != 0);
+        if(request.body.find("to=3&") == 0) liveSignals.push_back(request.body);
+    }
+    REQUIRE(liveSignals.size() == 2);
+    REQUIRE(liveSignals[0] == "to=3&kind=offer&data=" + hexOf(sdpWith(kFingerprintA)));
+    REQUIRE(liveSignals[1] == "to=3&kind=candidate&data="
+        + hexOf("0|candidate:2 1 udp 2122260223 192.0.2.1 50000 typ host"));
+    REQUIRE(h.transport->isJoined());
+    REQUIRE(h.transport->connectedPeerCount() == 1);
+    const std::uint8_t packet[] = {0x10, 0x01};
+    REQUIRE(h.transport->sendGamePayload(packet, sizeof(packet), 0, 3));
+}
+
+TEST_CASE("A retired link's in-flight signal cannot retry or acknowledge a phase update",
+          "[direct][lifetime][regression]") {
+    Harness h;
+    h.join();
+    h.deliverPoll("status=ok\nphase=lobby\n" + peerRecord(2, "client", "Ada", "browser")
+        + peerRecord(3, "client", "Bo", "native") + fingerprintRecord(2, kFingerprintA)
+        + fingerprintRecord(3, kFingerprintB) + "cursor=0\n");
+    REQUIRE(h.channels.size() == 2);
+    h.service->silent = true;
+    h.pump(1, 250);
+    REQUIRE(h.service->busy());
+    REQUIRE(h.service->requests.back().url.find("/v1/p2p/poll") != std::string::npos);
+    for(auto& channel : h.channels) {
+        channel->localSignals.push_back({P2PSignal::SignalKind::Offer, sdpWith(kFingerprintA)});
+        channel->localSignals.push_back({P2PSignal::SignalKind::Candidate,
+            "0|candidate:2 1 udp 2122260223 192.0.2.1 50000 typ host"});
+    }
+    h.pump();
+
+    // The first offer has left this computer; retirement cannot undo server acceptance.
+    h.service->silent = false;
+    h.pump();
+    REQUIRE(h.service->lastRequestTo("/v1/p2p/signal") != nullptr);
+    REQUIRE(h.service->lastRequestTo("/v1/p2p/signal")->body.find("to=2&kind=offer&") == 0);
+    h.service->silent = true;
+    h.channels[0]->current = DirectPeerConnection::State::Failed;
+    h.channels[1]->current = DirectPeerConnection::State::Connected;
+    h.pump();
+    REQUIRE(h.channels[0]->current == DirectPeerConnection::State::Closed);
+    h.drain();
+    REQUIRE(h.transport->setRoomPhase(RoomRelay::Phase::Lobby));
+
+    auto completion = ScriptedService::ok("status=ok\n");
+    bool timeout = false;
+    SECTION("a late successful completion") { }
+    SECTION("a late retryable HTTP failure") { completion.httpStatus = 503; }
+    SECTION("a late transport failure") { completion.transportError = "connection lost"; }
+    SECTION("a late refusal") { completion.httpStatus = 409; }
+    SECTION("the request deadline expires before completion") { timeout = true; }
+    if(timeout) h.pump(1, 15001);
+    else h.service->signalAnswers.push_back(completion);
+    h.service->silent = false;
+    h.pump(8, 1);
+
+    unsigned retiredPosts = 0;
+    std::vector<std::string> liveSignals;
+    for(const auto& request : h.service->requests) {
+        if(request.url.find("/v1/p2p/signal") == std::string::npos) continue;
+        if(request.body.find("to=2&") == 0) ++retiredPosts;
+        if(request.body.find("to=3&") == 0) liveSignals.push_back(request.body);
+    }
+    REQUIRE(retiredPosts == 1); // Only the offer already in flight, never its candidate or retry.
+    REQUIRE(liveSignals.size() == 2);
+    REQUIRE(liveSignals[0] == "to=3&kind=offer&data=" + hexOf(sdpWith(kFingerprintA)));
+    REQUIRE(liveSignals[1] == "to=3&kind=candidate&data="
+        + hexOf("0|candidate:2 1 udp 2122260223 192.0.2.1 50000 typ host"));
+    REQUIRE(h.service->lastRequestTo("/v1/p2p/phase") != nullptr);
+    REQUIRE(h.service->lastRequestTo("/v1/p2p/phase")->body == "phase=lobby");
+    REQUIRE(h.transport->isJoined());
+    REQUIRE(h.transport->connectedPeerCount() == 1);
+    REQUIRE(h.channels[1]->current == DirectPeerConnection::State::Connected);
+    for(const auto& event : h.drain()) {
+        REQUIRE(event.type != RoomSessionTransport::Event::Type::Closed);
+        REQUIRE(event.type != RoomSessionTransport::Event::Type::Refused);
+    }
 }
 
 TEST_CASE("A host alone in the room is not waiting for anybody", "[direct][mesh]") {

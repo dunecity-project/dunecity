@@ -156,15 +156,21 @@ The roster freezes when the host starts the match or when this computer's own si
 whichever happens first. After that, a player the service introduces is refused rather than
 admitted: lockstep has no way to bring a latecomer up to date.
 
+Signaling is owned by its live peer connection. Retiring a link discards its queued offer and
+candidates, without changing another peer's queue order. A signal POST already in flight cannot
+be unsent: its eventual completion or timeout must not retry the retired negotiation, recreate
+the link, or acknowledge a separate pending room-phase update.
+
 Player addresses are visible to the other players in the room - that is what "direct" means, and
 with no TURN it cannot be otherwise. It is a deliberate property of the requested topology, not
 an oversight.
 
 ## 7. Failure is said out loud
 
-A peer that will not connect produces "Could not open a direct connection to <name>. Your network
-blocked the peer-to-peer link." There is no fallback to HTTP or WebSocket gameplay and no TURN
-retry, because a silent fallback is how direct play quietly becomes relayed play.
+A peer that will not connect produces a setup error distinguishing incomplete signaling, an
+explicit ICE failure and a data-channel timeout. Exchanged descriptions alone do not prove that
+ICE succeeded or that a NAT blocked it. There is no HTTP/WebSocket gameplay fallback or TURN
+retry: a silent fallback would quietly turn direct play into relayed play.
 
 Losing the signaling service after the players are connected is a diagnostic, not a disconnect:
 polling stops and the match continues. A `gone` record for a peer whose channel is open is
@@ -258,3 +264,15 @@ control reproduced that limitation without the game, SDK or PHP; production STUN
 the real matches above. That fixture failure is **not** evidence for a production transport
 patch. A third-party public-room connection also failed during the investigation, but its ICE
 diagnostics were not retained; these successful owned-room checks do not explain or resolve it.
+
+### Retired-handshake regression
+
+`DirectRoomTransportTestCase` holds a poll while two peers queue offers and candidates, retires
+one link, then releases the poll. Only the surviving peer's ordered handshake may be posted,
+and its gameplay channel remains usable. A second scenario retires a link with its offer
+already in flight; success, retryable HTTP failure, transport failure, refusal and request
+deadline expiry must neither resend it nor consume an unrelated pending phase update.
+
+These are deterministic lifecycle regressions for the stale-offer defect, separate from the
+published-client browser evidence above. They do not establish that this ordering caused the
+observed third-party WAN failure, or promise progress while a browser suspends its game loop.
