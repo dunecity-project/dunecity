@@ -1,13 +1,60 @@
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 #include <SDL.h>
 #include <SDL_syswm.h>
 #include <stdexcept>
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 namespace {
 id pointerEventMonitor = nil;
 NSInteger nextPointerEventNumber = 1;
+
+NSRect unconstrainedPointerFrame(id, SEL, NSRect frame, NSScreen*) {
+    return frame;
+}
+
+// AppKit constrains titled windows' top edges to their screen. A stationary
+// pointer near that edge otherwise cannot reach the fixture's lower buttons.
+// Subclass only this SDL window, only during our explicit placement; retain its
+// actual SDL class for input dispatch and every fullscreen/resize transition.
+class PointerWindowPlacement {
+public:
+    explicit PointerWindowPlacement(NSWindow* native)
+        : window(native), original(object_getClass(native)) {
+        static Class base = Nil, placement = Nil;
+        if(base != original) {
+            const std::string name = std::string("DuneCityPointerPlacement_") + class_getName(original);
+            placement = objc_lookUpClass(name.c_str());
+            if(!placement) {
+                const SEL selector = @selector(constrainFrameRect:toScreen:);
+                const Method method = class_getInstanceMethod(original, selector);
+                if(!method) throw std::runtime_error("Missing AppKit frame constraint method");
+                placement = objc_allocateClassPair(original, name.c_str(), 0);
+                if(!placement) throw std::runtime_error("Cannot isolate pointer window geometry");
+                if(!class_addMethod(placement, selector, reinterpret_cast<IMP>(unconstrainedPointerFrame),
+                                    method_getTypeEncoding(method))) {
+                    objc_disposeClassPair(placement);
+                    throw std::runtime_error("Cannot override pointer window frame constraints");
+                }
+                objc_registerClassPair(placement);
+            }
+            if(class_getSuperclass(placement) != original)
+                throw std::runtime_error("Unexpected pointer placement superclass");
+            base = original;
+        }
+        object_setClass(window, placement);
+    }
+
+    ~PointerWindowPlacement() { object_setClass(window, original); }
+    PointerWindowPlacement(const PointerWindowPlacement&) = delete;
+    PointerWindowPlacement& operator=(const PointerWindowPlacement&) = delete;
+
+private:
+    NSWindow* window;
+    Class original;
+};
 
 void logNativePointerEvent(SDL_Window* window, NSEvent* event, const char* stage) {
     NSWindow* native = event.window;
@@ -74,8 +121,8 @@ extern "C" void nativePointerProbeCurrentPoint(SDL_Window* window, int* x, int* 
         : NSMaxY(bounds) - point.y) * height / bounds.size.height));
 }
 
-// AppKit can constrain a titled window at the menu bar. Return the actual
-// available content point; callers retain and report the requested-point coverage.
+// Return the measured content point, never the requested fixture coordinates.
+// Any remaining placement failure still makes the named coverage gate fail.
 extern "C" SDL_Point nativePointerProbePlace(SDL_Window* window, int x, int y) {
     @autoreleasepool {
         SDL_SysWMinfo info{};
@@ -97,8 +144,11 @@ extern "C" SDL_Point nativePointerProbePlace(SDL_Window* window, int x, int y) {
             NSRect frame = native.frame;
             frame.origin.x += pointer.x - screen.x;
             frame.origin.y += pointer.y - screen.y;
-            [native setFrameOrigin:frame.origin];
-            SDL_PumpEvents();
+            {
+                PointerWindowPlacement geometry(native);
+                [native setFrameOrigin:frame.origin];
+                SDL_PumpEvents();
+            }
         }
         SDL_Point actual{};
         nativePointerProbeCurrentPoint(window, &actual.x, &actual.y);
