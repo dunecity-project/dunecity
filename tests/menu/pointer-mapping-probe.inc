@@ -3,9 +3,12 @@
 extern "C" void nativePointerProbeBegin(SDL_Window*);
 extern "C" void nativePointerProbeEvent(SDL_Window*, int, int, int);
 extern "C" void nativePointerProbeCurrentPoint(SDL_Window*, int*, int*);
+extern "C" SDL_Point nativePointerProbePlace(SDL_Window*, int, int);
 #include "pointer-runtime-probe.inc"
 
 namespace PointerMappingProbe {
+int unavailableSamples = 0;
+
 void settleWindow(int width, int height) {
     for(int attempt = 0; attempt < 40; ++attempt) {
         SDL_PumpEvents();
@@ -101,21 +104,37 @@ void verifyMenu(const char* phase, bool offscreen = false) {
             const auto point = points[pointIndex];
             // Independent presentation geometry, never the inverse SDL function
             // under test or an already-logical SDL_PushEvent fixture.
-            const int wx = fullscreen ? stationaryX : int(std::lround((vx + point.x * vw / lw) * ww / ow));
-            const int wy = fullscreen ? stationaryY : int(std::lround((vy + point.y * vh / lh) * wh / oh));
-            const double ex = (wx * double(ow) / ww - vx) * lw / vw;
-            const double ey = (wy * double(oh) / wh - vy) * lh / vh;
-            const bool inside = ex >= bounds.x && ex < bounds.x + bounds.w && ey >= bounds.y && ey < bounds.y + bounds.h;
-            clicked = -1;
-            bool motion = false, down = false, up = false;
+            const int requestedX = fullscreen ? stationaryX : int(std::lround((vx + point.x * vw / lw) * ww / ow));
+            const int requestedY = fullscreen ? stationaryY : int(std::lround((vy + point.y * vh / lh) * wh / oh));
             if(!fullscreen) {
-                nativePointerProbeEvent(window, wx > 20 ? wx - 20 : wx + 20, wy, -1);
+                const auto nudge = nativePointerProbePlace(window,
+                    requestedX > 20 ? requestedX - 20 : requestedX + 20, requestedY);
+                nativePointerProbeEvent(window, nudge.x, nudge.y, -1);
                 SDL_PumpEvents();
                 SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
             }
-            nativePointerProbeEvent(window, wx, wy, -1);
-            nativePointerProbeEvent(window, wx, wy, 1);
-            nativePointerProbeEvent(window, wx, wy, 0);
+            const auto available = nativePointerProbePlace(window, requestedX, requestedY);
+            const bool requestedAvailable = std::abs(available.x - requestedX) <= 1
+                && std::abs(available.y - requestedY) <= 1;
+            if(!requestedAvailable) {
+                ++unavailableSamples;
+                SDL_Log("POINTER_UNAVAILABLE: phase=%s target=%d sample=%d requestedLogical=%d,%d requestedWindow=%d,%d availableWindow=%d,%d",
+                        phase, index, pointIndex, point.x, point.y, requestedX, requestedY, available.x, available.y);
+            }
+            if(available.x < 0 || available.y < 0 || available.x >= ww || available.y >= wh) {
+                if(requestedAvailable) ++unavailableSamples;
+                SDL_Log("POINTER_UNAVAILABLE: phase=%s target=%d sample=%d availableWindow=%d,%d outsideContent=1",
+                        phase, index, pointIndex, available.x, available.y);
+                continue;
+            }
+            const double ex = (available.x * double(ow) / ww - vx) * lw / vw;
+            const double ey = (available.y * double(oh) / wh - vy) * lh / vh;
+            const bool inside = ex >= bounds.x && ex < bounds.x + bounds.w && ey >= bounds.y && ey < bounds.y + bounds.h;
+            clicked = -1;
+            bool motion = false, down = false, up = false;
+            nativePointerProbeEvent(window, available.x, available.y, -1);
+            nativePointerProbeEvent(window, available.x, available.y, 1);
+            nativePointerProbeEvent(window, available.x, available.y, 0);
             SDL_Event event{};
             while(SDL_PollEvent(&event)) {
                 if(event.type != SDL_MOUSEMOTION && event.type != SDL_MOUSEBUTTONDOWN && event.type != SDL_MOUSEBUTTONUP) continue;
@@ -125,7 +144,7 @@ void verifyMenu(const char* phase, bool offscreen = false) {
                 const int x = moving ? event.motion.x : event.button.x;
                 const int y = moving ? event.motion.y : event.button.y;
                 SDL_Log("POINTER_EVENT: phase=%s type=%u window=%d,%d expected=%.2f,%.2f actual=%d,%d target=%d inside=%d",
-                        phase, event.type, wx, wy, ex, ey, x, y, index, int(inside));
+                        phase, event.type, available.x, available.y, ex, ey, x, y, index, int(inside));
                 menuRequire(std::abs(x - ex) <= 2 && std::abs(y - ey) <= 2,
                             "Native SDL pointer coordinates disagree with the rendered button");
                 if(moving) motion = true;
@@ -135,8 +154,8 @@ void verifyMenu(const char* phase, bool offscreen = false) {
             }
             menuRequire(down && up && (motion || fullscreen), "Cocoa did not deliver native motion and both button events");
             if(motion) menuRequire(buttons[index]->bHover == inside, "Native pointer hover misses the visible button");
-            SDL_Log("POINTER_COVERAGE: phase=%s motion=%d down=%d up=%d stationaryFullscreen=%d",
-                    phase, int(motion), int(down), int(up), int(fullscreen));
+            SDL_Log("POINTER_COVERAGE: phase=%s target=%d sample=%d motion=%d down=%d up=%d stationaryFullscreen=%d requestedAvailable=%d",
+                    phase, index, pointIndex, int(motion), int(down), int(up), int(fullscreen), int(requestedAvailable));
             menuRequire(inside ? clicked == index : clicked != index, "Native buttons do not click the visible target");
         }
     }
@@ -173,6 +192,8 @@ int runPointerMappingProbe() {
         menuRequire(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN),
                     "Video reinitialization did not actually leave fullscreen");
         PointerMappingProbe::verifyMenu("settings-apply-reinitialized-window");
+        menuRequire(PointerMappingProbe::unavailableSamples == 0,
+                    "Native menu coverage incomplete: requested button samples unavailable; see POINTER_UNAVAILABLE");
         SDL_Log("MENU_PROBE_PASS: real windowed menu native motion/buttons align at centers and edges; stationary fullscreen real-button clicks, target restoration, letterbox resize and settings reinitialization align; actual backing ratios are logged");
         return MENU_QUIT_DEFAULT;
     }

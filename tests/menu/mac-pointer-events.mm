@@ -5,6 +5,30 @@
 #include <cmath>
 #include <cstdio>
 
+namespace {
+id pointerEventMonitor = nil;
+NSInteger nextPointerEventNumber = 1;
+
+void logNativePointerEvent(SDL_Window* window, NSEvent* event, const char* stage) {
+    NSWindow* native = event.window;
+    NSView* view = native.contentView;
+    const NSRect bounds = view.bounds;
+    const NSPoint location = event.locationInWindow;
+    const NSPoint content = [view convertPoint:location fromView:nil];
+    const NSPoint pointer = NSEvent.mouseLocation;
+    int width = 0, height = 0;
+    SDL_GetWindowSize(window, &width, &height);
+    const double x = (content.x - bounds.origin.x) * width / bounds.size.width;
+    const double y = (view.flipped ? content.y - bounds.origin.y : NSMaxY(bounds) - content.y)
+        * height / bounds.size.height;
+    std::printf("POINTER_NATIVE_EVENT: stage=%s sequence=%ld type=%lu location=%.3f,%.3f content=%.3f,%.3f global=%.3f,%.3f focused=%d nativeKey=%d\n",
+                stage, static_cast<long>(event.eventNumber), static_cast<unsigned long>(event.type),
+                location.x, location.y, x, y, pointer.x, pointer.y,
+                int((SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0), int(native.keyWindow));
+    std::fflush(stdout);
+}
+}
+
 
 // Leave the physical pointer untouched. Move only the diagnostic's own window
 // beneath it, then queue each event in NSApp's event queue exactly where the
@@ -18,6 +42,18 @@ extern "C" void nativePointerProbeBegin(SDL_Window* window) {
     SDL_VERSION(&info.version);
     if(!SDL_GetWindowWMInfo(window, &info) || info.subsystem != SDL_SYSWM_COCOA)
         throw std::runtime_error("Pointer regression requires the actual Cocoa backend");
+    if(pointerEventMonitor) [NSEvent removeMonitor:pointerEventMonitor];
+    __weak NSWindow* monitored = info.info.cocoa.window;
+    const Uint32 monitoredID = SDL_GetWindowID(window);
+    pointerEventMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:
+        NSEventMaskMouseMoved | NSEventMaskLeftMouseDown | NSEventMaskLeftMouseUp
+        handler:^NSEvent*(NSEvent* event) {
+            if(monitored && event.window == monitored) {
+                if(SDL_Window* live = SDL_GetWindowFromID(monitoredID))
+                    logNativePointerEvent(live, event, "dequeued");
+            }
+            return event;
+        }];
     [NSApp activateIgnoringOtherApps:YES];
     [info.info.cocoa.window makeKeyAndOrderFront:nil];
 }
@@ -36,6 +72,45 @@ extern "C" void nativePointerProbeCurrentPoint(SDL_Window* window, int* x, int* 
     *x = static_cast<int>(std::lround((point.x - bounds.origin.x) * width / bounds.size.width));
     *y = static_cast<int>(std::lround((view.flipped ? point.y - bounds.origin.y
         : NSMaxY(bounds) - point.y) * height / bounds.size.height));
+}
+
+// AppKit can constrain a titled window at the menu bar. Return the actual
+// available content point; callers retain and report the requested-point coverage.
+extern "C" SDL_Point nativePointerProbePlace(SDL_Window* window, int x, int y) {
+    @autoreleasepool {
+        SDL_SysWMinfo info{};
+        SDL_VERSION(&info.version);
+        if(!SDL_GetWindowWMInfo(window, &info) || info.subsystem != SDL_SYSWM_COCOA)
+            throw std::runtime_error("Lost the Cocoa pointer regression window");
+        NSWindow* native = info.info.cocoa.window;
+        NSView* view = native.contentView;
+        int width = 0, height = 0;
+        SDL_GetWindowSize(window, &width, &height);
+        if(width <= 0 || height <= 0) throw std::runtime_error("Empty native pointer window");
+        if(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN)) {
+            const NSRect bounds = view.bounds;
+            const NSPoint local = NSMakePoint(bounds.origin.x + x * bounds.size.width / width,
+                view.flipped ? bounds.origin.y + y * bounds.size.height / height
+                             : NSMaxY(bounds) - y * bounds.size.height / height);
+            const NSPoint screen = [native convertPointToScreen:[view convertPoint:local toView:nil]];
+            const NSPoint pointer = NSEvent.mouseLocation;
+            NSRect frame = native.frame;
+            frame.origin.x += pointer.x - screen.x;
+            frame.origin.y += pointer.y - screen.y;
+            [native setFrameOrigin:frame.origin];
+            SDL_PumpEvents();
+        }
+        SDL_Point actual{};
+        nativePointerProbeCurrentPoint(window, &actual.x, &actual.y);
+        int originX = 0, originY = 0;
+        SDL_GetWindowPosition(window, &originX, &originY);
+        const NSPoint pointer = NSEvent.mouseLocation;
+        std::printf("POINTER_NATIVE: global=%.3f,%.3f windowOrigin=%d,%d requested=%d,%d actual=%d,%d focused=%d\n",
+                    pointer.x, pointer.y, originX, originY, x, y, actual.x, actual.y,
+                    int((SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0));
+        std::fflush(stdout);
+        return actual;
+    }
 }
 
 extern "C" void nativePointerProbeEvent(SDL_Window* window, int x, int y, int buttonState) {
@@ -58,29 +133,8 @@ extern "C" void nativePointerProbeEvent(SDL_Window* window, int x, int y, int bu
             : buttonState ? NSEventTypeLeftMouseDown : NSEventTypeLeftMouseUp;
         NSEvent* event = [NSEvent mouseEventWithType:type location:location modifierFlags:0
             timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:native.windowNumber
-            context:nil eventNumber:1 clickCount:1 pressure:buttonState > 0 ? 1.0 : 0.0];
-        if(buttonState < 0) {
-            if(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN)) {
-                const NSPoint screen = [native convertPointToScreen:location];
-                const NSPoint pointer = NSEvent.mouseLocation;
-                NSRect frame = native.frame;
-                frame.origin.x += pointer.x - screen.x;
-                frame.origin.y += pointer.y - screen.y;
-                [native setFrameOrigin:frame.origin];
-                SDL_PumpEvents();
-            }
-            int actualX = 0, actualY = 0;
-            nativePointerProbeCurrentPoint(window, &actualX, &actualY);
-            if(std::abs(actualX - x) > 1 || std::abs(actualY - y) > 1)
-                throw std::runtime_error("Own-window position was clamped or fullscreen pointer point is unavailable");
-            int originX = 0, originY = 0;
-            SDL_GetWindowPosition(window, &originX, &originY);
-            const NSPoint pointer = NSEvent.mouseLocation;
-            std::printf("POINTER_NATIVE: global=%.1f,%.1f windowOrigin=%d,%d requested=%d,%d actual=%d,%d focused=%d\n",
-                        pointer.x, pointer.y, originX, originY, x, y, actualX, actualY,
-                        int((SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0));
-            std::fflush(stdout);
-        }
+            context:nil eventNumber:nextPointerEventNumber++ clickCount:1 pressure:buttonState > 0 ? 1.0 : 0.0];
+        logNativePointerEvent(window, event, "queued");
         [NSApp postEvent:event atStart:NO];
     }
 }
