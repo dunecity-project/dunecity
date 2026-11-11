@@ -7,7 +7,12 @@
 
 
 // Leave the physical pointer untouched. Move only the diagnostic's own window
-// beneath it, then exercise the real Cocoa responder and SDL event conversion.
+// beneath it, then queue each event in NSApp's event queue exactly where the
+// window server delivers real input: SDL's pump dequeues it, Cocoa_HandleMouseEvent
+// records Cocoa mouse focus and button state, AppKit routes it to SDL's responder,
+// and SDL converts it for the renderer. Calling the responder directly skips SDL's
+// dispatch; SDL 3.4 then drops the motion (no Cocoa mouse focus) and the press
+// synthesizes a focus motion at SDL's stale cached position.
 extern "C" void nativePointerProbeBegin(SDL_Window* window) {
     SDL_SysWMinfo info{};
     SDL_VERSION(&info.version);
@@ -75,12 +80,8 @@ extern "C" void nativePointerProbeEvent(SDL_Window* window, int x, int y, int bu
                         pointer.x, pointer.y, originX, originY, x, y, actualX, actualY,
                         int((SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0));
             std::fflush(stdout);
-            [view mouseMoved:event];
-        } else if(buttonState) {
-            [view mouseDown:event];
-        } else {
-            [view mouseUp:event];
         }
+        [NSApp postEvent:event atStart:NO];
     }
 }
 

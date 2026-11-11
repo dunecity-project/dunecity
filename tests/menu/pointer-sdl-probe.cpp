@@ -88,22 +88,41 @@ static void verify(SDL_Window* window, SDL_Renderer* renderer, const char* phase
 
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
+    // The game's macOS presentation and mouse hints (src/main.cpp).
     SDL_SetHint(SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES, "0");
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "POINTER_FAIL: SDL initialization: %s\n", SDL_GetError());
         return 1;
     }
-    std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window{SDL_CreateWindow("DuneCity native pointer phase 0",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1000, 740,
-        SDL_WINDOW_ALLOW_HIGHDPI), SDL_DestroyWindow};
-    std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer{
-        window ? SDL_CreateRenderer(window.get(), -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE) : nullptr,
-        SDL_DestroyRenderer};
+    using WindowPtr = std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)>;
+    using RendererPtr = std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)>;
+    constexpr Uint32 rendererFlags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE;
     try {
+        {
+            // The reported profile (5120x2880 request, 1066x600 interface, Fullscreen=true)
+            // starts straight in desktop fullscreen on a smaller, possibly Retina, display.
+            WindowPtr window{SDL_CreateWindow("DuneCity native pointer fullscreen startup",
+                SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 5120, 2880,
+                SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_ALLOW_HIGHDPI), SDL_DestroyWindow};
+            RendererPtr renderer{window ? SDL_CreateRenderer(window.get(), -1, rendererFlags) : nullptr,
+                SDL_DestroyRenderer};
+            require(window && renderer, SDL_GetError());
+            require(SDL_RenderSetLogicalSize(renderer.get(), 1066, 600) == 0, "Cannot set logical presentation");
+            verifyPointerRuntime(renderer.get());
+            nativePointerProbeBegin(window.get());
+            SDL_PumpEvents();
+            require(SDL_GetWindowFlags(window.get()) & SDL_WINDOW_FULLSCREEN, "Fullscreen startup did not settle");
+            verify(window.get(), renderer.get(), "fullscreen-desktop-startup-5120x2880-request");
+        }
+        WindowPtr window{SDL_CreateWindow("DuneCity native pointer phase 0",
+            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1000, 740,
+            SDL_WINDOW_ALLOW_HIGHDPI), SDL_DestroyWindow};
+        RendererPtr renderer{window ? SDL_CreateRenderer(window.get(), -1, rendererFlags) : nullptr,
+            SDL_DestroyRenderer};
         require(window && renderer, SDL_GetError());
         require(SDL_RenderSetLogicalSize(renderer.get(), 1066, 600) == 0, "Cannot set logical presentation");
-        verifyPointerRuntime(renderer.get());
         nativePointerProbeBegin(window.get());
         verify(window.get(), renderer.get(), "windowed-letterbox-native-origin");
         require(SDL_SetWindowFullscreen(window.get(), SDL_WINDOW_FULLSCREEN_DESKTOP) == 0, "Cannot enter fullscreen");
@@ -117,7 +136,7 @@ int main() {
         SDL_SetWindowSize(window.get(), 1440, 900);
         SDL_PumpEvents();
         verify(window.get(), renderer.get(), "windowed-1440x900-960x600");
-        std::puts("MENU_PROBE_PASS: native Cocoa motion/buttons match rendered targets under own-window origin changes; stationary fullscreen buttons match; no physical pointer movement");
+        std::puts("MENU_PROBE_PASS: native Cocoa motion/buttons queued through SDL's own pump match rendered targets at fullscreen-desktop startup with an oversize request, under own-window origin changes, after fullscreen entry and after a 1440x900 resize; no physical pointer movement");
         return 0;
     } catch(const std::exception& error) {
         std::fprintf(stderr, "POINTER_FAIL: %s; SDL=%s\n", error.what(), SDL_GetError());

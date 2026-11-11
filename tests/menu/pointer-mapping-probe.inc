@@ -39,8 +39,15 @@ void verifyMenu(const char* phase, bool offscreen = false) {
                     && stationaryLogical.y >= 0 && stationaryLogical.y < lh,
                     "Stationary fullscreen pointer lies outside the logical viewport");
     }
-    SDL_Log("POINTER_GEOMETRY: phase=%s window=%dx%d output=%dx%d logical=%dx%d viewport=%.1f,%.1f,%.0f,%.0f fullscreen=%d",
-            phase, ww, wh, ow, oh, lw, lh, vx, vy, vw, vh,
+    // Placement is logged before any own-window move, so the window position the
+    // real toogleFullscreen()/reinitialization produced is visible next to the
+    // display's usable area.
+    int originX = 0, originY = 0;
+    SDL_GetWindowPosition(window, &originX, &originY);
+    SDL_Rect usable{};
+    SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(window), &usable);
+    SDL_Log("POINTER_GEOMETRY: phase=%s window=%dx%d origin=%d,%d usable=%d,%d,%dx%d output=%dx%d logical=%dx%d viewport=%.1f,%.1f,%.0f,%.0f fullscreen=%d",
+            phase, ww, wh, originX, originY, usable.x, usable.y, usable.w, usable.h, ow, oh, lw, lh, vx, vy, vw, vh,
             int((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0));
     MainMenu menu;
     int clicked = -1;
