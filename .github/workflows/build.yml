@@ -1086,7 +1086,16 @@ jobs:
   dev-release:
     needs: [select-inputs, test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos]
     if: |
-      success() && github.event_name != 'pull_request' && needs.select-inputs.outputs.staging == 'true' &&
+      always() && !cancelled() &&
+      needs.select-inputs.result == 'success' &&
+      needs.test-linux.result == 'success' &&
+      needs.relay-tests.result == 'success' &&
+      needs.signaling-tests.result == 'success' &&
+      needs.build-emscripten.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      github.event_name != 'pull_request' && needs.select-inputs.outputs.staging == 'true' &&
       needs.select-inputs.outputs.package == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -1151,7 +1160,17 @@ jobs:
 
   request-staging-packages:
     needs: [select-inputs, test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos]
-    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integrate/feature-batch'
+    if: |
+      always() && !cancelled() &&
+      needs.select-inputs.result == 'success' &&
+      needs.test-linux.result == 'success' &&
+      needs.relay-tests.result == 'success' &&
+      needs.signaling-tests.result == 'success' &&
+      needs.build-emscripten.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/integrate/feature-batch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
