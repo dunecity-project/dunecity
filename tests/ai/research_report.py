@@ -626,7 +626,7 @@ def actuation_identity(manifest, data, game, arm, base):
         return False
     try:
         native, effective = hashes['native'], hashes[arm]
-        if game.get('config_hash') != native or hashes['off'] != native:
+        if game.get('config_hash') != native or hashes['off'] != native or hashes['on'] == hashes['off']:
             return False
         selected = game['candidate_house']
         configs = json.loads(game['ai_config_receipts'])

@@ -236,8 +236,10 @@ class ResearchReports(unittest.TestCase):
 
     def test_historical_quality_comparison_keeps_any_winner_and_candidate_wins_separate(self):
         self.paired()
-        self.table(self.on, 'games.csv', [self.game('g1-seat' + str(seat), arm='on', winner=1) for seat in range(2)])
-        self.table(self.on, 'houses.csv', [self.house('g1-seat' + str(seat), won=1) for seat in range(2)])
+        self.table(self.on, 'games.csv', [self.game('g1-seat' + str(seat), arm='on', winner=1,
+                                                   candidate_seat=str(seat)) for seat in range(2)])
+        self.table(self.on, 'houses.csv', [self.house('g1-seat' + str(seat), house=str(seat), won=1,
+            seat_style=self.manifest['configs']['on']) for seat in range(2)])
         result = subject.quality_comparison(self.off, self.on)
         self.assertEqual(result['matched_house_games'], 2)
         self.assertEqual(result['control']['outcomes']['engine_decided_games'], 2)
@@ -381,6 +383,31 @@ class ResearchReports(unittest.TestCase):
                 self.assertEqual(result['opportunity_coverage']['max'], 0)
                 self.assertEqual(result['metrics']['opportunity']['paired_observations'], 2)
                 self.assertEqual(result['metrics']['opportunity']['coverage']['rejected'], {})
+
+    def test_identical_static_arm_hashes_preserve_measurements_without_verifying_actuation(self):
+        self.paired()
+        native = self.manifest['effective_config_hashes']['native']
+        self.manifest['effective_config_hashes']['on'] = native
+        self.save_manifest()
+        candidate = subject.dataset([self.on])
+        for game in candidate['games']:
+            configs = json.loads(game['ai_config_receipts'])
+            phases = json.loads(game['genome_phase_receipts'])
+            for receipt in configs + phases:
+                receipt['config_hash'] = native
+            game['ai_config_receipts'] = json.dumps(configs)
+            game['genome_phase_receipts'] = json.dumps(phases)
+            game['ai_config_hashes'] = ','.join(row['house'] + ':' + native for row in configs)
+        self.table(self.on, 'games.csv', candidate['games'])
+        result = subject.experiment_report(self.path, 'pilot', self.off, self.on)
+        self.assertEqual(result['status'], 'inconclusive')
+        self.assertTrue(result['facts']['transport_verified'])
+        self.assertFalse(result['facts']['actuation_verified'])
+        self.assertFalse(result['facts']['primary_confirmed'])
+        self.assertFalse(result['facts']['mechanism_adequately_unsupported'])
+        self.assertEqual(result['opportunity_coverage']['max'], 0)
+        self.assertEqual(result['metrics']['opportunity']['paired_observations'], 2)
+        self.assertEqual(result['metrics']['opportunity']['coverage']['rejected'], {})
 
     def test_malformed_expected_hashes_are_rejected_without_guessing_names(self):
         for hashes in (None, {}, {'native': '1' * 16, 'off': '1' * 16, 'on': 'repair-demand-on'},

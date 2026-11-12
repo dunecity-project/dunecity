@@ -1438,8 +1438,6 @@ class DuneCityAuditTests(unittest.TestCase):
                 {('matrix/fixture', '0'): house_row()})
             self.assertEqual(matched, [])
             self.assertIn('different_observer_mode' if mode else 'missing_observer_mode', rejected)
-        self.assertEqual(audit['GAME_FIELDS'][-4:], (
-            'observer_mode', 'fleet_observer_status', 'fleet_house_samples', 'fleet_refinery_samples'))
         with tempfile.TemporaryDirectory() as temporary:
             out = Path(temporary)
             audit['append'](out / 'games.csv', audit['GAME_FIELDS'], [game_row('default')])

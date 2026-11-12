@@ -213,7 +213,7 @@ finally:
     (out / 'finalized').write_text('closed')
 '''
         with tempfile.TemporaryDirectory() as directory:
-            out = Path(directory)
+            out = Path(directory).resolve()
             config = out / 'projects.json'
             config.write_text(json.dumps({'projects': {'dunecity': {
                 'scratch_root': str(out / 'scratch-root')}}}))
@@ -256,6 +256,15 @@ finally:
                         module.Scratch(state=state, config=config).finish(scratch, True)
                     else:
                         shutil.rmtree(scratch)
+                except Exception as error:
+                    log.flush()
+                    with (out / 'supervisor.log').open('rb') as evidence:
+                        evidence.seek(0, os.SEEK_END)
+                        evidence.seek(max(0, evidence.tell() - 16384))
+                        output = evidence.read().decode('utf-8', errors='replace')
+                    raise AssertionError(
+                        f'{error}\nsupervisor returncode: {supervisor.poll()}\n'
+                        f'supervisor log (last 16384 bytes):\n{output}') from error
                 finally:
                     if supervisor.poll() is None:
                         supervisor.kill()

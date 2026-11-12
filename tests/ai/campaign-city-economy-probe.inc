@@ -352,25 +352,49 @@ void runCampaignCityEconomyPositiveProbe(Game& game) {
         // Exercise the engine build list: the population exemption must follow
         // the same per-controller switch, never leak into a custom game.
         const auto savedPopulationRule=game.gameInitSettings.gameOptions.starportPopulation;
+        const auto savedInitGameType=game.gameInitSettings.gameType;
+        auto& starport=game.objectData.data[Structure_StarPort][first->getOriginalHouseID()];
+        const auto savedStarportTech=starport.techLevel;
+        const auto savedUpgradeLevel=first->curUpgradeLev;
         auto& city=game.getCitySimulation()->getHouseStateMut(owner->getHouseID());
         const int savedResidential=city.resPop,savedCommercial=city.comPop,savedIndustrial=city.indPop;
-        city.resPop=city.comPop=city.indPop=0;
-        game.gameInitSettings.gameOptions.starportPopulation=true;
-        first->curUpgradeLev=first->getMaxUpgradeLevel();
-        for(bool enabled:{false,true}) {
-            config->force.singleMissionCampaignPolicy=enabled;
-            for(auto type:{GameType::Campaign,GameType::CampaignCoop,GameType::Skirmish,
-                          GameType::SkirmishCoop,GameType::CustomGame,GameType::CustomMultiplayer}) {
-                game.gameType=type;first->updateBuildList();
-                const bool exempt=type==GameType::Campaign || type==GameType::CampaignCoop
-                    || (enabled && (type==GameType::Skirmish || type==GameType::SkirmishCoop));
-                require(first->isAvailableToBuild(Structure_StarPort)==exempt,
-                    "Starport build permission differs between campaign and Single mission policy");
+        const auto restoreStarportFixture=[&] {
+            city.resPop=savedResidential;city.comPop=savedCommercial;city.indPop=savedIndustrial;
+            game.gameInitSettings.gameOptions.starportPopulation=savedPopulationRule;
+            game.gameInitSettings.gameType=savedInitGameType;
+            starport.techLevel=savedStarportTech;first->curUpgradeLev=savedUpgradeLevel;
+            game.gameType=originalGameType;enemy->configOverride=savedConfig;
+        };
+        try {
+            city.resPop=city.comPop=city.indPop=0;
+            // Early missions may not meet this product's configured technology.
+            // Isolate population policy by lowering only its fixture tech gate;
+            // retain the real enabled, builder, upgrade and structure prerequisites.
+            starport.techLevel=std::min<int>(savedStarportTech,owner->getTechLevel());
+            first->curUpgradeLev=first->getMaxUpgradeLevel();
+            game.gameInitSettings.gameOptions.starportPopulation=false;
+            first->updateBuildList();
+            require(first->isAvailableToBuild(Structure_StarPort),
+                "Starport fixture lacks non-population build prerequisites");
+            game.gameInitSettings.gameOptions.starportPopulation=true;
+            for(bool enabled:{false,true}) {
+                config->force.singleMissionCampaignPolicy=enabled;
+                for(auto type:{GameType::Campaign,GameType::CampaignCoop,GameType::Skirmish,
+                              GameType::SkirmishCoop,GameType::CustomGame,GameType::CustomMultiplayer}) {
+                    game.gameType=type;game.gameInitSettings.gameType=type;first->updateBuildList();
+                    const bool exempt=type==GameType::Campaign || type==GameType::CampaignCoop
+                        || (enabled && (type==GameType::Skirmish || type==GameType::SkirmishCoop));
+                    require(owner->meetsStarportPopulation()==exempt,
+                        "Starport population exemption differs between campaign and Single mission policy");
+                    require(first->isAvailableToBuild(Structure_StarPort)==exempt,
+                        "Starport build permission differs between campaign and Single mission policy");
+                }
             }
+        } catch(...) {
+            restoreStarportFixture();
+            throw;
         }
-        city.resPop=savedResidential;city.comPop=savedCommercial;city.indPop=savedIndustrial;
-        game.gameInitSettings.gameOptions.starportPopulation=savedPopulationRule;
-        game.gameType=originalGameType;enemy->configOverride=savedConfig;
+        restoreStarportFixture();
         for(auto* yard:{first,second}) {
             yard->updateBuildList();
             // Keep the existing policy-only forbidden-building check independent
