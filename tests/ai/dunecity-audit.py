@@ -80,7 +80,7 @@ TROOPER_ENEMY_AIR_FIELDS = {item: 'trooper_' + field for item, field in ENEMY_AI
 AIR_COUNT_FIELDS = tuple(ENEMY_AIR_FIELDS.values()) + tuple(TROOPER_ENEMY_AIR_FIELDS.values())
 AIR_ATTRIBUTION_FIELDS = ('air_kill_attribution_complete', 'air_kill_unknown_attribution')
 REFINERY_FIELDS = META + REFINERY_VALUES
-REPAIR_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'capture_status') + research_report.REPAIR_EVENT_FIELDS
+REPAIR_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'player', 'capture_status', 'capture_reasons', 'data') + research_report.REPAIR_EVENT_FIELDS
 GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes',
                       'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error', 'config_hash', 'options_hash',
                       'map_hash', 'content_hash', 'object_data_hash', 'ai_config_hashes', 'probe_sha256',
@@ -90,7 +90,8 @@ GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outco
                       'mod', 'candidate_house', 'candidate_seat', 'candidate_style', 'sample_case', 'sample_seed', 'research_enabled',
                       'scoring_rule', 'scored_winner_team', 'win_condition', 'team_populations',
                       'seat_styles', 'style_cohort', 'style_rotation', 'observer_mode',
-                      'fleet_observer_status', 'fleet_house_samples', 'fleet_refinery_samples')
+                      'fleet_observer_status', 'fleet_house_samples', 'fleet_refinery_samples',
+                      'ai_config_receipts', 'genome_phase_receipts', 'setup_style')
 HOUSE_FIELDS = META + ('house', 'team', 'alive', 'eliminated_s', 'kill_value', 'loss_value', 'structures',
                        'army_value', 'army_units', 'sortie_minutes', 'attack_telemetry', 'attack_count',
                        'first_attack_minute', 'storage_full_cycles', 'storage_overflow_cycles', 'storage_income_lost',
@@ -296,13 +297,13 @@ def air_kill_capture(out, houses, final_cycle, enabled):
                                    'construction_completed', 'ground_hunt', 'team_attack', 'team_help',
                                    'starport_purchase', 'starport_cash_stockpile',
                                    'income_tech_state', 'income_tech_hold', 'income_tech_early',
-                                   'base_scramble') or (name == 'attack_deferred'
+                                   'base_scramble', 'repair_capacity') or (name == 'attack_deferred'
                                    and data.get('reason') == 'team_wait_partner'):
-                        if 'state' not in data and data.get('state_id') in states:
+                        if name != 'repair_capacity' and 'state' not in data and data.get('state_id') in states:
                             state_cycle, state = states[data['state_id']]
                             data = dict(data, state=state, state_cycle=state_cycle)
-                        decisions.append(dict(session=session, seq=seq, cycle=cycle, house=int(event['house']),
-                                              event=name, data=data))
+                        decisions.append(dict(session=event['session'], seq=seq, cycle=cycle, house=int(event['house']),
+                                              event=name, player=event.get('player', ''), data=data))
                     elif name == 'combat_target_hit':
                         target = int(data['target'])
                         before, after = int(data['hp_before_milli']), int(data['hp_after_milli'])
@@ -1257,6 +1258,10 @@ def play(args, scratch, binary, game):
     row.update({field: setup.get(field, '') for field in (
         'config_hash', 'options_hash', 'map_hash', 'content_hash', 'object_data_hash')})
     row.update(ai_config_hashes=','.join(f'{item["house"]}:{item["config_hash"]}' for item in configs),
+               ai_config_receipts=json.dumps(configs, sort_keys=True, separators=(',', ':')),
+               genome_phase_receipts=json.dumps([parse(line, 'GENOME_PHASE:') for line in lines
+                                                 if 'GENOME_PHASE:' in line], sort_keys=True, separators=(',', ':')),
+               setup_style=setup.get('style', ''),
                probe_sha256=probe_sha256, source_commit=summary.get('sourceCommit', ''),
                source_fingerprint=summary.get('sourceFingerprint', ''),
                source_fingerprint_error=summary.get('sourceFingerprintError', ''))

@@ -21,7 +21,7 @@ class ResearchReports(unittest.TestCase):
         self.on.mkdir()
         for name, seed in (('pilot', 1), ('confirmation', 999)):
             (self.root / (name + '.json')).write_text(json.dumps(dict(schema_version=1, sample_seed=10,
-                cases=[dict(seed=seed, format='ffa4', size=96, spice_level='medium', initial_tech=9)])))
+                cases=[dict(seed=seed, format='1v1', size=96, spice_level='medium', initial_tech=9)])))
         self.manifest = dict(schema=subject.SCHEMA, id='repair-demand', mechanism='Serviceable repair demand',
             falsifier='No serviceable waiting vehicles', scope='Native Brutal', off_contract='OFF keeps native actions',
             stopping_rule='No adaptive peeking; fixed preregistered decks', snapshot=dict(revision='a' * 40, cwd=str(self.root)),
@@ -38,6 +38,12 @@ class ResearchReports(unittest.TestCase):
         self.manifest['stages']['confirmation'].update(locked_at='2026-11-12T00:00:00Z', untouched=True)
         self.path = self.root / 'experiment.json'
         self.save_manifest()
+        calibration = self.root / 'independent-calibration.txt'
+        calibration.write_text('Independent fixture calibration, not game or strength evidence.\n')
+        self.manifest['effective_config_hashes'] = dict(native='1' * 16, off='1' * 16, on='2' * 16)
+        self.manifest['config_calibration_references'] = [str(calibration)]
+        self.evidence = {}
+        self.save_manifest()
 
     def save_manifest(self):
         self.path.write_text(json.dumps(self.manifest))
@@ -46,16 +52,28 @@ class ResearchReports(unittest.TestCase):
         row = dict(id=game_id, seed=str(seed), candidate_house='0', candidate_seat='0',
                    candidate_style=self.manifest['configs'][arm], source_commit='a' * 40,
                    source_fingerprint='fingerprint', map_hash='map', content_hash='content', object_data_hash='objects',
-                   options_hash='options', ai_config_hashes='0:native', observer_mode='on', error='',
-                   mod='dunecity', format='ffa4', difficulty='brutal', base='medium', army='2', city='0',
+                   options_hash='options', config_hash='1' * 16, style='default', setup_style='default',
+                   observer_mode='on', error='', size='96', sample_case='1',
+                   mod='dunecity', format='1v1', difficulty='brutal', base='medium', army='2', city='0',
                    initial_tech='9', spice_level='medium', winner_team=str(winner), scored_winner_team=str(winner),
                    outcome='decided', minutes='30', wall_s='10')
         row.update(changes)
+        row['candidate_seat'] = {'0': 'original', '1': 'swapped'}.get(row['candidate_seat'], row['candidate_seat'])
+        if 'candidate_house' not in changes:
+            row['candidate_house'] = '1' if row['candidate_seat'] == 'swapped' else '0'
+        selected = row['candidate_house']
+        configs = [dict(house=house, config_hash='2' * 16 if arm == 'on' and house == selected else '1' * 16)
+                   for house in ('0', '1')]
+        row.setdefault('ai_config_hashes', ','.join(item['house'] + ':' + item['config_hash'] for item in configs))
+        row.setdefault('ai_config_receipts', json.dumps(configs))
+        row.setdefault('genome_phase_receipts', json.dumps([] if arm == 'off' else [dict(
+            house=selected, config_hash='2' * 16, genome='candidate-' + self.manifest['configs'][arm],
+            controller='0', difficulty='3', phase='opening', cycle='0')]))
         return row
 
     def house(self, game_id='g1', won=0, **changes):
         row = dict(id=game_id, house='0', team='1', alive='1', eliminated_s='-1', won=str(won),
-                   triggers='0', repaired='0', loss_value='1000', economy_stall='1', eligible_economy_stall='1',
+                   triggers='0', repaired='0', seat_style='control', loss_value='1000', economy_stall='1', eligible_economy_stall='1',
                    first_economy_stall='12', repair_yards='', repair_yards_built='', occupied_refinery_bays='2')
         row.update(changes)
         return row
@@ -70,8 +88,10 @@ class ResearchReports(unittest.TestCase):
 
     def paired(self, seats=2, **house_changes):
         for arm, directory in (('off', self.off), ('on', self.on)):
-            games = [self.game('g1-seat' + str(seat), arm=arm) for seat in range(seats)]
-            houses = [self.house(game['id'], **house_changes) for game in games]
+            games = [self.game('g1-seat' + str(seat), arm=arm, candidate_seat=str(seat)) for seat in range(seats)]
+            houses = [self.house(game['id'], house=house,
+                                 seat_style=self.manifest['configs'][arm] if house == game['candidate_house'] else 'control',
+                                 **house_changes) for game in games for house in ('0', '1')]
             self.table(directory, 'games.csv', games)
             self.table(directory, 'houses.csv', houses)
 
@@ -156,13 +176,13 @@ class ResearchReports(unittest.TestCase):
 
     def test_missing_or_partial_pilot_is_not_a_never_triggered_pilot(self):
         self.paired(seats=1)
-        result = subject.experiment_report(self.path, 'pilot', self.off, self.on)
+        result = subject.experiment_report(self.path, 'pilot', self.off, self.on, self.evidence)
         self.assertEqual(result['status'], 'inconclusive')
         self.paired()
-        result = subject.experiment_report(self.path, 'pilot', self.off, self.on)
+        result = subject.experiment_report(self.path, 'pilot', self.off, self.on, self.evidence)
         self.assertEqual(result['status'], 'opportunity-missing')
         self.paired(triggers='')
-        self.assertEqual(subject.experiment_report(self.path, 'pilot', self.off, self.on)['status'], 'inconclusive')
+        self.assertEqual(subject.experiment_report(self.path, 'pilot', self.off, self.on, self.evidence)['status'], 'inconclusive')
 
     def test_harm_and_implementation_failure_are_not_missing_opportunity(self):
         self.assertEqual(subject.decide('pilot', dict(harm_demonstrated=True, opportunity_complete=True, opportunities=0)), 'harmful')
@@ -185,7 +205,7 @@ class ResearchReports(unittest.TestCase):
         self.paired()
         data = subject.dataset([self.off])
         data['repairs'] = [
-            dict(id=house['id'], house='0', seq=str(seq), cycle=str(seq * 100),
+            dict(id=house['id'], house=house['house'], seq=str(seq), cycle=str(seq * 100),
                  repair_serviceable_waiting=str(value), capture_status='complete')
             for house in data['houses'] for seq, value in ((1, 0), (2, 3))]
         values = subject.measured_metric(data, 'repair_serviceable_waiting', 'decision_max')
@@ -265,6 +285,7 @@ class ResearchReports(unittest.TestCase):
         evidence_path.write_text('Retained isolated fixture: OFF identity, intended mechanism and locked untouched holdout.\n')
         evidence = {name: dict(passed=True, references=[str(evidence_path)])
                     for name in ('independent_holdout', 'off_contract', 'mechanism')}
+        evidence.update(self.evidence)
         for direction, disposition in ((1, 'confirmed'), (-1, 'harmful')):
             with self.subTest(direction=direction):
                 for arm, directory in (('off', self.off), ('on', self.on)):
@@ -276,8 +297,12 @@ class ResearchReports(unittest.TestCase):
                             if direction < 0:
                                 won = 1 - won
                             games.append(self.game(game_id, seed=seed, arm=arm, winner=1 if won else 2,
-                                                   map_hash='map-' + str(seed), candidate_seat=str(seat)))
-                            houses.append(self.house(game_id, won=won, triggers='1', repaired='1' if arm == 'on' else '0'))
+                                                   map_hash='map-' + str(seed), candidate_seat=str(seat),
+                                                   sample_case=str(seeds.index(seed) + 1),
+                                                   candidate_house=str((seeds.index(seed) + seat) % 2)))
+                            houses.extend(self.house(game_id, house=house, won=won, triggers='1',
+                                seat_style=self.manifest['configs'][arm] if house == games[-1]['candidate_house'] else 'control',
+                                repaired='1' if arm == 'on' else '0') for house in ('0', '1'))
                     self.table(directory, 'games.csv', games)
                     self.table(directory, 'houses.csv', houses)
                 self.manifest['design'].pop('paired_cluster_sd', None)
@@ -294,6 +319,154 @@ class ResearchReports(unittest.TestCase):
                 self.assertTrue(planned['facts']['power_sufficient'])
                 self.assertEqual(planned['metrics']['primary']['frozen_cluster_budget'], 4)
                 self.assertEqual(planned['metrics']['primary']['interval'], exploratory['metrics']['primary']['interval'])
+                frozen_hashes = self.manifest.pop('effective_config_hashes')
+                self.save_manifest()
+                unverified = subject.experiment_report(self.path, 'confirmation', self.off, self.on, evidence)
+                self.assertEqual(unverified['status'], 'inconclusive')
+                self.assertFalse(unverified['facts']['actuation_verified'])
+                self.assertEqual(unverified['metrics']['primary']['interval'], planned['metrics']['primary']['interval'])
+                self.manifest['effective_config_hashes'] = frozen_hashes
+
+
+    def test_requested_names_cannot_replace_frozen_hashes_or_actual_controller_receipts(self):
+        mutations = (
+            ('config-unverified', lambda game: game.pop('config_hash')),
+            ('controller-unverified', lambda game: game.pop('ai_config_receipts')),
+            ('controller-unverified', lambda game: game.pop('genome_phase_receipts')),
+            ('effective-config', lambda game: game.update(ai_config_hashes='0:' + '1' * 16 + ',1:' + '1' * 16)),
+            ('effective-config', lambda game: game.update(ai_config_receipts=json.dumps([
+                dict(house='0', config_hash='2' * 16), dict(house='1', config_hash='2' * 16)]))),
+            ('controller-unverified', lambda game: game.update(ai_config_receipts=json.dumps([
+                dict(house='0', config_hash='2' * 16), dict(house='0', config_hash='1' * 16),
+                dict(house='1', config_hash='1' * 16)]))),
+            ('phase-identity', lambda game: game.update(genome_phase_receipts='[]')),
+            ('phase-identity', lambda game: game.update(genome_phase_receipts=json.dumps([dict(
+                house='0', config_hash='2' * 16, genome='candidate-repair-demand-on',
+                controller='1', difficulty='3', phase='opening', cycle='0')]))),
+            ('candidate-seat', lambda game: game.update(candidate_seat='swapped')),
+            ('planned-case', lambda game: game.update(sample_case='2')),
+        )
+        for reason, mutate in mutations:
+            with self.subTest(reason=reason):
+                self.paired()
+                games = subject.dataset([self.on])['games']
+                mutate(games[0])
+                self.table(self.on, 'games.csv', games)
+                self.save_manifest()
+                result = subject.experiment_report(self.path, 'pilot', self.off, self.on, self.evidence)
+                self.assertEqual(result['status'], 'inconclusive')
+                self.assertGreater(result['metrics']['primary']['coverage']['rejected'].get(reason, 0), 0)
+
+    def test_missing_or_mismatched_calibration_keeps_measurements_but_cannot_conclude(self):
+        self.paired()
+        frozen = json.loads(json.dumps(self.manifest))
+        for change in ('absent', 'hash', 'off', 'references', 'missing-reference'):
+            with self.subTest(change=change):
+                self.manifest = json.loads(json.dumps(frozen))
+                if change == 'absent':
+                    self.manifest.pop('effective_config_hashes')
+                elif change == 'hash':
+                    self.manifest['effective_config_hashes']['on'] = '3' * 16
+                elif change == 'off':
+                    self.manifest['effective_config_hashes']['off'] = '2' * 16
+                elif change == 'references':
+                    self.manifest.pop('config_calibration_references')
+                else:
+                    self.manifest['config_calibration_references'] = [str(self.root / 'missing')]
+                self.save_manifest()
+                result = subject.experiment_report(self.path, 'pilot', self.off, self.on)
+                self.assertEqual(result['status'], 'inconclusive')
+                self.assertTrue(result['facts']['transport_verified'])
+                self.assertFalse(result['facts']['actuation_verified'])
+                self.assertEqual(result['opportunity_coverage']['max'], 0)
+                self.assertEqual(result['metrics']['opportunity']['paired_observations'], 2)
+                self.assertEqual(result['metrics']['opportunity']['coverage']['rejected'], {})
+
+    def test_malformed_expected_hashes_are_rejected_without_guessing_names(self):
+        for hashes in (None, {}, {'native': '1' * 16, 'off': '1' * 16, 'on': 'repair-demand-on'},
+                       {'native': '1' * 16, 'off': '1' * 16, 'on': 'A' * 16},
+                       {'native': '1' * 16, 'off': '1' * 16, 'on': '2' * 16, 'house': '0'}):
+            with self.subTest(hashes=hashes):
+                self.manifest['effective_config_hashes'] = hashes
+                with self.assertRaisesRegex(ValueError, 'effective_config_hashes'):
+                    subject.validate_manifest(self.manifest, self.root)
+
+    def test_raw_repair_stream_reaches_csv_and_clustered_report_without_inventing_missing_zero(self):
+        from test_dunecity_audit import audit, write_capture
+        self.manifest['opportunity'].update(metric='repair_serviceable_waiting', aggregation='decision_max')
+        self.manifest['mechanism_metric'].update(metric='repair_actual', aggregation='decision_mean')
+        self.save_manifest()
+        for mode, expected in (('complete', 'opportunity-missing'), ('truncated', 'inconclusive'),
+                               ('absent', 'inconclusive'), ('missing-field', 'inconclusive'),
+                               ('wrong-treatment', 'inconclusive'), ('wrong-player', 'inconclusive')):
+            with self.subTest(mode=mode):
+                self.paired()
+                for arm, directory in (('off', self.off), ('on', self.on)):
+                    observations = []
+                    for game in subject.dataset([directory])['games']:
+                        records = [('session_start', -1, -1, 0, {})]
+                        if mode != 'absent':
+                            for house in ('0', '1'):
+                                data = dict(treatment=int(arm == 'on' and house == game['candidate_house']),
+                                    actual=1, committed=1, busy=0, serviceable_waiting=0,
+                                    reason='legacy' if arm == 'off' else 'no_serviceable_saturation', state_id=0)
+                                if mode == 'missing-field' and house == game['candidate_house']:
+                                    data.pop('serviceable_waiting')
+                                if mode == 'wrong-treatment' and arm == 'on':
+                                    data['treatment'] = 0
+                                records.append(('repair_capacity', int(house), int(house) + 1, 25, data))
+                                if mode == 'wrong-player' and arm == 'on' and house == game['candidate_house']:
+                                    records.append(('repair_capacity', int(house), 99, 50, data))
+                        records += [('game_summary', -1, -1, 100, dict(houses={'0': {}, '1': {}})),
+                                    ('session_end', -1, -1, 100, {})]
+                        if mode == 'truncated':
+                            records.pop()
+                        events = [dict(schema_version=1, session='raw-' + game['id'], seq=seq, event=name,
+                                       house=house, player=player, cycle=cycle, data=data)
+                                  for seq, (name, house, player, cycle, data) in enumerate(records, 1)]
+                        out = self.root / ('raw-' + arm + '-' + game['id'])
+                        write_capture(out, events)
+                        capture = audit['air_kill_capture'](out, [dict(house='0', team='1'), dict(house='1', team='2')], 100, True)
+                        observations.extend(dict(id=game['id'], **row) for row in subject.repair_observations(capture))
+                    path = directory / 'repair-capacity.csv'
+                    if path.exists():
+                        path.unlink()
+                    audit['append'](path, audit['REPAIR_FIELDS'], observations)
+                result = subject.experiment_report(self.path, 'pilot', self.off, self.on, self.evidence)
+                self.assertEqual(result['status'], expected)
+                self.assertFalse(result['facts']['power_sufficient'])
+                if mode == 'complete':
+                    self.assertEqual(result['metrics']['opportunity']['clusters'], 1)
+                    self.assertEqual(result['metrics']['opportunity']['paired_observations'], 2)
+                    self.assertEqual(result['opportunity_coverage']['max'], 0)
+                    row = subject.dataset([self.on])['repairs'][0]
+                    self.assertEqual((row['session'], row['seq'], row['cycle'], row['house'], row['player']),
+                                     ('raw-g1-seat0', '2', '25', '0', '1'))
+                    self.assertEqual(json.loads(row['data'])['state_id'], 0)
+                elif mode == 'absent':
+                    self.assertIsNone(result['opportunity_coverage']['max'])
+
+    def test_duplicate_original_seat_cannot_complete_a_swapped_deck(self):
+        self.paired()
+        for arm, directory in (('off', self.off), ('on', self.on)):
+            games = [self.game('g1-seat' + str(seat), arm=arm) for seat in range(2)]
+            self.table(directory, 'games.csv', games)
+            self.table(directory, 'houses.csv', [self.house(game['id'], house=house,
+                seat_style=self.manifest['configs'][arm] if house == '0' else 'control')
+                for game in games for house in ('0', '1')])
+        result = subject.experiment_report(self.path, 'pilot', self.off, self.on, self.evidence)
+        self.assertEqual(result['status'], 'inconclusive')
+        self.assertFalse(result['facts']['opportunity_complete'])
+
+    def test_missing_later_stock_does_not_disappear_from_coverage_or_become_last_zero(self):
+        self.paired()
+        data = subject.dataset([self.off])
+        data['repairs'] = [dict(id='g1-seat0', house='0', cycle='25', seq='1',
+                               repair_actual='1', capture_status='complete'),
+                           dict(id='g1-seat0', house='0', cycle='50', seq='2',
+                               repair_actual='', capture_status='incomplete')]
+        self.assertEqual(subject.measured_metric(data, 'repair_actual', 'decision_max')[('g1-seat0', '0')], (1, True))
+        self.assertEqual(subject.measured_metric(data, 'repair_actual', 'decision_last')[('g1-seat0', '0')], (None, True))
 
 
     def legacy_sample_header(self):

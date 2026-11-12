@@ -214,9 +214,15 @@ finally:
 '''
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory)
+            config = out / 'projects.json'
+            config.write_text(json.dumps({'projects': {'dunecity': {
+                'scratch_root': str(out / 'scratch-root')}}}))
+            state = out / 'workspace-state'
+            env = dict(os.environ, AGENT_WORKSPACE_CONFIG=str(config), AGENT_WORKSPACE_STATE=str(state))
             with (out / 'supervisor.log').open('w') as log:
                 supervisor = subprocess.Popen([sys.executable, '-c', program, str(helpers), str(profiles),
-                                               str(out), TREE, checkpoint], stdout=log, stderr=subprocess.STDOUT)
+                                               str(out), TREE, checkpoint], stdout=log, stderr=subprocess.STDOUT,
+                                              env=env)
                 try:
                     wait_for(out / 'scratch-path')
                     scratch = Path((out / 'scratch-path').read_text())
@@ -247,7 +253,7 @@ finally:
                     from probe_profile import _installed
                     module = _installed('scratch')
                     if lease.exists() and module is not None:
-                        module.Scratch().finish(scratch, True)
+                        module.Scratch(state=state, config=config).finish(scratch, True)
                     else:
                         shutil.rmtree(scratch)
                 finally:

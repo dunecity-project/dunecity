@@ -1,21 +1,58 @@
 // Real-engine policy integration probe; never included in the shipped executable.
 #include <FileClasses/FileManager.h>
 #include <Trigger/TimeoutTrigger.h>
+#include <Network/WorkshopGameContent.h>
+#include <mod/Workshop.h>
 
 // Fixture-only independent games: never finish or change the outcome of an ordinary
-// campaign run. Each outcome starts through the native constructor and init path.
+// campaign run. Outcomes and content-scope controls use native constructors and init.
 void runCampaignObserverOutcomeProbe(std::unique_ptr<Game>& game, int level,
                                     const std::string& candidateClass, const std::string& enemyClass) {
     const auto require=[](bool ok,const char* why) {
         if(!ok) {SDL_Log("CAMPAIGN_OBSERVER_FAIL: %s",why);throw std::runtime_error(why);}
     };
-    const auto& original=game->getGameInitSettings();
-    const HOUSETYPE objectiveID=original.getHouseID();
-    const int mission=original.getMission(),tech=game->techLevel;
-    const Uint32 seed=original.getRandomSeed();
-    const auto options=original.getGameOptions();
-    const std::string filename=original.getFilename();
-    std::string filedata=original.getFiledata();
+    struct RestoreState {
+        std::unique_ptr<Game>& game;
+        std::string mod=ModManager::instance().getActiveModName();
+        SettingsClass savedSettings=settings;
+        SettingsClass::GameOptionsClass savedEffectiveOptions=effectiveGameOptions;
+        QuantBotConfig savedConfig=getQuantBotConfig();
+        bool restored=false;
+
+        void clearWorld() {
+            // Game and its objects still need the owning engine globals while dying.
+            game.reset();currentGame=nullptr;pLocalPlayer=nullptr;pLocalHouse=nullptr;
+        }
+        bool restore() {
+            clearWorld();
+            auto& mods=ModManager::instance();
+            bool modRestored=false;
+            try {
+                modRestored=!currentGameMap
+                    && (mods.getActiveModName()==mod || mods.setActiveMod(mod));
+            } catch(const std::exception& error) {
+                SDL_Log("CITY_CAMPAIGN_FAIL: cannot restore active mod: %s",error.what());
+            }
+            settings=std::move(savedSettings);
+            effectiveGameOptions=std::move(savedEffectiveOptions);
+            getQuantBotConfig()=std::move(savedConfig);
+            restored=true;
+            return modRestored;
+        }
+        ~RestoreState() {
+            if(!restored) try {
+                if(!restore()) SDL_Log("CITY_CAMPAIGN_FAIL: native fixture restoration failed");
+            } catch(const std::exception& error) {
+                SDL_Log("CITY_CAMPAIGN_FAIL: native fixture restoration failed: %s",error.what());
+            }
+        }
+    } state{game};
+    const HOUSETYPE objectiveID=game->getGameInitSettings().getHouseID();
+    const int mission=game->getGameInitSettings().getMission(),tech=game->techLevel;
+    const Uint32 seed=game->getGameInitSettings().getRandomSeed();
+    const auto options=game->getGameInitSettings().getGameOptions();
+    const std::string filename=game->getGameInitSettings().getFilename();
+    std::string filedata=game->getGameInitSettings().getFiledata();
     if(filedata.empty()) {
         auto file=pFileManager->openCampaignFile(filename);
         const auto size=SDL_RWsize(file.get());
@@ -24,8 +61,9 @@ void runCampaignObserverOutcomeProbe(std::unique_ptr<Game>& game, int level,
         require(SDL_RWread(file.get(),filedata.data(),1,filedata.size())==filedata.size(),
             "Incomplete authored observer scenario");
     }
-    const auto start=[&](GameInitSettings init) {
-        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;pLocalHouse=nullptr;
+    const auto start=[&](GameInitSettings init,bool reloadConfig=false) {
+        state.clearWorld();
+        require(!currentGame && !currentGameMap,"Native fixtures share a live world");
         init.randomSeed=seed;
         init.setLocalSpectator(true);
         init.setMultiplePlayersPerHouse(false);
@@ -33,6 +71,19 @@ void runCampaignObserverOutcomeProbe(std::unique_ptr<Game>& game, int level,
             GameInitSettings::HouseInfo row(static_cast<HOUSETYPE>(h),h==objectiveID ? 1:2);
             row.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),h==objectiveID ? candidateClass:enemyClass});
             init.addHouseInfo(row);
+        }
+        // Pin before constructing Game: an authored mod can activate a ws-<hash>
+        // revision here, and no previous world may survive that activation.
+        WorkshopGameContent::resolveMod(init,false);
+        WorkshopGameContent::pin(init);
+        require(init.getModName()==ModManager::instance().getActiveModName(),
+            "Native setup did not retain the actual active mod");
+        if(reloadConfig) {
+            // The global config is lazy, not invalidated by setActiveMod().
+            // Reset missing-key defaults as well as loading the new active path.
+            getQuantBotConfig()=QuantBotConfig();
+            require(getQuantBotConfig().load(getQuantBotConfigFilepath()),
+                "Cannot reload the native control's QuantBot configuration");
         }
         game=std::make_unique<Game>();currentGame=game.get();
         game->bReplay=true;
@@ -132,11 +183,79 @@ void runCampaignObserverOutcomeProbe(std::unique_ptr<Game>& game, int level,
             && game->watchedResultText()==_("Time is up - no winner"),"Custom observer lost its generic timeout draw");
         SDL_Log("CAMPAIGN_OBSERVER_OUTCOME_PASS: mode=custom case=timeout lose_flag=%d won=0",int(winFlag));
     }
+
+    // The final Custom outcome still owns a world. Destroy it before authoring
+    // or activating either independent native Full campaign control.
+    state.clearWorld();
+    require(!currentGame && !currentGameMap,"Content controls retained an outcome world");
+    auto& mods=ModManager::instance();
+    const char* profile=std::getenv("DUNECITY_USERDIR");
+    require(profile && *profile,"Content controls require an isolated probe profile");
+    require(std::filesystem::weakly_canonical(mods.getModsBasePath())
+        ==std::filesystem::weakly_canonical(std::filesystem::path(profile)/"mods"),
+        "Content control mod directory escaped the isolated probe profile");
+    const std::string otherMod="Campaign City Scope "+Workshop::newID();
+    // The managed probe profile owns this authored input, including on failure.
+    const auto draftPath=mods.getModPath(otherMod);
+    require(mods.createMod(otherMod,"vanilla"),"Cannot create the non-DuneCity city control");
+    auto info=mods.getModInfo(otherMod);
+    require(info.baseMod=="vanilla","Other city control did not inherit Vanilla content");
+    info.enablesCityMode=true;
+    require(mods.writeModInfo(draftPath,info),"Cannot enable the authored city control");
+
+    for(bool city:{false,true}) {
+        state.clearWorld();
+        require(!currentGame && !currentGameMap,"Content activation retained a native world");
+        const std::string selectedMod=city ? otherMod:"vanilla";
+        require(mods.setActiveMod(selectedMod) && mods.getActiveModName()==selectedMod,
+            "Cannot activate the native content control");
+        effectiveGameOptions=mods.loadEffectiveGameOptions(state.savedSettings.gameOptions);
+        GameInitSettings init(objectiveID,effectiveGameOptions,level);
+        init.mission=mission;
+        init.filename=GameInitSettings::getScenarioFilename(objectiveID,mission);
+        require(init.getModName()==selectedMod && init.getGameType()==GameType::Campaign,
+            "Full campaign constructor did not capture the selected control mod");
+        const auto optionsHash=init.getGameOptions().getHash();
+        start(std::move(init),true);
+
+        const auto& setup=game->getGameInitSettings();
+        const auto contentBase=mods.getContentBase(mods.getActiveModName());
+        require(mods.isInitialized() && setup.getModName()==mods.getActiveModName()
+            && contentBase=="vanilla" && !mods.isDuneCityContentActive(),
+            "Native content control resolved to DuneCity or a stale mod identity");
+        require(game->gameType==GameType::Campaign && setup.getGameType()==GameType::Campaign
+            && setup.getMission()==mission && setup.getRandomSeed()==seed
+            && setup.getGameOptions().getHash()==optionsHash && game->techLevel==tech
+            && game->getOutcomeHouse()==game->getHouse(objectiveID),
+            "Content control lost native Full campaign mission, seed, options or objective");
+        const auto* sim=game->getCitySimulation();
+        const bool initialized=sim && sim->isInitialized();
+        require(mods.isCityModeActive()==city && game->isCitySimEnabled()==city && initialized==city,
+            "Content control did not initialize its real city-mode capability");
+        QuantBot* enemy=nullptr;
+        for(int h=0;h<NUM_HOUSES;++h) if(h!=objectiveID)
+            if(const auto* house=game->getHouse(static_cast<HOUSETYPE>(h));house && house->isAlive()
+               && house->getNumItems(Structure_Refinery)>0)
+                for(const auto& player:house->getPlayerList())
+                    if(auto* bot=dynamic_cast<QuantBot*>(player.get())) {enemy=bot;break;}
+        require(enemy && enemy->getPlayerclass()==enemyClass && !enemy->configOverride
+            && enemy->isCampaignEnemy() && !enemy->switchedOff(),
+            "Content control has no normally configured eligible campaign enemy");
+        const bool cityEconomy=enemy->campaignCityEconomy();
+        const bool harvesterAllowed=enemy->campaignCanAddHarvester();
+        require(!cityEconomy,"DuneCity campaign economy leaked into a native content control");
+        require(harvesterAllowed,"Native content control inherited a DuneCity worker restriction");
+        SDL_Log("CITY_CAMPAIGN_CONTENT_SCOPE_PASS: case=%s mode=full mod=%s content_base=%s "
+            "city_enabled=%d city_initialized=%d eligible_enemy=1 city_economy=0 harvester_allowed=1 "
+            "mission=%d seed=%u options_hash=%s config_hash=%s",
+            city ? "other_city":"vanilla",mods.getActiveModName().c_str(),contentBase.c_str(),
+            int(game->isCitySimEnabled()),int(initialized),mission,seed,optionsHash.c_str(),
+            getQuantBotConfig().getConfigHash().c_str());
+    }
+    require(state.restore(),"Cannot restore content, configuration and globals after native controls");
 }
 
-void runCampaignCityEconomyProbe(std::unique_ptr<Game>& ownedGame, int level,
-                                const std::string& candidateClass, const std::string& enemyClass) {
-    Game& game=*ownedGame;
+void runCampaignCityEconomyPositiveProbe(Game& game) {
     auto require=[](bool ok,const char* reason) {
         if(!ok) {SDL_Log("CITY_CAMPAIGN_FAIL: %s",reason);throw std::runtime_error(reason);}
     };
@@ -166,12 +285,6 @@ void runCampaignCityEconomyProbe(std::unique_ptr<Game>& ownedGame, int level,
     const auto before=enemy->campaignCityLimits();
     require(before.sharedZoneCap>0 && before.harvesters<=enemy->campaignBaseline.allowance,"Invalid campaign economy limits");
 
-    const auto originalMod=game.gameInitSettings.modName;
-    game.gameInitSettings.modName="vanilla";
-    require(!enemy->campaignCityEconomy() && enemy->campaignCanAddHarvester(),"Policy leaked into vanilla");
-    game.gameInitSettings.modName="custom-city";
-    require(!enemy->campaignCityEconomy(),"Policy leaked into another city mod");
-    game.gameInitSettings.modName=originalMod;
     const auto originalGameType=game.gameType;
     game.gameType=GameType::CustomGame;
     require(!enemy->campaignCityEconomy(),"Policy leaked into custom games");
@@ -368,7 +481,14 @@ void runCampaignCityEconomyProbe(std::unique_ptr<Game>& ownedGame, int level,
     for(Uint32 cycle=resume;cycle<resume+501;++cycle) tick(cycle);
     require(!enemy->campaignPostSpice() && enemy->campaignCityLimits().sharedZoneCap==before.sharedZoneCap,
         "Restored map spice left extra expansion enabled");
+}
+
+void runCampaignCityEconomyProbe(std::unique_ptr<Game>& ownedGame, int level,
+                                const std::string& candidateClass, const std::string& enemyClass) {
+    // Positive-world references and controller pointers end before native
+    // outcome/content controls replace and finally destroy the owned world.
+    runCampaignCityEconomyPositiveProbe(*ownedGame);
     runCampaignObserverOutcomeProbe(ownedGame,level,candidateClass,enemyClass);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=city_campaign outcome=passed");
-    SDL_Log("CITY_CAMPAIGN_PROBE_PASS: original permissions, ally exclusion, fractional spice/cargo, exact depletion delay, restore and save/load; native Full/Single observer quota, defeat and timeout outcomes; generic Custom observer timeouts");
+    SDL_Log("CITY_CAMPAIGN_PROBE_PASS: original permissions, ally exclusion, fractional spice/cargo, exact depletion delay, restore and save/load; native Full/Single observer quota, defeat and timeout outcomes; generic Custom observer timeouts; real native Vanilla and non-DuneCity city content controls");
 }

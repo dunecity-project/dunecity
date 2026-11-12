@@ -187,6 +187,50 @@ class DuneCityAuditTests(unittest.TestCase):
         self.assertEqual(quotes[0]['data']['market_price'], 240)
         self.assertEqual(quotes[0]['data']['factory_price'], 270)
 
+    def test_raw_repair_capture_preserves_sparse_data_and_capture_status_in_ordinary_csv(self):
+        payload = dict(treatment=1, actual=2, committed=3, serviceable_waiting=0,
+                       reason='no_serviceable_saturation', state_id=2, future_stock=None)
+        base = [dict(schema_version=1, session='repair-session', seq=1, cycle=0, house=-1,
+                     event='session_start', data={}),
+                dict(schema_version=1, session='repair-session', seq=2, cycle=5, house=-1,
+                     event='state_snapshot', data=dict(state={'credits': 123})),
+                dict(schema_version=1, session='repair-session', seq=3, cycle=25, house=1, player=2,
+                     event='repair_capacity', data=payload),
+                dict(schema_version=1, session='repair-session', seq=4, cycle=100, house=-1,
+                     event='game_summary', data=dict(houses={house['house']: {} for house in HOUSES})),
+                dict(schema_version=1, session='repair-session', seq=5, cycle=100, house=-1,
+                     event='session_end', data={})]
+        with tempfile.TemporaryDirectory() as temporary:
+            for name, events, status in (('complete', base, 'complete'),
+                                         ('truncated', base[:-1], 'incomplete'),
+                                         ('changed-session', [dict(event, session='other' if event['event'] == 'repair_capacity'
+                                                                  else event['session']) for event in base], 'incomplete'),
+                                         ('absent', [dict(event, seq=seq) for seq, event in enumerate(
+                                             [base[0], base[3], base[4]], 1)], 'complete')):
+                with self.subTest(name=name):
+                    out = Path(temporary) / name
+                    write_capture(out, events)
+                    capture = audit['air_kill_capture'](out, HOUSES, 100, True)
+                    self.assertEqual(capture['status'], status)
+                    rows = audit['research_report'].repair_observations(capture)
+                    path = out / 'repair-capacity.csv'
+                    audit['append'](path, audit['REPAIR_FIELDS'], [dict(id='repair-game', **row) for row in rows])
+                    restored = audit['research_report'].read_table(out, 'repair-capacity.csv', ('id', 'house', 'seq'))
+                    if name == 'absent':
+                        self.assertEqual(restored, [])
+                        continue
+                    self.assertEqual(len(restored), 1)
+                    row = restored[0]
+                    self.assertEqual((row['session'], row['seq'], row['cycle'], row['house'], row['player']),
+                                     ('other' if name == 'changed-session' else 'repair-session', '3', '25', '1', '2'))
+                    self.assertEqual(json.loads(row['data']), payload)
+                    self.assertEqual(row['capture_status'], status)
+                    self.assertEqual(row['repair_serviceable_waiting'], '0')
+                    self.assertEqual(row['repair_busy'], '')
+                    self.assertEqual(row['repair_transport_blocked'], '')
+                    self.assertEqual(capture['decisions'][0]['data'], payload)
+                    self.assertEqual(bool(row['capture_reasons']), status != 'complete')
+
     def test_population_win_boundary_is_inclusive_and_uses_exact_integer_arithmetic(self):
         for population, winner in ((1199, 0), (1200, 1), (1201, 1)):
             with self.subTest(population=population):
@@ -1001,6 +1045,11 @@ class DuneCityAuditTests(unittest.TestCase):
                 events = known_callbacks()
                 events[2]['data'].update(attacker_house=0, attacker_firing_house=0)  # Friendly splash.
                 events[-2]['cycle'] = events[-1]['cycle'] = cycle
+                events.insert(-2, dict(schema_version=1, session='fixture', seq=0, cycle=90,
+                    house=0, player=1, event='repair_capacity', data=dict(treatment=0, actual=1,
+                    committed=1, serviceable_waiting=0, reason='legacy', state_id=0)))
+                for seq, event in enumerate(events, 1):
+                    event['seq'] = seq
                 write_capture(out, events)
                 assets = out / 'profile/mods/disposable'
                 assets.mkdir(parents=True)
@@ -1057,6 +1106,17 @@ class DuneCityAuditTests(unittest.TestCase):
                              ('44', '100', '0'))
             self.assertEqual(kill['attribution_complete'], '1')
             self.assertEqual(len(audit['read'](results / 'waves.csv')), 1)
+            repair = audit['read'](results / 'repair-capacity.csv')[0]
+            self.assertEqual((repair['session'], repair['seq'], repair['cycle'], repair['house'], repair['player']),
+                             ('fixture', '6', '90', '0', '1'))
+            self.assertEqual(repair['capture_status'], 'complete')
+            self.assertEqual((repair['repair_actual'], repair['repair_serviceable_waiting'], repair['repair_busy']),
+                             ('1', '0', ''))
+            self.assertEqual(json.loads(repair['data']), dict(treatment=0, actual=1, committed=1,
+                             serviceable_waiting=0, reason='legacy', state_id=0))
+            saved = audit['read'](results / 'games.csv')[0]
+            self.assertEqual(json.loads(saved['ai_config_receipts']), [])
+            self.assertEqual(json.loads(saved['genome_phase_receipts']), [])
 
     def test_enemy_air_kills_use_exact_attacker_house_and_victim_team(self):
         with tempfile.TemporaryDirectory() as temporary:

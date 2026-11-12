@@ -115,6 +115,16 @@ def validate_manifest(manifest, base):
     for arm in ('off', 'on'):
         text(manifest.get('configs', {}).get(arm), 'configs.' + arm)
     require(manifest['configs']['off'] != manifest['configs']['on'], 'OFF and ON configurations must differ')
+    if 'effective_config_hashes' in manifest:
+        hashes = manifest['effective_config_hashes']
+        require(isinstance(hashes, dict) and set(hashes) == {'native', 'off', 'on'},
+                'effective_config_hashes requires native/off/on')
+        require(all(isinstance(value, str) and re.fullmatch(r'[0-9a-f]{16}', value) for value in hashes.values()),
+                'effective_config_hashes values must be 16 lowercase hex digits')
+    if 'config_calibration_references' in manifest:
+        refs = manifest['config_calibration_references']
+        require(isinstance(refs, list) and all(isinstance(ref, str) and ref.strip() for ref in refs),
+                'Invalid config_calibration_references')
     for field in ('opportunity', 'mechanism_metric', 'primary'):
         metric = manifest.get(field, {})
         text(metric.get('metric'), field + '.metric')
@@ -190,7 +200,9 @@ def validate_manifest(manifest, base):
     return {'schema': 'dunecity-experiment-provenance/1', 'manifest_sha256': digest(manifest),
             'source_revision': revision, 'configs': manifest['configs'], 'decks': decks,
             'build_identity_inputs': ['source', 'harness', 'assets', 'toolchain', 'platform', 'build_options'],
-            'config_values_are_run_inputs': True}
+            'config_values_are_run_inputs': True,
+            'effective_config_hashes': manifest.get('effective_config_hashes', {}),
+            'config_calibration_references': manifest.get('config_calibration_references', [])}
 
 
 def canonical_csv_fields(fields):
@@ -254,8 +266,10 @@ def repair_observations(capture):
     for event in capture.get('decisions', []):
         if event.get('event') != 'repair_capacity':
             continue
-        row = {field: event.get(field, '') for field in ('session', 'seq', 'cycle', 'house')}
+        row = {field: event.get(field, '') for field in ('session', 'seq', 'cycle', 'house', 'player')}
         row['capture_status'] = capture['status']
+        row['capture_reasons'] = capture.get('reasons', '')
+        row['data'] = json.dumps(event.get('data', {}), sort_keys=True, separators=(',', ':'))
         for field in REPAIR_EVENT_FIELDS:
             value = event.get('data', {}).get(field.removeprefix('repair_'), '')
             row[field] = int(value) if isinstance(value, bool) else value
@@ -512,24 +526,136 @@ def measured_metric(data, metric, aggregation='final'):
         return {(house['id'], house['house']): (number(house.get(metric)), False) for _, house in selected}
     groups = defaultdict(list)
     for row in data.get('repairs', []):
-        value = number(row.get(metric))
-        if value is not None and value >= 0:
-            groups[(row['id'], row['house'])].append(row)
+        groups[(row['id'], row['house'])].append(row)
     result = {}
     for _, house in selected:
         key = (house['id'], house['house'])
         rows = groups.get(key, [])
-        values = [number(row[metric]) for row in rows]
+        observed = [(row, number(row.get(metric))) for row in rows]
+        values = [value for _, value in observed if value is not None and value >= 0]
+        partial = not rows or any(row.get('capture_status') != 'complete' or value is None or value < 0
+                                  for row, value in observed)
         if not values:
             result[key] = (None, True)
             continue
-        value = max(values) if aggregation == 'decision_max' else statistics.mean(values) if aggregation == 'decision_mean' else number(
-            max(rows, key=lambda row: (number(row['cycle']), number(row['seq'])))[metric])
-        result[key] = (value, any(row.get('capture_status') != 'complete' for row in rows))
+        last = max(rows, key=lambda row: (number(row['cycle']), number(row['seq'])))
+        value = max(values) if aggregation == 'decision_max' else statistics.mean(values) if aggregation == 'decision_mean' else number(last.get(metric))
+        result[key] = (value, partial)
     return result
 
 
-def paired_metrics(manifest, control, candidate, metric, aggregation='final'):
+def arm_identity(manifest, data, game, arm, cases):
+    """Verify actual transport receipts, not requested labels or global deltas.
+
+    SCENARIO_AI_CONFIG has no controller index. Duplicate house rows therefore
+    cannot verify multiple controllers; never collapse them into a last-wins map.
+    This verifies observed transport only, not the intended mechanism's force value.
+    """
+    selected = game.get('candidate_house')
+    seat = game.get('candidate_seat')
+    try:
+        index = int(game.get('sample_case', '')) - 1
+        if index < 0 or index >= len(cases):
+            return 'planned-case'
+        case = cases[index]
+        if any(str(game.get(field, '')) != str(case[field]) for field in
+               ('seed', 'format', 'size', 'spice_level', 'initial_tech')):
+            return 'planned-case'
+        if game.get('difficulty') != case.get('difficulty', 'brutal'):
+            return 'planned-case'
+        count = {'1v1': 2, '2v2': 4, 'ffa4': 4, 'ffa6': 6}[case['format']]
+        houses = ('0', '1', '2', '4', '3', '5')[:count]
+        shift = index % count
+        houses = houses[shift:] + houses[:shift]
+        position = 0 if seat == 'original' else (2 if case['format'] == '2v2' else count - 1) if seat == 'swapped' else None
+        if position is None or selected != houses[position]:
+            return 'candidate-seat'
+        native = game.get('config_hash')
+        if not native:
+            return 'config-unverified'
+        if (game.get('config_hash') != native or game.get('setup_style') != 'default'
+                or game.get('style') != 'default'):
+            return 'global-config'
+        configs = json.loads(game.get('ai_config_receipts') or 'null')
+        phases = json.loads(game.get('genome_phase_receipts') or 'null')
+        if not isinstance(configs, list) or not isinstance(phases, list):
+            return 'controller-unverified'
+        observed = {row['house']: row['config_hash'] for row in configs}
+        if len(configs) != count or set(observed) != set(houses) or not all(observed.values()):
+            return 'controller-unverified'
+        effective = observed[selected]
+        expected = {house: effective if house == selected else native for house in houses}
+        if arm == 'off' and effective != native:
+            return 'effective-config'
+        if observed != expected:
+            return 'effective-config'
+        legacy = [part.split(':') for part in game.get('ai_config_hashes', '').split(',')]
+        if len(legacy) != count or dict(legacy) != observed:
+            return 'effective-config'
+        style = manifest['configs'][arm]
+        if style == 'control':
+            if phases or effective != native:
+                return 'phase-identity'
+        elif (len(phases) != 1 or any(phases[0].get(field) != value for field, value in
+                (('house', selected), ('genome', 'candidate-' + style), ('phase', 'opening'),
+                 ('cycle', '0'), ('controller', '0'), ('difficulty', '3'), ('config_hash', effective)))):
+            return 'phase-identity'
+        roster = [row for row in data['houses'] if row['id'] == game['id']]
+        if len(roster) != count or {row['house'] for row in roster} != set(houses):
+            return 'controller-unverified'
+        if any(row.get('seat_style') != (style if row['house'] == selected else 'control') for row in roster):
+            return 'candidate-seat'
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+        return 'controller-unverified'
+    return None
+
+
+def actuation_identity(manifest, data, game, arm, base):
+    """Preregister one independently calibrated hash per role, never infer from names.
+
+    Optional manifest effective_config_hashes = {native, off, on} binds expected
+    effective hashes to the frozen snapshot/configs. config_calibration_references
+    retains the independent calibration receipts. Missing identities still allow
+    observation/pilot admission and measured reports, but cannot verify actuation.
+    Multiple-controller/phase heterogeneity is unverified by this simple contract.
+    Repair treatment is proven by actual decisions, not a hash difference.
+    """
+    hashes = manifest.get('effective_config_hashes', {})
+    references = manifest.get('config_calibration_references', [])
+    if not hashes or not references or not all(resolve(base, ref).is_file() for ref in references):
+        return False
+    try:
+        native, effective = hashes['native'], hashes[arm]
+        if game.get('config_hash') != native or hashes['off'] != native:
+            return False
+        selected = game['candidate_house']
+        configs = json.loads(game['ai_config_receipts'])
+        if any(row['config_hash'] != (effective if row['house'] == selected else native) for row in configs):
+            return False
+        phases = json.loads(game['genome_phase_receipts'])
+        if manifest['configs'][arm] != 'control':
+            if len(phases) != 1 or phases[0].get('config_hash') != effective:
+                return False
+        elif phases or effective != native:
+            return False
+        repair = any(specification['metric'] in REPAIR_METRICS + REPAIR_EVENT_FIELDS for specification in
+                     [manifest[name] for name in ('opportunity', 'mechanism_metric', 'primary')] + manifest['guards'])
+        if repair:
+            for house in {row['house'] for row in configs}:
+                rows = [row for row in data.get('repairs', []) if row['id'] == game['id'] and row['house'] == house]
+                if (not rows or any(row.get('capture_status') != 'complete' for row in rows)
+                        or any(not row.get('session') or not row.get('player') for row in rows)
+                        or len({row['player'] for row in rows}) != 1):
+                    return False
+                wanted = int(arm == 'on' and house == selected)
+                if any(number(row.get('repair_treatment')) != wanted for row in rows):
+                    return False
+        return True
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+        return False
+
+
+def paired_metrics(manifest, control, candidate, metric, aggregation='final', cases=()):
     left = {(h['id'], h['house']): (g, h) for g, h in selected_houses(control)}
     right = {(h['id'], h['house']): (g, h) for g, h in selected_houses(candidate)}
     before_values = measured_metric(control, metric, aggregation)
@@ -546,6 +672,10 @@ def paired_metrics(manifest, control, candidate, metric, aggregation='final'):
             continue
         if old.get('candidate_style') != manifest['configs']['off'] or new.get('candidate_style') != manifest['configs']['on']:
             rejected['config-identity'] += 1
+            continue
+        reason = arm_identity(manifest, control, old, 'off', cases) or arm_identity(manifest, candidate, new, 'on', cases)
+        if reason:
+            rejected[reason] += 1
             continue
         if metric == 'won' and any(number(house.get('won')) is not None and
                                  number(house['won']) != int(outcome(game, house)[0] == 'win')
@@ -595,16 +725,17 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
     evidence = evidence or {}
     control, candidate = dataset([control_directory]), dataset([candidate_directory])
     planned_clusters = len(provenance['decks'][stage]['seeds'])
+    expected_deck = compact_json(provenance['decks'][stage]['path'])
     reports = {}
     for name in ('opportunity', 'mechanism_metric', 'primary'):
         specification = manifest[name]
-        values, matching = paired_metrics(manifest, control, candidate, specification['metric'], specification.get('aggregation', 'final'))
+        values, matching = paired_metrics(manifest, control, candidate, specification['metric'], specification.get('aggregation', 'final'), expected_deck['cases'])
         if specification['direction'] == 'lower':
             values = [(key, -value) for key, value in values]
         reports[name] = dict(clustered_effect(values, manifest['design'], specification['minimum_effect'], planned_clusters), coverage=matching)
     guards, harmful, guards_complete = {}, False, True
     for guard in manifest['guards']:
-        values, matching = paired_metrics(manifest, control, candidate, guard['metric'], guard.get('aggregation', 'final'))
+        values, matching = paired_metrics(manifest, control, candidate, guard['metric'], guard.get('aggregation', 'final'), expected_deck['cases'])
         if guard['direction'] == 'lower':
             values = [(key, -value) for key, value in values]
         result = clustered_effect(values, manifest['design'], max(guard['margin'], manifest['primary']['minimum_effect']), planned_clusters)
@@ -618,9 +749,12 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
     opportunities = coverage([{'value': value} for value, _ in opportunity_values.values()], 'value')
     opportunity_partial = any(partial for _, partial in opportunity_values.values())
     primary, mechanism = reports['primary'], reports['mechanism_metric']
-    expected_deck = compact_json(provenance['decks'][stage]['path'])
     expected_seeds = Counter(str(case['seed']) for case in expected_deck['cases'] for _ in range(2))
+    expected_seats = Counter((str(index), seat) for index in range(1, len(expected_deck['cases']) + 1)
+                             for seat in ('original', 'swapped'))
     deck_complete = all(Counter(game.get('seed') for game, _ in selected_houses(data)) == expected_seeds
+                        and Counter((game.get('sample_case'), game.get('candidate_seat'))
+                                    for game, _ in selected_houses(data)) == expected_seats
                         and not any(game.get('error') for game in data['games']) for data in (control, candidate))
     def attested(name):
         record = evidence.get(name, {})
@@ -628,21 +762,28 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
             return False
         refs = record.get('references', [])
         return bool(refs) and all(resolve(path.parent, ref).is_file() for ref in refs)
-    facts = {'opportunity_complete': deck_complete and not opportunity_partial
+    transport_verified = bool(deck_complete and all(
+        arm_identity(manifest, data, game, arm, expected_deck['cases']) is None
+        for arm, data in (('off', control), ('on', candidate)) for game in data['games']))
+    actuation_verified = bool(transport_verified and all(
+        actuation_identity(manifest, data, game, arm, path.parent)
+        for arm, data in (('off', control), ('on', candidate)) for game in data['games']))
+    facts = {'transport_verified': transport_verified, 'actuation_verified': actuation_verified,
+             'opportunity_complete': actuation_verified and deck_complete and not opportunity_partial
              and complete_matching(reports['opportunity']['coverage'])
              and opportunities['observed'] == opportunities['eligible'] and opportunities['eligible'] > 0,
              'opportunities': opportunities['max'], 'implementation_failed': attested('implementation_failed'),
-             'harm_demonstrated': bool(deck_complete and (harmful or complete_matching(primary['coverage'])
+             'harm_demonstrated': bool(actuation_verified and deck_complete and (harmful or complete_matching(primary['coverage'])
                  and primary['power_sufficient'] and primary['interval'] and primary['interval'][1] < 0)),
-             'mechanism_adequately_unsupported': bool(deck_complete and complete_matching(mechanism['coverage'])
+             'mechanism_adequately_unsupported': bool(actuation_verified and deck_complete and complete_matching(mechanism['coverage'])
                  and mechanism['power_sufficient'] and mechanism['interval']
                  and mechanism['interval'][1] < manifest['mechanism_metric']['minimum_effect']),
              'independent_holdout': stage == 'confirmation' and deck_complete and attested('independent_holdout'),
              'off_contract_verified': attested('off_contract'),
-             'mechanism_verified': bool(attested('mechanism') and complete_matching(mechanism['coverage'])
+             'mechanism_verified': bool(actuation_verified and attested('mechanism') and complete_matching(mechanism['coverage'])
                  and mechanism['interval'] and mechanism['interval'][0] > 0
                  and mechanism['effect'] >= manifest['mechanism_metric']['minimum_effect']),
-             'primary_confirmed': bool(deck_complete and complete_matching(primary['coverage'])
+             'primary_confirmed': bool(actuation_verified and deck_complete and complete_matching(primary['coverage'])
                  and primary['interval'] and primary['interval'][0] > 0
                  and primary['effect'] >= manifest['primary']['minimum_effect']),
              'power_sufficient': primary['power_sufficient'], 'guards_complete': bool(guards_complete),
@@ -657,7 +798,7 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
             'helped_examples': evidence.get('helped_examples', []), 'harmed_examples': evidence.get('harmed_examples', []),
             'recommendation': 'Review mechanism, missing coverage and independent confirmation; default changes remain an explicit integrator decision.',
             'missing_attestations': [key for key in ('independent_holdout', 'off_contract_verified', 'mechanism_verified',
-                                                    'quality_reviewed', 'promotion_controls_passed') if not facts[key]]}
+                                                    'quality_reviewed', 'promotion_controls_passed', 'actuation_verified') if not facts[key]]}
 
 
 def quality_comparison(control_directory, candidate_directory):
