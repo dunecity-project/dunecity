@@ -145,7 +145,31 @@ struct World {
     }
     QuantBot::BuildPass plan() {
         QuantBot::BuildPass pass(bot->militaryUnitValue());
-        bot->resetBuildPass(); bot->planBuildInventory(pass); bot->planBuildBudget(pass);
+        // Orders consume the completed build plan, not just inventory/budget.
+        // In particular chooseCapitalPlan establishes the selected candidate
+        // (or -1); production acceptance consults it even for a repair order.
+        bot->resetBuildPass();
+        bot->planBuildInventory(pass);
+        bot->planBuildBudget(pass);
+        bot->planCityState(pass);
+        bot->planStrategicReserve(pass);
+        bot->planSpiceEconomy(pass);
+        bot->planPowerAndYards(pass);
+        bot->planCityPopulation(pass);
+        bot->planCivicNeedAndTrips(pass);
+        bot->traceBuildState(pass);
+        bot->planUnitMix(pass);
+        bot->planCapitalForecast(pass);
+        bot->planCityBootstrap(pass);
+        bot->planOpeningProduction(pass);
+        bot->planDefenceCoverage(pass);
+        bot->planVanillaCoreDefence(pass);
+        bot->planCityResearchOrder(pass);
+        bot->planTechSavings(pass);
+        bot->planCapitalCandidates(pass);
+        bot->planVanillaBoldCapital(pass);
+        bot->chooseCapitalPlan(pass);
+        if (!pass.vanillaBoomArmy) bot->planTechResearch(pass);
         return pass;
     }
     void contain(GroundUnit* unit) {
