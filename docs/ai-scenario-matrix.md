@@ -8,6 +8,10 @@ should beat an easy. test different levels from 1-9 ... a few of the MP popular 
 Until 1.0.847 almost every AI measurement was a 1v1 or All against Atreides. The matrix plays many
 kinds of game with one driver, `tests/ai/scenario-matrix.py`, and prints one summary table.
 
+Mixed four-way FFA smoke cells check completion and meaningful combat, not a
+particular seed's incidental default winner. Keep explicit matchup/campaign
+expectations and replay-digest checks; do not pin a past protocol's FFA winner.
+
 ## Income-based technology timing experiment
 
 `TechIncomeTiming` is a hashed, default-OFF QuantBot setting (`0/1/2`) for

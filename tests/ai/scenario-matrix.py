@@ -190,10 +190,6 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
     s('2p-small-smallarmy', 'vanilla', ffa('QH', 'AH'), skirmish_spec(64, 'small', 2), expect=('wins', 1))
     s('2p-medium-noarmy', 'dunecity', ffa('QB', 'QM'), skirmish_spec(96, 'medium', 0), expect=('wins', 1))
     s('3p-ffa-mcv-smallarmy', 'vanilla', ffa('QH', 'QM', 'AH'), skirmish_spec(128, 'none', 2))
-    # 90866 drew through protocol 118 (two houses alive after a measured 120 minutes, audited
-    # genuine exhaustion). Since protocol 119 (counters50-S5: VanillaArmyCounters=1,
-    # VanillaArmyCounterMapScope=5) QB (team 1) wins it at 41.26 min, so it expects that win;
-    # seed 91875 keeps the cell's completion coverage.
     s('4p-ffa-medium-smallarmy', 'vanilla', ffa('QB', 'QH', 'QM', 'QE'), skirmish_spec(128, 'medium', 2), smoke=2)
     s('4p-ffa-small-largearmy', 'dunecity', ffa('QH', 'QM', 'AH', 'AM'), skirmish_spec(128, 'small', 5))
     s('2v2-fortress-largearmy', 'vanilla', team_slots(['QH', 'QH'], ['QE', 'QE']), skirmish_spec(128, 'fortress', 5),
@@ -360,8 +356,6 @@ def schedule(args):
                  aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count))
         for index, seed in enumerate(seeds):
             game = match_game(cell, index, seed)
-            if game['id'] == 'skirmish/4p-ffa-medium-smallarmy/vanilla/90866':
-                game['expect'] = ('wins', 1)
             games.append(game)
             if cell['repeat'] and index == 0 and args.tier == 'smoke':
                 games.append(dict(match_game(cell, index, seed), id=match_game(cell, index, seed)['id'] + '#replay'))
