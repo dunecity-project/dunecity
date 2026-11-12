@@ -28,7 +28,7 @@ def _entry_header(digest, name, logical_link, size):
     digest.update(size.to_bytes(8, 'big'))
 
 
-def source_fingerprint(root: Path, build: Path, output: Path) -> str:
+def _source_entries(root: Path, build: Path, output: Path):
     root = root.resolve()
     excluded_names = tuple(os.path.normcase(os.fspath(path.resolve())) for path in (build, output))
     # Include the separator: "build/" is excluded, but "build-sibling/" is not.
@@ -40,9 +40,7 @@ def source_fingerprint(root: Path, build: Path, output: Path) -> str:
     entries = subprocess.check_output(['git', 'ls-files', '--stage', '-z'], cwd=root).split(b'\0')
     tracked_links = {entry.split(b'\t', 1)[1].decode('utf-8', errors='surrogateescape')
                      for entry in entries if entry.startswith(b'120000 ')}
-    digest = hashlib.sha256(SOURCE_FINGERPRINT_VERSION.encode() + b'\0')
-    # A source directory is shared by many files. Resolve its symlinks once per
-    # invocation, not once for every file; file contents are still read in full.
+    # Resolve a shared source directory once per invocation, not once per file.
     resolved_parents = {}
     for name in sorted(set(filter(None, names))):
         relative = Path(name)
@@ -67,6 +65,44 @@ def source_fingerprint(root: Path, build: Path, output: Path) -> str:
             continue
         if not actual_link and (info is None or not stat.S_ISREG(info.st_mode)):
             raise RuntimeError(f'Cannot fingerprint source input: {name}')
+        yield name, path, logical_link, actual_link, info, resolved
+
+
+def _source_snapshot(entries):
+    snapshot = []
+    resolved_parents = {}
+    for name, path, logical_link, actual_link, info, resolved in entries:
+        canonical = resolved
+        if logical_link:
+            # Canonicalize the parent, never the logical link's target bytes.
+            parent = path.parent
+            if parent not in resolved_parents:
+                resolved_parents[parent] = parent.resolve()
+            canonical = resolved_parents[parent] / path.name
+        snapshot.append([name, str(canonical), logical_link, actual_link,
+                         info.st_dev, info.st_ino, info.st_mode, info.st_size,
+                         info.st_mtime_ns, info.st_ctime_ns])
+    return snapshot
+
+
+def source_fingerprint(root: Path, build: Path, output: Path, *, cache=None) -> str:
+    """Keep the exact v2 byte stream; optionally reuse its digest after fresh stat checks.
+
+    The caller owns cache locking and atomic persistence. A miss compares complete
+    membership/metadata snapshots before and after reading the original bytes.
+    """
+    entries = _source_entries(root, build, output)
+    if cache is not None:
+        entries = list(entries)
+        before = _source_snapshot(entries)
+        cached = cache.get('digest')
+        if (cache.get('version') == SOURCE_FINGERPRINT_VERSION
+                and cache.get('snapshot') == before
+                and isinstance(cached, str) and len(cached) == 64
+                and all(character in '0123456789abcdef' for character in cached)):
+            return cached
+    digest = hashlib.sha256(SOURCE_FINGERPRINT_VERSION.encode() + b'\0')
+    for name, path, logical_link, actual_link, info, _ in entries:
         if logical_link:
             target = os.fsencode(os.readlink(path)) if actual_link else path.read_bytes()
             _entry_header(digest, name, True, len(target))
@@ -79,7 +115,13 @@ def source_fingerprint(root: Path, build: Path, output: Path) -> str:
                 if not chunk:
                     break
                 digest.update(chunk)
-    return digest.hexdigest()
+    value = digest.hexdigest()
+    if cache is not None:
+        if _source_snapshot(_source_entries(root, build, output)) != before:
+            raise RuntimeError('Source changed while fingerprinting; refusing unstable cache')
+        cache.clear()
+        cache.update(version=SOURCE_FINGERPRINT_VERSION, snapshot=before, digest=value)
+    return value
 
 
 def pinned_source_fingerprint(root: Path, source: str) -> str:

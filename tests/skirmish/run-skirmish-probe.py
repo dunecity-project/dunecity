@@ -112,7 +112,7 @@ def file_hash(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def fixture_identity():
+def fixture_identity(source_cache):
     # Commands identify the ABI/toolchain flags; hash the actual linked objects,
     # libraries and configured build too, not just the production executable.
     inputs = {build / target, build / 'CMakeCache.txt', build / 'build.ninja'}
@@ -123,7 +123,7 @@ def fixture_identity():
             for arg in compiler[:compiler.index('-c')]:
                 if Path(arg).is_absolute() and Path(arg).is_file() and os.access(arg, os.X_OK):
                     inputs.add(Path(arg))
-    return {'source': source_fingerprint(root, build, out), 'commands': commands,
+    return {'source': source_fingerprint(root, build, out, cache=source_cache), 'commands': commands,
             'inputs': {str(path): file_hash(path) for path in sorted(inputs)}}
 
 
@@ -183,7 +183,15 @@ fixture_root = args.fixture_dir.resolve() if args.fixture_dir else out / 'fixtur
 fixture_root.mkdir(parents=True, exist_ok=True)
 with (fixture_root / 'publication.lock').open('a+b') as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
-    identity = fixture_identity()
+    cache_path = fixture_root / 'source-fingerprint.json'
+    try:
+        cache_text = cache_path.read_text()
+        source_cache = json.loads(cache_text)
+    except (OSError, ValueError):
+        cache_text, source_cache = None, {}
+    if not isinstance(source_cache, dict):
+        source_cache = {}
+    identity = fixture_identity(source_cache)
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     fixture = fixture_root / key
     executable = Path('skirmish-probe.app/Contents/MacOS/skirmish-probe')
@@ -193,7 +201,7 @@ with (fixture_root / 'publication.lock').open('a+b') as lock:
         staged = Path(tempfile.mkdtemp(prefix=key + '.incoming-', dir=fixture_root))
         try:
             compile_fixture(staged)
-            if fixture_identity() != identity:
+            if fixture_identity(source_cache) != identity:
                 raise RuntimeError('Source or build inputs changed during fixture preparation')
             (staged / 'manifest.json').write_text(json.dumps(
                 {'identity': identity, 'binary': file_hash(staged / executable)}, sort_keys=True) + '\n')
@@ -205,6 +213,18 @@ with (fixture_root / 'publication.lock').open('a+b') as lock:
     binary = fixture / executable
     if fixture.is_symlink() or binary.is_symlink() or manifest['identity'] != identity or manifest['binary'] != file_hash(binary):
         raise RuntimeError('Skirmish fixture seal differs; refusing stale or modified executable')
+    source_cache_text = json.dumps(source_cache, sort_keys=True) + '\n'
+    if source_cache_text != cache_text:
+        temporary_cache = None
+        try:
+            with tempfile.NamedTemporaryFile('w', dir=fixture_root, prefix='source-fingerprint-',
+                                             suffix='.incoming', delete=False) as stream:
+                temporary_cache = Path(stream.name)
+                stream.write(source_cache_text)
+            temporary_cache.replace(cache_path)
+        finally:
+            if temporary_cache is not None:
+                temporary_cache.unlink(missing_ok=True)
 if args.prepare_only:
     print('SKIRMISH_FIXTURE_READY: ' + str(fixture), flush=True)
     sys.exit(0)

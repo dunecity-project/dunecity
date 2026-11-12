@@ -599,7 +599,15 @@ generated", and "random settings on army and city must apply equally to each pla
     level and dearest price for every item. The hosted screen's choices round-trip without
     overwriting the single-player mod or layout; starts clamp to 2–8 and the house cap.
 - `ctest --test-dir build -R skirmish_generator_probe` (`tests/skirmish/run-skirmish-probe.py`, real
-  engine, isolated profiles) runs these cases:
+  engine, isolated profiles). CTest prepares one sealed fixture, then runs each case separately.
+  The wrapper memoizes the exact v2 source digest only after freshly enumerating all included
+  tracked/untracked files and matching canonical paths, device/inode, mode, size and nanosecond
+  mtime/ctime. A miss reads the original byte stream and rejects changes between complete
+  before/after snapshots. The source-cache manifest is atomically published under the existing
+  fixture lock; linked/toolchain inputs and the fixture executable are still fully hashed.
+  Profiles/settings remain private per case, and the 600-second deadlines are unchanged.
+  Metadata enumeration still costs time; this avoids repeated source-byte reads, not all startup work.
+  Cases:
   - **menu:** at 640x480 and 1280x720, checks house choices and the enemy cap, persistence across
     reopening, and that Save map writes the file. Screenshots are saved as
     `build/skirmish-probe/random-skirmish*.bmp`.

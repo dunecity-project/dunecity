@@ -5,12 +5,15 @@ Run directly with Python, unittest discovery, or pytest; no engine/dependencies 
 import contextlib
 import csv
 import io
+import json
+import os
 from pathlib import Path
 import statistics
 import subprocess
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 from test_civ_wars_matrix import arguments, matrix
 from source_provenance import source_fingerprint
@@ -249,8 +252,8 @@ class SourceFingerprintTests(unittest.TestCase):
         self.source.write_text('int source = 1;\n', encoding='utf-8')
         subprocess.run(['git', 'add', 'tracked.cpp'], cwd=self.root, check=True, capture_output=True)
 
-    def fingerprint(self):
-        return source_fingerprint(self.root, self.build, self.output)
+    def fingerprint(self, **kwargs):
+        return source_fingerprint(self.root, self.build, self.output, **kwargs)
 
     def test_tracked_and_nonignored_untracked_source_mutations_change_identity(self):
         baseline = self.fingerprint()
@@ -320,6 +323,48 @@ class SourceFingerprintTests(unittest.TestCase):
         baseline = self.fingerprint()
         self.source.write_bytes(b'int source = 1;\r\n')
         self.assertNotEqual(self.fingerprint(), baseline)
+
+    def test_persisted_cache_matches_v2_and_invalidates_preserved_mtime_change(self):
+        baseline = self.fingerprint()
+        cache = {}
+        self.assertEqual(self.fingerprint(cache=cache), baseline)
+        cache = json.loads(json.dumps(cache))
+        with mock.patch.object(Path, 'open', side_effect=AssertionError('Warm cache reread source bytes')):
+            self.assertEqual(self.fingerprint(cache=cache), baseline)
+        before = self.source.stat()
+        self.source.write_bytes(b'int source = 2;\n')
+        os.utime(self.source, ns=(before.st_atime_ns, before.st_mtime_ns))
+        self.assertEqual(self.source.stat().st_size, before.st_size)
+        self.assertEqual(self.source.stat().st_mtime_ns, before.st_mtime_ns)
+        changed = self.fingerprint(cache=cache)
+        self.assertNotEqual(changed, baseline)
+        self.assertEqual(changed, self.fingerprint())
+
+    def test_cache_reenumerates_untracked_source_membership(self):
+        cache = {}
+        baseline = self.fingerprint(cache=cache)
+        extra = self.root / 'untracked.inc'
+        extra.write_bytes(b'new source\n')
+        changed = self.fingerprint(cache=cache)
+        self.assertNotEqual(changed, baseline)
+        self.assertEqual(changed, self.fingerprint())
+        extra.unlink()
+        self.assertEqual(self.fingerprint(cache=cache), baseline)
+
+    def test_cache_miss_rejects_source_changed_during_read(self):
+        cache = {}
+        original_open = Path.open
+
+        def changing_open(path, *args, **kwargs):
+            stream = original_open(path, *args, **kwargs)
+            if path == self.source and args and args[0] == 'rb':
+                self.source.write_bytes(b'int source = 2;\n')
+            return stream
+
+        with mock.patch.object(Path, 'open', changing_open):
+            with self.assertRaisesRegex(RuntimeError, 'Source changed while fingerprinting'):
+                self.fingerprint(cache=cache)
+        self.assertEqual(cache, {})
 
 
 if __name__ == '__main__':
