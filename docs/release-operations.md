@@ -4,6 +4,9 @@ Verified 2026-09-10. This is the entry point for Codex, Claude, Hermes and human
 maintainers. Check current branches, workflows and release state before acting;
 version numbers and run IDs below are verification examples, not next-version defaults.
 
+Read [Release execution contract](#release-execution-contract) before starting
+qualification. It governs readiness, parallel execution, evidence reuse and stalls.
+
 ## Repositories and destinations
 
 | Purpose | Repository / local checkout on Stefan's MacBook Air | Destination |
@@ -68,6 +71,83 @@ protocol/save/mod compatibility metadata, `CFBundleShortVersionString` and iOS
 `CFBundleVersion` stay unchanged; the `dev` suffix belongs only to runtime display
 identity (and macOS Finder's long version/Get Info description).
 
+## Release execution contract
+
+Use the existing workspace coordinator, queue and CI; do not build another release
+orchestrator. These rules change execution order, not the required channel gates.
+
+### Establish readiness before long runs
+
+1. Name one release coordinator and pin the full 40-hex committed source SHA.
+   Record required gates and their owners in the release evidence directory under
+   `~/Documents/projects/outputs/release-X.Y.Z/`. Each gate records its command,
+   source SHA, configuration, machine, state, timestamps and evidence path.
+2. Read `~/.local/state/compute-watch/latest.md`,
+   `~/.local/state/agent-workspace/reports/compute-watch-alerts.md`,
+   `agent-workspace status` and `dunecity-queue status -v`. Check actual host
+   reachability, admission holds and platform capability. AWS game capacity is
+   not CTest capacity. Air work must be positively classified headless.
+3. Budget physical free bytes for the next phase: the unchanged 25 GB reserve
+   plus its measured or conservatively bounded peak scratch/package footprint.
+   Recheck before that phase, not just at release start. Preserve evidence and
+   build trees; do not turn a release into speculative cleanup or compression.
+4. Inspect the harness at the pinned SHA, its required assets and packaged-runtime
+   inputs. Prove admission and one representative required test/game before
+   submitting a large dependent matrix. Count that canary toward its required
+   scope where valid; do not invent an extra suite. AI observer-off canaries must
+   prove the strict verifier receives required per-house research evidence.
+   An earlier source-cache prewarm is not proof the archive still exists: verify
+   its identity immediately before consumption using existing canonical checks.
+
+### Execute independent work concurrently
+
+Start PR CI and independent native-platform checks together with readiness work.
+Fan suitable pinned AI games out to available game hosts after the canary passes.
+Keep Mini-only GUI, packaging and simulator phases on one explicitly ordered lane.
+Obtain a named handoff from competing owners through the existing coordinator;
+an agent being idle is not a handoff. If unavailable, record the owner/blocker
+and continue independent work. Never stop running jobs, globally pause research,
+override another owner's hold, or bypass the one-heavy-build rule.
+
+Use one pinned submission per intended scope through the existing wrapper:
+
+```sh
+agent-workspace run --project dunecity --owner OWNER --tests --wait -- \
+  dunecity-queue ctest --cwd /Users/stefan/Documents/projects/dunecity-feature-batch \
+  --rev FULL_SHA --priority 5 --tag release-X.Y.Z --owner OWNER -R CLASSIFIED_REGEX
+# Capture the returned JOB_ID; follow outside the workspace wrapper:
+dunecity-queue report JOB_ID --follow
+```
+
+Replace placeholders with the actual identity, full SHA and classified test
+allowlist. Partition GUI/headless scopes without omissions or overlap; never
+send an unfiltered graphical suite to the Air. Wrapper exit 0 and a job ID mean
+**accepted**, not completed or passed.
+
+### Bound stalls and preserve completed work
+
+- Agents report `preparing`, `submitted`, `running`, `passed`, `failed` or
+  `blocked`. Running requires a live operation/job identity and start time.
+  After five minutes preparing without launch, report the exact missing input
+  or guard; do not silently expand a wrapper or wait for redundant approval.
+- After an admission timeout, first check for an accepted job to avoid duplicates.
+  Preserve the failure and measure archive creation, extraction, unit discovery,
+  cleanup and publication separately with existing diagnostics before retrying.
+  Do not increase deadlines, weaken assertions or repeat an unchanged failure.
+- After ten minutes with no new phase evidence, the coordinator investigates and
+  names the owner and next action. This is an escalation interval, not permission
+  to terminate a legitimate long test or cluster job. Distinguish a product
+  failure from a harness failure, unavailable host and work never launched.
+- Reuse completed passes when the required gate's inputs are unchanged: source
+  dependency closure, harness, assets, configuration, toolchain and platform.
+  Keep the actual tested SHA and record explicit equivalence evidence for reuse
+  across commits. Docs-only changes do not restart game qualification. Harness
+  fixes rerun affected gates; runtime changes invalidate affected consumers.
+  Never relabel old results as tested at the new pin.
+- Progress updates state published production version, completed gates, currently
+  running operations and the single critical-path blocker. Preparation is not
+  execution; CI success is not publication. No ETA without measured throughput.
+
 ## Release checklist: every channel (verified for 1.0.864, 2026-11-01)
 
 One release touches all of these; each is a separate gate. Report each one as verified,
@@ -97,13 +177,15 @@ client that needs them).
 
 ## Test on every available computer (Stefan, 2026-11-01)
 
-Every build, release candidate and release is tested on all reachable machines in parallel,
-not on the Mac mini alone (`~/.config/agent-workspace/POLICY.md`, "Use every available
-computer"). The full suite runs through `dunecity-queue ctest --cwd <staging> --wait`, which
-spreads it over the MacBook Pro, Windows PC, MacBook Air and mini. Native checks run on the
-machine that is that platform: Windows packages on the Windows PC, iOS on the mini's
-simulators, the browser build on the mini with the pinned Emscripten 4.0.14. Run one agent
-per platform while PR CI runs. Android needs Stefan's phone. The release report names the
+Every build, release candidate and release is tested on all reachable machines in
+parallel (`~/.config/agent-workspace/POLICY.md`, "Use every available computer").
+Classify the actual CTest registry into complete, disjoint headless and graphical
+allowlists before using the pinned queue command above. The Air is headless-only;
+never send it an unfiltered suite. Queue acceptance is not test completion.
+Native checks run on the machine that is that platform: Windows packages on the
+Windows PC, iOS on the mini's simulators, the browser build on the mini with pinned
+Emscripten 4.0.14. Run one agent per platform while PR CI runs, subject to the Mini
+heavy-build limit. Android needs Stefan's phone. The release report names the
 machine for each check and lists every untested platform.
 
 ## An authorized desktop release
