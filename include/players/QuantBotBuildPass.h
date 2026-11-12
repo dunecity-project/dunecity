@@ -116,6 +116,18 @@ struct QuantBot::BuildPass {
     int waitingRepairVehicles{};
     int repairBaseline{};
     int repairTarget{};
+    bool repairCapacityDemand{};
+    int observedBusyRepairBays{};
+    int completedRepairReturns{};
+    int serviceableRepairVehicles{};
+    int transportBlockedRepairVehicles{};
+    int inFlightRepairVehicles{};
+    int accessBlockedRepairVehicles{};
+    int usableLocalRepairBays{};
+    int busyLocalRepairBays{};
+    int waitingLocalRepairVehicles{};
+    Uint32 repairPressureCycles{};
+    const char* repairCapacityReason{"legacy"};
     bool powerRules{};
     bool turretPowerRequired{};
     bool vanillaEconomy{};

@@ -118,6 +118,56 @@ class LogisticsSnapshotContractTest(unittest.TestCase):
         self.assertNotIn('harvesters_harvesting', present)
 
 
+class AuditCsvSchemaContractTest(unittest.TestCase):
+    def test_sample_output_round_trips_one_fleet_and_logistics_column_per_name(self):
+        rows = [dict(id='fleet', house='0', cycle='18750', harvesters_lost='7', refinery_bays='2',
+                     refinery_bays_busy='1', occupied_refinery_bays='1'),
+                dict(id='fleet', house='0', cycle='37500', harvesters_lost='', refinery_bays='0',
+                     refinery_bays_busy='0', occupied_refinery_bays='')]
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'samples.csv'
+            audit['append'](path, audit['SAMPLE_FIELDS'], rows)
+            with path.open(newline='') as handle:
+                fields = next(csv.reader(handle))
+            self.assertEqual(fields.count('harvesters_lost'), 1)
+            self.assertEqual(fields.count('refinery_bays'), 1)
+            restored = audit['research_report'].read_table(Path(temporary), 'samples.csv', ('id', 'house', 'cycle'))
+            self.assertEqual([(row['harvesters_lost'], row['refinery_bays'], row['refinery_bays_busy'],
+                               row['occupied_refinery_bays']) for row in restored],
+                             [('7', '2', '1', '1'), ('', '0', '0', '')])
+            self.assertEqual(audit['read'](path), restored)
+
+    def test_generic_writer_canonicalizes_duplicate_names_without_losing_values(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'counts.csv'
+            fields = ('id', 'counter', 'counter', 'note', 'note')
+            audit['append'](path, fields, [dict(id='first', counter='0', note='a,quoted\nnote')])
+            audit['append'](path, fields, [dict(id='second', counter='', note='')])
+            with path.open(newline='') as handle:
+                self.assertEqual(list(csv.reader(handle)), [
+                    ['id', 'counter', 'note'], ['first', '0', 'a,quoted\nnote'], ['second', '', '']])
+
+    def test_historical_audit_read_checks_duplicates_and_never_rewrites_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'samples.csv'
+            fields = ('id', 'house', 'cycle', 'refinery_bays', 'harvesters_lost', 'refinery_bays', 'harvesters_lost')
+            with path.open('w', newline='') as handle:
+                writer = csv.writer(handle)
+                writer.writerow(fields)
+                writer.writerow(('fleet', '0', '0', '', '', '', ''))
+            original = path.read_bytes()
+            restored = audit['read'](path)
+            self.assertEqual(restored[0]['refinery_bays'], '')
+            self.assertEqual(restored[0]['harvesters_lost'], '')
+            with self.assertRaisesRegex(ValueError, 'CSV schema changed'):
+                audit['append'](path, fields, [dict(id='another', house='0', cycle='18750')])
+            self.assertEqual(path.read_bytes(), original)
+            with path.open('a', newline='') as handle:
+                csv.writer(handle).writerow(('fleet', '0', '18750', '0', '7', '', '7'))
+            with self.assertRaisesRegex(ValueError, 'Conflicting duplicate CSV column'):
+                audit['read'](path)
+
+
 class DuneCityAuditTests(unittest.TestCase):
     def test_starport_purchase_quotes_survive_compact_decision_capture(self):
         events = known_callbacks()

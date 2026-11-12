@@ -49,23 +49,21 @@ and power against the generator's own plan, and draws the loaded (and played) ma
 fails on any error, invalid entry or occupied position the engine logs while it plays.
 """
 import argparse
-import fcntl
-import hashlib
-import json
 import os
 from pathlib import Path
 import re
 import shlex
 import shutil
 import subprocess
-import tempfile
 import sys
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import managed_profile, require_free_space, scratch_dir
-sys.path.insert(0, str(root / 'tests/ai'))
-from source_provenance import source_fingerprint
+sys.path.insert(0, str(root / 'tests/menu'))
+from probe_process import processes, run, check_output
+from probe_fixture import prepare_fixture
+processes.install_signal_handlers()
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
@@ -98,33 +96,15 @@ if args.size:
     if len(selected_size) != 2:
         parser.error('--size must be WxH')
 require_free_space(sweep='if-low')
-subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 
 target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+commands = check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
 production_link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
 production_link = production_link[production_link.index('&&') + 1:]
 production_link = production_link[:production_link.index('&&')]
 
 
-def file_hash(path):
-    with Path(path).open('rb') as stream:
-        return hashlib.file_digest(stream, 'sha256').hexdigest()
-
-
-def fixture_identity(source_cache):
-    # Commands identify the ABI/toolchain flags; hash the actual linked objects,
-    # libraries and configured build too, not just the production executable.
-    inputs = {build / target, build / 'CMakeCache.txt', build / 'build.ninja'}
-    inputs.update(build / arg for arg in production_link if arg.endswith(('.o', '.a', '.dylib')))
-    for line in commands:
-        compiler = shlex.split(line)
-        if ' -c ' in line:
-            for arg in compiler[:compiler.index('-c')]:
-                if Path(arg).is_absolute() and Path(arg).is_file() and os.access(arg, os.X_OK):
-                    inputs.add(Path(arg))
-    return {'source': source_fingerprint(root, build, out, cache=source_cache), 'commands': commands,
-            'inputs': {str(path): file_hash(path) for path in sorted(inputs)}}
 
 
 def compile_fixture(work):
@@ -175,58 +155,16 @@ def compile_fixture(work):
     with (work / 'build.log').open('w') as log:
         for phase, command in (('main', compile_command), ('civ-menu', menu_compile), ('link', link)):
             print('SKIRMISH_FIXTURE_PHASE: ' + phase, flush=True)
-            subprocess.run(['nice', '-n', '10'] + command, cwd=build, stdout=log,
+            run(['nice', '-n', '10'] + command, cwd=build, stdout=log,
                            stderr=subprocess.STDOUT, check=True)
 
 
-fixture_root = args.fixture_dir.resolve() if args.fixture_dir else out / 'fixture'
-fixture_root.mkdir(parents=True, exist_ok=True)
-with (fixture_root / 'publication.lock').open('a+b') as lock:
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    cache_path = fixture_root / 'source-fingerprint.json'
-    try:
-        cache_text = cache_path.read_text()
-        source_cache = json.loads(cache_text)
-    except (OSError, ValueError):
-        cache_text, source_cache = None, {}
-    if not isinstance(source_cache, dict):
-        source_cache = {}
-    identity = fixture_identity(source_cache)
-    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-    fixture = fixture_root / key
-    executable = Path('skirmish-probe.app/Contents/MacOS/skirmish-probe')
-    if not fixture.exists():
-        if args.fixture_dir and not args.prepare_only:
-            raise RuntimeError('Missing current skirmish fixture; run --prepare-only with the same --fixture-dir')
-        staged = Path(tempfile.mkdtemp(prefix=key + '.incoming-', dir=fixture_root))
-        try:
-            compile_fixture(staged)
-            if fixture_identity(source_cache) != identity:
-                raise RuntimeError('Source or build inputs changed during fixture preparation')
-            (staged / 'manifest.json').write_text(json.dumps(
-                {'identity': identity, 'binary': file_hash(staged / executable)}, sort_keys=True) + '\n')
-            staged.rename(fixture)
-        except BaseException:
-            print('Kept incomplete fixture evidence: ' + str(staged), file=sys.stderr)
-            raise
-    manifest = json.loads((fixture / 'manifest.json').read_text())
-    binary = fixture / executable
-    if fixture.is_symlink() or binary.is_symlink() or manifest['identity'] != identity or manifest['binary'] != file_hash(binary):
-        raise RuntimeError('Skirmish fixture seal differs; refusing stale or modified executable')
-    source_cache_text = json.dumps(source_cache, sort_keys=True) + '\n'
-    if source_cache_text != cache_text:
-        temporary_cache = None
-        try:
-            with tempfile.NamedTemporaryFile('w', dir=fixture_root, prefix='source-fingerprint-',
-                                             suffix='.incoming', delete=False) as stream:
-                temporary_cache = Path(stream.name)
-                stream.write(source_cache_text)
-            temporary_cache.replace(cache_path)
-        finally:
-            if temporary_cache is not None:
-                temporary_cache.unlink(missing_ok=True)
+fixture_root = args.fixture_dir.resolve() if args.fixture_dir else build / 'skirmish-probe-fixture'
+binary = prepare_fixture(root, build, out, fixture_root, 'skirmish-probe.app/Contents/MacOS/skirmish-probe',
+                         commands, production_link, compile_fixture,
+                         require_prepared=bool(args.fixture_dir and not args.prepare_only))
 if args.prepare_only:
-    print('SKIRMISH_FIXTURE_READY: ' + str(fixture), flush=True)
+    print('SKIRMISH_FIXTURE_READY: ' + str(binary.parents[3]), flush=True)
     sys.exit(0)
 
 # Engine diagnostics that mean a generated map or match is broken. Occupied
@@ -268,7 +206,7 @@ def run_cases(work):
             logpath = out / f'run-{label}.log'
             print('SKIRMISH_RUNTIME_PHASE: ' + label, flush=True)
             with managed_profile(profile), logpath.open('w') as log:
-                subprocess.run(['nice', '-n', '10', str(binary), '--window', '--showlog'], cwd=work, env=env, stdout=log,
+                run(['nice', '-n', '10', str(binary), '--window', '--showlog'], phase='SKIRMISH_RUNTIME_PHASE', cwd=work, env=env, stdout=log,
                                stderr=subprocess.STDOUT, check=True, timeout=600)
             text = logpath.read_text(errors='replace')
             if text.count('SKIRMISH_PROBE_PASS:') != 1:

@@ -573,6 +573,17 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     int accessRejected = 0, pollutionRejected = 0, reservedRejected = 0, roadRejected = 0, neighbourRejected = 0;
     int productionPlotRejected = 0;
     int searchPassUsed = 0;
+    const auto* repairBuilder = itemID == Structure_RepairYard && repairCapacityDemandActive()
+        ? dynamic_cast<const BuilderBase*>(getObject(planningBuilder)) : nullptr;
+    const bool acceptedRepair = repairBuilder && repairBuilder->getOwner() == getHouse()
+        && repairBuilder->getHealth() > 0
+        && std::any_of(repairBuilder->getBuildList().begin(), repairBuilder->getBuildList().end(),
+            [](const auto& offer) { return offer.itemID == Structure_RepairYard && offer.num > 0; });
+    // Already accepted material keeps the ordinary placement/retry contract
+    // even after its demand cleared. Only NEW repeat capacity is constrained.
+    const bool localRepair = itemID == Structure_RepairYard && repairCapacityDemandActive()
+        && getHouse()->getNumItems(Structure_RepairYard) > 0 && !acceptedRepair;
+    if (localRepair && !repairPlacementReady) return Coord::Invalid();
 	// Check per-build-cycle cache first
 	auto cacheIt = placementCache.find(itemID);
 	if (cacheIt != placementCache.end()) {
@@ -898,6 +909,11 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
             }
 			if (!relaxRoading && !CityPlacementPolicy::inPlacementSearchPass(placeLocationX,placeLocationY,
                 baseCenter.x,baseCenter.y,searchRadius,searchPass)) continue;
+            // Repeat repair capacity belongs to the observed local queue.
+            // The existing scorer still applies every placement guard; the
+            // pass's cached components avoid pathfinding/allocation per plot.
+            if (localRepair && repairPlacementAccess.waitingFor(
+                    placeLocationX, placeLocationY, newSizeX, newSizeY) < 2) continue;
             // Both okayToPlaceStructure() overloads finish with
             // `return withinBuildRange`, an OR over the footprint of
             // isWithinBuildRange(), which is itself "any owned tile within

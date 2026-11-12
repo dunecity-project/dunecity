@@ -368,6 +368,7 @@ QuantBotConfig::QuantBotConfig() {
     force.fleetHarvestersPerBay = 3;
     force.fleetCarryallQuarters = 1;
     force.fleetRepairYards = 1;
+    force.repairCapacityDemand = false;
     force.ffaVultureLevel = 0;
     force.techIncomeTiming = 0;
     // Candidate (fix/ladder-campaign, docs/ai-scenario-matrix.md "Team games"): team waves join an
@@ -377,6 +378,7 @@ QuantBotConfig::QuantBotConfig() {
     force.teamDefenceSharePercent = 0;
     force.openingCombatBudget = false;
     force.campaignCombatBudget = false;
+    force.singleMissionCampaignPolicy = true;
     force.campaignPlayerHouse = false;
     force.campaignMilitaryOpening = true;
     force.campaignAdaptiveReadiness = true;
@@ -797,6 +799,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "FleetHarvestersPerBay", force.fleetHarvestersPerBay);
         iniFile.setIntValue("Force Concentration", "FleetCarryallQuarters", force.fleetCarryallQuarters);
         iniFile.setIntValue("Force Concentration", "FleetRepairYards", force.fleetRepairYards);
+        iniFile.setBoolValue("Force Concentration", "RepairCapacityDemand", force.repairCapacityDemand);
         iniFile.setIntValue("Force Concentration", "FfaVultureLevel", force.ffaVultureLevel);
         iniFile.setIntValue("Force Concentration", "TechIncomeTiming", force.techIncomeTiming);
         iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
@@ -804,6 +807,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "TeamDefenceSharePercent", force.teamDefenceSharePercent);
         iniFile.setBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
         iniFile.setBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
+        iniFile.setBoolValue("Force Concentration", "SingleMissionCampaignPolicy", force.singleMissionCampaignPolicy);
         iniFile.setBoolValue("Force Concentration", "CampaignPlayerHouse", force.campaignPlayerHouse);
         iniFile.setBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
         iniFile.setBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
@@ -1059,6 +1063,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         "Force Concentration", "FleetCarryallQuarters", force.fleetCarryallQuarters), 0, 2);
     force.fleetRepairYards = std::clamp(iniFile.getIntValue(
         "Force Concentration", "FleetRepairYards", force.fleetRepairYards), 0, 1);
+    force.repairCapacityDemand = iniFile.getBoolValue(
+        "Force Concentration", "RepairCapacityDemand", force.repairCapacityDemand);
     force.ffaVultureLevel = std::clamp(iniFile.getIntValue("Force Concentration", "FfaVultureLevel", force.ffaVultureLevel), 0, 2);
     force.techIncomeTiming = std::clamp(iniFile.getIntValue(
         "Force Concentration", "TechIncomeTiming", force.techIncomeTiming), 0, 2);
@@ -1069,6 +1075,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         force.teamDefenceSharePercent = 0;
     force.openingCombatBudget = iniFile.getBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
     force.campaignCombatBudget = iniFile.getBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
+    force.singleMissionCampaignPolicy = iniFile.getBoolValue(
+        "Force Concentration", "SingleMissionCampaignPolicy", force.singleMissionCampaignPolicy);
     force.campaignPlayerHouse = iniFile.getBoolValue("Force Concentration", "CampaignPlayerHouse", force.campaignPlayerHouse);
     force.campaignMilitaryOpening = iniFile.getBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
     force.campaignAdaptiveReadiness = iniFile.getBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
@@ -1683,6 +1691,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("fleetHarvestersPerBay", force.fleetHarvestersPerBay);
     addNamed("fleetCarryallQuarters", force.fleetCarryallQuarters);
     addNamed("fleetRepairYards", force.fleetRepairYards);
+    if (force.repairCapacityDemand) addNamed("repairCapacityDemand", force.repairCapacityDemand);
     if (force.ffaVultureLevel != 0) addNamed("ffaVultureLevel", force.ffaVultureLevel);
     addNamed("techIncomeTiming", force.techIncomeTiming);
     addNamed("joinAllyWaves", force.joinAllyWaves);
@@ -1690,6 +1699,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("teamDefenceSharePercent", force.teamDefenceSharePercent);
     addNamed("openingCombatBudget", force.openingCombatBudget);
     addNamed("campaignCombatBudget", force.campaignCombatBudget);
+    addNamed("singleMissionCampaignPolicy", force.singleMissionCampaignPolicy);
     addNamed("campaignPlayerHouse", force.campaignPlayerHouse);
     addNamed("campaignMilitaryOpening", force.campaignMilitaryOpening);
     addNamed("campaignAdaptiveReadiness", force.campaignAdaptiveReadiness);

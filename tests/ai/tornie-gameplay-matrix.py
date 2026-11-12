@@ -5,6 +5,8 @@ The optional --baseline-root runs identical nonfamily isolation cases against an
 read-only main checkout/build. All profiles and diagnostic products remain in leased scratch.
 Audit markers retain actual production, damage, roster, mission and terrain observations;
 fixtures do not issue gameplay commands or alter AI rules.
+Campaign cells intentionally audit authored scenario-settings CampaignAIPlayer content,
+not QuantBot enemy difficulty. Their IDs are marked legacy-campaign to keep that evidence separate.
 """
 import argparse
 import configparser
@@ -69,7 +71,7 @@ def schedule(args):
         for mod in args.mods:
             for house in playable(mod):
                 for level, mission in MISSIONS:
-                    games.append(dict(id=f'campaign/{mod}/{house}/m{mission:03d}/42', category='campaign',
+                    games.append(dict(id=f'legacy-campaign/{mod}/{house}/m{mission:03d}/42', category='campaign',
                                       mod=mod, house=house, level=level, mission=mission, seed=42, minutes=10))
     if 'custom' in args.categories:
         for mod in args.mods:
@@ -167,6 +169,7 @@ def command(args, binary, game, out):
            '--house', game['house'], '--capture-mib', '256', '--wall-timeout', str(args.wall_timeout),
            '--path-workers', '1', '--no-ai-telemetry']
     if game['category'] == 'campaign':
+        # Deliberate legacy content QA, never QuantBot difficulty or campaign balance evidence.
         return cmd + ['--level', str(game['level']), '--mission', str(game['mission']),
                       '--partner-difficulty', 'hard', '--enemy-ai', 'campaign']
     difficulty = 'qBotBrutal' if game['difficulty'] == 'brutal' else 'qBotHard'

@@ -56,7 +56,7 @@ class Harvester;
 #include <vector>
 #include <list>
 
-namespace QuantBotBuildPolicy { struct FleetRatioLevel; }
+#include <players/QuantBotBuildPolicy.h>
 
 class QuantBot : public Player
 {
@@ -221,6 +221,8 @@ public:
     bool campaignPermitsStructure(Uint32 itemID) const;
     bool campaignAllowsZone(int zonesIncludingQueued) const;
     bool campaignCanAddHarvester() const;
+    /// Full campaign policy, plus Single mission/co-op when its hashed switch is on.
+    bool campaignPolicyApplies() const;
     int campaignHarvesterCeiling() const; // -1 outside policy; zero forbids new workers
     void doProduceItem(const BuilderBase* builder, Uint32 itemID) const;
 
@@ -363,6 +365,9 @@ private:
     Uint32 powerDemandSampleCycle = 0;
     Sint32 powerDemandSample = 0;
     Sint32 projectedPowerDemandGrowth = 0;
+    /// RepairCapacityDemand's sustained local queue, saved from version 9885.
+    Uint32 repairPressureYard = NONE_ID;
+    Uint32 repairPressureSince = std::numeric_limits<Uint32>::max();
     Coord squadRetreatLocation = Coord::Invalid();
     AIRole role = AIRole::Both;
     Uint32 lastStatsLogCycle = 0;
@@ -915,6 +920,9 @@ private:
     OrnithopterStrikeTeam ornithopterStrikeTeam;
     std::unordered_map<Uint32, Coord> placementCache; ///< Per-build-cycle cache for findPlaceLocation results
     Uint32 placementCacheExcludedBuilder = NONE_ID;
+    // Rebuilt by planRepairCapacity before every repeat-bay choice; not saved.
+    bool repairPlacementReady = false;
+    QuantBotBuildPolicy::RepairServiceAccess repairPlacementAccess;
 
     /// The four placement distance fields (CityDistanceField), reused across searches.
     /// The key is the contribution list itself -- every live owned structure and
@@ -1876,6 +1884,10 @@ private:
     void resetBuildPass();
     /// Queue-inclusive item counts and the producers' current load.
     void planBuildInventory(BuildPass& pass);
+    bool repairCapacityDemandActive() const;
+    void planRepairCapacity(BuildPass& pass, std::set<Uint32>& repairQueue);
+    bool repairYardAdmitted(const BuildPass& pass) const;
+    Coord repairCapacitySite(const BuildPass& pass);
     /// Spendable cash, military budget, spice competition, support queues and reserves.
     void planBuildBudget(BuildPass& pass);
     void planCityBoom(BuildPass& pass);

@@ -422,6 +422,9 @@ TeamDefenceSharePercent=0
 # Experimental custom spice Vanilla/DuneCity games: 0=native, 1=income/min >= tech cost,
 # 2=income/min >= 2*tech cost. Safe full-knowledge rivals allow earlier tech.
 TechIncomeTiming=0
+# Use Full campaign QuantBot policy for Single mission and Single mission co-op.
+# Hashed; OFF restores legacy Single behavior. Full campaign policy is unchanged.
+SingleMissionCampaignPolicy=true
 # Treat the selected campaign player house as player-side without a registered human.
 # OFF preserves the old human-presence role test; authored enemy houses are unchanged.
 CampaignPlayerHouse=0
@@ -618,6 +621,12 @@ EconomicFleetRatios=0
 FleetHarvestersPerBay=3
 FleetCarryallQuarters=1
 FleetRepairYards=1
+# Experimental, multiplayer-hashed OFF/ON treatment; shipped policy stays unchanged.
+# Custom only: preserve the useful first repair/tech prerequisite, then require
+# 30 seconds of reachable local backlog with all usable bays repairing.
+# Queued bays, idle bays and transport/access failures do not justify repeats.
+# Campaign rebuild permissions and Medium's existing limits are unchanged.
+RepairCapacityDemand=false
 # Experimental pre-ladder (1.0.807) Custom Medium, default 0 = current. 1: no banked-credit
 # surplus army and no heavy-factory walk after the starport opening; 2: also the standing
 # 40% raid share instead of whole-army waves. Easy/Hard/Brutal and campaigns are unchanged.

@@ -8,7 +8,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $Emcmake = Join-Path $EmsdkRoot 'upstream\emscripten\emcmake.exe'
-$PlayRoot = Join-Path $WebsiteRoot 'play'
+$Channel = if ($ReleaseBuild) { 'stable' } else { 'staging' }
+$PlayRoot = Join-Path $WebsiteRoot $(if ($ReleaseBuild) { 'play' } else { 'play-staging' })
 $releaseBuildOption = if ($ReleaseBuild) { 'ON' } else { 'OFF' }
 
 if (-not (Test-Path -LiteralPath $Emcmake)) {
@@ -26,5 +27,5 @@ if ($LASTEXITCODE -ne 0) { throw "Emscripten CMake configure failed with exit co
 cmake --build $BuildRoot --target dunecity --parallel 8
 if ($LASTEXITCODE -ne 0) { throw "Emscripten build failed with exit code $LASTEXITCODE" }
 
-python (Join-Path $PSScriptRoot 'package-web.py') --build-root $BuildRoot --play-root $PlayRoot
+python (Join-Path $PSScriptRoot 'package-web.py') --build-root $BuildRoot --play-root $PlayRoot --channel $Channel
 if ($LASTEXITCODE -ne 0) { throw "Browser packaging failed with exit code $LASTEXITCODE" }

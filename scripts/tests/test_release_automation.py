@@ -1,0 +1,607 @@
+import argparse
+import base64
+from contextlib import redirect_stdout
+import datetime as dt
+import importlib.util
+import io
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tarfile
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def load(name, filename):
+    spec = importlib.util.spec_from_file_location(name, ROOT / 'scripts' / filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+automation = load('release_automation', 'release-automation.py')
+updates = load('release_updates', 'prepare-desktop-updates.py')
+SHA = 'a' * 40
+OTHER = 'b' * 40
+VERSION = re.search(r'project\(DuneCity VERSION ([0-9.]+)', (ROOT / 'CMakeLists.txt').read_text())[1]
+
+
+def browser_fixture(root, sha=SHA, channel='staging'):
+    root.mkdir(parents=True, exist_ok=True)
+    names = ['index.html', 'shell.js', 'shell.css', 'p2p-direct.js',
+             'dunecity.js', 'dunecity.wasm', 'dunecity.data']
+    for name in names:
+        (root / name).write_bytes(('browser fixture ' + name).encode())
+    (root / '.htaccess').write_text("Header always set Content-Security-Policy \"default-src 'none'\"\n")
+    build = dict(sourceCommit=sha, version=VERSION, channel=channel,
+                 releaseBuild='OFF' if channel == 'staging' else 'ON', artifacts=names,
+                 sha256={name: automation.digest(root / name) for name in names})
+    automation.write_json(root / 'build.json', build)
+    return build
+
+
+class StagingSelectionTests(unittest.TestCase):
+    def test_snapshot_identity_is_immutable_and_requires_full_sha(self):
+        self.assertEqual(automation.snapshot_tag(SHA), automation.snapshot_tag(SHA))
+        self.assertNotEqual(automation.snapshot_tag(SHA), automation.snapshot_tag(OTHER))
+        self.assertTrue(automation.snapshot_tag(SHA).startswith('staging-' + SHA + '-'))
+        for value in ('main', 'abc12345', SHA.upper(), SHA + '\n'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                automation.snapshot_tag(value)
+
+    def test_existing_snapshot_is_not_rebuilt_even_on_manual_request(self):
+        now = dt.datetime(2026, 11, 12, tzinfo=dt.timezone.utc)
+        selected, reason = automation.package_decision(SHA, True, {'draft': False}, [], now, manual=True)
+        self.assertFalse(selected)
+        self.assertIn('no-new-inputs', reason)
+
+    def test_current_red_head_never_falls_back_to_previous_green(self):
+        now = dt.datetime(2026, 11, 12, tzinfo=dt.timezone.utc)
+        selected, reason = automation.package_decision(SHA, False, None, [], now)
+        self.assertFalse(selected)
+        self.assertIn(SHA, reason)
+
+    def test_debounce_boundary_and_explicit_on_demand(self):
+        now = dt.datetime(2026, 11, 12, 4, tzinfo=dt.timezone.utc)
+        run = dict(id=7, display_title='Staging packages ' + OTHER, created_at='2026-11-12T02:00:01Z')
+        self.assertFalse(automation.package_decision(SHA, True, None, [run], now)[0])
+        self.assertTrue(automation.package_decision(SHA, True, None, [run], now, manual=True)[0])
+        self.assertTrue(automation.package_decision(SHA, True, None, [run], now, current_run=7)[0])
+        run['created_at'] = '2026-11-12T02:00:00Z'
+        self.assertTrue(automation.package_decision(SHA, True, None, [run], now)[0])
+
+    def test_receipt_requires_every_platform_and_test_job_at_the_exact_source(self):
+        source = dict(head_sha=SHA, head_branch=automation.STAGING, event='push')
+        names = ['test-linux', 'relay-tests', 'signaling-tests', 'build-emscripten',
+                 'build-windows', 'build-linux', 'build-macos']
+        jobs = [dict(name=name, conclusion='success') for name in names]
+        self.assertTrue(automation.integration_green(source, jobs, SHA))
+        self.assertFalse(automation.integration_green(source, jobs[:-1], SHA))
+        jobs[-1]['conclusion'] = 'failure'
+        self.assertFalse(automation.integration_green(source, jobs, SHA))
+        jobs[-1]['conclusion'] = 'success'
+        self.assertFalse(automation.integration_green(source, jobs, OTHER))
+        source['event'] = 'pull_request'
+        self.assertFalse(automation.integration_green(source, jobs, SHA))
+
+    def scheduled_plan(self, directory, nightly=False, existing=None):
+        event = Path(directory) / 'event.json'
+        automation.write_json(event, {'schedule': '47 3 * * *' if nightly else '17 */2 * * *'})
+        selected = Path(directory) / 'selection.json'
+        runs = [dict(id=7, head_sha=SHA, head_branch=automation.STAGING,
+                     event='push', conclusion='success', display_title='CI integration')]
+        with patch.dict(os.environ, GITHUB_EVENT_PATH=str(event), GITHUB_EVENT_NAME='schedule',
+                        GITHUB_REF='refs/heads/main', GITHUB_SHA=OTHER, GITHUB_RUN_ID='8',
+                        GITHUB_OUTPUT='', GITHUB_STEP_SUMMARY=''), \
+             patch.object(automation, 'api', return_value={'object': {'sha': SHA}}), \
+             patch.object(automation, 'workflow_runs', return_value=runs), \
+             patch.object(automation.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'HTTP 404')), \
+             patch.object(automation, 'optional_release', return_value=existing):
+            automation.plan(argparse.Namespace(output=selected))
+        return json.loads(selected.read_text())
+
+    def test_schedule_explicitly_selects_staging_not_default_branch_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = self.scheduled_plan(directory)
+            self.assertEqual(selected['sha'], SHA)
+            self.assertTrue(selected['staging'])
+            self.assertTrue(selected['package'])
+            self.assertFalse(selected['stable'])
+
+    def test_daily_nightly_still_runs_without_repackaging_unchanged_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = self.scheduled_plan(directory, nightly=True, existing={'draft': False})
+            self.assertEqual(selected['sha'], SHA)
+            self.assertTrue(selected['run'])
+            self.assertFalse(selected['package'])
+            self.assertEqual(selected['tier'], 'nightly')
+
+    def test_documentation_filter_does_not_skip_build_or_signing_inputs(self):
+        self.assertTrue(automation.docs_only(['docs/release-operations.md', 'HANDOVER.md']))
+        self.assertFalse(automation.docs_only(['README.md'] * 300))
+        for path in ('CMakeLists.txt', 'cmake/update-public-key.txt', 'config/Game Options.ini',
+                     '.github/workflows/build.yml', 'src/main.cpp'):
+            self.assertFalse(automation.docs_only([path]))
+
+
+    def test_mini_admission_requires_active_authority_and_the_actual_source(self):
+        state = dict(active=True, id='release-capability', sid=SHA, owner='operator')
+        self.assertEqual(automation.release_token(state, SHA, SHA), 'release-capability')
+        for invalid in (None, {}, dict(state, active=False), dict(state, active='true'),
+                        dict(state, sid=OTHER), dict(state, id=''), dict(state, id='bad\nid')):
+            with self.subTest(state=invalid), self.assertRaisesRegex(ValueError, 'admission blocked'):
+                automation.release_token(invalid, SHA, SHA)
+        with self.assertRaisesRegex(ValueError, 'admission blocked'):
+            automation.release_token(state, SHA, OTHER)
+
+
+class FrozenArtifactTests(unittest.TestCase):
+    def test_browser_source_channel_completeness_and_content_are_checked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = browser_fixture(root)
+            automation.verify_browser(root, 'staging', SHA)
+            for channel, sha in [('stable', SHA), ('staging', OTHER)]:
+                with self.assertRaisesRegex(ValueError, 'channel/source'):
+                    automation.verify_browser(root, channel, sha)
+            build['releaseBuild'] = 'ON'
+            automation.write_json(root / 'build.json', build)
+            with self.assertRaisesRegex(ValueError, 'official identity'):
+                automation.verify_browser(root, 'staging', SHA)
+            build['releaseBuild'] = 'OFF'
+            build['artifacts'].remove('dunecity.js')
+            automation.write_json(root / 'build.json', build)
+            with self.assertRaisesRegex(ValueError, 'incomplete runtime'):
+                automation.verify_browser(root, 'staging', SHA)
+            build['artifacts'].append('dunecity.js')
+            automation.write_json(root / 'build.json', build)
+            (root / 'dunecity.wasm').write_bytes(b'wrong source bytes')
+            with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+                automation.verify_browser(root, 'staging', SHA)
+
+    def test_archive_path_escape_and_links_are_rejected_before_extraction(self):
+        for name, link in [('../outside', False), ('/absolute', False), ('engine', True)]:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                archive = root / 'package.tar.gz'
+                with tarfile.open(archive, 'w:gz') as output:
+                    member = tarfile.TarInfo(name)
+                    if link:
+                        member.type = tarfile.SYMTYPE
+                        member.linkname = '/etc/passwd'
+                        output.addfile(member)
+                    else:
+                        member.size = 4
+                        output.addfile(member, io.BytesIO(b'data'))
+                with self.assertRaisesRegex(ValueError, 'Unsafe browser'):
+                    automation.extract_browser(archive, root / 'restore')
+                self.assertFalse((root / 'outside').exists())
+
+    def test_manifest_refuses_partial_platform_success_and_mixed_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = argparse.Namespace(directory=root, sha=SHA, stable=False, tag=automation.snapshot_tag(SHA))
+            with self.assertRaisesRegex(ValueError, 'Missing required'):
+                automation.make_manifest(args)
+            for name in automation.desktop_names(VERSION) | {automation.BROWSER, 'DuneCity-p2p-service.tar.gz'}:
+                (root / name).write_bytes(('package ' + name).encode())
+            for platform in ('windows-x64', 'macos-arm64', 'linux-x86_64', 'emscripten'):
+                automation.write_json(root / f'build-inputs-{platform}.json', dict(
+                    sourceCommit=SHA if platform != 'macos-arm64' else OTHER,
+                    releaseBuild='OFF', configuration={'DUNECITY_RELEASE_BUILD:BOOL': 'OFF'}))
+            with self.assertRaisesRegex(ValueError, 'identity mismatch: macos-arm64'):
+                automation.make_manifest(args)
+
+    def test_published_set_rejects_corruption_and_a_different_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            payload = root / 'package.zip'
+            payload.write_bytes(b'frozen source')
+            manifest = dict(tag=automation.snapshot_tag(SHA), sourceCommit=SHA,
+                            sha256={'package.zip': automation.digest(payload)})
+            automation.verify_manifest(root, manifest, manifest['tag'], SHA)
+            extra = root / 'unfrozen.zip'
+            extra.write_bytes(b'unqualified input')
+            with self.assertRaisesRegex(ValueError, 'asset set differs'):
+                automation.verify_manifest(root, manifest, manifest['tag'], SHA)
+            extra.unlink()
+            with self.assertRaisesRegex(ValueError, 'selected commit'):
+                automation.verify_manifest(root, manifest, manifest['tag'], OTHER)
+            payload.write_bytes(b'replaced data')
+            with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+                automation.verify_manifest(root, manifest, manifest['tag'], SHA)
+
+    def test_real_updater_signatures_bind_archive_version_url_and_appcast(self):
+        key = Ed25519PrivateKey.generate()
+        public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for platform, name in [('macos-arm64', f'DuneCity-{VERSION}-macOS.zip'),
+                                   ('windows-x64', f'DuneCity-{VERSION}-Windows-x64.exe'),
+                                   ('linux-x86_64', f'DuneCity-{VERSION}-Linux-x86_64.AppImage')]:
+                archive = root / name
+                archive.write_bytes(('archive ' + platform).encode())
+                updates.prepare(VERSION, platform, archive, 'https://github.com/example/game/releases/download/v' + VERSION, key, root)
+            paths = automation.asset_paths(root)
+            automation.verify_updates(paths, VERSION, repo='example/game', public_key=public)
+            (root / f'DuneCity-{VERSION}-macOS.zip').write_bytes(b'other signed-version package')
+            with self.assertRaisesRegex(ValueError, 'disagrees with frozen package'):
+                automation.verify_updates(paths, VERSION, repo='example/game', public_key=public)
+
+    def test_failed_build_resume_never_reruns_successful_platforms(self):
+        source = dict(path='.github/workflows/build.yml', event='push', head_branch='v' + VERSION,
+                      display_title='CI stable')
+        with patch.object(automation, 'api', return_value=source), \
+             patch.object(automation.subprocess, 'run') as command:
+            automation.resume(argparse.Namespace(channel='build', run_id='123', tag=None))
+            self.assertIn('--failed', command.call_args.args[0])
+            self.assertNotIn('--all', command.call_args.args[0])
+            self.assertNotIn('workflow', command.call_args.args[0])
+        source['event'] = 'pull_request'
+        with patch.object(automation, 'api', return_value=source), \
+             patch.object(automation.subprocess, 'run') as command:
+            with self.assertRaisesRegex(ValueError, 'not a trusted'):
+                automation.resume(argparse.Namespace(channel='build', run_id='123', tag=None))
+            command.assert_not_called()
+
+
+    def test_complete_staging_manifest_persists_frozen_run_artifact_ids_and_hashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            dist = base / 'dist'
+            dist.mkdir()
+            browser = base / 'browser'
+            browser_fixture(browser)
+            for name in automation.desktop_names(VERSION):
+                (dist / name).write_bytes(('platform package ' + name).encode())
+            (dist / 'DuneCity-p2p-service.tar.gz').write_bytes(b'frozen matching signaling source')
+            with tarfile.open(dist / automation.BROWSER, 'w:gz') as archive:
+                for path in browser.iterdir():
+                    archive.add(path, arcname=path.name)
+            for platform in ('windows-x64', 'macos-arm64', 'linux-x86_64', 'emscripten'):
+                automation.write_json(dist / f'build-inputs-{platform}.json', dict(
+                    sourceCommit=SHA, releaseBuild='OFF',
+                    configuration={'DUNECITY_RELEASE_BUILD:BOOL': 'OFF'}))
+            artifact = dict(id=71, name='DuneCity-Emscripten', digest='sha256:' + 'c' * 64,
+                            size_in_bytes=123, expired=False)
+            def response(path):
+                return ({'artifacts': [artifact]} if '/artifacts?' in path else
+                        {'id': 41, 'run_attempt': 1, 'head_sha': OTHER,
+                         'event': 'workflow_dispatch', 'head_branch': automation.STAGING,
+                         'path': automation.BUILD_WORKFLOW})
+            args = argparse.Namespace(directory=dist, sha=SHA, stable=False, tag=automation.snapshot_tag(SHA))
+            with patch.dict(os.environ, GITHUB_RUN_ID='41'), \
+                 patch.object(automation, 'api', side_effect=response), \
+                 patch.object(automation, 'qualification_for', return_value={
+                     'id': 7, 'run_attempt': 1, 'head_sha': SHA}):
+                automation.make_manifest(args)
+            manifest = json.loads((dist / automation.MANIFEST).read_text())
+            self.assertEqual((manifest['sourceCommit'], manifest['releaseBuild'], manifest['runId']), (SHA, 'OFF', 41))
+            self.assertEqual(manifest['artifacts'][0]['id'], 71)
+            self.assertEqual(manifest['qualificationSourceCommit'], SHA)
+            self.assertEqual(manifest['qualificationRunId'], 7)
+            self.assertEqual(manifest['producerSourceCommit'], OTHER)
+            automation.verify_manifest(dist, manifest, args.tag, SHA)
+
+    def test_recovery_after_publication_is_read_only_and_rejects_changed_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / 'package.zip'
+            package.write_bytes(b'frozen bytes')
+            manifest = dict(tag=automation.snapshot_tag(SHA), sourceCommit=SHA, releaseBuild='OFF',
+                            sha256={'package.zip': automation.digest(package)})
+            automation.write_json(root / automation.MANIFEST, manifest)
+            original = json.loads(json.dumps(manifest))
+            existing = dict(draft=False, prerelease=True, assets=[
+                dict(name='package.zip', digest='sha256:' + original['sha256']['package.zip'])])
+            def restore(tag, destination, names):
+                automation.write_json(destination / automation.MANIFEST, original)
+                return existing
+            args = argparse.Namespace(directory=root, sha=SHA, tag=manifest['tag'])
+            with patch.object(automation, 'optional_release', return_value=existing), \
+                 patch.object(automation, 'resolve_tag', return_value=SHA), \
+                 patch.object(automation, 'download_release', side_effect=restore), \
+                 patch.object(automation.subprocess, 'run') as command:
+                automation.publish(args)
+                command.assert_not_called()
+                package.write_bytes(b'changed bytes')
+                manifest['sha256']['package.zip'] = automation.digest(package)
+                automation.write_json(root / automation.MANIFEST, manifest)
+                with self.assertRaisesRegex(ValueError, 'Refusing to change a published release'):
+                    automation.publish(args)
+                command.assert_not_called()
+
+    def test_staging_browser_retry_uses_the_exact_published_snapshot_not_latest(self):
+        tag = automation.snapshot_tag(SHA)
+        release = dict(draft=False, prerelease=True, assets=[dict(name=automation.BROWSER)])
+        with patch.object(automation, 'optional_release', return_value=release), \
+             patch.object(automation.subprocess, 'run') as command:
+            automation.resume(argparse.Namespace(channel='browser', run_id=None, tag=tag))
+            argv = command.call_args.args[0]
+            self.assertIn('web.yml', argv)
+            self.assertIn('tag=' + tag, argv)
+            self.assertNotIn('build.yml', argv)
+        with patch.object(automation.subprocess, 'run') as command:
+            with self.assertRaisesRegex(ValueError, 'exact published'):
+                automation.resume(argparse.Namespace(channel='sourceforge', run_id=None, tag=tag))
+            command.assert_not_called()
+
+    def test_failed_overall_run_does_not_hide_a_successful_immutable_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tag = 'v' + VERSION
+            event = dict(workflow_run=dict(id=42, event='push', conclusion='failure',
+                path='.github/workflows/build.yml', head_repository=dict(full_name=automation.repository()),
+                head_branch=tag, head_sha=SHA))
+            event_path = root / 'event.json'
+            automation.write_json(event_path, event)
+            output = root / 'inputs'
+            def restore(*args, **kwargs):
+                automation.write_json(output / automation.MANIFEST,
+                    dict(runId=42, tag=tag, sourceCommit=SHA))
+            with patch.dict(os.environ, GITHUB_EVENT_NAME='workflow_run',
+                            GITHUB_EVENT_PATH=str(event_path), GITHUB_OUTPUT='', GITHUB_STEP_SUMMARY=''), \
+                 patch.object(automation, 'api', return_value={'artifacts': [
+                     dict(id=71, name='DuneCity-Publication-inputs-1', expired=False)]}), \
+                 patch.object(automation, 'optional_release', return_value={'draft': False}), \
+                 patch.object(automation.subprocess, 'run', side_effect=restore), \
+                 redirect_stdout(io.StringIO()) as text:
+                automation.select_publication(argparse.Namespace(tag='', directory=output, stable_only=True))
+            self.assertIn('eligible=true', text.getvalue())
+            self.assertIn('tag=' + tag, text.getvalue())
+
+
+    def test_legacy_browser_resume_freezes_existing_website_bytes_without_a_game_build(self):
+        release = dict(draft=False, prerelease=False, assets=[])
+        build = dict(version=VERSION, sourceCommit=SHA)
+        def response(path):
+            if '/git/ref/heads/main' in path:
+                return {'object': {'sha': OTHER}}
+            return {'content': base64.b64encode(json.dumps(build).encode()).decode()}
+        args = argparse.Namespace(channel='browser', tag='v' + VERSION, run_id=None)
+        with patch.object(automation, 'optional_release', return_value=release), \
+             patch.object(automation, 'api', side_effect=response), \
+             patch.object(automation, 'resolve_tag', return_value=SHA), \
+             patch.object(automation.subprocess, 'run') as command:
+            automation.resume(args)
+            argv = command.call_args.args[0]
+            self.assertIn('deploy-metaserver-droplet.yml', argv)
+            self.assertIn('source_sha=' + OTHER, argv)
+            self.assertNotIn('build.yml', argv)
+            self.assertNotIn('release', argv)
+            command.reset_mock()
+            build['sourceCommit'] = OTHER
+            with self.assertRaisesRegex(ValueError, 'exact legacy release'):
+                automation.resume(args)
+            command.assert_not_called()
+
+    def test_deploy_retry_requires_a_retained_frozen_receipt(self):
+        receipt = dict(name='Website-deployment-inputs-1', expired=False)
+        def response(path):
+            if '/artifacts?' in path:
+                return {'artifacts': [receipt]}
+            return dict(path='.github/workflows/deploy-metaserver-droplet.yml', event='push')
+        args = argparse.Namespace(channel='deploy', tag=None, run_id='123')
+        with patch.object(automation, 'api', side_effect=response), \
+             patch.object(automation.subprocess, 'run') as command:
+            automation.resume(args)
+            self.assertIn('--failed', command.call_args.args[0])
+            self.assertIn('VR48/dunelegacy.com', command.call_args.args[0])
+            command.reset_mock()
+            receipt['expired'] = True
+            with self.assertRaisesRegex(ValueError, 'frozen input receipt'):
+                automation.resume(args)
+            command.assert_not_called()
+
+
+class StagingRetentionTests(unittest.TestCase):
+    def setUp(self):
+        self.tags = [automation.snapshot_tag(f'{number:040x}') for number in range(10)]
+        self.releases = [dict(tag_name=tag, draft=False, prerelease=True, body='',
+                              published_at=f'2026-11-{number + 1:02d}T00:00:00Z')
+                         for number, tag in enumerate(self.tags)]
+        self.game_runs, self.website_runs = [], []
+
+    def test_newest_seven_known_good_current_and_active_consumers_are_preserved(self):
+        unrelated = [dict(tag_name='v1.0.865', draft=False, prerelease=False),
+                     dict(tag_name='latest-dev', draft=False, prerelease=True)]
+        eligible, held = automation.staging_retention_plan(
+            self.releases + unrelated, self.tags[-1], self.tags[1], {self.tags[0]})
+        self.assertEqual([item['tag_name'] for item in eligible], [self.tags[2]])
+        self.assertTrue(set(self.tags[3:]).issubset(held))
+        self.assertNotIn('v1.0.865', held)
+        self.assertNotIn('latest-dev', held)
+
+    def test_explicit_and_malformed_investigation_holds_both_prevent_deletion(self):
+        self.releases[0]['body'] = '<!-- dunecity-retain: investigating packaged GUI -->'
+        self.releases[2]['body'] = '<!-- dunecity-retain -->'
+        eligible, held = automation.staging_retention_plan(self.releases, self.tags[-1], self.tags[1])
+        self.assertEqual(eligible, [])
+        self.assertIn('investigation:', held[self.tags[0]])
+        self.assertIn('unknown investigation hold syntax', held[self.tags[2]])
+
+    def test_unknown_dates_or_consumer_authority_retain_with_named_reasons(self):
+        self.releases[0]['published_at'] = None
+        eligible, held = automation.staging_retention_plan(
+            self.releases, self.tags[-1], self.tags[-1], uncertain='consumer API unavailable')
+        self.assertEqual(eligible, [])
+        self.assertIn('unknown publication date', held[self.tags[0]])
+        self.assertIn('consumer API unavailable', held[self.tags[1]])
+
+    def request(self, tag):
+        return dict(schema=1, repository=automation.repository(), releaseTag=tag,
+                    sourceCommit=automation.STAGING_TAG.fullmatch(tag)[1], websiteCodeCommit=OTHER,
+                    publicationManifestSha256='c' * 64, browserArchiveSha256='d' * 64,
+                    serviceArchiveSha256='e' * 64)
+
+    def api(self, path):
+        if '/contents/deploy/staging-browser.json?' in path:
+            tag = self.tags[8] if path.endswith('ref=main') else self.tags[0]
+            return dict(type='file', encoding='base64',
+                        content=base64.b64encode(json.dumps(self.request(tag)).encode()).decode())
+        if '/actions/runs?' in path:
+            rows = self.website_runs if path.startswith('repos/VR48/dunelegacy.com/') else self.game_runs
+            selected = rows if '?status=in_progress&' in path else []
+            return dict(total_count=len(selected), workflow_runs=selected)
+        raise AssertionError('Unexpected API request: ' + path)
+
+    def test_current_request_queued_game_tag_and_running_website_commit_pin_sources(self):
+        self.game_runs = [dict(id=11, status='queued', head_branch=self.tags[1], path=automation.BUILD_WORKFLOW)]
+        self.website_runs = [dict(id=22, status='in_progress', head_sha=OTHER,
+                                  path='.github/workflows/deploy-metaserver-droplet.yml')]
+        with patch.object(automation, 'api', side_effect=self.api):
+            self.assertEqual(automation.staging_consumer_pins(), {self.tags[8], self.tags[1], self.tags[0]})
+
+    def test_unresolved_game_browser_dispatch_is_held_not_guessed_from_default_branch(self):
+        self.game_runs = [dict(id=11, status='queued', head_branch='main', path='.github/workflows/web.yml')]
+        with patch.object(automation, 'api', side_effect=self.api):
+            with self.assertRaisesRegex(ValueError, 'unresolved dispatch inputs'):
+                automation.staging_consumer_pins()
+
+    def test_truncated_or_unknown_active_status_is_not_a_safe_deletion_view(self):
+        for response in (dict(total_count=1001, workflow_runs=[]),
+                         dict(total_count=1, workflow_runs=[dict(id=1, status='unknown')])):
+            with patch.object(automation, 'api', return_value=response), self.assertRaises(ValueError):
+                list(automation.active_runs(automation.repository()))
+
+    def test_api_failure_retains_everything_without_changing_package_qualification(self):
+        with patch.dict(os.environ, RUNNER_TEMP='', GITHUB_STEP_SUMMARY=''), \
+             patch.object(automation, 'api', side_effect=RuntimeError('consumer API unavailable')), \
+             patch.object(automation.subprocess, 'run') as command, redirect_stdout(io.StringIO()):
+            result = automation.prune_staging(argparse.Namespace(current=self.tags[-1], dry_run=False))
+        self.assertEqual(result['deleted'], [])
+        self.assertIn('retention held:', result['reason'])
+        command.assert_not_called()
+
+    def test_retired_snapshot_and_unknown_retirement_state_fail_before_expensive_builds(self):
+        tag = self.tags[0]
+        with patch.object(automation.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                [], 0, json.dumps({'ref': 'refs/tags/' + tag}), '')):
+            with self.assertRaisesRegex(ValueError, 'Retired staging snapshot'):
+                automation.require_unretired_staging(automation.STAGING_TAG.fullmatch(tag)[1], None)
+        with patch.object(automation.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'HTTP 503')):
+            with self.assertRaisesRegex(RuntimeError, 'Cannot establish'):
+                automation.require_unretired_staging(SHA, None)
+        with patch.object(automation.subprocess, 'run') as command:
+            automation.require_unretired_staging(SHA, {'draft': False})
+            command.assert_not_called()
+
+    def test_explicit_retired_browser_request_is_red_and_never_builds_a_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            event = Path(directory) / 'event.json'
+            event.write_text('{}')
+            with patch.dict(os.environ, GITHUB_EVENT_PATH=str(event), GITHUB_EVENT_NAME='workflow_dispatch'), \
+                 patch.object(automation, 'optional_release', return_value=None), \
+                 patch.object(automation.subprocess, 'run') as command:
+                with self.assertRaisesRegex(ValueError, 'retired or unavailable'):
+                    automation.select_publication(argparse.Namespace(tag=self.tags[0], stable_only=False))
+            command.assert_not_called()
+
+
+    def test_frozen_browser_recipe_is_not_reinterpreted_by_current_control_scripts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            source, inputs = base / 'source', base / 'inputs'
+            inputs.mkdir()
+            browser_fixture(source)
+            recipe = 'previous-pinned-toolchain-recipe'
+            tag = automation.snapshot_tag(SHA, recipe)
+            self.assertNotEqual(tag, automation.snapshot_tag(SHA))
+            with tarfile.open(inputs / automation.BROWSER, 'w:gz') as archive:
+                for path in source.iterdir():
+                    archive.add(path, arcname=path.name)
+            automation.write_json(inputs / automation.MANIFEST, dict(
+                tag=tag, sourceCommit=SHA, recipe=recipe, runId=41,
+                sha256={automation.BROWSER: automation.digest(inputs / automation.BROWSER)}))
+            args = argparse.Namespace(tag=tag, directory=inputs, output=base / 'play-staging',
+                                      service_output=base / 'service')
+            with patch.dict(os.environ, GITHUB_OUTPUT='', GITHUB_STEP_SUMMARY=''), \
+                 patch.object(automation, 'download_release', return_value={'prerelease': True}), \
+                 redirect_stdout(io.StringIO()):
+                automation.browser_inputs(args)
+            self.assertEqual(automation.digest(args.output / 'dunecity.wasm'), automation.digest(source / 'dunecity.wasm'))
+
+
+    def test_existing_draft_resumes_publication_instead_of_rebuilding_identical_inputs(self):
+        selected, reason = automation.package_decision(
+            SHA, True, {'draft': True}, [], dt.datetime(2026, 11, 12, tzinfo=dt.timezone.utc), manual=True)
+        self.assertFalse(selected)
+        self.assertIn('resume its producing workflow', reason)
+
+
+class HostedHeadlessQualificationTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.names = ['quantbot_all_against_atreides', 'quantbot_scenario_matrix', 'quantbot_ffa_army_deploys']
+        self.plan = {'tests': [dict(name=name, properties=[dict(name='LABELS', value=['headless', 'nightly', 'macOS'])])
+                               for name in self.names]}
+        automation.write_json(self.root / automation.HEADLESS_PLAN, self.plan)
+        self.xml = '<testsuite>' + ''.join(f'<testcase name="{name}" status="run"/>' for name in self.names) + '</testsuite>'
+        (self.root / automation.HEADLESS_RESULTS).write_text(self.xml)
+        (self.root / 'CMakeCache.txt').write_text('DUNECITY_RELEASE_BUILD:BOOL=OFF\nDUNECITY_BUILD_TESTS:BOOL=ON\n')
+        args = argparse.Namespace(platform='macos-arm64-headless-qualification', build_root=self.root,
+                                  output=self.root / automation.HEADLESS_RECEIPT)
+        with patch.dict(os.environ, DUNECITY_RELEASE_BUILD='OFF', PACKAGE_BUILD='false',
+                        GITHUB_RUN_ID='41', GITHUB_RUN_ATTEMPT='1'), \
+             patch.object(automation, 'run', side_effect=lambda *command: SHA if command[0] == 'git' else 'cmake fixture'):
+            automation.record_build(args)
+        self.paths = {name: self.root / name for name in
+                      (automation.HEADLESS_PLAN, automation.HEADLESS_RESULTS, automation.HEADLESS_RECEIPT)}
+
+    def test_hosted_off_qualification_binds_all_selected_tests_source_and_result_hashes(self):
+        with patch.dict(os.environ, GITHUB_RUN_ID='41'):
+            automation.verify_headless_qualification(self.paths, SHA)
+        receipt = json.loads(self.paths[automation.HEADLESS_RECEIPT].read_text())
+        self.assertEqual(receipt['qualification']['tests'], sorted(self.names))
+        self.assertEqual(receipt['releaseBuild'], 'OFF')
+        self.assertIs(receipt['packageBuild'], False)
+        self.assertEqual(receipt['qualification']['resultsSha256'], automation.digest(self.paths[automation.HEADLESS_RESULTS]))
+
+    def test_failed_skipped_and_missing_execution_cannot_qualify_stable(self):
+        for kind in ('failure', 'error', 'skipped'):
+            tree = automation.ET.fromstring(self.xml)
+            automation.ET.SubElement(tree[0], kind)
+            self.paths[automation.HEADLESS_RESULTS].write_text(automation.ET.tostring(tree, encoding='unicode'))
+            with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, 'failed, skipped'):
+                automation.headless_qualification(self.root)
+        self.paths[automation.HEADLESS_RESULTS].write_text('<testsuite/>')
+        with self.assertRaisesRegex(ValueError, 'missing or incomplete'):
+            automation.headless_qualification(self.root)
+
+    def test_wrong_source_identity_run_or_changed_frozen_results_cannot_publish(self):
+        with patch.dict(os.environ, GITHUB_RUN_ID='41'):
+            with self.assertRaisesRegex(ValueError, 'source/configuration mismatch'):
+                automation.verify_headless_qualification(self.paths, OTHER)
+            receipt = json.loads(self.paths[automation.HEADLESS_RECEIPT].read_text())
+            receipt['configuration']['DUNECITY_RELEASE_BUILD:BOOL'] = 'ON'
+            automation.write_json(self.paths[automation.HEADLESS_RECEIPT], receipt)
+            with self.assertRaisesRegex(ValueError, 'source/configuration mismatch'):
+                automation.verify_headless_qualification(self.paths, SHA)
+            receipt['configuration']['DUNECITY_RELEASE_BUILD:BOOL'] = 'OFF'
+            automation.write_json(self.paths[automation.HEADLESS_RECEIPT], receipt)
+            self.paths[automation.HEADLESS_RESULTS].write_text(self.xml + '\n')
+            with self.assertRaisesRegex(ValueError, 'frozen test results'):
+                automation.verify_headless_qualification(self.paths, SHA)
+        with patch.dict(os.environ, GITHUB_RUN_ID='42'):
+            with self.assertRaisesRegex(ValueError, 'different producing run'):
+                automation.verify_headless_qualification(self.paths, SHA)
+
+    def test_empty_or_gui_only_inventory_is_not_headless_nightly_coverage(self):
+        for tests in ([], [dict(name='gui', properties=[dict(name='LABELS', value=['gui', 'nightly'])])]):
+            automation.write_json(self.paths[automation.HEADLESS_PLAN], {'tests': tests})
+            with self.assertRaisesRegex(ValueError, 'nonempty headless nightly'):
+                automation.headless_qualification(self.root)
+
+
+if __name__ == '__main__':
+    unittest.main()

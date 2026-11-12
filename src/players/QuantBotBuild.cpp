@@ -36,7 +36,7 @@ int QuantBot::recentFactoryLossCount() const {
 
 bool QuantBot::campaignEconomySupport() const {
     return currentGame && !currentGame->isCitySimEnabled() && !builderOnly()
-        && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman();
+        && campaignPolicyApplies() && isAlliedWithHuman();
 }
 
 int QuantBot::campaignRefineryReplacementCost(BuildPass& pass) {
@@ -55,7 +55,7 @@ int QuantBot::campaignRefineryReplacementCost(BuildPass& pass) {
 
 bool QuantBot::simpleTechPolicyActive() const {
     return currentGame && botConfig().force.simpleTechSavings && gameMode == GameMode::Custom
-        && !isCampaignGameType(currentGame->gameType) && !builderOnly()
+        && !campaignPolicyApplies() && !builderOnly()
         && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal);
 }
 
@@ -68,7 +68,7 @@ bool QuantBot::economicFleetRatioActive() const {
         && !ModManager::instance().isTornieFamilyContentActive()
         && !currentGame->getGameInitSettings().isCivilizationWars()
         && currentGame->getGameInitSettings().getModName() != "CivWars"
-        && (!isCampaignGameType(currentGame->gameType) || isAlliedWithHuman());
+        && (!campaignPolicyApplies() || isAlliedWithHuman());
 }
 
 // Read only while economicFleetRatioActive(): an explicit EconomicFleetRatios
@@ -135,6 +135,149 @@ void QuantBot::planFleetResourceBudget(BuildPass& pass) {
         available / std::max(1, pass.spiceCompetitors)));
 }
 
+namespace {
+bool repairWaitingUnit(const UnitBase* unit, const House* owner) {
+    if (unit->getOwner() != owner || unit->getHealth() <= 0 || !unit->isAGroundUnit()
+        || unit->isInfantry() || unit->getItemID() == Unit_Saboteur
+        || !unit->isEligibleForRepair() || unit->getHealth() >= unit->getMaxHealth()) return false;
+    const auto* target = unit->getTarget();
+    const bool repairTrip = target && target->getOwner() == owner
+        && target->getItemID() == Structure_RepairYard;
+    return repairTrip || (unit->isBadlyDamaged() && !unit->wasForced());
+}
+bool repairGroundWaiting(const UnitBase* unit, const House* owner) {
+    if (!repairWaitingUnit(unit, owner) || !unit->isActive() || unit->isPickedUp()) return false;
+    const auto* ground = static_cast<const GroundUnit*>(unit);
+    return !ground->hasBookedCarrier() && !ground->isAwaitingPickup();
+}
+bool repairingOccupant(const RepairYard* yard) {
+    const auto* unit = yard->getContainedRepairUnit();
+    return unit && unit->getHealth() > 0 && unit->getHealth() < unit->getMaxHealth();
+}
+}
+
+bool QuantBot::repairCapacityDemandActive() const {
+    return botConfig().force.repairCapacityDemand && currentGame && gameMode == GameMode::Custom
+        && !campaignPolicyApplies();
+}
+
+bool QuantBot::repairYardAdmitted(const BuildPass& pass) const {
+    const int committed = pass.itemCount[Structure_RepairYard];
+    if (!pass.repairCapacityDemand) return canAddRepairYard(committed);
+    return QuantBotBuildPolicy::repairCapacityAdmitted(canAddRepairYard(committed),
+        getHouse()->getNumItems(Structure_RepairYard), committed, pass.repairTarget);
+}
+
+void QuantBot::planRepairCapacity(BuildPass& pass, std::set<Uint32>& repairQueue) {
+    pass.repairCapacityDemand = repairCapacityDemandActive();
+    if (!pass.repairCapacityDemand && !AITelemetry::log().enabled()) return;
+    const int actual = getHouse()->getNumItems(Structure_RepairYard);
+    const int committed = pass.itemCount[Structure_RepairYard];
+    // getRepairUnit() can retain a historical pointer after deployment. Only
+    // actual containment proves a running job or a completed return wait.
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_RepairYard
+            || structure->getHealth() <= 0) continue;
+        const auto* yard = static_cast<const RepairYard*>(structure);
+        if (const auto* unit = yard->getContainedRepairUnit()) {
+            repairQueue.erase(unit->getObjectID());
+        }
+    }
+    for (auto it = repairQueue.begin(); it != repairQueue.end();) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(*it));
+        if (!unit || !repairWaitingUnit(unit, getHouse())) { it = repairQueue.erase(it); continue; }
+        if (!repairGroundWaiting(unit, getHouse())) {
+            if (unit->isPickedUp() || static_cast<const GroundUnit*>(unit)->hasBookedCarrier())
+                ++pass.inFlightRepairVehicles;
+            else ++pass.transportBlockedRepairVehicles;
+            it = repairQueue.erase(it);
+        } else ++it;
+    }
+    Uint32 pressured = NONE_ID;
+    int bestWaiting = -1;
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_RepairYard
+            || structure->getHealth() <= 0) continue;
+        const Coord at = structure->getLocation(), size = structure->getStructureSize();
+        QuantBotBuildPolicy::RepairServiceAccess access;
+        access.survey(at.x, at.y, size.x, size.y, [&](int x, int y) {
+            if (!getMap().tileExists(x, y)) return false;
+            const auto* tile = getMap().getTile(x, y);
+            return !tile->isMountain() && !tile->hasAStructure();
+        });
+        int usable = 0, busy = 0, waiting = 0;
+        for (const auto* other : getStructureList()) {
+            if (other->getOwner() != getHouse() || other->getItemID() != Structure_RepairYard
+                || other->getHealth() <= 0) continue;
+            const Coord otherAt = other->getLocation(), otherSize = other->getStructureSize();
+            if (!access.touches(otherAt.x, otherAt.y, otherSize.x, otherSize.y)) continue;
+            ++usable;
+            if (repairingOccupant(static_cast<const RepairYard*>(other))) ++busy;
+        }
+        for (const auto* unit : getUnitList()) {
+            if (!repairGroundWaiting(unit, getHouse())
+                || !access.reaches(unit->getX(), unit->getY())) continue;
+            ++waiting;
+            access.addWaiting(unit->getX(), unit->getY());
+            // Reuse the legacy set to deduplicate the observational total.
+            pass.serviceableRepairVehicles += int(repairQueue.erase(unit->getObjectID()));
+        }
+        const bool pressure = usable > 0 && usable == busy && waiting >= 2
+            && getHouse()->getCredits() >= UNIT_REPAIRCOST && committed == actual;
+        const bool retained = pressure && structure->getObjectID() == repairPressureYard;
+        if (retained || (pressured == NONE_ID && (pressure || waiting > bestWaiting))) {
+            pass.usableLocalRepairBays = usable;
+            pass.busyLocalRepairBays = busy;
+            pass.waitingLocalRepairVehicles = waiting;
+            bestWaiting = waiting;
+            if (pass.repairCapacityDemand) repairPlacementAccess = access;
+            if (pressure) pressured = structure->getObjectID();
+        }
+    }
+    repairPlacementReady = pass.repairCapacityDemand && pressured != NONE_ID;
+    for (auto it = repairQueue.begin(); it != repairQueue.end();) {
+        const auto* unit = static_cast<const UnitBase*>(getObject(*it));
+        const auto* target = unit->getTarget();
+        if (unit->getAttackMode() == CARRYALLREQUESTED && target
+            && target->getOwner() == getHouse() && target->getItemID() == Structure_RepairYard) {
+            ++pass.transportBlockedRepairVehicles;
+            it = repairQueue.erase(it);
+        } else ++it;
+    }
+    pass.accessBlockedRepairVehicles = int(repairQueue.size());
+    if (pass.repairCapacityDemand) {
+        pass.repairPressureCycles = QuantBotBuildPolicy::observeRepairPressure(
+            pressured, getGameCycleCount(), repairPressureYard, repairPressureSince);
+        pass.repairBaseline = QuantBotBuildPolicy::firstRepairYardTarget(pass.combatVehicles, pass.actualHarvesters);
+        pass.repairTarget = QuantBotBuildPolicy::repairCapacityTarget(pass.repairBaseline > 0,
+            actual, committed, pass.usableLocalRepairBays, pass.busyLocalRepairBays,
+            pass.waitingLocalRepairVehicles, pass.repairPressureCycles);
+        pass.repairCapacityReason = committed > actual ? "pending_capacity"
+            : actual == 0 ? "first_repair_or_technology"
+            : pressured == NONE_ID ? "no_serviceable_saturation"
+            : pass.repairTarget > actual ? "sustained_serviceable_backlog" : "observing_backlog";
+    }
+    if (AITelemetry::log().enabled())
+        traceDecision("repair_capacity", AITelemetry::Record()
+            .set("treatment", pass.repairCapacityDemand).set("actual", actual).set("committed", committed)
+            .set("busy", pass.observedBusyRepairBays).set("completed_waiting", pass.completedRepairReturns)
+            .set("serviceable_waiting", pass.serviceableRepairVehicles)
+            .set("transport_blocked", pass.transportBlockedRepairVehicles)
+            .set("transport_inflight", pass.inFlightRepairVehicles)
+            .set("access_blocked", pass.accessBlockedRepairVehicles)
+            .set("usable_local", pass.usableLocalRepairBays).set("busy_local", pass.busyLocalRepairBays)
+            .set("waiting_local", pass.waitingLocalRepairVehicles).set("pressure_cycles", pass.repairPressureCycles)
+            .set("target", pass.repairTarget).set("reason", pass.repairCapacityReason));
+}
+
+Coord QuantBot::repairCapacitySite(const BuildPass& pass) {
+    const Coord site = findPlaceLocation(Structure_RepairYard);
+    if (!pass.repairCapacityDemand || getHouse()->getNumItems(Structure_RepairYard) == 0) return site;
+    if (!repairYardAdmitted(pass) || !repairPlacementReady || site.isInvalid()) return Coord::Invalid();
+    const Coord size = getStructureSize(Structure_RepairYard);
+    return repairPlacementAccess.waitingFor(site.x, site.y, size.x, size.y) >= 2 ? site : Coord::Invalid();
+}
+
 bool QuantBot::canAddRepairYard(int includingQueued) const {
     if (economicFleetRatioActive())
         return includingQueued < fleetRatioTreatment().repairYards;
@@ -145,7 +288,7 @@ bool QuantBot::canAddRepairYard(int includingQueued) const {
         // Medium too. This is not permission for repeat capacity or campaigns.
         || (includingQueued == 0 && currentGame
             && simpleTechPolicyActive()
-            && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType) && !builderOnly());
+            && gameMode == GameMode::Custom && !campaignPolicyApplies() && !builderOnly());
 }
 
 bool QuantBot::civWarsRules() const {
@@ -166,7 +309,7 @@ bool QuantBot::isCivWarsMatch() const {
 
 bool QuantBot::palaceExperimentScope() const {
     return currentGame && gameMode == GameMode::Custom && difficulty >= Difficulty::Hard
-        && !builderOnly() && !isCampaignGameType(currentGame->gameType)
+        && !builderOnly() && !campaignPolicyApplies()
         && (currentGame->getGameInitSettings().getGameType() == GameType::CustomGame
             || currentGame->getGameInitSettings().getGameType() == GameType::CustomMultiplayer)
         && currentGame->getGameInitSettings().getInitialSpiceTilePermille() > 0;
@@ -325,7 +468,7 @@ void QuantBot::build(int militaryValue) {
 void QuantBot::planCityResearchOrder(BuildPass& pass) {
     const int level = botConfig().force.cityResearchOrder;
     if (level == 0 || !pass.citySimEnabled || gameMode != GameMode::Custom
-        || isCampaignGameType(currentGame->gameType) || !researchLabPolicyActive()
+        || campaignPolicyApplies() || !researchLabPolicyActive()
         || !ModManager::instance().isDuneCityContentActive()
         || (currentGame->getGameInitSettings().getGameType() != GameType::CustomGame
             && currentGame->getGameInitSettings().getGameType() != GameType::CustomMultiplayer)
@@ -389,7 +532,7 @@ bool QuantBot::researchRequired(const BuildPass& pass) const {
         || (botConfig().force.researchLabProgression && getHouse()->getTechLevel() < 9
             && (openingFleetIncomplete(pass) || pass.dangerousCrimeProperties > 0))
         || (botConfig().force.cityContinuousResearch && pass.citySimEnabled
-            && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+            && gameMode == GameMode::Custom && !campaignPolicyApplies()
             && lastCalculatedSpice > 0 && getHouse()->getTechLevel() < 9));
 }
 
@@ -561,6 +704,7 @@ void QuantBot::startTechResearch(BuildPass& pass) {
 
 void QuantBot::resetBuildPass() {
     refreshTacticalDanger();
+    repairPlacementReady = false;
     planningBuilder = NONE_ID;
     // One lot per construction pass across every yard, enforced on the side
     // that actually demolishes rather than inferred from how many orders were
@@ -690,6 +834,13 @@ void QuantBot::planBuildInventory(BuildPass& pass) {
                         if (QuantBotInternal::ornithopterItem(pBuilder->getCurrentProducedItem())
                             && !pBuilder->isOnHold() && !pBuilder->isUpgrading()) ++pass.ornithopterFactoryCount;
                     }
+                }
+                if (repairCapacityDemandActive() && pBuilder->getProductionQueueSize() > 0) {
+                    const auto reserved = reservedStructures.find(pBuilder->getObjectID());
+                    if (reserved != reservedStructures.end() && reserved->second.item == Structure_RepairYard
+                        && std::none_of(pBuilder->getBuildList().begin(), pBuilder->getBuildList().end(),
+                            [](const auto& offer) { return offer.itemID == Structure_RepairYard && offer.num > 0; }))
+                        ++pass.itemCount[Structure_RepairYard];
                 }
             }
             else if (pStructure->getItemID() == Structure_RepairYard) {
@@ -851,6 +1002,10 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
             && (unit->isBadlyDamaged() || (target && target->getItemID()==Structure_RepairYard
             && target->getOwner()==getHouse() && unit->getHealth()<unit->getMaxHealth()))) repairQueue.insert(unit->getObjectID());
     }
+    const bool repairDemandActive = repairCapacityDemandActive();
+    // These new occupancy counters feed structured repair/state telemetry, not
+    // the independent CSV sampler or the legacy support/transport targets.
+    const bool observeRepairOccupancy = repairDemandActive || AITelemetry::log().enabled();
     for (const auto* structure:getStructureList()) {
         if (structure->getOwner()!=getHouse()) continue;
         if (structure->getItemID() == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive()) {
@@ -866,7 +1021,14 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
         }
         const GroundUnit* returnUnit=nullptr;
         if (structure->getItemID()==Structure_RepairYard) {
-            const auto* unit=static_cast<const RepairYard*>(structure)->getRepairUnit();
+            const auto* yard = static_cast<const RepairYard*>(structure);
+            const auto* contained = observeRepairOccupancy ? yard->getContainedRepairUnit() : nullptr;
+            if (contained && structure->getHealth() > 0) {
+                if (contained->getHealth() > 0 && contained->getHealth() < contained->getMaxHealth())
+                    ++pass.observedBusyRepairBays;
+                else if (contained->getHealth() >= contained->getMaxHealth()) ++pass.completedRepairReturns;
+            }
+            const auto* unit = repairDemandActive ? contained : yard->getRepairUnit();
             if (unit && unit->getHealth()<unit->getMaxHealth()) {
                 ++pass.busyRepairBays;repairQueue.insert(unit->getObjectID());
             } else returnUnit=dynamic_cast<const GroundUnit*>(unit);
@@ -884,6 +1046,7 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     pass.repairBaseline = QuantBotBuildPolicy::baselineRepairYards(pass.combatVehicles,pass.actualHarvesters);
     pass.repairTarget = QuantBotBuildPolicy::supportQueueTarget(pass.repairBaseline,
         getHouse()->getNumItems(Structure_RepairYard),pass.itemCount[Structure_RepairYard],pass.busyRepairBays,pass.waitingRepairVehicles);
+    planRepairCapacity(pass, repairQueue);
     pass.powerRules = getHouse()->isPowerRequired();
     pass.turretPowerRequired = getGameInitSettings().getGameOptions().rocketTurretsNeedPower;
     // Power consumption is independent of the funded spice-production policy.
@@ -891,8 +1054,8 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     // economy consistently, including its worker, factory and MCV allocation.
     pass.vanillaEconomy = !pass.citySimEnabled && (!pass.powerRules
         || (difficulty==Difficulty::Brutal && gameMode==GameMode::Custom
-            && botConfig().force.fundedClassicProduction && !isCampaignGameType(currentGame->gameType)));
-    pass.campaignEconomyPush = pass.vanillaEconomy && isCampaignGameType(currentGame->gameType)
+            && botConfig().force.fundedClassicProduction && !campaignPolicyApplies()));
+    pass.campaignEconomyPush = pass.vanillaEconomy && campaignPolicyApplies()
         && !builderOnly() && !isCampaignEnemy() && difficulty>=Difficulty::Hard;
     // Buildings pay gradually. Previously the same unspent cash funded more
     // orders every pass even though it was already committed to existing queues.
@@ -1471,7 +1634,7 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
         pass.repairBaseline = pass.repairTarget = targets.repairYards;
     }
     pass.citySpiceCapacityRunway = botConfig().force.citySpiceCapacityRunway && pass.citySimEnabled
-        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && gameMode == GameMode::Custom && !campaignPolicyApplies()
         && lastCalculatedSpice > 0
         && CityEconomyInvestmentPolicy::spiceEconomyViable(pass.mapSpiceHarvesterTarget);
     pass.busyRefineries = 0; pass.freeRefineries = 0; pass.unbookedRefineries = 0; pass.waitingHarvesters = 0; pass.waitingCargo = 0; pass.blockedRefineryReturns = 0;
@@ -1565,7 +1728,7 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
             if (const House* other = currentGame->getHouse(i); other && !other->isNatives() && other->isAlive())
                 ++(other->getTeamID() == getHouse()->getTeamID() ? ownTeamHouses : enemyHouses);
     pass.brutalEconomy = pass.brutalCityEconomy || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal
-        && !builderOnly() && !isCampaignGameType(currentGame->gameType)
+        && !builderOnly() && !campaignPolicyApplies()
         && enemyHouses <= ownTeamHouses && !outnumberedByEstimate());
     pass.openingWorkerFloor = pass.techSavings
         || (pass.citySimEnabled && gameMode == GameMode::Custom) || pass.brutalEconomy;
@@ -1611,7 +1774,7 @@ int QuantBot::harvesterInvestmentReserve(BuildPass& pass) {
             price = std::max(price, getHouse()->getChoam().getPrice(Unit_Harvester));
         return (replacement - pass.itemCount[Unit_Harvester]) * price;
     }
-    if (!isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
+    if (!campaignPolicyApplies() || !isAlliedWithHuman()
         || gameMode != GameMode::Custom || builderOnly() || !(pass.vanillaEconomy || pass.citySimEnabled)
         || lastCalculatedSpice <= 0 || getHouse()->isGroundUnitLimitReached()
         || getAIRefineryBays() == 0
@@ -1675,7 +1838,7 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
             - getHouse()->getNumItems(Structure_ResearchLab)) * std::max(0,data[Structure_ResearchLab][houseID].power);
     int matureZonePower = pass.matureZonePower;
     if (botConfig().force.cityPowerGrowthHorizon && pass.citySimEnabled
-        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && gameMode == GameMode::Custom && !campaignPolicyApplies()
         && lastCalculatedSpice > 0
         && pass.money < int64_t(buildingCapitalCost(pass,Structure_WindTrap))
             + std::max(1000,pass.cityWorkingReserve)) {
@@ -1736,7 +1899,7 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
     // Medium's. Exhausted rock (below) still adds a yard, and a lost yard leaves capacity
     // under two, so it is still rebuilt.
     if(botConfig().force.smallMapYardCap && difficulty>=Difficulty::Hard && gameMode==GameMode::Custom
-        && !builderOnly() && !isCampaignGameType(currentGame->gameType) && customWave.launched==0
+        && !builderOnly() && !campaignPolicyApplies() && customWave.launched==0
         && std::max(currentGameMap->getSizeX(),currentGameMap->getSizeY())<=96)
         pass.cityYardTarget=std::min(pass.cityYardTarget,2);
     if(pass.rockExpansionNeeded)pass.cityYardTarget=std::max(pass.cityYardTarget,getHouse()->getNumItems(Structure_ConstructionYard)+1);
@@ -1829,7 +1992,7 @@ bool QuantBot::cityAdmitsStructure(BuildPass& pass, Uint32 item) {
 
 void QuantBot::planCivicNeedAndTrips(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
-    pass.campaignPowerBudget = isCampaignGameType(currentGame->gameType)
+    pass.campaignPowerBudget = campaignPolicyApplies()
         && (difficulty==Difficulty::Easy || difficulty==Difficulty::Medium)
         && !pass.citySimEnabled && !pass.vanillaEconomy;
 
@@ -1876,7 +2039,7 @@ void QuantBot::planCivicNeedAndTrips(BuildPass& pass) {
     pass.unloadCycles = HARVESTERMAXSPICE*8/5;
     pass.bayAnnualIncome = int(DuneCity::kCyclesPerMinute)*15/32;
     pass.citySpiceTransition = botConfig().force.citySpiceTransition && pass.citySimEnabled
-        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && gameMode == GameMode::Custom && !campaignPolicyApplies()
         && lastCalculatedSpice > 0
         && CityEconomyInvestmentPolicy::spiceTransitionDue(pass.spiceShare,pass.actualHarvesters,
             getAIRefineryBays(),workerAnnualIncome(pass),pass.bayAnnualIncome);
@@ -2565,7 +2728,7 @@ void QuantBot::traceBuildState(BuildPass& pass) {
                     .set("stored_spice_credits", getHouse()->getStoredCredits().lround())
                     .set("city_credit_balance", getHouse()->getCityCredits().lround())
                     .set("starting_credit_balance", getHouse()->getStartingCredits().lround()))
-                .set("heavy_busy", pass.activeHeavyFactoryCount).set("light_busy",pass.activeLightFactoryCount).set("repair_busy", pass.activeRepairYardCount)
+                .set("heavy_busy", pass.activeHeavyFactoryCount).set("light_busy",pass.activeLightFactoryCount).set("repair_busy", pass.observedBusyRepairBays)
                 .set("built_value", getHouse()->getUnitBuiltValue()).set("kill_value", getHouse()->getKillValue())
                 .set("loss_value", getHouse()->getLossValue()));
         if (pass.cityBoom == CityBoomKind::Reactive) {
@@ -3157,7 +3320,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     }
     pass.campaignThreatProduction = botConfig().force.campaignThreatProduction && pass.defendingEconomy
         && !pass.citySimEnabled && !builderOnly()
-        && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman();
+        && campaignPolicyApplies() && isAlliedWithHuman();
     pass.vanillaFfaThreatProduction = vanillaFfaThreatPolicy && vanillaFfaGrowth
         && groundEconomyThreat && ownGroundArmyValue()
             < ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), openingReadinessPercent());
@@ -3189,7 +3352,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     // CityCapitalPacing applies the same levels to research-enabled City
     // economy matches only; TechIncomeTiming keeps precedence.
     const bool techIncomeScope = force.techIncomeTiming > 0 && gameMode == GameMode::Custom
-        && !isCampaignGameType(currentGame->gameType) && !builderOnly()
+        && !campaignPolicyApplies() && !builderOnly()
         && (getGameInitSettings().getModName() == "vanilla"
             || ModManager::instance().isDuneCityContentActive()) && lastCalculatedSpice > 0
         && (difficulty == Difficulty::Medium || difficulty == Difficulty::Hard
@@ -3705,7 +3868,7 @@ void QuantBot::planDefenceCoverage(BuildPass& pass) {
         const int range=std::max(1,data[Structure_RocketTurret][houseID].weaponrange-1);
         int bestMissing=0;
         const bool protectCityZones = botConfig().force.cityZoneDefence && pass.citySimEnabled
-            && !isCampaignGameType(currentGame->gameType) && lastCalculatedSpice > 0;
+            && !campaignPolicyApplies() && lastCalculatedSpice > 0;
         for (const auto* asset:getStructureList()) {
             if (asset->getOwner()!=getHouse() || asset->getHealth()<=0
                 || (!RocketTurretPolicy::coreAsset(asset->getItemID())
@@ -4432,7 +4595,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 }
             }
             if (botConfig().force.cityAdvancedTech && pass.citySimEnabled
-                && !isCampaignGameType(currentGame->gameType) && lastCalculatedSpice > 0
+                && !campaignPolicyApplies() && lastCalculatedSpice > 0
                 && getHouse()->getTechLevel() == 9 && pass.itemCount[Structure_IX] == 0
                 && pass.itemCount[Structure_HeavyFactory] > 0 && pass.itemCount[Structure_RepairYard] > 0
                 && !openingFleetIncomplete(pass) && !pass.defendingEconomy && !pass.airEngaged
@@ -4811,7 +4974,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                         && botConfig().force.cityConstructionCapital && !pass.spiceEconomyViable
                         && difficulty>=Difficulty::Hard
                         && pass.itemCount[Structure_StarPort]>0
-                        && !builderOnly() && !isCampaignGameType(currentGame->gameType)
+                        && !builderOnly() && !campaignPolicyApplies()
                         && pass.itemCount[factory]==0 && !cityBootstrapNeeded(pass)
                         && pass.forecastTax>pass.forecastUpkeep
                         && !pass.defendingEconomy && !pass.airEngaged
@@ -5295,7 +5458,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     // order is accepted. A lone opening yard retains its tech path.
     Uint32 dedicatedCityYard=NONE_ID;
     const bool threatBudget = pass.cityBoomArmy || (botConfig().force.cityThreatBudget && pass.citySimEnabled
-        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && gameMode == GameMode::Custom && !campaignPolicyApplies()
         && lastCalculatedSpice > 0 && pass.defendingEconomy);
     if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1 && !pass.protectionCapital
         && !threatBudget) {
@@ -5328,7 +5491,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     // same profitable zone candidates. Do not divert urgent service, committed
     // power, first combat capability or the opening import supplier.
     if (botConfig().force.citySingleYardGrowth && pass.sharedSpending && pass.citySimEnabled
-        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && gameMode == GameMode::Custom && !campaignPolicyApplies()
         && lastCalculatedSpice > 0 && pass.cityYards == 1 && !pass.protectionCapital
         && !pass.defendingEconomy && !pass.airEngaged && pass.dangerousCrimeProperties == 0
         && pass.civicStructuralNeed == 0 && !pass.openingSupplierDue
@@ -5434,7 +5597,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             return details;
         };
         pass.capitalDecision=traceDecision("capital_plan",observeVanillaFfa(AITelemetry::Record().set("policy_version",2)
-            .set("mode",pass.citySimEnabled ? "dunecity" : "vanilla").set("campaign",isCampaignGameType(currentGame->gameType))
+            .set("mode",pass.citySimEnabled ? "dunecity" : "vanilla").set("campaign",campaignPolicyApplies())
             .set("campaign_helper_reserve",harvesterInvestmentReserve(pass)).set("defending",pass.defendingEconomy)
             .set("cash",getHouse()->getCredits()).set("committed_cost",pass.queuedProductionCost).set("spendable",pass.money)
             .set("horizon_cycles",CityEconomyInvestmentPolicy::horizonCycles).set("forecast_tax_per_minute",pass.forecastTax)

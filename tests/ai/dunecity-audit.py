@@ -59,6 +59,7 @@ from probe_profile import finish_game, headless_asset_arguments, probe_binary, r
 import match_score  # noqa: E402
 from ai_map_features import MAP_FEATURE_FIELDS, rows_from_log  # noqa: E402
 from fleet_observer import FLEET_VALUES, REFINERY_VALUES, fleet_observations  # noqa: E402
+import research_report  # noqa: E402
 
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary')
 HOUSE_IDS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
@@ -79,6 +80,7 @@ TROOPER_ENEMY_AIR_FIELDS = {item: 'trooper_' + field for item, field in ENEMY_AI
 AIR_COUNT_FIELDS = tuple(ENEMY_AIR_FIELDS.values()) + tuple(TROOPER_ENEMY_AIR_FIELDS.values())
 AIR_ATTRIBUTION_FIELDS = ('air_kill_attribution_complete', 'air_kill_unknown_attribution')
 REFINERY_FIELDS = META + REFINERY_VALUES
+REPAIR_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'capture_status') + research_report.REPAIR_EVENT_FIELDS
 GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes',
                       'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error', 'config_hash', 'options_hash',
                       'map_hash', 'content_hash', 'object_data_hash', 'ai_config_hashes', 'probe_sha256',
@@ -120,7 +122,8 @@ BOOM_FIELDS = ('boom_phase', 'boom_stop_minute', 'boom_own_army', 'boom_enemy_ar
                'boom_reachable_spice_share', 'boom_refinery_cap', 'boom_harvester_cap', 'boom_current_workers')
 LOGISTICS_FIELDS = ('harvesters_total', 'harvesters_active', 'harvesters_harvesting', 'harvesters_returning',
                     'refinery_bays', 'refinery_bays_busy', 'harvesters_lost', 'tax_per_min', 'tax_rate')
-SAMPLE_FIELDS = META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required') + BOOM_FIELDS + LOGISTICS_FIELDS
+SAMPLE_FIELDS = research_report.canonical_csv_fields(
+    META + SAMPLE_VALUES + ('flags', 'refineries', 'power_required') + BOOM_FIELDS + LOGISTICS_FIELDS)
 FIELD_FIELDS = META + ('mod', 'minute', 'cycle', 'field', 'initial', 'remaining')
 # Spice blooms (docs/ai-scenario-matrix.md, "Spice bloom harvest"): per house per minute.
 BLOOM_FIELDS = META + ('mod', 'minute', 'cycle', 'house', 'ledger_enabled', 'blooms_initial', 'blooms_burst',
@@ -207,10 +210,11 @@ def read(path):
     if not path.exists():
         return []
     with path.open(newline='') as handle:
-        return list(csv.DictReader(handle))
+        return list(research_report.normalized_csv_rows(handle, path))
 
 
 def require_schema(path, fields):
+    fields = research_report.canonical_csv_fields(fields)
     if path.exists():
         with path.open(newline='') as handle:
             if next(csv.reader(handle), []) != list(fields):
@@ -218,6 +222,7 @@ def require_schema(path, fields):
 
 
 def append(path, fields, rows):
+    fields = research_report.canonical_csv_fields(fields)
     with lock:
         new = not path.exists()
         require_schema(path, fields)
@@ -1324,6 +1329,8 @@ def play(args, scratch, binary, game):
         append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
         if telemetry:
             append(results / 'waves.csv', ATTACK_FIELDS, attack_rows)
+            append(results / 'repair-capacity.csv', REPAIR_FIELDS,
+                   [dict(metadata(game), **entry) for entry in research_report.repair_observations(capture)])
             append(results / 'air-kills.csv', AIR_KILL_FIELDS,
                    [dict(metadata(game), **event) for event in capture['events']])
             append(results / 'team-events.csv', TEAM_EVENT_FIELDS,
@@ -1386,6 +1393,7 @@ def run(args):
                          ('air-kills.csv', AIR_KILL_FIELDS),
                          ('map-features.csv', MAP_FEATURE_FIELDS),
                          ('refinery-samples.csv', REFINERY_FIELDS),
+                         ('repair-capacity.csv', REPAIR_FIELDS),
                          ('team-events.csv', TEAM_EVENT_FIELDS),
                          ('combat.csv', COMBAT_FIELDS)) + TECH_TABLES:
         require_schema(results / name, fields)
@@ -2225,6 +2233,18 @@ parser.add_argument('--keep-telemetry', action='store_true',
 parser.add_argument('--list', action='store_true')
 parser.add_argument('--report', nargs='+', type=Path, dest='report_dirs')
 parser.add_argument('--compare', nargs=2, type=Path, metavar=('CONTROL', 'CANDIDATE'))
+parser.add_argument('--loss-audit', nargs='+', type=Path, metavar='RESULTS',
+                    help='Bounded read-only baseline loss/quality audit; never start games')
+parser.add_argument('--quality-report', nargs='+', type=Path, metavar='RESULTS',
+                    help='Read-only winning/losing behavioural quality and missing field coverage')
+parser.add_argument('--quality-compare', nargs=2, type=Path, metavar=('CONTROL', 'CANDIDATE'),
+                    help='One compact per-arm quality/strength-coverage report for retained winner bundles')
+parser.add_argument('--baseline-label', help='Exact release/default-policy population label for loss audit')
+parser.add_argument('--baseline-source', help='Expected full committed baseline source for loss audit')
+parser.add_argument('--experiment-report', type=Path, metavar='MANIFEST',
+                    help='Report preregistered OFF/ON results supplied by --compare')
+parser.add_argument('--experiment-stage', choices=('pilot', 'screen', 'evaluation', 'confirmation'), default='pilot')
+parser.add_argument('--experiment-evidence', type=Path, help='Retained mechanism/control/quality attestations and measured costs')
 args = parser.parse_args()
 if not 1 <= args.minutes <= 120 or any(not 0 <= seed <= 0xffffffff for seed in args.seeds):
     parser.error('Use 1-120 game minutes and unsigned 32-bit seeds')
@@ -2248,7 +2268,25 @@ if args.game_seed_base is not None and (
         args.mode != 'sample' or args.game_seed_base < 0
         or args.game_seed_base + args.cases * (2 if args.mod == 'both' else 1) - 1 > 0xffffffff):
     parser.error('--game-seed-base requires sample mode and an unsigned 32-bit engine seed range')
-if args.compare:
+if args.loss_audit or args.quality_report or args.quality_compare or args.experiment_report:
+    try:
+        if args.loss_audit:
+            if not args.baseline_label:
+                parser.error('--loss-audit requires --baseline-label; historical populations must remain distinct')
+            result = research_report.loss_audit(args.loss_audit, args.baseline_label, args.baseline_source)
+        elif args.quality_report:
+            result = research_report.quality_report(research_report.dataset(args.quality_report), args.quality_report)
+        elif args.quality_compare:
+            result = research_report.quality_comparison(*args.quality_compare)
+        else:
+            if not args.compare:
+                parser.error('--experiment-report requires --compare CONTROL CANDIDATE')
+            evidence = research_report.compact_json(args.experiment_evidence) if args.experiment_evidence else None
+            result = research_report.experiment_report(args.experiment_report, args.experiment_stage, *args.compare, evidence=evidence)
+        print(json.dumps(result, sort_keys=True, indent=2, allow_nan=False))
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        parser.exit(1, 'audit report: ' + str(exc) + '\n')
+elif args.compare:
     compare(*args.compare)
 elif args.report_dirs:
     report(args.report_dirs)

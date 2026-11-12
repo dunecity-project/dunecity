@@ -386,7 +386,6 @@ TEST_CASE("QuantBot support queues expand occupied services without duplicating 
     CHECK(supportQueueTarget(2,2,3,2,3)==2); // Third supplier already coming.
     CHECK(supportQueueTarget(2,2,2,1,3)==2); // An existing supplier is idle.
     CHECK(supportQueueTarget(2,2,2,2,1)==2); // A single waiting job is normal.
-    CHECK(supportQueueTarget(4,2,2,0,0)==4); // Ratio anticipates a growing fleet.
     CHECK(supportQueueTarget(1,4,4,0,8)==1); // Completed repairs awaiting transport are not busy repair bays.
     CHECK(supportQueueTarget(0,0,0,0,3)==0); // No useful fleet/service to bootstrap.
 }
@@ -1567,13 +1566,63 @@ TEST_CASE("Spice fleet targets retain runway without retiring workers too early"
     REQUIRE(desiredSpiceHarvesters(711263, 5, 0) == 0);
 }
 
-TEST_CASE("QuantBot establishes repair support before expanding the opening vehicle fleet", "[quantbot][repair]") {
-    CHECK(baselineRepairYards(0,0)==0);
-    CHECK(baselineRepairYards(0,10)==1); // Working spice fleet needs a first repair bay.
-    CHECK(baselineRepairYards(25,10)==1);
-    CHECK(baselineRepairYards(26,10)==2);
-    CHECK(baselineRepairYards(100,10)==4);
-    CHECK(baselineRepairYards(175,10)==7); // Imported armies are not capped by heavy-factory count.
+TEST_CASE("Repair capacity preserves the first useful bay without scaling with healthy armies", "[quantbot][repair]") {
+    CHECK(firstRepairYardTarget(0, 0) == 0);
+    CHECK(firstRepairYardTarget(0, 10) == 1);
+    for (int fleet : {1, 25, 26, 100, 175, 1000}) {
+        CHECK(firstRepairYardTarget(fleet, 10) == 1);
+        const int target = repairCapacityTarget(true, 2, 2, 2, 0, 0, MILLI2CYCLES(60000));
+        CHECK_FALSE(repairCapacityAdmitted(true, 2, 2, target));
+    }
+    // A first technology prerequisite does not require an already damaged army.
+    CHECK(repairCapacityAdmitted(true, 0, 0, 0));
+    CHECK_FALSE(repairCapacityAdmitted(false, 0, 0, 1)); // Medium/campaign permissions still win.
+}
+
+TEST_CASE("Repair expansion consumes sustained useful demand once across parallel yards", "[quantbot][repair]") {
+    const Uint32 dwell = MILLI2CYCLES(30000);
+    CHECK(repairCapacityTarget(true, 2, 2, 2, 2, 3, dwell - 1) == 2);
+    const int target = repairCapacityTarget(true, 2, 2, 2, 2, 3, dwell);
+    REQUIRE(repairCapacityAdmitted(true, 2, 2, target));
+    CHECK_FALSE(repairCapacityAdmitted(true, 2, 3, target)); // Another CY already accepted it.
+    CHECK(repairCapacityTarget(true, 2, 3, 2, 2, 30, dwell) == 2);
+    CHECK(repairCapacityTarget(true, 2, 2, 2, 1, 30, dwell) == 2); // Use idle local capacity.
+    CHECK(repairCapacityTarget(true, 2, 2, 2, 0, 30, dwell) == 2); // Completed return waits aren't work.
+    CHECK(repairCapacityTarget(true, 2, 2, 2, 2, 0, dwell) == 2); // Blocked/inflight units aren't waiting jobs.
+    CHECK_FALSE(repairCapacityAdmitted(false, 2, 2, target));
+    CHECK_FALSE(repairCapacityAdmitted(true, 0, 1, 1)); // A pending first bay is capacity too.
+    // This is demand admission, never a blanket one-bay ceiling.
+    CHECK(repairCapacityTarget(true, 8, 8, 3, 3, 4, dwell) == 9);
+}
+
+TEST_CASE("Repair pressure resets on idle service, a different base or pending capacity", "[quantbot][repair]") {
+    Uint32 yard = NONE_ID, since = std::numeric_limits<Uint32>::max();
+    const Uint32 start = 100, dwell = MILLI2CYCLES(30000);
+    CHECK(observeRepairPressure(17, start, yard, since) == 0);
+    CHECK(observeRepairPressure(17, start + dwell - 1, yard, since) == dwell - 1);
+    CHECK(observeRepairPressure(17, start + dwell, yard, since) == dwell);
+    CHECK(observeRepairPressure(18, start + dwell, yard, since) == 0);
+    CHECK(observeRepairPressure(NONE_ID, start + dwell + 1, yard, since) == 0);
+    CHECK(yard == NONE_ID);
+    CHECK(observeRepairPressure(18, start + dwell + 2, yard, since) == 0);
+}
+
+TEST_CASE("Repair service counts reachable local work rather than transport or access failures", "[quantbot][repair]") {
+    RepairServiceAccess access;
+    auto open = [](int x, int y) { return !(x >= 0 && x < 2 && y >= 0 && y < 2); };
+    access.survey(0, 0, 2, 2, open);
+    REQUIRE(access.reaches(4, 1));
+    CHECK_FALSE(access.reaches(40, 1)); // No assumed delivery flight.
+    CHECK(access.touches(4, 2, 2, 2));
+    access.survey(0, 0, 2, 2, [&](int x, int y) { return x != 3 && open(x, y); });
+    CHECK_FALSE(access.reaches(4, 1)); // A wall closes the local approach.
+    access.survey(0, 0, 2, 2, [&](int x, int y) { return (x != 3 || y == 3) && open(x, y); });
+    CHECK(access.reaches(4, 1)); // A genuine ground route around an obstruction counts.
+    access.survey(0, 0, 2, 2, [&](int x, int y) { return x != 0 && open(x, y); });
+    access.addWaiting(4, 1); access.addWaiting(4, 2);
+    CHECK(access.waitingFor(-3, 0, 2, 2) == 0); // The existing bay does not bridge disconnected approaches.
+    CHECK(access.waitingFor(2, 3, 2, 2) == 2);
+    CHECK(access.waitingFor(4, 1, 1, 2) == 0); // A footprint displacing the jobs is not spare service.
 }
 
 TEST_CASE("Opening transport precedes repeated heavy factories and saves for the first carryall", "[quantbot][production][air]") {

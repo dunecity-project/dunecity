@@ -12,6 +12,31 @@ Mixed four-way FFA smoke cells check completion and meaningful combat, not a
 particular seed's incidental default winner. Keep explicit matchup/campaign
 expectations and replay-digest checks; do not pin a past protocol's FFA winner.
 
+## Campaign enemy fixture correction (2026-11-13)
+
+Campaign **difficulty** evidence now requires QuantBot enemies at the requested
+Easy/Medium/Hard/Brutal tier. The old vanilla `player-brutal-v-campaign-ai` cell
+actually ran `CampaignAIPlayer`: its historical **63/66** and related recovery
+results remain legacy-controller observations, **not evidence for the corrected
+QuantBot fixture or Single mission balance**. They must not be resumed or counted
+as new-fixture passes. No replacement aggregate result is claimed here.
+
+`--enemy-difficulty easy|medium|hard|brutal` selects the actual enemy QuantBot
+(default Easy); `--campaign-mode full|single` selects the native Full campaign
+or Single mission setup (default Full campaign). Every tier/mode has distinct
+game and cell IDs, while mission seeds and authored objectives stay unchanged.
+The idle human plus selected QuantBot AI-support seat remains the default.
+The engine's captured player and enemy rosters must match the requested fixture;
+a legacy controller, wrong tier or missing human seat fails instead of producing
+a mislabeled win. Reports keep modes/tiers separate and retain real losses,
+unfinished missions and engine errors.
+
+The six-edition `tornie-gameplay-matrix.py` content audit intentionally retains
+scenario-settings `CampaignAIPlayer` enemies; those cases are explicitly marked
+`legacy-campaign` and cannot qualify QuantBot difficulty. The throughput harness's
+`campaign` workload follows the corrected QuantBot Easy recovery fixture.
+
+
 ## Income-based technology timing experiment
 
 `TechIncomeTiming` is a hashed, default-OFF QuantBot setting (`0/1/2`) for
@@ -286,13 +311,14 @@ Every game is a real match played headless to its end by the balance probe:
   `symmetric`); its mode (vanilla or DuneCity city simulation) follows `--mod` as in the menu.
   `base=cy` is a Construction Yard only start: each start's MCV is deployed where the map put it before
   the first cycle (`SCENARIO_CY_START`), no army, the menu's default 3,000 credits.
-- **Campaign missions** (no sides; `--house`, `--level`, optional `--mission`): the full-tier
-  vanilla gate uses a sole Brutal QuantBot on the player house, authored scenario-settings
-  `CampaignAIPlayer` opponents and `--campaign-ai-only`. No human is registered or issues orders.
-  A detached, command-disabled UI identity anchors the campaign's player house, without enabling
-  observer match-end semantics. The real mission's win/lose conditions (`Game::finished`) decide
-  conquest, loss and spice-quota victory; no forced conquest or scripted orders substitute for them.
-  DuneCity partner-difficulty diagnostics and the existing smoke campaign cells retain their prior setup.
+- **Campaign missions** (no sides; `--house`, `--level`, optional `--mission`):
+  the vanilla gate uses an idle human plus Brutal QuantBot support against
+  QuantBot enemies at `--enemy-difficulty` (default Easy).
+  `--campaign-mode full|single` uses the corresponding native menu setup.
+  Both preserve the real mission's win/lose conditions (`Game::finished`),
+  including conquest, defeat and spice quotas; neither forces conquest,
+  grants assets nor issues scripted human orders. DuneCity partner diagnostics
+  and smoke use the same explicit QuantBot enemy-tier/mode transport.
 - Game rules come from the mod (`ModManager::loadEffectiveGameOptions`) as a new Custom Game takes them;
   `--game-options` (All against Atreides: Stefan's own options) applies on top.
 - Once a game minute every house is sampled, and its **sortie** measured: combat ground units more than
@@ -308,8 +334,8 @@ run's cell limits. It does not change the ordinary matrix limits or winner
 assertions; use a separate results directory for the extended observation.
 For matched fresh-seed campaign screens, `--campaign-seeds 1280000 1280001`
 replaces the fixed seeds for each selected campaign mission (duplicate seeds are
-played once). `--cases` can restrict the missions. The default fixed 66-game gate,
-the idle-human AI-support seating, and every non-campaign seed remain unchanged.
+played once). `--cases` can restrict the missions. The selected mode retains the
+fixed 66-game plan and idle-human AI-support seating; non-campaign seeds are unchanged.
 Use separate result directories for each arm and keep observer flags identical.
 
 Campaign support home fields: `[Force Concentration] CampaignHomeFields`
@@ -534,7 +560,7 @@ by the seed's index so every controller plays every house; map-named houses (All
 | `skirmish` | 13 Random Skirmish cells: 1v1, 3-8 player FFA, 2v2, 3v3, 4v4; MCV only, small, medium and fortress bases; no, small and large armies; 8 vanilla, 5 DuneCity; QuantBot difficulties mixed with AI Player; 4 seeds each | decided, eliminations, idle armies; team cells with a stronger team must be won by it; placement score per controller (QB > QH > QM > QE) |
 | `cy` | 7 Construction Yard only cells: 1v1 QH v AH, QH v QM, QB v QE (40 min), QH mirror; 4P FFA vanilla and DuneCity; 2v2 mirror | as above |
 | `aaa` | All against Atreides: vanilla Brutal v 4 AI Player Hard (6 fixed seeds, win within **50 min**); DuneCity (6 seeds, win within its 60-min cap); saved Dune2R rules (7 seeds, unchanged 40-min gate); reverse vanilla Atreides Medium v 4 QuantBot Hard (6 seeds, must lose) | expected winner |
-| `campaign` | Vanilla: every real mission ID **1–22**, Atreides/Harkonnen/Ordos, one fixed seed per mission (**66 games**); sole Brutal player against authored `CampaignAIPlayer`. DuneCity retains Hard/Medium/Easy partner diagnostics, now also covering all 22 IDs | vanilla and Hard-partner missions must be won by their native conditions; conquest/quota and triggers reported |
+| `campaign` | Vanilla: every real mission ID **1–22**, Atreides/Harkonnen/Ordos, one fixed seed per mission (**66 games**); idle human + Brutal support against QuantBot at `--enemy-difficulty` (default Easy). DuneCity Hard/Medium/Easy support diagnostics cover the same 22 IDs. `--campaign-mode full|single` selects either native menu path | vanilla and Hard-support missions must be won by their native conditions; actual enemy roster/tier, conquest/quota and triggers reported |
 | `ladder` | Every adjacent pair (QB v QH, QH v QM, QM v QE) plus QB v QM and QH v QE. Long maps (the decision): Random Skirmish 128x128 (75 min) and 160x160 (90 min), vanilla and DuneCity, medium bases, no army, 18 seeds each played twice with the houses swapped (`#swap`; each side keeps its start): 144 games per pair. Short maps (reported): 96x96 small bases vanilla and DuneCity, Habbanya-Penny, a vanilla CY 96x96 start, 9 seeds x both houses: 72 per pair | the stronger QuantBot's placement score interval above 0 over the long maps (the interval resamples seeds); game length per cell |
 | `mp` | The most-played bundled maps (dunelegacy.com usage statistics, all time, 2026-10-18): 1v1 Habbanya-Penny (364 games), Tuono-Orac (104), Sihaya-Chvrches (82); 2v2 Sihaya-Toto (113), Deserted (105), 4P DuneCity (68, DuneCity mod); 3v3 Sihaya-Lenka (536), Full Wormage, Alkozeltser 4 (265, 256x256: 2 seeds, 80 min). QH teams v QH teams (4 seeds), and QH teams v AH teams on the 2v2/3v3 maps (must win) | decided, idle armies, expected winner |
 
@@ -574,16 +600,20 @@ Every game must also finish without a crash. 10 games, three at a time.
 ### Complete vanilla campaign recovery gate
 
 `run-campaign-matrix.py` is a thin entry point to the existing `campaign` category,
-not a separate campaign convention. It selects `player-brutal-v-campaign-ai/vanilla`,
-enforces native wins (`--check`), forwards the scenario-matrix options and writes the
-same `games.csv` / `houses.csv` evidence.
+not a separate campaign convention. It selects
+`player-brutal-v-quantbot-<enemy difficulty>/vanilla`, enforces native wins
+(`--check`), forwards the scenario-matrix options and writes the same
+`games.csv` / `houses.csv` evidence, including enemy tier, mode, source commit
+and source fingerprint. The default is QuantBot Easy, **not** CampaignAIPlayer.
 
 ```sh
 python3 tests/ai/run-campaign-matrix.py --list
 python3 tests/ai/run-campaign-matrix.py --list --shard 1/4
+python3 tests/ai/run-campaign-matrix.py --list --enemy-difficulty medium --campaign-mode single
 dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag campaign-recovery -- \
   python3 tests/ai/scenario-matrix.py --tier full --categories campaign \
-  --cells '^campaign/player-brutal-v-campaign-ai/vanilla$' --check --build-dir build-int --results RESULTS
+  --cells '^campaign/player-brutal-v-quantbot-easy/vanilla$' \
+  --enemy-difficulty easy --campaign-mode full --check --build-dir build-int --results RESULTS
 ```
 
 Coverage per house: L1=mission 1; L2=2/3/4; L3=5/6/7; L4=8/9/10; L5=11/12/13;
@@ -594,13 +624,60 @@ mission-specific seed from `seeds_for`; `--list` exposes those seeds.
 `--shard K/N` partitions the same ordered 66-game plan without replacing seeds or
 opponents. Merge shard directories with the existing `--report DIR1 DIR2 ...`.
 The default 80-minute cap is not a victory condition: unfinished quotas and other
-unfinished missions fail. Historical smoke expectations are unchanged.
+unfinished missions fail. Selecting a different tier or mode does not weaken win assertions.
 
 **The campaign gate is the AI-support setup** (Stefan, 2026-11-08: QuantBot always
 plays the campaign as AI support beside a human). The default schedule gives the
 selected house an idle human seat plus the Brutal QuantBot support, so the AI has to
 carry both roles; IDs end `#human-partner`. `--campaign-ai-only` keeps the old
 no-human diagnostic and is never gate evidence.
+
+### Focused parity and difficulty checks
+
+The fast fixture regression is `python3 tests/ai/test_campaign_matrix.py` (also
+CTest `quantbot_campaign_matrix_coverage`): all four requested enemy tiers,
+both native menu-mode commands, all authored mission IDs and fixed seeds,
+support seating, wrong/legacy captured-roster rejection, separate report rows
+and unchanged loss/time-limit failure semantics. This is harness coverage,
+not an engine balance result.
+
+For a bounded actual-engine smoke, run **one authored mission in each mode**,
+not all 66 or a new calibration sweep. After the shared committed-source/build
+handoff, submit these through the usual coordinated queue; use distinct result
+directories and retain logs. For example, these each schedule only Atreides m8
+at seed42, with Brutal support versus QuantBot Medium, the normal 80-minute cap
+and the unchanged native-win assertion:
+
+```sh
+python3 tests/ai/run-campaign-matrix.py --build-dir build-int --jobs 1 \
+  --enemy-difficulty medium --campaign-mode full --campaign-seeds 42 \
+  --cases '/atreides-m8/' --attack-events --results RESULTS-FULL
+python3 tests/ai/run-campaign-matrix.py --build-dir build-int --jobs 1 \
+  --enemy-difficulty medium --campaign-mode single --campaign-seeds 42 \
+  --cases '/atreides-m8/' --attack-events --results RESULTS-SINGLE
+```
+
+For the reported city-economy path, use the same two modes with
+`scenario-matrix.py --tier full --categories campaign --seeds-per-cell 1
+--cells '^campaign/partner-hard-v-quantbot-medium/dunecity$'
+--enemy-difficulty medium --campaign-seeds 42 --cases '/harkonnen-m8/'
+--check --economy-samples --attack-events --jobs 1`, adding the chosen mode,
+build directory and a distinct results directory. Inspect the actual
+`HumanPlayer+qBotHard` / `qBotMedium` roster, effective config/options hashes,
+scenario mode, initial refinery count and retained economy samples; an early
+load-only run does not establish difficulty parity or victory.
+
+Equal-tier 45–55% and one-tier-higher ≥95% were historical **working calibration
+targets**, not hard gates for a noisy one/few-seed smoke. Authored mission
+objectives and existing per-game win assertions remain the acceptance rules.
+No AI economy default or balance tuning is changed by this fixture correction.
+
+
+### Historical CampaignAIPlayer recovery evidence
+
+The recovery experiments below retain their original source pins and outcomes.
+Their campaign results used legacy CampaignAIPlayer enemies, not the corrected
+QuantBot enemy fixture; no historical win count is promoted to a new-fixture pass.
 
 `[Force Concentration] CampaignPlayerHouse` (default off) identifies the selected
 campaign house from `GameInitSettings`, independently of registered human seats.

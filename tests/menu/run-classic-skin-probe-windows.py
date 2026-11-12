@@ -19,6 +19,9 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
+from probe_process import processes, run, check_output
+sys.path.insert(0, str(ROOT / 'tests/performance'))
+from probe_profile import scratch_dir, require_free_space, discard_profile_assets
 
 
 def tracking_records(path):
@@ -61,7 +64,7 @@ def toolchain_environment(tlog):
         raise RuntimeError("Visual Studio vswhere.exe is required")
     states = list(tlog.glob("*.lastbuildstate"))
     version = re.search(r"VCToolsVersion=([^:]+)", states[0].read_text() if states else "")
-    installations = subprocess.check_output([
+    installations = check_output([
         str(vswhere), "-all", "-products", "*", "-requires",
         "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath",
     ], text=True, creationflags=subprocess.CREATE_NO_WINDOW).splitlines()
@@ -80,7 +83,7 @@ def toolchain_environment(tlog):
     # cmd.exe does not interpret the backslash-escaped inner quotes that
     # subprocess.list2cmdline would add to a list-form /c argument.
     invocation = subprocess.list2cmdline([os.environ.get("COMSPEC", "cmd.exe")]) + ' /d /s /c "' + command + '"'
-    result = subprocess.run(invocation, capture_output=True, text=True, check=False,
+    result = run(invocation, capture_output=True, text=True, check=False,
                             creationflags=subprocess.CREATE_NO_WINDOW)
     if result.returncode:
         raise RuntimeError("Visual Studio compiler environment initialization failed")
@@ -133,7 +136,7 @@ def asset_junction(destination, source):
     # Directory junction creation needs no Administrator/symlink privilege.
     # Only create named links inside the owned diagnostic output; never move,
     # delete, copy over, or modify the real runtime asset directories.
-    result = subprocess.run([
+    result = run([
         os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", "mklink", "/J",
         str(destination), str(source),
     ], capture_output=True, text=True, check=False,
@@ -159,6 +162,8 @@ def main():
     args = parser.parse_args()
     if os.name != "nt":
         raise RuntimeError("This diagnostic runner requires Windows and an MSVC build")
+    processes.install_signal_handlers()
+    require_free_space(sweep='if-low')
     build, out = args.build_dir.resolve(), args.output_dir.resolve()
     marker = out / ".classic-ui-probe-owned"
     if out in (ROOT, build, Path.home(), Path(out.anchor)):
@@ -280,7 +285,7 @@ def main():
     with (out / "build.log").open("w") as log:
         for command in ([cl, "@" + str(compile_rsp)], [cl, "@" + str(path_compile_rsp)],
                         [linker, "@" + str(link_rsp)]):
-            subprocess.run(command, cwd=workdir, env=environment, stdout=log,
+            run(command, cwd=workdir, env=environment, stdout=log,
                            stderr=subprocess.STDOUT, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
     if args.compile_only:
         print("Compiled and linked the private diagnostic; no runtime was executed.")
@@ -289,54 +294,62 @@ def main():
         asset_junction(out / directory, runtime / directory)
     environment["PATH"] = str(runtime) + os.pathsep + environment.get("PATH", "")
 
-    for skin in args.skins:
-        for size in args.sizes:
-            match = re.fullmatch(r"([1-9][0-9]*)x([1-9][0-9]*)", size)
-            if not match:
-                raise RuntimeError("Sizes must use WIDTHxHEIGHT")
-            width, height = map(int, match.groups())
-            if not (640 <= width <= 3840 and 480 <= height <= 2160):
-                raise RuntimeError("Diagnostic dimensions are outside the supported bounds")
-            case = out / f"skin-{skin}-{size}"
-            case.mkdir(parents=True, exist_ok=True)
-            profile = out / "profile" if args.reuse_profile else case / "profile"
-            profile.mkdir(parents=True, exist_ok=True)
-            # Game's offline content pinning may select a private workshop
-            # snapshot. Keep each test case on the bundled Vanilla base while
-            # retaining only the sandbox's already-copied asset cache.
-            (profile / "mods").mkdir(exist_ok=True)
-            (profile / "mods/active_mod.txt").write_text("vanilla\n")
-            # Only 480/600/768 are valid fixed presets. Automatic remains 1:1
-            # at 1280x720; 1080p explicitly exercises the Native selection.
-            interface_height = -1 if size == "1920x1080" else height if height in (480, 600, 768) else 0
-            (profile / "Dune City.ini").write_text(
-                f"[Video]\nPhysical Width = {width}\nPhysical Height = {height}\n"
-                f"Width = {width}\nHeight = {height}\nInterface Height = {interface_height}\n"
-                f"UI Skin = {skin}\nMenu Palette = 0\nFullscreen = false\nFrameLimit = false\nPreferred Zoom Level = 0\n"
-                "[General]\nPlay Intro = false\nPlayer Name = UI skin tester\nDiagnostic Logs = true\n"
-                '[Audio]\nPlay Music = false\nPlay SFX = false\n[Network]\nMetaServer = ""\n'
-                'Relay Endpoint = ""\nDirect Endpoint = ""\n[Discord]\nWebhookUrl = ""\n')
-            env = dict(environment, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER="dummy",
-                       SDL_AUDIODRIVER="dummy", MENU_PROBE_OUT=str(case), MENU_PROBE_WIDTH=str(width),
-                       MENU_PROBE_HEIGHT=str(height), MENU_PROBE_SKIN=skin)
-            env.pop("MENU_PROBE_HUD", None)
-            if args.hud:
-                env["MENU_PROBE_HUD"] = "1"
-            logpath = case / "run.log"
-            with logpath.open("w") as log:
-                subprocess.run([str(binary), "--window", "--showlog"], cwd=case, env=env,
-                               stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.timeout,
-                               creationflags=subprocess.CREATE_NO_WINDOW)
-            text = logpath.read_text(errors="replace")
-            results = [line for line in text.splitlines() if "CLASSIC_UI_SKIN_PROBE_PASS:" in line]
-            if len(results) != 1:
-                raise RuntimeError("Missing unique renderer fixture pass marker; see " + str(logpath))
-            # Every stage must actually exercise the shipping bitmap font and
-            # nearest evidence, not just reach the existing settings round trip.
-            for marker_name in ("CLASSIC_UI_RETRO_FONT_PASS:", "CLASSIC_UI_RETRO_EVIDENCE_PASS:"):
-                if sum(marker_name in line for line in text.splitlines()) != 3:
-                    raise RuntimeError("Missing complete three-stage bitmap checks; see " + str(logpath))
-            print(f"skin={skin} {size}: " + results[0])
+    with scratch_dir('classic-ui-skin-probe') as scratch:
+        for skin in args.skins:
+            for size in args.sizes:
+                match = re.fullmatch(r"([1-9][0-9]*)x([1-9][0-9]*)", size)
+                if not match:
+                    raise RuntimeError("Sizes must use WIDTHxHEIGHT")
+                width, height = map(int, match.groups())
+                if not (640 <= width <= 3840 and 480 <= height <= 2160):
+                    raise RuntimeError("Diagnostic dimensions are outside the supported bounds")
+                case = out / f"skin-{skin}-{size}"
+                case.mkdir(parents=True, exist_ok=True)
+                profile = scratch / "profile" if args.reuse_profile else scratch / f"skin-{skin}-{size}" / "profile"
+                profile.mkdir(parents=True, exist_ok=True)
+                # Game's offline content pinning may select a private workshop
+                # snapshot. Keep each test case on the bundled Vanilla base while
+                # retaining only the sandbox's already-copied asset cache.
+                (profile / "mods").mkdir(exist_ok=True)
+                (profile / "mods/active_mod.txt").write_text("vanilla\n")
+                # Only 480/600/768 are valid fixed presets. Automatic remains 1:1
+                # at 1280x720; 1080p explicitly exercises the Native selection.
+                interface_height = -1 if size == "1920x1080" else height if height in (480, 600, 768) else 0
+                (profile / "Dune City.ini").write_text(
+                    f"[Video]\nPhysical Width = {width}\nPhysical Height = {height}\n"
+                    f"Width = {width}\nHeight = {height}\nInterface Height = {interface_height}\n"
+                    f"UI Skin = {skin}\nMenu Palette = 0\nFullscreen = false\nFrameLimit = false\nPreferred Zoom Level = 0\n"
+                    "[General]\nPlay Intro = false\nPlayer Name = UI skin tester\nDiagnostic Logs = true\n"
+                    '[Audio]\nPlay Music = false\nPlay SFX = false\n[Network]\nMetaServer = ""\n'
+                    'Relay Endpoint = ""\nDirect Endpoint = ""\n[Discord]\nWebhookUrl = ""\n')
+                env = dict(environment, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER="dummy",
+                           SDL_AUDIODRIVER="dummy", MENU_PROBE_OUT=str(case), MENU_PROBE_WIDTH=str(width),
+                           MENU_PROBE_HEIGHT=str(height), MENU_PROBE_SKIN=skin)
+                env.pop("MENU_PROBE_HUD", None)
+                if args.hud:
+                    env["MENU_PROBE_HUD"] = "1"
+                logpath = case / "run.log"
+                with logpath.open("w") as log:
+                    run([str(binary), "--window", "--showlog"], phase="CLASSIC_UI_RUNTIME_PHASE", cwd=case, env=env,
+                                   stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.timeout,
+                                   creationflags=subprocess.CREATE_NO_WINDOW)
+                text = logpath.read_text(errors="replace")
+                results = [line for line in text.splitlines() if "CLASSIC_UI_SKIN_PROBE_PASS:" in line]
+                if len(results) != 1:
+                    raise RuntimeError("Missing unique renderer fixture pass marker; see " + str(logpath))
+                # Every stage must actually exercise the shipping bitmap font and
+                # nearest evidence, not just reach the existing settings round trip.
+                for marker_name in ("CLASSIC_UI_RETRO_FONT_PASS:", "CLASSIC_UI_RETRO_EVIDENCE_PASS:"):
+                    if sum(marker_name in line for line in text.splitlines()) != 3:
+                        raise RuntimeError("Missing complete three-stage bitmap checks; see " + str(logpath))
+                print(f"skin={skin} {size}: " + results[0])
+                if not args.reuse_profile:
+                    discard_profile_assets(profile)
+                    shutil.copytree(profile, case / 'profile', dirs_exist_ok=True)
+                    shutil.rmtree(profile)
+        if args.reuse_profile:
+            discard_profile_assets(profile)
+            shutil.copytree(profile, out / 'profile', dirs_exist_ok=True)
 
 
 if __name__ == "__main__":

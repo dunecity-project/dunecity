@@ -245,7 +245,24 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     if (!vanillaBoomAdmits(pass, itemID)
         || (turn.spendingItem != NONE_ID && !vanillaBoomAdmits(pass, turn.spendingItem))) return false;
     if(!cityAdmitsStructure(pass, itemID)) return false;
-    if (itemID==Structure_RepairYard && !canAddRepairYard(pass.itemCount[Structure_RepairYard])) return false;
+    if (itemID == Structure_RepairYard && pass.repairCapacityDemand) {
+        int liveCommitments = getHouse()->getNumItems(Structure_RepairYard);
+        for (const auto* structure : getStructureList()) {
+            const auto* builder = dynamic_cast<const BuilderBase*>(structure);
+            if (!builder || builder->getOwner() != getHouse() || builder->getHealth() <= 0
+                || builder->getProductionQueueSize() == 0) continue;
+            int queued = 0;
+            for (const auto& offer : builder->getBuildList())
+                if (offer.itemID == Structure_RepairYard) queued += offer.num;
+            const auto reserved = reservedStructures.find(builder->getObjectID());
+            liveCommitments += queued > 0 ? queued
+                : reserved != reservedStructures.end() && reserved->second.item == Structure_RepairYard ? 1 : 0;
+        }
+        // Execution revalidates ownership/queues, independently of a selector's
+        // stale pass snapshot. Already accepted orders are never cancelled.
+        pass.itemCount[Structure_RepairYard] = std::max(pass.itemCount[Structure_RepairYard], liveCommitments);
+    }
+    if (itemID==Structure_RepairYard && !repairYardAdmitted(pass)) return false;
     // Also cover campaign rebuild orders, which bypass the strategic planner.
     if (itemID==Structure_Palace && pass.itemCount[Structure_Palace] >=
         QuantBotBuildPolicy::difficultyPalaceCap(static_cast<int>(difficulty))) return false;
@@ -558,10 +575,12 @@ bool QuantBot::queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 
         || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize()!=0
         || !vanillaBoomAdmits(pass, item)
         || !campaignAvailableToBuild(turn.pBuilder,item) || !cityAdmitsStructure(pass, item)) return false;
+    if (item == Structure_RepairYard && pass.repairCapacityDemand && !repairYardAdmitted(pass)) return false;
     planningBuilder=turn.pBuilder->getObjectID();
     clearPlacementCache(false,true);
-    const Coord site=item==Structure_RocketTurret || item==Structure_GunTurret
-        ? findEffectiveTurretPlaceLocation(item) : findPlaceLocation(item);
+    const Coord site=item==Structure_RepairYard && pass.repairCapacityDemand ? repairCapacitySite(pass)
+        : item==Structure_RocketTurret || item==Structure_GunTurret
+            ? findEffectiveTurretPlaceLocation(item) : findPlaceLocation(item);
     if (!site.isValid()) return false;
     // Legacy campaign reconstruction and power orders share the
     // one foundation rule: no site it cannot prepare in full.
@@ -851,7 +870,7 @@ bool QuantBot::buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn) {
     // Hard/Brutal establish repair capacity; Medium only replaces an authored
     // yard before optional expansion, including its missing prerequisites.
     // Count queued structures and preserve normal costs/placement rules.
-    if (isCampaignGameType(currentGame->gameType)
+    if (campaignPolicyApplies()
         && !(pass.cityGrowthProtected && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID())
         && !(capitalPending(pass) && pass.capitalCandidates[pass.capitalChoice].item==Unit_Carryall)
         && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal
@@ -891,7 +910,7 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
     auto& data = currentGame->objectData.data;
     turn.campaignLightWorkingCash = botConfig().force.campaignLightWorkingCash
         && !pass.citySimEnabled && !pass.techSavings && !builderOnly()
-        && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman()
+        && campaignPolicyApplies() && isAlliedWithHuman()
         && (!data[Structure_HeavyFactory][houseID].enabled
             || data[Structure_HeavyFactory][houseID].techLevel > getHouse()->getTechLevel());
     // The factory that has to supply the next yard: either because
@@ -1779,7 +1798,7 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
         // A bargain worker is a cheap economy upgrade for a human
         // ally. Fill the permitted fleet instead of stopping at the
         // normal-price, remaining-spice planning target.
-        const bool bargainWorkers = isCampaignGameType(currentGame->gameType)
+        const bool bargainWorkers = campaignPolicyApplies()
             && isAlliedWithHuman() && lastCalculatedSpice > 0
             && purchasePrice(turn.pBuilder,Unit_Harvester) > 0
             && purchasePrice(turn.pBuilder,Unit_Harvester) < data[Unit_Harvester][houseID].price;

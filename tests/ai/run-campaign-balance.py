@@ -11,6 +11,11 @@ and structured AI decision logs remain in --output-dir; when the run ends
 workshop revisions) is deleted unless --keep-profile-assets. This is a simulation
 comparison, not a substitute for the browser playtest or human playtesting.
 
+--campaign-mode full/single selects the native Full campaign or Single mission setup
+for authored --scenario missions; their own win/lose conditions and quotas remain active.
+The default player house has an idle human plus QuantBot support. --campaign-ai-only
+removes only that human seat; --enemy-ai and --enemy-difficulty still select its enemies.
+
 --civ-wars uses the real Civilization Wars generator and spectator initialization;
 --partner-difficulty/--enemy-difficulty select its left/right QuantBots. Its strategy
 defaults off; explicit --civ-strategy off/on also supplies ordinary-game digest controls.
@@ -468,12 +473,16 @@ parser.add_argument('--strategic-site-probe', action='store_true',
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
 parser.add_argument('--repair-probe', action='store_true', help='Verify experienced campaign bots replace missing repair yards')
+parser.add_argument('--repair-capacity-probe', action='store_true',
+                    help='Verify demand-driven repair capacity, shared pending orders and saved pressure')
 parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy worker caps and small-wave readiness')
 parser.add_argument('--scenario', action='store_true',
                     help='AI scenario matrix game (tests/ai/scenario-matrix.py, scenario-match.inc): a campaign mission '
                          'to its own end, or with --scenario-sides a match on --custom-map/--skirmish until one team is left')
+parser.add_argument('--campaign-mode', choices=('full', 'single'), default='full',
+                    help='Authored campaign --scenario: Full campaign (default) or Single mission initialization')
 parser.add_argument('--campaign-ai-only', action='store_true',
-                    help='Campaign scenario: sole QuantBot on the player house, authored CampaignAIPlayer enemies, '
+                    help='Authored campaign scenario: sole QuantBot on the player house, selected enemy controllers, '
                          'no registered human; retain native mission victory including quotas')
 parser.add_argument('--scenario-sides',
                     help='Scenario match: house:team:class per house (class as PlayerFactory names it, e.g. '
@@ -581,9 +590,12 @@ if args.scenario:
                      'a campaign scenario neither.')
     if args.mission and args.scenario_sides:
         parser.error('--mission is for campaign scenarios.')
-if args.campaign_ai_only and (not args.scenario or args.scenario_sides or args.local_spectator
-                             or args.enemy_ai != 'campaign'):
-    parser.error('--campaign-ai-only needs a campaign --scenario and --enemy-ai campaign, without --local-spectator.')
+authored_campaign = args.scenario and not (
+    args.custom_map or args.skirmish or args.scenario_sides or args.load_save or args.civ_wars)
+if args.campaign_mode == 'single' and not authored_campaign:
+    parser.error('--campaign-mode single needs an authored campaign --scenario, not custom maps, skirmishes, sides or loads.')
+if args.campaign_ai_only and (not authored_campaign or args.local_spectator):
+    parser.error('--campaign-ai-only needs an authored campaign --scenario, without --local-spectator.')
 
 
 def team_number(brain, default):
@@ -876,7 +888,8 @@ if args.build_only:
 env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy',
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
-           BALANCE_HOUSE=str(house_names.index(args.house)),BALANCE_HARVESTER_LIMIT=str(args.harvester_limit))
+           BALANCE_HOUSE=str(house_names.index(args.house)),BALANCE_HARVESTER_LIMIT=str(args.harvester_limit),
+           BALANCE_CAMPAIGN_MODE=args.campaign_mode)
 # Never inherit the regression's non-pure observer into an ordinary probe.
 env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
 if args.army_deploys_regression_observer:
@@ -1037,6 +1050,7 @@ if args.pressure_probe: env['BALANCE_PRESSURE_PROBE'] = '1'
 if args.defence_probe: env['BALANCE_DEFENCE_PROBE'] = '1'
 if args.pacing_probe: env['BALANCE_PACING_PROBE'] = '1'
 if args.repair_probe: env['BALANCE_REPAIR_PROBE'] = '1'
+if args.repair_capacity_probe: env['BALANCE_REPAIR_CAPACITY_PROBE'] = '1'
 if args.scenario:
     env['BALANCE_SCENARIO'] = '1'
     if scenario_sides:
@@ -1113,7 +1127,9 @@ summary = {'result':results[0],'sourceCommit':source_commit,
            'workingTreeModified':source_modified,
            'sourceFingerprint':source_fingerprint_value,
            'sourceFingerprintError':source_fingerprint_error,
-           'metadata':metadata,'attacks':attacks,'final':final,'resolved_roster':roster,'enemy_controller':args.enemy_ai,'harvester_limit':args.harvester_limit}
+           'metadata':metadata,'attacks':attacks,'final':final,'resolved_roster':roster,
+           'enemy_controller':args.enemy_ai,'enemy_difficulty':args.enemy_difficulty,
+           'campaign_mode':args.campaign_mode,'harvester_limit':args.harvester_limit}
 (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(results[0])
 print('Telemetry:',events or 'off (--no-ai-telemetry)')

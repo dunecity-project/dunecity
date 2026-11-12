@@ -5,6 +5,7 @@
 #include <Network/WorkshopGameContent.h>
 #include <sand.h>
 #include <mod/ModManager.h>
+#include <misc/CampaignControls.h>
 #include <players/QuantBotConfig.h>
 #include <players/HumanPlayer.h>
 #include <units/HarvesterHelpers.h>
@@ -76,6 +77,7 @@
 #include "trooper-support-probe.inc"
 #include "zone-power-probe.inc"
 #include "tech-production-probe.inc"
+#include "repair-capacity-probe.inc"
 #include "research-lab-continuation-probe.inc"
 #include "research-lab-ai-probe.inc"
 #include "factory-continuation-probe.inc"
@@ -159,11 +161,29 @@ int runCampaignBalanceProbe() {
         runResearchLabAIProbe(requestedMod.c_str(), partnerClass.c_str());
         return MENU_QUIT_DEFAULT;
     }
-    GameInitSettings init(humanHouse, settings.gameOptions, level);
-    // Scenario matrix: a campaign mission other than the level's first (levels 2-8 have three).
-    if (const char* mission = std::getenv("BALANCE_MISSION")) {
-        init.mission = std::atoi(mission); // Test-only access, provided by -fno-access-control.
-        init.filename = GameInitSettings::getScenarioFilename(humanHouse, init.mission);
+    if (std::getenv("BALANCE_REPAIR_CAPACITY_PROBE")) {
+        runRepairCapacityProbe(requestedMod.c_str());
+        return MENU_QUIT_DEFAULT;
+    }
+    const std::string campaignMode=std::getenv("BALANCE_CAMPAIGN_MODE") ? std::getenv("BALANCE_CAMPAIGN_MODE") : "full";
+    if(campaignMode!="full" && campaignMode!="single")
+        throw std::runtime_error("Unknown campaign mode: "+campaignMode);
+    if(campaignMode=="single" && (!scenario || civWars || std::getenv("BALANCE_CUSTOM_MAP")
+       || std::getenv("BALANCE_SKIRMISH") || std::getenv("BALANCE_SCENARIO_SIDES")
+       || std::getenv("BALANCE_DUEL_MAP_SIZE") || std::getenv("BALANCE_MATCH_SIDES")
+       || std::getenv("BALANCE_SKIRMISH_FFA_SIZE") || std::getenv("BALANCE_LOAD_SAVE")))
+        throw std::runtime_error("Single mission mode needs an authored campaign scenario");
+    const char* requestedMission=std::getenv("BALANCE_MISSION");
+    // Use the menu's actual constructors: Single mission is a scenario, not a Full
+    // campaign with its game type patched. Both load the chosen authored mission.
+    GameInitSettings init=campaignMode=="single"
+        ? GameInitSettings(humanHouse, requestedMission ? std::atoi(requestedMission) : CampaignControls::firstMission(level),
+                           settings.gameOptions)
+        : GameInitSettings(humanHouse, settings.gameOptions, level);
+    // Full campaign can also select a non-first authored mission at this level.
+    if(requestedMission && campaignMode=="full") {
+        init.mission=std::atoi(requestedMission); // Test-only access, provided by -fno-access-control.
+        init.filename=GameInitSettings::getScenarioFilename(humanHouse, init.mission);
     }
     const char* customMap=std::getenv("BALANCE_CUSTOM_MAP");
     if(customMap) {
@@ -279,6 +299,9 @@ int runCampaignBalanceProbe() {
     }
     if(localSpectator && (!game->isObserving() || !game->getGameInitSettings().isLocalSpectator()))
         throw std::runtime_error("Custom diagnostic did not create the real local observer");
+    if(scenario && scenarioSides.empty())
+        SDL_Log("PROBE_CONFIG: campaign_mode=%s mission=%d enemy=%s enemy_difficulty=%s",
+            campaignMode.c_str(),game->getGameInitSettings().getMission(),enemyClass.c_str(),enemy.c_str());
     if(campaignAiOnly) {
         const House* candidateHouse=game->getHouse(humanHouse);
         if(!candidateHouse || candidateHouse->getPlayerList().size()!=1
@@ -329,7 +352,8 @@ int runCampaignBalanceProbe() {
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_CITY_CAMPAIGN_PROBE")) {
-        runCampaignCityEconomyProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        runCampaignCityEconomyProbe(game,level,partnerClass,enemyClass);
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_NO_POPULATION_VICTORY_PROBE")) {

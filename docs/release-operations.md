@@ -1,17 +1,17 @@
 # Release and hosting operations
 
-Verified 2026-09-10. This is the entry point for Codex, Claude, Hermes and human
-maintainers. Check current branches, workflows and release state before acting;
-version numbers and run IDs below are verification examples, not next-version defaults.
+Operating contract updated 2026-11-13. This is the entry point for Codex, Claude,
+Hermes and human maintainers. Check current branches, workflows and release state
+before acting; historical version numbers/run IDs below are examples, not defaults.
 
 Read [Release execution contract](#release-execution-contract) before starting
 qualification. It governs readiness, parallel execution, evidence reuse and stalls.
 
 ## Repositories and destinations
 
-| Purpose | Repository / local checkout on Stefan's MacBook Air | Destination |
+| Purpose | Repository / local staging checkout | Destination |
 | --- | --- | --- |
-| Game and release automation | `dunecity-project/dunecity`; `~/Documents/projects/dunecity` | GitHub Releases; SourceForge Files and dedicated source refs |
+| Game and release automation | `dunecity-project/dunecity`; `~/Documents/projects/dunecity-feature-batch` (`integrate/feature-batch`, `build-int`) | GitHub Releases; SourceForge Files and dedicated source refs |
 | Main website | `VR48/dunelegacy.com`; `~/Documents/projects/dunelegacy.com` | https://dunelegacy.com via **Deploy to Droplet** |
 | Historical SourceForge repository | `ssh://svan058@git.code.sf.net/p/dunelegacy/code`; `~/Documents/projects/dunelegacy-code` | `master` holds Legacy history/old website; `dunecity` holds latest released game source |
 
@@ -48,12 +48,12 @@ use a new version. No update feed is emitted for `latest-dev`.
 
 Normal staging, local agent builds and non-release CI builds use
 `DUNECITY_RELEASE_BUILD=OFF` (the CMake default). Their runtime label is
-`<last release version>dev`, currently `1.0.864dev`; do not bump the numeric version
-just to identify development work. `CMAKE_BUILD_TYPE=Release` selects optimized
+`<last release version>dev`; do not bump the numeric version just to identify
+development work. `CMAKE_BUILD_TYPE=Release` selects optimized
 code, not official release identity.
 
 Only an explicitly requested official build configures with
-`-DDUNECITY_RELEASE_BUILD=ON`, giving the plain runtime label (currently `1.0.864`).
+`-DDUNECITY_RELEASE_BUILD=ON`, giving the plain numeric runtime label.
 Apply that opt-in at each release channel's configure step:
 
 | Channel | Official release identity |
@@ -87,10 +87,12 @@ orchestrator. These rules change execution order, not the required channel gates
    `agent-workspace status` and `dunecity-queue status -v`. Check actual host
    reachability, admission holds and platform capability. AWS game capacity is
    not CTest capacity. Air work must be positively classified headless.
-3. Budget physical free bytes for the next phase: the unchanged 25 GB reserve
+3. Budget physical free bytes for the next phase: the unchanged 25 GB hard reserve
    plus its measured or conservatively bounded peak scratch/package footprint.
-   Recheck before that phase, not just at release start. Preserve evidence and
-   build trees; do not turn a release into speculative cleanup or compression.
+   Research admission on Mini requires 60 GB free; release phases use their own
+   explicit budget rather than overriding the hard floor. Recheck before each
+   phase. Clean registered disposable assets or offload verified copies, never
+   active artifacts, pinned snapshots or sole-copy failure evidence.
 4. Inspect the harness at the pinned SHA, its required assets and packaged-runtime
    inputs. Prove admission and one representative required test/game before
    submitting a large dependent matrix. Count that canary toward its required
@@ -102,12 +104,23 @@ orchestrator. These rules change execution order, not the required channel gates
 ### Execute independent work concurrently
 
 Start PR CI and independent native-platform checks together with readiness work.
-Fan suitable pinned AI games out to available game hosts after the canary passes.
-Keep Mini-only GUI, packaging and simulator phases on one explicitly ordered lane.
-Obtain a named handoff from competing owners through the existing coordinator;
-an agent being idle is not a handoff. If unavailable, record the owner/blocker
-and continue independent work. Never stop running jobs, globally pause research,
-override another owner's hold, or bypass the one-heavy-build rule.
+Before a production qualification window, acquire the queue's durable production
+reservation and pause new research admission. Let owned active work drain, retain
+artifact pins, and use the reservation's explicit release token for release work.
+Never override another owner's reservation or cancel unrelated jobs. Keep
+Mini-only GUI, signing/packaging and simulator phases on one ordered lane.
+Fan suitable pinned AI games out to reachable Linux/AWS hosts after the canary.
+No Pro/PC availability assumption; unavailable platform coverage is held, not passed.
+The research controller stays paused until release evidence is recorded and the
+reservation is explicitly released. The one-heavy-build rule still applies.
+
+Capture `dunecity-queue reservation pause --cwd "$CHECKOUT" --rev "$FULL_SHA"
+--owner "$OWNER" --reason production --budget-gb "$PHASE_BUDGET_GB"` as private
+JSON outside uploaded evidence. Its `id` is a bearer token: never print it.
+Use `reservation phase TOKEN Mini-reserved --owner OWNER`, followed by
+`building`, `publishing`, `verifying` and `completed`, attaching measured budgets,
+artifact paths and run IDs. Only the owner explicitly calls `reservation resume`;
+a completed upload does not implicitly resume research.
 
 Use one pinned queue submission per positively classified headless scope:
 
@@ -159,6 +172,65 @@ Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
   running operations and the single critical-path blocker. Preparation is not
   execution; CI success is not publication. No ETA without measured throughput.
 
+### Test tiers and frequent staging
+
+- `integration` is the bounded ordinary change gate; `nightly` retains broad
+  regression coverage and collects every result without stop-on-first-failure;
+  `release-smoke` checks the actual packaged candidate. Capability labels
+  (`headless`, `gui`, platform and `packaged`) are independent of tier.
+- Only tests with a real official-runtime input qualify as packaged smoke.
+  A source-linked menu/gallery probe is not packaged evidence. The pointer
+  regression remains required; a passing build or hidden-window launch is not
+  a substitute. Keep GUI automation off Air.
+- Reuse one sealed fixture per source/toolchain/runtime identity, not per test
+  case. Cancellation/timeout terminates and reaps the complete owned process
+  group. Preserve the failed case's concise evidence, not endless raw traces.
+- Green integration batches produce immutable staging packages after the two-hour
+  debounce, with a daily safety-net and full-SHA manual dispatch. Unchanged input
+  does not create another package. Development stays `DUNECITY_RELEASE_BUILD=OFF`,
+  prerelease and never Latest. Routine Mac packages use hosted ARM64, not Mini.
+- Browser staging commits only tiny `deploy/staging-browser.json` metadata to
+  the website repository; verified immutable archives download into temporary
+  storage. Never commit WASM/data snapshots into its Git history. `/play-staging`
+  isolates dev/SHA identity, caches, saves and signaling from stable `/play`.
+- Stable headless-nightly qualification runs on hosted Mac at the exact source
+  SHA before the Mini lane. Long QuantBot/Atreides/scenario/FFA checks stay there;
+  Mini retains bounded native integration, calibrated GUI/performance/skin and
+  packaged-pointer verification. Qualification metadata, plan and JUnit digests
+  must agree before Latest.
+- Freeze one candidate artifact set and required gates before production.
+  Record scoped accepted known failures separately from genuinely blocking
+  defects. Do not silently waive a gate or rebuild a successful artifact because
+  another publication channel failed.
+- Report GitHub, SourceForge, browser, website, TestFlight and Android separately.
+  A channel is complete only after verifying its live destination/source/digest;
+  resume from those facts rather than restarting the entire release. Missing
+  Android signer/phone approval holds Android alone, not every other channel.
+
+Staging and recovery use the existing automation, with `FULL_SHA` set to the
+committed, qualified source and the workflows first deployed on default `main`:
+
+```sh
+gh workflow run build.yml --repo dunecity-project/dunecity --ref main -f staging_sha="$FULL_SHA"
+python3 scripts/release-automation.py prune-staging --dry-run
+gh workflow run build.yml --repo dunecity-project/dunecity --ref "$STAGING_TAG" \
+  -f ios_staging=true -f staging_sha="$FULL_SHA"
+```
+
+The weekly iOS lane exports a signed **internal dev IPA** with unique build
+number and source provenance. It cannot upload, install or claim device coverage.
+Its Mini admission is denied during an active production reservation.
+
+Publication/request/pruning use GitHub's shared staging concurrency group with
+`queue: max` and no in-progress cancellation; coalescing belongs before expensive
+builds, not after frozen artifacts exist. Retention keeps the newest seven
+successful snapshots, known-good and investigation holds, and admitted consumers.
+After actual qualification, the existing `latest-dev` body records
+`<!-- dunecity-staging-tag: STAGING_TAG -->`; an individual staging release's
+`<!-- dunecity-retain: reason -->` pins an investigation. Missing/ambiguous state
+holds cleanup. Retired inputs fail explicitly, never silently rebuild.
+
+
 ## Release checklist: every channel (verified for 1.0.864, 2026-11-01)
 
 One release touches all of these; each is a separate gate. Report each one as verified,
@@ -186,19 +258,21 @@ the SourceForge default), `/Applications` on Stefan's Mac (only when asked, see 
 below), the Discord bot and the relay/signaling services (deploy them separately before a
 client that needs them).
 
-## Test on every available computer (Stefan, 2026-11-01)
+## Platform coverage without personal-machine dependencies
 
-Every build, release candidate and release is tested on all reachable machines in
-parallel (`~/.config/agent-workspace/POLICY.md`, "Use every available computer").
-Classify the actual CTest registry into complete, disjoint headless and graphical
-allowlists. Only the headless allowlist uses the pinned queue command above;
-graphical work uses the coordinated non-Air native lane. The Air is headless-only,
-and a queue regex does not select a host. Queue acceptance is not test completion.
-Native checks run on the machine that is that platform: Windows packages on the
-Windows PC, iOS on the mini's simulators, the browser build on the mini with pinned
-Emscripten 4.0.14. Run one agent per platform while PR CI runs, subject to the Mini
-heavy-build limit. Android needs Stefan's phone. The release report names the
-machine for each check and lists every untested platform.
+Use reachable existing Linux workers and hosted native CI under the current
+workspace policy. Pro/PC availability is not a prerequisite; Air's running game
+is not a test resource. Classify the actual CTest registry into complete, disjoint
+headless and graphical sets. Only positively headless cases use the pinned queue;
+graphical work uses the coordinated non-Air native lane. A regex does not select
+a host, and queue acceptance is not completion.
+
+Hosted Windows/Mac jobs provide their actual platform coverage; Linux does not
+stand in for Windows or Cocoa. Mini owns required signing and packaged native
+GUI/iOS phases, serialized. Browser compilation uses pinned Emscripten in hosted
+CI rather than consuming Mini by default. Android still requires the correct
+signer, phone validation and explicit publication approval. Name the execution
+environment and every untested surface in the report.
 
 ## An authorized desktop release
 
@@ -247,19 +321,21 @@ are separate deliberate changes, such as `dc69c5a`.
 ## Retry without rebuilding
 
 ```sh
-gh workflow run sourceforge.yml --repo dunecity-project/dunecity --ref main -f tag=vX.Y.Z
-gh run list --repo dunecity-project/dunecity --workflow sourceforge.yml --limit 5
-gh run watch RUN_ID --repo dunecity-project/dunecity --exit-status
+python3 scripts/release-automation.py resume build --run-id "$PACKAGE_RUN_ID"
+python3 scripts/release-automation.py resume browser --tag "$TAG"
+python3 scripts/release-automation.py resume sourceforge --tag "$TAG"
+python3 scripts/release-automation.py resume deploy --run-id "$WEBSITE_RUN_ID"
+python3 scripts/release-automation.py verify "$TAG" --live
 ```
 
-Dispatch only an existing published stable tag. Historical backfills do not
-change current download defaults or the source branch. A failed SourceForge run
-does not roll back a GitHub release. Fix its specific failure and rerun the mirror;
-do not create a new game version merely to retry an upload. Strict host checking,
-missing secrets, conflicting tags or non-fast-forward refs must be investigated.
-Infrastructure/docs-only pushes can use `[skip ci]` to avoid starting a game build;
-do not skip required CI for game changes. SourceForge workflow_run dispatch occurs
-only after successful stable-tag builds, not such documentation pushes.
+Resume uses frozen successful inputs and reconciles actual channel state; it
+does not replace published bytes or rerun completed platform builds merely
+because a later upload failed. A draft/incomplete staging set requires explicit
+resume. Investigate missing secrets, host verification, conflicting tags and
+non-fast-forward refs instead of retrying the entire pipeline. Historical
+SourceForge backfills never advance current download defaults or source branches.
+Documentation-only pushes may use `[skip ci]`; game changes may not skip their
+required CI.
 
 ## SourceForge presentation and web hosting
 
@@ -521,11 +597,6 @@ retag or replace published binaries to repair the test harness.
 
 ## Windows compile caching
 
-The macOS release job also enables tests and runs `classic_desert_ui_tests`
-and `perf_regression`, plus the mandatory Atreides, scenario-matrix and
-free-for-all AI regressions, through CTest before packaging. Dependency audits bracket
-that verification. A successful package compile alone is not evidence that
-the native rendering/performance gate passed.
 
 Windows CI uses Ninja with four concurrent MSVC compiler processes and sccache
 for game object files. Precompiled headers are disabled in this CI configuration

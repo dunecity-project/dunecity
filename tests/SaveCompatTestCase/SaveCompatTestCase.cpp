@@ -91,7 +91,9 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9881 appends Research Lab house state and MOD15 research/trooper-AA rules.
     // 9882/MOD17's pace/area/damage layout is frozen; 9883/MOD18 drops area and adds scenery.
     // 9884/MOD19 adds technology installments and captured per-house research payment state.
-    REQUIRE(SAVEGAMEVERSION == 9884);
+    // 9885 first persists the repair-demand anchor and pressure clock; this boundary stays frozen.
+    REQUIRE(SAVEGAMEVERSION_REPAIR_CAPACITY == 9885);
+    REQUIRE(SAVEGAMEVERSION >= SAVEGAMEVERSION_REPAIR_CAPACITY);
     REQUIRE(SAVEGAMEVERSION_RESEARCH_INSTALLMENTS == 9884);
     REQUIRE(SAVEGAMEVERSION_MOUNTAIN_SCENERY == 9883);
     REQUIRE(SAVEGAMEVERSION_RESEARCH_PACE == 9882);

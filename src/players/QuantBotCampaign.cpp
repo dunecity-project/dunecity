@@ -23,7 +23,7 @@
 
 int QuantBot::getCityPopulationLimit(int mapArea) const {
     if(!currentGame || !currentGame->isCitySimEnabled() || switchedOff()
-       || gameMode != GameMode::Custom || isCampaignGameType(currentGame->gameType)) return 0;
+       || gameMode != GameMode::Custom || campaignPolicyApplies()) return 0;
     // All custom-game QuantBots share the same difficulty ceiling, including
     // helpers in a human-controlled house and support-mode controllers.
     const bool hardCityMatch = difficulty == Difficulty::Hard && botConfig().force.hardCityMatch;
@@ -47,7 +47,7 @@ bool QuantBot::isAlliedWithHuman() const {
     // The selected campaign house is the player even when no human controller
     // is registered. Reuse every existing player/partner policy consistently.
     if (botConfig().force.campaignPlayerHouse && currentGame
-        && isCampaignGameType(currentGame->gameType)
+        && campaignPolicyApplies()
         && getHouse()->getHouseID() == currentGame->getGameInitSettings().getHouseID()) return true;
     for (int h=0; h<NUM_HOUSES; ++h) if (const auto* house=getHouse(h)) {
         if (house->getTeamID()!=getHouse()->getTeamID()) continue;
@@ -220,15 +220,20 @@ int QuantBot::harvesterCountCeiling() const {
 }
 
 int QuantBot::campaignAllyHarvesterLimit() const {
-    return currentGame && isCampaignGameType(currentGame->gameType)
+    return currentGame && campaignPolicyApplies()
         && difficulty == Difficulty::Brutal && isAlliedWithHuman()
         && currentGame->getGameInitSettings().getMission() >= CampaignControls::firstMission(8)
         && currentGame->getGameInitSettings().getGameOptions().harvesterCeiling() == 0
         ? 20 : 0;
 }
 
+bool QuantBot::campaignPolicyApplies() const {
+    return currentGame && (isCampaignGameType(currentGame->gameType)
+        || (isScenarioGameType(currentGame->gameType) && botConfig().force.singleMissionCampaignPolicy));
+}
+
 bool QuantBot::isCampaignEnemy() const {
-    return currentGame && isCampaignGameType(currentGame->gameType)
+    return currentGame && campaignPolicyApplies()
         && !builderOnly() && difficulty != Difficulty::Defend && !isAlliedWithHuman();
 }
 
@@ -266,7 +271,7 @@ bool QuantBot::reserveDamagedUnitForRepair(const UnitBase* unit) const {
     // Keep them available for combat instead of withdrawing and excluding them
     // from every later wave. Explicit retreat/manual orders remain protected.
     return unit->isBadlyDamaged() && !declinesUnfundedRepair(unit)
-        && !(currentGame && isCampaignGameType(currentGame->gameType)
+        && !(currentGame && campaignPolicyApplies()
             && (difficulty==Difficulty::Easy || difficulty==Difficulty::Medium) && !getHouse()->hasRepairYard());
 }
 
@@ -471,7 +476,7 @@ bool QuantBot::campaignControlsUnit(const UnitBase* unit) {
     if (!isCampaignEnemy()) {
         // Only an already dispatched helper attacker can scout. Home guards,
         // economy-only support and manual orders keep their existing roles.
-        if (isCampaignGameType(currentGame->gameType) && !builderOnly()
+        if (campaignPolicyApplies() && !builderOnly()
             && unit->isActive() && unit->isRespondable()
             && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free && unit->getAttackMode()==HUNT
             && !unit->isMoving() && !unit->hasATarget()) {

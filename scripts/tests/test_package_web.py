@@ -40,10 +40,11 @@ class PackageTests(unittest.TestCase):
                 root = Path(temp)
                 output = root / 'build/bin'
                 output.mkdir(parents=True)
+                (root / 'build/CMakeCache.txt').write_text('DUNECITY_RELEASE_BUILD:BOOL=ON\n')
                 (output / 'dunecity.html').write_text(f'<link href={quote}shell.css{quote} rel=stylesheet><script src={quote}shell.js{quote}></script><script src={quote}p2p-direct.js{quote}></script><script src={quote}dunecity.js{quote} async></script>')
                 for name in ('dunecity.js','dunecity.wasm','dunecity.data','p2p-direct.js'):
                     (output / name).write_bytes(b'test artifact')
-                packager.package(root/'build', root/'play')
+                packager.package(root/'build', root/'play', channel='stable')
                 html = (root/'play/index.html').read_text()
                 self.assertEqual(html.count('?v='),4)
                 manifest = json.loads((root/'play/build.json').read_text())
@@ -53,17 +54,18 @@ class PackageTests(unittest.TestCase):
                 self.assertEqual(manifest['gameTransport'], 'direct-webrtc')
                 self.assertEqual(manifest['relayOrigins'], [])
                 (output / 'p2p-direct.js').write_bytes(b'changed transport, identical wasm')
-                packager.package(root/'build', root/'play')
+                packager.package(root/'build', root/'play', channel='stable')
                 self.assertNotEqual(html, (root/'play/index.html').read_text())
                 (output / 'p2p-direct.js').unlink()
                 with self.assertRaisesRegex(RuntimeError, 'Missing browser artifact'):
-                    packager.package(root/'build', root/'play')
+                    packager.package(root/'build', root/'play', channel='stable')
 
     def test_oversized_data_is_split_into_ordered_parts_and_rejoins_to_the_manifest_hash(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             output = root / 'build/bin'
             output.mkdir(parents=True)
+            (root / 'build/CMakeCache.txt').write_text('DUNECITY_RELEASE_BUILD:BOOL=ON\n')
             (output / 'dunecity.html').write_text('<link href=shell.css><script src=shell.js></script><script src=p2p-direct.js></script><script src=dunecity.js></script>')
             for name in ('dunecity.js', 'dunecity.wasm', 'p2p-direct.js'):
                 (output / name).write_bytes(b'small')
@@ -72,7 +74,7 @@ class PackageTests(unittest.TestCase):
             original = packager.PART_BYTES
             packager.PART_BYTES = 4096
             try:
-                packager.package(root/'build', root/'play')
+                packager.package(root/'build', root/'play', channel='stable')
                 manifest = json.loads((root/'play/build.json').read_text())
                 parts = manifest['split']['dunecity.data']
                 self.assertEqual(parts, ['dunecity.data.part-000', 'dunecity.data.part-001', 'dunecity.data.part-002'])
@@ -82,11 +84,57 @@ class PackageTests(unittest.TestCase):
                 self.assertEqual(hashlib.sha256(joined).hexdigest(), manifest['sha256']['dunecity.data'])
                 # A smaller repackage drops the parts again instead of leaving stale ones.
                 (output / 'dunecity.data').write_bytes(b'small data')
-                packager.package(root/'build', root/'play')
+                packager.package(root/'build', root/'play', channel='stable')
                 self.assertEqual(list((root/'play').glob('dunecity.data.part-*')), [])
                 self.assertNotIn('dunecity.data', json.loads((root/'play/build.json').read_text()).get('split', {}))
             finally:
                 packager.PART_BYTES = original
+
+    def test_development_package_is_visible_and_isolates_assets_cache_and_saves(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output = root / 'build/bin'
+            output.mkdir(parents=True)
+            (root / 'build/CMakeCache.txt').write_text('DUNECITY_RELEASE_BUILD:BOOL=OFF\n')
+            (output / 'dunecity.html').write_text('<body><span>Browser edition</span><link href=shell.css><script src=shell.js></script><script src=p2p-direct.js></script><script src=dunecity.js></script></body>')
+            for name in ('dunecity.js', 'dunecity.wasm', 'dunecity.data', 'p2p-direct.js'):
+                (output / name).write_bytes(b'development artifact')
+            stable = root / 'play'
+            stable.mkdir()
+            (stable / 'build.json').write_bytes(b'published stable manifest')
+            with self.assertRaisesRegex(ValueError, 'never the stable play'):
+                packager.package(root / 'build', stable)
+            staging = root / 'play-staging'
+            packager.package(root / 'build', staging)
+            manifest = json.loads((staging / 'build.json').read_text())
+            html = (staging / 'index.html').read_text()
+            self.assertEqual(manifest['channel'], 'staging')
+            self.assertEqual(manifest['releaseBuild'], 'OFF')
+            self.assertEqual(manifest['cacheScope'], '/play-staging/')
+            self.assertIn('Staging ' + manifest['version'] + 'dev+' + manifest['sourceCommit'][:12], html)
+            self.assertIn('?v=staging-', html)
+            self.assertIn('Service-Worker-Allowed "/play-staging/"', (staging / '.htaccess').read_text())
+            shell = (staging / 'shell.js').read_text()
+            self.assertIn("FS.mount(IDBFS, {}, '/home/web_user_staging')", shell)
+            self.assertIn("FS.symlink('/home/web_user_staging', '/home/web_user')", shell)
+            self.assertNotIn("FS.mount(IDBFS, {}, '/home/web_user')", shell)
+            self.assertEqual((stable / 'build.json').read_bytes(), b'published stable manifest')
+            for name, digest in manifest['sha256'].items():
+                self.assertEqual(hashlib.sha256((staging / name).read_bytes()).hexdigest(), digest)
+
+    def test_channel_requires_the_actual_configured_build_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            build = root / 'build'
+            build.mkdir()
+            for channel, path, identity in [('staging', 'play-staging', 'ON'), ('stable', 'play', 'OFF')]:
+                with self.subTest(channel=channel):
+                    (build / 'CMakeCache.txt').write_text(f'DUNECITY_RELEASE_BUILD:BOOL={identity}\n')
+                    with self.assertRaisesRegex(ValueError, 'configured DUNECITY_RELEASE_BUILD'):
+                        packager.package(build, root / path, channel=channel)
+            (build / 'CMakeCache.txt').unlink()
+            with self.assertRaisesRegex(ValueError, 'configured DUNECITY_RELEASE_BUILD'):
+                packager.package(build, root / 'play-staging')
 
 
 if __name__ == '__main__': unittest.main()

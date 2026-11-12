@@ -377,8 +377,8 @@ def run_probe(out, peer_case=None):
                             payload = host_runtime.read_bytes()
                             if payload != viewer_runtime.read_bytes():
                                 raise RuntimeError('Transferred path continuation bytes differ')
-                            # Runtime8 appends bot authority/snapshots; the queue/path prefix remains unchanged.
-                            if struct.unpack_from('<I', payload)[0] != 8:
+                            # Runtime9 appends repair pressure after bot state; the queue/path prefix is unchanged.
+                            if struct.unpack_from('<I', payload)[0] != 9:
                                 raise RuntimeError('Update the suspended-path fixture for the observer runtime version')
                             offset = 24
                             targets = struct.unpack_from('<I', payload, offset)[0]

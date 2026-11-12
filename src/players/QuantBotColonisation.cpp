@@ -32,7 +32,7 @@
 
 bool QuantBot::fieldExpansionActive() const {
     if (botConfig().force.spiceFieldExpansion <= 0 || gameMode != GameMode::Custom
-        || builderOnly() || isCampaignGameType(currentGame->gameType)
+        || builderOnly() || campaignPolicyApplies()
         || ModManager::instance().isTornieFamilyContentActive()) return false;
     if (!fieldExpansionInitialSpice) {
         // Immutable terrain: spills from destroyed harvesters must not activate
@@ -422,7 +422,7 @@ QuantBotColonisationPolicy::Demand QuantBot::colonisationDemand(int mcvsIncludin
     demand.customGame=gameMode==GameMode::Custom;
     // Campaign missions keep the base the script gave them, whatever mode the
     // helper bot runs in. Colonisation is a custom-game rule only.
-    demand.campaignGame=isCampaignGameType(currentGame->gameType);
+    demand.campaignGame=campaignPolicyApplies();
     demand.supportMode=builderOnly();
     demand.siteAvailable=colonySiteOpen();
     demand.productionRoomBlocked=baseProductionRoomBlocked;

@@ -6170,10 +6170,11 @@ void Game::endObservationWithoutHost() {
 }
 
 void Game::setGameWon() {
-    // A campaign's authored objective is independent of who is watching it. Network viewers
-    // follow the host; only a local campaign observer ends on the mission's native rules.
+    // Authored objectives are independent of who is watching. Network viewers
+    // follow the host; local campaign/Single mission observers use native rules.
     const bool observing = isObserving();
-    if(observing && !(localObserver && gameType == GameType::Campaign)) return;
+    if(observing && !(localObserver
+        && (gameType == GameType::Campaign || gameType == GameType::Skirmish))) return;
     if(!bQuitGame && !finished) {
         if(!observing) AchievementEvents::finish(true);
         won = true;
@@ -6191,7 +6192,8 @@ void Game::setGameWon() {
 
 void Game::setGameLost() {
     const bool observing = isObserving();
-    if(observing && !(localObserver && gameType == GameType::Campaign)) return;
+    if(observing && !(localObserver
+        && (gameType == GameType::Campaign || gameType == GameType::Skirmish))) return;
     if(!bQuitGame && !finished) {
         if(!observing) AchievementEvents::finish(false);
         won = false;
@@ -6219,9 +6221,10 @@ int Game::soleSurvivingTeam() const {
 }
 
 bool Game::watchesWithoutSide() const {
-    // A campaign mission ends on its own rules; a network co-op spectator follows the host into
-    // the next mission instead.
-    if(gameType == GameType::Campaign || gameType == GameType::CampaignCoop) return false;
+    // Authored missions end on their own rules; network co-op viewers follow
+    // the host. Other network/custom/defeated-player observers remain side-free.
+    if(gameType == GameType::Campaign || gameType == GameType::CampaignCoop
+        || (localObserver && gameType == GameType::Skirmish)) return false;
     if(isObserving()) return true;
     // A player whose team is still in the game keeps the original rules.
     if(pLocalHouse == nullptr) return false;
@@ -6257,7 +6260,7 @@ void Game::setWatchedGameOver(int winningTeam, bool timeUp) {
 }
 
 std::string Game::watchedResultText() const {
-    if(localObserver && gameType == GameType::Campaign && finished) {
+    if(localObserver && (gameType == GameType::Campaign || gameType == GameType::Skirmish) && finished) {
         const std::string name = getHouseNameByNumber(gameInitSettings.getHouseID());
         return fmt::sprintf(won ? _("House %s completed its mission") : _("House %s failed its mission"), name);
     }
@@ -8614,7 +8617,8 @@ int Game::getInterfaceHouseID() const {
 
 House* Game::getOutcomeHouse() const {
     if(pLocalHouse) return pLocalHouse;
-    if(isObserving() && (gameType == GameType::Campaign || gameType == GameType::CampaignCoop))
+    if(isObserving() && (gameType == GameType::Campaign || gameType == GameType::CampaignCoop
+        || (localObserver && gameType == GameType::Skirmish)))
         return house[gameInitSettings.getHouseID()].get();
     return nullptr;
 }
@@ -8742,7 +8746,8 @@ std::string Game::saveObserverRuntime() const {
     // would then book transport on different cycles.
     // Version 8 preserves the lower-difficulty aircraft sortie permissions and
     // recent asset-attack contacts in QuantBot's supplemental runtime.
-    out.writeUint32(8); out.writeUint32(gameCycleCount);
+    // Version 9 preserves sustained repair-capacity pressure across observer joins.
+    out.writeUint32(9); out.writeUint32(gameCycleCount);
     out.writeUint32(negotiatedBudget); out.writeUint32(cmdManager.getNetworkCycleBuffer());
     out.writeUint32(currentGameMap->getPathingRevision());
     out.writeUint32(carryOverTokens);
@@ -8798,7 +8803,7 @@ std::string Game::saveObserverRuntime() const {
 void Game::loadObserverRuntime(const std::string& bytes) {
     IMemoryStream in(bytes.data(),bytes.size());
     const auto runtimeVersion=in.readUint32();
-    if((runtimeVersion!=8) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
+    if((runtimeVersion!=9) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
     // The checkpoint replaces this instance's unit set, so the derived carrier index describes
     // units that may no longer exist. Rebuilt on first use after this.
     invalidateCarryallCandidateIds();

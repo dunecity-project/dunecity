@@ -933,6 +933,11 @@ bool House::meetsStarportPopulation() const {
     if(!currentGame->getGameInitSettings().getGameOptions().starportPopulation
        || isCampaignGameType(currentGame->gameType)
        || !currentGame->isCitySimEnabled()) return true;
+    // Mission AI permissions follow each controller's hashed policy; a human-only
+    // Single mission and every custom game retain their population requirement.
+    for(const auto& player:players)
+        if(const auto* bot=dynamic_cast<const QuantBot*>(player.get());bot && bot->campaignPolicyApplies())
+            return true;
     const auto* sim = currentGame->getCitySimulation();
     if(sim == nullptr || !sim->isInitialized() || houseID < 0 || houseID >= DuneCity::kMaxCityHouses) return true;
     return sim->getHouseState(houseID).getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier

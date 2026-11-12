@@ -4,6 +4,30 @@ Custom-game Hard and Brutal bots use a house-level army posture, rather than
 asking every unit to decide independently whether the whole army is losing.
 Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 
+## Single-mission campaign policy parity
+
+`[Force Concentration] SingleMissionCampaignPolicy` is hashed and defaults ON.
+Single mission and its co-op variant use the same QuantBot mission policy as
+Full campaign and campaign co-op. This changes policy selection, not difficulty
+values: enemy refinery/worker budgets, authored city-building permissions,
+shared R/C/I limits, scripted wave pacing and repair behavior keep their existing
+campaign rules. The seven-worker Brutal ceiling still applies only to enemies.
+Human-allied and shared-house helpers retain their player-side economy and
+attacks; Builder, Defend and custom games do not become campaign enemies.
+
+The same selector excludes mission helpers from custom-only army/economy and
+colonisation policies. House-level refinery deliveries still count paid worker
+queues before granting a free worker. A Single-mission house with a participating
+QuantBot gets the campaign Starport population exemption; a human-only Single
+mission and every custom game keep the existing population requirement.
+
+`single-mission-campaign-policy-off` restores the previous Single-mission
+selection for paired comparisons; `single-mission-campaign-policy-on` enables
+parity explicitly. Full-campaign policy is unchanged in both arms. No game type,
+campaign progression, objective, save layout or runtime AI state is added.
+The existing campaign pressure and city-economy behavioral fixtures exercise
+the scenario, custom, allied/support and OFF/ON permission boundaries.
+
 ## Harvester raiding experiment
 
 `[Force Concentration] HarvesterRaid` is hashed and **defaults OFF**;

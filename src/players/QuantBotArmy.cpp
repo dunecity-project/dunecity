@@ -519,7 +519,7 @@ bool QuantBot::autonomousCustomArmy() const {
     // MediumClassic 2 (Regression807, default off) keeps Custom Medium on its 1.0.807 standing
     // raid share outside this scope, as Easy.
     return !builderOnly() && !switchedOff() && currentGame!=nullptr && gameMode==GameMode::Custom
-        && !isCampaignGameType(currentGame->gameType)
+        && !campaignPolicyApplies()
         && ((difficulty==Difficulty::Medium && botConfig().force.mediumClassic < 2)
             || difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
 }
@@ -813,7 +813,7 @@ int QuantBot::emergencyResponseRadius(int threatValue) {
 
 bool QuantBot::exhaustedArmyEconomy() const {
     if (!currentGame || !currentGameMap || gameMode != GameMode::Custom
-        || isCampaignGameType(currentGame->gameType) || builderOnly() || switchedOff()
+        || campaignPolicyApplies() || builderOnly() || switchedOff()
         || difficulty == Difficulty::Defend) return false;
     const auto& config = botConfig();
     const auto& settings = config.getSettings(static_cast<int>(difficulty));
@@ -993,7 +993,7 @@ int customMapLimit(const QuantBotConfig::DifficultySettings& settings) {
 int QuantBot::reachableAttackThreshold(int required) const {
     // Custom games only (docs/ai-scenario-matrix.md, "Difficulty ladder"): campaign enemies keep
     // their scripted readiness and helpers do not launch waves.
-    if (builderOnly() || currentGame == nullptr || isCampaignGameType(currentGame->gameType)) return required;
+    if (builderOnly() || currentGame == nullptr || campaignPolicyApplies()) return required;
     required = SimpleArmyPolicy::reachableReadiness(required, militaryUnitValue(), getHouse()->getCredits(),
                                                     lastCalculatedSpice);
     // The opening of a whole-army house that started without an army able to launch a wave (a
@@ -1037,7 +1037,7 @@ void QuantBot::attack(int militaryValue) {
 
     if (isCampaignEnemy()) attackTimer=0;
     else {
-        const bool campaignAlly = isCampaignGameType(currentGame->gameType) && isAlliedWithHuman();
+        const bool campaignAlly = campaignPolicyApplies() && isAlliedWithHuman();
         attackTimer = campaignAlly ? MILLI2CYCLES(60000)
             : SimpleArmyPolicy::attackDelay(MILLI2CYCLES(config.attackTimerMs),
                 currentGame->getGameInitSettings().getRandomSeed(), getGameCycleCount(), getHouse()->getHouseID());
@@ -1064,7 +1064,7 @@ void QuantBot::attack(int militaryValue) {
 		: config.attackThresholdPercent;
 	const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
 	int requiredMilitary = houseAttackThreshold();
-    const bool campaign = isCampaignGameType(currentGame->gameType);
+    const bool campaign = campaignPolicyApplies();
     if (campaign) requiredMilitary=campaignRequiredArmy(requiredMilitary);
     // Wave size (docs/formations.md, "Concentrating force"): the house threshold scales with
     // the wave readiness (QuantBotConfig::force.waveReadinessPercent; duel labels L / Q; D
@@ -1310,7 +1310,7 @@ void QuantBot::launchGroundHunt() {
     if (builderOnly()) return;
     const HarvesterRaidPlan harvesterRaid = planHarvesterRaid();
     const bool limited = isCampaignEnemy();
-    const bool custom = !isCampaignGameType(currentGame->gameType);
+    const bool custom = !campaignPolicyApplies();
     if (limited && !campaignCanLaunch()) return;
     const auto profile = limited ? campaignProfile()
         : CampaignDifficultyPolicy::profile(static_cast<int>(difficulty),getHouse()->getTechLevel());
@@ -1481,7 +1481,7 @@ void QuantBot::launchGroundHunt() {
                     && (!cheapest || candidate.value<cheapest->value)) cheapest=&candidate;
             if (cheapest) {selected.push_back(cheapest->id);++pressure.units;pressure.value+=cheapest->value;}
         }
-    } else if (isCampaignGameType(currentGame->gameType)) {
+    } else if (campaignPolicyApplies()) {
         // Shared-house helpers retain a modest home reserve, without enemy caps.
         selected=SimpleArmyPolicy::limitedAttack(armyValue,committedValue,100-profile.reservePercent,candidates);
     } else {
@@ -1956,7 +1956,7 @@ void QuantBot::launchGroundHunt() {
 bool QuantBot::retreatPreserveActive() const {
     // Test the switch first: OFF does not survey, reserve or issue any orders.
     return botConfig().force.retreatPreserve && currentGame && !builderOnly() && !switchedOff()
-        && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType)
+        && gameMode == GameMode::Custom && !campaignPolicyApplies()
         && !isAlliedWithHuman();
 }
 
@@ -3618,7 +3618,7 @@ void QuantBot::applyOpeningSpaceDispersal() {
     // Campaign missions keep their scripted opening, and a helper bot never
     // reorders the units its human is commanding.
     if (builderOnly() || gameMode!=GameMode::Custom
-        || (currentGame && isCampaignGameType(currentGame->gameType))) return;
+        || (currentGame && campaignPolicyApplies())) return;
     const Coord anchor=openingAnchor();
     if (anchor.isInvalid()) return;
     refreshTacticalDanger();
@@ -3977,7 +3977,7 @@ void QuantBot::kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThre
 	// Short combat spacing follows the fighting army, never the home rally. A
 	// unit that was not sent on the wave backs onto the body it belongs to.
 	Coord squadCenter = findSquadCenter(getHouse()->getHouseID(),
-        isCampaignGameType(currentGame->gameType) || gameMode!=GameMode::Custom
+        campaignPolicyApplies() || gameMode!=GameMode::Custom
         || !raidShareDifficulty() || pUnit->getAttackMode()==HUNT);
 
 	// If no squad center, just move directly away from threat
@@ -4095,7 +4095,7 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
     // replaces. Where "home" is depends on the posture - outside the staging
     // colony while offensive, the protected shelter while coming home.
     const bool recoveryHold = recoveryActive();
-    const bool homeAnchored = recoveryHold || (!isCampaignGameType(currentGame->gameType)
+    const bool homeAnchored = recoveryHold || (!campaignPolicyApplies()
         && gameMode==GameMode::Custom && raidShareDifficulty());
     const Coord home = assemblyPoint();
     Coord regroup = (unit->getAttackMode()==RETREAT || homeAnchored)
@@ -4509,7 +4509,7 @@ void QuantBot::retreatAllUnits() {
                 if (const UnitBase* tank = findThreateningTank(pUnit)) {
                     // A short dodge does not release an offensive slot. Keep
                     // custom hunters in their wave just like artillery kiting.
-                    if (isCampaignGameType(currentGame->gameType) || pUnit->getAttackMode()!=HUNT)
+                    if (campaignPolicyApplies() || pUnit->getAttackMode()!=HUNT)
                         doSetAttackMode(pUnit, AREAGUARD);
                     kiteAwayFromThreat(pUnit, tank, tank->getWeaponRange() + 2);
                     traceDecision("light_raider_evade", AITelemetry::Record().set("unit", pUnit->getObjectID())
@@ -4692,7 +4692,7 @@ void QuantBot::retreatAllUnits() {
                             // Check if we've reached the retreat position. An
                             // attack centroid is not a place to end a retreat.
                             Coord actualSquadCenter = findSquadCenter(getHouse()->getHouseID(),
-                                isCampaignGameType(currentGame->gameType) || gameMode!=GameMode::Custom
+                                campaignPolicyApplies() || gameMode!=GameMode::Custom
                                 || !raidShareDifficulty());
                             FixPoint distToSquadCenter = actualSquadCenter.isValid() ? 
                                 blockDistance(pUnit->getLocation(), actualSquadCenter) : FixPt_MAX;

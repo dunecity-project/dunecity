@@ -15,6 +15,8 @@
 #                                              Same, but writes build-ios-device/appstore/*.ipa
 #   scripts/build-ios.sh --device --release-build
 #                                              Official device build (ordinary builds are dev)
+#   scripts/build-ios.sh --internal-staging --build-number X.Y.Z
+#                                              Signed dev IPA, internal-only export; NEVER uploads
 #
 # --testflight and --ipa select release mode and sign with the team's cloud-managed Apple Distribution
 # certificate through the Apple ID signed into Xcode (team 34X7AYJZ93 by
@@ -33,12 +35,14 @@ BUNDLE_ID="net.dunecity.DuneCity"
 INSTALL_DEVICE=""
 APP_STORE=""
 BUILD_NUMBER=""
+INTERNAL_STAGING=0
+OFFICIAL_REQUEST=0
 RELEASE_BUILD=OFF
 JOBS=${JOBS:-4}
 DEPLOYMENT_TARGET=15.0
 SIMULATOR_NAME="Dune City iPhone"
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -49,15 +53,27 @@ while [[ $# -gt 0 ]]; do
         --profile) PROFILE=${2:?}; shift ;;
         --bundle-id) BUNDLE_ID=${2:?}; shift ;;
         --install) INSTALL_DEVICE=${2:?}; shift ;;
-        --testflight) MODE=device; APP_STORE=upload; RELEASE_BUILD=ON ;;
-        --ipa) MODE=device; APP_STORE=export; RELEASE_BUILD=ON ;;
-        --release-build) RELEASE_BUILD=ON ;;
+        --testflight) MODE=device; APP_STORE=upload; RELEASE_BUILD=ON; OFFICIAL_REQUEST=1 ;;
+        --ipa) MODE=device; APP_STORE=export; RELEASE_BUILD=ON; OFFICIAL_REQUEST=1 ;;
+        --release-build) RELEASE_BUILD=ON; OFFICIAL_REQUEST=1 ;;
+        --internal-staging) MODE=device; INTERNAL_STAGING=1 ;;
         --build-number) BUILD_NUMBER=${2:?}; shift ;;
         -h|--help) usage ;;
         *) echo "Unknown option: $1" >&2; usage ;;
     esac
     shift
 done
+if [[ "$INTERNAL_STAGING" -eq 1 ]]; then
+    if [[ "$OFFICIAL_REQUEST" -ne 0 || "$MODE" != device || "$RUN" -ne 0 ||
+          -n "$IDENTITY" || -n "$PROFILE" || -n "$INSTALL_DEVICE" ]]; then
+        echo "Internal staging exports only a dev-identity IPA; official/upload/run/install/manual-signing flags cannot be combined." >&2
+        exit 2
+    fi
+    [[ -n "$BUILD_NUMBER" ]] || { echo "Internal staging requires an explicit unique --build-number." >&2; exit 2; }
+    python3 "$REPO_ROOT/scripts/release-automation.py" validate-ios-build-number "$BUILD_NUMBER" >/dev/null
+    APP_STORE=export
+    RELEASE_BUILD=OFF
+fi
 
 # xcode-select may still point at the Command Line Tools, which have no iOS
 # SDK; switching it needs sudo, DEVELOPER_DIR does not.
@@ -174,6 +190,8 @@ if [[ -n "$APP_STORE" ]]; then
 	<key>SchemeName</key><string>dunecity</string>
 </dict></plist>
 EOF
+    INTERNAL_TESTING=false
+    [[ "$INTERNAL_STAGING" -eq 0 ]] || INTERNAL_TESTING=true
     cat > "$BUILD_DIR/appstore/ExportOptions.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -184,13 +202,58 @@ EOF
 	<key>signingStyle</key><string>automatic</string>
 	<key>manageAppVersionAndBuildNumber</key><false/>
 	<key>uploadSymbols</key><false/>
-	<key>testFlightInternalTestingOnly</key><false/>
+	<key>testFlightInternalTestingOnly</key><$INTERNAL_TESTING/>
 </dict></plist>
 EOF
     xcodebuild -exportArchive -archivePath "$ARCHIVE" \
         -exportOptionsPlist "$BUILD_DIR/appstore/ExportOptions.plist" \
         -exportPath "$BUILD_DIR/appstore" -allowProvisioningUpdates
-    echo "App Store build $VERSION_STRING ($BUILD_NUMBER): $APP_STORE done"
+    if [[ "$INTERNAL_STAGING" -eq 1 ]]; then
+        grep -qx 'DUNECITY_RELEASE_BUILD:BOOL=OFF' "$BUILD_DIR/CMakeCache.txt"
+        shopt -s nullglob
+        IPAS=("$BUILD_DIR"/appstore/*.ipa)
+        [[ "${#IPAS[@]}" -eq 1 ]] || { echo "Expected one exported internal IPA, not an unqualified partial set." >&2; exit 1; }
+        VERIFY_ROOT=$(mktemp -d "$BUILD_DIR/appstore/.verify.XXXXXX")
+        trap 'rm -rf "$VERIFY_ROOT"' EXIT
+        ditto -x -k "${IPAS[0]}" "$VERIFY_ROOT"
+        SIGNED_APPS=("$VERIFY_ROOT"/Payload/*.app)
+        [[ "${#SIGNED_APPS[@]}" -eq 1 ]] || { echo "Internal IPA has no single signed application." >&2; exit 1; }
+        SIGNED_APP="${SIGNED_APPS[0]}"
+        codesign --verify --deep --strict "$SIGNED_APP"
+        codesign -dv --verbose=4 "$SIGNED_APP" 2> "$BUILD_DIR/appstore/staging-signing.txt"
+        grep -Fx "TeamIdentifier=$TEAM_ID" "$BUILD_DIR/appstore/staging-signing.txt"
+        grep -Eq '^Authority=(Apple|iPhone) Distribution:' "$BUILD_DIR/appstore/staging-signing.txt"
+        python3 - "${IPAS[0]}" "$SIGNED_APP/Info.plist" "$BUILD_NUMBER" "$TEAM_ID" "$SDK_VERSION" "$XCODE_VERSION" "$REPO_ROOT" "$VERSION_STRING" <<'PY'
+import datetime, hashlib, json, os, pathlib, plistlib, subprocess, sys
+ipa, plist_path, number, team, sdk, xcode, repo, expected_version = sys.argv[1:]
+with open(plist_path, 'rb') as source:
+    info = plistlib.load(source)
+if info['CFBundleVersion'] != number or info['CFBundleShortVersionString'] != expected_version:
+    raise SystemExit('Exported internal IPA changed its frozen version/build number')
+source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
+dirty = subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], cwd=repo).returncode != 0
+if os.environ.get('GITHUB_SHA') and (source != os.environ['GITHUB_SHA'] or dirty):
+    raise SystemExit('Internal CI export source differs from its immutable qualified tag')
+checksum = hashlib.sha256()
+with open(ipa, 'rb') as artifact:
+    for block in iter(lambda: artifact.read(1024 * 1024), b''):
+        checksum.update(block)
+manifest = dict(schema=1, status='packaged', sourceCommit=source, sourceDirty=dirty,
+    sourceTag=os.environ.get('GITHUB_REF_NAME'), version=expected_version, buildNumber=number,
+    releaseBuild='OFF', internalTestingOnly=True, exportDestination='export',
+    teamId=team, sdkVersion=sdk, xcodeVersion=xcode,
+    runId=os.environ.get('GITHUB_RUN_ID'), runAttempt=os.environ.get('GITHUB_RUN_ATTEMPT'),
+    deviceCoverage='untested', testflightPublication='not-requested',
+    builtAtUtc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    sha256={pathlib.Path(ipa).name: checksum.hexdigest()})
+pathlib.Path(ipa).with_name('staging-build.json').write_text(json.dumps(manifest, indent=2) + '\n')
+PY
+        rm -rf "$VERIFY_ROOT"
+        trap - EXIT
+        echo "Internal iOS staging $VERSION_STRING ($BUILD_NUMBER): signed export only; no upload, physical device untested"
+    else
+        echo "App Store build $VERSION_STRING ($BUILD_NUMBER): $APP_STORE done"
+    fi
     exit 0
 fi
 if [[ "$MODE" == device && -z "$IDENTITY" ]]; then

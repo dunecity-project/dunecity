@@ -1,5 +1,35 @@
 # Campaign QuantBot: current behaviour and proposed difficulty design
 
+## Current test-fixture contract (2026-11-13)
+
+QuantBot difficulty checks must use actual `qBotEasy`, `qBotMedium`, `qBotHard`
+or `qBotBrutal` enemies, matching the requested enemy tier. `CampaignAIPlayer`
+is the separate legacy scenario-settings controller and has no QuantBot
+difficulty; a win against it does not validate any column of this matrix.
+The old 63/66 campaign recovery result used that legacy enemy and is not evidence
+for the corrected QuantBot fixture or the reported Single mission behavior.
+
+The existing scenario harness now passes `--enemy-ai quantbot` and
+`--enemy-difficulty` explicitly, records/rejects mismatched actual rosters, and
+uses distinct result identities for enemy tiers and `--campaign-mode full|single`.
+Full campaign remains the default; Single mission must use its real native setup,
+not a renamed campaign. Both retain the authored mission objectives and seeds.
+Idle human plus QuantBot AI support remains the default; no-human diagnostics
+cannot substitute for it. Support/custom economies must not acquire enemy limits.
+
+Use the [focused fixture and engine commands](ai-scenario-matrix.md#focused-parity-and-difficulty-checks)
+before any wider study. All four enemy tiers and both modes have harness coverage;
+that is not a claim of new live-engine win-rate evidence. Equal-tier 45–55% and
+one-tier-higher ≥95% were working calibration targets, not strict small-sample
+gates. Keep actual losses, time limits and failures, native quota/conquest rules,
+and exact source/config/options identity. This fixture correction neither tunes
+AI economy defaults nor authorizes a broad calibration run.
+
+The dated implementation/audit sections below remain historical evidence for
+their named source revisions, not proof that the current engine or either menu
+mode passes every proposed target.
+
+
 ## Implemented local candidate: 1.0.672
 
 Stefan authorized implementation after reviewing this matrix. The following

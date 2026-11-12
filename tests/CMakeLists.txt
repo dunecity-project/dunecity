@@ -1,5 +1,39 @@
 cmake_minimum_required(VERSION 3.10)
 
+# Capability is an admission requirement, independent of tier membership. Nightly
+# is the complete configured suite; the other tiers are deliberately small subsets.
+function(dunecity_add_test capability tiers)
+    if(NOT capability STREQUAL "headless" AND NOT capability STREQUAL "gui")
+        message(FATAL_ERROR "CTest capability must be exactly headless or gui")
+    endif()
+    foreach(tier IN LISTS tiers)
+        if(NOT tier STREQUAL "integration" AND NOT tier STREQUAL "nightly" AND NOT tier STREQUAL "release-smoke")
+            message(FATAL_ERROR "Unknown CTest tier: ${tier}")
+        endif()
+    endforeach()
+    cmake_parse_arguments(CASE "" "NAME" "COMMAND;LABELS" ${ARGN})
+    if(NOT CASE_NAME OR NOT CASE_COMMAND OR CASE_UNPARSED_ARGUMENTS OR NOT tiers)
+        message(FATAL_ERROR "Incomplete CTest metadata/command: ${ARGN}")
+    endif()
+    set(labels ${capability} nightly ${tiers} ${CASE_LABELS})
+    list(REMOVE_DUPLICATES labels)
+    if("release-smoke" IN_LIST labels AND NOT "packaged" IN_LIST labels)
+        message(FATAL_ERROR "Release smoke must name a packaged runtime: ${CASE_NAME}")
+    endif()
+    add_test(NAME ${CASE_NAME} COMMAND ${CASE_COMMAND})
+    set_tests_properties(${CASE_NAME} PROPERTIES LABELS "${labels}")
+endfunction()
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    dunecity_add_test(headless integration NAME probe_wrapper_lifecycle COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/menu/test_probe_process.py)
+    set_tests_properties(probe_wrapper_lifecycle PROPERTIES TIMEOUT 60)
+    dunecity_add_test(headless integration NAME research_report_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/ai/test_research_report.py)
+    set_tests_properties(research_report_contract PROPERTIES TIMEOUT 60)
+endif()
+
 # Find Catch2 package
 find_package(Catch2 3 REQUIRED)
 
@@ -8,7 +42,7 @@ if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_executable(renderer_initialization_tests RendererInitializationTestCase.cpp)
     target_include_directories(renderer_initialization_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(renderer_initialization_tests PRIVATE Catch2::Catch2WithMain SDL2::SDL2)
-    add_test(NAME renderer_initialization COMMAND renderer_initialization_tests)
+    dunecity_add_test(headless integration LABELS "linux" NAME renderer_initialization COMMAND renderer_initialization_tests)
 endif()
 
 # Test executable
@@ -235,34 +269,34 @@ target_compile_options(dunelegacy_tests
 # Add test
 # The dedicated generator groups below run their matrices once.
 # Exclude both from the umbrella executable invocation.
-add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests "~[skirmish]~[civwars]")
-add_test(NAME pak_concurrent_read_tests COMMAND dunelegacy_tests "[pak][threading]")
-add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
-add_test(NAME direct_transport_tests COMMAND dunelegacy_tests "[direct]")
+dunecity_add_test(gui nightly NAME dunelegacy_tests COMMAND dunelegacy_tests "~[skirmish]~[civwars]")
+dunecity_add_test(headless integration NAME pak_concurrent_read_tests COMMAND dunelegacy_tests "[pak][threading]")
+dunecity_add_test(headless integration NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
+dunecity_add_test(headless integration NAME direct_transport_tests COMMAND dunelegacy_tests "[direct]")
 # Local revision store: snapshots, pinning, verified imports and retired sharing-queue cleanup.
-add_test(NAME workshop_store_tests COMMAND dunelegacy_tests "[workshop]")
-add_test(NAME soundtrack_pack_tests COMMAND dunelegacy_tests "[music][soundtrack]")
-add_test(NAME preplace_queue_tests COMMAND dunelegacy_tests "[preplace]")
-add_test(NAME tornie_building_sale_tests COMMAND dunelegacy_tests "[tornie][sale]")
-add_test(NAME tornie_chaos_persistence_tests COMMAND dunelegacy_tests "[tornie][chaos]")
-add_test(NAME tornie_radar_command_tests COMMAND dunelegacy_tests "[tornie][radar]")
+dunecity_add_test(headless integration NAME workshop_store_tests COMMAND dunelegacy_tests "[workshop]")
+dunecity_add_test(headless integration NAME soundtrack_pack_tests COMMAND dunelegacy_tests "[music][soundtrack]")
+dunecity_add_test(headless integration NAME preplace_queue_tests COMMAND dunelegacy_tests "[preplace]")
+dunecity_add_test(headless integration NAME tornie_building_sale_tests COMMAND dunelegacy_tests "[tornie][sale]")
+dunecity_add_test(headless integration NAME tornie_chaos_persistence_tests COMMAND dunelegacy_tests "[tornie][chaos]")
+dunecity_add_test(headless integration NAME tornie_radar_command_tests COMMAND dunelegacy_tests "[tornie][radar]")
 # Map chooser/editor catalogue rules: duplicate collapse, revision sidecars are not
 # map rows, and a locally edited workshop map keeps its authored mod in the filter.
-add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
-add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
-add_test(NAME classic_desert_ui_tests COMMAND dunelegacy_tests "[menu][ui-skin]")
+dunecity_add_test(headless integration NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
+dunecity_add_test(headless integration NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
+dunecity_add_test(headless integration NAME classic_desert_ui_tests COMMAND dunelegacy_tests "[menu][ui-skin]")
 # Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
-add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
+dunecity_add_test(headless integration NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
 # The fair-start-rock seed sweep is one Catch test case per mode and map size; as one test the
 # sanitized Debug build exceeded the CTest timeout. Catch's sharding divides whatever sweep
 # cases exist in declaration order: a changed size list moves work between shards but never
 # drops a case, and a shard left without one fails (no tests ran).
 set(SKIRMISH_SWEEP_SHARDS 12)
-add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]~[rockfairness-sweep]~[generator-matrix]")
+dunecity_add_test(headless integration NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]~[rockfairness-sweep]~[generator-matrix]")
 set(SKIRMISH_SWEEP_TESTS)
 math(EXPR SKIRMISH_LAST_SWEEP_SHARD "${SKIRMISH_SWEEP_SHARDS} - 1")
 foreach(shard RANGE ${SKIRMISH_LAST_SWEEP_SHARD})
-    add_test(NAME skirmish_generator_tests_rockfairness_${shard} COMMAND dunelegacy_tests "[rockfairness-sweep]"
+    dunecity_add_test(headless nightly NAME skirmish_generator_tests_rockfairness_${shard} COMMAND dunelegacy_tests "[rockfairness-sweep]"
         --order decl --shard-count ${SKIRMISH_SWEEP_SHARDS} --shard-index ${shard})
     list(APPEND SKIRMISH_SWEEP_TESTS skirmish_generator_tests_rockfairness_${shard})
 endforeach()
@@ -272,16 +306,16 @@ set(SKIRMISH_MATRIX_SHARDS 5)
 set(SKIRMISH_MATRIX_TESTS)
 math(EXPR SKIRMISH_LAST_MATRIX_SHARD "${SKIRMISH_MATRIX_SHARDS} - 1")
 foreach(shard RANGE ${SKIRMISH_LAST_MATRIX_SHARD})
-    add_test(NAME skirmish_generator_tests_matrix_${shard} COMMAND dunelegacy_tests "[generator-matrix]"
+    dunecity_add_test(headless nightly NAME skirmish_generator_tests_matrix_${shard} COMMAND dunelegacy_tests "[generator-matrix]"
         --order decl --shard-count ${SKIRMISH_MATRIX_SHARDS} --shard-index ${shard})
     list(APPEND SKIRMISH_MATRIX_TESTS skirmish_generator_tests_matrix_${shard})
 endforeach()
-add_test(NAME civilization_wars_tests COMMAND dunelegacy_tests "[civwars]")
+dunecity_add_test(headless nightly NAME civilization_wars_tests COMMAND dunelegacy_tests "[civwars]")
 # Formation planner (docs/formations.md): determinism, layout, fallback, edges, catch-up.
-add_test(NAME formation_planner_tests COMMAND dunelegacy_tests "[formation]")
+dunecity_add_test(headless integration NAME formation_planner_tests COMMAND dunelegacy_tests "[formation]")
 
 # Sidebar build grid geometry (docs/sidebar-grid.md): slots, hit-testing, row scrolling.
-add_test(NAME sidebar_grid_tests COMMAND dunelegacy_tests "[sidebar-grid]")
+dunecity_add_test(headless integration NAME sidebar_grid_tests COMMAND dunelegacy_tests "[sidebar-grid]")
 
 # Standalone network wire harness.
 #
@@ -322,7 +356,7 @@ if(WIN32)
     target_link_libraries(network_wire_harness PRIVATE ws2_32 winmm)
 endif()
 
-add_test(NAME network_wire_harness COMMAND network_wire_harness)
+dunecity_add_test(headless integration NAME network_wire_harness COMMAND network_wire_harness)
 
 # Standalone relay wire harness.
 #
@@ -346,7 +380,7 @@ target_include_directories(relay_wire_harness
         ${CMAKE_BINARY_DIR}/include
 )
 
-add_test(NAME relay_wire_harness COMMAND relay_wire_harness)
+dunecity_add_test(headless integration NAME relay_wire_harness COMMAND relay_wire_harness)
 
 # Relay session tests.
 #
@@ -387,7 +421,7 @@ if(WIN32)
     target_link_libraries(relay_session_tests PRIVATE ws2_32 winmm version)
 endif()
 
-add_test(NAME relay_session_tests COMMAND relay_session_tests)
+dunecity_add_test(headless integration NAME relay_session_tests COMMAND relay_session_tests)
 
 # Relay HTTPS polling transport tests.
 #
@@ -419,7 +453,7 @@ target_compile_options(relay_http_transport_tests
         $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -pedantic>
 )
 
-add_test(NAME relay_http_transport_tests COMMAND relay_http_transport_tests)
+dunecity_add_test(headless integration NAME relay_http_transport_tests COMMAND relay_http_transport_tests)
 
 # Relay transport harness.
 #
@@ -510,11 +544,11 @@ endif()
 if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
-        add_test(NAME source_identity_regression COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration NAME source_identity_regression COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_genome_qualification.py
             SourceIdentityTests.test_source_identity_matches_committed_blobs_not_modified_worktree)
         set_tests_properties(source_identity_regression PROPERTIES TIMEOUT 60)
-        add_test(NAME cross_platform_city_medium COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME cross_platform_city_medium COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/cross-platform-city-medium
             --scenario --mod dunecity --house harkonnen --local-spectator --seed 9101 --minutes 25
@@ -525,7 +559,7 @@ if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
         # The exact audited four-Brutal/96/CY/no-army/no-spice/9101/25-minute case is
         # the canonical cluster's third same-source mini-reference parity case for
         # native CTest and game preparation, not a frozen implementation digest.
-        add_test(NAME tile_non_infantry_lookup COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME tile_non_infantry_lookup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable --city-placement-probe
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/tile-non-infantry-lookup
             --scenario --mod dunecity --house harkonnen --local-spectator --seed 9101 --minutes 1
@@ -544,16 +578,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         foreach(achievement_mod IN ITEMS Tornie vanilla dunecity Dune2R)
-            add_test(NAME achievements_events_${achievement_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(gui nightly LABELS "macos" NAME achievements_events_${achievement_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --achievements-probe --repeatable
                 --mod ${achievement_mod} --no-ai-telemetry --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/achievements-${achievement_mod}-probe)
             set_tests_properties(achievements_events_${achievement_mod} PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
         endforeach()
-        add_test(NAME quantbot_match_score COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME quantbot_match_score COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/test_match_score.py)
         set_tests_properties(quantbot_match_score PROPERTIES TIMEOUT 30)
-        add_test(NAME save_scenario_export COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME save_scenario_export COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/scenarios/export-save-scenario.py
             --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/scenario-export-regression
             --selftest --force --match-seconds 10 --min-structures 4 --min-units 19)
@@ -561,24 +595,24 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # A save pinned to an authored mod's exact Workshop revision loads once the mod
         # exists only in workshop/revisions, and a retired upload queue in that profile is
         # deleted without any publication.
-        add_test(NAME save_pinned_workshop_revision COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME save_pinned_workshop_revision COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/scenarios/export-save-scenario.py
             --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/pinned-revision-save
             --selftest --fixture-draft "Pinned Draft" --force --match-seconds 5)
         set_tests_properties(save_pinned_workshop_revision PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
-        add_test(NAME save_scenario_input_preservation COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME save_scenario_input_preservation COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/scenarios/test-export-paths.py)
         set_tests_properties(save_scenario_input_preservation PROPERTIES TIMEOUT 30)
-        add_test(NAME web_mod_payload_tests COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME web_mod_payload_tests COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/scripts/tests/test_check_web_mods.py)
         set_tests_properties(web_mod_payload_tests PROPERTIES TIMEOUT 30)
-        add_test(NAME bundled_city_eight_slot_startup COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME bundled_city_eight_slot_startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/bundled-eight-slot-startup
             --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 384x384 - new beginning.ini"
             --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
         set_tests_properties(bundled_city_eight_slot_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
-        add_test(NAME bundled_three_way_startup COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME bundled_three_way_startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/bundled-three-way-startup
             --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/3P - 192x192 - 3waysplit.ini"
@@ -587,42 +621,54 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Every catalogue map in data/maps/community-maps.json is the recorded revision, has the
         # slots and size its name advertises, a start for every slot, and loads and plays for a
         # game minute in its mod with every lobby house still holding its start.
-        add_test(NAME community_maps_startup COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME community_maps_startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/maps/check-community-maps.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-maps-startup)
         set_tests_properties(community_maps_startup PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # Exact reviewed payloads, real five-minute AI production from two bare yards,
         # and matching final digests across two runs of every community mod.
-        add_test(NAME community_mods_startup COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME community_mods_startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/mods/check-community-mods.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-mods-startup)
         set_tests_properties(community_mods_startup PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
         # Sihaya-Phonics stacks two scenario sandworms on tile 790. The second
         # cannot be placed and is destroyed while an observed game's map loads,
         # before any local player exists; that crashed 1.0.830 at startup.
-        add_test(NAME observed_startup_unplaceable_unit COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME observed_startup_unplaceable_unit COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/observed-startup-unplaceable-unit
             --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 51x31 - 2v2 - Sihaya-Phonics.ini"
             --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
         set_tests_properties(observed_startup_unplaceable_unit PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
-        add_test(NAME graphics_skin_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME graphics_skin_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/skins/run-skin-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skin-probe)
         set_tests_properties(graphics_skin_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
-        add_test(NAME menu_navigation_probe COMMAND ${Python3_EXECUTABLE}
+        # Navigation and terrain controls use the same injected objects; compile once.
+        set(MENU_PROBE_FIXTURE_DIR ${CMAKE_BINARY_DIR}/menu-probe-fixture)
+        dunecity_add_test(headless nightly LABELS "macos" NAME menu_probe_fixture COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --prepare-only
+            --fixture-dir ${MENU_PROBE_FIXTURE_DIR}
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${MENU_PROBE_FIXTURE_DIR})
+        set_tests_properties(menu_probe_fixture PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+            FIXTURES_SETUP menu_native_fixture)
+        dunecity_add_test(gui nightly LABELS "macos" NAME menu_navigation_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
+            --fixture-dir ${MENU_PROBE_FIXTURE_DIR}
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
         set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 RUN_SERIAL TRUE)
-        add_test(NAME terrain_mix_menu_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME terrain_mix_menu_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --terrain-mix --size 640x480
+            --fixture-dir ${MENU_PROBE_FIXTURE_DIR}
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/terrain-mix-menu-probe)
         set_tests_properties(terrain_mix_menu_probe PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
-        add_test(NAME research_lab_probe COMMAND ${Python3_EXECUTABLE}
+        set_tests_properties(menu_navigation_probe terrain_mix_menu_probe PROPERTIES
+            FIXTURES_REQUIRED menu_native_fixture)
+        dunecity_add_test(gui nightly LABELS "macos" NAME research_lab_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-research-lab-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/research-lab-probe)
         set_tests_properties(research_lab_probe PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
-        add_test(NAME trooper_anti_air_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME trooper_anti_air_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-aa-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-aa-probe)
         set_tests_properties(trooper_anti_air_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
@@ -631,7 +677,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # spectated end plate fits the map in every house colour, chat clears the city readouts,
         # a skin round trip leaves the in-game sidebar pixel-identical, new and 1.0.850 profiles
         # get Classic. The full 3 skins x 7 sizes gallery: run-ui-gallery-probe.py without --skins/--cases.
-        add_test(NAME ui_gallery_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME ui_gallery_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-ui-gallery-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ui-gallery-probe
             --skins 0 2 --cases 640x480 1440x900-hd)
@@ -647,7 +693,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # existing case/size/payment processes. No case pays for a private rebuild
         # or shares its profile, and each retains the existing 600 s runtime bound.
         set(SKIRMISH_PROBE_FIXTURE_DIR ${CMAKE_BINARY_DIR}/skirmish-probe-fixture)
-        add_test(NAME skirmish_probe_fixture COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME skirmish_probe_fixture COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py --prepare-only
             --fixture-dir ${SKIRMISH_PROBE_FIXTURE_DIR}
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${SKIRMISH_PROBE_FIXTURE_DIR})
@@ -668,26 +714,28 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 if(case STREQUAL "civ-research")
                     foreach(payment IN ITEMS off on)
                         set(name civilization_wars_research_probe_${size}_${payment})
-                        add_test(NAME ${name} COMMAND ${Python3_EXECUTABLE}
+                        dunecity_add_test(gui nightly LABELS "macos" NAME ${name} COMMAND ${Python3_EXECUTABLE}
                             ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
                             --fixture-dir ${SKIRMISH_PROBE_FIXTURE_DIR} --cases ${case} --size ${size}
                             --research-payment ${payment}
                             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/${name})
                         set_tests_properties(${name} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
-                            FIXTURES_REQUIRED skirmish_native_fixture)
+                            FIXTURES_REQUIRED skirmish_native_fixture
+                            TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20)
                     endforeach()
                 else()
                     set(name ${prefix}_${case}_${size})
-                    add_test(NAME ${name} COMMAND ${Python3_EXECUTABLE}
+                    dunecity_add_test(gui nightly LABELS "macos" NAME ${name} COMMAND ${Python3_EXECUTABLE}
                         ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
                         --fixture-dir ${SKIRMISH_PROBE_FIXTURE_DIR} --cases ${case} --size ${size}
                         --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/${name})
                     set_tests_properties(${name} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
-                        FIXTURES_REQUIRED skirmish_native_fixture)
+                        FIXTURES_REQUIRED skirmish_native_fixture
+                        TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20)
                 endif()
             endforeach()
         endforeach()
-        add_test(NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)
         set_tests_properties(retina_resolution_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
@@ -698,15 +746,18 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             # explicitly select the dependency-fixed installed candidate instead.
             set(DUNECITY_POINTER_RUNTIME_APP "$<TARGET_BUNDLE_DIR:dunecity>" CACHE PATH
                 "App bundle whose packaged SDL runtime the native pointer gate must verify")
-            add_test(NAME native_pointer_mapping_probe COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(gui release-smoke LABELS "macos;pointer;packaged" NAME native_pointer_mapping_probe COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --pointer-mapping --size 1440x900
                 --runtime-app "${DUNECITY_POINTER_RUNTIME_APP}"
                 --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/native-pointer-mapping-probe)
             set_tests_properties(native_pointer_mapping_probe PROPERTIES TIMEOUT 300
                 TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20
-                RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS "gui;macos;pointer")
+                RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         endif()
-        add_test(NAME game_command_regressions COMMAND ${Python3_EXECUTABLE}
+        set_tests_properties(graphics_skin_probe menu_probe_fixture menu_navigation_probe
+            terrain_mix_menu_probe ui_gallery_probe skirmish_probe_fixture retina_resolution_probe PROPERTIES
+            TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20)
+        dunecity_add_test(gui nightly LABELS "macos" NAME game_command_regressions COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/network/run-command-execution-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/command-probe)
         set_tests_properties(game_command_regressions PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
@@ -715,7 +766,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # every owner, every mutation route refused while the owners' own commands still work,
         # and observation preserved across save and reload. Separate from the menu probe so
         # neither has to carry the other's runtime.
-        add_test(NAME local_spectator_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME local_spectator_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py
             --map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
@@ -726,7 +777,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             if(shared STREQUAL "on")
                 list(APPEND shared_args --shared-house)
             endif()
-            add_test(NAME local_spectator_worm_startup_${shared} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(gui nightly LABELS "macos" NAME local_spectator_worm_startup_${shared} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py --eight-houses ${shared_args}
                 --map "${CMAKE_SOURCE_DIR}/tests/spectator/8P-preplaced-worms.ini"
                 --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
@@ -735,14 +786,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         endforeach()
         # Control case: the shared non-network local-player byte must keep its old meaning for
         # an ordinary human single-player save, and must never read back as an observer.
-        add_test(NAME local_spectator_ordinary_round_trip COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME local_spectator_ordinary_round_trip COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py --ordinary-round-trip
             --map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/spectator-ordinary-probe)
         set_tests_properties(local_spectator_ordinary_round_trip PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
         # The Offline Custom Game setup row itself, against the real CustomGamePlayers widgets.
-        add_test(NAME local_spectator_setup_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME local_spectator_setup_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py --setup
             --map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
@@ -753,7 +804,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # mods, a player out on a WinFlags=1 map, quota and time-limit rules, and a spectator
         # beside two networked players (same end cycle and state digest as the winning player);
         # the winner is named in its colour in the game and the statistics; played games unchanged.
-        add_test(NAME spectator_game_end_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME spectator_game_end_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/spectator/run-game-end-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-game-end-probe)
         set_tests_properties(spectator_game_end_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
@@ -762,7 +813,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # on the host's last cycle and digest with the winner on its plate and statistics when the
         # host leaves after its end message, quits at the decision, while the spectator hangs 20-25 s
         # or runs at half speed, and in a Dune City game with Natives worms. Skipped without PHP.
-        add_test(NAME spectator_online_end_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME spectator_online_end_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/network/run-spectator-end-probe.py
             --cases end,decision,lag-end,lag-decision,slow,natives
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-online-end-probe)
@@ -777,13 +828,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # with real local PHP/libdatachannel admission, named guest, committed start
         # barrier, both humans' executed moves and 13 matching game-state checkpoints.
         # Missing PHP is an explicit skip, never evidence that these modes were played.
-        add_test(NAME native_multiplayer_join_modes COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos;network" NAME native_multiplayer_join_modes COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/network/run-late-join-probe.py
             --peer-cases campaign skirmish custom --mod vanilla
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/native-multiplayer-join-modes)
         set_tests_properties(native_multiplayer_join_modes PROPERTIES TIMEOUT 900
             TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 40
-            RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS "headless;network")
+            RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         # Stefan: "make any spawned troopers due to crime and make all worms belong to 'natives' house".
         # Worms on bundled maps, a Random Skirmish, a campaign mission and a 9868 save are the
         # Natives'; crime troopers are, and QuantBot's threat estimate ignores them; Natives is in
@@ -791,28 +842,38 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # 1.0.852 interactions: Natives kills and a shot-down plane's crash deciding spectated,
         # played and campaign games (a crash taking two last teams at once names nobody), the
         # analytics roster, and host/guest/spectator lockstep digests with all of it in play.
-        add_test(NAME natives_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME natives_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/natives/run-natives-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/natives-probe)
         set_tests_properties(natives_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # Saves 1.0.842, 1.0.847, 1.0.850 and the public 1.0.851 wrote (vanilla FFA, DuneCity 1v1,
         # mid-game with worms) load in a fresh profile, run 600 cycles, re-save as the current
         # savegame version and load again, every worm the Natives'.
-        add_test(NAME save_roundtrip_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME save_roundtrip_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/saves/run-save-roundtrip-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/save-roundtrip-probe)
         set_tests_properties(save_roundtrip_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        add_test(NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
         set_tests_properties(carryall_flight_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         # Real human/QuantBot repair decisions must book a free carryall, pick up, deliver to the
         # bay and release fully repaired. No carryall (or a busy one) keeps the driving fallback.
         # The QuantBot prefix deliberately includes this test in the AI/unit round gates.
-        add_test(NAME quantbot_carryall_repair COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_carryall_repair COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-repair-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-repair-probe)
         set_tests_properties(quantbot_carryall_repair PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        # Demand-backed capacity, pending work, access failures and save/observer clocks.
+        foreach(repair_mod IN ITEMS vanilla dunecity)
+            dunecity_add_test(headless integration LABELS "macos" NAME repair_capacity_${repair_mod}
+                COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repair-capacity-probe --repeatable
+                --mod ${repair_mod} --level 9 --partner-difficulty hard --minutes 1
+                --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/repair-capacity-${repair_mod}-probe)
+            set_tests_properties(repair_capacity_${repair_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
         # A ground unit walled in on a real map really does stop moving, so the thirty-second
         # long-stall rescue can be measured against the engine instead of being simulated:
         # the clock survives a queued path request and a route cleared every cycle, and the
@@ -822,24 +883,24 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # traffic patrol and bounded friendly-only reporting, the airplane's
         # original take-off and off-map ending, hostile anti-air destroying
         # both with no tile/unit/count leak, and an exact save continuation.
-        add_test(NAME city_aircraft_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME city_aircraft_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-city-aircraft-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-aircraft-probe)
         set_tests_properties(city_aircraft_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
-        add_test(NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
         set_tests_properties(stalled_carryall_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # Real production objects and full saves: two independent refinery bays,
         # captured production blueprints, slow status and movement continuation.
-        add_test(NAME tornie_object_state_roundtrip COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME tornie_object_state_roundtrip COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-transport-containment-probe.py
             --tornie-state --mods Tornie,vanilla,dunecity,Dune2R --worker-counts 1
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/tornie-object-state-probe)
         set_tests_properties(tornie_object_state_roundtrip PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # Real manufacturing/combat commands, explicit aircraft targets and complete
         # Tornie rule-state continuation, alongside nonfamily control cases.
-        add_test(NAME tornie_gameplay_state COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME tornie_gameplay_state COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-tornie-state.py --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/tornie-gameplay-state)
         set_tests_properties(tornie_gameplay_state PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
@@ -849,31 +910,31 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # recovered - including from a walled-off corner, with no anchor at all, and in bounded
         # batches - without disturbing valid cargo or bay occupants. Runs all three engines and
         # repeats the scheduled boundary under one and four path workers.
-        add_test(NAME transport_containment_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME transport_containment_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-transport-containment-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/transport-containment-probe)
         set_tests_properties(transport_containment_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
         # Brutal only plans past its configured military value cap when the lobby
         # selected an explicit unit-count override; the engine count limit stays
         # the authority, and other difficulties keep the configured cap.
-        add_test(NAME brutal_unit_override_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME brutal_unit_override_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-brutal-unit-override-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/brutal-unit-override-probe)
         set_tests_properties(brutal_unit_override_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        add_test(NAME active_tile_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME active_tile_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/performance/run-active-tile-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/active-tile-probe)
         set_tests_properties(active_tile_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        add_test(NAME tile_track_bounds_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME tile_track_bounds_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-tile-track-bounds-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --phases current
             --output-dir ${CMAKE_BINARY_DIR}/tile-track-bounds-probe)
         set_tests_properties(tile_track_bounds_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
-        add_test(NAME body_angle_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME body_angle_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-body-angle-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/body-angle-probe)
         set_tests_properties(body_angle_probe PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
-        add_test(NAME unit_speed_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME unit_speed_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)
         set_tests_properties(unit_speed_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
@@ -882,16 +943,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # and 9857 unit records, Combined arms with sonic tanks and scouts (sonic lanes never
         # entered), Line and Column, and a hunt in formation that breaks on contact; leaves
         # formation-march.png and formation-combined.png (with the panel's formation buttons).
-        add_test(NAME formation_movement_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME formation_movement_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-formation-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/formation-probe)
         set_tests_properties(formation_movement_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        add_test(NAME unit_route_continuation_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME unit_route_continuation_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --continuation
             --output-dir ${CMAKE_BINARY_DIR}/unit-route-continuation-probe)
         set_tests_properties(unit_route_continuation_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        add_test(NAME weapon_reload_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME weapon_reload_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --weapon-reloads
             --output-dir ${CMAKE_BINARY_DIR}/weapon-reload-probe)
@@ -899,17 +960,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Modern RTS controls on real units over real cycles: attack-move column, HOLD launcher
         # under fire, three-waypoint Shift queue, repeat production through the unit limit,
         # save round trip, the committed 9854 save, and a rendered waypoint/tooltip smoke frame.
-        add_test(NAME rts_controls_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME rts_controls_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-rts-controls-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/rts-controls-probe)
         set_tests_properties(rts_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        add_test(NAME mouse_controls_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME mouse_controls_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --controls-probe --real-video --viewport 640x480 --no-ai-telemetry --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/mouse-controls-probe)
         set_tests_properties(mouse_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # Force the real main() through an SDL initialization exception with no
         # modal dialog, and cover the probe child's deadline/diagnostic/cleanup.
-        add_test(NAME native_probe_process_lifecycle COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui integration LABELS "macos" NAME native_probe_process_lifecycle COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_strategy_processes.py
             --game-binary $<TARGET_FILE:dunecity>)
         set_tests_properties(native_probe_process_lifecycle PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
@@ -917,22 +978,26 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # simulated (and drawn) units never stand still mid-step, keep justStoppedMoving on a
         # chained step or jump a tile, per cycle and per rendered frame, and a unit whose carryall
         # wait was cancelled drives on at its speed.
-        add_test(NAME unit_motion_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME unit_motion_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-motion-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-motion-probe)
         set_tests_properties(unit_motion_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        add_test(NAME deviation_reward_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME deviation_reward_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --deviation-reward
             --output-dir ${CMAKE_BINARY_DIR}/deviation-reward-probe)
         set_tests_properties(deviation_reward_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         foreach(projectile_probe IN ITEMS mechanics combat continuation)
+            set(projectile_capability headless)
+            if(projectile_probe STREQUAL "continuation")
+                set(projectile_capability gui)
+            endif()
             if(projectile_probe STREQUAL "mechanics")
                 set(projectile_flag --projectiles)
             else()
                 set(projectile_flag --projectile-${projectile_probe})
             endif()
-            add_test(NAME projectile_${projectile_probe}_probe COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(${projectile_capability} nightly LABELS "macos" NAME projectile_${projectile_probe}_probe COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
                 --build-dir ${CMAKE_BINARY_DIR} ${projectile_flag}
                 --output-dir ${CMAKE_BINARY_DIR}/projectile-${projectile_probe}-probe)
@@ -940,7 +1005,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         endforeach()
         foreach(ai_mod IN ITEMS vanilla dunecity Dune2R)
             foreach(ai_probe IN ITEMS air-defense shared-spending stats harvester-safety)
-                add_test(NAME quantbot_${ai_probe}_${ai_mod} COMMAND ${Python3_EXECUTABLE}
+                set(ai_capability headless)
+                if(ai_probe STREQUAL "stats")
+                    set(ai_capability gui)
+                endif()
+                dunecity_add_test(${ai_capability} nightly LABELS "macos" NAME quantbot_${ai_probe}_${ai_mod} COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --${ai_probe}-probe --repeatable
                     --level 9 --mod ${ai_mod} --build-dir ${CMAKE_BINARY_DIR}
                     --output-dir ${CMAKE_BINARY_DIR}/${ai_probe}-${ai_mod}-probe)
@@ -949,7 +1018,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         endforeach()
         # Real QuantBot orders and paid completion, then ordinary infantry SmallRockets
         # defeat a hostile aircraft; the fixture explicitly compares the hashed switch.
-        add_test(NAME quantbot_trooper_support COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_trooper_support COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --trooper-support-probe --repeatable
             --mod dunecity --no-ai-telemetry --path-workers 1 --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/trooper-support-probe)
@@ -958,7 +1027,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Builder variants, plus Defend and negative legality/funding controls.
         foreach(lab_mod IN ITEMS vanilla dunecity)
             foreach(lab_difficulty IN ITEMS easy medium hard brutal)
-                add_test(NAME quantbot_research_lab_${lab_mod}_${lab_difficulty}
+                dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_research_lab_${lab_mod}_${lab_difficulty}
                     COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --research-lab-ai-probe --repeatable
                     --mod ${lab_mod} --partner-difficulty ${lab_difficulty}
@@ -971,7 +1040,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         endforeach()
         # Synthetic physical city isolates the old crime-only lab funding veto;
         # reported user saves remain private frozen queue inputs.
-        add_test(NAME quantbot_research_lab_crime_policy COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_research_lab_crime_policy COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --research-lab-ai-probe --repeatable
             --mod dunecity --partner-difficulty hard --seed 1841712204
             --no-ai-telemetry --path-workers 1 --wall-timeout 240
@@ -980,7 +1049,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         set_tests_properties(quantbot_research_lab_crime_policy PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
             ENVIRONMENT "BALANCE_RESEARCH_LAB_CRIME_ONLY=1")
         # A deferred CityResearchOrder study must not veto the Research Lab building.
-        add_test(NAME quantbot_research_order_lab_capital COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_research_order_lab_capital COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --research-lab-ai-probe --repeatable
             --mod dunecity --partner-difficulty hard --seed 1841712204
             --no-ai-telemetry --path-workers 1 --wall-timeout 240
@@ -988,38 +1057,38 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --output-dir ${CMAKE_BINARY_DIR}/research-order-lab-capital)
         set_tests_properties(quantbot_research_order_lab_capital PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
             ENVIRONMENT "BALANCE_RESEARCH_ORDER_LAB_ONLY=1")
-        add_test(NAME quantbot_dunecity_audit_parser COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME quantbot_dunecity_audit_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_dunecity_audit.py)
         set_tests_properties(quantbot_dunecity_audit_parser PROPERTIES TIMEOUT 60)
-        add_test(NAME quantbot_campaign_matrix_coverage COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME quantbot_campaign_matrix_coverage COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_campaign_matrix.py)
         set_tests_properties(quantbot_campaign_matrix_coverage PROPERTIES TIMEOUT 60)
-        add_test(NAME quantbot_control_maps_schedule COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME quantbot_control_maps_schedule COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_control_maps.py)
         set_tests_properties(quantbot_control_maps_schedule PROPERTIES TIMEOUT 60)
-        add_test(NAME quantbot_screen_manifest_schedule COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME quantbot_screen_manifest_schedule COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_ai_screen_manifest.py)
         set_tests_properties(quantbot_screen_manifest_schedule PROPERTIES TIMEOUT 60)
-        add_test(NAME quantbot_initial_map_features COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME quantbot_initial_map_features COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_ai_map_features.py)
         set_tests_properties(quantbot_initial_map_features PROPERTIES TIMEOUT 60)
-        add_test(NAME quantbot_power_continuation_parser COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME quantbot_power_continuation_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_power_continuation.py)
         set_tests_properties(quantbot_power_continuation_parser PROPERTIES TIMEOUT 60)
-        add_test(NAME quantbot_baseline_807_check COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless integration LABELS "macos" NAME quantbot_baseline_807_check COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_ai_baseline_gate.py)
         set_tests_properties(quantbot_baseline_807_check PROPERTIES TIMEOUT 60)
         # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
         # and saved partner state through the live Harkonnen level-9 fixture.
         foreach(pressure_mod IN ITEMS vanilla dunecity)
-            add_test(NAME quantbot_campaign_pressure_${pressure_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(gui nightly LABELS "macos" NAME quantbot_campaign_pressure_${pressure_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --pressure-probe --repeatable
                 --house harkonnen --level 9 --mod ${pressure_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/campaign-pressure-${pressure_mod}-probe)
             set_tests_properties(quantbot_campaign_pressure_${pressure_mod}
                 PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         endforeach()
-        add_test(NAME quantbot_campaign_pacing COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_campaign_pacing COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --pacing-probe --repeatable
             --house harkonnen --level 4 --mod vanilla --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/campaign-pacing-probe)
@@ -1028,7 +1097,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # on a real renderer at the smallest supported interface height and at
         # native 1080. Both sizes capture screenshots into their output directory.
         foreach(ui_viewport IN ITEMS 640x480 1920x1080)
-            add_test(NAME stats_ui_${ui_viewport} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(gui nightly LABELS "macos" NAME stats_ui_${ui_viewport} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --stats-ui-probe --repeatable
                 --viewport ${ui_viewport} --level 9 --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/stats-ui-${ui_viewport}-probe)
@@ -1036,26 +1105,26 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         endforeach()
         # The same window without a city economy: tax and population must read
         # N/A rather than a fabricated zero, and Stats must still be reachable.
-        add_test(NAME stats_ui_vanilla COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME stats_ui_vanilla COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --stats-ui-probe --repeatable
             --viewport 1024x768 --level 9 --mod vanilla --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/stats-ui-vanilla-probe)
         set_tests_properties(stats_ui_vanilla PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         foreach(ai_mod IN ITEMS vanilla dunecity Dune2R)
-            add_test(NAME quantbot_opening-economy_${ai_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_opening-economy_${ai_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --opening-economy-probe --repeatable
                 --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
                 --mod ${ai_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/opening-economy-${ai_mod}-probe)
             set_tests_properties(quantbot_opening-economy_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         endforeach()
-        add_test(NAME quantbot_police_placement COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_police_placement COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --police-placement-probe --repeatable
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/police-placement-probe)
         set_tests_properties(quantbot_police_placement PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
-        add_test(NAME quantbot_police_budget COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_police_budget COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --police-budget-probe --repeatable
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
@@ -1066,7 +1135,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Police reinforcement admission: the unit limit the lobby selected is the only
         # authority for the sidebar status and for deployment, and the station's own
         # garrison restrictions stay independent of it.
-        add_test(NAME police_reinforcement_limit COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME police_reinforcement_limit COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --police-reinforcement-probe --repeatable
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
@@ -1076,7 +1145,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # even while the advanced core and its turret cover are unfinished.
         # The reported match ran this map and mod; the fixture asserts that
         # the colonisation gate really is shut before it measures anything.
-        add_test(NAME quantbot_mcv_deployment COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_mcv_deployment COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --mcv-deployment-probe --repeatable
             --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
@@ -1086,7 +1155,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         option(DUNECITY_ENABLE_AI_MATCH_TESTS "Enable long, victory-required QuantBot matches" OFF)
         if(DUNECITY_ENABLE_AI_MATCH_TESTS)
             foreach(seed 1841712204 41562270 1430976924)
-                add_test(NAME quantbot_city_hard_match_${seed} COMMAND ${Python3_EXECUTABLE}
+                dunecity_add_test(headless nightly LABELS "macos;full-match" NAME quantbot_city_hard_match_${seed} COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable --require-win
                     --mod dunecity --house atreides --partner-difficulty brutal
                     --enemy-ai ai-player --enemy-difficulty hard --concrete-required
@@ -1095,10 +1164,10 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     --build-dir ${CMAKE_BINARY_DIR}
                     --output-dir ${CMAKE_BINARY_DIR}/city-hard-match-${seed})
                 set_tests_properties(quantbot_city_hard_match_${seed} PROPERTIES
-                    TIMEOUT 2500 RUN_SERIAL TRUE LABELS "full-match")
+                    TIMEOUT 2500 RUN_SERIAL TRUE)
             endforeach()
             # The reported 1.0.780 game used powered rocket turrets and this seed.
-            add_test(NAME quantbot_city_reclaimed_rock_match COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos;full-match" NAME quantbot_city_reclaimed_rock_match COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable --require-win
                 --mod dunecity --house atreides --partner-difficulty brutal
                 --enemy-ai ai-player --enemy-difficulty hard --concrete-required
@@ -1108,15 +1177,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/city-reclaimed-rock-match)
             set_tests_properties(quantbot_city_reclaimed_rock_match PROPERTIES
-                TIMEOUT 2500 RUN_SERIAL TRUE LABELS "full-match")
+                TIMEOUT 2500 RUN_SERIAL TRUE)
         endif()
-        add_test(NAME quantbot_city_growth COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_city_growth COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --city-growth-probe --repeatable
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/city-growth-probe)
         set_tests_properties(quantbot_city_growth PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
-        add_test(NAME city_zone_power COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME city_zone_power COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --zone-power-probe --repeatable
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
@@ -1125,7 +1194,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # A city map with no usable spice must seed demanded R/C/I out of its
         # starting grant, including the storage needed to bank its tax. Optional
         # port technology and transport must leave this budget intact.
-        add_test(NAME quantbot_no_spice_city COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_no_spice_city COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --no-spice-city-probe --repeatable
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
@@ -1135,14 +1204,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # production without its price banked and be charged in installments out of
         # arriving tax: the reported 1.0.817 city never ordered a 3000-credit stadium
         # in 247109 cycles. Concrete is required so the foundation budget is exercised.
-        add_test(NAME quantbot_growth_installments COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_growth_installments COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --growth-installment-probe
             --repeatable --level 9 --mod dunecity --concrete-required
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
             --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/growth-installment-probe)
         set_tests_properties(quantbot_growth_installments PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        add_test(NAME quantbot_civic_priority COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_civic_priority COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --civic-priority-probe
             --repeatable --level 9 --mod dunecity --concrete-required
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
@@ -1150,7 +1219,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --output-dir ${CMAKE_BINARY_DIR}/civic-priority-probe)
         set_tests_properties(quantbot_civic_priority PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         foreach(no_spice_map IN ITEMS dunecity low-cash)
-            add_test(NAME quantbot_no_spice_income_${no_spice_map} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_no_spice_income_${no_spice_map} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-no-spice-city-progress.py
                 --map ${no_spice_map} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/no-spice-income-probe)
@@ -1158,7 +1227,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
         endforeach()
         foreach(starport_mod IN ITEMS vanilla dunecity)
-            add_test(NAME quantbot_starport_${starport_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_starport_${starport_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --starport-probe --level 9 --repeatable
                 --mod ${starport_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/starport-${starport_mod}-probe)
@@ -1169,13 +1238,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # campaign exemption and the 9847 save state. Every mod is measured,
         # including Tornie, which needs no concrete but still loses power damage.
         foreach(degradation_mod IN ITEMS vanilla dunecity Dune2R Tornie)
-            add_test(NAME structure_degradation_${degradation_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos" NAME structure_degradation_${degradation_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --degradation-probe --repeatable
                 --level 9 --mod ${degradation_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/degradation-${degradation_mod}-probe)
             set_tests_properties(structure_degradation_${degradation_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         endforeach()
-        add_test(NAME quantbot_custom_attack COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_custom_attack COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --custom-attack-probe --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/custom-attack-probe)
         set_tests_properties(quantbot_custom_attack PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
@@ -1185,7 +1254,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # arrival, the outnumbered dispatch gate holds its 80%-of-configured
         # boundary, the enemy-facing battery is legal and corridor-preserving,
         # the special allocator learns, and a large wave is recalled fairly.
-        add_test(NAME quantbot_army_recovery COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME quantbot_army_recovery COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --recovery-probe --repeatable
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
@@ -1194,7 +1263,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # One default-OFF experiment, actual hidden-force boundaries and paid repair
         # in both supported skirmish modes. The ordinary recovery fixture is unchanged.
         foreach(preserve_mod IN ITEMS vanilla dunecity)
-            add_test(NAME quantbot_retreat_preserve_${preserve_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_retreat_preserve_${preserve_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --recovery-probe --repeatable
                 --level 9 --mod ${preserve_mod} --local-spectator --partner-difficulty brutal
                 --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
@@ -1209,7 +1278,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # MCVs and the air planner's aircraft keep theirs. An attack on a
         # building we own then pulls an adequate local response in one event,
         # including hunting troops, and Easy/Medium keep their shared waves.
-        add_test(NAME quantbot_whole_army_dispatch COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_whole_army_dispatch COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --whole-army-probe --repeatable
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
@@ -1220,7 +1289,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Box, Line) towards its own objective, harvester and MCV left out, no slot in a sonic
         # lane; it marches in Hunt and every member breaks into the fight on contact and stays
         # in Hunt. WaveFormation None and a wave below three units keep today's orders.
-        add_test(NAME quantbot_wave_formation COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_wave_formation COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --wave-formation-probe --repeatable
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
@@ -1232,7 +1301,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # contact, reforms when quiet, falls back a short way when overwhelmed and returns; the
         # gather times out on stragglers; party orders do not depend on unit order; the party
         # survives a save and load mid-gather, mid-march and mid-reform; None keeps today's orders.
-        add_test(NAME quantbot_blob_waves COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_blob_waves COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --blob-wave-probe --repeatable
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
@@ -1245,7 +1314,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # for it (at most 60 s) and launches from it, an attacked building pulls defenders out
         # of it, and save/load mid-gather restores the bundle; the orders do not depend on unit
         # order, Medium is untouched, and the duel override 0 is the previous behaviour.
-        add_test(NAME quantbot_force_concentration COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_force_concentration COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --force-probe --repeatable
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
@@ -1258,7 +1327,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # campaign and Easy are inert, the hook keeps its cadence, and only an explored nearer
         # enemy building puts a bloom on the enemy side.
         foreach(bloom_mod IN ITEMS vanilla dunecity)
-            add_test(NAME quantbot_spice_bloom_${bloom_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_spice_bloom_${bloom_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --spice-bloom-probe --repeatable
                 --level 9 --mod ${bloom_mod}
                 --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
@@ -1274,7 +1343,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # three-seed mean. TrikeSwarm uses the twelve predeclared calibration seeds
         # (docs/unit-route-comparison.md), with only its unchanged game on extra seeds.
         # Learned/Base plays exactly the configured default's game.
-        add_test(NAME quantbot_strategy COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME quantbot_strategy COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --strategy-probe --repeatable
             --mod vanilla --seed 486409243 --no-ai-telemetry --path-workers 1
             --strategy-margin-seeds 11,22 --strategy-trike-margin-seeds 33,44,55,66,77,88,99,111,122
@@ -1289,20 +1358,20 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # target. A distant enemy - even one that just hit it - produces no escape, and
         # human/repair/transit/defence authority, other hunters, Deviators, Easy/Medium and
         # campaign games keep theirs.
-        add_test(NAME quantbot_launcher_kiting COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_launcher_kiting COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --launcher-kiting-probe --repeatable
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/launcher-kiting-probe)
         set_tests_properties(quantbot_launcher_kiting PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         # EliteLauncher is Tornie-only: exercise its real stats and projectile there.
-        add_test(NAME quantbot_launcher_kiting_tornie COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_launcher_kiting_tornie COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --launcher-kiting-probe --repeatable
             --level 9 --mod Tornie
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/launcher-kiting-tornie-probe)
         set_tests_properties(quantbot_launcher_kiting_tornie PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        add_test(NAME quantbot_battery_clearance COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_battery_clearance COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --battery-clearance-probe --repeatable
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
@@ -1314,14 +1383,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # harvester overrides 0). Atreides must eliminate every house within 40 game minutes
         # on all six seeds; 1.0.796 does so (32-37 min), 1.0.812-1.0.842 lose or take 42-71.
         # docs/quantbot-all-against-atreides.md.
-        add_test(NAME quantbot_all_against_atreides COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_all_against_atreides COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-all-against-atreides.py --jobs 3 --win-minutes 50
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/all-against-atreides)
         set_tests_properties(quantbot_all_against_atreides PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
         # Saved Dune2R rules are a separate mandatory gate: powered, non-city, no human.
         # The funded policy wins all seven in 29.79-35.29 min; 40 keeps a 4.71-min margin.
         # Test defaults, not a forced ON style. Keep this addition below ten real minutes.
-        add_test(NAME quantbot_all_against_atreides_dune2r COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_all_against_atreides_dune2r COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/scenario-matrix.py --tier full
             --cells "^aaa/qb-v-4ah-saved/Dune2R$" --check --fresh --jobs 3
             --economy-samples --attack-events --build-dir ${CMAKE_BINARY_DIR}
@@ -1335,14 +1404,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # house eliminated by minute 30 - 1.0.847 summed every enemy into "outnumbered" and never
         # attacked. One seed's elimination time is chance (12-seed sweep, run-ffa-army-deploys.py).
         # docs/formations.md, "Free-for-all: the army deploys".
-        add_test(NAME quantbot_ffa_army_deploys COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_ffa_army_deploys COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-ffa-army-deploys.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ffa-army-deploys)
         set_tests_properties(quantbot_ffa_army_deploys PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
         # Restores the overdue Palace timer in the stalled minute-35 city fixture, checks
         # that no Palace site exists, then requires other completed construction and no
         # prolonged all-yard idle/storage-cap plateau. Disk saves reset this planning timer.
-        add_test(NAME quantbot_strategic_site_stall COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME quantbot_strategic_site_stall COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-strategic-site-stall.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/strategic-site-stall)
         set_tests_properties(quantbot_strategic_site_stall PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
@@ -1356,7 +1425,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # tests/performance/data/eight-house-384); fails when the p99 simulation CPU per cycle or
         # the p99 modelled 10-cycle frame exceeds its budget (1.0.849: 6.3 and 16.8 x calibration,
         # budgets 3 and 9). docs/game-performance.md.
-        add_test(NAME perf_regression COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME perf_regression COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/performance/game-perf.py --scenario stefan-map --minutes 6
             --path-workers 1 --menu-launch 30 --eight-house 2 --check --label perf_regression
             --build-dir ${CMAKE_BINARY_DIR})
@@ -1368,7 +1437,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Hard must lose), Hard v Easy on both sides, a 2v2 on Sihaya-Toto and three campaign
         # missions (levels 1, 4, 9; vanilla and DuneCity) the Hard partner must win. Fails on a
         # crash, a missed expected winner, a time-out, nobody eliminated or idle armies.
-        add_test(NAME quantbot_scenario_matrix COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_scenario_matrix COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/scenario-matrix.py --tier smoke --fresh --jobs 3
             --build-dir ${CMAKE_BINARY_DIR} --results ${CMAKE_BINARY_DIR}/scenario-matrix-smoke)
         set_tests_properties(quantbot_scenario_matrix PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
@@ -1378,7 +1447,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # mods are measured: DuneCity adds city taxes, which must not earn at the factor, and
         # Tornie adds the Worfinery/Harvestank pair, which must.
         foreach(spice_mod IN ITEMS vanilla dunecity Tornie)
-            add_test(NAME house_spice_income_${spice_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(gui nightly LABELS "macos" NAME house_spice_income_${spice_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --spice-income-probe --repeatable
                 --mod ${spice_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/spice-income-${spice_mod}-probe)
@@ -1387,7 +1456,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # No population victory: Atreides level 4 (SCENA008-010, WinFlags=19) must not
         # end when the city passes 500 population; vanilla must behave the same.
         foreach(popwin_mod IN ITEMS vanilla dunecity)
-            add_test(NAME campaign_no_population_victory_${popwin_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos" NAME campaign_no_population_victory_${popwin_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --no-population-victory-probe --repeatable
                 --level 4 --house atreides
                 --mod ${popwin_mod} --build-dir ${CMAKE_BINARY_DIR}
@@ -1398,7 +1467,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # capacity, starting cash is exempt, and the overflow is destroyed at once.
         # City tax only exists with the dunecity mod, so both mods are measured.
         foreach(credit_mod IN ITEMS vanilla dunecity)
-            add_test(NAME house_credit_storage_${credit_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos" NAME house_credit_storage_${credit_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --credit-storage-probe --repeatable
                 --mod ${credit_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/credit-storage-${credit_mod}-probe)
@@ -1407,7 +1476,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # The same probe in a custom game (a bundled multiplayer map), so the spice quota met by
         # refined spice and city tax credits alike is checked outside campaigns too, for every house.
         foreach(credit_mod IN ITEMS vanilla dunecity)
-            add_test(NAME house_credit_storage_custom_${credit_mod} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(headless nightly LABELS "macos" NAME house_credit_storage_custom_${credit_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --credit-storage-probe --repeatable
                 --mod ${credit_mod}
                 --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/2P - 128x128 - 1v1 - Habbanya-Penny.ini"
@@ -1419,7 +1488,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # (chained and refused), save/load, placement on plan after moving a unit, the blocked
         # fallback with its ticker message, mixed queue order, cancel refunds, yard
         # destruction and a 9854 save. Writes preplace-ghosts.png / preplace-fallback.png.
-        add_test(NAME preplace_queue_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(gui nightly LABELS "macos" NAME preplace_queue_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --preplace-probe --repeatable
             --mod dunecity --viewport 1024x768 --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/preplace-probe)
@@ -1428,7 +1497,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # with a repeating unit in production and a Starport with a sold-out item, rendered
         # through Game::drawScreen at both sizes. Writes sidebar-*-<viewport>.png.
         foreach(grid_viewport IN ITEMS 1024x768 1920x1080)
-            add_test(NAME sidebar_grid_probe_${grid_viewport} COMMAND ${Python3_EXECUTABLE}
+            dunecity_add_test(gui nightly LABELS "macos" NAME sidebar_grid_probe_${grid_viewport} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --sidebar-grid-probe --repeatable
                 --mod dunecity --level 9 --viewport ${grid_viewport} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/sidebar-grid-${grid_viewport}-probe)
@@ -1449,3 +1518,20 @@ endif()
 if(NOT EMSCRIPTEN AND NOT ANDROID)
     add_subdirectory(desktop-updater)
 endif()
+
+# Queue admission consumes these labels from ctest --show-only=json-v1 too.
+# Check registrations here so a future raw add_test cannot silently become Air-safe.
+get_property(DUNECITY_ALL_TESTS DIRECTORY PROPERTY TESTS)
+foreach(test IN LISTS DUNECITY_ALL_TESTS)
+    get_test_property(${test} LABELS labels)
+    set(capabilities)
+    foreach(capability IN ITEMS headless gui)
+        if(capability IN_LIST labels)
+            list(APPEND capabilities ${capability})
+        endif()
+    endforeach()
+    list(LENGTH capabilities capability_count)
+    if(NOT capability_count EQUAL 1 OR NOT "nightly" IN_LIST labels)
+        message(FATAL_ERROR "CTest ${test} lacks a unique capability or nightly coverage: ${labels}")
+    endif()
+endforeach()

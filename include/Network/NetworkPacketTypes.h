@@ -376,7 +376,9 @@
 // 122: QuantBot promotes the tested w151 tactical profile with ConvergeChokepointScope
 //      and OpeningOpenMapScope together. Older peers choose different AI attacks and
 //      would desync. Private development identity and save format remain unchanged.
-#define NETWORK_PROTOCOL_VERSION            122
+// 123: QuantBot repair-capacity demand treatment and its saved/runtime pressure
+//      clock; observer runtime 9 carries the same continuation state (save 9885).
+#define NETWORK_PROTOCOL_VERSION            123
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

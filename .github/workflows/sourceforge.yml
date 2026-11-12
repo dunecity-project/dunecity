@@ -7,42 +7,71 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Published stable release to mirror (vX.Y.Z)
+        description: 'Exact already-published stable release to mirror, without rebuilding.'
         required: true
         type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: sourceforge-release
   cancel-in-progress: false
 
 jobs:
-  mirror:
+  select:
+    # Publication may have succeeded before an unrelated website step failed.
+    # Inspect its frozen receipt/release instead of requiring the whole run green.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.head_repository.full_name == github.repository &&
        github.event.workflow_run.event == 'push' &&
        startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
+    outputs:
+      eligible: ${{ steps.select.outputs.eligible }}
+      tag: ${{ steps.select.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Select only published immutable stable inputs
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: python3 scripts/release-automation.py select-publication --stable-only --tag "$REQUESTED_TAG"
+
+  mirror:
+    needs: [select]
+    if: needs.select.outputs.eligible == 'true'
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      RELEASE_TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+      RELEASE_TAG: ${{ needs.select.outputs.tag }}
       GH_TOKEN: ${{ github.token }}
       SOURCEFORGE_USER: ${{ vars.SOURCEFORGE_USER }}
       SOURCEFORGE_API_KEY: ${{ secrets.SOURCEFORGE_API_KEY }}
     steps:
-      # Scripts are taken from trusted main, never an untrusted run artifact.
       - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: '3.x'
       - name: Test release safeguards
         run: python3 -m unittest discover -s scripts/tests -p 'test_sourceforge_release.py'
+      - name: Persist exact published asset IDs, digests and source receipt
+        run: |
+          mkdir -p "$RUNNER_TEMP/sourceforge-inputs"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/sourceforge-inputs/release.json"
+          if jq -e '.assets[] | select(.name == "publication-inputs.json")' "$RUNNER_TEMP/sourceforge-inputs/release.json" >/dev/null; then
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern publication-inputs.json --dir "$RUNNER_TEMP/sourceforge-inputs"
+          fi
       - name: Configure SourceForge authentication
         env:
           SF_KEY: ${{ secrets.SOURCEFORGE_SSH_KEY }}
@@ -63,8 +92,21 @@ jobs:
           ssh-keygen -F frs.sourceforge.net -f ~/.ssh/sourceforge_known_hosts >/dev/null
           ssh-keygen -F git.code.sf.net -f ~/.ssh/sourceforge_known_hosts >/dev/null
           echo "GIT_SSH_COMMAND=ssh -i $HOME/.ssh/sourceforge_release -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/sourceforge_known_hosts" >> "$GITHUB_ENV"
-      - name: Upload, verify and update source and platform defaults
-        run: python3 scripts/sourceforge-release.py "$RELEASE_TAG" --directory "$RUNNER_TEMP/sourceforge-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --publish
+      - name: Resume copy and verify downloads/defaults, never compile
+        run: |
+          set -euo pipefail
+          python3 scripts/sourceforge-release.py "$RELEASE_TAG" \
+            --directory "$RUNNER_TEMP/sourceforge-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --publish \
+            2>&1 | tee "$RUNNER_TEMP/sourceforge-inputs/delivery.log"
+          cp "$RUNNER_TEMP/sourceforge-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/SHA256SUMS" "$RUNNER_TEMP/sourceforge-inputs/"
+      - name: Retain resumable publication identities and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: SourceForge-publication-inputs-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sourceforge-inputs/
+          if-no-files-found: warn
+          retention-days: 90
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -f ~/.ssh/sourceforge_release ~/.ssh/sourceforge_known_hosts

@@ -210,7 +210,8 @@
 // 9882: GameInitSettings MOD17 appends research pace, frozen map area and damage land value.
 // 9883: MOD18 drops obsolete research map area and adds mountain scenery; MOD17/9882 stays frozen.
 // 9884: MOD19 adds technology installments; houses capture study terms and exact payments.
-#define SAVEGAMEVERSION     9884
+// 9885: QuantBot persists sustained, serviceable repair-capacity pressure.
+#define SAVEGAMEVERSION     9885
 /// First save with the integrated Tornie 1.0.546 state (independent of upstream save versions).
 #define SAVEGAMEVERSION_TORNIE546 9878
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
@@ -231,6 +232,8 @@
 #define SAVEGAMEVERSION_MOUNTAIN_SCENERY 9883
 /// First save with captured research payment mode, cost, duration and paid-so-far (MOD19).
 #define SAVEGAMEVERSION_RESEARCH_INSTALLMENTS 9884
+/// First save with the repair-capacity pressure anchor and simulation clock.
+#define SAVEGAMEVERSION_REPAIR_CAPACITY 9885
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

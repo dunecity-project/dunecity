@@ -21,10 +21,15 @@ import re
 import shlex
 import shutil
 import subprocess
-import tempfile
+import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import scratch_dir, require_free_space
+from probe_process import processes, run, check_output
+from probe_fixture import prepare_fixture
+processes.install_signal_handlers()
 SKINS = {0: 'modern', 1: 'lapis', 2: 'classic'}
 # name: physical size, Interface Height preset, the logical size the game must then use
 CASES = {
@@ -44,52 +49,61 @@ parser.add_argument('--skins', type=int, nargs='+', default=[0, 1, 2], choices=[
 parser.add_argument('--cases', nargs='+', default=list(CASES), choices=list(CASES))
 parser.add_argument('--jobs', type=int, default=2)
 parser.add_argument('--timeout', type=int, default=900)
-parser.add_argument('--keep', action='store_true', help='Keep profiles and the probe executable')
+parser.add_argument('--keep', action='store_true', help='Keep profiles in case output; the sealed fixture stays cached')
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
-subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+require_free_space(sweep='if-low')
+run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 
 target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
-main = (root / 'src/main.cpp').read_text()
-needle = 'int menuResult = MainMenu().showMenu();'
-if main.count(needle) != 1:
-    raise RuntimeError('Main-menu injection point changed.')
-main = main.replace(needle, 'int menuResult = runUIGalleryProbe();')
-clamp = 'clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);'
-if main.count(clamp) != 1:
-    raise RuntimeError('Window-size fixture injection point changed.')
-main = main.replace(clamp, '(void)displayIndex;')
-main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
-position = main.index('int main(')
-main = main[:position] + '#include "' + str(root / 'tests/menu/ui-gallery-probe.inc') + '"\n' + main[position:]
-work = Path(tempfile.mkdtemp(prefix='ui-gallery-build-', dir=out))
-source, obj = work / 'ui-gallery-main.cpp', work / 'ui-gallery-main.o'
-source.write_text(main)
-compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
-for option in ('-include', '-MT', '-MF'):
-    if option in compile_command:
-        index = compile_command.index(option)
-        del compile_command[index:index + 2]
-for option in ('-MD', '-MMD'):
-    if option in compile_command:
-        compile_command.remove(option)
-compile_command[compile_command.index('-o') + 1] = str(obj)
-compile_command[compile_command.index('-c') + 1] = str(source)
-compile_command.append('-fno-access-control')
-app = work / 'ui-gallery.app/Contents'
-(app / 'MacOS').mkdir(parents=True)
-(app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-binary = app / 'MacOS/ui-gallery'
-link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
-link = link[link.index('&&') + 1:]
-link = link[:link.index('&&')]
-link[link.index('-o') + 1] = str(binary)
-link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
-with (work / 'build.log').open('w') as log:
-    subprocess.run(['nice', '-n', '10'] + compile_command, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
-    subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+commands = check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+production_link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
+production_link = production_link[production_link.index('&&') + 1:]
+production_link = production_link[:production_link.index('&&')]
+
+def compile_fixture(work):
+    main = (root / 'src/main.cpp').read_text()
+    needle = 'int menuResult = MainMenu().showMenu();'
+    if main.count(needle) != 1:
+        raise RuntimeError('Main-menu injection point changed.')
+    main = main.replace(needle, 'int menuResult = runUIGalleryProbe();')
+    clamp = 'clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);'
+    if main.count(clamp) != 1:
+        raise RuntimeError('Window-size fixture injection point changed.')
+    main = main.replace(clamp, '(void)displayIndex;')
+    main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
+    position = main.index('int main(')
+    main = main[:position] + '#include "' + str(root / 'tests/menu/ui-gallery-probe.inc') + '"\n' + main[position:]
+    source, obj = work / 'ui-gallery-main.cpp', work / 'ui-gallery-main.o'
+    source.write_text(main)
+    compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
+    for option in ('-include', '-MT', '-MF'):
+        if option in compile_command:
+            index = compile_command.index(option)
+            del compile_command[index:index + 2]
+    for option in ('-MD', '-MMD'):
+        if option in compile_command:
+            compile_command.remove(option)
+    compile_command[compile_command.index('-o') + 1] = str(obj)
+    compile_command[compile_command.index('-c') + 1] = str(source)
+    compile_command.append('-fno-access-control')
+    app = work / 'ui-gallery.app/Contents'
+    (app / 'MacOS').mkdir(parents=True)
+    (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
+    binary = app / 'MacOS/ui-gallery'
+    link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
+    link = link[link.index('&&') + 1:]
+    link = link[:link.index('&&')]
+    link[link.index('-o') + 1] = str(binary)
+    link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
+    with (work / 'build.log').open('w') as log:
+        run(['nice', '-n', '10'] + compile_command, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+        run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+
+binary = prepare_fixture(root, build, out, build / 'ui-gallery-probe-fixture',
+                         'ui-gallery.app/Contents/MacOS/ui-gallery', commands, production_link, compile_fixture)
+print('UI_GALLERY_RUNTIME_PHASE: begin', flush=True)
 
 lobby_map = root / 'data/maps/multiplayer/2P - 51x31 - 1v1 - Habbanya-Autumn.ini'
 
@@ -120,7 +134,7 @@ def run_case(label, skin, case, extra_env=None, write_ini=True, skin_in_ini=True
     logpath = case_out / 'run.log'
     with logpath.open('w') as log:
         try:
-            result = subprocess.run(['nice', '-n', '10', str(binary), '--window', '--showlog'], cwd=case_out, env=env,
+            result = run(['nice', '-n', '10', str(binary), '--window', '--showlog'], phase='UI_GALLERY_RUNTIME_PHASE', cwd=case_out, env=env,
                                     stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout)
             code = result.returncode
         except subprocess.TimeoutExpired:
@@ -139,20 +153,29 @@ def run_case(label, skin, case, extra_env=None, write_ini=True, skin_in_ini=True
     broken = [issue for issue in issues if issue[3] in ('failed', 'over-corner-crest')]
     failed += [f'{issue[2]}: {issue[4]}' for issue in broken]
     ok = code == 0 and len(passed) == 1 and not broken
+    if args.keep:
+        shutil.copytree(profile, case_out / 'profile', dirs_exist_ok=True)
+    if ok:
+        shutil.rmtree(profile)
     return dict(label=label, case=case, ok=ok, code=code, failed=failed, issues=issues, log=logpath, plates=plates)
 
 
-jobs = []
-with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-    for skin in args.skins:
-        for case in args.cases:
-            jobs.append(pool.submit(run_case, SKINS[skin], skin, case))
-    # A 1.0.850 profile has no UI Skin key; a brand-new profile has no Dune City.ini at all.
-    jobs.append(pool.submit(run_case, 'profile-850', 2, '1440x900-hd',
-                            {'UI_GALLERY_FRESH_PROFILE': '1'}, True, False))
-    jobs.append(pool.submit(run_case, 'profile-new', 2, '640x480',
-                            {'UI_GALLERY_NEW_PROFILE': '1'}, False))
-    results = [job.result() for job in jobs]
+with scratch_dir('ui-gallery-probe') as work:
+    jobs = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+        for skin in args.skins:
+            for case in args.cases:
+                jobs.append(pool.submit(run_case, SKINS[skin], skin, case))
+        # A 1.0.850 profile has no UI Skin key; a brand-new profile has no Dune City.ini at all.
+        jobs.append(pool.submit(run_case, 'profile-850', 2, '1440x900-hd',
+                                {'UI_GALLERY_FRESH_PROFILE': '1'}, True, False))
+        jobs.append(pool.submit(run_case, 'profile-new', 2, '640x480',
+                                {'UI_GALLERY_NEW_PROFILE': '1'}, False))
+        results = [job.result() for job in jobs]
+    failures = [f"{result['label']}/{result['case']}" for result in results if not result['ok']]
+    if failures:
+        (work / 'failed').mkdir()
+        (work / 'failed/cases').write_text('\n'.join(failures) + '\n')
 
 # Contact sheets: one per skin x case, every screen as a labelled thumbnail.
 try:
@@ -198,8 +221,6 @@ for result in sorted(results, key=lambda r: (r['label'], r['case'])):
 (out / 'summary.txt').write_text('\n'.join(lines) + '\n')
 print('\n'.join(lines))
 print(f'issues: {out / "issues.tsv"}; contact sheets: {out / "contact"}')
-if not args.keep:
-    shutil.rmtree(work, ignore_errors=True)
-subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 if not all(result['ok'] for result in results):
     raise SystemExit('Failed: ' + ', '.join(f"{r['label']}/{r['case']}" for r in results if not r['ok']))

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """1.0.807 promotion check (docs/ai-baseline-gate.md); Python 3.9 standard library.
 
-On 1.0.807's own deck the candidate must win at least as many games as the
-switch-OFF arm of the same source. 1.0.807's wins are printed for information.
-Every house in a deck game runs that build's AI, so a game is won when it ends
-with a winner (outcome "decided") before the deck's 40-minute cap.
+On 1.0.807's deck the candidate must finish at least as many games with any
+winner as switch-OFF on the same source. All houses run that arm's AI: this
+is a decisiveness/timeout-regression check, NOT head-to-head strength.
+Independent candidate-seat matches establish competitive improvement.
 """
 import argparse
 import csv
@@ -27,7 +27,7 @@ def games(path):
         return {row['id']: row for row in csv.DictReader(stream)}
 
 
-def wins(rows):
+def decided_games(rows):
     return sum(row['outcome'] == 'decided' for row in rows.values())
 
 
@@ -139,16 +139,16 @@ def main(argv=None):
             return 2
     else:
         reference = games(args.reference)
-        reference_wins = wins(reference)
+        reference_wins = decided_games(reference)
     invalid = problems(candidate, off, reference, reference_validated=bool(args.reference_observations))
     if invalid:
         more = f' (+{len(invalid) - 5} more)' if len(invalid) > 5 else ''
         print('INVALID: ' + '; '.join(invalid[:5]) + more)
         return 2
-    candidate_wins, off_wins = wins(candidate), wins(off)
-    verdict = 'PASS' if candidate_wins >= off_wins else 'FAIL'
-    print(f'{verdict}, candidate {candidate_wins} / OFF {off_wins} / 807 {reference_wins}'
-          f' (wins of {len(reference)} games)')
+    candidate_decided, off_decided = decided_games(candidate), decided_games(off)
+    verdict = 'PASS' if candidate_decided >= off_decided else 'FAIL'
+    print(f'{verdict}, decided games: candidate {candidate_decided} / OFF {off_decided}'
+          f' / 807 {reference_wins} (of {len(reference)}; not head-to-head strength)')
     return 0 if verdict == 'PASS' else 1
 
 

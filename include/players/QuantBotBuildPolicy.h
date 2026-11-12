@@ -352,6 +352,125 @@ inline int supportQueueTarget(int baseline, int actual, int committed, int busy,
         return std::max(baseline,actual+1);
     return baseline;
 }
+
+// Only a useful first bay is speculative. Repeat capacity must serve a
+// persistent, reachable queue; army size and completed return flights are not
+// service demand. One incoming bay gets its chance before another is ordered.
+inline int firstRepairYardTarget(int combatVehicles, int workers) {
+    return combatVehicles > 0 || workers > 0 ? 1 : 0;
+}
+inline int repairCapacityTarget(bool firstUseful, int actual, int committed,
+                                int usable, int busy, int waiting, Uint32 pressureCycles) {
+    const int target = std::max(actual, firstUseful ? 1 : 0);
+    return actual > 0 && committed == actual && usable > 0 && busy == usable
+        && waiting >= 2 && pressureCycles >= MILLI2CYCLES(30000) ? actual + 1 : target;
+}
+inline bool repairCapacityAdmitted(bool permitted, int actual, int committed, int target) {
+    return permitted && (committed == 0 || (committed == actual && committed < target));
+}
+// The anchor prevents pressure at unrelated bases from sharing one wait.
+// Both values are simulation state and are carried through disk/network saves.
+inline Uint32 observeRepairPressure(Uint32 demandYard, Uint32 now, Uint32& yard, Uint32& since) {
+    if (demandYard == NONE_ID) {
+        yard = NONE_ID;
+        since = std::numeric_limits<Uint32>::max();
+        return 0;
+    }
+    if (yard != demandYard || since == std::numeric_limits<Uint32>::max() || since > now) {
+        yard = demandYard;
+        since = now;
+    }
+    return now - since;
+}
+
+// Bounded ground-access proof around a repair footprint. Ignore mobile traffic,
+// never terrain or buildings: a transport/access failure is not another bay's
+// work. Flood once per yard, not once per unit, with no heap allocation.
+struct RepairServiceAccess {
+    static constexpr int radius = MIN_CARRYALL_LIFT_DISTANCE;
+    static constexpr int side = 2 * radius + 1;
+    std::array<Uint16, side * side> component{};
+    std::array<int, side * side + 1> jobs{};
+    std::array<int, side * side> jobsAt{};
+    int left = 0, top = 0;
+
+    bool contains(int x, int y) const {
+        return x >= left && x < left + side && y >= top && y < top + side;
+    }
+    Uint16 componentAt(int x, int y) const {
+        return contains(x, y) ? component[(y - top) * side + x - left] : 0;
+    }
+    bool reaches(int x, int y) const { return componentAt(x, y) != 0; }
+    void addWaiting(int x, int y) {
+        if (const Uint16 id = componentAt(x, y)) {
+            ++jobs[id];
+            ++jobsAt[(y - top) * side + x - left];
+        }
+    }
+    // Cached component counts prove that this footprint can serve the waiting
+    // jobs. Inserting the new bay cannot break their route to its own perimeter.
+    // Jobs standing on its footprint must move first and do not justify it.
+    int waitingFor(int x, int y, int width, int height) const {
+        if (x + width < left || x - 1 >= left + side || y + height < top || y - 1 >= top + side) return 0;
+        std::array<bool, side * side + 1> seen{};
+        int waiting = 0;
+        auto touch = [&](int px, int py) {
+            const Uint16 id = componentAt(px, py);
+            if (id && !seen[id]) { seen[id] = true; waiting += jobs[id]; }
+        };
+        for (int px = x - 1; px <= x + width; ++px) {
+            touch(px, y - 1); touch(px, y + height);
+        }
+        for (int py = y; py < y + height; ++py) {
+            touch(x - 1, py); touch(x + width, py);
+        }
+        for (int py = std::max(y, top); py < std::min(y + height, top + side); ++py)
+            for (int px = std::max(x, left); px < std::min(x + width, left + side); ++px) {
+                const int index = (py - top) * side + px - left;
+                if (seen[component[index]]) waiting -= jobsAt[index];
+            }
+        return waiting;
+    }
+    bool touches(int x, int y, int width, int height) const {
+        for (int px = x - 1; px <= x + width; ++px)
+            if (reaches(px, y - 1) || reaches(px, y + height)) return true;
+        for (int py = y; py < y + height; ++py)
+            if (reaches(x - 1, py) || reaches(x + width, py)) return true;
+        return false;
+    }
+    template<class Walkable>
+    void survey(int x, int y, int width, int height, Walkable walkable) {
+        component.fill(0); jobs.fill(0); jobsAt.fill(0);
+        left = x + width / 2 - radius;
+        top = y + height / 2 - radius;
+        std::array<Uint16, side * side> queue;
+        Uint16 nextComponent = 0;
+        auto seed = [&](int sx, int sy) {
+            if (!contains(sx, sy) || componentAt(sx, sy) || !walkable(sx, sy)) return;
+            const Uint16 id = ++nextComponent;
+            size_t count = 0;
+            auto visit = [&](int px, int py) {
+                if (!contains(px, py)) return;
+                const int index = (py - top) * side + px - left;
+                if (component[index] || !walkable(px, py)) return;
+                component[index] = id;
+                queue[count++] = static_cast<Uint16>(index);
+            };
+            visit(sx, sy);
+            for (size_t cursor = 0; cursor < count; ++cursor) {
+                const int px = left + queue[cursor] % side, py = top + queue[cursor] / side;
+                visit(px - 1, py); visit(px + 1, py);
+                visit(px, py - 1); visit(px, py + 1);
+            }
+        };
+        for (int px = x - 1; px <= x + width; ++px) {
+            seed(px, y - 1); seed(px, y + height);
+        }
+        for (int py = y; py < y + height; ++py) {
+            seed(x - 1, py); seed(x + width, py);
+        }
+    }
+};
 inline bool firstTransportNeeded(bool available, int heavyFactories, int workers, int carryalls) {
     return available && heavyFactories > 0 && workers > 0 && carryalls == 0;
 }

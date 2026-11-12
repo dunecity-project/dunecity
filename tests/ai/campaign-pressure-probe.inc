@@ -62,13 +62,18 @@ void runCampaignPressureProbe(Game& game) {
     game.getTriggerManager().addTrigger(std::make_unique<ReinforcementTrigger>(enemies[0]->getHouse()->getHouseID(),Unit_Tank,Drop_Homebase,false,100));
     game.getTriggerManager().addTrigger(std::make_unique<ReinforcementTrigger>(enemies[0]->getHouse()->getHouseID(),Unit_Harvester,Drop_Enemybase,false,200));
     game.getTriggerManager().addTrigger(std::make_unique<ReinforcementTrigger>(enemies[0]->getHouse()->getHouseID(),Unit_Tank,Drop_Enemybase,false,30000));
-    for(auto* bot:enemies) for(auto tier:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
-        bot->difficulty=tier;bot->campaignWave={};bot->attackTimer=INT32_MAX;
-        bot->updateCampaignWave();
-        require(bot->campaignWave.opening>=30000,"AI opened before map attack trigger");
-        require(bot->campaignWave.opening<=30000+MILLI2CYCLES(120000),"Opening delay exceeds two minutes");
-        if(tier==QuantBot::Difficulty::Brutal) require(bot->campaignWave.opening==30000,"Brutal delayed opening");
+    const auto originalGameType=game.gameType;
+    for(auto type:{GameType::Campaign,GameType::CampaignCoop,GameType::Skirmish,GameType::SkirmishCoop}) {
+        game.gameType=type;
+        for(auto* bot:enemies) for(auto tier:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
+            bot->difficulty=tier;bot->campaignWave={};bot->attackTimer=INT32_MAX;
+            bot->updateCampaignWave();
+            require(bot->campaignWave.opening>=30000,"AI opened before map attack trigger");
+            require(bot->campaignWave.opening<=30000+MILLI2CYCLES(120000),"Opening delay exceeds two minutes");
+            if(tier==QuantBot::Difficulty::Brutal) require(bot->campaignWave.opening==30000,"Brutal delayed opening");
+        }
     }
+    game.gameType=originalGameType;
     game.getTriggerManager().triggers.clear();
     enemies[0]->difficulty=QuantBot::Difficulty::Brutal;enemies[0]->campaignWave={};
     enemies[0]->updateCampaignWave();
@@ -102,21 +107,27 @@ void runCampaignPressureProbe(Game& game) {
             }
         }
     };
-    for (auto tier:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
-        reset(tier);
-        enemies[0]->launchGroundHunt();
-        require(!enemies[0]->campaignWave.members.empty(),"First enemy failed to launch fixture wave");
-        const auto first=enemies[0]->campaignWave.members;
-        enemies[0]->militaryValueLimit=1000000;
-        enemies[0]->launchGroundHunt();
-        require(enemies[0]->campaignWave.members==first,"Away attackers bypassed fresh-wave readiness");
-        enemies[1]->launchGroundHunt();
-        require(!enemies[1]->campaignWave.members.empty(),"Another house incorrectly blocked independent attack");
-        const auto profile=enemies[0]->campaignProfile();const auto used=enemies[0]->campaignPressure();
-        require(!profile.limitedWave || (used.units<=profile.units && used.value<=profile.value),"Alliance exceeded count/value cap");
-        require(used.houses<=profile.houses,"Alliance exceeded house cap");
-        SDL_Log("PRESSURE_TIER_PASS: tier=%d houses=%d units=%d value=%d",int(tier),used.houses,used.units,used.value);
+    // Compare real dispatches, not just role predicates, in all mission modes.
+    for(auto type:{GameType::Campaign,GameType::CampaignCoop,GameType::Skirmish,GameType::SkirmishCoop}) {
+        game.gameType=type;
+        for(auto tier:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
+            reset(tier);
+            enemies[0]->launchGroundHunt();
+            require(!enemies[0]->campaignWave.members.empty(),"First enemy failed to launch fixture wave");
+            const auto first=enemies[0]->campaignWave.members;
+            enemies[0]->militaryValueLimit=1000000;
+            enemies[0]->launchGroundHunt();
+            require(enemies[0]->campaignWave.members==first,"Away attackers bypassed fresh-wave readiness");
+            enemies[1]->launchGroundHunt();
+            require(!enemies[1]->campaignWave.members.empty(),"Another house incorrectly blocked independent attack");
+            const auto profile=enemies[0]->campaignProfile();const auto used=enemies[0]->campaignPressure();
+            require(!profile.limitedWave || (used.units<=profile.units && used.value<=profile.value),"Alliance exceeded count/value cap");
+            require(used.houses<=profile.houses,"Alliance exceeded house cap");
+            SDL_Log("PRESSURE_TIER_PASS: game_type=%d tier=%d houses=%d units=%d value=%d",
+                int(type),int(tier),used.houses,used.units,used.value);
+        }
     }
+    game.gameType=originalGameType;
     // Large real armies must not be cut back to the former alliance caps.
     // Each house gets 40 tanks: Hard observes its credit cap, Brutal sends all 40.
     std::vector<UnitBase*> assaultArmy;

@@ -92,7 +92,8 @@ def schedule(args):
                 games += [dict(id=f'{case}-{seed}/{index}', case=case, round=index, seed=seed)
                           for seed in args.stress_seeds]
             else:
-                games.append(dict(id=f'{case}/{index}', case=case, round=index))
+                fixture = 'campaign-quantbot-easy-full' if case == 'campaign' else case
+                games.append(dict(id=f'{fixture}/{index}', case=case, round=index))
     return games
 
 
@@ -118,9 +119,10 @@ def case_arguments(case):
                 '--scenario-sides', sides, '--local-spectator', '--skirmish', spec,
                 '--seed', '9101', '--minutes', '120' if city else '90'], {}
     if case == 'campaign':
-        # The real human-partner gate, not its AI-only diagnostic (Atreides L7/m17).
+        # The QuantBot human-partner gate, not the historical CampaignAIPlayer fixture.
         return ['--scenario', '--mod', 'vanilla', '--house', 'atreides', '--level', '7', '--mission', '17',
-                '--partner-difficulty', 'brutal', '--enemy-ai', 'campaign', '--seed', '80762', '--minutes', '80'], {}
+                '--partner-difficulty', 'brutal', '--enemy-ai', 'quantbot', '--enemy-difficulty', 'easy',
+                '--campaign-mode', 'full', '--seed', '80762', '--minutes', '80'], {}
     seed = '1756374161' if case == 'aaa1' else '906213928'
     sides = ('harkonnen:1:AIPlayerHard,atreides:2:qBotBrutal,ordos:1:AIPlayerHard,'
              'fremen:1:AIPlayerHard,sardaukar:1:AIPlayerHard')

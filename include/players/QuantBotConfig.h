@@ -138,8 +138,8 @@ struct QuantBotConfig {
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
-    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CampaignPlayerHouse,
-    /// CapacityMcvRunway,
+    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget,
+    /// SingleMissionCampaignPolicy, CampaignPlayerHouse, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
     /// SpreadVsDeathHand, DefencePrerequisites, HardCityMatch, ResearchLab, ResearchLabProgression,
     /// CityGrowthPower, CityPowerSizing, CityOpeningCapital, CityConstructionCapital, CityProductionPrerequisites,
@@ -272,6 +272,9 @@ struct QuantBotConfig {
         int fleetHarvestersPerBay;             ///< Fixed factorial levels: 2, 3, 4.
         int fleetCarryallQuarters;             ///< Carryalls per worker in quarters: 0, 1, 2.
         int fleetRepairYards;                  ///< New repair-yard ceiling: 0 or 1.
+        /// Default-OFF: repeat bays need 30s of reachable, saturated local service
+        /// demand. Custom games only; authored campaign rebuilding is unchanged.
+        bool repairCapacityDemand;
         /// Default-off FFA vulture timing: 0 native, 1 strike below 60%, 2 below 90%.
         /// Uses current mutual rival combat and true army values, never unsaved history.
         int ffaVultureLevel;
@@ -295,6 +298,9 @@ struct QuantBotConfig {
         /// The equivalent four-worker first-wave budget for a Hard/Brutal campaign partner of a
         /// human that started without a heavy factory. Enemy controllers and Easy/Medium stay as-is.
         bool campaignCombatBudget;
+        /// Use Full campaign AI policy for Single mission and Single mission co-op.
+        /// Hashed; default on. OFF restores legacy Single behavior, never Full campaign.
+        bool singleMissionCampaignPolicy;
         /// The campaign's selected player house uses normal player-side economy and attacks,
         /// even when its QuantBot is the sole controller. Authored enemy houses are unchanged.
         bool campaignPlayerHouse;

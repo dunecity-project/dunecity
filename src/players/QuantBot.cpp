@@ -111,8 +111,9 @@ QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Diffic
 
     retreatTimer = MILLI2CYCLES(60000); //turning off
 
-	// Different AI logic for Campaign. Assumption is if player is loading they are playing a campaign game
-	if ((isCampaignGameType(currentGame->gameType)) || (currentGame->gameType == GameType::LoadSavegame) || ((currentGame->gameType == GameType::Skirmish || currentGame->gameType == GameType::SkirmishCoop))) {
+    // Single missions already use campaign mode, including the legacy OFF arm.
+    // Policy scope is separate from campaign progression and saved AI mode.
+    if (isScenarioGameType(currentGame->gameType) || currentGame->gameType == GameType::LoadSavegame) {
 		gameMode = GameMode::Campaign;
 	}
 	else {
@@ -205,7 +206,7 @@ void QuantBot::setRole(AIRole newRole) {
         attackTimer = std::numeric_limits<Sint32>::max();
     } else if (!wasFighting) {
         // Back to commanding the army: the timer a human-allied controller starts with.
-        attackTimer = isCampaignGameType(currentGame->gameType) ? 0
+        attackTimer = campaignPolicyApplies() ? 0
             : SimpleArmyPolicy::attackDelay(MILLI2CYCLES(botConfig().attackTimerMs),
                 currentGame->getGameInitSettings().getRandomSeed(), getGameCycleCount(), getHouse()->getHouseID());
     }
@@ -216,7 +217,7 @@ int QuantBot::configuredCustomHarvesterLimit() const {
     // Custom games the house plays itself only: campaigns keep their scripted fleets and a
     // support controller follows its human partner.
     if (builderOnly() || gameMode != GameMode::Custom || currentGame == nullptr || currentGameMap == nullptr
-        || isCampaignGameType(currentGame->gameType)) return 0;
+        || campaignPolicyApplies()) return 0;
     // Maps above 64x64 (the Large and Huge classes: Easy 8/15, Medium 15/25, Hard 40/40, Brutal
     // 100/50). The Small and Medium class values (2-10 workers) are campaign-era fleet sizes that
     // would starve every custom economy on a 64x64 map; there the spice budget alone decides, as before.
@@ -230,7 +231,7 @@ int QuantBot::configuredCustomHarvesterLimit() const {
 bool QuantBot::openingCombatBudgetActive() const {
     if (!botConfig().force.openingCombatBudget || difficulty < Difficulty::Hard || builderOnly()
         || gameMode != GameMode::Custom || !currentGame || !currentGameMap
-        || isCampaignGameType(currentGame->gameType) || initialMilitaryValue < 0
+        || campaignPolicyApplies() || initialMilitaryValue < 0
         || initialItemCount[Structure_HeavyFactory] > 0 || customWave.launched != 0
         || currentGameMap->getSizeX() * currentGameMap->getSizeY() <= 4096) return false;
     const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
@@ -239,7 +240,7 @@ bool QuantBot::openingCombatBudgetActive() const {
 
 bool QuantBot::campaignCombatBudgetActive() const {
     if (!botConfig().force.campaignCombatBudget || difficulty < Difficulty::Hard || builderOnly()
-        || !currentGame || !isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
+        || !currentGame || !campaignPolicyApplies() || !isAlliedWithHuman()
         || initialMilitaryValue < 0 || initialItemCount[Structure_HeavyFactory] > 0
         || campaignWave.launched != 0) return false;
     const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
@@ -295,7 +296,7 @@ void QuantBot::update() {
         initialMilitaryValue = -1;
         const auto& config = botConfig();
         attackTimer = builderOnly() ? std::numeric_limits<Sint32>::max()
-            : isCampaignGameType(currentGame->gameType) ? 0
+            : campaignPolicyApplies() ? 0
             : SimpleArmyPolicy::attackDelay(MILLI2CYCLES(config.attackTimerMs),
                 currentGame->getGameInitSettings().getRandomSeed(), getGameCycleCount(), getHouse()->getHouseID());
         logDebug("Human-allied house: using economy development instead of campaign enemy rebuild limits");
@@ -304,7 +305,7 @@ void QuantBot::update() {
     // Allies have no campaign opening grace. Discard a legacy opening timer
     // on load, but preserve the normal 60-second break between their attacks.
     if (!builderOnly() && difficulty != Difficulty::Defend && isAlliedWithHuman()
-        && isCampaignGameType(currentGame->gameType) && attackTimer > MILLI2CYCLES(60000))
+        && campaignPolicyApplies() && attackTimer > MILLI2CYCLES(60000))
         attackTimer = 0;
 
     // The strategy (docs/ai-play-styles.md, "Strategies"): once, from the seed, house and config.
@@ -327,7 +328,7 @@ void QuantBot::update() {
 		// Allow campaign controllers a repair-yard target, except Medium:
         // Medium preserves only the count actually present at mission start.
 		// Note: supportMode sets gameMode to Custom, so check currentGame->gameType instead
-		if (difficulty!=Difficulty::Medium && (initialItemCount[Structure_RepairYard] == 0) && currentGame && isCampaignGameType(currentGame->gameType) && getHouse()->getTechLevel() > 4) {
+		if (difficulty!=Difficulty::Medium && (initialItemCount[Structure_RepairYard] == 0) && currentGame && campaignPolicyApplies() && getHouse()->getTechLevel() > 4) {
 			initialItemCount[Structure_RepairYard] = 1;
 			if (initialItemCount[Structure_Radar] == 0) {
 				initialItemCount[Structure_Radar] = 1;
@@ -1018,7 +1019,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 		// If the unit is at 60% health or less and is not being forced to move anywhere
 		// only do these acitons for vehicles and not when fighting turrets
 		// repair them, if they are eligible to be repaired
-		if (difficulty != Difficulty::Easy || (isCampaignGameType(currentGame->gameType) && gameMode==GameMode::Custom)) {
+		if (difficulty != Difficulty::Easy || (campaignPolicyApplies() && gameMode==GameMode::Custom)) {
 			if (pGroundUnit->getHealth() / pGroundUnit->getMaxHealth() < 0.80_fix
 				&& !pGroundUnit->isInfantry()
 				&& pGroundUnit->isVisible()

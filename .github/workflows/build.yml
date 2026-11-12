@@ -1,52 +1,102 @@
 name: Build Dune Legacy
 
+run-name: ${{ (inputs.ios_staging == true || github.event.schedule == '23 4 * * 1') && format('iOS internal staging {0}', github.event.schedule == '23 4 * * 1' && 'weekly selection' || github.ref_name) || (github.event_name == 'schedule' || inputs.staging_sha != '') && format('Staging packages {0}', inputs.staging_sha || 'scheduled integration head') || format('CI {0}', github.ref_name) }}
+
 on:
   push:
-    branches: [ main, release-* ]
-    tags:     [ 'v*' ]
+    branches: [ main, release-*, integrate/feature-batch ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+  schedule:
+    - cron: '17 */2 * * *'
+    - cron: '47 3 * * *'
+    # Weekly internal iOS is a separate hosted request, never a desktop dependency.
+    - cron: '23 4 * * 1'
   workflow_dispatch:
     inputs:
+      staging_sha:
+        description: 'Package this exact full 40-character integration SHA after green CI (never stable identity).'
+        type: string
+        default: ''
+      integration_run_id:
+        description: 'Optional producing integration CI receipt; every required platform/test job is checked.'
+        type: string
+        default: ''
+      ios_staging:
+        description: 'Export an internal-only signed dev IPA from this published immutable staging tag. Never uploads to TestFlight.'
+        type: boolean
+        default: false
       windows_cache_probe:
-        description: >-
-          Validation only: run the Windows build alone, rebuild it once from
-          scratch and require compiler-cache hits. Publishes nothing.
+        description: 'Validate Windows compiler-cache reuse only; publish nothing.'
         type: boolean
         default: false
       linux_audio_probe:
-        description: 'Validation only: build/test Linux audio and packages; no other platforms or publication.'
+        description: 'Validate Linux audio/packages only; publish nothing.'
         type: boolean
         default: false
       android_package_probe:
-        description: 'Build an ARM64 Android candidate only; signing for public upgrades is performed separately.'
+        description: 'Build an Android candidate only; public upgrade signing is separate.'
         type: boolean
         default: false
       android_release_build:
-        description: 'With android_package_probe: explicitly build an official Android release candidate, not a development build.'
+        description: 'Explicit official identity for the independent Android candidate.'
         type: boolean
         default: false
       macos_skin_probe:
-        description: 'Validate the Mac build, skin renderer and performance only; no other platforms or publication.'
+        description: 'Validate unsigned hosted Mac rendering/performance only; publish nothing.'
         type: boolean
         default: false
 
-concurrency:
-  group: build-${{ github.ref }}${{ inputs.macos_skin_probe == true && '-mac-skin' || '' }}
-  cancel-in-progress: true
+permissions:
+  contents: read
+  actions: read
 
-# Only official stable-tag builds opt in. Branch CI and validation probes must
-# reset this option even when a persistent runner reuses an official build tree.
+concurrency:
+  group: ${{ inputs.ios_staging == true && format('ios-staging-{0}', github.ref) || github.event.schedule == '23 4 * * 1' && 'ios-staging-scheduler' || startsWith(github.ref, 'refs/tags/v') && format('stable-{0}', github.ref) || (github.event_name == 'schedule' || inputs.staging_sha != '') && 'staging-packages' || format('ci-{0}', github.head_ref || github.ref) }}
+  cancel-in-progress: ${{ inputs.ios_staging != true && !startsWith(github.ref, 'refs/tags/v') && github.event_name != 'schedule' && inputs.staging_sha == '' }}
+
 env:
-  DUNECITY_RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true && 'ON' || 'OFF' }}
+  DUNECITY_RELEASE_BUILD: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && 'ON' || 'OFF' }}
 
 jobs:
+  select-inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.select.outputs.sha }}
+      run: ${{ steps.select.outputs.run }}
+      package: ${{ steps.select.outputs.package }}
+      stable: ${{ steps.select.outputs.stable }}
+      staging: ${{ steps.select.outputs.staging }}
+      tier: ${{ steps.select.outputs.tier }}
+      tag: ${{ steps.select.outputs.tag }}
+      ios: ${{ steps.select.outputs.ios }}
+      ios_dispatch: ${{ steps.select.outputs.ios_dispatch }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Resolve immutable integration or release inputs
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release-automation.py plan --output selection.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-selection-${{ steps.select.outputs.sha }}-${{ github.run_attempt }}
+          path: selection.json
+          if-no-files-found: error
+
   relay-tests:
     # A Windows cache probe validates the Windows job in isolation.
-    if: inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true
+    needs: [select-inputs]
+    if: needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -61,12 +111,14 @@ jobs:
           python3 tools/room-relay/deploy/test-release-pinning.py
   # Exercise the real PHP introduction service; this job never deploys it.
   signaling-tests:
-    if: inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true
+    needs: [select-inputs]
+    if: needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ needs.select-inputs.outputs.sha }}
       - name: Run the signaling service test suite
         run: |
           php --version
@@ -76,10 +128,14 @@ jobs:
   # (CMakeLists.txt, include/config.h, vcpkg.json) already matches the tag.
   # This catches missing bump commits BEFORE any build/release/upload runs.
   verify-version:
-    if: startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true
+    needs: [select-inputs]
+    if: needs.select-inputs.outputs.run == 'true' && needs.select-inputs.outputs.stable == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
@@ -99,12 +155,15 @@ jobs:
 
   test-linux:
     runs-on: ubuntu-latest
-    needs: [verify-version]
+    needs: [select-inputs, verify-version]
     if: |
-      always() && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true &&
+      always() && needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true &&
       (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -128,6 +187,8 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/tests -p test_desktop_updates.py
           python3 -m unittest discover -s scripts/tests -p test_checkout_content.py
+          python3 -m unittest discover -s scripts/tests -p test_release_automation.py
+          python3 -m unittest discover -s scripts/tests -p test_ios_staging.py
           python3 -m unittest discover -s tests/performance -p test_fixture_reconstruction.py
           python3 -m unittest discover -s scripts/tests -p test_macos_runtime.py
           python3 tests/desktop-updater/run-appimage-flow.py --output "$RUNNER_TEMP/appimage-update-test"
@@ -143,9 +204,13 @@ jobs:
         run: |
           # No unbounded -j: sanitizer translation units can exhaust a hosted
           # runner before it reports a compiler error. Keep all test targets.
-          cmake --build build --parallel 2 --target dunelegacy_tests network_wire_harness \
-            relay_wire_harness relay_session_tests relay_http_transport_tests desktop_updater_tests \
-            renderer_initialization_tests
+          if [ '${{ needs.select-inputs.outputs.tier }}' = nightly ]; then
+            cmake --build build --parallel 2
+          else
+            cmake --build build --parallel 2 --target dunelegacy_tests network_wire_harness \
+              relay_wire_harness relay_session_tests relay_http_transport_tests desktop_updater_tests \
+              renderer_initialization_tests
+          fi
 
       - name: Check native and browser framing still agree
         run: node tools/p2p-interop/framing-vectors.mjs
@@ -159,25 +224,24 @@ jobs:
         env:
           ASAN_OPTIONS: detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1
           UBSAN_OPTIONS: print_stacktrace=1
-        # The Random Skirmish generator tests (skirmish_generator_tests and its seed-sweep shards)
-        # run two at a time; everything else runs once, in order.
-        run: |
-          ctest --test-dir build --output-on-failure --stop-on-failure -E '^skirmish_generator_tests'
-          ctest --test-dir build --output-on-failure --stop-on-failure --no-tests=error --parallel 2 -R '^skirmish_generator_tests'
+        # Capability and tier are independent: hosted Linux never admits GUI tests.
+        run: ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L '${{ needs.select-inputs.outputs.tier }}' -LE gui
 
   build-emscripten:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
-    needs: [verify-version]
+    needs: [select-inputs, verify-version]
     if: |
-      always() && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true &&
+      always() && needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true &&
+      (needs.select-inputs.outputs.tier != 'nightly' || needs.select-inputs.outputs.package == 'true') &&
       (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ needs.select-inputs.outputs.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -240,27 +304,41 @@ jobs:
           source .emsdk/emsdk_env.sh
           tests/wasm/run-webrtc-peer-lifecycle.sh
 
-      - name: Upload browser artifacts
-        uses: actions/upload-artifact@v4
+      - name: Freeze the verified browser package
+        if: needs.select-inputs.outputs.package == 'true'
+        env:
+          WEB_CHANNEL: ${{ needs.select-inputs.outputs.stable == 'true' && 'stable' || 'staging' }}
+        run: |
+          PLAY_ROOT="$RUNNER_TEMP/$(test "$WEB_CHANNEL" = staging && echo play-staging || echo play)"
+          python3 scripts/package-web.py --build-root build/emscripten --play-root "$PLAY_ROOT" \
+            --channel "$WEB_CHANNEL" --signaling-origin https://dunelegacy.com
+          mkdir -p browser-package
+          python3 scripts/release-automation.py record-build --platform emscripten \
+            --build-root build/emscripten --output browser-package/build-inputs-emscripten.json
+          tar -czf browser-package/DuneCity-browser.tar.gz -C "$PLAY_ROOT" .
+          python3 scripts/package-p2p-service.py --output "$RUNNER_TEMP/browser-service"
+          tar -czf browser-package/DuneCity-p2p-service.tar.gz -C "$RUNNER_TEMP/browser-service" .
+      - name: Upload frozen browser artifacts
+        if: needs.select-inputs.outputs.package == 'true'
+        uses: actions/upload-artifact@v7
         with:
           name: DuneCity-Emscripten
-          path: |
-            build/emscripten/bin/dunecity.html
-            build/emscripten/bin/dunecity.js
-            build/emscripten/bin/dunecity.wasm
-            build/emscripten/bin/dunecity.data
-            build/emscripten/bin/shell.js
-            build/emscripten/bin/shell.css
-            build/emscripten/bin/p2p-direct.js
+          overwrite: true
+          path: browser-package/*
+          if-no-files-found: error
+          retention-days: 30
 
   build-windows:
     timeout-minutes: 40
-    runs-on: windows-latest
+    runs-on: windows-2022
     # Wait for version check on tag builds; run unconditionally otherwise
-    needs: [verify-version]
-    if: always() && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true && (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
+    needs: [select-inputs, verify-version]
+    if: always() && needs.select-inputs.outputs.run == 'true' && (needs.select-inputs.outputs.tier != 'nightly' || needs.select-inputs.outputs.package == 'true') && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true && (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
 
       - name: Install NSIS
         run: choco install nsis --no-progress -y
@@ -458,6 +536,7 @@ jobs:
           if ($probe.ExitCode -ne 0) { exit $probe.ExitCode }
 
       - name: Create Installer Package
+        if: needs.select-inputs.outputs.package == 'true' && inputs.windows_cache_probe != true
         run: |
           cd build
           cmake --install . --prefix install --config Release
@@ -478,255 +557,223 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: Windows-installer-diagnostics
+          name: Windows-installer-diagnostics-${{ github.run_attempt }}
           path: |
             installer-preflight/package/**/NSISOutput.log
             installer-preflight/package/**/project.nsi
             build/_CPack_Packages/**/NSISOutput.log
             build/_CPack_Packages/**/project.nsi
             build/*.zip
+            build/*.exe
 
+      - name: Record Windows package inputs
+        if: success() && needs.select-inputs.outputs.package == 'true' && inputs.windows_cache_probe != true
+        run: python scripts/release-automation.py record-build --platform windows-x64 --build-root build --output build/build-inputs-windows-x64.json
       - name: Upload Installer
-        if: ${{ inputs.windows_cache_probe != true }}
+        if: success() && needs.select-inputs.outputs.package == 'true' && inputs.windows_cache_probe != true
         uses: actions/upload-artifact@v7
         with:
           name: DuneCity-Windows-Installer
+          overwrite: true
           path: |
             build/*.zip
             build/*.exe
+            build/build-inputs-windows-x64.json
+          if-no-files-found: error
 
-  build-macos:
-    # Runs on the Mac mini (claw.local, M4, macOS 26.6) registered as the
-    # self-hosted runner `dunecity-mac-mini`. The `dunecity-builder` label is
-    # what pins it there: the MacBook Air is still registered as a runner but
-    # deliberately carries only the read-only self-hosted/macOS/ARM64 labels,
-    # so it can never pick up a release build. Re-arm it as a fallback with:
-    #   gh api -X POST repos/VR48/dunecity/actions/runners/25/labels \
-    #     -f 'labels[]=dunecity-builder'
-    # Pull requests never run here because this is a persistent machine with
-    # repository access and a warm dependency cache.
-    runs-on: [self-hosted, macOS, ARM64, dunecity-builder]
-    needs: [verify-version]
-    if: |
-      always() &&
-      inputs.windows_cache_probe != true &&
-      github.event_name != 'pull_request' &&
-      inputs.linux_audio_probe != true &&
-      vars.ENABLE_MACOS_BUILD == 'true' &&
-      inputs.android_package_probe != true &&
-      (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
-    timeout-minutes: 60
+  release-headless-qualification:
+    # Deliberate once-per-release verification, not an idea/build tree on Mini.
+    needs: [select-inputs, verify-version]
+    if: success() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.select-inputs.outputs.stable == 'true'
+    runs-on: macos-15
+    timeout-minutes: 120
     permissions:
       contents: read
     env:
-      # The mini has 10 cores / 16 GB. 8 parallel C++ TUs stays inside RAM.
-      CMAKE_BUILD_PARALLEL_LEVEL: "8"
-      # A `brew update` on every build is minutes of network time and the most
-      # common cause of a slow or flaky macOS job.
-      HOMEBREW_NO_AUTO_UPDATE: "1"
-      HOMEBREW_NO_INSTALL_CLEANUP: "1"
-      HOMEBREW_NO_ENV_HINTS: "1"
+      DUNECITY_RELEASE_BUILD: 'OFF'
+      PACKAGE_BUILD: 'false'
+      TEST_TIER: nightly
+      HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
-      # Fail fast and legibly if this landed on a machine that is not set up,
-      # rather than 10 minutes later inside vcpkg. Records which Mac built the
-      # release, which matters when more than one runner carries the label.
-      - name: Preflight — identify runner and verify toolchain
-        run: |
-          set -euo pipefail
-          echo "Host:      $(hostname) ($(sysctl -n hw.model), $(sysctl -n hw.ncpu) cores)"
-          echo "macOS:     $(sw_vers -productVersion)  Xcode CLT: $(xcode-select -p)"
-          echo "Free disk: $(df -h / | awk 'NR==2 {print $4}')"
-
-          if ! command -v brew >/dev/null 2>&1; then
-            echo "::error title=Runner not provisioned::Homebrew is not on PATH. The runner reads its PATH from ~/actions-runner-dunecity/.path — it must include /opt/homebrew/bin."
-            exit 1
-          fi
-
-          MISSING=()
-          for tool in cmake ninja nasm autoconf automake glibtool pkg-config; do
-            command -v "$tool" >/dev/null 2>&1 || MISSING+=("$tool")
-          done
-          if [ ${#MISSING[@]} -gt 0 ]; then
-            echo "::notice title=Installing missing build deps::${MISSING[*]}"
-          fi
-          echo "cmake $(cmake --version | head -1) | ninja $(ninja --version) | nasm $(nasm --version | awk '{print $3}')"
-
       - uses: actions/checkout@v7
         with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
           persist-credentials: false
-
-      - name: Clean previous build
-        run: rm -rf build
-
-      # vcpkg builds SDL2 + its audio codecs, curl, miniupnpc and discord-rpc
-      # from source; the autotools toolchain + nasm have to be present. Only
-      # install what is actually missing — an unconditional `brew install` of
-      # eight already-present formulas is pure network latency on a persistent
-      # runner, and it is the step this job died in on the old laptop runner.
-      - name: Install build deps
-        run: |
-          set -euo pipefail
-          WANT=(autoconf autoconf-archive automake cmake libtool pkg-config nasm ninja)
-          INSTALLED=$(brew list --formula -1)
-          MISSING=()
-          for f in "${WANT[@]}"; do
-            grep -qx "$f" <<<"$INSTALLED" || MISSING+=("$f")
-          done
-          if [ ${#MISSING[@]} -eq 0 ]; then
-            echo "All build deps already present."
-          else
-            echo "Installing: ${MISSING[*]}"
-            brew install "${MISSING[@]}"
-          fi
-
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require the declared hosted Mac architecture
+        run: test "$(uname -m)" = arm64
+      - name: Restore compiled Mac objects
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: macos-arm64-${{ hashFiles('vcpkg.json') }}
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: 'vcpkg.json'
-
-      # Use the machine-local vcpkg binary cache (seeded from the old runner)
-      # so deps restore instead of rebuilding from source.
-      - name: Fix vcpkg binary caching
+      - name: Restore dependency binaries
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: vcpkg-macos-arm64-${{ hashFiles('vcpkg.json') }}
+      - name: Enable portable dependency cache
         run: |
           mkdir -p "$HOME/.cache/vcpkg/archives"
           echo "VCPKG_BINARY_SOURCES=clear;files,$HOME/.cache/vcpkg/archives,readwrite" >> "$GITHUB_ENV"
-          echo "Cache holds $(find "$HOME/.cache/vcpkg/archives" -name '*.zip' | wc -l | tr -d ' ') prebuilt packages."
-
-      # The p2pkit SDK headers are a configure-time dependency on every
-      # platform. This is a persistent self-hosted runner, so fail legibly if
-      # node is missing rather than deep inside CMake's SDK guard.
-      - name: Install the pinned p2pkit SDK headers
-        working-directory: platform/web
+      - name: Qualify headless nightly at the exact release source without signing
+        run: bash scripts/macos-ci-lane.sh release-headless-qualification
+      - name: Freeze successful source/toolchain/test qualification
         run: |
-          set -euo pipefail
-          command -v node >/dev/null 2>&1 || { echo "::error title=Runner not provisioned::node is required to install the p2pkit SDK headers (brew install node)."; exit 1; }
-          npm ci --ignore-scripts
-
-      - name: Configure CMake
-        run: >-
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DDUNECITY_RELEASE_BUILD=$DUNECITY_RELEASE_BUILD
-          -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
-          -DVCPKG_TARGET_TRIPLET=arm64-osx
-          -DDUNECITY_BUILD_TESTS=ON
-
-      - name: Build
-        run: cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-
-      # Rendering changes must pass the calibrated native performance gate,
-      # not just compile. This probe requires the macOS Ninja build objects.
-      - name: Verify Classic interface, native performance and AI regressions
-        run: |
-          python3 scripts/check-build-deps.py build
-          ctest --test-dir build --output-on-failure -R '^(classic_desert_ui_tests|perf_regression|quantbot_all_against_atreides|quantbot_scenario_matrix|quantbot_ffa_army_deploys)$' --no-tests=error
-          python3 scripts/check-build-deps.py build
-
-      - name: Verify secure relay support
-        run: build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
-
-      - name: Verify DuneCity portraits, high-detail civic overlays and cache recovery
-        run: |
-          python3 tests/skins/run-skin-probe.py --build-dir build --output-dir "$RUNNER_TEMP/dunecity-skin-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          python3 scripts/check-build-deps.py build
-
-      - name: Retain skin probe diagnostics
+          python3 scripts/release-automation.py record-build --platform macos-arm64-headless-qualification \
+            --build-root build --output build/macos-headless-qualification.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-macOS-headless-qualification
+          path: |
+            build/macos-headless-qualification.json
+            build/macos-headless-plan.json
+            build/macos-headless-results.xml
+          if-no-files-found: error
+          retention-days: 90
+      - name: Preserve failed hosted qualification diagnostics
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: DuneCity-Skin-Probe
+          name: DuneCity-macOS-headless-diagnostics-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/dunecity-skin-probe-${{ github.run_id }}-${{ github.run_attempt }}/*.png
-            ${{ runner.temp }}/dunecity-skin-probe-${{ github.run_id }}-${{ github.run_attempt }}/*.log
-          if-no-files-found: ignore
+            build/Testing/Temporary/
+            build/macos-headless-plan.json
+            build/macos-headless-results.xml
+          if-no-files-found: warn
+          retention-days: 90
 
-      - name: Create development DMG
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+  build-macos:
+    # Untrusted PRs and routine staging never reach a persistent signing host.
+    runs-on: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && fromJSON('["self-hosted","macOS","ARM64","dunecity-builder"]') || 'macos-15' }}
+    needs: [select-inputs, verify-version, release-headless-qualification]
+    if: |
+      always() && needs.select-inputs.outputs.run == 'true' &&
+      inputs.windows_cache_probe != true && inputs.linux_audio_probe != true &&
+      inputs.android_package_probe != true &&
+      (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped') &&
+      (needs.select-inputs.outputs.stable != 'true' || needs.release-headless-qualification.result == 'success')
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      PACKAGE_BUILD: ${{ needs.select-inputs.outputs.package }}
+      MACOS_SKIN_PROBE: ${{ inputs.macos_skin_probe || false }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      TEST_TIER: ${{ needs.select-inputs.outputs.tier }}
+    steps:
+      - name: Initialize honest packaged-GUI coverage status
         run: |
-          cd build
-          cpack -G DragNDrop -C Release
-
-      - name: Sign and notarize stable Mac packages
-        if: startsWith(github.ref, 'refs/tags/v')
+          OUT="$RUNNER_TEMP/dunecity-pointer-mapping-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$OUT"
+          printf '%s\n' '{"status":"not-run","reason":"Native GUI gate prerequisites have not completed; inspect the failed prerequisite step"}' > "$OUT/gate-status.json"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+      - name: Require source-bound production admission before using the Mini
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
-          MAC_SIGNING_IDENTITY: 'Developer ID Application: Stefan van der Wel (34X7AYJZ93)'
+          RELEASE_SHA: ${{ needs.select-inputs.outputs.sha }}
         run: |
-          python3 scripts/unlock-macos-signing.py
-          cmake --install build --prefix "$RUNNER_TEMP/dunecity-mac-install" --config Release
-          python3 scripts/package-signed-macos.py \
-            --app "$RUNNER_TEMP/dunecity-mac-install/dunecity.app" \
-            --output "$RUNNER_TEMP/dunecity-mac-signed-${{ github.run_id }}-${{ github.run_attempt }}" \
-            --identity "$MAC_SIGNING_IDENTITY" \
-            --signing-keychain "$HOME/Library/Keychains/DuneCity-Signing.keychain-db" \
-            --notary-profile DuneCityNotarization \
-            --notary-keychain "$HOME/Library/Keychains/DuneCity-Signing.keychain-db"
-          cp "$RUNNER_TEMP/dunecity-mac-signed-${{ github.run_id }}-${{ github.run_attempt }}"/*.dmg build/
-          cp "$RUNNER_TEMP/dunecity-mac-signed-${{ github.run_id }}-${{ github.run_attempt }}"/*.zip build/
-
-      - name: Require packaged native pointer-to-menu alignment
-        if: startsWith(github.ref, 'refs/tags/v')
+          TOKEN=$(python3 scripts/release-automation.py reservation-token --sha "$RELEASE_SHA")
+          echo "::add-mask::$TOKEN"
+          echo "DUNECITY_RESERVATION=$TOKEN" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require the declared Mac architecture
+        run: test "$(uname -m)" = arm64
+      - name: Restore compiled Mac objects
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: macos-arm64-${{ hashFiles('vcpkg.json') }}
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: 'vcpkg.json'
+      - name: Restore dependency binaries
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: vcpkg-macos-arm64-${{ hashFiles('vcpkg.json') }}
+      - name: Enable portable dependency cache
+        run: |
+          mkdir -p "$HOME/.cache/vcpkg/archives"
+          echo "VCPKG_BINARY_SOURCES=clear;files,$HOME/.cache/vcpkg/archives,readwrite" >> "$GITHUB_ENV"
+      - name: Build unsigned hosted Mac coverage
+        if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/v')
+        run: bash scripts/macos-ci-lane.sh
+      - name: Reserve the shared Mini build, signing and GUI lane
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.select-inputs.outputs.stable == 'true'
         env:
-          DUNECITY_NATIVE_POINTER_TEST: '1'
+          RELEASE_SHA: ${{ needs.select-inputs.outputs.sha }}
         run: |
-          python3 tests/menu/run-menu-probe.py \
-            --pointer-mapping --size 1440x900 --build-dir build \
-            --runtime-app "$RUNNER_TEMP/dunecity-mac-install/dunecity.app" \
-            --output-dir "$RUNNER_TEMP/dunecity-pointer-mapping-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-
-      - name: Retain native pointer regression diagnostics
-        if: always() && startsWith(github.ref, 'refs/tags/v')
+          OWNER="github:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:macos"
+          agent-workspace run --project dunecity --owner "$OWNER" --tests -- \
+            dunecity-queue reservation run --cwd "$GITHUB_WORKSPACE" --rev "$RELEASE_SHA" \
+            --owner "$OWNER" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --lane macos-build --purpose release --reservation "$DUNECITY_RESERVATION" -- \
+            bash "$GITHUB_WORKSPACE/scripts/macos-ci-lane.sh"
+      - name: Retain all packaged GUI and signing diagnostics
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: DuneCity-macOS-pointer-regression
-          path: ${{ runner.temp }}/dunecity-pointer-mapping-${{ github.run_id }}-${{ github.run_attempt }}/
+          name: DuneCity-macOS-pointer-regression-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/dunecity-pointer-mapping-${{ github.run_id }}-${{ github.run_attempt }}/
+            ${{ runner.temp }}/dunecity-skin-probe-${{ github.run_id }}-${{ github.run_attempt }}/
+            ${{ runner.temp }}/dunecity-mac-signed-${{ github.run_id }}-${{ github.run_attempt }}/*.json
           if-no-files-found: warn
-          retention-days: 14
-
-      - name: Verify DMG
-        run: bash scripts/verify-macos-dmg.sh build/DuneCity-*-macOS.dmg
-
-      - name: Upload DMG
+          retention-days: 30
+      - name: Record Mac package inputs
+        if: always() && needs.select-inputs.outputs.package == 'true' && hashFiles('build/CMakeCache.txt') != ''
+        run: python3 scripts/release-automation.py record-build --platform macos-arm64 --build-root build --output build/build-inputs-macos-arm64.json
+      - name: Upload complete Mac package set
+        if: success() && needs.select-inputs.outputs.package == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: DuneCity-macOS-DMG
+          overwrite: true
           path: |
-            build/*.dmg
+            build/*-macOS.dmg
             build/*-macOS.zip
+            build/macos-signing.json
+            build/build-inputs-macos-arm64.json
           if-no-files-found: error
-          retention-days: 14
-
-      # A persistent runner keeps every past checkout's build tree. Drop the
-      # Release objects once the DMG is safely uploaded; the vcpkg binary cache
-      # (the expensive part) is outside _work and is untouched.
-      - name: Reclaim build space
-        if: always()
-        run: rm -rf build/CMakeFiles build/vcpkg_installed || true
-
-      - name: Notify Discord
-        if: always() && env.DISCORD_WEBHOOK != ''
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
-        run: |
-          VERSION=$(sed -n 's/^project(DuneCity VERSION \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' CMakeLists.txt)
-          if [ "${{ job.status }}" = "success" ]; then
-            MSG="✅ **macOS build passed** — DuneCity v${VERSION} DMG ready (built on $(hostname -s))"
-          else
-            MSG="❌ **macOS build failed** — DuneCity v${VERSION} (on $(hostname -s))"
-          fi
-          curl -s -H "Content-Type: application/json" \
-            -d "{\"content\": \"${MSG}\"}" \
-            "$DISCORD_WEBHOOK"
+          retention-days: 30
+      - name: Preserve unqualified Mac packages after a later GUI failure
+        if: failure() && needs.select-inputs.outputs.package == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-macOS-failed-packages-${{ github.run_attempt }}
+          path: |
+            build/*-macOS.dmg
+            build/*-macOS.zip
+            build/macos-signing.json
+            build/build-inputs-macos-arm64.json
+          if-no-files-found: warn
+          retention-days: 30
 
   build-linux:
     # Keep the release ABI on an older, stable glibc baseline. A moving
     # ubuntu-latest runner produced binaries requiring GLIBC_2.38.
     runs-on: ubuntu-22.04
-    needs: [verify-version]
+    needs: [select-inputs, verify-version]
     if: |
-      always() && inputs.windows_cache_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true &&
+      always() && needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true &&
+      (needs.select-inputs.outputs.tier != 'nightly' || needs.select-inputs.outputs.package == 'true') &&
       (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1
@@ -806,12 +853,14 @@ jobs:
           xvfb-run -a python3 scripts/check-video-runtime.py --binary build/bin/dunecity --require-driver opengl --require-accelerated
 
       - name: Create Linux Packages
+        if: needs.select-inputs.outputs.package == 'true'
         run: |
           cd build
           cmake --install . --prefix install --config Release
           cpack -G "DEB;RPM;TGZ" -C Release
 
       - name: Create AppImage
+        if: needs.select-inputs.outputs.package == 'true'
         run: |
           # Download linuxdeploy (fuse-less FUSE_APPIMAGE_EXTRACT_AND_RUN avoids
           # "fuse: device not found" errors on GitHub-hosted runners)
@@ -842,6 +891,7 @@ jobs:
           mv DuneCity-*.AppImage "DuneCity-${VERSION}-Linux-x86_64.AppImage" 2>/dev/null || true
 
       - name: Smoke-test portable Linux packages
+        if: needs.select-inputs.outputs.package == 'true'
         run: |
           set -euo pipefail
 
@@ -915,20 +965,42 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN=1 smoke_launch appimage "$APPIMAGE" || smoke_status=1
           exit "$smoke_status"
 
+      - name: Record Linux package inputs
+        if: success() && needs.select-inputs.outputs.package == 'true'
+        run: python3 scripts/release-automation.py record-build --platform linux-x86_64 --build-root build --output build/build-inputs-linux-x86_64.json
       - name: Upload Packages
-        if: always()
+        if: success() && needs.select-inputs.outputs.package == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: DuneCity-Linux-Packages
+          overwrite: true
           path: |
             build/*.deb
             build/*.rpm
             build/*.tar.gz
             build/*.AppImage
+            build/build-inputs-linux-x86_64.json
+
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve failed Linux package/runtime evidence
+        if: failure() && needs.select-inputs.outputs.package == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Linux-failed-packages-${{ github.run_attempt }}
+          path: |
+            build/*.deb
+            build/*.rpm
+            build/*.tar.gz
+            build/*.AppImage
+            ${{ runner.temp }}/dunecity-linux-smoke/
+          if-no-files-found: warn
+          retention-days: 30
 
   # Candidate only: never upload a private signing key to this hosted runner.
   android-package:
-    if: inputs.android_package_probe == true && inputs.macos_skin_probe != true
+    needs: [select-inputs]
+    if: needs.select-inputs.outputs.run == 'true' && inputs.android_package_probe == true && inputs.macos_skin_probe != true
     runs-on: windows-latest
     timeout-minutes: 120
     permissions:
@@ -937,6 +1009,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ needs.select-inputs.outputs.sha }}
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
@@ -1009,80 +1082,111 @@ jobs:
             build-android-apk/app/build/outputs/apk/debug/DuneLegacy.apk
             android-version.json
 
-  # Rolling dev build: update a "latest-dev" pre-release on every main push
-  # so builds are always downloadable from the releases page.
+  # Reuse the existing dev publisher, but publish a complete immutable source set.
   dev-release:
-    needs: [test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos]
+    needs: [select-inputs, test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos]
     if: |
-      always() &&
-      inputs.windows_cache_probe != true && inputs.macos_skin_probe != true &&
-      github.ref == 'refs/heads/main' &&
-      inputs.linux_audio_probe != true &&
-      needs.test-linux.result == 'success' &&
-      inputs.android_package_probe != true &&
-      needs.relay-tests.result == 'success' &&
-      needs.signaling-tests.result == 'success' &&
-      needs.build-emscripten.result == 'success' &&
-      (needs.build-windows.result == 'success' || needs.build-linux.result == 'success' || needs.build-macos.result == 'success')
+      success() && github.event_name != 'pull_request' && needs.select-inputs.outputs.staging == 'true' &&
+      needs.select-inputs.outputs.package == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
+    concurrency:
+      group: dunecity-staging-lifecycle
+      cancel-in-progress: false
+      queue: max
+    env:
+      DUNECITY_STAGING_LIFECYCLE: 'true'
     steps:
       - uses: actions/checkout@v7
-
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v8
-        continue-on-error: true
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
         with:
           name: DuneCity-Windows-Installer
           path: dist/windows
-
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v8
-        continue-on-error: true
+      - uses: actions/download-artifact@v8
         with:
           name: DuneCity-macOS-DMG
           path: dist/macos
-
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v8
-        continue-on-error: true
+      - uses: actions/download-artifact@v8
         with:
           name: DuneCity-Linux-Packages
           path: dist/linux
-
-      - name: Update latest-dev release
+      - uses: actions/download-artifact@v8
+        with:
+          name: DuneCity-Emscripten
+          path: dist/browser
+      - name: Preserve exact source and publication inputs
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          STAGING_TAG: ${{ needs.select-inputs.outputs.tag }}
+          STAGING_SHA: ${{ needs.select-inputs.outputs.sha }}
         run: |
-          VERSION=$(sed -n 's/^project(DuneCity VERSION \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' CMakeLists.txt)
-          SHA="${GITHUB_SHA::8}"
-          NOTES="Dev build v${VERSION} (${SHA})\n\nAuto-built from main @ $(date -u '+%Y-%m-%d %H:%M UTC')\n\n**Downloads** (attached below)"
+          python3 scripts/release-automation.py manifest --directory dist --sha "$STAGING_SHA" --tag "$STAGING_TAG"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Publication-inputs-${{ github.run_attempt }}
+          path: |
+            dist/publication-inputs.json
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish without touching Latest or update feeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_TAG: ${{ needs.select-inputs.outputs.tag }}
+          STAGING_SHA: ${{ needs.select-inputs.outputs.sha }}
+        run: python3 scripts/release-automation.py publish --directory dist --sha "$STAGING_SHA" --tag "$STAGING_TAG"
+      - name: Preserve staging retention decisions independently of package status
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Staging-retention-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/staging-retention.json
+          if-no-files-found: warn
+          retention-days: 90
 
-          # Delete old dev release if it exists, then create fresh
-          gh release delete latest-dev --yes 2>/dev/null || true
-          git push origin :refs/tags/latest-dev 2>/dev/null || true
-
-          # Collect whatever artifacts succeeded
-          shopt -s nullglob
-          FILES=(dist/*/*)
-          if [ ${#FILES[@]} -gt 0 ]; then
-            echo -e "$NOTES" | gh release create latest-dev "${FILES[@]}" \
-              --title "Dev Build v${VERSION}" \
-              --notes-file - \
-              --prerelease
-          fi
+  request-staging-packages:
+    needs: [select-inputs, test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos]
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integrate/feature-batch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+      - name: Request a debounced green snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_SHA: ${{ needs.select-inputs.outputs.sha }}
+        run: python3 scripts/release-automation.py dispatch-staging --sha "$STAGING_SHA"
 
   # Only trusted stable tags reach the local update-signing key.
   sign-desktop-updates:
-    needs: [build-windows, build-linux, build-macos]
-    if: success() && startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true
+    needs: [select-inputs, build-windows, build-linux, build-macos]
+    if: success() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.select-inputs.outputs.stable == 'true'
     runs-on: [self-hosted, macOS, ARM64, dunecity-builder]
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+      - name: Require the same source-bound production reservation
+        env:
+          RELEASE_SHA: ${{ needs.select-inputs.outputs.sha }}
+        run: |
+          TOKEN=$(python3 scripts/release-automation.py reservation-token --sha "$RELEASE_SHA")
+          echo "::add-mask::$TOKEN"
+          echo "DUNECITY_RESERVATION=$TOKEN" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v8
         with:
           name: DuneCity-Windows-Installer
@@ -1104,37 +1208,40 @@ jobs:
         env:
           UPDATE_TAG: ${{ github.ref_name }}
           UPDATE_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ needs.select-inputs.outputs.sha }}
         run: |
-          VERSION="${UPDATE_TAG#v}"
-          KEY_DIR="$HOME/Library/Application Support/DuneCity Signing/updates"
-          BASE="https://github.com/${UPDATE_REPO}/releases/download/${UPDATE_TAG}"
-          for SPEC in "macos-arm64:macos:DuneCity-${VERSION}-macOS.zip" "windows-x64:windows:DuneCity-${VERSION}-Windows-x64.exe" "linux-x86_64:linux:DuneCity-${VERSION}-Linux-x86_64.AppImage"; do
-            IFS=: read -r PLATFORM FOLDER FILE <<< "$SPEC"
-            "$RUNNER_TEMP/dunecity-update-signing-python/bin/python" scripts/prepare-desktop-updates.py --version "$VERSION" --platform "$PLATFORM" \
-              --archive "update-input/$FOLDER/$FILE" --base-url "$BASE" \
-              --key-file "$KEY_DIR/update-ed25519.pem" --password-file "$KEY_DIR/update-key-password" \
-              --output update-feeds
-          done
+          OWNER="github:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:update-signing"
+          agent-workspace run --project dunecity --owner "$OWNER" --tests -- \
+            dunecity-queue reservation run --cwd "$GITHUB_WORKSPACE" --rev "$RELEASE_SHA" \
+            --owner "$OWNER" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --lane macos-feeds --purpose release --reservation "$DUNECITY_RESERVATION" -- \
+            bash "$GITHUB_WORKSPACE/scripts/macos-ci-lane.sh" feeds
       - uses: actions/upload-artifact@v7
         with:
           name: DuneCity-Update-Feeds
+          overwrite: true
           path: update-feeds/*
           if-no-files-found: error
 
   # Publish all binaries and their signed feeds together after every build passes.
   release:
-    needs: [verify-version, test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos, sign-desktop-updates]
-    # The website advertises all desktop platforms at this version. Publish only
-    # after tests and every desktop package have actually succeeded.
-    if: success() && startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true
+    needs: [select-inputs, verify-version, test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos, sign-desktop-updates]
+    # Missing desktop assets, GUI gates or signature identities block Latest.
+    if: success() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.select-inputs.outputs.stable == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v7
         with:
           # All tags and history: the website's release history page is built from them.
           fetch-depth: 0
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v8
@@ -1159,49 +1266,39 @@ jobs:
         with:
           name: DuneCity-Update-Feeds
           path: dist/updates
+      - name: Download the already-built browser package
+        uses: actions/download-artifact@v8
+        with:
+          name: DuneCity-Emscripten
+          path: dist/browser
+      - name: Restore the already-qualified hosted Mac headless receipt
+        uses: actions/download-artifact@v8
+        with:
+          name: DuneCity-macOS-headless-qualification
+          path: dist/headless
 
-      - name: Create or update GitHub Release
+      - name: Verify all official assets and persist publication inputs
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.select-inputs.outputs.tag }}
+          RELEASE_SHA: ${{ needs.select-inputs.outputs.sha }}
         run: |
-          NOTES_FILE="$(mktemp)"
-          {
-            echo "Dune City ${TAG}"
-            echo
-            echo "Auto-built from tag ${TAG}. See the [CHANGELOG](https://github.com/${GITHUB_REPOSITORY}/commits/${TAG}) for what's in this release."
-            echo
-            if [ -f "releases/desktop/${TAG#v}.md" ]; then
-              sed '1,2d' "releases/desktop/${TAG#v}.md"
-              echo
-            fi
-            echo "**Downloads** (attached below):"
-            echo "- Windows: \`DuneCity-*.exe\` installer (recommended), or portable \`.zip\`"
-            echo "- Linux: \`.AppImage\` (recommended) / \`.deb\` / \`.rpm\` / \`.tar.gz\`"
-            if compgen -G "dist/macos/*.dmg" > /dev/null; then
-              echo "- macOS: \`DuneCity-*.dmg\`"
-              echo
-              echo "**macOS:** Developer ID signed and Apple notarized. Drag Dune City into Applications."
-            else
-              echo "- macOS: no build was produced for this release. The last stable Mac build remains Dune City 1.0.359."
-            fi
-            echo
-            echo "Upgrading from a previous Dune City install? Your built-in mod INI files are reseeded automatically on first launch."
-          } > "$NOTES_FILE"
-
-          # Publish only after all binaries and feeds have uploaded to a draft.
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != true ]; then
-              echo "Refusing to overwrite a published release. Use a new version."
-              exit 1
-            fi
-            gh release upload "$TAG" dist/*/* --clobber
-            gh release edit "$TAG" --notes-file "$NOTES_FILE"
-          else
-            gh release create "$TAG" dist/*/* --draft \
-              --title "Dune City ${TAG}" --notes-file "$NOTES_FILE"
-          fi
-          gh release edit "$TAG" --draft=false --latest
+          python3 -m pip install --disable-pip-version-check cryptography==50.0.1
+          python3 scripts/release-automation.py manifest --stable --directory dist --sha "$RELEASE_SHA" --tag "$RELEASE_TAG"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Publication-inputs-${{ github.run_attempt }}
+          path: |
+            dist/publication-inputs.json
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish only the fully verified immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.select-inputs.outputs.tag }}
+          RELEASE_SHA: ${{ needs.select-inputs.outputs.sha }}
+        run: python3 scripts/release-automation.py publish --directory dist --sha "$RELEASE_SHA" --tag "$RELEASE_TAG"
 
       - name: Update dunelegacy.com website
         env:
@@ -1281,3 +1378,98 @@ jobs:
           git add website/index.html website/dune-city.html website/changelog.html
           git diff --cached --quiet || git commit -m "release: bump website to Dune City ${VERSION}"
           git push
+
+  request-ios-staging:
+    needs: [select-inputs]
+    if: github.event_name == 'schedule' && github.event.schedule == '23 4 * * 1' && needs.select-inputs.outputs.ios_dispatch == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Request the qualified immutable source, not default-branch source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IOS_TAG: ${{ needs.select-inputs.outputs.tag }}
+        run: gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref "$IOS_TAG" -f ios_staging=true
+
+  ios-staging:
+    needs: [select-inputs]
+    # The external Mini pre-job gate independently authenticates this immutable
+    # published snapshot and its API qualification; this conditional is not it.
+    if: github.event_name == 'workflow_dispatch' && inputs.ios_staging == true && startsWith(github.ref, 'refs/tags/staging-') && needs.select-inputs.outputs.ios == 'true'
+    runs-on: [self-hosted, macOS, ARM64, dunecity-builder]
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Initialize truthful internal export disposition
+        run: |
+          OUT="$RUNNER_TEMP/dunecity-ios-staging-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$OUT"
+          printf '%s\n' '{"status":"not-run","deviceCoverage":"untested","testflightPublication":"not-requested"}' > "$OUT/job-status.json"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Freeze qualified inputs and allocate the unique Apple build number
+        id: ios-inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OUT="$RUNNER_TEMP/dunecity-ios-staging-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 scripts/release-automation.py ios-inputs --tag "$GITHUB_REF_NAME" \
+            --sha "$GITHUB_SHA" --output "$OUT/publication-inputs.json"
+          NUMBER=$(python3 scripts/release-automation.py ios-build-number \
+            --run-number "$GITHUB_RUN_NUMBER" --attempt "$GITHUB_RUN_ATTEMPT")
+          echo "build_number=$NUMBER" >> "$GITHUB_OUTPUT"
+      - name: Admit one internal export through the shared Mini verification lane
+        env:
+          IOS_BUILD_NUMBER: ${{ steps.ios-inputs.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/dunecity-ios-staging-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          OWNER="github:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:ios"
+          set +e
+          agent-workspace run --project dunecity --owner "$OWNER" --tests -- \
+            dunecity-queue reservation run --cwd "$GITHUB_WORKSPACE" --rev "$GITHUB_SHA" \
+            --owner "$OWNER" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --lane ios-staging --purpose verification -- \
+            bash "$GITHUB_WORKSPACE/scripts/macos-ci-lane.sh" ios-staging 2>&1 | tee "$OUT/build.log"
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          export IOS_STAGE_EXIT="$STATUS"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          status = int(os.environ['IOS_STAGE_EXIT'])
+          record = dict(status='packaged' if status == 0 else 'held' if status == 3 else 'failed',
+                        exitCode=status, sourceCommit=os.environ['GITHUB_SHA'],
+                        deviceCoverage='untested', testflightPublication='not-requested')
+          output = Path(os.environ['RUNNER_TEMP']) / ('dunecity-ios-staging-' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT'])
+          if status == 0 and not Path('build-ios-device/appstore/staging-build.json').is_file():
+              record['status'] = 'failed'
+              record['reason'] = 'Missing verified internal export manifest'
+          (output / 'job-status.json').write_text(json.dumps(record, indent=2) + '\n')
+          if record['status'] == 'failed' and status == 0:
+              raise SystemExit(record['reason'])
+          PY
+          exit "$STATUS"
+      - name: Retain internal IPA provenance and all failed export diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-iOS-internal-${{ needs.select-inputs.outputs.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            build-ios-device/appstore/*.ipa
+            build-ios-device/appstore/staging-build.json
+            build-ios-device/appstore/staging-signing.txt
+            build-ios-device/appstore/ExportOptions.plist
+            ${{ runner.temp }}/dunecity-ios-staging-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
+          retention-days: 90

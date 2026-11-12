@@ -1,12 +1,12 @@
 # 1.0.807 promotion check
 
-An AI switch that has passed its paired and control games needs one more check
-before it is turned on by default (Stefan, 2026-11-09): **on 1.0.807's own test
-deck, the candidate build must win at least as many games as the switch-OFF
-build of the same source.** 1.0.807's own win count is printed alongside for
-information; it does not block. This replaces the earlier historical
-statistical gate (independent objectives, 50,000-draw bootstrap), which was
-removed because today's AI with every switch OFF already failed it.
+An AI switch that passed its competitive paired/control games also needs the
+historical **decisiveness/timeout-regression check** before promotion: on the
+1.0.807 deck, candidate games ending with any winner must be at least the
+same-source OFF count. This does **not** measure victories against the old AI.
+All houses run that arm's policy; the historical count is informational.
+Independent candidate-seat and held-out games establish competitive improvement.
+The earlier historical statistical gate was retired; no policy is changed here.
 
 ## The deck
 
@@ -39,9 +39,9 @@ python3 tests/ai/ai-baseline-gate.py --candidate /abs/results/on --off /abs/resu
 
 Submit through `agent-workspace run --project dunecity --owner "$OWNER" --tests
 --wait -- ...` and wait with `dunecity-queue wait JOB` outside that lock. The
-check prints one line, `PASS, candidate X / OFF Y / 807 Z (wins of 192 games)`
-(exit 0) or `FAIL, ...` (exit 1). Arms that did not play exactly the reference
-deck (game ids, maps, options, seeds), failed games, candidate and OFF from two
+check prints `PASS, decided games: candidate X / OFF Y / 807 Z (of 192;
+not head-to-head strength)` (exit 0) or `FAIL, ...` (exit 1). Arms that did not play
+the exact reference deck (game ids, maps, options, seeds), failed games, candidate and OFF from two
 source commits, or a reference that is not native 1.0.807 are invalid input
 (`INVALID: ...`, exit 2), never a pass.
 
@@ -115,7 +115,7 @@ checked with its unscoped level, which runs the same code in more fights.
 
 1.0.807 is native source `abdf71e7` built through the test-only bridge
 `863d1ac6`, queue job `20261106T210623-baseline-league-807-episodes-d00a75`:
-all 192 games, 22 won. Results:
+all 192 games, 22 ended with any winner. Results:
 `~/Documents/projects/outputs/baseline-league-20261106/releases/1.0.807-episodes/games.csv`.
 The bridge builds the old engine and plays 1.0.807 against itself on these
 maps; two builds cannot share one game, so the comparison is per build on the

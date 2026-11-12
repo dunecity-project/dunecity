@@ -262,6 +262,10 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
             if (family) initialItemCount[item] = count;
         }
     }
+    if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_REPAIR_CAPACITY) {
+        repairPressureYard = stream.readUint32();
+        repairPressureSince = stream.readUint32();
+    }
     resolveStrategyProfile();
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
@@ -407,6 +411,10 @@ void QuantBot::save(OutputStream& stream) const {
     for (const int share : strategyPrior) stream.writeUint16(static_cast<Uint16>(share));
     for (Uint32 item = Structure_LastID + 1; item <= Unit_TameSandworm; ++item)
         stream.writeUint32(ModManager::instance().isTornieFamilyContentActive() ? initialItemCount[item] : 0);
+    // SAVEGAMEVERSION_REPAIR_CAPACITY: an interrupted wait must not start over
+    // on reload, nor may an observer expand earlier than its host.
+    stream.writeUint32(repairPressureYard);
+    stream.writeUint32(repairPressureSince);
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.
@@ -465,6 +473,8 @@ void QuantBot::saveObserverRuntime(OutputStream& s) const {
         s.writeSint32(slot.targetBps);
         s.writeBool(slot.allocated);
     }
+    s.writeUint32(repairPressureYard);
+    s.writeUint32(repairPressureSince);
 }
 
 void QuantBot::loadObserverRuntime(InputStream& s) {
@@ -520,4 +530,6 @@ void QuantBot::loadObserverRuntime(InputStream& s) {
         slot.targetBps=s.readSint32();
         slot.allocated=s.readBool();
     }
+    repairPressureYard = s.readUint32();
+    repairPressureSince = s.readUint32();
 }

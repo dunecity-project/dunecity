@@ -68,10 +68,21 @@ def split_large_artifacts(play_root, names):
     return split
 
 
-def package(build_root, play_root, relay_origin=None, allow_loopback_relay=False):
+def package(build_root, play_root, relay_origin=None, allow_loopback_relay=False, channel='staging'):
     sources = relay_sources(relay_origin, allow_loopback_relay) if relay_origin else []
     repo = Path(__file__).resolve().parents[1]
     version = re.search(r'project\(DuneCity VERSION ([0-9.]+)', (repo / 'CMakeLists.txt').read_text())[1]
+    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
+    if channel not in ('stable', 'staging'):
+        raise ValueError('Expected stable or staging browser channel')
+    if (channel == 'staging') != (play_root.name == 'play-staging'):
+        raise ValueError('Staging browser packages must use play-staging, never the stable play directory')
+    cache = build_root / 'CMakeCache.txt'
+    expected_identity = 'OFF' if channel == 'staging' else 'ON'
+    if not cache.exists() or not re.search(
+            r'^DUNECITY_RELEASE_BUILD:BOOL=' + expected_identity + r'$', cache.read_text(), re.MULTILINE):
+        raise ValueError(f'{channel} browser packages require a configured DUNECITY_RELEASE_BUILD={expected_identity}')
+    display_version = version if channel == 'stable' else f'{version}dev+{commit[:12]}'
     output = build_root / 'bin'
     files = {'index.html': output / 'dunecity.html',
              **{name: output / name for name in ('dunecity.js', 'dunecity.wasm', 'dunecity.data', 'p2p-direct.js')},
@@ -86,12 +97,30 @@ def package(build_root, play_root, relay_origin=None, allow_loopback_relay=False
         if name not in ('index.html', '.htaccess'):
             runtime_hash.update(name.encode() + b'\0')
             runtime_hash.update(hashlib.sha256(files[name].read_bytes()).digest())
-    token = version + '-' + runtime_hash.hexdigest()[:12]
+    token = channel + '-' + display_version + '-' + runtime_hash.hexdigest()[:12]
     play_root.mkdir(parents=True, exist_ok=True)
     for name, source in files.items():
         shutil.copyfile(source, play_root / name)
     index = play_root / 'index.html'
     html = index.read_text()
+    if channel == 'staging':
+        label = f'Staging {display_version}'
+        if '<span>Browser edition</span>' in html:
+            html = html.replace('<span>Browser edition</span>', f'<span>{label}</span>')
+        else:
+            html = html.replace('<body>', f'<body><p id="staging-identity">{label}</p>', 1)
+        # IDBFS names its database after the mountpoint. Keep the game's home
+        # path, but link it to a separate database so dev never rewrites stable saves.
+        shell = play_root / 'shell.js'
+        shell_text = shell.read_text()
+        mount = "FS.mount(IDBFS, {}, '/home/web_user');"
+        if shell_text.count(mount) != 1:
+            raise RuntimeError('Expected one browser persistence mount')
+        shell.write_text(shell_text.replace(mount,
+            "FS.mkdirTree('/home/web_user_staging');\n"
+            "        FS.mount(IDBFS, {}, '/home/web_user_staging');\n"
+            "        FS.rmdir('/home/web_user');\n"
+            "        FS.symlink('/home/web_user_staging', '/home/web_user');"))
     for name in ('shell.css', 'shell.js', 'p2p-direct.js', 'dunecity.js'):
         # Release HTML is minified and may have unquoted attributes.
         html, count = re.subn(r"\b(src|href)=[\"']?" + re.escape(name) + r"(?:[\"']|(?=[\s>]))",
@@ -105,12 +134,21 @@ def package(build_root, play_root, relay_origin=None, allow_loopback_relay=False
         # This opt-in artifact is only for a loopback development server.
         header_text = header_text.replace('; upgrade-insecure-requests', '')
     headers.write_text(header_text)
+    if channel == 'staging':
+        headers.write_text(headers.read_text() +
+                           '\n<IfModule mod_headers.c>\n'
+                           '  Header always set Service-Worker-Allowed "/play-staging/"\n'
+                           '</IfModule>\n')
     names = [name for name in files if name != '.htaccess']
     hashes = {name: hashlib.sha256((play_root / name).read_bytes()).hexdigest() for name in names}
     manifest = {
         'version': version,
-        'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip(),
+        'sourceCommit': commit,
         'builtAtUtc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'channel': channel,
+        'displayVersion': display_version,
+        'cacheScope': '/play-staging/' if channel == 'staging' else '/play/',
+        'releaseBuild': 'OFF' if channel == 'staging' else 'ON',
         'artifacts': names,
         'relayOrigins': [],  # retained for old manifest readers; gameplay is direct-only
         'signalingOrigins': sources,
@@ -128,10 +166,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build-root', type=Path, required=True)
     parser.add_argument('--play-root', type=Path, required=True)
+    parser.add_argument('--channel', choices=('stable', 'staging'), default='staging')
     parser.add_argument('--signaling-origin', '--relay-origin', dest='relay_origin',
                         help='Exact HTTPS origin allowed for lobby and connection introductions')
     parser.add_argument('--allow-loopback-signaling', '--allow-loopback-relay',
                         dest='allow_loopback_relay', action='store_true',
                         help='Allow HTTP signaling on explicit loopback development endpoints')
     args = parser.parse_args()
-    package(args.build_root, args.play_root, args.relay_origin, args.allow_loopback_relay)
+    package(args.build_root, args.play_root, args.relay_origin, args.allow_loopback_relay, args.channel)

@@ -14,9 +14,9 @@ Every game is a real match played headless to its end by the balance probe (run-
             the same in the DuneCity mod, and the reverse sanity check (Atreides QuantBot Medium
             against four QuantBot Hard must lose).
   campaign  Vanilla: all 22 authored missions for Atreides, Harkonnen and Ordos, one fixed
-            seed each; a sole Brutal QuantBot controls the player house against CampaignAIPlayer,
-            with native mission victory including quotas. DuneCity retains the partner-difficulty
-            diagnostics; smoke retains its existing three campaign games.
+            seed each; an idle human with Brutal QuantBot support against QuantBot enemies
+            at --enemy-difficulty (default Easy), with native mission victory including quotas.
+            --campaign-mode single exercises Single mission; default full uses Full campaign.
   ladder    QuantBot against QuantBot 1v1, every adjacent pair (Brutal v Hard, Hard v Medium, Medium v
             Easy) plus Brutal v Medium and Hard v Easy. Decided on long games: Random Skirmish 128x128
             and 160x160, vanilla and DuneCity, medium bases, 75/90 minutes; the short maps (96x96,
@@ -36,8 +36,8 @@ soon as its rows are written. Smoke timeouts retain their engine log in timeout-
 the complete events.jsonl. --cases filters game IDs. The vanilla campaign gate plays the way the
 game is played: an idle human seat with the Brutal QuantBot as its AI support, which therefore has
 to carry the whole campaign (IDs end #human-partner, win expectation unchanged).
---campaign-ai-only is the diagnostic without the human seat; its IDs are the bare cell names.
-These diagnostic games cannot stand in for the gate. Scores use
+--campaign-ai-only is the diagnostic without the human seat. Enemy tier and campaign mode
+have distinct IDs, so historical CampaignAIPlayer games cannot stand in for this gate. Scores use
 tests/ai/match_score.py placement scores.
 """
 import argparse
@@ -82,7 +82,8 @@ CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team', 'cont
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
                'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint',
-               'style_seats', 'control_diagnostics') + genome_qualification.FIELDS
+               'style_seats', 'control_diagnostics', 'campaign_mode', 'partner', 'enemy_ai',
+               'enemy_difficulty') + genome_qualification.FIELDS
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
@@ -182,7 +183,7 @@ def control_cells():
     return cells
 
 
-def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
+def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='easy'):
     cells = []
     # 1. Random Skirmish, mixed: players, teams, bases, armies (kArmyBudgets index: 0 none, 2 = 2,500
     # small, 5 = 20,000 large), mods, QuantBot difficulties and the AI Player.
@@ -230,14 +231,16 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
         minutes=40, expect=('wins', 2, 40), full=7)
     aaa('reverse-qm-v-4qh', 'vanilla', ['QH', 'QM', 'QH', 'QH', 'QH'], options=AAA_OPTIONS, minutes=60,
         expect=('loses', 2), smoke=1, full=6)
-    # 4. Campaign (built per mission in schedule()). The vanilla recovery gate is
-    # one actual scenario-settings campaign, not a difficulty-substituted skirmish.
-    cells.append(dict(category='campaign', name='player-brutal-v-campaign-ai', kind='campaign', mod='vanilla',
-                      partner='brutal', enemy_ai='campaign', ai_only=True, minutes=80, full=1, smoke=0))
+    # 4. Authored campaign missions, with the selected QuantBot enemy tier in both menu modes.
+    # The old CampaignAIPlayer fixture is not QuantBot difficulty evidence.
+    cells.append(dict(category='campaign', name=f'player-brutal-v-quantbot-{enemy_difficulty}',
+                      kind='campaign', mod='vanilla', partner='brutal', enemy_ai='quantbot',
+                      enemy_difficulty=enemy_difficulty, ai_only=True, minutes=80, full=1, smoke=0))
     for partner in ('hard', 'medium', 'easy'):
-        cells.append(dict(category='campaign', name=f'partner-{partner}', kind='campaign', mod='dunecity',
-                          partner=partner, enemy_ai='quantbot', minutes=80, full=2 if partner == 'hard' else 1,
-                          smoke=0))
+        cells.append(dict(category='campaign', name=f'partner-{partner}-v-quantbot-{enemy_difficulty}',
+                          kind='campaign', mod='dunecity', partner=partner, enemy_ai='quantbot',
+                          enemy_difficulty=enemy_difficulty, minutes=80,
+                          full=2 if partner == 'hard' else 1, smoke=0))
     # 5. Difficulty ladder: the stronger QuantBot must win. Every adjacent pair, plus Brutal v Medium and
     # Hard v Easy; in the full tier both houses of every seed (each side keeps its start).
     # Long maps (the decision, Stefan 2026-10-20: "don't test on such short timelines"): Random
@@ -327,8 +330,10 @@ def schedule(args):
         raise SystemExit('Control gates are unobserved native matches: no --economy-samples, --genome '
                          'or --game-options; use --control-diagnostics for a separate observed study')
     games = []
+    campaign_mode = getattr(args, 'campaign_mode', 'full')
+    enemy_difficulty = getattr(args, 'enemy_difficulty', 'easy')
     cells = control_cells() if args.tier == 'controls' else matrix(
-        getattr(args, 'ladder_seeds', LADDER_SEEDS), getattr(args, 'team_seeds', TEAM_SEEDS))
+        getattr(args, 'ladder_seeds', LADDER_SEEDS), getattr(args, 'team_seeds', TEAM_SEEDS), enemy_difficulty)
     for cell in cells:
         if diagnostic and control_mod:
             cell = dict(cell, mod=control_mod)
@@ -350,7 +355,7 @@ def schedule(args):
                     if seeds is None:
                         seeds = seeds_for('campaign', f'{house}{mission}', count)
                     for seed in dict.fromkeys(seeds):
-                        games.append(campaign_game(cell, house, level, mission, seed))
+                        games.append(campaign_game(cell, house, level, mission, seed, campaign_mode))
             continue
         seeds = ((control_seeds or (10801, 11810)) if cell['category'] == 'controls' else
                  aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count))
@@ -363,7 +368,8 @@ def schedule(args):
                 games.append(match_game(cell, index + 1, seed, '#swap'))
             if cell['swap_teams'] and args.tier == 'full':
                 games.append(match_game(cell, index, seed, '#swap'))
-    for cell in smoke_campaigns() if args.tier == 'smoke' and (not args.categories or 'campaign' in args.categories) else ():
+    for cell in (smoke_campaigns(enemy_difficulty, campaign_mode)
+                 if args.tier == 'smoke' and (not args.categories or 'campaign' in args.categories) else ()):
         games.append(cell)
     if not getattr(args, 'campaign_ai_only', False):
         for game in games:
@@ -386,13 +392,13 @@ def schedule(args):
     return games
 
 
-def smoke_campaigns():
-    """Smoke: two quick campaign missions and a level 9 one, the partner at Hard."""
-    cell = dict(category='campaign', name='partner-hard', kind='campaign', partner='hard', enemy_ai='quantbot',
-                minutes=60)
-    return [campaign_game(dict(cell, mod='vanilla'), 'atreides', 1, 1, 42),
-            campaign_game(dict(cell, mod='vanilla'), 'ordos', 4, 5, 42),
-            campaign_game(dict(cell, mod='dunecity'), 'harkonnen', 9, 22, 42)]
+def smoke_campaigns(enemy_difficulty='easy', campaign_mode='full'):
+    """Two quick authored missions and a level 9 one, with Hard QuantBot support."""
+    cell = dict(category='campaign', name=f'partner-hard-v-quantbot-{enemy_difficulty}', kind='campaign',
+                partner='hard', enemy_ai='quantbot', enemy_difficulty=enemy_difficulty, minutes=60)
+    return [campaign_game(dict(cell, mod='vanilla'), 'atreides', 1, 1, 42, campaign_mode),
+            campaign_game(dict(cell, mod='vanilla'), 'ordos', 4, 5, 42, campaign_mode),
+            campaign_game(dict(cell, mod='dunecity'), 'harkonnen', 9, 22, 42, campaign_mode)]
 
 
 def match_game(cell, index, seed, suffix=''):
@@ -416,13 +422,14 @@ def match_game(cell, index, seed, suffix=''):
                 skirmish=f'{cell["skirmish"]},seed={seed}' if cell['skirmish'] else None, path=cell['path'])
 
 
-def campaign_game(cell, house, level, mission, seed):
-    enemy = 'CampaignAIPlayer' if cell['enemy_ai'] == 'campaign' else 'QE'
-    return dict(id=f'campaign/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}', category='campaign',
-                cell=f'{cell["name"]}/{cell["mod"]}', kind='campaign', seed=seed, mod=cell['mod'],
+def campaign_game(cell, house, level, mission, seed, campaign_mode='full'):
+    enemy = 'Q' + cell['enemy_difficulty'][0].upper()
+    mode = '#single-mission' if campaign_mode == 'single' else '#full-campaign'
+    return dict(id=f'campaign/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category='campaign',
+                cell=f'{cell["name"]}{mode}/{cell["mod"]}', kind='campaign', seed=seed, mod=cell['mod'],
                 map=f'{house} level {level} mission {mission}', house=house, level=level, mission=mission,
-                partner=cell['partner'], enemy_ai=cell['enemy_ai'], ai_only=cell.get('ai_only', False),
-                minutes=cell['minutes'],
+                partner=cell['partner'], enemy_ai=cell['enemy_ai'], enemy_difficulty=cell['enemy_difficulty'],
+                campaign_mode=campaign_mode, ai_only=cell.get('ai_only', False), minutes=cell['minutes'],
                 sides=[(house, 1, 'Q' + cell['partner'][0].upper()), ('enemies', 2, enemy)],
                 expect=('campaign_won',) if cell.get('ai_only') or cell['partner'] == 'hard' else None)
 
@@ -489,7 +496,8 @@ def command(args, binary, game, out):
         cmd += ['--game-options', str(options_path)]
     if game['kind'] == 'campaign':
         cmd += ['--house', game['house'], '--level', str(game['level']), '--mission', str(game['mission']),
-                '--partner-difficulty', game['partner'], '--enemy-ai', game['enemy_ai']]
+                '--partner-difficulty', game['partner'], '--enemy-ai', game['enemy_ai'],
+                '--enemy-difficulty', game['enemy_difficulty'], '--campaign-mode', game['campaign_mode']]
         if game.get('ai_only'):
             cmd += ['--campaign-ai-only']
         return cmd
@@ -552,6 +560,21 @@ def expected_style_seats(args, game):
     if not getattr(args, 'style', None):
         return 'none'
     return f'{HOUSE_NUMBERS[game["sides"][0][0]]}=candidate-{args.style}'
+
+
+def campaign_roster_error(game, houses):
+    """Reject a mislabeled enemy fixture using the engine's actual controller roster."""
+    player = next((row for row in houses if int(row['house']) == HOUSE_NUMBERS[game['house']]), None)
+    expected_player = {CLASSES['Q' + game['partner'][0].upper()]}
+    if not game['ai_only']:
+        expected_player.add('HumanPlayer')
+    if player is None or set(player['players'].split('+')) != expected_player:
+        return 'campaign player roster does not match the requested human/support setup'
+    expected_enemy = CLASSES['Q' + game['enemy_difficulty'][0].upper()]
+    enemies = [row for row in houses if row['team'] != player['team']]
+    if not enemies or any(row['players'] != expected_enemy for row in enemies):
+        return f'campaign enemies are not all {expected_enemy}'
+    return ''
 
 
 def win_type(result, houses, campaign):
@@ -618,7 +641,10 @@ def play(args, scratch, binary, game):
            'source_commit': summary.get('sourceCommit', ''),
            'source_fingerprint': summary.get('sourceFingerprint', ''),
            'style_seats': style_seats(lines),
-           'control_diagnostics': int(getattr(args, 'control_diagnostics', False))}
+           'control_diagnostics': int(getattr(args, 'control_diagnostics', False)),
+           **{key: game.get(key, '') for key in ('campaign_mode', 'partner', 'enemy_ai', 'enemy_difficulty')}}
+    if campaign and not row['error']:
+        row['error'] = campaign_roster_error(game, houses)
     if args.tier == 'controls':
         remove_tree(candidate_dir)
         if not row['error'] and row['style_seats'] != expected_style_seats(args, game):
@@ -1110,16 +1136,20 @@ def compare(args):
 
 
 def campaign_report(rows, houses, problems):
-    print('| Mod | Player/partner | Enemy | Missions | Won | Lost | Not finished | Crash | Win by conquest/quota '
+    print('| Mod | Mode | Player/support | Enemy | Missions | Won | Lost | Not finished | Crash | Win by conquest/quota '
           '| Mean min (won) | Triggers fired |')
-    print('|---|---|---|---|---|---|---|---|---|---|---|')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|')
     by_cell = defaultdict(list)
     for g in rows:
         by_cell[g['cell']].append(g)
     for cell, gs in sorted(by_cell.items()):
-        name, mod = cell.split('/')
-        partner = name.split('-')[1]
-        enemy = 'CampaignAIPlayer' if 'campaign-ai' in name else 'QuantBot Easy'
+        _, mod = cell.split('/')
+        sides = [side.rsplit(':', 1)[-1] for side in gs[0]['sides'].split()]
+        partner = CLASSES.get(sides[0], sides[0])
+        enemy = CLASSES.get(sides[-1], sides[-1])
+        if enemy == 'CampaignAIPlayer':
+            enemy += ' (legacy; not QuantBot)'
+        mode = gs[0].get('campaign_mode') or 'full (historical)'
         ok = [g for g in gs if not g['error']]
         won = [g for g in ok if g['outcome'] == 'won']
         types = defaultdict(int)
@@ -1127,7 +1157,7 @@ def campaign_report(rows, houses, problems):
             types[g['win_type']] += 1
         fired = sum(int(g['fired'] or 0) for g in ok)
         mean_won = statistics.mean(float(g['minutes']) for g in won) if won else 0
-        print(f'| {mod} | {partner} | {enemy} | {len(gs)} | {len(won)} | {sum(g["outcome"] == "lost" for g in ok)} | '
+        print(f'| {mod} | {mode} | {partner} | {enemy} | {len(gs)} | {len(won)} | {sum(g["outcome"] == "lost" for g in ok)} | '
               f'{sum(g["outcome"] == "time_limit" for g in ok)} | {len(gs) - len(ok)} | '
               f'{types["conquest"]}/{types["quota"]} | {mean_won:.1f} | {fired} |')
         for g in gs:
@@ -1140,22 +1170,22 @@ def campaign_report(rows, houses, problems):
     print('Required campaign missions (W won, L lost, T not finished, X crash; q = quota win):\n')
     grid = defaultdict(str)
     for g in rows:
-        name, mod = g['cell'].split('/')
+        cell = g['cell']
         if g['expect'] != 'campaign_won':
             continue
         house, mission = g['id'].split('/')[3].split('-m')
         mark = 'X' if g['error'] else {'won': 'W', 'lost': 'L', 'time_limit': 'T'}.get(g['outcome'], '?')
         if mark == 'W' and g['win_type'] == 'quota':
             mark += g['win_type'][0]
-        grid[(mod, house, int(mission))] += mark
+        grid[(cell, house, int(mission))] += mark
     missions = sorted({m for _, _, m in grid})
     if missions:
-        print('| Mod | House | ' + ' | '.join(f'm{m}' for m in missions) + ' |')
+        print('| Cell | House | ' + ' | '.join(f'm{m}' for m in missions) + ' |')
         print('|---|---|' + '---|' * len(missions))
-        for mod in ('vanilla', 'dunecity'):
+        for cell in sorted({cell for cell, _, _ in grid}):
             for house in ('atreides', 'harkonnen', 'ordos'):
-                if any((mod, house, m) in grid for m in missions):
-                    print(f'| {mod} | {house} | ' + ' | '.join(grid.get((mod, house, m), '') for m in missions) + ' |')
+                if any((cell, house, m) in grid for m in missions):
+                    print(f'| {cell} | {house} | ' + ' | '.join(grid.get((cell, house, m), '') for m in missions) + ' |')
         print()
 
 
@@ -1177,6 +1207,10 @@ parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this 
 parser.add_argument('--campaign-seeds', nargs='+', type=int,
                     help='Explicit fresh campaign seeds, shared across selected missions; default retains '
                          'the fixed campaign gate seeds. Does not alter non-campaign games.')
+parser.add_argument('--enemy-difficulty', choices=tuple(DIFFICULTY.values()), default='easy',
+                    help='Campaign enemy QuantBot difficulty, explicit in commands, rosters and result IDs')
+parser.add_argument('--campaign-mode', choices=('full', 'single'), default='full',
+                    help='Authored missions through the Full campaign or Single mission setup; objectives stay native')
 parser.add_argument('--minutes', type=int, choices=range(1, 121),
                     help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')

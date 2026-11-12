@@ -168,7 +168,7 @@ void QuantBot::traceYardStatus(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             .set("heavy_cash_target", pass.vanillaEconomy ? 1 + std::max(0, pass.money - 10000) / 4000 : 0)
             .set("heavy_opening_target", pass.vanillaEconomy ? std::min(factoryTarget, 2 * std::clamp(pass.itemCount[Structure_ConstructionYard], 1, 8)) : 0)
             .set("heavy_losses_2min", recentFactoryLossCount())
-            .set("repair_busy", pass.activeRepairYardCount).set("repair_target",pass.repairTarget)
+            .set("repair_busy", pass.observedBusyRepairBays).set("repair_target",pass.repairTarget)
             .set("state", decisionState(pass)));
         logDebug("BUILD-BALANCE: CY=%u HF=%d queued=%d busy=%d target=%d reason=%s RY=%d queued=%d busy=%d cap=%d taxPerSec=%d power=%d/%d",
             turn.pBuilder->getObjectID(), getHouse()->getNumItems(Structure_HeavyFactory),
@@ -448,7 +448,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     // economy can compound. The normal refinery/starport ladders otherwise
     // consume every opening order, including on missions with no factory.
     if (botConfig().force.campaignMilitaryOpening && !pass.citySimEnabled
-        && isCampaignGameType(currentGame->gameType) && isAlliedWithHuman()
+        && campaignPolicyApplies() && isAlliedWithHuman()
         && !builderOnly() && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && pass.itemCount[Structure_Refinery] > 0
         && pass.itemCount[Structure_LightFactory] == 0 && pass.itemCount[Structure_HeavyFactory] == 0
@@ -569,7 +569,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         && getHouse()->hasPower()) {
         for (Uint32 item : {Structure_RepairYard, Structure_HighTechFactory, Structure_IX, Structure_Palace}) {
             if (pass.itemCount[item] > 0
-                || (item == Structure_RepairYard && !canAddRepairYard(0))
+                || (item == Structure_RepairYard && !repairYardAdmitted(pass))
                 || !campaignAvailableToBuild(turn.pBuilder, item)) continue;
             const int cost = buildingCapitalCost(pass, item);
             if (cost <= 0 || pass.money < cost + std::max(pass.economyReserve, pass.cityWorkingReserve)
@@ -1366,13 +1366,13 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             if (step == NONE_ID && pass.vanillaFfaWaveCapitalReserve > 0)
                 step = Structure_RepairYard;
         } else if (getHouse()->getNumItems(Structure_RepairYard) == 0
-            && canAddRepairYard(pass.itemCount[Structure_RepairYard])
+            && repairYardAdmitted(pass)
             && data[Structure_RepairYard][houseID].enabled
             && getHouse()->getTechLevel() >= data[Structure_RepairYard][houseID].techLevel) {
             step = Structure_RepairYard;
-        } else if (!canAddRepairYard(pass.itemCount[Structure_RepairYard])
+        } else if (!repairYardAdmitted(pass)
             && !(botConfig().force.mediumClassic >= 1 && difficulty == Difficulty::Medium
-                 && gameMode == GameMode::Custom && !isCampaignGameType(currentGame->gameType))
+                 && gameMode == GameMode::Custom && !campaignPolicyApplies())
             && pass.itemCount[Structure_HeavyFactory] == 0
             && data[Structure_HeavyFactory][houseID].enabled
             && getHouse()->getTechLevel() >= data[Structure_HeavyFactory][houseID].techLevel) {
@@ -1648,7 +1648,7 @@ void QuantBot::chooseYardServicesAndRefineries(BuildPass& pass, BuilderTurn& tur
     // Establish repairs before more factories/tech consume the opening
     // grant. Count queued yards to avoid duplicate orders from parallel CYs.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && gameMode == GameMode::Custom && canAddRepairYard(pass.itemCount[Structure_RepairYard])
+        && gameMode == GameMode::Custom && repairYardAdmitted(pass)
         && !openingWorkersNeeded(pass)
         && pass.itemCount[Structure_RepairYard] < pass.repairBaseline
         && getAIRefineryBays() > 0
@@ -1864,7 +1864,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
     }
     if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.fundedCityProduction
         && pass.itemCount[Structure_RepairYard]<pass.repairTarget
-        && canAddRepairYard(pass.itemCount[Structure_RepairYard])
+        && repairYardAdmitted(pass)
         && campaignAvailableToBuild(turn.pBuilder,Structure_RepairYard)
         && pass.money>=buildingCapitalCost(pass, Structure_RepairYard)+pass.cashBuffer
         && findPlaceLocation(Structure_RepairYard).isValid()) {
@@ -1956,7 +1956,7 @@ void QuantBot::chooseYardMilitaryInfrastructure(BuildPass& pass, BuilderTurn& tu
     }
     // 8. Repair Yard (only if starport or heavy factory exists)
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && canAddRepairYard(pass.itemCount[Structure_RepairYard]) && pass.itemCount[Structure_RepairYard] == 0
+        && repairYardAdmitted(pass) && pass.itemCount[Structure_RepairYard] == 0
         && (pass.itemCount[Structure_StarPort] > 0 || pass.itemCount[Structure_HeavyFactory] > 0)
         && campaignAvailableToBuild(turn.pBuilder,Structure_RepairYard)
         && (!yardTurn.isCitySim || (!openingWorkersNeeded(pass)
@@ -2231,7 +2231,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
     }
     // 14. Expand repair only when existing capacity is busy and production supports it.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-                && canAddRepairYard(pass.itemCount[Structure_RepairYard]) && campaignAvailableToBuild(turn.pBuilder,Structure_RepairYard) && pass.money > std::max(2000, pass.economyReserve + data[Structure_RepairYard][houseID].price)
+                && repairYardAdmitted(pass) && campaignAvailableToBuild(turn.pBuilder,Structure_RepairYard) && pass.money > std::max(2000, pass.economyReserve + data[Structure_RepairYard][houseID].price)
                 && pass.itemCount[Structure_RepairYard]<pass.repairTarget) {
         yardTurn.itemID = Structure_RepairYard; yardTurn.structureRule = "repair_capacity";
         logDebug("Build Repair Yard: have=%d busy=%d cap=%d military=%d", pass.itemCount[Structure_RepairYard], pass.activeRepairYardCount,
@@ -2424,6 +2424,15 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
 void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    // Common admission applies even to prerequisite and capital selectors.
+    if (yardTurn.itemID == Structure_RepairYard && pass.repairCapacityDemand
+        && !repairYardAdmitted(pass)) {
+        traceDecision("construction_rejected", AITelemetry::Record()
+            .set("builder", turn.pBuilder->getObjectID()).set("item", yardTurn.itemID)
+            .set("rule", yardTurn.structureRule).set("reason", pass.repairCapacityReason));
+        yardTurn.itemID = NONE_ID;
+        yardTurn.crimeServiceSite = Coord::Invalid();
+    }
     // All city power branches share the same investment decision.
     // Include committed consumers, but never change vanilla policy.
     if (yardTurn.isCitySim && (yardTurn.itemID == Structure_NuclearPlant || yardTurn.itemID == Structure_WindTrap)
@@ -2627,10 +2636,15 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         yardTurn.itemID = variant;
         yardTurn.crimeServiceSite = Coord::Invalid();
     }
+    // Recheck after variant selection and earlier yards' accepted decisions.
+    if (yardTurn.itemID == Structure_RepairYard && pass.repairCapacityDemand
+        && !repairYardAdmitted(pass)) yardTurn.itemID = NONE_ID;
     if (yardTurn.itemID != NONE_ID && !vanillaBoomAdmits(pass, yardTurn.itemID)) return false;
     Coord selectedPlaceLocation = Coord::Invalid();
     if (yardTurn.itemID != NONE_ID && campaignAvailableToBuild(turn.pBuilder,yardTurn.itemID)) {
-        if (yardTurn.crimeServiceSite.isValid()) selectedPlaceLocation = yardTurn.crimeServiceSite;
+        if (yardTurn.itemID == Structure_RepairYard && pass.repairCapacityDemand)
+            selectedPlaceLocation = repairCapacitySite(pass);
+        else if (yardTurn.crimeServiceSite.isValid()) selectedPlaceLocation = yardTurn.crimeServiceSite;
         else if (yardTurn.itemID == Structure_PoliceStation) {
             // Legacy demand/emergency rules use the same bounded service
             // scorer; no alternate full-map search bypasses its overlap costs.

@@ -5,69 +5,181 @@ on:
     workflows: [Build Dune Legacy]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Exact published vX.Y.Z or immutable staging snapshot; reuse its frozen browser artifact.'
+        type: string
+        required: true
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: publish-browser
+  group: publish-browser-${{ startsWith(inputs.tag || github.event.workflow_run.head_branch, 'v') && 'stable' || 'staging' }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
-  publish:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v'))
+  select:
+    # A failed post-publication website update must not suppress browser recovery.
+    # PR artifacts never enter a job which can obtain a website deploy credential.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.event != 'pull_request' &&
+       (startsWith(github.event.workflow_run.head_branch, 'v') ||
+        startsWith(github.event.workflow_run.display_title, 'Staging packages')))
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      GH_TOKEN: ${{ github.token }}
+    outputs:
+      eligible: ${{ steps.select.outputs.eligible }}
+      tag: ${{ steps.select.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
-      - name: Test browser shell
-        run: |
-          node --test scripts/tests/test-web-shell.cjs
-          python3 -m unittest discover -s scripts/tests -p 'test_package_web.py'
-          python3 -m unittest discover -s scripts/tests -p 'test_check_web_mods.py'
-      - name: Select latest published release
-        run: |
-          TAG=$(gh release view --json tagName --jq .tagName)
-          git fetch origin "tag" "$TAG"
-          git checkout "$TAG"
-          echo "WEB_TAG=$TAG" >> "$GITHUB_ENV"
-      - name: Install the pinned P2PKit SDK
-        working-directory: platform/web
-        run: npm ci
-      - name: Build and verify the complete browser game
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Select the producing run's published inputs, never Latest
+        id: select
         env:
-          BUILD_DIR: build-web
-          JOBS: '4'
-          DUNECITY_RELEASE_BUILD: 'ON'
-        run: ./tools/web/build-emscripten.sh
-      - name: Package and publish website
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: python3 scripts/release-automation.py select-publication --tag "$REQUESTED_TAG"
+
+  publish:
+    needs: [select]
+    if: needs.select.outputs.eligible == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: ${{ startsWith(needs.select.outputs.tag, 'staging-') && 'dunecity-staging-lifecycle' || format('stable-browser-{0}', github.run_id) }}
+      cancel-in-progress: false
+      queue: max
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WEB_TAG: ${{ needs.select.outputs.tag }}
+    steps:
+      # Only trusted control scripts execute; downloaded runtime files are data.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Restore and verify the already-built browser package
+        id: browser
+        run: |
+          python3 scripts/release-automation.py browser-inputs --tag "$WEB_TAG" \
+            --directory "$RUNNER_TEMP/browser-inputs" --output "$RUNNER_TEMP/browser-package" \
+            --service-output "$RUNNER_TEMP/browser-service"
+      - name: Persist the immutable recovery receipt
+        uses: actions/upload-artifact@v7
+        with:
+          name: Browser-publication-inputs-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/browser-inputs/publication-inputs.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish only the selected browser channel
         env:
           WEBSITE_DEPLOY_KEY: ${{ secrets.WEBSITE_DEPLOY_KEY }}
+          WEB_CHANNEL: ${{ steps.browser.outputs.channel }}
+          WEB_SHA: ${{ steps.browser.outputs.sha }}
+          WEB_VERSION: ${{ steps.browser.outputs.version }}
         run: |
+          set -euo pipefail
+          test -n "$WEBSITE_DEPLOY_KEY"
           mkdir -p ~/.ssh
           printf '%s\n' "$WEBSITE_DEPLOY_KEY" > ~/.ssh/website_deploy
           chmod 600 ~/.ssh/website_deploy
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/website_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
-          git clone git@github.com:VR48/dunelegacy.com.git website-repo
-          # Do not let a slow build replace a newer release or browser hotfix.
-          test "$(gh release view --json tagName --jq .tagName)" = "$WEB_TAG"
-          export WEB_VERSION="${WEB_TAG#v}"
-          python3 - <<'PY'
+          if [ "$WEB_CHANNEL" = staging ]; then
+            # The deploy key transports a tiny immutable-input request, never
+            # WASM/data blobs. Sparse checkout also avoids downloading old game blobs.
+            git clone --filter=blob:none --no-checkout --single-branch --branch main \
+              git@github.com:VR48/dunelegacy.com.git website-repo
+            git -C website-repo sparse-checkout set deploy .github
+            git -C website-repo checkout main
+          else
+            git clone --filter=blob:none --single-branch --branch main \
+              git@github.com:VR48/dunelegacy.com.git website-repo
+          fi
+          export WEBSITE_CODE_SHA="$(git -C website-repo rev-parse HEAD)"
+          if [ "$WEB_CHANNEL" = staging ]; then
+            python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          inputs = Path(os.environ['RUNNER_TEMP']) / 'browser-inputs'
+          manifest_path = inputs / 'publication-inputs.json'
+          manifest = json.loads(manifest_path.read_text())
+          import hashlib
+          request = dict(schema=1, websiteCodeCommit=os.environ['WEBSITE_CODE_SHA'],
+              repository=os.environ['GITHUB_REPOSITORY'], releaseTag=os.environ['WEB_TAG'],
+              sourceCommit=os.environ['WEB_SHA'],
+              publicationManifestSha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+              browserArchiveSha256=manifest['sha256']['DuneCity-browser.tar.gz'],
+              serviceArchiveSha256=manifest['sha256']['DuneCity-p2p-service.tar.gz'])
+          target = Path('website-repo/deploy/staging-browser.json')
+          if target.exists():
+              previous = json.loads(target.read_text())
+              if previous['sourceCommit'] != request['sourceCommit']:
+                  relation = json.loads(subprocess.check_output(['gh', 'api',
+                      'repos/' + os.environ['GITHUB_REPOSITORY'] + '/compare/' +
+                      previous['sourceCommit'] + '...' + request['sourceCommit']], text=True))['status']
+                  if relation not in ('ahead', 'identical'):
+                      raise SystemExit('Refusing a stale/diverged staging artifact request')
+              same = all(previous.get(key) == value for key, value in request.items() if key != 'websiteCodeCommit')
+              changed_code = subprocess.check_output(['git', '-C', 'website-repo', 'diff',
+                  '--name-only', '--no-renames', previous['websiteCodeCommit'], request['websiteCodeCommit'],
+                  '--', '.', ':(exclude)deploy/staging-browser.json'], text=True).strip()
+              if same and not changed_code:
+                  request = previous
+          target.write_text(json.dumps(request, indent=2) + '\n')
+          (inputs / 'staging-browser.json').write_text(json.dumps(request, indent=2) + '\n')
+          PY
+            WEBSITE_CODE_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["websiteCodeCommit"])' "$RUNNER_TEMP/browser-inputs/staging-browser.json")"
+            git -C website-repo add -- deploy/staging-browser.json
+          else
+            # Stable keeps its existing release convention. A dev request can
+            # never stage /play, production service code, prose or updater feeds.
+            test "$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)" = "$WEB_TAG"
+            python3 - <<'PY'
           import json, os
           from pathlib import Path
-          current = json.loads(Path('website-repo/website/play/build.json').read_text())['version']
-          if tuple(map(int, current.split('.'))) > tuple(map(int, os.environ['WEB_VERSION'].split('.'))):
-              raise SystemExit('Website already has a newer browser build; refusing downgrade')
+          current = Path('website-repo/website/play/build.json')
+          if current.exists():
+              prior = json.loads(current.read_text())
+              expected = json.loads((Path(os.environ['RUNNER_TEMP']) / 'browser-package/build.json').read_text())
+              if tuple(map(int, prior['version'].split('.'))) > tuple(map(int, expected['version'].split('.'))):
+                  raise SystemExit('Website already has a newer stable browser version')
+              if prior['version'] == expected['version'] and (
+                      prior['sourceCommit'] != expected['sourceCommit'] or prior['sha256'] != expected['sha256']):
+                  raise SystemExit('Existing stable browser inputs differ; explicit hotfix disposition required')
           PY
-          python3 scripts/package-web.py --build-root build-web --play-root website-repo/website/play --signaling-origin https://dunelegacy.com
-          python3 scripts/package-p2p-service.py --output website-repo/p2p-service
-          python3 website-repo/deploy/check-web-security.py
+            mkdir -p website-repo/website/play
+            rsync -a --delete "$RUNNER_TEMP/browser-package/" website-repo/website/play/
+            rsync -a --delete "$RUNNER_TEMP/browser-service/" website-repo/p2p-service/
+            python3 website-repo/deploy/check-web-security.py --play-root website-repo/website/play
+            git -C website-repo add -- website/play p2p-service
+          fi
           cd website-repo
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add website/play p2p-service
-          git commit -m "Publish browser build ${WEB_TAG}"
-          git pull --rebase origin main
-          git push origin main
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish ${WEB_CHANNEL} browser ${WEB_TAG} (${WEB_SHA})"
+            # Reject racing main; never rebase frozen delivery onto other code.
+            git push origin HEAD:main
+          fi
+          printf 'websiteRequestCommit=%s\nwebsiteCodeCommit=%s\npackageTag=%s\npackageSource=%s\nchannel=%s\n' \
+            "$(git rev-parse HEAD)" "$WEBSITE_CODE_SHA" "$WEB_TAG" "$WEB_SHA" "$WEB_CHANNEL" > "$RUNNER_TEMP/browser-delivery.txt"
+      - name: Retain deployment identity even after a failed copy
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Browser-delivery-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/browser-inputs/publication-inputs.json
+            ${{ runner.temp }}/browser-delivery.txt
+            ${{ runner.temp }}/browser-inputs/staging-browser.json
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Remove temporary website credential
+        if: always()
+        run: rm -f ~/.ssh/website_deploy
