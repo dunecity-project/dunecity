@@ -466,7 +466,7 @@ parser.add_argument('--no-ai-telemetry', action='store_true',
                          'Log = false')
 parser.add_argument('--headless-assets', action=argparse.BooleanOptionalAction,
                     default=os.environ.get('DUNECITY_HEADLESS_ASSETS') == '1',
-                    help='Simulation-only graphics/audio assets; rendered and fixture probes keep full assets')
+                    help='Simulation-only graphics/audio assets; rendered and UI probes keep full assets')
 parser.add_argument('--factory-recovery-probe', action='store_true')
 parser.add_argument('--strategic-site-probe', action='store_true',
                     help='Continue the stalled-city fixture with its overdue Palace timer restored')
@@ -501,6 +501,8 @@ parser.add_argument('--seed', type=int, default=486409243)
 parser.add_argument('--minutes', type=int, default=20)
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
 args = parser.parse_args()
+if args.repair_capacity_probe and args.no_ai_telemetry:
+    parser.error('--repair-capacity-probe requires structured production/placement receipts.')
 if args.army_deploys_regression_observer and args.scenario:
     parser.error('--army-deploys-regression-observer is forbidden for scenario/A/B/AAA games.')
 if args.civ_wars:
@@ -896,10 +898,12 @@ if args.army_deploys_regression_observer:
     env['BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER'] = '1'
 assert args.army_deploys_regression_observer or 'BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER' not in env
 # A batch's inherited asset mode must never turn a renderer/UI assertion into
-# a null-texture test. Direct CTests remain full-asset by default.
+# a null-texture test. The repair-capacity fixture checks simulation service,
+# not rendering; its headless CTest explicitly opts in to the existing mode.
 headless_assets = args.headless_assets and not (
     args.real_video or args.ffa_screenshot
-    or any(value is True for name, value in vars(args).items() if name.endswith('_probe')))
+    or any(value is True for name, value in vars(args).items()
+           if name.endswith('_probe') and name != 'repair_capacity_probe'))
 env['DUNECITY_HEADLESS_ASSETS'] = '1' if headless_assets else '0'
 env.pop('DUNECITY_SHARED_MODS', None)
 if args.civ_wars:
@@ -1098,6 +1102,40 @@ else:
 run_lines = (out/'run.log').read_text(errors='replace').splitlines()
 results = [line for line in run_lines if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')
+if args.repair_capacity_probe:
+    placements = [dict(part.split('=', 1) for part in line.split('REPAIR_CAPACITY_PLACEMENT:', 1)[1].split()
+                       if '=' in part)
+                  for line in run_lines if 'REPAIR_CAPACITY_PLACEMENT:' in line]
+    if len(placements) != 1:
+        raise RuntimeError('Repair capacity needs exactly one real expansion placement.')
+    placement = {key: int(value) for key, value in placements[0].items()}
+    receipts = []
+    for trace in (out/'profile').rglob('events.jsonl'):
+        with trace.open() as lines:
+            for line in lines:
+                row = json.loads(line)
+                if row['event'] in ('production_order', 'placement_request', 'placement_result'):
+                    receipts.append(row)
+    orders = [row for row in receipts if row['event'] == 'production_order'
+              and row['data'].get('rule') == 'probe_backlog' and row['data'].get('accepted') == 1]
+    if (len(orders) != 1 or orders[0]['data'].get('builder') != placement['builder']
+            or orders[0]['data'].get('item') != placement['item']
+            or orders[0]['data'].get('queue_before') != 0 or orders[0]['data'].get('queue_after') != 1
+            or orders[0]['data'].get('quoted_price', 0) <= 0):
+        raise RuntimeError('Repair expansion has no unique paid order from its accepted construction yard.')
+    order = orders[0]
+    placement_receipts = [row for row in receipts if row['event'] == 'placement_result' and row['data'].get('success') == 1
+               and row['player'] == order['player'] and row['house'] == order['house']
+               and order['cycle'] <= row['cycle'] <= placement['cycle']
+               and all(row['data'].get(key) == placement[key] for key in ('builder', 'item', 'x', 'y'))]
+    if len(placement_receipts) != 1:
+        raise RuntimeError("Repair expansion site does not match its accepted builder's successful placement receipt.")
+    requests = [row for row in receipts if row['event'] == 'placement_request'
+                and row['player'] == order['player'] and row['house'] == order['house']
+                and row['cycle'] == placement_receipts[0]['cycle']
+                and all(row['data'].get(key) == placement[key] for key in ('builder', 'item', 'x', 'y'))]
+    if len(requests) != 1:
+        raise RuntimeError('Repair expansion has no matching real placement command.')
 if args.expect_digest:
     digests = [dict(part.split('=', 1) for part in line.split('PROBE_DIGEST:', 1)[1].split() if '=' in part)
                for line in run_lines if 'PROBE_DIGEST:' in line and 'final=1' in line]

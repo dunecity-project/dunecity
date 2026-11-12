@@ -279,6 +279,9 @@ void backlogAndContinuation(const char* mod) {
     const auto reserved = world.bot->reservedStructures.find(world.first->getObjectID());
     require(reserved != world.bot->reservedStructures.end(), "Accepted repair capacity has no reserved plot");
     const Coord expansionSite = reserved->second.location;
+    const Coord repairSize = getStructureSize(Structure_RepairYard);
+    require(world.bot->repairPlacementAccess.waitingFor(expansionSite.x, expansionSite.y, repairSize.x, repairSize.y) >= 2,
+        "Accepted repair reservation does not connect the waiting local workload");
     // Deliberately do not advance the pass count: the execution layer must
     // revalidate accepted queues independently of a stale selector snapshot.
     QuantBot::BuilderTurn second(pass.money); second.pBuilder = world.second; second.pStructure = world.second;
@@ -298,8 +301,15 @@ void backlogAndContinuation(const char* mod) {
             if (structure->getOwner() == world.owner && structure->getItemID() == Structure_RepairYard
                 && structure != world.bay) expansion = static_cast<RepairYard*>(structure);
     }
-    require(expansion && expansion->getLocation() == expansionSite,
-        "Accepted useful repair capacity was not built at its real reserved site within the bound");
+    // Own traffic can invalidate a reservation while the paid structure is
+    // building. The normal yard consumer replans it; the runner verifies the
+    // accepted builder's actual placement receipt at this resulting site.
+    require(expansion && world.owner->getNumItems(Structure_RepairYard) == 2 && world.queued() == 0
+        && !world.bot->reservedStructures.count(world.first->getObjectID()),
+        "Accepted repair order was not consumed into exactly one owned expansion within the bound");
+    SDL_Log("REPAIR_CAPACITY_PLACEMENT: builder=%u item=%u cycle=%u initial_x=%d initial_y=%d x=%d y=%d",
+        world.first->getObjectID(), static_cast<unsigned>(Structure_RepairYard), world.game->getGameCycleCount(),
+        expansionSite.x, expansionSite.y, expansion->getX(), expansion->getY());
     GroundUnit* next = nullptr;
     FixPoint distance = 0;
     for (auto* unit : world.jobs) {

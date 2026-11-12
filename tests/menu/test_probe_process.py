@@ -147,8 +147,36 @@ processes.install_signal_handlers()
 sent = False
 prepared = False
 
+def trace_start(frame, event, arg):
+    global prepared
+    if prepared or event != 'call' or frame.f_code is not ProbeProcesses._communicate.__code__:
+        return
+    process = frame.f_locals['process']
+    # Python 3.15 may use kqueue/pidfd instead of the waitpid-lock path.
+    # Force its normal fallback so this test still exercises the real lock.
+    for name in ('_wait_pidfd', '_wait_kqueue'):
+        if hasattr(process, name):
+            setattr(process, name, lambda timeout: False)
+    deadline = time.monotonic() + 10
+    while not (scratch / 'pids.json').exists():
+        if time.monotonic() >= deadline:
+            raise AssertionError('Owned descendants did not become ready')
+        time.sleep(.01)
+    (out / 'tree-ready').write_text('ready')
+    while not (out / 'tree-observed').exists():
+        if time.monotonic() >= deadline:
+            raise AssertionError('Parent did not observe owned descendants')
+        time.sleep(.01)
+    prepared = True
+    return trace_wait
+
+def trace_dispatch(frame, event, arg):
+    if not prepared:
+        return trace_start(frame, event, arg)
+    return trace_wait(frame, event, arg)
+
 def trace_wait(frame, event, arg):
-    global sent, prepared
+    global sent
     if sent or event != 'call' or frame.f_code is not subprocess.Popen._try_wait.__code__:
         return trace_wait
     process = frame.f_locals['self']
@@ -158,20 +186,11 @@ def trace_wait(frame, event, arg):
     while ancestor is not None and ancestor.f_code is not ProbeProcesses._finish.__code__:
         ancestor = ancestor.f_back
     cleanup = ancestor is not None
-    if not cleanup and not prepared:
-        # Barrier on the real owned tree, not a scheduling guess or patched Popen.
-        deadline = time.monotonic() + 10
-        while not (scratch / 'pids.json').exists():
-            if time.monotonic() >= deadline:
-                raise AssertionError('Owned descendants did not reach the wait checkpoint')
-            time.sleep(.01)
-        prepared = True
-        if checkpoint == 'cleanup-lock':
-            # Deliberately exhaust this real wait's known deadline while tracing
-            # remains installed, so the next checkpoint is the actual abort cleanup.
-            wait_deadline = frame.f_back.f_locals['endtime']
-            while time.monotonic() <= wait_deadline:
-                time.sleep(.001)
+    if not cleanup and checkpoint == 'cleanup-lock':
+        # Exhaust the actual wait deadline to enter abort cleanup.
+        wait_deadline = frame.f_back.f_locals['endtime']
+        while time.monotonic() <= wait_deadline:
+            time.sleep(.001)
     target = cleanup if checkpoint == 'cleanup-lock' else not cleanup
     if target:
         entry_locked = cleanup and ancestor.f_locals['entry'].lock._is_owned()
@@ -188,9 +207,9 @@ try:
     with scratch_dir('probe-cancellation-contract') as scratch:
         (out / 'scratch-path').write_text(str(scratch))
         if checkpoint != 'external':
-            sys.settrace(trace_wait)
+            sys.settrace(trace_dispatch)
         processes.run([sys.executable, '-c', sys.argv[4], str(scratch)],
-                      timeout=.01 if checkpoint == 'cleanup-lock' else 30)
+                      timeout=1 if checkpoint == 'cleanup-lock' else 30)
 finally:
     sys.settrace(None)
     (out / 'finalized').write_text('closed')
@@ -205,6 +224,9 @@ finally:
                     scratch = Path((out / 'scratch-path').read_text())
                     wait_for(scratch / 'pids.json')
                     pids = json.loads((scratch / 'pids.json').read_text())
+                    if checkpoint != 'external':
+                        wait_for(out / 'tree-ready')
+                        (out / 'tree-observed').write_text('observed')
                     if checkpoint == 'external':
                         supervisor.send_signal(signal.SIGTERM)
                     else:
