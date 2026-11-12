@@ -842,6 +842,11 @@ It removes `BALANCE_DUNECITY_AUDIT`, keeps real elimination samples/final result
 and leaves power/refinery/audit-dependent metrics unmeasured rather than inventing
 zeros. `games.csv` appends the verified `observer_mode` receipt; comparison rejects
 mixed or missing modes and resume requires a new directory when the mode changes.
+Mandatory cycle-zero per-playing-house research proof remains enabled for DuneCity
+sample/team-study games; the optional continuous sampler stays off. Setup/roster
+metadata alone cannot replace the engine's research-state rows. See
+`docs/quantbot-dunecity-audit.md` for the one-game runtime smoke and fresh-results
+requirements after an old observer-off capture lacks this proof.
 Do not compare an observed screen with an observer-off gate. Any screen winner
 still needs the full candidate-only vanilla96 against observer-off native on the
 same pin, plus AAA2 and the cross-mode/default gates, before proposing ON.

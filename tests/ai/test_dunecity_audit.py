@@ -629,6 +629,63 @@ class DuneCityAuditTests(unittest.TestCase):
             game, dict(research_enabled='1'), lines + [lines[0].replace('cycle=0 research_enabled=1',
                                                                        'cycle=3750 research_enabled=0')]))
 
+    def test_dunecity_observer_off_accepts_complete_engine_research_startup(self):
+        # Parser fixtures, not proof that a particular C++ probe emitted these rows.
+        lines = [
+            'DUNECITY_TECH_SAMPLE: minute=0 cycle=0 house=0 credits=3000 tech_level=9 '
+            'research_target=0 research_remaining=0 research_enabled=1 city_sim=1',
+            'DUNECITY_TECH_SAMPLE: minute=0 cycle=0 house=1 credits=3000 tech_level=9 '
+            'research_target=0 research_remaining=0 research_enabled=1 city_sim=1',
+            'DUNECITY_TECH_SAMPLE: minute=0 cycle=0 house=2 credits=3000 tech_level=9 '
+            'research_target=0 research_remaining=0 research_enabled=1 city_sim=1',
+            'DUNECITY_TECH_SAMPLE: minute=0 cycle=0 house=3 credits=3000 tech_level=9 '
+            'research_target=0 research_remaining=0 research_enabled=1 city_sim=1',
+            'DUNECITY_TECH_SAMPLE: minute=0 cycle=0 house=4 credits=3000 tech_level=9 '
+            'research_target=0 research_remaining=0 research_enabled=1 city_sim=1',
+            'DUNECITY_TECH_SAMPLE: minute=0 cycle=0 house=5 credits=3000 tech_level=9 '
+            'research_target=0 research_remaining=0 research_enabled=1 city_sim=1',
+        ]
+        setup = audit['parse']('SCENARIO_SETUP: cycle=0 research_enabled=1 city_sim=1', 'SCENARIO_SETUP:')
+        for fmt, houses in (('1v1', (0, 1)), ('2v2', (0, 1, 2, 4)),
+                            ('ffa4', (0, 1, 2, 4)), ('ffa6', (0, 1, 2, 3, 4, 5))):
+            with self.subTest(format=fmt):
+                args = audit['parser'].parse_args([
+                    '--mode', 'sample', '--mod', 'dunecity', '--cases', '1',
+                    '--sample-formats', fmt, '--sample-techs', '9', '--observer-off'])
+                self.assertTrue(args.observer_off)
+                for game in audit['schedule'](args):
+                    self.assertTrue(game['require_research'])
+                    self.assertTrue(audit['research_verified'](game, setup, [lines[house] for house in houses]))
+
+    def test_dunecity_observer_off_rejects_missing_disabled_or_incomplete_research(self):
+        args = audit['parser'].parse_args([
+            '--mode', 'sample', '--mod', 'dunecity', '--cases', '1',
+            '--sample-formats', 'ffa6', '--sample-techs', '9', '--observer-off'])
+        game = audit['schedule'](args)[0]
+        setup = dict(research_enabled='1')
+        lines = [f'DUNECITY_TECH_SAMPLE: minute=0 cycle=0 house={house} tech_level=9 '
+                 'research_target=0 research_remaining=0 research_enabled=1 city_sim=1'
+                 for house in range(6)]
+        variants = [
+            ('no_samples', setup, []),
+            ('setup_and_roster_only', setup, [f'SCENARIO_ROSTER: house={house} team={house + 1} '
+                                            'players=qBotBrutal' for house in range(6)]),
+            ('missing_setup_flag', {}, lines),
+            ('disabled_setup', dict(research_enabled='0'), lines),
+            ('missing_house', setup, lines[:-1]),
+            ('duplicate_cannot_cover_missing_house', setup, lines[:-1] + [lines[0]]),
+            ('unexpected_house', setup, lines + [lines[0].replace('house=0', 'house=6')]),
+            ('late_house', setup, lines[:-1] + [lines[-1].replace('cycle=0', 'cycle=3750')]),
+            ('disabled_initial_house', setup,
+             lines[:-1] + [lines[-1].replace('research_enabled=1', 'research_enabled=0')]),
+            ('missing_house_flag', setup, lines[:-1] + [lines[-1].replace(' research_enabled=1', '')]),
+            ('disabled_later_sample', setup,
+             lines + [lines[0].replace('cycle=0', 'cycle=3750').replace('research_enabled=1', 'research_enabled=0')]),
+        ]
+        for label, observed_setup, observed_lines in variants:
+            with self.subTest(evidence=label):
+                self.assertFalse(audit['research_verified'](game, observed_setup, observed_lines))
+
     def test_initial_technology_changes_the_real_skirmish_without_colliding_with_default_ids(self):
         options = ['--sizes', '96', '--spice', 'medium', '--formats', '1v1',
                    '--difficulties', 'hard', '--seeds', '9101']

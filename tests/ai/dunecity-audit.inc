@@ -1,5 +1,5 @@
-// Probe-only, read-only DuneCity Random Skirmish audit. Enabled by the matrix harness through
-// BALANCE_DUNECITY_AUDIT; no changes to the shipped game or to AI decisions.
+// Probe-only, read-only DuneCity Random Skirmish evidence; no shipped-game or AI decision changes.
+// BALANCE_DUNECITY_AUDIT enables continuous diagnostics, not mandatory startup research proof.
 #include <dunecity/CitySimulation.h>
 #include <dunecity/PowerRules.h>
 #include <dunecity/SpatialFields.h>
@@ -33,6 +33,19 @@ struct TechObservation {
     std::array<int64_t,6> firstCompleted{-1,-1,-1,-1,-1,-1};
 };
 inline std::array<TechObservation,NUM_HOUSES> technology;
+
+// Scenario outcome gates still require live per-house research state with the
+// optional observer off. The enabled observer already emits the richer cycle-0
+// TECH_SAMPLE through sampleComposition; do not duplicate or replace that row.
+inline void sampleInitialResearch(Game& game) {
+    if (game.getGameCycleCount()!=0 || std::getenv("BALANCE_DUNECITY_AUDIT")) return;
+    for (const House* house : EliminationMatch::playingHouses(game))
+        SDL_Log("DUNECITY_TECH_SAMPLE: minute=0 cycle=%u house=%d credits=%d"
+                " tech_level=%d research_target=%d research_remaining=%d research_enabled=%d city_sim=%d",
+            game.getGameCycleCount(),house->getHouseID(),house->getCredits(),house->getTechLevel(),
+            house->getTechResearchTarget(),house->getTechResearchRemaining(),
+            int(game.getGameInitSettings().getGameOptions().researchLab),int(game.isCitySimEnabled()));
+}
 
 // Start-only port of RockBudget's sampleRock geometry:
 // 4e1a962d7c581c7e03ba16b0a761f427e3d09cfc, tests/ai/dunecity-audit.inc.

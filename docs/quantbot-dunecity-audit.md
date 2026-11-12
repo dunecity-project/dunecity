@@ -4,8 +4,9 @@
 
 `tests/ai/dunecity-audit.py` uses the existing `ScenarioMatch` Random Skirmish generator and the real
 all-QuantBot simulation. No human controller, fixture cash, artificial reinforcements or changed
-combat orders are introduced. `dunecity-audit.inc` is a probe-only, read-only sampler, enabled only
-by `BALANCE_DUNECITY_AUDIT`. Ordinary game/probe runs do not pay for these extra measurements.
+combat orders are introduced. `dunecity-audit.inc` supplies probe-only, read-only evidence:
+`BALANCE_DUNECITY_AUDIT` enables the optional continuous sampler. Scenario startup also records
+mandatory per-house research state when that observer is off. Shipped games pay for neither.
 
 The exhaustive `--mode matrix` is 3 map sizes (96/128/160), 4 spice levels
 (None/Low/Medium/**High**), 3 formats (1v1/2v2/4-house FFA), 3 mirror difficulties
@@ -115,6 +116,45 @@ and every captured research flag must remain enabled. Missing/disabled telemetry
 records `research_enabled_not_verified`, retains failure evidence and fails the
 sample run. Merely setting the INI or printing `research_required=1` in `--list`
 does not verify research.
+
+`--observer-off` disables only the optional continuous audit, not this mandatory
+startup proof. Before the first simulation tick, the scenario probe reads every
+playing house's actual technology/research state and the effective engine rule
+into cycle-zero `DUNECITY_TECH_SAMPLE` rows. With the observer on, its existing
+richer composition/technology rows supply that evidence instead, without duplicate
+startup rows. Observer-off runs do not populate optional technology/composition,
+fleet or power audit tables; their mandatory rows contain no invented military
+or allocation measurements. `SCENARIO_SETUP`, roster metadata and requested INIs
+alone still do not satisfy the verifier.
+
+After rebuilding the probe from a committed repair, the integrator must run an
+actual observer-off DuneCity game, not just the parser fixtures. This command
+selects one six-house, tech-9 game (one case has two seat assignments; shard 1/2
+selects only the original) and retains its raw proof after successful cleanup:
+
+```sh
+python3 tests/ai/test_dunecity_audit.py
+dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag research-off-smoke -- \
+  python3 tests/ai/dunecity-audit.py --mode sample --mod dunecity --cases 1 --sample-seed 9101 \
+  --sample-formats ffa6 --sample-techs 9 --minutes 1 --shard 1/2 --jobs 1 \
+  --observer-off --keep-telemetry --build-dir build-int --results FRESH_RESULTS
+```
+
+`--keep-telemetry` retains `diagnostics/<gamehash>/run.log`; it does not enable
+`BALANCE_DUNECITY_AUDIT`. Require one successful `games.csv` row with
+`observer_mode=off`, `research_enabled=1`, no error and a final digest. In the raw
+log require setup research enabled and exactly one cycle-zero research sample
+for each of the six playing houses, all enabled with actual tech/research fields.
+There must be no later technology samples or optional `DUNECITY_AUDIT`,
+`DUNECITY_COMPOSITION`, `DUNECITY_FLEET` or `DUNECITY_REFINERY` rows.
+This one-minute smoke proves emission/verification, not release balance.
+
+Historical observer-off DuneCity sample/team-study attempts missing these rows
+remain failed/unverified even if their game process exited successfully, their
+INI requested research and their outcome/digest survived. Rebuild and play fresh
+games in a fresh results directory; never retrofit startup proof or rescore those
+attempts as accepted measurements. A paired gate needs fresh matching games in
+both affected arms, with the observer still off.
 
 New game columns retain mod, sampled case/seed, candidate house/seat and observed
 research enablement; use a **fresh results directory** after this schema change.
