@@ -258,13 +258,23 @@ add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
 # cases exist in declaration order: a changed size list moves work between shards but never
 # drops a case, and a shard left without one fails (no tests ran).
 set(SKIRMISH_SWEEP_SHARDS 12)
-add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]~[rockfairness-sweep]")
+add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]~[rockfairness-sweep]~[generator-matrix]")
 set(SKIRMISH_SWEEP_TESTS)
 math(EXPR SKIRMISH_LAST_SWEEP_SHARD "${SKIRMISH_SWEEP_SHARDS} - 1")
 foreach(shard RANGE ${SKIRMISH_LAST_SWEEP_SHARD})
     add_test(NAME skirmish_generator_tests_rockfairness_${shard} COMMAND dunelegacy_tests "[rockfairness-sweep]"
         --order decl --shard-count ${SKIRMISH_SWEEP_SHARDS} --shard-index ${shard})
     list(APPEND SKIRMISH_SWEEP_TESTS skirmish_generator_tests_rockfairness_${shard})
+endforeach()
+# Keep the other generation-heavy matrices out of the base test's shared timeout too.
+# This is a scheduling count, not a copied list of cases; Catch partitions the tagged cases.
+set(SKIRMISH_MATRIX_SHARDS 5)
+set(SKIRMISH_MATRIX_TESTS)
+math(EXPR SKIRMISH_LAST_MATRIX_SHARD "${SKIRMISH_MATRIX_SHARDS} - 1")
+foreach(shard RANGE ${SKIRMISH_LAST_MATRIX_SHARD})
+    add_test(NAME skirmish_generator_tests_matrix_${shard} COMMAND dunelegacy_tests "[generator-matrix]"
+        --order decl --shard-count ${SKIRMISH_MATRIX_SHARDS} --shard-index ${shard})
+    list(APPEND SKIRMISH_MATRIX_TESTS skirmish_generator_tests_matrix_${shard})
 endforeach()
 add_test(NAME civilization_wars_tests COMMAND dunelegacy_tests "[civwars]")
 # Formation planner (docs/formations.md): determinism, layout, fallback, edges, catch-up.
@@ -469,7 +479,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests ${SKIRMISH_SWEEP_TESTS} civilization_wars_tests sidebar_grid_tests classic_desert_ui_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests ${SKIRMISH_SWEEP_TESTS} ${SKIRMISH_MATRIX_TESTS} civilization_wars_tests sidebar_grid_tests classic_desert_ui_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
@@ -633,20 +643,50 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # unchanged, and three generated matches (vanilla 1v1, 2v3 vs allied Large bases with 10k
         # armies, DuneCity 192 with 15k cities at tech 8) checked against the generator's plan,
         # measured city population, a one-minute played smoke with a clean log and a save/load round trip.
-        add_test(NAME skirmish_generator_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skirmish-probe)
-        set_tests_properties(skirmish_generator_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        add_test(NAME civilization_wars_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/civ-wars-probe
-            --cases civ-menu,civ-1v1,civ-2v2,civ-3v3)
-        set_tests_properties(civilization_wars_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
-        add_test(NAME civilization_wars_research_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/civ-wars-research-probe
-            --cases civ-research)
-        set_tests_properties(civilization_wars_research_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # Compilation is a separate, fingerprinted fixture, shared by all 25
+        # existing case/size/payment processes. No case pays for a private rebuild
+        # or shares its profile, and each retains the existing 600 s runtime bound.
+        set(SKIRMISH_PROBE_FIXTURE_DIR ${CMAKE_BINARY_DIR}/skirmish-probe-fixture)
+        add_test(NAME skirmish_probe_fixture COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py --prepare-only
+            --fixture-dir ${SKIRMISH_PROBE_FIXTURE_DIR}
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${SKIRMISH_PROBE_FIXTURE_DIR})
+        set_tests_properties(skirmish_probe_fixture PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+            FIXTURES_SETUP skirmish_native_fixture)
+        foreach(case IN ITEMS menu mp-lobby legacy-map vanilla-1v1 allied-2v3 city-192 stefan-128
+                partner-support partner-quantbot partner-fighter spectate render
+                civ-menu civ-1v1 civ-2v2 civ-3v3 civ-research)
+            set(sizes 1024x768)
+            set(prefix skirmish_generator_probe)
+            if(case STREQUAL "menu" OR case MATCHES "^civ-")
+                set(sizes 640x480 1280x720)
+            endif()
+            if(case MATCHES "^civ-")
+                set(prefix civilization_wars_probe)
+            endif()
+            foreach(size IN LISTS sizes)
+                if(case STREQUAL "civ-research")
+                    foreach(payment IN ITEMS off on)
+                        set(name civilization_wars_research_probe_${size}_${payment})
+                        add_test(NAME ${name} COMMAND ${Python3_EXECUTABLE}
+                            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
+                            --fixture-dir ${SKIRMISH_PROBE_FIXTURE_DIR} --cases ${case} --size ${size}
+                            --research-payment ${payment}
+                            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/${name})
+                        set_tests_properties(${name} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+                            FIXTURES_REQUIRED skirmish_native_fixture)
+                    endforeach()
+                else()
+                    set(name ${prefix}_${case}_${size})
+                    add_test(NAME ${name} COMMAND ${Python3_EXECUTABLE}
+                        ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
+                        --fixture-dir ${SKIRMISH_PROBE_FIXTURE_DIR} --cases ${case} --size ${size}
+                        --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/${name})
+                    set_tests_properties(${name} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+                        FIXTURES_REQUIRED skirmish_native_fixture)
+                endif()
+            endforeach()
+        endforeach()
         add_test(NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)

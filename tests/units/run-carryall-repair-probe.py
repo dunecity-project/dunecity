@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise human and QuantBot repair trips with free, busy and absent carryalls.
 
-Uses the existing macOS Ninja build, real game objects, isolated profiles and dummy SDL.
+Uses the existing macOS Ninja build, real game objects, fresh isolated profiles per run and dummy SDL.
 Repeats each mod's seeded cases and compares the event cycles. Retains logs in --output-dir.
 """
 import argparse
@@ -64,8 +64,7 @@ for mod in ('vanilla', 'dunecity'):
     expected = None
     for repeat in (1, 2):
         tag = mod + '-' + str(repeat)
-        profile = out / ('profile-' + tag)
-        profile.mkdir(parents=True, exist_ok=True)
+        profile = Path(tempfile.mkdtemp(prefix='profile-' + tag + '-', dir=out))
         (profile / 'Dune City.ini').write_text(
             '[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
             'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\n'

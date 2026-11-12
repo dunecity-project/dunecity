@@ -546,14 +546,26 @@ generated", and "random settings on army and city must apply equally to each pla
     and mirrored terrain. Budget scaling excludes mountain, and helper cases reject diagonal,
     outside-berth, non-rock and invalid-start shortcuts.
   - The sweep is one Catch test case per mode and `kMapSizes` entry (`[rockfairness-sweep]`,
-    60 configurations and 120 maps each, Vanilla's sizes first). `skirmish_generator_tests` runs
-    the rest of `[skirmish]`; `skirmish_generator_tests_rockfairness_0` to `_11` run the sweep as
+    60 configurations and 120 maps each, Vanilla's sizes first).
+    `skirmish_generator_tests_rockfairness_0` to `_11` run the sweep as
     Catch's `--order decl --shard-count 12` split, so a changed size list moves work between
     shards without dropping a case, and a shard left empty fails. As one test, the sanitized Debug
     sweep exceeded CTest's 1,500 s timeout (CI run 43123285133); CI now runs the generator tests
     two at a time. Every configuration is a section: from the checkout root, the group's name
     (`dunelegacy_tests "[rockfairness-sweep]" --list-tests`) plus
     `-c "players=8 shares=50/20/30 seed=418379001"` regenerates one map.
+  - Five other generation-heavy matrices carry `[generator-matrix]`: expansion-berth scaling,
+    city population presets, the 150 random configurations, Random army/city, and the 60-map
+    spice-bloom sweep. Their bodies, seeds and assertions are unchanged. Catch partitions these
+    cases into `skirmish_generator_tests_matrix_0` to `_4`, with declaration order and the single
+    `SKIRMISH_MATRIX_SHARDS` scheduling count. The base `skirmish_generator_tests` excludes only
+    `[rockfairness-sweep]` and `[generator-matrix]` from `[skirmish]`; the whole family keeps the
+    existing data environment, macOS ASan handling and 1,500 s timeout.
+    CI run 43135834417 measured 1,447.32 s for the base before this second split, but logged no
+    per-case durations. [INFERENCE] Weighting map-generation counts by area and scaling to that
+    aggregate predicts about 116/265/425/93/115 s for the five matrices above and 433 s for the
+    remaining base. City work, terrain retries and runner contention can change those estimates;
+    actual Linux sanitizer CI timings remain the acceptance evidence.
   - Terrain looks like the editor's: longest straight rock edge at most 16 tiles, mountains and
     dunes present, every start's rim reaches at least 2 tiles past its core and changes width at
     least once per 8 edge tiles, and the core stays clean rock.

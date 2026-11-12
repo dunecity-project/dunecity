@@ -3,6 +3,8 @@
 
 Requires the existing macOS Ninja Release build and bundled game assets. Uses an isolated
 profile and dummy SDL drivers. Logs and the test executable are retained in --output-dir.
+The software-driver environment exercises the real startup renderer selection;
+the probe does not replace renderer initialization in its private source.
 """
 import argparse
 import os
@@ -29,13 +31,6 @@ if main.count(needle) != 1:
     raise RuntimeError('Main menu entry changed; update the test injection point.')
 main = main.replace(needle, 'int menuResult = runSkinProbe();')
 main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
-# SDL's dummy video backend has no accelerated renderer. Match the existing
-# headless Classic UI probe without changing the production renderer settings.
-renderer_flags = 'Uint32 rendererFlags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE;'
-if main.count(renderer_flags) != 1:
-    raise RuntimeError('Renderer initialization changed; update the headless probe.')
-main = main.replace(renderer_flags,
-    'Uint32 rendererFlags = SDL_RENDERER_SOFTWARE | SDL_RENDERER_TARGETTEXTURE;')
 pos = main.index('int main(')
 include = root / 'tests/skins/skin-probe.inc'
 main = main[:pos] + '#include "' + str(include) + '"\n' + main[pos:]

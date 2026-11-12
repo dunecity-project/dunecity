@@ -2,7 +2,30 @@
 #include <MapEditor/ChoamWindow.h>
 #include <misc/SpiceGeneration.h>
 
+// Private timeout diagnosis only: remove these markers after the narrow runtime
+// identifies the slow interval. No additional discovery or verification is run.
+struct FamilyMenuPhase {
+    const char* mod;
+    const char* phase;
+    Uint64 started;
+    FamilyMenuPhase(const char* mod, const char* phase)
+        : mod(mod), phase(phase), started(SDL_GetPerformanceCounter()) {
+        SDL_Log("MENU_FAMILY_PHASE: mod=%s phase=%s edge=begin monotonic_ms=%.3f",
+                mod, phase, 1000.0 * started / SDL_GetPerformanceFrequency());
+    }
+    ~FamilyMenuPhase() {
+        const Uint64 now = SDL_GetPerformanceCounter();
+        SDL_Log("MENU_FAMILY_PHASE: mod=%s phase=%s edge=end elapsed_ms=%.3f monotonic_ms=%.3f",
+                mod, phase, 1000.0 * (now - started) / SDL_GetPerformanceFrequency(),
+                1000.0 * now / SDL_GetPerformanceFrequency());
+    }
+};
+
 void verifyTornieFamilyMenus() {
+    FamilyMenuPhase matrixPhase("all", "matrix");
+    SDL_Log("MENU_FAMILY_ROOT: workshop=%s userdir=%s",
+            Workshop::store().root().string().c_str(),
+            std::getenv("DUNECITY_USERDIR") ? std::getenv("DUNECITY_USERDIR") : "<unset>");
     auto& mods = ModManager::instance();
     const auto previousMod = mods.getActiveModName();
     const auto previousOptions = effectiveGameOptions;
@@ -24,8 +47,12 @@ void verifyTornieFamilyMenus() {
     menuRequire(std::filesystem::is_regular_file(map), "Family lobby needs its bundled two-player map");
 
     for(const std::string name : {"Tornie", "TornieLite", "Jericho", "JerichoLite", "ArcaKev", "ArcaKevLite"}) {
+        FamilyMenuPhase editionPhase(name.c_str(), "edition");
         SDL_Log("TORNIE_MENU_BEGIN: mod=%s", name.c_str());
-        menuRequire(mods.setActiveMod(name), "Family menu mod unavailable");
+        {
+            FamilyMenuPhase phase(name.c_str(), "activate");
+            menuRequire(mods.setActiveMod(name), "Family menu mod unavailable");
+        }
         effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
         const auto roster = mods.getPlayableHouses();
         const bool lite = name.find("Lite") != std::string::npos;
@@ -34,6 +61,7 @@ void verifyTornieFamilyMenus() {
         HouseChoiceMenu::s_startLevel = 1;
         HouseChoiceMenu::s_separateFactionCoop = false;
         {
+            FamilyMenuPhase phase(name.c_str(), "campaign");
             HouseChoiceMenu menu(false);
             menuRequire(menu.houseChoices.count == static_cast<int>(roster.size())
                         && std::is_permutation(menu.houseChoices.houses.begin(), menu.houseChoices.houses.begin() + menu.houseChoices.count,
@@ -61,6 +89,7 @@ void verifyTornieFamilyMenus() {
             menuRequire(menu.isQuiting() && menu.retVal == menu.houseChoices[menu.houseChoices.count - 1], "Campaign Start loses the selected house");
         }
         {
+            FamilyMenuPhase phase(name.c_str(), "online-campaign");
             HouseChoiceMenu menu(true);
             menuRequire(menu.connectionDropDown.getNumEntries() == 3, "Family campaign lacks faction co-op");
             menuRequire(menu.connectionDropDown.getSelectedEntryIntData() == 1
@@ -75,17 +104,22 @@ void verifyTornieFamilyMenus() {
             CustomPlaySetup setup;
             setup.online = true;
             setup.maps.push_back(map);
-            setup.mods = mods.listModChoices();
+            {
+                FamilyMenuPhase phase(name.c_str(), "list-mod-choices");
+                setup.mods = mods.listModChoices();
+            }
             const auto choice = std::find_if(setup.mods.begin(), setup.mods.end(), [&](const auto& mod) { return mod.name == name; });
             menuRequire(choice != setup.mods.end(), "Family mod missing from custom chooser");
             setup.mod = static_cast<int>(std::distance(setup.mods.begin(), choice));
             setup.rules = effectiveGameOptions;
             {
+                FamilyMenuPhase phase(name.c_str(), "custom-browser");
                 CustomGameMenu browser(false, false, &setup);
                 menuRequire(browser.getSelectedMapPath() == setup.maps.front(), "Family map chooser lost its bundled map");
                 browser.onNext();
                 menuRequire(browser.retVal == MENU_SETUP_PLAYERS && mods.getActiveModName() == name, "Family custom chooser cannot reach player setup");
             }
+            FamilyMenuPhase lobbyPhase(name.c_str(), "custom-lobby");
             GameInitSettings init(getBasename(setup.maps.front(), true), readCompleteFile(setup.maps.front()), true, setup.rules);
             CustomGamePlayers lobby(init, true, false, &setup);
             lobby.update();
@@ -104,6 +138,7 @@ void verifyTornieFamilyMenus() {
                         "Family custom setup cannot prepare its lobby or loses the mod");
         }
         {
+            FamilyMenuPhase phase(name.c_str(), "editor");
             MapEditor editor;
             auto& ui = *editor.pInterface;
             while(ui.hasChildWindow()) { ui.closeChildWindow(); ui.processChildWindowOpenCloses(); }
@@ -238,6 +273,7 @@ void verifyTornieFamilyMenus() {
         SDL_Log("TORNIE_MENU_PASS: mod=%s houses=%zu campaign_selections=%zu custom_lobby=1 editor_units=12 editor_structures=2 choam_units=31 choam_scroll=1 spice_enabled=3 spice_disabled=3 spice_mask=%u",
                 name.c_str(), roster.size(), roster.size(), name.find("Jericho") == 0 ? 10u : name.find("ArcaKev") == 0 ? 9u : 5u);
     }
+    FamilyMenuPhase restorePhase("all", "restore");
     menuRequire(mods.setActiveMod(previousMod), "Cannot restore mod after family menu matrix");
     effectiveGameOptions = previousOptions;
     settings.general.customGameMod = previousCustomMod;

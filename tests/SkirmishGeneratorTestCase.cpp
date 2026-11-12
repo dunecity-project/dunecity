@@ -815,7 +815,7 @@ TEMPLATE_LIST_TEST_CASE("Random skirmish: seed sweep gives every MCV compact fai
 }
 
 TEST_CASE("Random skirmish: expansion berths reach mode goals and scale with usable ordinary rock",
-          "[skirmish][generator][terrain][rockfairness]") {
+          "[skirmish][generator][terrain][rockfairness][generator-matrix]") {
     REQUIRE(kStartRockFairnessPercent == 75);
     REQUIRE(kCityStartRockBerthSide == 32);
     REQUIRE(kVanillaStartRockBerthSide == 24);
@@ -904,7 +904,7 @@ TEST_CASE("Random skirmish: Stefan's 80 percent geology no longer overproduces m
     requireLegal(r, city());
 }
 
-TEST_CASE("Random skirmish: city population lands within 25% of every preset", "[skirmish][generator][city]") {
+TEST_CASE("Random skirmish: city population lands within 25% of every preset", "[skirmish][generator][city][generator-matrix]") {
     for(int preset = 1; preset < static_cast<int>(kCityTargets.size()); ++preset)
         for(BaseSize base : {BaseSize::None, BaseSize::Small, BaseSize::Medium, BaseSize::Large, BaseSize::Fortress})
             for(int tech : {4, 8}) {
@@ -1434,7 +1434,7 @@ TEST_CASE("Random skirmish: bases grow around the Construction Yard", "[skirmish
     }
 }
 
-TEST_CASE("Random skirmish: random configurations stay legal, connected and keep their mountains", "[skirmish][generator][terrain]") {
+TEST_CASE("Random skirmish: random configurations stay legal, connected and keep their mountains", "[skirmish][generator][terrain][generator-matrix]") {
     // Keep the same 150 seeded configurations, now varying all three terrain shares as well
     // as every size, mode, mirror, spice, base, army and city choice. Crowded small maps may
     // skip items; they must never place anything illegally or isolate starts or spice.
@@ -1525,7 +1525,7 @@ TEST_CASE("Random skirmish: armies have no light infantry and troopers stand fiv
     REQUIRE(troopersSeen > 5);    // the fixture really exercises bundling
 }
 
-TEST_CASE("Random skirmish: Random army and city are drawn once per map", "[skirmish][generator][random]") {
+TEST_CASE("Random skirmish: Random army and city are drawn once per map", "[skirmish][generator][random][generator-matrix]") {
     std::set<int> armies, cities;
     for(uint32_t seed = 1; seed <= 12; ++seed) {
         Params p = params(160, 2, 3, Mode::DuneCity, 9, seed);
@@ -1725,7 +1725,7 @@ TEST_CASE("Random skirmish: multiplayer maps have equal open starts the lobby as
     }
 }
 
-TEST_CASE("Random skirmish: no unit starts on a spice bloom", "[skirmish][generator][army]") {
+TEST_CASE("Random skirmish: no unit starts on a spice bloom", "[skirmish][generator][army][generator-matrix]") {
     // A unit on a bloom sets it off while the map loads (Tile::triggerSpiceBloom, which crashed
     // a local-spectator load of the 64x64 Fortress / 20,000-credit map with seed 7101).
     auto bloom = [](TERRAINTYPE t) {

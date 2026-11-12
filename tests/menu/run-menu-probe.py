@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Exercise real menu widgets with no public connection or shared user settings.
-Test access is isolated to this diagnostic binary; production objects are unchanged."""
+Test access is isolated to this diagnostic binary; production objects are unchanged.
+Like the native pointer gate and workspace test wrapper, preflight checks the disk
+floor first and sweeps only when low; leased scratch cleanup ownership is unchanged."""
 import argparse
 from contextlib import contextmanager, nullcontext
 import json
@@ -44,10 +46,9 @@ elif args.runtime_app:
     parser.error('--runtime-app requires --pointer-mapping')
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
-# Native UI diagnostics are not simulation batches. Reuse the coordinator's
-# supported check-first mode, preserving the configured floor without an
-# unnecessary full scratch sweep. Other menu/batch modes keep their default.
-disk = require_free_space(sweep='if-low' if args.pointer_mapping else True)
+# Match the workspace test guard: enforce the floor, sweeping owned stale
+# scratch only if low instead of making every native UI check scan all scratch.
+disk = require_free_space(sweep='if-low')
 if args.pointer_mapping:
     print('POINTER_PREFLIGHT: '+json.dumps(disk, sort_keys=True), flush=True)
 subprocess.run(['python3',str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
