@@ -455,7 +455,8 @@ parser.add_argument('--skirmish-ffa-size', type=int, choices=(64, 96, 128, 160, 
 parser.add_argument('--skirmish-map-seed', type=int, default=1, help='--skirmish-ffa-size: the Random Skirmish map seed')
 parser.add_argument('--prebuilt-probe', type=Path,
                     help='Run this balance-probe binary (from an earlier run of this tree) instead of building one')
-parser.add_argument('--build-only', action='store_true', help='Prepare the private probe binary without playing a game')
+parser.add_argument('--build-only', action='store_true',
+                    help='Prepare the shared probe binary and eligible headless mods without playing a game')
 parser.add_argument('--genome-phase-dir', type=Path,
                     help='Internal genome-match inputs: per-house resolved phase INIs and schedule.ini (probe only)')
 parser.add_argument('--no-ai-telemetry', action='store_true',
@@ -884,7 +885,14 @@ else:
         binary = app/'MacOS/balance-probe'
         shutil.copy2(entry/'balance-probe', binary)
     (out/'balance-main.cpp').write_text(main, encoding='utf-8')
-if args.build_only:
+# A batch's inherited asset mode must never turn a renderer/UI assertion into
+# a null-texture test. The repair-capacity fixture checks simulation service,
+# not rendering; its headless CTest explicitly opts in to the existing mode.
+headless_assets = args.headless_assets and not (
+    args.real_video or args.ffa_screenshot
+    or any(value is True for name, value in vars(args).items()
+           if name.endswith('_probe') and name != 'repair_capacity_probe'))
+if args.build_only and not headless_assets:
     print(binary)
     sys.exit(0)
 env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy',
@@ -897,13 +905,6 @@ env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
 if args.army_deploys_regression_observer:
     env['BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER'] = '1'
 assert args.army_deploys_regression_observer or 'BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER' not in env
-# A batch's inherited asset mode must never turn a renderer/UI assertion into
-# a null-texture test. The repair-capacity fixture checks simulation service,
-# not rendering; its headless CTest explicitly opts in to the existing mode.
-headless_assets = args.headless_assets and not (
-    args.real_video or args.ffa_screenshot
-    or any(value is True for name, value in vars(args).items()
-           if name.endswith('_probe') and name != 'repair_capacity_probe'))
 env['DUNECITY_HEADLESS_ASSETS'] = '1' if headless_assets else '0'
 env.pop('DUNECITY_SHARED_MODS', None)
 if args.civ_wars:
@@ -1071,6 +1072,13 @@ if (headless_assets and args.mod in ('vanilla', 'dunecity')
     shared_mods = shared_headless_mods(binary, build, env, source_fingerprint_value, lock_exclusive)
     if shared_mods is not None:
         env['DUNECITY_SHARED_MODS'] = str(shared_mods)
+    elif args.build_only:
+        raise RuntimeError('Headless preparation did not publish a validated shared mod cache.')
+# Publish the same sealed rules during headless preparation, before timed cases.
+# No game/fixture dispatch is reached by --build-only.
+if args.build_only:
+    print(binary)
+    sys.exit(0)
 if args.strategy_probe:
     extra_seeds = [int(seed) for seed in args.strategy_margin_seeds.split(',') if seed.strip()]
     trike_seeds = [int(seed) for seed in args.strategy_trike_margin_seeds.split(',') if seed.strip()]

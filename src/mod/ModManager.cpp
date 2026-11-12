@@ -1704,6 +1704,14 @@ void ModManager::refreshBundledDunecityGraphicsSkins() const {
         return;
     }
 
+    if(HeadlessAssets::enabled() && std::getenv("DUNECITY_HEADLESS_SEED_ONLY")) {
+        // This transient process never starts a game or pins a revision. The
+        // shared fixture publisher stages these exact installer bytes before
+        // hashing/sealing the complete mod, outside the native rules-seed bound.
+        SDL_Log("HEADLESS_MOD_ARTWORK_V1: %s", bundledSkins.string().c_str());
+        return;
+    }
+
     try {
         const std::filesystem::path installedSkins =
             std::filesystem::path(getModPath(DUNECITY_MOD_NAME)) / "graphics_skins";

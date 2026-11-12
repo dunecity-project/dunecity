@@ -152,11 +152,11 @@ def trace_start(frame, event, arg):
     if prepared or event != 'call' or frame.f_code is not ProbeProcesses._communicate.__code__:
         return
     process = frame.f_locals['process']
-    # Python 3.15 may use kqueue/pidfd instead of the waitpid-lock path.
-    # Force its normal fallback so this test still exercises the real lock.
-    for name in ('_wait_pidfd', '_wait_kqueue'):
-        if hasattr(process, name):
-            setattr(process, name, lambda timeout: False)
+    if checkpoint == 'wait-lock':
+        # Force the normal fallback only for the real waitpid-lock regression.
+        for name in ('_wait_pidfd', '_wait_kqueue'):
+            if hasattr(process, name):
+                setattr(process, name, lambda timeout: False)
     deadline = time.monotonic() + 10
     while not (scratch / 'pids.json').exists():
         if time.monotonic() >= deadline:
@@ -177,29 +177,27 @@ def trace_dispatch(frame, event, arg):
 
 def trace_wait(frame, event, arg):
     global sent
-    if sent or event != 'call' or frame.f_code is not subprocess.Popen._try_wait.__code__:
+    if sent or event != 'call':
         return trace_wait
-    process = frame.f_locals['self']
-    if not process._waitpid_lock.locked():
-        raise AssertionError('Signal checkpoint did not hold the real Popen waitpid lock')
-    ancestor = frame.f_back
-    while ancestor is not None and ancestor.f_code is not ProbeProcesses._finish.__code__:
-        ancestor = ancestor.f_back
-    cleanup = ancestor is not None
-    if not cleanup and checkpoint == 'cleanup-lock':
-        # Exhaust the actual wait deadline to enter abort cleanup.
-        wait_deadline = frame.f_back.f_locals['endtime']
-        while time.monotonic() <= wait_deadline:
-            time.sleep(.001)
-    target = cleanup if checkpoint == 'cleanup-lock' else not cleanup
-    if target:
-        entry_locked = cleanup and ancestor.f_locals['entry'].lock._is_owned()
-        if cleanup and not entry_locked:
-            raise AssertionError('Cleanup checkpoint did not hold its owned-entry lock')
+    if checkpoint == 'cleanup-lock' and frame.f_code is ProbeProcesses._signal_group.__code__:
+        finish = frame.f_back
+        if finish is None or finish.f_code is not ProbeProcesses._finish.__code__:
+            return trace_wait
+        entry_locked = finish.f_locals['entry'].lock._is_owned()
+        deferred = getattr(processes._local, 'deferred', 0) > 0
+        if not entry_locked or not deferred:
+            raise AssertionError('Cleanup checkpoint must hold the entry lock and defer signals')
         (out / 'checkpoint.json').write_text(json.dumps(
-            {'checkpoint': checkpoint, 'waitpid_locked': True, 'entry_locked': entry_locked}))
+            {'checkpoint': checkpoint, 'entry_locked': entry_locked, 'deferred': deferred}))
         sent = True
-        # Delivery is synchronous at the chosen real lock, never a timeout race.
+        os.kill(os.getpid(), signal.SIGTERM)
+    elif checkpoint == 'wait-lock' and frame.f_code is subprocess.Popen._try_wait.__code__:
+        process = frame.f_locals['self']
+        if not process._waitpid_lock.locked():
+            raise AssertionError('Signal checkpoint did not hold the real Popen waitpid lock')
+        (out / 'checkpoint.json').write_text(json.dumps(
+            {'checkpoint': checkpoint, 'waitpid_locked': True}))
+        sent = True
         os.kill(os.getpid(), signal.SIGTERM)
     return trace_wait
 
@@ -233,9 +231,11 @@ finally:
                         wait_for(out / 'checkpoint.json')
                         observed = json.loads((out / 'checkpoint.json').read_text())
                         self.assertEqual(observed['checkpoint'], checkpoint)
-                        self.assertTrue(observed['waitpid_locked'])
                         if checkpoint == 'cleanup-lock':
                             self.assertTrue(observed['entry_locked'])
+                            self.assertTrue(observed['deferred'])
+                        else:
+                            self.assertTrue(observed['waitpid_locked'])
                     self.assertEqual(supervisor.wait(timeout=10), 128 + signal.SIGTERM)
                     self.assertTrue((out / 'finalized').is_file())
                     self.assert_stopped(pids)

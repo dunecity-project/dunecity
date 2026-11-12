@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 
 MINIMAL_INI = ('[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
                'Fullscreen = false\n[General]\nPlay Intro = false\n')
@@ -63,20 +64,15 @@ def headless_asset_arguments():
 
 
 def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
-    """Reuse exact, sealed Vanilla/DuneCity install payloads, never a user's mods.
+    """Publish complete native rules and installer artwork once, never user mods.
 
-    A real seed-only engine run produces the files. The immutable binary and
-    source identity key the cache; every reader verifies all bytes under the
-    publication lock. Invalid caches are left untouched and the caller uses
-    ordinary private profile copies instead.
+    The seed-only engine authors all logical files and declares its artwork
+    input. That exact trusted input is staged before the immutable publication;
+    ordinary game starts, approval and Workshop revision bytes stay unchanged.
     """
     if not fingerprint:
         return None
     binary, build = Path(binary), Path(build)
-    identity = {'binary': hashlib.sha256(binary.read_bytes()).hexdigest(), 'source': fingerprint}
-    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-    cache = build / 'headless-mod-cache'
-    destination = cache / key
     staged = None
 
     def payload_hashes(directory):
@@ -88,9 +84,32 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
                 raise RuntimeError('Linked file in shared headless mods')
             if path.is_file():
                 result[path.relative_to(directory).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+            elif not path.is_dir():
+                raise RuntimeError('Non-regular file in shared headless mods')
         return result
 
+    started = time.monotonic()
     try:
+        print('HEADLESS_MOD_PHASE: validating bundled inputs', flush=True)
+        runtime = build / ('bin/dunecity.app/Contents/Resources' if sys.platform == 'darwin' else 'bin')
+        trusted = runtime.resolve(strict=True)
+        artwork = (trusted / 'mods/dunecity/graphics_skins').resolve(strict=True)
+        if not artwork.is_relative_to(trusted):
+            raise RuntimeError('Bundled artwork escapes the configured runtime')
+        art_files = payload_hashes(artwork)
+        templates = {}
+        for name in ('ObjectData.ini', 'QuantBot Config.ini'):
+            path = trusted / 'config' / (name + '.default')
+            if path.is_symlink() or not path.resolve(strict=True).is_relative_to(trusted):
+                raise RuntimeError('Bundled rules escape the configured runtime')
+            templates[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        bundled = hashlib.sha256(json.dumps({'artwork': art_files, 'templates': templates},
+                                           sort_keys=True).encode()).hexdigest()
+        identity = {'format': 2, 'binary': hashlib.sha256(binary.read_bytes()).hexdigest(),
+                    'source': fingerprint, 'bundled': bundled}
+        key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+        cache = build / 'headless-mod-cache'
+        destination = cache / key
         cache.mkdir(parents=True, exist_ok=True)
         with (cache / (key + '.lock')).open('a+b') as handle:
             if handle.tell() == 0:
@@ -102,23 +121,77 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
                 manifest = json.loads((destination / 'manifest.json').read_text())
                 if manifest['identity'] != identity or manifest['files'] != payload_hashes(destination / 'mods'):
                     raise RuntimeError('Shared headless mod fingerprint differs')
+                print('HEADLESS_MOD_PHASE: reused %s (%.3fs)' % (destination, time.monotonic() - started), flush=True)
                 return destination / 'mods'
             with scratch_dir('headless-mod-seed') as scratch:
-                seed_env = dict(env, DUNECITY_USERDIR=str(scratch / 'profile'),
+                seed_env = dict(env, DUNECITY_USERDIR=str(scratch / 'profile'), DUNECITY_HEADLESS_ASSETS='1',
                                 DUNECITY_HEADLESS_SEED_ONLY='1')
                 for name in ('DUNECITY_SHARED_MODS', 'DUNECITY_SIM_MEASURE', 'DUNECITY_SIM_SAMPLE_SECONDS',
                              'BALANCE_HEAP_PROFILE', 'BALANCE_HEAP_TOOLS', 'MallocStackLogging'):
                     seed_env.pop(name, None)
+                print('HEADLESS_MOD_PHASE: native rules seed (120s bound)', flush=True)
                 with (scratch / 'seed.log').open('w') as log:
                     subprocess.run([str(binary), '--window', '--showlog', '--non-interactive'],
                                    cwd=scratch, env=seed_env, stdout=log, stderr=subprocess.STDOUT,
                                    check=True, timeout=120)
+                marker = 'HEADLESS_MOD_ARTWORK_V1: '
+                declarations = [line.split(marker, 1)[1] for line in (scratch / 'seed.log').read_text().splitlines()
+                                if marker in line]
+                if len(declarations) != 1:
+                    raise RuntimeError('Native seed must declare exactly one bundled artwork input')
+                declared = Path(declarations[0])
+                if not declared.is_absolute() or declared.resolve(strict=True) != artwork:
+                    raise RuntimeError('Native artwork declaration differs from the trusted bundle')
+                native = scratch / 'profile/mods'
+                native_files = payload_hashes(native)
+                for mod in ('vanilla', 'dunecity'):
+                    for name in ('ObjectData.ini', 'QuantBot Config.ini', 'GameOptions.ini', 'mod.ini'):
+                        if mod + '/' + name not in native_files:
+                            raise RuntimeError('Native seed omitted required rules or metadata')
+                    for name, digest in templates.items():
+                        if native_files[mod + '/' + name] != digest:
+                            raise RuntimeError('Native seed rules differ from the trusted bundle')
                 staged = Path(tempfile.mkdtemp(prefix=key + '.incoming-', dir=cache))
                 for name in ('vanilla', 'dunecity'):
-                    shutil.copytree(scratch / 'profile/mods' / name, staged / 'mods' / name)
+                    clone_tree(native / name, staged / 'mods' / name)
+                target = staged / 'mods/dunecity/graphics_skins'
+                if target.exists() or target.is_symlink():
+                    raise RuntimeError('Native seed shadows the staged artwork target')
+                # Reuse only byte-verified, complete publications of this harness.
+                # Their logical files are never reused: the current engine authored
+                # those above. The trusted bundle remains the artwork authority.
+                source = artwork
+                prefix = 'dunecity/graphics_skins/'
+                cache_stamp = '.bundled-skin-fingerprint'
+                for previous in sorted(cache.glob('*/manifest.json')):
+                    if (previous.is_symlink() or previous.parent.is_symlink()
+                            or not re.fullmatch('[0-9a-f]{64}', previous.parent.name)):
+                        continue
+                    try:
+                        old = json.loads(previous.read_text())
+                        old_art = {name[len(prefix):]: digest for name, digest in old['files'].items()
+                                   if name.startswith(prefix) and name != prefix + cache_stamp}
+                        if old_art != art_files or old['files'] != payload_hashes(previous.parent / 'mods'):
+                            continue
+                    except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+                        continue
+                    source = previous.parent / 'mods/dunecity/graphics_skins'
+                    break
+                print('HEADLESS_MOD_PHASE: staging %d artwork files from %s' % (len(art_files), source), flush=True)
+                clone_tree(source, target)
+                # This local refresh stamp is excluded by both canonical mod
+                # approval and Workshop manifests, and is not installer artwork.
+                stamp = target / cache_stamp
+                if source != artwork and cache_stamp not in art_files and stamp.exists():
+                    target.chmod(0o755)
+                    stamp.chmod(0o644)
+                    stamp.unlink()
+                files = payload_hashes(staged / 'mods')
+                copied_art = {name[len(prefix):]: digest for name, digest in files.items() if name.startswith(prefix)}
+                if copied_art != art_files:
+                    raise RuntimeError('Staged artwork membership or bytes differ from the trusted bundle')
                 (staged / 'manifest.json').write_text(
-                    json.dumps({'identity': identity, 'files': payload_hashes(staged / 'mods')}, sort_keys=True) + '\n')
-            # Read-only files on both platforms; read-only directories on POSIX.
+                    json.dumps({'identity': identity, 'files': files}, sort_keys=True) + '\n')
             for path in staged.rglob('*'):
                 if path.is_file():
                     path.chmod(0o444)
@@ -126,6 +199,7 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
                     path.chmod(0o555)
             staged.rename(destination)
             staged = None
+            print('HEADLESS_MOD_PHASE: published %s (%.3fs)' % (destination, time.monotonic() - started), flush=True)
             return destination / 'mods'
     except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
         print(f'Shared headless mods unavailable; using private copies: {error}', file=sys.stderr)

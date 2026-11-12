@@ -1,5 +1,6 @@
 import gzip
 import hashlib
+from contextlib import nullcontext
 import importlib.util
 import json
 import os
@@ -214,6 +215,158 @@ class ProbeLifecycleTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'Archived fixture bytes changed'):
                 probe.restore_fixture_revisions(profile,[save])
         self.assertFalse((profile/'workshop/revisions'/revision/'manifest').exists())
+
+
+class SharedHeadlessModTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.build = self.root / 'build'
+        self.runtime = self.build / ('bin/dunecity.app/Contents/Resources' if probe.sys.platform == 'darwin' else 'bin')
+        self.artwork = self.runtime / 'mods/dunecity/graphics_skins'
+        self.artwork.mkdir(parents=True)
+        (self.artwork / 'building.ini').write_bytes(b'[Building]\nObjPic=Repair\n')
+        (self.artwork / 'atlas.png').write_bytes(b'pixels-a')
+        config = self.runtime / 'config'
+        config.mkdir()
+        for name in ('ObjectData.ini', 'QuantBot Config.ini'):
+            (config / (name + '.default')).write_text(name + ' installer rules\n')
+        self.binary = self.root / 'native-probe'
+        self.binary.write_bytes(b'current native producer')
+        self.fingerprint = hashlib.sha256(b'current source').hexdigest()
+        self.declarations = [self.artwork]
+        self.shadow = False
+        self.metadata = b'native metadata'
+        self.scratch_count = 0
+
+    def scratch(self, name):
+        self.assertEqual(name, 'headless-mod-seed')
+        self.scratch_count += 1
+        directory = self.root / ('seed-' + str(self.scratch_count))
+        directory.mkdir()
+        return nullcontext(directory)
+
+    def native_seed(self, command, *, cwd, env, stdout, stderr, check, timeout):
+        self.assertEqual(command[0], str(self.binary))
+        self.assertEqual(env['DUNECITY_HEADLESS_ASSETS'], '1')
+        self.assertEqual(env['DUNECITY_HEADLESS_SEED_ONLY'], '1')
+        self.assertNotIn('DUNECITY_SHARED_MODS', env)
+        self.assertTrue(check)
+        self.assertEqual(timeout, 120)
+        for name in ('vanilla', 'dunecity'):
+            mod = Path(env['DUNECITY_USERDIR']) / 'mods' / name
+            mod.mkdir(parents=True)
+            for template in ('ObjectData.ini', 'QuantBot Config.ini'):
+                (mod / template).write_bytes((self.runtime / 'config' / (template + '.default')).read_bytes())
+            (mod / 'GameOptions.ini').write_text(name + ' native options\n')
+            (mod / 'mod.ini').write_bytes(self.metadata)
+        if self.shadow:
+            (mod / 'graphics_skins').mkdir()
+        for path in self.declarations:
+            stdout.write('HEADLESS_MOD_ARTWORK_V1: ' + str(path) + '\n')
+        return probe.subprocess.CompletedProcess(command, 0)
+
+    def prepare(self, fingerprint=None, copier=None):
+        if copier is None:
+            copier = lambda source, target: shutil.copytree(source, target, dirs_exist_ok=True)
+        with patch.object(probe, 'scratch_dir', side_effect=self.scratch), \
+             patch.object(probe.subprocess, 'run', side_effect=self.native_seed) as native, \
+             patch.object(probe, 'clone_tree', side_effect=copier) as copies:
+            result = probe.shared_headless_mods(self.binary, self.build,
+                {'BALANCE_MOD': 'vanilla', 'BALANCE_REPAIR_CAPACITY_PROBE': '1', 'DUNECITY_SHARED_MODS': '/not-input'},
+                fingerprint or self.fingerprint, lambda lock: None)
+        return result, native, copies
+
+    def assert_unpublished(self):
+        cache = self.build / 'headless-mod-cache'
+        self.assertFalse(list(cache.glob('*/manifest.json')))
+        self.assertFalse(list(cache.glob('*.incoming-*')))
+
+    def test_cold_publication_has_complete_native_rules_and_exact_art_warm_reuses_it(self):
+        mods, native, copies = self.prepare()
+        self.assertIsNotNone(mods)
+        native.assert_called_once()
+        self.assertEqual(copies.call_count, 3)
+        for name in ('vanilla', 'dunecity'):
+            self.assertEqual((mods / name / 'mod.ini').read_bytes(), self.metadata)
+            self.assertEqual((mods / name / 'ObjectData.ini').read_bytes(),
+                             (self.runtime / 'config/ObjectData.ini.default').read_bytes())
+        art = mods / 'dunecity/graphics_skins'
+        self.assertEqual({p.relative_to(art): p.read_bytes() for p in art.rglob('*') if p.is_file()},
+                         {p.relative_to(self.artwork): p.read_bytes() for p in self.artwork.rglob('*') if p.is_file()})
+        manifest = json.loads((mods.parent / 'manifest.json').read_text())
+        self.assertEqual(len(manifest['files']), 10)
+        self.assertEqual(manifest['identity']['format'], 2)
+        self.assertEqual(manifest['identity']['source'], self.fingerprint)
+        if os.name != 'nt':
+            self.assertEqual((art / 'atlas.png').stat().st_mode & 0o222, 0)
+        again, native, copies = self.prepare()
+        self.assertEqual(again, mods)
+        native.assert_not_called()
+        copies.assert_not_called()
+
+    def test_new_source_reuses_verified_art_but_current_engine_authors_metadata(self):
+        old, _, _ = self.prepare()
+        # Older complete native publications include this noncanonical cache stamp.
+        art = old / 'dunecity/graphics_skins'
+        art.chmod(0o755)
+        stamp = art / '.bundled-skin-fingerprint'
+        stamp.write_text('0123456789abcdef\n')
+        manifest_path = old.parent / 'manifest.json'
+        manifest_path.chmod(0o644)
+        manifest = json.loads(manifest_path.read_text())
+        manifest['files']['dunecity/graphics_skins/.bundled-skin-fingerprint'] = hashlib.sha256(stamp.read_bytes()).hexdigest()
+        manifest_path.write_text(json.dumps(manifest))
+        stamp.chmod(0o444)
+        art.chmod(0o555)
+        manifest_path.chmod(0o444)
+        self.binary.write_bytes(b'next native producer')
+        self.metadata = b'new native metadata'
+        current, native, copies = self.prepare(hashlib.sha256(b'next source').hexdigest())
+        native.assert_called_once()
+        self.assertNotEqual(current, old)
+        self.assertEqual(copies.call_args_list[-1].args[0], art)
+        self.assertFalse((current / 'dunecity/graphics_skins/.bundled-skin-fingerprint').exists())
+        self.assertEqual((current / 'dunecity/mod.ini').read_bytes(), self.metadata)
+        self.assertEqual((old / 'dunecity/mod.ini').read_bytes(), b'native metadata')
+
+    def test_changed_installer_art_gets_a_new_seal_without_reusing_stale_bytes(self):
+        old, _, _ = self.prepare()
+        (self.artwork / 'atlas.png').write_bytes(b'pixels-b')
+        current, native, copies = self.prepare()
+        native.assert_called_once()
+        self.assertNotEqual(current, old)
+        self.assertEqual(copies.call_args_list[-1].args[0], self.artwork.resolve())
+        self.assertEqual((current / 'dunecity/graphics_skins/atlas.png').read_bytes(), b'pixels-b')
+        self.assertEqual((old / 'dunecity/graphics_skins/atlas.png').read_bytes(), b'pixels-a')
+
+    def test_missing_ambiguous_and_escaping_art_declarations_never_publish(self):
+        outside = self.root / 'outside-bundle'
+        outside.mkdir()
+        (outside / 'keep').write_bytes(b'not an installer input')
+        for declarations in ([], [self.artwork, self.artwork], [outside]):
+            with self.subTest(declarations=declarations):
+                self.declarations = declarations
+                result, _, copies = self.prepare()
+                self.assertIsNone(result)
+                copies.assert_not_called()
+                self.assert_unpublished()
+        self.assertEqual((outside / 'keep').read_bytes(), b'not an installer input')
+
+    def test_native_target_shadow_and_failed_art_copy_never_publish(self):
+        self.shadow = True
+        result, _, _ = self.prepare()
+        self.assertIsNone(result)
+        self.assert_unpublished()
+        self.shadow = False
+        def failed_copy(source, target):
+            if source == self.artwork.resolve():
+                raise OSError('interrupted artwork copy')
+            shutil.copytree(source, target, dirs_exist_ok=True)
+        result, _, _ = self.prepare(copier=failed_copy)
+        self.assertIsNone(result)
+        self.assert_unpublished()
 
 
 if __name__=='__main__':unittest.main()
