@@ -4,20 +4,36 @@
 
 // Private timeout diagnosis only: remove these markers after the narrow runtime
 // identifies the slow interval. No additional discovery or verification is run.
+Uint64 menuProbeRuntimeStarted = 0;
+
+void menuRuntimeCheckpoint(const char* phase) {
+    const Uint64 now = SDL_GetPerformanceCounter();
+    SDL_Log("MENU_RUNTIME_PHASE: phase=%s runtime_elapsed_ms=%.3f monotonic_ms=%.3f",
+            phase, 1000.0 * (now - menuProbeRuntimeStarted) / SDL_GetPerformanceFrequency(),
+            1000.0 * now / SDL_GetPerformanceFrequency());
+}
+
+void beginMenuRuntimeProbe() {
+    menuProbeRuntimeStarted = SDL_GetPerformanceCounter();
+    menuRuntimeCheckpoint("main-entry");
+}
+
 struct FamilyMenuPhase {
     const char* mod;
     const char* phase;
     Uint64 started;
     FamilyMenuPhase(const char* mod, const char* phase)
         : mod(mod), phase(phase), started(SDL_GetPerformanceCounter()) {
-        SDL_Log("MENU_FAMILY_PHASE: mod=%s phase=%s edge=begin monotonic_ms=%.3f",
-                mod, phase, 1000.0 * started / SDL_GetPerformanceFrequency());
+        SDL_Log("MENU_FAMILY_PHASE: mod=%s phase=%s edge=begin monotonic_ms=%.3f runtime_elapsed_ms=%.3f",
+                mod, phase, 1000.0 * started / SDL_GetPerformanceFrequency(),
+                1000.0 * (started - menuProbeRuntimeStarted) / SDL_GetPerformanceFrequency());
     }
     ~FamilyMenuPhase() {
         const Uint64 now = SDL_GetPerformanceCounter();
-        SDL_Log("MENU_FAMILY_PHASE: mod=%s phase=%s edge=end elapsed_ms=%.3f monotonic_ms=%.3f",
+        SDL_Log("MENU_FAMILY_PHASE: mod=%s phase=%s edge=end elapsed_ms=%.3f monotonic_ms=%.3f runtime_elapsed_ms=%.3f",
                 mod, phase, 1000.0 * (now - started) / SDL_GetPerformanceFrequency(),
-                1000.0 * now / SDL_GetPerformanceFrequency());
+                1000.0 * now / SDL_GetPerformanceFrequency(),
+                1000.0 * (now - menuProbeRuntimeStarted) / SDL_GetPerformanceFrequency());
     }
 };
 
