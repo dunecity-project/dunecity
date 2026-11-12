@@ -253,7 +253,19 @@ add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][prese
 add_test(NAME classic_desert_ui_tests COMMAND dunelegacy_tests "[menu][ui-skin]")
 # Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
 add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
-add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]")
+# The fair-start-rock seed sweep is one Catch test case per mode and map size; as one test the
+# sanitized Debug build exceeded the CTest timeout. Catch's sharding divides whatever sweep
+# cases exist in declaration order: a changed size list moves work between shards but never
+# drops a case, and a shard left without one fails (no tests ran).
+set(SKIRMISH_SWEEP_SHARDS 12)
+add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]~[rockfairness-sweep]")
+set(SKIRMISH_SWEEP_TESTS)
+math(EXPR SKIRMISH_LAST_SWEEP_SHARD "${SKIRMISH_SWEEP_SHARDS} - 1")
+foreach(shard RANGE ${SKIRMISH_LAST_SWEEP_SHARD})
+    add_test(NAME skirmish_generator_tests_rockfairness_${shard} COMMAND dunelegacy_tests "[rockfairness-sweep]"
+        --order decl --shard-count ${SKIRMISH_SWEEP_SHARDS} --shard-index ${shard})
+    list(APPEND SKIRMISH_SWEEP_TESTS skirmish_generator_tests_rockfairness_${shard})
+endforeach()
 add_test(NAME civilization_wars_tests COMMAND dunelegacy_tests "[civwars]")
 # Formation planner (docs/formations.md): determinism, layout, fallback, edges, catch-up.
 add_test(NAME formation_planner_tests COMMAND dunelegacy_tests "[formation]")
@@ -457,7 +469,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests civilization_wars_tests sidebar_grid_tests classic_desert_ui_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests ${SKIRMISH_SWEEP_TESTS} civilization_wars_tests sidebar_grid_tests classic_desert_ui_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 

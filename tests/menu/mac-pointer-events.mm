@@ -150,37 +150,53 @@ extern "C" SDL_Point nativePointerProbePlace(SDL_Window* window, int x, int y) {
         if(width <= 0 || height <= 0) throw std::runtime_error("Empty native pointer window");
         if(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN)) {
             const NSRect bounds = view.bounds;
-            const NSPoint local = NSMakePoint(bounds.origin.x + x * bounds.size.width / width,
-                view.flipped ? bounds.origin.y + y * bounds.size.height / height
-                             : NSMaxY(bounds) - y * bounds.size.height / height);
-            const NSPoint screen = [native convertPointToScreen:[view convertPoint:local toView:nil]];
-            const NSPoint pointer = NSEvent.mouseLocation;
             const NSRect originalFrame = native.frame;
             if(originalFrame.size.width <= 0 || originalFrame.size.height <= 0
                || bounds.size.width <= 0 || bounds.size.height <= 0)
                 throw std::runtime_error("Empty native pointer frame or content geometry");
-            NSRect frame = originalFrame;
-            frame.origin.x += pointer.x - screen.x;
-            frame.origin.y += pointer.y - screen.y;
-            {
-                PointerWindowPlacement geometry(native);
-                [native setFrameOrigin:frame.origin];
+            const NSPoint local = NSMakePoint(bounds.origin.x + x * bounds.size.width / width,
+                view.flipped ? bounds.origin.y + y * bounds.size.height / height
+                             : NSMaxY(bounds) - y * bounds.size.height / height);
+            // A later pump can re-apply AppKit's screen constraint after the
+            // override is restored. Retry only this own-window move, and accept it
+            // only after the requested point survives a further pump unmoved.
+            // Exhaustion returns the measured mismatch to the coverage gate.
+            constexpr int placementAttempts = 4;
+            for(int attempt = 1; attempt <= placementAttempts; ++attempt) {
+                const NSRect beforeFrame = native.frame;
+                const NSPoint screen = [native convertPointToScreen:[view convertPoint:local toView:nil]];
+                const NSPoint pointer = NSEvent.mouseLocation;
+                const NSPoint origin = NSMakePoint(beforeFrame.origin.x + pointer.x - screen.x,
+                                                   beforeFrame.origin.y + pointer.y - screen.y);
+                {
+                    PointerWindowPlacement geometry(native);
+                    [native setFrameOrigin:origin];
+                }
+                bool settled = false;
+                for(int observation = 1; observation <= 2; ++observation) {
+                    if(observation == 2) SDL_Delay(5);
+                    SDL_PumpEvents();
+                    const NSRect actualFrame = native.frame;
+                    const NSRect actualBounds = view.bounds;
+                    int actualWidth = 0, actualHeight = 0;
+                    SDL_GetWindowSize(window, &actualWidth, &actualHeight);
+                    SDL_Point measured{};
+                    nativePointerProbeCurrentPoint(window, &measured.x, &measured.y);
+                    std::printf("POINTER_PLACEMENT: attempt=%d observation=%d requestedOrigin=%.3f,%.3f frameBefore=%.3f,%.3f,%.3f,%.3f frameAfter=%.3f,%.3f,%.3f,%.3f contentBefore=%.3f,%.3f contentAfter=%.3f,%.3f windowBefore=%dx%d windowAfter=%dx%d requested=%d,%d actual=%d,%d\n",
+                                attempt, observation, origin.x, origin.y,
+                                beforeFrame.origin.x, beforeFrame.origin.y, beforeFrame.size.width, beforeFrame.size.height,
+                                actualFrame.origin.x, actualFrame.origin.y, actualFrame.size.width, actualFrame.size.height,
+                                bounds.size.width, bounds.size.height, actualBounds.size.width, actualBounds.size.height,
+                                width, height, actualWidth, actualHeight, x, y, measured.x, measured.y);
+                    std::fflush(stdout);
+                    if(!NSEqualSizes(actualFrame.size, originalFrame.size) || !NSEqualSizes(actualBounds.size, bounds.size)
+                       || actualWidth != width || actualHeight != height || native.contentView != view)
+                        throw std::runtime_error("Own-window pointer placement changed native content or SDL dimensions");
+                    if(std::abs(measured.x - x) > 1 || std::abs(measured.y - y) > 1) break;
+                    settled = observation == 2;
+                }
+                if(settled) break;
             }
-            SDL_PumpEvents();
-            const NSRect actualFrame = native.frame;
-            const NSRect actualBounds = view.bounds;
-            int actualWidth = 0, actualHeight = 0;
-            SDL_GetWindowSize(window, &actualWidth, &actualHeight);
-            std::printf("POINTER_PLACEMENT: requestedOrigin=%.3f,%.3f frameBefore=%.3f,%.3f,%.3f,%.3f frameAfter=%.3f,%.3f,%.3f,%.3f contentBefore=%.3f,%.3f contentAfter=%.3f,%.3f windowBefore=%dx%d windowAfter=%dx%d\n",
-                        frame.origin.x, frame.origin.y,
-                        originalFrame.origin.x, originalFrame.origin.y, originalFrame.size.width, originalFrame.size.height,
-                        actualFrame.origin.x, actualFrame.origin.y, actualFrame.size.width, actualFrame.size.height,
-                        bounds.size.width, bounds.size.height, actualBounds.size.width, actualBounds.size.height,
-                        width, height, actualWidth, actualHeight);
-            std::fflush(stdout);
-            if(!NSEqualSizes(actualFrame.size, originalFrame.size) || !NSEqualSizes(actualBounds.size, bounds.size)
-               || actualWidth != width || actualHeight != height || native.contentView != view)
-                throw std::runtime_error("Own-window pointer placement changed native content or SDL dimensions");
         }
         SDL_Point actual{};
         nativePointerProbeCurrentPoint(window, &actual.x, &actual.y);

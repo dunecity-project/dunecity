@@ -159,7 +159,11 @@ jobs:
         env:
           ASAN_OPTIONS: detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1
           UBSAN_OPTIONS: print_stacktrace=1
-        run: ctest --test-dir build --output-on-failure --stop-on-failure
+        # The Random Skirmish generator tests (skirmish_generator_tests and its seed-sweep shards)
+        # run two at a time; everything else runs once, in order.
+        run: |
+          ctest --test-dir build --output-on-failure --stop-on-failure -E '^skirmish_generator_tests'
+          ctest --test-dir build --output-on-failure --stop-on-failure --no-tests=error --parallel 2 -R '^skirmish_generator_tests'
 
   build-emscripten:
     runs-on: ubuntu-latest
