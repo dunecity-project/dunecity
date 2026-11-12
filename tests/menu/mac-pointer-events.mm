@@ -9,8 +9,22 @@
 namespace {
 id pointerEventMonitor = nil;
 NSInteger nextPointerEventNumber = 1;
-Class pointerApplicationClass = Nil;
-IMP pointerApplicationDispatch = nullptr;
+// Focus and renderer transitions may reconfigure AppKit's dispatcher. Validate
+// SDL's current entry point instead of pinning an earlier Objective-C identity.
+Class requireLivePointerDispatcher() {
+    if(!NSApp || ![NSThread isMainThread])
+        throw std::runtime_error("Native pointer dispatch requires SDL's main-thread application");
+    const SEL selector = @selector(sendEvent:);
+    const IMP applicationDispatch = class_getMethodImplementation(object_getClass(NSApp), selector);
+    const IMP cocoaDispatch = class_getMethodImplementation([NSApplication class], selector);
+    const Class candidates[] = {objc_lookUpClass("SDL3Application"), objc_lookUpClass("SDLApplication")};
+    for(Class candidate : candidates) {
+        if(candidate && [NSApp isKindOfClass:candidate] && applicationDispatch != cocoaDispatch
+           && applicationDispatch == class_getMethodImplementation(candidate, selector))
+            return candidate;
+    }
+    throw std::runtime_error("Native pointer dispatch requires the actual SDL application sendEvent override");
+}
 
 // Keep SDL's NSWindow class intact, including during synchronous frame-change
 // notifications. Only this instance may bypass AppKit's screen-edge constraint,
@@ -80,25 +94,11 @@ extern "C" void nativePointerProbeBegin(SDL_Window* window) {
     SDL_VERSION(&info.version);
     if(!SDL_GetWindowWMInfo(window, &info) || info.subsystem != SDL_SYSWM_COCOA)
         throw std::runtime_error("Pointer regression requires the actual Cocoa backend");
-    if(!NSApp || ![NSThread isMainThread])
-        throw std::runtime_error("Native pointer dispatch requires SDL's main-thread application");
+    const Class dispatchClass = requireLivePointerDispatcher();
     const SEL selector = @selector(sendEvent:);
     const Class applicationClass = object_getClass(NSApp);
     const IMP applicationDispatch = class_getMethodImplementation(applicationClass, selector);
     const IMP cocoaDispatch = class_getMethodImplementation([NSApplication class], selector);
-    const Class candidates[] = {objc_lookUpClass("SDL3Application"), objc_lookUpClass("SDLApplication")};
-    Class dispatchClass = Nil;
-    for(Class candidate : candidates) {
-        if(candidate && [NSApp isKindOfClass:candidate] && applicationDispatch != cocoaDispatch
-           && applicationDispatch == class_getMethodImplementation(candidate, selector)) {
-            dispatchClass = candidate;
-            break;
-        }
-    }
-    if(!dispatchClass)
-        throw std::runtime_error("Native pointer dispatch requires the actual SDL application sendEvent override");
-    pointerApplicationClass = applicationClass;
-    pointerApplicationDispatch = applicationDispatch;
     std::printf("POINTER_DISPATCH: route=NSApp.sendEvent synchronous=1 applicationClass=%s dispatchClass=%s sendEventIMP=%p cocoaSendEventIMP=%p\n",
                 class_getName(applicationClass), class_getName(dispatchClass),
                 reinterpret_cast<void*>(applicationDispatch), reinterpret_cast<void*>(cocoaDispatch));
@@ -232,9 +232,7 @@ extern "C" void nativePointerProbeEvent(SDL_Window* window, int x, int y, int bu
         NSEvent* event = [NSEvent mouseEventWithType:type location:location modifierFlags:0
             timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:native.windowNumber
             context:nil eventNumber:nextPointerEventNumber++ clickCount:1 pressure:buttonState > 0 ? 1.0 : 0.0];
-        if(!pointerApplicationDispatch || object_getClass(NSApp) != pointerApplicationClass
-           || class_getMethodImplementation(pointerApplicationClass, @selector(sendEvent:)) != pointerApplicationDispatch)
-            throw std::runtime_error("SDL application pointer dispatcher changed");
+        requireLivePointerDispatcher();
         logNativePointerEvent(window, event, "sending");
         [NSApp sendEvent:event];
     }
