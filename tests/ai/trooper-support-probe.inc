@@ -659,6 +659,17 @@ inline void fullBuildStandingRecruitment() {
         world.bot->build(world.bot->militaryUnitValue());
         ++fullTurns;
         auto after = world.plan();
+        if (!(after.trooperTarget == expectedTarget && after.trooperCount <= expectedTarget)) {
+            SDL_Log("TROOPER_SUPPORT_BOUND_DIAGNOSTIC: cycle=%u full_turns=%d expected=%d "
+                    "before_target=%d before_count=%d before_aircraft=%d before_support=%d "
+                    "after_target=%d after_count=%d after_aircraft=%d after_support=%d "
+                    "infantry_value=%d army_value=%d infantry_percent=%d light_budget=%d money=%d tech_savings=%d",
+                    world.game->getGameCycleCount(), fullTurns, expectedTarget,
+                    before.trooperTarget, before.trooperCount, before.hostileAircraft, int(before.trooperSupport),
+                    after.trooperTarget, after.trooperCount, after.hostileAircraft, int(after.trooperSupport),
+                    after.infantryValue, after.militaryValue, after.infantryPercent,
+                    after.lightBudget, after.money, int(after.techSavings));
+        }
         require(after.trooperTarget == expectedTarget && after.trooperCount <= expectedTarget,
                 "Full builder's committed count escaped the live standing/reactive demand");
         if (!worQueued && world.owner->getNumItems(Structure_WOR) == 0 && after.itemCount[Structure_WOR] == 1) {
