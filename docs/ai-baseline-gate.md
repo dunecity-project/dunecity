@@ -45,6 +45,29 @@ deck (game ids, maps, options, seeds), failed games, candidate and OFF from two
 source commits, or a reference that is not native 1.0.807 are invalid input
 (`INVALID: ...`, exit 2), never a pass.
 
+The canonical normalized 1.0.807 export is an alternative primary reference when
+the original raw results are unavailable; it is not the retired statistical gate:
+
+```sh
+python3 tests/ai/ai-baseline-gate.py --candidate /abs/results/on --off /abs/results/off \
+  --reference-observations \
+  ~/Documents/projects/outputs/baseline-league-20261106/1.0.807-observations.csv.gz
+```
+
+`--reference` and `--reference-observations` are mutually exclusive. The latter
+accepts plain or gzip canonical scorecard CSV. It requires the exact 192
+research-OFF contexts on the eight seeds above (not the manifest's extra Vanilla
+seed block), their map/options/context hashes, native source `abdf71e7`, test bridge
+`863d1ac6`, and every expected house/team's measured binary native-win summary.
+Malformed schema, duplicate/conflicting records, partial rosters, multiple winning
+teams, or mismatched provenance are invalid input. The canonical extractor validates
+complete, error-free native games before exporting; its `win` metric is exactly
+`winner_team != 0 && house.team == winner_team`. Count each winning game once.
+No raw `outcome` or `error` columns are invented. Candidate/OFF raw validation,
+the candidate-at-least-OFF rule, and the informational historical win count are
+unchanged; normalized metrics do not restore the old historical statistical gate.
+
+
 ## CPU cost of unit and combat candidates
 
 A candidate that changes how units fight or move (targeting, focus fire,

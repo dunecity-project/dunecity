@@ -9,6 +9,8 @@
 namespace {
 id pointerEventMonitor = nil;
 NSInteger nextPointerEventNumber = 1;
+Class pointerApplicationClass = Nil;
+IMP pointerApplicationDispatch = nullptr;
 
 // Keep SDL's NSWindow class intact, including during synchronous frame-change
 // notifications. Only this instance may bypass AppKit's screen-edge constraint,
@@ -68,17 +70,39 @@ void logNativePointerEvent(SDL_Window* window, NSEvent* event, const char* stage
 
 
 // Leave the physical pointer untouched. Move only the diagnostic's own window
-// beneath it, then queue each event in NSApp's event queue exactly where the
-// window server delivers real input: SDL's pump dequeues it, Cocoa_HandleMouseEvent
-// records Cocoa mouse focus and button state, AppKit routes it to SDL's responder,
-// and SDL converts it for the renderer. Calling the responder directly skips SDL's
-// dispatch; SDL 3.4 then drops the motion (no Cocoa mouse focus) and the press
-// synthesizes a focus motion at SDL's stale cached position.
+// beneath it, then synchronously send native events through SDL's application
+// override: Cocoa_DispatchEvent records mouse focus/buttons before AppKit routes
+// to SDL's responder. Calling that responder directly skips the SDL boundary.
+// NSApp postEvent serializes coordinates against stale window-server geometry
+// after own-window moves; sendEvent preserves the event's measured local point.
 extern "C" void nativePointerProbeBegin(SDL_Window* window) {
     SDL_SysWMinfo info{};
     SDL_VERSION(&info.version);
     if(!SDL_GetWindowWMInfo(window, &info) || info.subsystem != SDL_SYSWM_COCOA)
         throw std::runtime_error("Pointer regression requires the actual Cocoa backend");
+    if(!NSApp || ![NSThread isMainThread])
+        throw std::runtime_error("Native pointer dispatch requires SDL's main-thread application");
+    const SEL selector = @selector(sendEvent:);
+    const Class applicationClass = object_getClass(NSApp);
+    const IMP applicationDispatch = class_getMethodImplementation(applicationClass, selector);
+    const IMP cocoaDispatch = class_getMethodImplementation([NSApplication class], selector);
+    const Class candidates[] = {objc_lookUpClass("SDL3Application"), objc_lookUpClass("SDLApplication")};
+    Class dispatchClass = Nil;
+    for(Class candidate : candidates) {
+        if(candidate && [NSApp isKindOfClass:candidate] && applicationDispatch != cocoaDispatch
+           && applicationDispatch == class_getMethodImplementation(candidate, selector)) {
+            dispatchClass = candidate;
+            break;
+        }
+    }
+    if(!dispatchClass)
+        throw std::runtime_error("Native pointer dispatch requires the actual SDL application sendEvent override");
+    pointerApplicationClass = applicationClass;
+    pointerApplicationDispatch = applicationDispatch;
+    std::printf("POINTER_DISPATCH: route=NSApp.sendEvent synchronous=1 applicationClass=%s dispatchClass=%s sendEventIMP=%p cocoaSendEventIMP=%p\n",
+                class_getName(applicationClass), class_getName(dispatchClass),
+                reinterpret_cast<void*>(applicationDispatch), reinterpret_cast<void*>(cocoaDispatch));
+    std::fflush(stdout);
     if(pointerEventMonitor) [NSEvent removeMonitor:pointerEventMonitor];
     __weak NSWindow* monitored = info.info.cocoa.window;
     const Uint32 monitoredID = SDL_GetWindowID(window);
@@ -87,7 +111,7 @@ extern "C" void nativePointerProbeBegin(SDL_Window* window) {
         handler:^NSEvent*(NSEvent* event) {
             if(monitored && event.window == monitored) {
                 if(SDL_Window* live = SDL_GetWindowFromID(monitoredID))
-                    logNativePointerEvent(live, event, "dequeued");
+                    logNativePointerEvent(live, event, "monitored");
             }
             return event;
         }];
@@ -192,8 +216,11 @@ extern "C" void nativePointerProbeEvent(SDL_Window* window, int x, int y, int bu
         NSEvent* event = [NSEvent mouseEventWithType:type location:location modifierFlags:0
             timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:native.windowNumber
             context:nil eventNumber:nextPointerEventNumber++ clickCount:1 pressure:buttonState > 0 ? 1.0 : 0.0];
-        logNativePointerEvent(window, event, "queued");
-        [NSApp postEvent:event atStart:NO];
+        if(!pointerApplicationDispatch || object_getClass(NSApp) != pointerApplicationClass
+           || class_getMethodImplementation(pointerApplicationClass, @selector(sendEvent:)) != pointerApplicationDispatch)
+            throw std::runtime_error("SDL application pointer dispatcher changed");
+        logNativePointerEvent(window, event, "sending");
+        [NSApp sendEvent:event];
     }
 }
 

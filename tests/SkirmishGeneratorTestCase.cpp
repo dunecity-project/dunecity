@@ -755,42 +755,51 @@ TEST_CASE("Random skirmish: seed sweep gives every MCV compact fair future expan
           "[skirmish][generator][terrain][determinism][rockfairness]") {
     const std::array<uint32_t, 5> seeds{418379001u, 836308809u, 1u, 7101u, 4000000000u};
     const std::array<int, 3> mixes[] = {{75, 20, 5}, {50, 45, 5}, {50, 20, 30}, {90, 5, 5}};
-    for(Mode mode : {Mode::Vanilla, Mode::DuneCity}) for(int size : kMapSizes) for(int players : {2, 4, 8})
-        for(const auto& shares : mixes) for(size_t seedIndex = 0; seedIndex < seeds.size(); ++seedIndex) {
-            Params p = expansionParams(size, players, mode, seeds[seedIndex]);
-            setTerrainShares(p, shares[0], shares[1], shares[2]);
-            // The two reported FFA failures stay unmirrored; other fixed seeds cover mirrors.
-            p.symmetric = seedIndex >= 2 && seedIndex % 2 == 0;
-            p.spice = seedIndex == 3 ? Spice::None : Spice::Medium;
-            const Catalogue& c = mode == Mode::DuneCity ? city() : vanilla();
-            const Result r = generate(p, c);
-            INFO("seed " << p.seed << " size " << size << " players " << players
-                 << " city mode " << (mode == Mode::DuneCity) << " mirrored " << p.symmetric
-                 << " Sand/Rock/Mountain " << shares[0] << "/" << shares[1] << "/" << shares[2]);
-            REQUIRE(static_cast<int>(r.houses.size()) == players);
-            REQUIRE_FALSE(r.flattenedMountains);
-            requireFairStartRock(r, mode);
-            requireCleanConnected(r);
-            requireLegal(r, c);
-            for(const HouseSetup& h : r.houses)
-                REQUIRE(std::count_if(r.units.begin(), r.units.end(), [&](const Placement& unit) {
-                    return unit.house == h.house && unit.item == Unit_MCV && h.plateau.contains(unit.x, unit.y);
-                }) == 1);
-            if(p.symmetric) requireMirroredStartRock(r, players);
-            const TerrainCounts counts = terrainCounts(r.map);
-            const int area = size * size;
-            // Crowded small maps retain the existing forced-core share exception.
-            // Ordinary-sized MCV-only starts must still leave the terrain controls intact.
-            if(size >= 128) {
-                REQUIRE(std::abs(counts.sand * 100 - p.sandPercent * area) <= 12 * area + 300);
-                REQUIRE(std::abs(counts.rock * 100 - p.rockPercent * area) <= 12 * area + 300);
+    // Named section paths keep the full matrix runnable while allowing a mode/size group
+    // or one exact configuration to be diagnosed without generating the other maps.
+    for(Mode mode : {Mode::Vanilla, Mode::DuneCity})
+        DYNAMIC_SECTION("mode=" << (mode == Mode::Vanilla ? "Vanilla" : "DuneCity")) {
+            for(int size : kMapSizes) DYNAMIC_SECTION("size=" << size) {
+                for(int players : {2, 4, 8}) for(const auto& shares : mixes)
+                    for(size_t seedIndex = 0; seedIndex < seeds.size(); ++seedIndex)
+                        DYNAMIC_SECTION("players=" << players << " shares=" << shares[0] << "/" << shares[1]
+                                        << "/" << shares[2] << " seed=" << seeds[seedIndex]) {
+                            Params p = expansionParams(size, players, mode, seeds[seedIndex]);
+                            setTerrainShares(p, shares[0], shares[1], shares[2]);
+                            // The two reported FFA failures stay unmirrored; other fixed seeds cover mirrors.
+                            p.symmetric = seedIndex >= 2 && seedIndex % 2 == 0;
+                            p.spice = seedIndex == 3 ? Spice::None : Spice::Medium;
+                            const Catalogue& c = mode == Mode::DuneCity ? city() : vanilla();
+                            const Result r = generate(p, c);
+                            INFO("seed " << p.seed << " size " << size << " players " << players
+                                 << " city mode " << (mode == Mode::DuneCity) << " mirrored " << p.symmetric
+                                 << " Sand/Rock/Mountain " << shares[0] << "/" << shares[1] << "/" << shares[2]);
+                            REQUIRE(static_cast<int>(r.houses.size()) == players);
+                            REQUIRE_FALSE(r.flattenedMountains);
+                            requireFairStartRock(r, mode);
+                            requireCleanConnected(r);
+                            requireLegal(r, c);
+                            for(const HouseSetup& h : r.houses)
+                                REQUIRE(std::count_if(r.units.begin(), r.units.end(), [&](const Placement& unit) {
+                                    return unit.house == h.house && unit.item == Unit_MCV && h.plateau.contains(unit.x, unit.y);
+                                }) == 1);
+                            if(p.symmetric) requireMirroredStartRock(r, players);
+                            const TerrainCounts counts = terrainCounts(r.map);
+                            const int area = size * size;
+                            // Crowded small maps retain the existing forced-core share exception.
+                            // Ordinary-sized MCV-only starts must still leave the terrain controls intact.
+                            if(size >= 128) {
+                                REQUIRE(std::abs(counts.sand * 100 - p.sandPercent * area) <= 12 * area + 300);
+                                REQUIRE(std::abs(counts.rock * 100 - p.rockPercent * area) <= 12 * area + 300);
+                            }
+                            REQUIRE(std::abs(counts.mountain - p.mountainPercent * area / 100) <= 3);
+                            int spice = 0;
+                            for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) spice += isSpiceTile(r.map(x, y));
+                            if(p.spice == Spice::None) REQUIRE(spice == 0);
+                            else REQUIRE(spice > 0);
+                            requireRepeatableStartRock(r, generate(p, c));
+                        }
             }
-            REQUIRE(std::abs(counts.mountain - p.mountainPercent * area / 100) <= 3);
-            int spice = 0;
-            for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) spice += isSpiceTile(r.map(x, y));
-            if(p.spice == Spice::None) REQUIRE(spice == 0);
-            else REQUIRE(spice > 0);
-            requireRepeatableStartRock(r, generate(p, c));
         }
 }
 
