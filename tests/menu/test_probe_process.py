@@ -28,7 +28,9 @@ while not (root / 'leaf-ready').exists():
     if time.monotonic() > deadline:
         raise RuntimeError('descendant failed to start')
     time.sleep(.01)
-(root / 'pids.json').write_text(json.dumps([os.getpid(), leaf.pid]))
+tmp = root / 'pids.json.tmp'
+tmp.write_text(json.dumps([os.getpid(), leaf.pid]))
+tmp.replace(root / 'pids.json')
 print('owned tree ready', flush=True)
 time.sleep(60)
 '''
@@ -187,23 +189,29 @@ def trace_wait(frame, event, arg):
         deferred = getattr(processes._local, 'deferred', 0) > 0
         if not entry_locked or not deferred:
             raise AssertionError('Cleanup checkpoint must hold the entry lock and defer signals')
-        (out / 'checkpoint.json').write_text(json.dumps(
+        tmp = out / 'checkpoint.json.tmp'
+        tmp.write_text(json.dumps(
             {'checkpoint': checkpoint, 'entry_locked': entry_locked, 'deferred': deferred}))
+        tmp.replace(out / 'checkpoint.json')
         sent = True
         os.kill(os.getpid(), signal.SIGTERM)
     elif checkpoint == 'wait-lock' and frame.f_code is subprocess.Popen._try_wait.__code__:
         process = frame.f_locals['self']
         if not process._waitpid_lock.locked():
             raise AssertionError('Signal checkpoint did not hold the real Popen waitpid lock')
-        (out / 'checkpoint.json').write_text(json.dumps(
+        tmp = out / 'checkpoint.json.tmp'
+        tmp.write_text(json.dumps(
             {'checkpoint': checkpoint, 'waitpid_locked': True}))
+        tmp.replace(out / 'checkpoint.json')
         sent = True
         os.kill(os.getpid(), signal.SIGTERM)
     return trace_wait
 
 try:
     with scratch_dir('probe-cancellation-contract') as scratch:
-        (out / 'scratch-path').write_text(str(scratch))
+        tmp = out / 'scratch-path.tmp'
+        tmp.write_text(str(scratch))
+        tmp.replace(out / 'scratch-path')
         if checkpoint != 'external':
             sys.settrace(trace_dispatch)
         processes.run([sys.executable, '-c', sys.argv[4], str(scratch)],
@@ -267,7 +275,19 @@ finally:
                         f'supervisor log (last 16384 bytes):\n{output}') from error
                 finally:
                     if supervisor.poll() is None:
-                        supervisor.kill()
+                        supervisor.terminate()
+                        try:
+                            supervisor.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            if os.name != 'nt' and (out / 'scratch-path').exists():
+                                pid_file = Path((out / 'scratch-path').read_text()) / 'pids.json'
+                                if pid_file.exists():
+                                    leader = json.loads(pid_file.read_text())[0]
+                                    try:
+                                        os.killpg(leader, signal.SIGKILL)
+                                    except ProcessLookupError:
+                                        pass
+                            supervisor.kill()
                     supervisor.wait()
 
 
