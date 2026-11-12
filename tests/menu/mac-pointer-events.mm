@@ -5,55 +5,45 @@
 #include <stdexcept>
 #include <cmath>
 #include <cstdio>
-#include <string>
 
 namespace {
 id pointerEventMonitor = nil;
 NSInteger nextPointerEventNumber = 1;
 
-NSRect unconstrainedPointerFrame(id, SEL, NSRect frame, NSScreen*) {
-    return frame;
-}
-
-// AppKit constrains titled windows' top edges to their screen. A stationary
-// pointer near that edge otherwise cannot reach the fixture's lower buttons.
-// Subclass only this SDL window, only during our explicit placement; retain its
-// actual SDL class for input dispatch and every fullscreen/resize transition.
+// Keep SDL's NSWindow class intact, including during synchronous frame-change
+// notifications. Only this instance may bypass AppKit's screen-edge constraint,
+// and only while setFrameOrigin runs. Restore the method before pumping input.
 class PointerWindowPlacement {
 public:
-    explicit PointerWindowPlacement(NSWindow* native)
-        : window(native), original(object_getClass(native)) {
-        static Class base = Nil, placement = Nil;
-        if(base != original) {
-            const std::string name = std::string("DuneCityPointerPlacement_") + class_getName(original);
-            placement = objc_lookUpClass(name.c_str());
-            if(!placement) {
-                const SEL selector = @selector(constrainFrameRect:toScreen:);
-                const Method method = class_getInstanceMethod(original, selector);
-                if(!method) throw std::runtime_error("Missing AppKit frame constraint method");
-                placement = objc_allocateClassPair(original, name.c_str(), 0);
-                if(!placement) throw std::runtime_error("Cannot isolate pointer window geometry");
-                if(!class_addMethod(placement, selector, reinterpret_cast<IMP>(unconstrainedPointerFrame),
-                                    method_getTypeEncoding(method))) {
-                    objc_disposeClassPair(placement);
-                    throw std::runtime_error("Cannot override pointer window frame constraints");
-                }
-                objc_registerClassPair(placement);
-            }
-            if(class_getSuperclass(placement) != original)
-                throw std::runtime_error("Unexpected pointer placement superclass");
-            base = original;
-        }
-        object_setClass(window, placement);
+    explicit PointerWindowPlacement(NSWindow* native) {
+        if(![NSThread isMainThread])
+            throw std::runtime_error("Pointer window placement requires the AppKit main thread");
+        const SEL selector = @selector(constrainFrameRect:toScreen:);
+        method = class_getInstanceMethod(object_getClass(native), selector);
+        if(!method) throw std::runtime_error("Missing AppKit frame constraint method");
+        original = method_getImplementation(method);
+        const auto constrain = reinterpret_cast<NSRect (*)(id, SEL, NSRect, NSScreen*)>(original);
+        // The runtime supplies the Objective-C IMP ABI, including NSRect returns;
+        // a block's arguments omit the hidden selector, unlike a method IMP.
+        replacement = imp_implementationWithBlock(^NSRect(id candidate, NSRect frame, NSScreen* screen) {
+            if(candidate == native) return frame;
+            return constrain(candidate, selector, frame, screen);
+        });
+        if(!replacement) throw std::runtime_error("Cannot isolate pointer window geometry");
+        method_setImplementation(method, replacement);
     }
 
-    ~PointerWindowPlacement() { object_setClass(window, original); }
+    ~PointerWindowPlacement() {
+        method_setImplementation(method, original);
+        imp_removeBlock(replacement);
+    }
     PointerWindowPlacement(const PointerWindowPlacement&) = delete;
     PointerWindowPlacement& operator=(const PointerWindowPlacement&) = delete;
 
 private:
-    NSWindow* window;
-    Class original;
+    Method method;
+    IMP original;
+    IMP replacement;
 };
 
 void logNativePointerEvent(SDL_Window* window, NSEvent* event, const char* stage) {
@@ -141,14 +131,32 @@ extern "C" SDL_Point nativePointerProbePlace(SDL_Window* window, int x, int y) {
                              : NSMaxY(bounds) - y * bounds.size.height / height);
             const NSPoint screen = [native convertPointToScreen:[view convertPoint:local toView:nil]];
             const NSPoint pointer = NSEvent.mouseLocation;
-            NSRect frame = native.frame;
+            const NSRect originalFrame = native.frame;
+            if(originalFrame.size.width <= 0 || originalFrame.size.height <= 0
+               || bounds.size.width <= 0 || bounds.size.height <= 0)
+                throw std::runtime_error("Empty native pointer frame or content geometry");
+            NSRect frame = originalFrame;
             frame.origin.x += pointer.x - screen.x;
             frame.origin.y += pointer.y - screen.y;
             {
                 PointerWindowPlacement geometry(native);
                 [native setFrameOrigin:frame.origin];
-                SDL_PumpEvents();
             }
+            SDL_PumpEvents();
+            const NSRect actualFrame = native.frame;
+            const NSRect actualBounds = view.bounds;
+            int actualWidth = 0, actualHeight = 0;
+            SDL_GetWindowSize(window, &actualWidth, &actualHeight);
+            std::printf("POINTER_PLACEMENT: requestedOrigin=%.3f,%.3f frameBefore=%.3f,%.3f,%.3f,%.3f frameAfter=%.3f,%.3f,%.3f,%.3f contentBefore=%.3f,%.3f contentAfter=%.3f,%.3f windowBefore=%dx%d windowAfter=%dx%d\n",
+                        frame.origin.x, frame.origin.y,
+                        originalFrame.origin.x, originalFrame.origin.y, originalFrame.size.width, originalFrame.size.height,
+                        actualFrame.origin.x, actualFrame.origin.y, actualFrame.size.width, actualFrame.size.height,
+                        bounds.size.width, bounds.size.height, actualBounds.size.width, actualBounds.size.height,
+                        width, height, actualWidth, actualHeight);
+            std::fflush(stdout);
+            if(!NSEqualSizes(actualFrame.size, originalFrame.size) || !NSEqualSizes(actualBounds.size, bounds.size)
+               || actualWidth != width || actualHeight != height || native.contentView != view)
+                throw std::runtime_error("Own-window pointer placement changed native content or SDL dimensions");
         }
         SDL_Point actual{};
         nativePointerProbeCurrentPoint(window, &actual.x, &actual.y);

@@ -1,20 +1,19 @@
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 
-// Real-engine QuantBot force concentration defaults (docs/formations.md, "Concentrating force").
+// Real-engine QuantBot force concentration policies (docs/formations.md, "Concentrating force").
 // Included only by run-campaign-balance.py --force-probe; never linked into the game.
 //
 // Drives the production QuantBot::concentrateForces(), checkAllUnits() and launchGroundHunt() on
 // a Custom Hard house against real units and structures on the real map:
-//   1. Defaults: the compiled and the shipped configuration focus fire, converge, bundle the
-//      reserve, launch from the bundle and launch waves at 60% readiness; only Custom
-//      Hard/Brutal use them; the duel override replaces them.
+//   1. Explicit fixture configuration enables focus fire, convergence, bundling and 60% readiness;
+//      Custom Medium/Hard/Brutal consume it, Easy does not, and the duel override replaces it.
 //   2. Focus fire: every hunting tank with a damaged enemy quad in reach shoots it (fighters
 //      before buildings, fewest hit points first), the same for a reversed unit list.
 //   3. Converge: a wave member that is not fighting walks (hunt-toward) to a fight of its army
 //      13 tiles away; one 35 tiles away and a home reserve keep their orders.
 //   4. Wave size: a ready army worth 80% of the difficulty's wave readiness attacks with the
-//      defaults (60%) and waits with the override 0 (the previous 100%).
+//      configured 60% threshold and waits with the override 0's 100% threshold.
 //   5. Override 0 turns focus fire and converging off.
 //   6. Bundling: idle reserve tanks get at most 12 bundle orders a pass, farthest first, the
 //      same units for a reversed unit list, and gather at the bundle over real cycles; the
@@ -56,20 +55,41 @@ void runForceConcentrationProbe(Game& game) {
     const bool savedRecovery=getQuantBotConfig().recovery.enabled;
     const int savedLimit=bot->militaryValueLimit;
 
-    // ---- 1. Defaults -----------------------------------------------------------------------
-    const QuantBotConfig defaults;
-    require(defaults.force.focusFire && defaults.force.converge && defaults.force.waveReadinessPercent==60
-        && defaults.force.bundle && defaults.force.launchFromBundle
-        && defaults.force.perimeterTurrets && defaults.force.sizedDefence && defaults.force.openingReadiness
-        && defaults.force.finishWhenLeading,
-        "Compiled force defaults are not focus fire + converge + 60% waves + bundle + launch from it"
-        " + perimeter turrets + sized defence + opening readiness + finish when leading");
-    const auto& loaded=getQuantBotConfig();
-    require(loaded.force.focusFire && loaded.force.converge && loaded.force.waveReadinessPercent==60
-        && loaded.force.bundle && loaded.force.launchFromBundle
-        && loaded.force.perimeterTurrets && loaded.force.sizedDefence && loaded.force.openingReadiness
-        && loaded.force.finishWhenLeading,
-        "The shipped QuantBot configuration did not load the force defaults");
+    // ---- 1. Configured policy and difficulty gates ------------------------------------------
+    struct RestoreForce {
+        QuantBotConfig::ForceSettings saved=getQuantBotConfig().force;
+        ~RestoreForce() { getQuantBotConfig().force=saved; }
+    } restoreForce;
+    auto& force=getQuantBotConfig().force;
+    force.focusFire=true;
+    force.converge=true;
+    force.waveReadinessPercent=60;
+    force.bundle=true;
+    force.launchFromBundle=true;
+    force.perimeterTurrets=true;
+    force.sizedDefence=true;
+    force.openingReadiness=true;
+    force.finishWhenLeading=true;
+    force.turretPriority=false;
+    force.pressOn=false;
+    force.finishWeakest=false;
+    force.fortifiedWaves=false;
+    force.sonicClearLane=false;
+    force.spendAtCap=false;
+    force.siegeStandoff=false;
+    force.massAssault=false;
+    force.closingMountainScope=0;
+    force.convergeChokepointScope=0;
+    force.openingOpenMapScope=0;
+    force.cityBoomWorkers=false;
+    force.cityBoomRefineries=false;
+    force.cityBoomGreedy=false;
+    force.cityBoomShortTax=false;
+    force.cityBoomReactive=false;
+    force.openingCombatBudget=false;
+    force.vanillaGreedyBoom=false;
+    force.vanillaFfaFullWaves=false;
+    force.mediumClassic=0;
     require(bot->forceBits()==(QuantBot::kForceFocusFire|QuantBot::kForceConverge|QuantBot::kForceBundle
             |QuantBot::kForceBundleGate|QuantBot::kForceThreatTurrets
             |QuantBot::kForceSizedDefence|QuantBot::kForceOpeningReadiness|QuantBot::kForceFinishLeading)
@@ -213,7 +233,7 @@ void runForceConcentrationProbe(Game& game) {
             require(inReach>=4,"Focus fixture: too few tanks in reach of the damaged quad");
             require(bot->forceStats.focusSwitches>=inReach,"Focus fire switches were not counted");
             require(targets(true)==first,"Focus fire depends on the order of the unit list");
-            // Override 0 (the previous defaults): nobody is given a target.
+            // Override 0: nobody is given a target.
             bot->forceVariantOverride=0;
             const auto off=targets(false);
             bot->forceVariantOverride=QuantBot::kNoForceOverride;
@@ -279,9 +299,9 @@ void runForceConcentrationProbe(Game& game) {
                 for(auto* unit:army) if(unit->getAttackMode()==HUNT) ++hunters;
                 return hunters;
             };
-            require(launch(0)==0,"The previous 100% readiness launched an army below it");
-            // I (default): a house that started without an army able to strike (a Construction
-            // Yard start) holds its first ground wave for full readiness; from then on, 60%.
+            require(launch(0)==0,"The 100% readiness override launched an army below it");
+            // With opening readiness enabled, a Construction Yard start holds its
+            // first ground wave for full readiness; from then on, 60%.
             const int savedInitial=bot->initialMilitaryValue;
             const Uint32 savedLaunched=bot->customWave.launched;
             bot->initialMilitaryValue=0;
@@ -291,7 +311,7 @@ void runForceConcentrationProbe(Game& game) {
             require(launch(QuantBot::kNoForceOverride)==int(army.size()),"A starting army able to strike did not launch at 60%");
             bot->initialMilitaryValue=0;
             bot->customWave.launched=std::max<Uint32>(1,savedLaunched);
-            require(launch(QuantBot::kNoForceOverride)==int(army.size()),"The 60% default did not launch the ready army");
+            require(launch(QuantBot::kNoForceOverride)==int(army.size()),"The configured 60% threshold did not launch the ready army");
             bot->initialMilitaryValue=savedInitial;
             bot->forceVariantOverride=QuantBot::kNoForceOverride;
             SDL_Log("FORCE_PROBE: waves value=%d limit=%d threshold=%.2f",value,bot->militaryValueLimit,threshold);

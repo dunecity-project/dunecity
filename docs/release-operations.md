@@ -243,36 +243,37 @@ WASM and data URL carries the same version/content token; unversioned artifacts
 must revalidate. Verify the live `play/build.json` and download/hash every listed
 artifact after deployment. Browser-test fresh defaults, Display aspect changes,
 Options resolution changes, reload persistence, viewport resize and fullscreen.
-Released 1.0.661 crossplay uses `https://dunelegacy.com/relay`. Desktop ENet multiplayer remains
-available; browser/native crossplay supports WebSocket and HTTPS polling transports,
-the public directory, optional private invitations and confirmed-name lobby chat.
-Package production clients with `--relay-origin https://dunelegacy.com` so their CSP
-permits the exact HTTPS/WSS origin. Local development packages explicitly opt into
-loopback and must never be copied to production.
 
-Before publishing a crossplay client, verify the relay and signed PHP analytics
-receiver. See `tools/room-relay/deploy/README.md` for both deployment paths and the
-rollback contract. The administrator path installs a service and WebSocket proxy.
-The restricted-account path uses existing Apache/PHP with a fixed-route HTTPS
-polling gateway and a supervised, sandboxed loopback relay. It needs neither a new
-server nor administrator access; it does not install Apache proxy modules.
+Current clients use direct peer-to-peer gameplay. The PHP introduction service
+provides rooms, invitations and signaling; it does not carry gameplay packets.
+See `docs/direct-play.md` and `tools/p2p-signaling/README.md`. The packaged
+manifest must identify `gameTransport=direct-webrtc`, contain no relay origins,
+and match the candidate's source and artifact hashes.
 
-A `release-*` branch builds candidate packages without publishing a stable release
-or replacing the browser site. Hold stable publication until actual public
-browser/browser and browser/native gameplay, bounded gateway behavior, signed
-SQLite delivery, artifact checks and watchdog recovery have passed. Successful
-localhost tests or desktop CI alone do not establish public gameplay readiness.
+Hold stable publication until actual public browser/browser and browser/native
+gameplay, non-relay ICE selection, artifact checks and bounded client recovery
+have passed. Exercise endpoint failures only against an owned isolated preview;
+never stop a live production service or other players' rooms to manufacture a
+recovery result. Where the production trusted-local analytics hook is enabled,
+verify SQLite delivery for the acceptance test's own room through an authorized
+server-side reader. Do not substitute unrelated legacy HMAC receiver tests.
+Successful localhost tests or desktop CI alone do not establish public gameplay
+readiness.
 
-### Gateway persistence during website deployments
+The relay, HTTPS polling queue, signed HTTP analytics receiver and Node watchdog
+described in `tools/room-relay/deploy/README.md` belong to historical clients,
+including 1.0.661. They are not the current client's transport or acceptance
+path. Do not deploy a relay or TURN service for a current release.
 
-The website deploy uses rsync --delete and runs after scheduled download-stat updates
-as well as release pushes. Relay PHP/.htaccess and analytics receiver files must be
-committed to website main before relying on them in a public test or release. A manual
-webroot upload alone is temporary: the 13 September 2026 test lost its gateway to the
-next scheduled deploy. Website main 9a85d48 contains the gateway and additive receiver.
-Untracked play-test-* previews are also removed; restore previews after deployment,
-or finish their tests before publishing. The private loopback relay and SQLite data
-live outside the deployed webroot and are preserved.
+### Introduction service and preview persistence during website deployments
+
+Website deployments use rsync --delete, including scheduled statistics updates.
+Introduction-service code and deployment/preservation rules must be committed
+to the website repository before relying on them. Keep private configuration,
+room/session state and SQLite data outside the replaced web root.
+Untracked play-test-* previews can be removed by the next deployment; use an
+explicitly preserved candidate preview or finish its tests before deploying.
+Historical gateway persistence failures do not establish current P2P readiness.
 
 ## iPhone and iPad: TestFlight
 
