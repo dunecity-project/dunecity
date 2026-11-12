@@ -357,7 +357,7 @@ class SourceFingerprintTests(unittest.TestCase):
 
         def changing_open(path, *args, **kwargs):
             stream = original_open(path, *args, **kwargs)
-            if path == self.source and args and args[0] == 'rb':
+            if args and args[0] == 'rb' and path.resolve() == self.source.resolve():
                 self.source.write_bytes(b'int source = 2;\n')
             return stream
 
