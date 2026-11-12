@@ -512,6 +512,13 @@ DUNECITY_NATIVE_POINTER_TEST=1 python3 tests/menu/run-menu-probe.py \
 the full menu gate. Stable macOS CI runs the full packaged-library check before
 artifact upload and retains its diagnostics on failure.
 
+Validate the live SDL Cocoa dispatcher for every native event; AppKit may add a
+KVO subclass during focus/renderer changes without changing SDL's implementation.
+Do not pin an earlier Objective-C class identity. For a test-only recovery against
+unchanged signed/notarized packages, record the package and corrected-helper
+source commits separately and retain every native mapping assertion. Do not
+retag or replace published binaries to repair the test harness.
+
 ## Windows compile caching
 
 The macOS release job also enables tests and runs `classic_desert_ui_tests`

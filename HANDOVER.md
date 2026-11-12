@@ -1,3 +1,44 @@
+## 2026-11-12 - 1.0.865 published; Mac pointer gate recovered without changing packages
+
+PR #122 merged at `ad4d1a522814ceb4f4fd492c3cf674e1d36bfa56`; tag
+`v1.0.865` is published with all 13 desktop assets, including signed update
+manifests/appcasts. Windows, Linux and Developer ID signed/notarized/stapled
+Apple-silicon Mac packages are available. Browser publisher `43215365464` and
+website deployment `43216740698` passed; live `/play/build.json` reports
+1.0.865/source `ad4d1a5`, all eight hashes match, and an actual Chrome menu shows
+`App v1.0.865`. SourceForge mirror `43218778029` passed its upload, readback
+verification, source update and platform-default publication.
+
+Tag workflow `43206168859` built Windows/Linux/browser successfully and passed
+Linux tests. Its Mac signing/notarization passed, but the final pointer harness
+incorrectly pinned SDL's Objective-C application class across AppKit KVO changes.
+Helper `e125e42850ecc2429a7b205102a12f6dd8f79b52` revalidates the live SDL
+dispatcher without changing any pointer/mapping assertion. The real gate passed
+in 9.137s against the unchanged official packages; app/DMG signature, Gatekeeper
+and stapling checks passed, with 10,121 ZIP/DMG app entries byte-identical.
+No published binary was replaced or tag moved. The original CI failure remains
+historical, not relabelled green.
+
+Explicit owner release overrides: trooper support remains a known failed
+fixture (21 committed vs target 18, source `e1e4f13b`); AI behavior was not
+changed. Campaign support remains 63/66 in both arms with identical digests;
+A20/H22/O4 losses are disclosed. Headless batch `5408d3` completed 130 PASS /
+2 FAIL; obsolete FFA winner pin removal `330c4149b` passes the existing 11
+retained outcomes without replay or raw-result changes. Controls26, paired96,
+historical807 and AAA2 passed. Mac pointer and Civ640 passed; the later 48-case
+batch was interrupted on the owner's ship-now instruction (1 interrupted,
+47 unrun). Mixed-runtime recovery acceptance and stress control are incomplete.
+Native Windows and physical Linux GPU verification are not claimed.
+
+Android deployment was explicitly excluded; iOS 1.0.865 was not published.
+AI-idea/idle-fixer triggers and workers remain paused; exact prior states and
+restart commands are in
+`~/.local/state/dunecity-programme-driver/release865-pause.json`. Do not silently
+resume them on tag push or elapsed time; the original tag workflow did not go
+green. Release evidence is under `outputs/release-1.0.865/`, especially
+`web-publication/`, `desktop/mac-signed-gate-corrected/dmg-focused/` and the
+explicit known-failure dispositions under `~/.local/state/release-1.0.865/`.
+
 ## 2026-11-07 - Combined 1.0.865 candidate: Linux startup and civic transparency
 
 Unpublished integration branch `release/1.0.865-civic-linux-20261107` preserves
