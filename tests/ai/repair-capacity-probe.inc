@@ -234,15 +234,17 @@ void idleAndSelectors(const char* mod) {
 
 void backlogAndContinuation(const char* mod) {
     World world(mod); world.workload();
+    // Poll the fixture about once per simulated second, independently of the bot's private scheduler.
+    constexpr int planPollCycles = MILLI2CYCLES(1000);
     auto start = world.plan();
     require(start.repairTarget == 1, "Initial repair burst expanded before the sustained window");
-    for (int i = 0; i < MILLI2CYCLES(10000); ++i) { world.tick(); if (i % AIUPDATEINTERVAL == 0) world.plan(); }
+    for (int i = 0; i < MILLI2CYCLES(10000); ++i) { world.tick(); if (i % planPollCycles == 0) world.plan(); }
     world.roundtrip(false);
     world.roundtrip(true);
     const auto oldSince = world.bot->repairPressureSince;
     while (world.game->getGameCycleCount() < oldSince + MILLI2CYCLES(30000)) {
         world.tick();
-        if (world.game->getGameCycleCount() % AIUPDATEINTERVAL == 0) world.plan();
+        if (world.game->getGameCycleCount() % planPollCycles == 0) world.plan();
     }
     auto pass = world.plan();
     require(world.completed > 0 && pass.repairTarget == 2, "Saved persistent repair demand failed bounded capacity admission");
@@ -266,7 +268,7 @@ void backlogAndContinuation(const char* mod) {
     const Uint32 placementBound = world.game->getGameCycleCount() + MILLI2CYCLES(180000);
     while (!expansion && world.game->getGameCycleCount() < placementBound) {
         world.tick();
-        if (world.game->getGameCycleCount() % AIUPDATEINTERVAL == 0)
+        if (world.game->getGameCycleCount() % planPollCycles == 0)
             world.bot->build(world.bot->militaryUnitValue());
         for (auto* structure : structureList)
             if (structure->getOwner() == world.owner && structure->getItemID() == Structure_RepairYard
@@ -275,11 +277,11 @@ void backlogAndContinuation(const char* mod) {
     require(expansion && expansion->getLocation() == expansionSite,
         "Accepted useful repair capacity was not built at its real reserved site within the bound");
     GroundUnit* next = nullptr;
-    int distance = INT_MAX;
+    FixPoint distance = 0;
     for (auto* unit : world.jobs) {
         if (!unit->isActive() || unit->getHealth() >= unit->getMaxHealth() || unit->getTarget()) continue;
-        const int candidate = blockDistance(unit->getLocation(), expansion->getClosestPoint(unit->getLocation()));
-        if (candidate < distance) { distance = candidate; next = unit; }
+        const auto candidate = blockDistance(unit->getLocation(), expansion->getClosestPoint(unit->getLocation()));
+        if (!next || candidate < distance) { distance = candidate; next = unit; }
     }
     require(next, "Backlog fixture exhausted its repair jobs before useful capacity arrived");
     // The real engine must be able to walk a waiting customer into the newly
