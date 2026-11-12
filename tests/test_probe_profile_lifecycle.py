@@ -341,6 +341,25 @@ class SharedHeadlessModTests(unittest.TestCase):
         self.assertEqual((current / 'dunecity/graphics_skins/atlas.png').read_bytes(), b'pixels-b')
         self.assertEqual((old / 'dunecity/graphics_skins/atlas.png').read_bytes(), b'pixels-a')
 
+    def test_malformed_unrelated_file_tables_skip_to_valid_next_artwork_candidate(self):
+        old, _, _ = self.prepare()
+        cache = old.parent.parent
+        valid = cache / ('f' * 64)
+        old.parent.rename(valid)
+        malformed = [('0' * 64, None), ('1' * 64, [])]
+        for name, files in malformed:
+            directory = cache / name
+            directory.mkdir()
+            (directory / 'manifest.json').write_text(json.dumps({'files': files}))
+        current, native, copies = self.prepare(hashlib.sha256(b'next source with bad older caches').hexdigest())
+        self.assertIsNotNone(current)
+        native.assert_called_once()
+        self.assertEqual(copies.call_args_list[-1].args[0], valid / 'mods/dunecity/graphics_skins')
+        self.assertEqual((current / 'dunecity/graphics_skins/atlas.png').read_bytes(), b'pixels-a')
+        self.assertEqual(len(json.loads((current.parent / 'manifest.json').read_text())['files']), 10)
+        for name, files in malformed:
+            self.assertEqual(json.loads((cache / name / 'manifest.json').read_text()), {'files': files})
+
     def test_missing_ambiguous_and_escaping_art_declarations_never_publish(self):
         outside = self.root / 'outside-bundle'
         outside.mkdir()

@@ -169,9 +169,12 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
                         continue
                     try:
                         old = json.loads(previous.read_text())
-                        old_art = {name[len(prefix):]: digest for name, digest in old['files'].items()
+                        old_files = old['files']
+                        if not isinstance(old_files, dict):
+                            continue
+                        old_art = {name[len(prefix):]: digest for name, digest in old_files.items()
                                    if name.startswith(prefix) and name != prefix + cache_stamp}
-                        if old_art != art_files or old['files'] != payload_hashes(previous.parent / 'mods'):
+                        if old_art != art_files or old_files != payload_hashes(previous.parent / 'mods'):
                             continue
                     except (OSError, ValueError, KeyError, TypeError, RuntimeError):
                         continue
