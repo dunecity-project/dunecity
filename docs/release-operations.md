@@ -109,7 +109,7 @@ an agent being idle is not a handoff. If unavailable, record the owner/blocker
 and continue independent work. Never stop running jobs, globally pause research,
 override another owner's hold, or bypass the one-heavy-build rule.
 
-Use one pinned submission per intended scope through the existing wrapper:
+Use one pinned queue submission per positively classified headless scope:
 
 ```sh
 agent-workspace run --project dunecity --owner OWNER --tests --wait -- \
@@ -119,10 +119,21 @@ agent-workspace run --project dunecity --owner OWNER --tests --wait -- \
 dunecity-queue report JOB_ID --follow
 ```
 
-Replace placeholders with the actual identity, full SHA and classified test
-allowlist. Partition GUI/headless scopes without omissions or overlap; never
-send an unfiltered graphical suite to the Air. Wrapper exit 0 and a job ID mean
-**accepted**, not completed or passed.
+Replace placeholders with the actual identity, full SHA and headless test
+allowlist. Partition GUI/headless scopes without omissions or overlap.
+`dunecity-queue ctest` has no host-selection flag: a graphical regex alone does
+not keep work off the Air. Run graphical scopes through the existing coordinated
+native lane on a verified non-Air host, for example on the Mini:
+
+```sh
+agent-workspace run --project dunecity --owner OWNER --tests --wait -- \
+  ctest --test-dir /Users/stefan/Documents/projects/dunecity-feature-batch/build-int \
+  -R GUI_REGEX --output-on-failure --no-tests=error -j1
+```
+
+Confirm that tree's source/configuration matches the recorded gate inputs;
+native execution requires committed staging and the normal source freeze.
+Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
 
 ### Bound stalls and preserve completed work
 
@@ -180,8 +191,9 @@ client that needs them).
 Every build, release candidate and release is tested on all reachable machines in
 parallel (`~/.config/agent-workspace/POLICY.md`, "Use every available computer").
 Classify the actual CTest registry into complete, disjoint headless and graphical
-allowlists before using the pinned queue command above. The Air is headless-only;
-never send it an unfiltered suite. Queue acceptance is not test completion.
+allowlists. Only the headless allowlist uses the pinned queue command above;
+graphical work uses the coordinated non-Air native lane. The Air is headless-only,
+and a queue regex does not select a host. Queue acceptance is not test completion.
 Native checks run on the machine that is that platform: Windows packages on the
 Windows PC, iOS on the mini's simulators, the browser build on the mini with pinned
 Emscripten 4.0.14. Run one agent per platform while PR CI runs, subject to the Mini
