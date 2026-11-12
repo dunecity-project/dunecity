@@ -75,10 +75,6 @@ else:
         main = main.replace(seed, 'initializePointerProbeVanilla();')
     main = main.replace('if(shouldPlayIntro && (bFirstInit==true))','if(false && shouldPlayIntro && (bFirstInit==true))')
     position = main.index('int main(')
-    # Private diagnostic clock starts at main entry, before asset/SDL startup;
-    # all runtime phase offsets therefore include startup in the process deadline.
-    body = main.index('{', position) + 1
-    main = main[:body] + '\n    beginMenuRuntimeProbe();\n' + main[body:]
     main = main[:position] + '#include "'+str(root/'tests/menu/menu-probe.inc')+'"\n' + main[position:]
     source.write_text(main)
 compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))

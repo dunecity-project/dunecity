@@ -371,8 +371,42 @@ A hidden-window initialization pass, center-only coordinate check, or skipped
 opt-in test does not satisfy this gate. Keep production held if this check fails
 or cannot run. Never run graphical or pointer-automation checks on the MacBook Air.
 
-Run the full regression on the mini with `CANDIDATE_APP` pointing to the
-dependency-fixed app bundle and `EVIDENCE_DIR` to a dedicated results directory:
+For the registered CTest gate, `DUNECITY_POINTER_RUNTIME_APP` is a CMake `PATH`
+cache entry passed directly to the existing `--runtime-app` CLI. Its default is
+`$<TARGET_BUNDLE_DIR:dunecity>`, preserving CI that already bundles the target app.
+A local Homebrew build's `build-int/bin/dunecity.app` is not a packaged candidate:
+select the dependency-fixed **installed** app explicitly. Do not credit a prior
+packaged-app pass to a CTest command that selected a different, unbundled app.
+
+On the mini, with `FINALPIN` set to the full committed candidate SHA and `OWNER`
+to the workspace owner identity, release edit claims first and use the shared
+staging lane. Configure the candidate path **before** the coherent build,
+installation and fixture preparation so their CMake cache identity stays stable.
+For example, the local 1.0.865 candidate sequence is:
+
+```sh
+CANDIDATE_PREFIX="/Users/stefan/Documents/projects/outputs/release-1.0.865/macos-local-${FINALPIN}/install"
+CANDIDATE_APP="$CANDIDATE_PREFIX/dunecity.app"
+agent-workspace run --project dunecity --owner "$OWNER" --wait -- \
+  cmake -S . -B build-int -DDUNECITY_POINTER_RUNTIME_APP:PATH="$CANDIDATE_APP"
+agent-workspace stage --project dunecity --owner "$OWNER" --wait --jobs 4 build
+agent-workspace run --project dunecity --owner "$OWNER" --wait -- \
+  cmake --install build-int --config Release --prefix "$CANDIDATE_PREFIX"
+codesign --verify --deep --strict "$CANDIDATE_APP"
+agent-workspace run --project dunecity --owner "$OWNER" --tests --wait -- \
+  env DUNECITY_NATIVE_POINTER_TEST=1 ctest --test-dir build-int \
+  --output-on-failure -R '^native_pointer_mapping_probe$'
+```
+
+The install rules bundle and fix up runtime dependencies; do not copy SDK
+libraries into the build app as a substitute. The gate still requires every
+dynamically loaded SDL library to reside inside the selected app, records its
+runtime identities, and returns skip code 77 without the native opt-in. A skip
+is not a passing release gate. CTest diagnostics remain under
+`build-int/native-pointer-mapping-probe`.
+
+For a direct full regression, retain the same packaged `CANDIDATE_APP` and set
+`EVIDENCE_DIR` to a dedicated results directory:
 
 ```sh
 DUNECITY_NATIVE_POINTER_TEST=1 python3 tests/menu/run-menu-probe.py \

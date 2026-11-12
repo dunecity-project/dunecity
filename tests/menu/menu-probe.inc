@@ -710,7 +710,6 @@ int runRetinaResolutionProbe() {
 
 
 int runMenuProbe() {
-    menuRuntimeCheckpoint("startup-complete-main-menu");
 #ifdef DUNECITY_NATIVE_POINTER_PROBE
     if(std::getenv("MENU_POINTER_MAPPING"))return runPointerMappingProbe();
 #endif
@@ -731,23 +730,12 @@ int runMenuProbe() {
         SDL_Log("MENU_PROBE_PASS: all six Tornie-family campaign, custom lobby and editor menus");
         return MENU_QUIT_DEFAULT;
     }
-    FamilyMenuPhase navigationPhase("all", "navigation");
-    {
-        FamilyMenuPhase phase("all", "saved-user-map-lists");
-        verifySavedUserMapLists();
-    }
-    {
-        FamilyMenuPhase phase("all", "campaign-map-library");
-        verifyCampaignMapLibrary();
-    }
-    {
-        FamilyMenuPhase phase("all", "save-as-map");
-        verifySaveAsMap();
-    }
+    verifySavedUserMapLists();
+    verifyCampaignMapLibrary();
+    verifySaveAsMap();
     settings.network.relayUseDevelopmentEndpoint = true;
     // Disable online discovery in this fixture; admission and transport have separate tests.
     settings.network.directDevelopmentEndpoint = "";
-    menuRuntimeCheckpoint("mod-policy-begin");
     const auto installedSkin = std::filesystem::path(ModManager::instance().getModPath("dunecity"))
         / "graphics_skins" / "Dune2" / "zones" / "dunecity_atreides_residential_zone" / "zone.ini";
     menuRequire(std::filesystem::is_regular_file(installedSkin),
@@ -1029,7 +1017,6 @@ int runMenuProbe() {
         menuRequire(mods.setActiveMod("vanilla"), "Cannot restore vanilla fixture");
         effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
     }
-    menuRuntimeCheckpoint("mod-policy-end-campaign-ui-begin");
     {
         HouseChoiceMenu menu(false);
         // A partner AI enables the Difficulty and Role boxes, so every list can open.
@@ -1294,7 +1281,6 @@ int runMenuProbe() {
         menuRequire(menu.startLevelDropDown.getNumEntries()==22,"Single mission range wrong");
     }
     verifyTornieFamilyMenus();
-    menuRuntimeCheckpoint("family-complete-custom-ui-begin");
     CustomPlaySetup setup;
     auto files = getFileNamesList(getDuneLegacyDataDir()+"/maps/multiplayer/","ini",true);
     auto dir = getDuneLegacyDataDir()+"/maps/multiplayer/";
@@ -1802,7 +1788,6 @@ int runMenuProbe() {
     // renderer. DuneCity also includes a graphics skin selector. Colour overrides have no
     // menu column, although their saved setup data is retained.
     {
-        FamilyMenuPhase spiceMatrixPhase("all", "spice-matrix");
         const int rowBudget = getRendererWidth() - 48 - 8 - 180;
         // Whether the lobby's rows fit vertically is decided by how many rows the map has, not
         // by this column: the selector lives in the existing house row and is no taller than
@@ -1811,7 +1796,6 @@ int runMenuProbe() {
         // vertical fit is asserted for the row counts shipped maps actually produce.
         const auto checkRows = [&](CustomGamePlayers& menu, const std::string& what,
                                    bool expectVerticalFit = true) {
-            FamilyMenuPhase phase(what.c_str(), "spice-row-checks");
             menuRequire(menu.mainVBox.getMinimumSize().x <= menu.mainVBox.getSize().x,
                 ("Spice income controls exceed the menu width: " + what).c_str());
             SDL_Log("MENU_PROBE: spice row fit %s rows=%d rowMin=%d budget=%d minY=%d sizeY=%d",
@@ -1872,13 +1856,8 @@ int runMenuProbe() {
         }
 
         for(const auto& mod : {std::string("vanilla"), std::string("dunecity"), std::string("Tornie")}) {
-            FamilyMenuPhase modPhase(mod.c_str(), "spice-row-mod");
-            {
-                FamilyMenuPhase phase(mod.c_str(), "spice-row-activate");
-                menuRequire(ModManager::instance().setActiveMod(mod), "Spice income fixture mod unavailable");
-            }
+            menuRequire(ModManager::instance().setActiveMod(mod), "Spice income fixture mod unavailable");
             for(const bool shared : {false, true}) {
-                FamilyMenuPhase controllerPhase(mod.c_str(), shared ? "spice-shared-scope" : "spice-single-scope");
                 auto spiceSetup = setup;
                 spiceSetup.sharedHouse = shared;
                 spiceSetup.players = ChangeEventList{};
@@ -1890,7 +1869,6 @@ int runMenuProbe() {
             }
             // Nine rows: the legacy limit, and a partial twelve-row family lobby.
             {
-                FamilyMenuPhase nineRowPhase(mod.c_str(), "spice-nine-row-scope");
                 auto nineSetup = setup;
                 nineSetup.players = ChangeEventList{};
                 GameInitSettings nineInit(getBasename(nineRowMap,true),
@@ -1899,14 +1877,8 @@ int runMenuProbe() {
                 menuRequire(menu.numHouses == CustomGamePlayerPolicy::maxPlayers(false),
                     "The nine-row fixture map did not produce nine rows");
                 checkRows(menu, mod + " nine rows", getRendererHeight() > 480);
-                {
-                    FamilyMenuPhase phase(mod.c_str(), "spice-nine-row-update");
-                    menu.update();
-                }
-                if(mod=="dunecity") {
-                    FamilyMenuPhase phase(mod.c_str(), "spice-nine-row-capture");
-                    menuCapture(menu,"custom-spice-income-nine-rows");
-                }
+                menu.update();
+                if(mod=="dunecity") menuCapture(menu,"custom-spice-income-nine-rows");
             }
         }
         ModManager::instance().setActiveMod("vanilla");
@@ -1914,7 +1886,6 @@ int runMenuProbe() {
         // The host picks a factor per row; what Start carries is what was picked, per row.
         ChangeEventList picked;
         {
-            FamilyMenuPhase phase("vanilla", "spice-host-selection");
             auto spiceSetup = setup;
             // An offline fixture: the lobby fills its open seats with bots, so every row is
             // actually played and Start keeps it. An online lobby would leave them open and
@@ -1967,7 +1938,6 @@ int runMenuProbe() {
 
         // Back and Next rebuild the lobby from that list, so the factors have to come back.
         {
-            FamilyMenuPhase phase("vanilla", "spice-browser-roundtrip");
             auto restoredSetup = setup;
             restoredSetup.players = picked;
             GameInitSettings spiceInit(getBasename(map,true),readCompleteFile(map),false,setup.rules);
@@ -1990,7 +1960,6 @@ int runMenuProbe() {
 
         // A client sees the host's choice but cannot change it, not even for its own row.
         {
-            FamilyMenuPhase phase("vanilla", "spice-client");
             auto clientSetup = setup;
             clientSetup.players = ChangeEventList{};
             GameInitSettings clientInit(getBasename(map,true),readCompleteFile(map),false,setup.rules);
@@ -2016,7 +1985,6 @@ int runMenuProbe() {
         // A load-game lobby shows what the saved match was played at, read-only. The payload is
         // the setup metadata of a savegame, which is where a resolved row's factor lives.
         for(const auto& mod : {std::string("vanilla"), std::string("dunecity"), std::string("Tornie")}) {
-            FamilyMenuPhase phase(mod.c_str(), "spice-loaded");
             menuRequire(ModManager::instance().setActiveMod(mod), "Saved spice fixture mod unavailable");
             GameInitSettings saved(getBasename(map,true),readCompleteFile(map),false,setup.rules);
             GameInitSettings::HouseInfoList rows;
@@ -2079,7 +2047,6 @@ int runMenuProbe() {
                 "Rebuilding a saved lobby lost its hidden colour override");
         }
         {
-            FamilyMenuPhase phase("vanilla", "spice-loaded-coop");
             GameInitSettings saved(HOUSE_ATREIDES, setup.rules, 1);
             GameInitSettings::HouseInfo shared(HOUSE_ATREIDES, 1);
             shared.spiceIncomeMultiplier = 4;
@@ -2118,7 +2085,6 @@ int runMenuProbe() {
         }
         ModManager::instance().setActiveMod("vanilla");
     }
-    menuRuntimeCheckpoint("spice-matrix-complete");
     setup.players=original;
     {
         CrossplayMenu menu;

@@ -694,9 +694,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         if(APPLE)
             # Real Cocoa motion/buttons through linked SDL and the production menu
             # hit-test path. Explicit Mini GUI opt-in; never admitted on the Air.
+            # CI may already bundle the target app. Local Homebrew builds must
+            # explicitly select the dependency-fixed installed candidate instead.
+            set(DUNECITY_POINTER_RUNTIME_APP "$<TARGET_BUNDLE_DIR:dunecity>" CACHE PATH
+                "App bundle whose packaged SDL runtime the native pointer gate must verify")
             add_test(NAME native_pointer_mapping_probe COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --pointer-mapping --size 1440x900
-                --runtime-app $<TARGET_BUNDLE_DIR:dunecity>
+                --runtime-app "${DUNECITY_POINTER_RUNTIME_APP}"
                 --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/native-pointer-mapping-probe)
             set_tests_properties(native_pointer_mapping_probe PROPERTIES TIMEOUT 300
                 TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20
