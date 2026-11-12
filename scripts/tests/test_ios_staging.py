@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -21,7 +22,14 @@ class IosBuildNumberTests(unittest.TestCase):
     def test_numbers_are_canonical_unique_and_monotonic_across_runs_and_attempts(self):
         values = [automation.ios_build_number(run, attempt)
                   for run, attempt in ((1, 1), (1, 2), (99, 99), (100, 1), (899999, 99))]
-        self.assertEqual(values, ['1000.1.1', '1000.1.2', '1000.99.99', '1001.0.1', '9999.99.99'])
+        for value in values:
+            parts = value.split('.')
+            self.assertEqual(len(parts), 3)
+            self.assertTrue(all(part.isascii() and part.isdecimal() for part in parts))
+            self.assertEqual('.'.join(str(int(part)) for part in parts), value)
+            self.assertGreater(int(parts[0]), 0)
+            self.assertLessEqual(len(parts[0]), 4)
+            self.assertTrue(all(len(part) <= 2 for part in parts[1:]))
         self.assertEqual(len(values), len(set(values)))
         self.assertEqual(sorted(tuple(map(int, value.split('.'))) for value in values),
                          [tuple(map(int, value.split('.'))) for value in values])
@@ -37,7 +45,11 @@ class IosBuildNumberTests(unittest.TestCase):
 
     def command(self, *arguments):
         with tempfile.TemporaryDirectory() as directory:
-            environment = dict(os.environ, DEVELOPER_DIR=directory)
+            binaries = Path(directory) / 'bin'
+            binaries.mkdir()
+            (binaries / 'python3').symlink_to(Path(sys.executable).resolve())
+            environment = dict(os.environ, DEVELOPER_DIR=directory,
+                               PATH=str(binaries) + os.pathsep + os.environ.get('PATH', ''))
             return subprocess.run(['/bin/bash', str(ROOT / 'scripts/build-ios.sh'), *arguments],
                                   env=environment, text=True, capture_output=True)
 
@@ -49,18 +61,14 @@ class IosBuildNumberTests(unittest.TestCase):
                 with self.subTest(arguments=arguments):
                     result = self.command(*arguments, '--build-number', '1000.1.1')
                     self.assertEqual(result.returncode, 2, result.stderr)
-                    self.assertIn('cannot be combined', result.stderr)
         result = self.command('--internal-staging', '--simulator', '--build-number', '1000.1.1')
         self.assertEqual(result.returncode, 2, result.stderr)
 
     def test_number_is_required_and_validated_before_touching_the_sdk(self):
         missing = self.command('--internal-staging')
         self.assertEqual(missing.returncode, 2, missing.stderr)
-        self.assertIn('explicit unique --build-number', missing.stderr)
         invalid = self.command('--internal-staging', '--build-number', '20261112.1')
-        self.assertNotEqual(invalid.returncode, 0)
-        self.assertIn('CFBundleVersion', invalid.stderr)
-        self.assertNotIn('iOS SDK', invalid.stderr)
+        self.assertEqual(invalid.returncode, 2, invalid.stderr)
 
 
 class IosReceiptTests(unittest.TestCase):

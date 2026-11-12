@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -864,12 +865,35 @@ def download_release(tag, directory, names=None):
 
 
 def extract_browser(archive, destination):
-    destination.mkdir(parents=True, exist_ok=True)
+    destination.mkdir(mode=0o755, parents=True, exist_ok=True)
+    root = destination.resolve()
     with tarfile.open(archive) as source:
-        for item in source.getmembers():
-            if item.issym() or item.islnk() or not (item.isfile() or item.isdir()) or not (destination / item.name).resolve().is_relative_to(destination.resolve()):
+        members = source.getmembers()
+        seen = set()
+        for item in members:
+            relative = Path(item.name)
+            target = destination / relative
+            if (relative.is_absolute() or '..' in relative.parts or relative in seen
+                    or item.issym() or item.islnk() or not (item.isfile() or item.isdir())
+                    or (relative == Path('.') and not item.isdir())
+                    or any((destination / parent).is_symlink() for parent in (relative, *relative.parents))
+                    or not target.resolve().is_relative_to(root)):
                 raise ValueError('Unsafe browser artifact member: ' + item.name)
-        source.extractall(destination, filter='data')
+            seen.add(relative)
+        # Apply no archive ownership, timestamps or permission bits. Create only
+        # ordinary directories/files and stream payloads on the Python 3.9 baseline.
+        for item in members:
+            relative = Path(item.name)
+            directory = relative if item.isdir() else relative.parent
+            parent = destination
+            for component in directory.parts:
+                parent /= component
+                parent.mkdir(mode=0o755, exist_ok=True)
+            if item.isfile():
+                target = destination / relative
+                with source.extractfile(item) as stream, target.open('xb') as output:
+                    target.chmod(0o644)
+                    shutil.copyfileobj(stream, output, length=1 << 20)
 
 
 def verify_browser(root, channel, sha):
@@ -1100,7 +1124,7 @@ def main():
     p = commands.add_parser('reservation-token'); p.add_argument('--sha', required=True); p.set_defaults(func=reservation_token)
     p = commands.add_parser('ios-build-number'); p.add_argument('--run-number', required=True); p.add_argument('--attempt', required=True); p.set_defaults(func=lambda a: print(ios_build_number(a.run_number, a.attempt)))
     p = commands.add_parser('ios-inputs'); p.add_argument('--tag', required=True); p.add_argument('--sha', required=True); p.add_argument('--output', type=Path, required=True); p.set_defaults(func=ios_inputs)
-    p = commands.add_parser('validate-ios-build-number'); p.add_argument('build_number'); p.set_defaults(func=lambda a: print(validate_ios_build_number(a.build_number)))
+    p = commands.add_parser('validate-ios-build-number'); p.add_argument('build_number', type=validate_ios_build_number); p.set_defaults(func=lambda a: print(a.build_number))
     p = commands.add_parser('verify'); p.add_argument('tag'); p.add_argument('--directory', type=Path); p.add_argument('--live', action='store_true'); p.set_defaults(func=verify)
     p = commands.add_parser('verify-browser'); p.add_argument('--url', required=True); p.add_argument('--version', required=True); p.add_argument('--sha', required=True); p.set_defaults(func=lambda a: verify_live_browser(a.url, a.version, a.sha))
     p = commands.add_parser('resume'); p.add_argument('channel', choices=['build', 'browser', 'sourceforge', 'deploy']); p.add_argument('--tag'); p.add_argument('--run-id'); p.set_defaults(func=resume)

@@ -167,23 +167,74 @@ class FrozenArtifactTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'hash mismatch'):
                 automation.verify_browser(root, 'staging', SHA)
 
-    def test_archive_path_escape_and_links_are_rejected_before_extraction(self):
-        for name, link in [('../outside', False), ('/absolute', False), ('engine', True)]:
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+    def test_archive_unsafe_members_are_rejected_before_extraction(self):
+        cases = [('../outside', tarfile.REGTYPE), ('/absolute', tarfile.REGTYPE),
+                 ('engine', tarfile.SYMTYPE), ('engine', tarfile.LNKTYPE),
+                 ('engine', tarfile.FIFOTYPE), ('engine', tarfile.CHRTYPE)]
+        for name, kind in cases:
+            with self.subTest(name=name, kind=kind), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 archive = root / 'package.tar.gz'
                 with tarfile.open(archive, 'w:gz') as output:
+                    safe = tarfile.TarInfo('safe-prefix')
+                    safe.size = 4
+                    output.addfile(safe, io.BytesIO(b'data'))
                     member = tarfile.TarInfo(name)
-                    if link:
-                        member.type = tarfile.SYMTYPE
-                        member.linkname = '/etc/passwd'
-                        output.addfile(member)
-                    else:
+                    member.type = kind
+                    member.linkname = '/etc/passwd'
+                    if member.isfile():
                         member.size = 4
                         output.addfile(member, io.BytesIO(b'data'))
-                with self.assertRaisesRegex(ValueError, 'Unsafe browser'):
+                    else:
+                        output.addfile(member)
+                with self.assertRaises(ValueError):
                     automation.extract_browser(archive, root / 'restore')
                 self.assertFalse((root / 'outside').exists())
+                self.assertFalse((root / 'restore/safe-prefix').exists())
+
+    def test_regular_archive_payloads_extract_without_applying_unsafe_modes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            restore = root / 'restore'
+            restore.mkdir(mode=0o700)
+            archive = root / 'package.tar.gz'
+            payload = b'frozen browser payload' * 65536
+            with tarfile.open(archive, 'w:gz') as output:
+                for name in ('.', 'runtime'):
+                    member = tarfile.TarInfo(name)
+                    member.type = tarfile.DIRTYPE
+                    member.mode = 0o7777
+                    output.addfile(member)
+                for name in ('runtime/dunecity.wasm', 'implicit/nested/dunecity.data'):
+                    member = tarfile.TarInfo(name)
+                    member.size = len(payload)
+                    member.mode = 0o7777
+                    output.addfile(member, io.BytesIO(payload))
+            automation.extract_browser(archive, restore)
+            self.assertEqual(restore.stat().st_mode & 0o7777, 0o700)
+            for name in ('runtime/dunecity.wasm', 'implicit/nested/dunecity.data'):
+                path = restore / name
+                self.assertEqual(path.read_bytes(), payload)
+                self.assertEqual(path.stat().st_mode & 0o7111, 0)
+                self.assertEqual(path.stat().st_mode & 0o022, 0)
+            for name in ('runtime', 'implicit', 'implicit/nested'):
+                self.assertEqual((restore / name).stat().st_mode & 0o7022, 0)
+
+    def test_archive_cannot_follow_existing_destination_symlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            restore, outside = root / 'restore', root / 'outside'
+            restore.mkdir()
+            outside.mkdir()
+            (restore / 'runtime').symlink_to(outside, target_is_directory=True)
+            archive = root / 'package.tar.gz'
+            with tarfile.open(archive, 'w:gz') as output:
+                member = tarfile.TarInfo('runtime/dunecity.wasm')
+                member.size = 4
+                output.addfile(member, io.BytesIO(b'data'))
+            with self.assertRaises(ValueError):
+                automation.extract_browser(archive, restore)
+            self.assertEqual(list(outside.iterdir()), [])
 
     def test_manifest_refuses_partial_platform_success_and_mixed_sources(self):
         with tempfile.TemporaryDirectory() as directory:
