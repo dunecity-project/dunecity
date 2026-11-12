@@ -832,7 +832,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=Release -DDUNECITY_RELEASE_BUILD=$DUNECITY_RELEASE_BUILD
+        run: cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=Release -DDUNECITY_RELEASE_BUILD="$DUNECITY_RELEASE_BUILD"
 
       - name: Build
         # Limit to 2 parallel jobs — ubuntu-latest has 4 cores but only 7GB

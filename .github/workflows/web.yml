@@ -101,7 +101,8 @@ jobs:
             git clone --filter=blob:none --single-branch --branch main \
               git@github.com:VR48/dunelegacy.com.git website-repo
           fi
-          export WEBSITE_CODE_SHA="$(git -C website-repo rev-parse HEAD)"
+          WEBSITE_CODE_SHA="$(git -C website-repo rev-parse HEAD)"
+          export WEBSITE_CODE_SHA
           if [ "$WEB_CHANNEL" = staging ]; then
             python3 - <<'PY'
           import json, os, subprocess

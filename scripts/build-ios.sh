@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
         --bundle-id) BUNDLE_ID=${2:?}; shift ;;
         --install) INSTALL_DEVICE=${2:?}; shift ;;
         --testflight) MODE=device; APP_STORE=upload; RELEASE_BUILD=ON; OFFICIAL_REQUEST=1 ;;
-        --ipa) MODE=device; APP_STORE=export; RELEASE_BUILD=ON; OFFICIAL_REQUEST=1 ;;
+        --ipa) MODE=device; APP_STORE='export'; RELEASE_BUILD=ON; OFFICIAL_REQUEST=1 ;;
         --release-build) RELEASE_BUILD=ON; OFFICIAL_REQUEST=1 ;;
         --internal-staging) MODE=device; INTERNAL_STAGING=1 ;;
         --build-number) BUILD_NUMBER=${2:?}; shift ;;
@@ -71,7 +71,7 @@ if [[ "$INTERNAL_STAGING" -eq 1 ]]; then
     fi
     [[ -n "$BUILD_NUMBER" ]] || { echo "Internal staging requires an explicit unique --build-number." >&2; exit 2; }
     python3 "$REPO_ROOT/scripts/release-automation.py" validate-ios-build-number "$BUILD_NUMBER" >/dev/null
-    APP_STORE=export
+    APP_STORE='export'
     RELEASE_BUILD=OFF
 fi
 
